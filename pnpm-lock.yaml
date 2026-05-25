@@ -7655,6 +7655,40 @@ importers:
         specifier: 'catalog:'
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
 
+  workspaces/files-sdk:
+    dependencies:
+      files-sdk:
+        specifier: ^1.5.0
+        version: 1.5.0(@aws-sdk/client-s3@3.1045.0)(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.19.0(encoding@0.1.13))(@supabase/storage-js@2.105.4)(ai@6.0.177(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.6))(google-auth-library@9.15.1(encoding@0.1.13))(openai@6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3)
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@internal/workspace-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      eslint:
+        specifier: ^10.2.1
+        version: 10.3.0(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+
   workspaces/gcs:
     dependencies:
       '@google-cloud/storage':
@@ -21647,6 +21681,99 @@ packages:
     resolution: {integrity: sha512-hw9gNZXUfZ02Jo0uafWLaFVPter5/k2rfcrjFJJHX/77xtSDOfJuEFb6oKlFV86FLP1SuyHMW1PSk0U9M5tKkQ==}
     engines: {node: '>=18'}
 
+  files-sdk@1.5.0:
+    resolution: {integrity: sha512-G+zNCMev8zgfbr8qYuxK3jvwkh1DnUJoJpnXbpsdQfw0nnrypH5HG7jOGJSOhqyesw0i/jJ32bW71yI4US9V9g==}
+    hasBin: true
+    peerDependencies:
+      '@anthropic-ai/claude-agent-sdk': ^0.2.0
+      '@aws-sdk/client-s3': ^3.700.0
+      '@aws-sdk/s3-presigned-post': ^3.700.0
+      '@aws-sdk/s3-request-presigner': ^3.700.0
+      '@azure/core-auth': ^1.9.0
+      '@azure/identity': ^4.5.0
+      '@azure/storage-blob': ^12.26.0
+      '@bunny.net/storage-sdk': ^0.3.1
+      '@google-cloud/storage': ^7.19.0
+      '@googleapis/drive': ^14.0.0
+      '@microsoft/microsoft-graph-client': ^3.0.7
+      '@netlify/blobs': ^10.7.4
+      '@openai/agents': ^0.11.0
+      '@supabase/storage-js': ^2.105.4
+      '@vercel/blob': ^2.4.0
+      ai: ^6.0.0
+      basic-ftp: ^6.0.1
+      box-typescript-sdk-gen: ^1.19.1
+      cloudinary: ^2.10.0
+      convex: ^1.16.0
+      dropbox: ^10.34.0
+      firebase-admin: ^13.10.0
+      google-auth-library: ^9.15.1
+      node-appwrite: ^24.1.0
+      openai: ^6.0.0
+      pocketbase: ^0.26.9
+      ssh2-sftp-client: ^12.1.1
+      uploadthing: ^7
+      zod: ^3.23.0 || ^4.0.0
+    peerDependenciesMeta:
+      '@anthropic-ai/claude-agent-sdk':
+        optional: true
+      '@aws-sdk/client-s3':
+        optional: true
+      '@aws-sdk/s3-presigned-post':
+        optional: true
+      '@aws-sdk/s3-request-presigner':
+        optional: true
+      '@azure/core-auth':
+        optional: true
+      '@azure/identity':
+        optional: true
+      '@azure/storage-blob':
+        optional: true
+      '@bunny.net/storage-sdk':
+        optional: true
+      '@google-cloud/storage':
+        optional: true
+      '@googleapis/drive':
+        optional: true
+      '@microsoft/microsoft-graph-client':
+        optional: true
+      '@netlify/blobs':
+        optional: true
+      '@openai/agents':
+        optional: true
+      '@supabase/storage-js':
+        optional: true
+      '@vercel/blob':
+        optional: true
+      ai:
+        optional: true
+      basic-ftp:
+        optional: true
+      box-typescript-sdk-gen:
+        optional: true
+      cloudinary:
+        optional: true
+      convex:
+        optional: true
+      dropbox:
+        optional: true
+      firebase-admin:
+        optional: true
+      google-auth-library:
+        optional: true
+      node-appwrite:
+        optional: true
+      openai:
+        optional: true
+      pocketbase:
+        optional: true
+      ssh2-sftp-client:
+        optional: true
+      uploadthing:
+        optional: true
+      zod:
+        optional: true
+
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
     engines: {node: '>=8'}
@@ -29151,6 +29278,14 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.3.6
 
+  '@ai-sdk/gateway@3.0.112(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@ai-sdk/provider-utils': 4.0.27(zod@4.4.3)
+      '@vercel/oidc': 3.2.0
+      zod: 4.4.3
+    optional: true
+
   '@ai-sdk/google-vertex@3.0.137(zod@4.3.6)':
     dependencies:
       '@ai-sdk/anthropic': 2.0.79(zod@4.3.6)
@@ -29358,6 +29493,14 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
       zod: 4.3.6
+
+  '@ai-sdk/provider-utils@4.0.27(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.8
+      zod: 4.4.3
+    optional: true
 
   '@ai-sdk/provider@1.0.9':
     dependencies:
@@ -36062,6 +36205,31 @@ snapshots:
       '@cfworker/json-schema': 4.1.1
     transitivePeerDependencies:
       - supports-color
+
+  '@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)':
+    dependencies:
+      '@hono/node-server': 1.19.14(hono@4.12.18)
+      ajv: 8.18.0
+      ajv-formats: 3.0.1(ajv@8.18.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      express: 5.2.1
+      express-rate-limit: 8.5.1(express@5.2.1)
+      hono: 4.12.18
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.1
+      zod: 4.4.3
+      zod-to-json-schema: 3.25.1(zod@4.4.3)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
 
   '@module-federation/error-codes@0.22.0': {}
 
@@ -43997,6 +44165,15 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       zod: 4.3.6
 
+  ai@6.0.177(zod@4.4.3):
+    dependencies:
+      '@ai-sdk/gateway': 3.0.112(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.10
+      '@ai-sdk/provider-utils': 4.0.27(zod@4.4.3)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.4.3
+    optional: true
+
   ajv-draft-04@1.0.0(ajv@8.18.0):
     optionalDependencies:
       ajv: 8.18.0
@@ -47076,6 +47253,26 @@ snapshots:
       token-types: 6.1.2
       uint8array-extras: 1.5.0
     transitivePeerDependencies:
+      - supports-color
+
+  files-sdk@1.5.0(@aws-sdk/client-s3@3.1045.0)(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.19.0(encoding@0.1.13))(@supabase/storage-js@2.105.4)(ai@6.0.177(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.6))(google-auth-library@9.15.1(encoding@0.1.13))(openai@6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3):
+    dependencies:
+      commander: 12.1.0
+    optionalDependencies:
+      '@aws-sdk/client-s3': 3.1045.0
+      '@azure/core-auth': 1.10.1
+      '@azure/identity': 4.13.0
+      '@azure/storage-blob': 12.31.0
+      '@google-cloud/storage': 7.19.0(encoding@0.1.13)
+      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      '@supabase/storage-js': 2.105.4
+      ai: 6.0.177(zod@4.4.3)
+      convex: 1.38.0(bufferutil@4.1.0)(react@19.2.6)
+      google-auth-library: 9.15.1(encoding@0.1.13)
+      openai: 6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@4.4.3)
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
       - supports-color
 
   fill-range@7.1.1:
@@ -50905,6 +51102,12 @@ snapshots:
     optionalDependencies:
       ws: 8.20.0(bufferutil@4.1.0)
       zod: 4.3.6
+    optional: true
+
+  openai@6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@4.4.3):
+    optionalDependencies:
+      ws: 8.20.0(bufferutil@4.1.0)
+      zod: 4.4.3
     optional: true
 
   openapi-fetch@0.14.1:
@@ -56557,6 +56760,11 @@ snapshots:
   zod-to-json-schema@3.25.1(zod@4.3.6):
     dependencies:
       zod: 4.3.6
+
+  zod-to-json-schema@3.25.1(zod@4.4.3):
+    dependencies:
+      zod: 4.4.3
+    optional: true
 
   zod-to-ts@2.0.0(typescript@6.0.3)(zod@4.3.6):
     dependencies:
