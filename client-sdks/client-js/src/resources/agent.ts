@@ -77,9 +77,40 @@ type ClientToolObservabilityEnvelope = {
 };
 
 type SignalRuntimeOptions = StreamParamsBaseWithoutMessages<any>;
+type SignalRuntimeOptionsEntry = {
+  streamOptions: SignalRuntimeOptions;
+  timeout: ReturnType<typeof setTimeout>;
+};
 
-const signalRuntimeOptionsByRunId = new Map<string, SignalRuntimeOptions>();
-const latestSignalRuntimeOptionsByThread = new Map<string, SignalRuntimeOptions>();
+const SIGNAL_RUNTIME_OPTIONS_TTL_MS = 5 * 60 * 1000;
+const signalRuntimeOptionsByRunId = new Map<string, SignalRuntimeOptionsEntry>();
+const latestSignalRuntimeOptionsByThread = new Map<string, SignalRuntimeOptionsEntry>();
+
+const createSignalRuntimeOptionsEntry = (
+  store: Map<string, SignalRuntimeOptionsEntry>,
+  key: string,
+  streamOptions: SignalRuntimeOptions,
+): SignalRuntimeOptionsEntry => {
+  const timeout = setTimeout(() => store.delete(key), SIGNAL_RUNTIME_OPTIONS_TTL_MS);
+  (timeout as { unref?: () => void }).unref?.();
+  return { streamOptions, timeout };
+};
+
+const setSignalRuntimeOptionsEntry = (
+  store: Map<string, SignalRuntimeOptionsEntry>,
+  key: string,
+  streamOptions: SignalRuntimeOptions,
+): void => {
+  const existing = store.get(key);
+  if (existing) clearTimeout(existing.timeout);
+  store.set(key, createSignalRuntimeOptionsEntry(store, key, streamOptions));
+};
+
+const deleteSignalRuntimeOptionsEntry = (store: Map<string, SignalRuntimeOptionsEntry>, key: string): void => {
+  const existing = store.get(key);
+  if (existing) clearTimeout(existing.timeout);
+  store.delete(key);
+};
 
 const noopClientToolObserve: ToolObserve = {
   async span<T>(_name: string, fn: () => Promise<T> | T): Promise<T> {
@@ -386,13 +417,13 @@ export class Agent extends BaseResource {
   }): void {
     const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
     if (runId) {
-      signalRuntimeOptionsByRunId.set(this.getSignalRuntimeRunKey(runId), streamOptions);
-      if (threadKey) latestSignalRuntimeOptionsByThread.delete(threadKey);
+      setSignalRuntimeOptionsEntry(signalRuntimeOptionsByRunId, this.getSignalRuntimeRunKey(runId), streamOptions);
+      if (threadKey) deleteSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey);
       return;
     }
 
     if (threadKey) {
-      latestSignalRuntimeOptionsByThread.set(threadKey, streamOptions);
+      setSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey, streamOptions);
     }
   }
 
@@ -407,16 +438,21 @@ export class Agent extends BaseResource {
   }): SignalRuntimeOptions | undefined {
     if (runId) {
       const runOptions = signalRuntimeOptionsByRunId.get(this.getSignalRuntimeRunKey(runId));
-      if (runOptions) return runOptions;
+      if (runOptions) return runOptions.streamOptions;
     }
 
     const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
-    return threadKey ? latestSignalRuntimeOptionsByThread.get(threadKey) : undefined;
+    return threadKey ? latestSignalRuntimeOptionsByThread.get(threadKey)?.streamOptions : undefined;
   }
 
   private deleteSignalRuntimeOptions(runId?: string): void {
     if (!runId) return;
-    signalRuntimeOptionsByRunId.delete(this.getSignalRuntimeRunKey(runId));
+    deleteSignalRuntimeOptionsEntry(signalRuntimeOptionsByRunId, this.getSignalRuntimeRunKey(runId));
+  }
+
+  private deleteLatestSignalRuntimeOptions({ resourceId, threadId }: { resourceId?: string; threadId?: string }): void {
+    const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
+    if (threadKey) deleteSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey);
   }
 
   /**
@@ -492,10 +528,18 @@ export class Agent extends BaseResource {
         }
       : params;
 
-    const response = await this.request<{ accepted: true; runId: string }>(`/agents/${this.agentId}/signals`, {
-      method: 'POST',
-      body,
-    });
+    let response: { accepted: true; runId: string };
+    try {
+      response = await this.request<{ accepted: true; runId: string }>(`/agents/${this.agentId}/signals`, {
+        method: 'POST',
+        body,
+      });
+    } catch (error) {
+      if (streamOptions) {
+        this.deleteLatestSignalRuntimeOptions({ resourceId: params.resourceId, threadId: params.threadId });
+      }
+      throw error;
+    }
 
     if (streamOptions) {
       this.setSignalRuntimeOptions({

@@ -158,6 +158,57 @@ describe('Agent signal routes', () => {
     expect(sentBody.threadId).toBe('thread-123');
   });
 
+  it('cleans provisional runtime options if sending a signal fails before a run id is returned', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent-cleanup-fail');
+    const mockRequest = vi.fn().mockRejectedValue(new Error('network down'));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    await expect(
+      agent.sendSignal({
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'resource-cleanup-fail',
+        threadId: 'thread-cleanup-fail',
+        ifIdle: {
+          streamOptions: {
+            maxSteps: 3,
+          },
+        },
+      } as SendAgentSignalParams),
+    ).rejects.toThrow('network down');
+
+    expect(
+      agent['getSignalRuntimeOptions']({ resourceId: 'resource-cleanup-fail', threadId: 'thread-cleanup-fail' }),
+    ).toBeUndefined();
+  });
+
+  it('expires runtime options if a subscribed finish is never received', async () => {
+    vi.useFakeTimers();
+    try {
+      const agent = new Agent(mockClientOptions, 'test-agent-cleanup-ttl');
+      const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-cleanup-ttl' });
+      agent['request'] = mockRequest as (typeof agent)['request'];
+
+      await agent.sendSignal({
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'resource-cleanup-ttl',
+        threadId: 'thread-cleanup-ttl',
+        ifIdle: {
+          streamOptions: {
+            maxSteps: 3,
+          },
+        },
+      } as SendAgentSignalParams);
+
+      expect(agent['getSignalRuntimeOptions']({ runId: 'run-cleanup-ttl' })).toEqual({ maxSteps: 3 });
+
+      vi.advanceTimersByTime(5 * 60 * 1000);
+
+      expect(agent['getSignalRuntimeOptions']({ runId: 'run-cleanup-ttl' })).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('subscribes to threads with the same body shape as the server route', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const response = new Response(new ReadableStream());
