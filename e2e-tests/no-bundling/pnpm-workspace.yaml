@@ -1,0 +1,6 @@
+overrides:
+  ssri: ^6.0.2
+  qs: ^6.15.1
+
+allowBuilds:
+  esbuild: true
