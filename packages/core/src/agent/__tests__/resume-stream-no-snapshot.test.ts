@@ -123,9 +123,15 @@ describe('resumeStream / resumeGenerate — no snapshot found', () => {
         .mockImplementationOnce(async () => null)
         .mockImplementation(async () => fakeSnapshot);
 
-      await registeredAgent.resumeStream({ approved: true }, { runId: 'race-run' }).catch(() => {});
+      let caught: any;
+      try {
+        await registeredAgent.resumeStream({ approved: true }, { runId: 'race-run' });
+      } catch (err) {
+        caught = err;
+      }
 
       expect(loadSpy.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(caught?.id).not.toBe('AGENT_RESUME_NO_SNAPSHOT_FOUND');
     });
   });
 
