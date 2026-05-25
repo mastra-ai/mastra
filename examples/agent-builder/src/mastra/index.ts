@@ -1,12 +1,12 @@
 import { Mastra } from '@mastra/core';
 import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
-import { builderAgent } from '@mastra/editor/ee';
+import { createBuilderAgent } from '@mastra/editor/ee';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { initWorkOS } from './auth';
 import { StagehandBrowser } from '@mastra/stagehand';
 import { ComposioToolProvider } from '@mastra/editor/composio';
-import { weatherInfo } from './tools';
+import { weatherInfo, diceRoll, coinFlip, randomQuote } from './tools';
 import { weatherAgent } from './agents';
 import { greetWorkflow } from './workflows';
 import { SlackProvider } from '@mastra/slack';
@@ -30,11 +30,14 @@ export const mastra = new Mastra({
   storage,
   channels: { slack },
   agents: {
-    builderAgent,
+    builderAgent: createBuilderAgent(),
     weatherAgent,
   },
   tools: {
     weatherInfo,
+    diceRoll,
+    coinFlip,
+    randomQuote,
   },
   workflows: {
     greetWorkflow,
@@ -106,7 +109,6 @@ export const mastra = new Mastra({
           memory: {
             observationalMemory: true,
           },
-          tools: { allowed: ['weather-info'] },
           agents: { allowed: ['weather-agent'] },
           workflows: { allowed: ['greet-workflow'] },
           browser: {
