@@ -127,16 +127,210 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
   );
 };
 
+const NestedLevelsDemo = ({ initialDepth }: { initialDepth: 2 | 3 }) => {
+  const [isLevel1Open, setIsLevel1Open] = useState(true);
+  const [isLevel2Open, setIsLevel2Open] = useState(initialDepth >= 2);
+  const [isLevel3Open, setIsLevel3Open] = useState(initialDepth >= 3);
+
+  const openDepth = (depth: 2 | 3) => {
+    setIsLevel1Open(true);
+    setIsLevel2Open(true);
+    setIsLevel3Open(depth === 3);
+  };
+
+  const closeLevel1 = () => {
+    setIsLevel1Open(false);
+    setIsLevel2Open(false);
+    setIsLevel3Open(false);
+  };
+
+  const closeLevel2 = () => {
+    setIsLevel2Open(false);
+    setIsLevel3Open(false);
+  };
+
+  return (
+    <div className="p-8">
+      <div className="flex gap-2">
+        <Button onClick={() => openDepth(2)}>Open Nested Level 2</Button>
+        {initialDepth === 3 && (
+          <Button variant="outline" onClick={() => openDepth(3)}>
+            Open Nested Level 3
+          </Button>
+        )}
+      </div>
+
+      <SideDialog
+        isOpen={isLevel1Open}
+        onClose={closeLevel1}
+        dialogTitle="Dataset Item"
+        dialogDescription="Primary dataset item details"
+        level={1}
+      >
+        <SideDialog.Top>
+          <TextAndIcon>
+            <HashIcon /> item_a1b2c3
+          </TextAndIcon>
+          <div className="ml-auto">
+            <Button variant="outline" size="sm" onClick={() => setIsLevel2Open(true)}>
+              Open Trace
+            </Button>
+          </div>
+        </SideDialog.Top>
+
+        <SideDialog.Content>
+          <SideDialog.Header>
+            <SideDialog.Heading>
+              <EyeIcon /> Refund request
+            </SideDialog.Heading>
+            <TextAndIcon>
+              <HashIcon /> level 1
+            </TextAndIcon>
+          </SideDialog.Header>
+
+          <Section>
+            <Section.Header>
+              <Section.Heading>
+                <FileInputIcon /> Overview
+              </Section.Heading>
+            </Section.Header>
+            <div className="grid gap-2">
+              <Field label="Name" value="Refund request" />
+              <Field label="Tokens used" value="412" />
+              <Field label="Status" value="Success" />
+            </div>
+          </Section>
+
+          <Section>
+            <Section.Header>
+              <Section.Heading>
+                <ListTreeIcon /> Linked trace
+              </Section.Heading>
+            </Section.Header>
+            <div className="flex items-center justify-between gap-4">
+              <TextAndIcon>
+                <HashIcon /> trace_72f19
+              </TextAndIcon>
+              <Button variant="outline" size="sm" onClick={() => setIsLevel2Open(true)}>
+                Open
+              </Button>
+            </div>
+          </Section>
+
+          <SideDialog
+            isOpen={isLevel2Open}
+            onClose={closeLevel2}
+            dialogTitle="Trace Details"
+            dialogDescription="Nested trace details for the selected dataset item"
+            level={2}
+          >
+            <SideDialog.Top>
+              <TextAndIcon>
+                <HashIcon /> trace_72f19
+              </TextAndIcon>
+              {initialDepth === 3 && (
+                <div className="ml-auto">
+                  <Button variant="outline" size="sm" onClick={() => setIsLevel3Open(true)}>
+                    Open Span
+                  </Button>
+                </div>
+              )}
+            </SideDialog.Top>
+
+            <SideDialog.Content>
+              <SideDialog.Header>
+                <SideDialog.Heading>
+                  <ListTreeIcon /> Retrieval trace
+                </SideDialog.Heading>
+                <TextAndIcon>
+                  <HashIcon /> level 2
+                </TextAndIcon>
+              </SideDialog.Header>
+
+              <Section>
+                <Section.Header>
+                  <Section.Heading>Trace metadata</Section.Heading>
+                </Section.Header>
+                <div className="grid gap-2">
+                  <Field label="Trace ID" value="trace_72f19" />
+                  <Field label="Latency" value="843 ms" />
+                  <Field label="Steps" value="4" />
+                </div>
+              </Section>
+
+              {initialDepth === 3 && (
+                <Section>
+                  <Section.Header>
+                    <Section.Heading>
+                      <TagIcon /> Span payload
+                    </Section.Heading>
+                  </Section.Header>
+                  <div className="flex items-center justify-between gap-4">
+                    <TextAndIcon>
+                      <HashIcon /> span_embed_query
+                    </TextAndIcon>
+                    <Button variant="outline" size="sm" onClick={() => setIsLevel3Open(true)}>
+                      Open
+                    </Button>
+                  </div>
+                </Section>
+              )}
+
+              {initialDepth === 3 && (
+                <SideDialog
+                  isOpen={isLevel3Open}
+                  onClose={() => setIsLevel3Open(false)}
+                  dialogTitle="Span Payload"
+                  dialogDescription="Third-level span payload details"
+                  level={3}
+                >
+                  <SideDialog.Top>
+                    <TextAndIcon>
+                      <HashIcon /> span_embed_query
+                    </TextAndIcon>
+                  </SideDialog.Top>
+
+                  <SideDialog.Content>
+                    <SideDialog.Header>
+                      <SideDialog.Heading>
+                        <TagIcon /> Embedding query payload
+                      </SideDialog.Heading>
+                      <TextAndIcon>
+                        <HashIcon /> level 3
+                      </TextAndIcon>
+                    </SideDialog.Header>
+
+                    <Section>
+                      <Section.Header>
+                        <Section.Heading>Payload summary</Section.Heading>
+                      </Section.Header>
+                      <div className="grid gap-2">
+                        <Field label="Operation" value="embedMany" />
+                        <Field label="Input count" value="3" />
+                        <Field label="Vector dimensions" value="1536" />
+                      </div>
+                    </Section>
+                  </SideDialog.Content>
+                </SideDialog>
+              )}
+            </SideDialog.Content>
+          </SideDialog>
+        </SideDialog.Content>
+      </SideDialog>
+    </div>
+  );
+};
+
 export const Default: Story = {
   render: () => <DetailDialogDemo />,
 };
 
 export const Level2: Story = {
-  render: () => <DetailDialogDemo level={2} />,
+  render: () => <NestedLevelsDemo initialDepth={2} />,
 };
 
 export const Level3: Story = {
-  render: () => <DetailDialogDemo level={3} />,
+  render: () => <NestedLevelsDemo initialDepth={3} />,
 };
 
 const SideDialogWithCodeDemo = () => {
