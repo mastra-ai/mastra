@@ -1,6 +1,5 @@
 ---
 '@mastra/core': patch
-'mastracode': patch
 ---
 
-Fixed mode switching delay — shift+tab now updates the UI instantly instead of waiting for storage round-trips. Fixed duplicate message when queueing with Ctrl+F.
+Fixed delay when switching agent modes. Mode changes now update the UI immediately. Added 10s TTL cache for available models list to speed up modal opens. Made provider capabilities loading lazy instead of bulk-syncing on every registry access.

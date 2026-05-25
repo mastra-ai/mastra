@@ -446,13 +446,21 @@ function isDirectory(dir: string): boolean {
   }
 }
 
-function findCapabilitiesDirs(_useDynamicLoading: boolean): string[] {
+function findCapabilitiesDirs(useDynamicLoading: boolean): string[] {
   const packageRoot = getPackageRoot();
   const distCapabilitiesDir = path.join(packageRoot, 'dist', 'capabilities');
   const sourceCapabilitiesDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
   const workspaceSourceCapabilitiesDir = path.join(process.cwd(), 'packages/core/src/llm/model/capabilities');
 
-  const dirs = isDirectory(distCapabilitiesDir) ? [distCapabilitiesDir] : [];
+  const dirs: string[] = [];
+
+  // In dynamic mode, prefer the global cache so fresher gateway-synced data wins.
+  if (useDynamicLoading) {
+    const globalCapDir = GLOBAL_CAPABILITIES_DIR();
+    if (isDirectory(globalCapDir)) dirs.push(globalCapDir);
+  }
+
+  if (isDirectory(distCapabilitiesDir)) dirs.push(distCapabilitiesDir);
 
   // Published packages only include dist/. Source fallbacks are for local workspace/dev
   // runs where @mastra/core may resolve through a stale partial dist while checked-in
@@ -461,11 +469,6 @@ function findCapabilitiesDirs(_useDynamicLoading: boolean): string[] {
   if (workspaceSourceCapabilitiesDir !== sourceCapabilitiesDir && isDirectory(workspaceSourceCapabilitiesDir)) {
     dirs.push(workspaceSourceCapabilitiesDir);
   }
-
-  // Global cache dir: capabilities synced by gateway refresh live here.
-  // Read directly instead of bulk-copying to local dist on every registry load.
-  const globalCapDir = GLOBAL_CAPABILITIES_DIR();
-  if (isDirectory(globalCapDir)) dirs.push(globalCapDir);
 
   return dirs;
 }

@@ -217,7 +217,7 @@ export interface TUIState {
   // ── Dedup ────────────────────────────────────────────────────────────
   /** Texts of queued messages that were locally rendered and fired — used to
    *  suppress the subscription echo that would otherwise create a duplicate. */
-  firedQueuedMessageTexts?: Set<string>;
+  firedQueuedMessageTexts?: Map<string, number>;
 
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;
