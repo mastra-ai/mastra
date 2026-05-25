@@ -17,7 +17,14 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
   await mkdir(newPath, { recursive: true });
   await cp(templatePath, newPath, { recursive: true });
 
-  const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
+  // tinyexec 1.2.x switched to npm's staged-publishes workflow
+  // (tinylibs/tinyexec#129, #130), which drops the trusted-publisher
+  // metadata on npm. Audited as a benign maintainer-driven hardening,
+  // not a takeover. Remove once upstream restores trusted-publisher.
+  const installArgs =
+    pkgManager === 'pnpm'
+      ? ['install', '--config.minimum-release-age=0', '--config.trust-policy-exclude=tinyexec@*']
+      : ['install'];
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
