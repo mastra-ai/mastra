@@ -21,16 +21,12 @@ export async function setupMonorepo(pathToStoreFiles, pkgManager) {
   await appendFile(join(newPath, 'pnpm-workspace.yaml'), '\nminimumReleaseAge: 0\n');
 
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
-  const env = {
-    ...process.env,
-    npm_config_minimum_release_age: '0',
-  };
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
   await execa(pkgManager, installArgs, {
     cwd: newPath,
     stdio: 'inherit',
-    env,
+    env: process.env,
   });
 }
