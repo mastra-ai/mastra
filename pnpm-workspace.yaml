@@ -44,6 +44,10 @@ patchedDependencies:
   tsup@8.5.1: patches/tsup@8.5.1.patch
 
 packageExtensions:
+  '@ai-sdk/provider-utils@3.0.25':
+    dependencies:
+      msw: ^2.12.11
+      vitest: 4.1.5
   '@uiw/codemirror-theme-dracula@*':
     dependencies:
       '@babel/runtime': ^7.29.2
