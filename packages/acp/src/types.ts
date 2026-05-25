@@ -1,5 +1,6 @@
 import type {
   InitializeRequest,
+  ModelId,
   NewSessionRequest,
   RequestPermissionRequest,
   RequestPermissionResponse,
@@ -34,6 +35,8 @@ export type CreateACPToolOptions = {
   onPermissionRequest?: (request: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
   /** Workspace for the ACP agent process and ACP session. */
   workspace?: Workspace;
+  /** Model ID to select after session creation via the ACP `session/set_model` method. */
+  model?: ModelId;
 };
 
 export type ACPToolInput = {

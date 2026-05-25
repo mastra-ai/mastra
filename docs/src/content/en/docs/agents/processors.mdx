@@ -46,10 +46,10 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const moderatedAgent = new Agent({
   name: 'moderated-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   inputProcessors: [
     new ModerationProcessor({
-      model: 'openai/gpt-5-mini',
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
       categories: ['hate', 'harassment', 'violence'],
       threshold: 0.7,
       strategy: 'block',
@@ -100,13 +100,13 @@ import { PrefillErrorHandler, TokenLimiter, ModerationProcessor } from '@mastra/
 
 const agent = new Agent({
   name: 'support-agent',
-  model: 'openai/gpt-5',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: '...',
   inputProcessors: [
     new TokenLimiter(4000),
-    new ModerationProcessor({ model: 'openai/gpt-4.1-nano' }),
+    new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' }),
   ],
-  outputProcessors: [new ModerationProcessor({ model: 'openai/gpt-4.1-nano' })],
+  outputProcessors: [new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' })],
   errorProcessors: [new PrefillErrorHandler()],
 })
 ```
@@ -200,7 +200,7 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-5-mini' }
+      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
     }
 
     // Disable tools after 5 steps to force completion
@@ -252,7 +252,7 @@ The `prepareStep()` callback on `generate()` or `stream()` is a shorthand for `p
 await agent.generate('Complex task', {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-5-mini' }
+      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
     }
     if (stepNumber > 5) {
       return { toolChoice: 'none' }
@@ -390,7 +390,7 @@ import { TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [new TokenLimiter(127000)],
 })
 ```
@@ -655,7 +655,7 @@ const moderationWorkflow = createWorkflow({
 const agent = new Agent({
   id: 'moderated-agent',
   name: 'Moderated Agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [moderationWorkflow],
 })
 ```
@@ -694,7 +694,7 @@ export class QualityChecker implements Processor {
 const agent = new Agent({
   id: 'quality-agent',
   name: 'Quality Agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   outputProcessors: [new QualityChecker()],
   maxProcessorRetries: 3, // Maximum retry attempts. If unset, retries are disabled (unless errorProcessors are configured, in which case it defaults to 10).
 })
@@ -715,7 +715,7 @@ All processors expose an `onViolation` property that fires whenever a policy vio
 import { ModerationProcessor, CostGuardProcessor } from '@mastra/core/processors'
 
 const moderation = new ModerationProcessor({
-  model: 'openai/gpt-5-nano',
+  model: '__GATEWAY_OPENAI_MODEL_NANO__',
   strategy: 'block',
 })
 
