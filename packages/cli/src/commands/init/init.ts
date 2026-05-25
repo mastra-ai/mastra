@@ -8,6 +8,7 @@ import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
 import { provisionObservabilityProject } from './observability-provision';
 import { installMastraSkills } from './skills-install';
+import { getStoreOption } from './store-options';
 import {
   createComponentsDir,
   createMastraDir,
@@ -19,6 +20,7 @@ import {
   writeCodeSample,
   writeIndexFile,
   writeObservabilityEnv,
+  writeStorageEnv,
 } from './utils';
 import type { Component, LLMProvider } from './utils';
 
@@ -38,6 +40,10 @@ export const init = async ({
   observabilityProject,
   observabilityMode = 'pick',
   observabilityToken,
+  storage = 'libsql',
+  vectorStore,
+  memoryStore = 'same',
+  observabilityStorage = 'duckdb',
 }: {
   directory?: string;
   components: Component[];
@@ -51,6 +57,10 @@ export const init = async ({
   observability?: boolean;
   observabilityProject?: string;
   observabilityToken?: string;
+  storage?: string;
+  vectorStore?: string;
+  memoryStore?: string;
+  observabilityStorage?: string;
   /**
    * `'create'` skips the picker and always provisions a new platform project
    * named after the local one (used by `create-mastra`). `'pick'` shows the
@@ -78,9 +88,14 @@ export const init = async ({
         addWorkflow: components.includes('workflows'),
         addAgent: components.includes('agents'),
         addScorers: components.includes('scorers'),
+        storage,
+        vectorStore,
+        memoryStore,
+        observabilityStorage,
       }),
       ...components.map(component => createComponentsDir(dirPath, component)),
       writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
+      writeStorageEnv({ storage, vectorStore, memoryStore, observabilityStorage }),
     ]);
 
     if (addExample) {
@@ -92,13 +107,33 @@ export const init = async ({
 
       const depService = new DepsService();
 
-      const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
-      if (needsLibsql) {
-        await depService.installPackages([`@mastra/libsql${packageVersionTag}`]);
+      // Install storage package
+      const storageOption = getStoreOption(storage);
+      if (storageOption) {
+        const needsStorage = (await depService.checkDependencies([storageOption.package])) !== `ok`;
+        if (needsStorage) {
+          await depService.installPackages([`${storageOption.package}${packageVersionTag}`]);
+        }
       }
-      const needsDuckDB = (await depService.checkDependencies(['@mastra/duckdb'])) !== `ok`;
-      if (needsDuckDB) {
-        await depService.installPackages([`@mastra/duckdb${packageVersionTag}`]);
+
+      // Install vector store package if separate
+      if (vectorStore && vectorStore !== 'none') {
+        const vectorOption = getStoreOption(vectorStore);
+        if (vectorOption) {
+          const needsVector = (await depService.checkDependencies([vectorOption.package])) !== `ok`;
+          if (needsVector) {
+            await depService.installPackages([`${vectorOption.package}${packageVersionTag}`]);
+          }
+        }
+      }
+
+      // Install observability storage package
+      const observabilityOption = getStoreOption(observabilityStorage);
+      if (observabilityOption) {
+        const needsObservabilityStorage = (await depService.checkDependencies([observabilityOption.package])) !== `ok`;
+        if (needsObservabilityStorage) {
+          await depService.installPackages([`${observabilityOption.package}${packageVersionTag}`]);
+        }
       }
       const needsMemory =
         components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;

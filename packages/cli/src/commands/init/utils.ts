@@ -18,6 +18,14 @@ import {
   antigravityGlobalMCPConfigPath,
 } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
+import {
+  ALL_STORAGE_OPTIONS,
+  VECTOR_ONLY_OPTIONS,
+  OBSERVABILITY_STORAGE_OPTIONS,
+  hasVectorSupport,
+  getStoreOption,
+} from './store-options';
+import type { StoreOption } from './store-options';
 
 const exec = util.promisify(child_process.exec);
 
@@ -508,12 +516,20 @@ export const writeIndexFile = async ({
   addExample,
   addWorkflow,
   addScorers,
+  storage = 'libsql',
+  vectorStore,
+  memoryStore = 'same',
+  observabilityStorage = 'duckdb',
 }: {
   dirPath: string;
   addExample: boolean;
   addWorkflow: boolean;
   addAgent: boolean;
   addScorers: boolean;
+  storage?: string;
+  vectorStore?: string;
+  memoryStore?: string;
+  observabilityStorage?: string;
 }) => {
   const indexPath = dirPath + '/index.ts';
   const destPath = path.join(indexPath);
@@ -536,14 +552,21 @@ export const mastra = new Mastra()
 
       return;
     }
+
+    const storageImports = generateStorageImports({
+      storage,
+      vectorStore,
+      _memoryStore: memoryStore,
+      observabilityStorage,
+    });
+    const storageCode = generateStorageCode({ storage, vectorStore, _memoryStore: memoryStore, observabilityStorage });
+
     await fs.writeFile(
       destPath,
       `
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-import { DuckDBStore } from "@mastra/duckdb";
-import { MastraCompositeStore } from '@mastra/core/storage';
+${storageImports.join('\n')}
 import { Observability, MastraStorageExporter, MastraPlatformExporter, SensitiveDataFilter } from '@mastra/observability';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
@@ -551,16 +574,7 @@ ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, tran
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
-  storage: new MastraCompositeStore({
-    id: 'composite-storage',
-    default: new LibSQLStore({
-      id: "mastra-storage",
-      url: "file:./mastra.db",
-    }),
-    domains: {
-      observability: await new DuckDBStore().getStore('observability'),
-    }
-  }),
+  ${storageCode}
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
@@ -710,6 +724,255 @@ export const writeObservabilityEnv = async ({
   lines.push('');
   await fs.appendFile(envFilePath, lines.join('\n'));
 };
+
+/**
+ * Write storage-specific environment variables to .env or .env.example
+ */
+export const writeStorageEnv = async ({
+  storage,
+  vectorStore,
+  memoryStore,
+  observabilityStorage = 'duckdb',
+}: {
+  storage: string;
+  vectorStore?: string;
+  memoryStore?: string;
+  observabilityStorage?: string;
+}) => {
+  const envFileName = '.env.example';
+  const lines: string[] = [];
+
+  const storageOption = getStoreOption(storage);
+  if (storageOption?.envVar) {
+    lines.push(`# ${storageOption.label} Configuration`);
+    lines.push(`${storageOption.envVar}=${storageOption.defaultUrl || 'your-connection-string'}`);
+    lines.push('');
+  }
+
+  if (vectorStore && vectorStore !== 'none') {
+    const vectorOption = getStoreOption(vectorStore);
+    if (vectorOption?.envVar) {
+      lines.push(`# ${vectorOption.label} Configuration (Vector)`);
+      lines.push(`${vectorOption.envVar}=${vectorOption.defaultUrl || 'your-api-key-or-url'}`);
+      lines.push('');
+    }
+  }
+
+  if (memoryStore && memoryStore !== 'same' && memoryStore !== 'none' && memoryStore !== storage) {
+    const memoryOption = getStoreOption(memoryStore);
+    if (memoryOption?.envVar) {
+      lines.push(`# ${memoryOption.label} Configuration (Memory)`);
+      lines.push(`${memoryOption.envVar}_MEMORY=${memoryOption.defaultUrl || 'your-connection-string'}`);
+      lines.push('');
+    }
+  }
+
+  // Add observability storage env vars if needed and different from main storage
+  if (observabilityStorage && observabilityStorage !== storage) {
+    const observabilityOption = getStoreOption(observabilityStorage);
+    if (observabilityOption?.envVar) {
+      lines.push(`# ${observabilityOption.label} Configuration (Observability)`);
+      lines.push(`${observabilityOption.envVar}=${observabilityOption.defaultUrl || 'your-connection-string'}`);
+      lines.push('');
+    }
+  }
+
+  if (lines.length > 0) {
+    await fs.appendFile(path.join(process.cwd(), envFileName), lines.join('\n'));
+  }
+};
+
+/**
+ * Generate storage configuration code for src/mastra/index.ts
+ */
+export function generateStorageCode({
+  storage,
+  vectorStore,
+  _memoryStore,
+  observabilityStorage = 'duckdb',
+}: {
+  storage: string;
+  vectorStore?: string;
+  _memoryStore?: string;
+  observabilityStorage?: string;
+}): string {
+  const storageOption = getStoreOption(storage);
+  if (!storageOption) {
+    throw new Error(`Unknown storage option: ${storage}`);
+  }
+
+  // Simple cases: single store with both storage and vector
+  if (storageOption.hasStorage && storageOption.hasVector && (!vectorStore || vectorStore === 'none')) {
+    return generateSimpleStorageCode(storageOption, observabilityStorage);
+  }
+
+  // Composite case: storage + separate vector store
+  if (vectorStore && vectorStore !== 'none') {
+    return generateCompositeStorageCode(storageOption, vectorStore, observabilityStorage);
+  }
+
+  // Default case
+  return generateSimpleStorageCode(storageOption, observabilityStorage);
+}
+
+function generateSimpleStorageCode(option: StoreOption, observabilityStorage: string): string {
+  const { value, className, envVar, defaultUrl } = option;
+
+  const observabilityOption = getStoreOption(observabilityStorage);
+  const observabilityCode = observabilityOption
+    ? generateStoreInstance(observabilityOption, 'observability-storage')
+    : `await new DuckDBStore().getStore('observability')`;
+
+  if (value === 'libsql') {
+    return `storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new ${className}({
+      id: "mastra-storage",
+      url: "file:./mastra.db",
+    }),
+    domains: {
+      observability: ${observabilityCode},
+    }
+  }),`;
+  }
+
+  if (value === 'duckdb') {
+    return `storage: await new ${className}().getStore('default'),`;
+  }
+
+  const urlConfig = envVar
+    ? `${getUrlConfigKey(value)}: process.env.${envVar}${defaultUrl ? ` || '${defaultUrl}'` : ''}`
+    : `${getUrlConfigKey(value)}: '${defaultUrl}'`;
+
+  return `storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new ${className}({
+      id: "mastra-storage",
+      ${urlConfig},
+    }),
+    domains: {
+      observability: ${observabilityCode},
+    }
+  }),`;
+}
+
+function generateCompositeStorageCode(
+  storageOption: StoreOption,
+  vectorStore: string,
+  observabilityStorage: string,
+): string {
+  const vectorOption = getStoreOption(vectorStore);
+  if (!vectorOption) {
+    throw new Error(`Unknown vector store: ${vectorStore}`);
+  }
+
+  const observabilityOption = getStoreOption(observabilityStorage);
+  const observabilityCode = observabilityOption
+    ? generateStoreInstance(observabilityOption, 'observability-storage')
+    : `await new DuckDBStore().getStore('observability')`;
+
+  const storageCode = generateStoreInstance(storageOption, 'mastra-storage');
+  const vectorCode = generateStoreInstance(vectorOption, 'vector-storage');
+
+  return `storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: ${storageCode},
+    domains: {
+      vector: ${vectorCode},
+      observability: ${observabilityCode},
+    }
+  }),`;
+}
+
+function generateStoreInstance(option: StoreOption, id: string): string {
+  const { value, className, envVar, defaultUrl } = option;
+
+  if (value === 'duckdb') {
+    return `await new ${className}().getStore('${id}')`;
+  }
+
+  const urlConfig = envVar
+    ? `${getUrlConfigKey(value)}: process.env.${envVar}${defaultUrl ? ` || '${defaultUrl}'` : ''}`
+    : `${getUrlConfigKey(value)}: '${defaultUrl}'`;
+
+  return `new ${className}({
+      id: "${id}",
+      ${urlConfig},
+    })`;
+}
+
+function getUrlConfigKey(storeValue: string): string {
+  const urlKeys: Record<string, string> = {
+    libsql: 'url',
+    pg: 'connectionString',
+    mongodb: 'uri',
+    redis: 'url',
+    upstash: 'url',
+    clickhouse: 'url',
+    'cloudflare-d1': 'databaseId',
+    dsql: 'endpoint',
+    lance: 'dbPath',
+    pinecone: 'apiKey',
+    qdrant: 'url',
+    chroma: 'url',
+    elasticsearch: 'node',
+    opensearch: 'node',
+    couchbase: 'connectionString',
+    astra: 'token',
+    convex: 'url',
+    dynamodb: 'region',
+    mssql: 'connectionString',
+    s3vectors: 'bucket',
+    turbopuffer: 'apiKey',
+    vectorize: 'accountId',
+  };
+  return urlKeys[storeValue] || 'url';
+}
+
+/**
+ * Generate import statements for storage packages
+ */
+export function generateStorageImports({
+  storage,
+  vectorStore,
+  _memoryStore,
+  observabilityStorage = 'duckdb',
+}: {
+  storage: string;
+  vectorStore?: string;
+  _memoryStore?: string;
+  observabilityStorage?: string;
+}): string[] {
+  const imports: string[] = [];
+  const seen = new Set<string>();
+
+  const storageOption = getStoreOption(storage);
+  if (storageOption && !seen.has(storageOption.package)) {
+    imports.push(`import { ${storageOption.className} } from '${storageOption.package}';`);
+    seen.add(storageOption.package);
+  }
+
+  if (vectorStore && vectorStore !== 'none') {
+    const vectorOption = getStoreOption(vectorStore);
+    if (vectorOption && !seen.has(vectorOption.package)) {
+      imports.push(`import { ${vectorOption.className} } from '${vectorOption.package}';`);
+      seen.add(vectorOption.package);
+    }
+  }
+
+  // Add observability storage package
+  const observabilityOption = getStoreOption(observabilityStorage);
+  if (observabilityOption && !seen.has(observabilityOption.package)) {
+    imports.push(`import { ${observabilityOption.className} } from '${observabilityOption.package}';`);
+    seen.add(observabilityOption.package);
+  }
+
+  // Add MastraCompositeStore - always needed now
+  imports.push(`import { MastraCompositeStore } from '@mastra/core/storage';`);
+
+  return imports;
+}
+
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
     .trim()
@@ -765,6 +1028,10 @@ interface InteractivePromptArgs {
     skills?: boolean;
     mcpServer?: boolean;
     observability?: boolean;
+    storage?: boolean;
+    vectorStore?: boolean;
+    memoryStore?: boolean;
+    observabilityStorage?: boolean;
   };
 }
 
@@ -815,6 +1082,69 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           });
         }
         return undefined;
+      },
+      storage: () =>
+        skip?.storage
+          ? undefined
+          : p.select({
+              message: 'Which database do you want to use?',
+              options: ALL_STORAGE_OPTIONS.map(opt => ({
+                value: opt.value,
+                label: opt.label,
+                hint: opt.hint,
+              })),
+              initialValue: 'libsql',
+            }),
+      vectorStore: ({ results }) => {
+        if (skip?.vectorStore) return undefined;
+
+        const selectedStorage = results.storage as string;
+        if (hasVectorSupport(selectedStorage)) {
+          return undefined;
+        }
+
+        return p.select({
+          message: 'Which vector store do you want to use?',
+          options: [
+            { value: 'none', label: 'None', hint: 'No semantic recall' },
+            ...VECTOR_ONLY_OPTIONS.map(opt => ({
+              value: opt.value,
+              label: opt.label,
+              hint: opt.hint,
+            })),
+          ],
+          initialValue: 'none',
+        });
+      },
+      memoryStore: () => {
+        if (skip?.memoryStore) return undefined;
+
+        return p.select({
+          message: 'Which memory store do you want to use?',
+          options: [
+            { value: 'same', label: 'Same as storage', hint: 'recommended' },
+            { value: 'none', label: 'None', hint: 'No memory persistence' },
+            ...ALL_STORAGE_OPTIONS.map(opt => ({
+              value: opt.value,
+              label: opt.label,
+              hint: opt.hint,
+            })),
+          ],
+          initialValue: 'same',
+        });
+      },
+      observabilityStorage: () => {
+        if (skip?.observabilityStorage) return undefined;
+
+        return p.select({
+          message: 'Which observability storage do you want to use?',
+          options: OBSERVABILITY_STORAGE_OPTIONS.map(opt => ({
+            value: opt.value,
+            label: opt.label,
+            hint: opt.hint,
+          })),
+          initialValue: 'duckdb',
+        });
       },
       observability: async () => {
         if (skip?.observability) return undefined;
@@ -1021,6 +1351,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
     observabilityToken: observability?.token,
     skills: configureMastraToolingForAgents?.skills as string[] | undefined,
     mcpServer: configureMastraToolingForAgents?.mcpServer as Editor | undefined,
+    storage: rest.storage as string | undefined,
+    vectorStore: rest.vectorStore as string | undefined,
+    memoryStore: rest.memoryStore as string | undefined,
+    observabilityStorage: rest.observabilityStorage as string | undefined,
   };
 };
 

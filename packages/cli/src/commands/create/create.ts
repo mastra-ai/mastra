@@ -33,6 +33,10 @@ export const create = async (args: {
   analytics?: PosthogAnalytics;
   observability?: boolean;
   observabilityProject?: string;
+  storage?: string;
+  vectorStore?: string;
+  memoryStore?: string;
+  observabilityStorage?: string;
 }) => {
   if (args.template !== undefined) {
     await createFromTemplate({
@@ -62,6 +66,10 @@ export const create = async (args: {
     skills: args?.skills,
     mcpServer: args?.mcpServer,
     observability: args?.observability,
+    storage: args?.storage,
+    vectorStore: args?.vectorStore,
+    memoryStore: args?.memoryStore,
+    observabilityStorage: args?.observabilityStorage,
     needsInteractive,
     onObservabilitySelected: event => getAnalytics()?.trackEvent('cli_observability_selected', event),
   });
@@ -97,6 +105,10 @@ export const create = async (args: {
       observabilityProject: args.observabilityProject,
       observabilityMode: 'create',
       observabilityToken: result?.observabilityToken,
+      storage: result?.storage || args.storage || 'libsql',
+      vectorStore: result?.vectorStore || args.vectorStore,
+      memoryStore: result?.memoryStore || args.memoryStore || 'same',
+      observabilityStorage: result?.observabilityStorage || args.observabilityStorage || 'duckdb',
     });
     postCreate({ projectName });
     return;

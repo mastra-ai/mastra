@@ -163,6 +163,10 @@ export const createMastraProject = async ({
   skills,
   mcpServer,
   observability,
+  storage,
+  vectorStore,
+  memoryStore,
+  observabilityStorage,
   needsInteractive,
   onObservabilitySelected,
 }: {
@@ -174,6 +178,10 @@ export const createMastraProject = async ({
   skills?: string[];
   mcpServer?: string;
   observability?: boolean;
+  storage?: string;
+  vectorStore?: string;
+  memoryStore?: string;
+  observabilityStorage?: string;
   needsInteractive?: boolean;
   onObservabilitySelected?: (event: {
     command?: 'create' | 'init';
@@ -215,6 +223,10 @@ export const createMastraProject = async ({
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
         observability: observability !== undefined,
+        storage: storage !== undefined,
+        vectorStore: vectorStore !== undefined,
+        memoryStore: memoryStore !== undefined,
+        observabilityStorage: observabilityStorage !== undefined,
         directory: true,
         gitInit: skipGitInit,
       },
