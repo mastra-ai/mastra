@@ -1709,6 +1709,7 @@ export class Workflow<
       onFinish: options.onFinish,
       onError: options.onError,
       sharePubsub: options.sharePubsub,
+      toolId: options.toolId,
     };
 
     if (!executionEngine) {

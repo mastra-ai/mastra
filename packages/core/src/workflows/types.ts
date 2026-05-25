@@ -479,6 +479,12 @@ export interface WorkflowOptions {
    * Errors thrown in this callback are caught and logged, not propagated.
    */
   onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
+
+  /**
+   * Explicit model-facing tool ID used when this workflow is exposed as a tool on an agent.
+   * If set, the agent uses this value as the tool name instead of the default `workflow-${registrationKey}`.
+   */
+  toolId?: string;
 }
 
 export type WorkflowInfo = {

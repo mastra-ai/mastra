@@ -4721,6 +4721,8 @@ export class Agent<
     const workflows = await this.listWorkflows({ requestContext });
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
+        const toolName = workflow.options?.toolId || `workflow-${workflowName}`;
+
         // Build input/output schemas as JSONSchema7 to avoid Zod composition issues
         // when workflow schemas are StandardSchemaWithJSON wrappers (e.g. from storage)
         const inputDataJsonSchema: JSONSchema7 = workflow.inputSchema
@@ -4769,7 +4771,7 @@ export class Agent<
         };
 
         const toolObj = createTool({
-          id: `workflow-${workflowName}`,
+          id: toolName,
           description: workflow.description || `Workflow: ${workflowName}`,
           inputSchema: extendedInputSchema,
           outputSchema,
@@ -4933,7 +4935,7 @@ export class Agent<
         });
 
         const options: ToolOptions = {
-          name: `workflow-${workflowName}`,
+          name: toolName,
           runId,
           threadId,
           resourceId,
@@ -4948,7 +4950,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(
+        convertedWorkflowTools[toolName] = makeCoreTool(
           toolObj,
           options,
           undefined,
