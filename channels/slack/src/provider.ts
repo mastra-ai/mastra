@@ -757,8 +757,23 @@ export class SlackProvider implements ChannelProvider {
    */
   #resolveSlackAdapterConfig(): SlackAdapterChannelConfig {
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- intentional read of deprecated alias for back-compat
-    const { adapterConfig, cors, gateway, formatError, streaming, typingStatus, toolDisplay } = this.#channelConfig;
-    const topLevel = { cors, gateway, formatError, streaming, typingStatus, toolDisplay };
+    const {
+      adapterConfig,
+      cors,
+      gateway,
+      formatError,
+      streaming: topLevelStreaming,
+      typingStatus,
+      toolDisplay: topLevelToolDisplay,
+    } = this.#channelConfig;
+    const topLevel = {
+      cors,
+      gateway,
+      formatError,
+      streaming: topLevelStreaming,
+      typingStatus,
+      toolDisplay: topLevelToolDisplay,
+    };
     const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
     const filteredAdapterConfig = Object.fromEntries(
       Object.entries(adapterConfig ?? {}).filter(([, value]) => value !== undefined),
@@ -766,15 +781,18 @@ export class SlackProvider implements ChannelProvider {
     // SlackProvider opinionated defaults — these render well in Slack's AI Assistant UI
     // but aren't appropriate for every platform, so they live here rather than in core.
     //   - `streaming: true`         — Slack supports native message streaming.
-    //   - `toolDisplay: 'grouped'`  — tools collapse into a single "Thinking Steps" widget.
+    //   - `toolDisplay: 'grouped'`  — tools collapse into a single "Thinking Steps" widget (streaming only).
     // Users can opt out of any of these by passing the field at the top level (or via `adapterConfig`).
     // Keep in sync with the `@default` JSDoc on `SlackAdapterChannelConfig` in ./types.ts.
+    const merged = { ...filteredAdapterConfig, ...filteredTopLevel } as Partial<SlackAdapterChannelConfig>;
+    const streaming = merged.streaming ?? true;
+    // `'grouped'` requires streaming; fall back to `'cards'` when streaming is off.
+    const toolDisplay = merged.toolDisplay ?? (streaming ? 'grouped' : 'cards');
     return {
-      streaming: true,
-      toolDisplay: 'grouped',
-      ...filteredAdapterConfig,
-      ...filteredTopLevel,
-    } as unknown as SlackAdapterChannelConfig;
+      ...merged,
+      streaming,
+      toolDisplay,
+    } as SlackAdapterChannelConfig;
   }
 
   /**
