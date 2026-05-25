@@ -71,7 +71,11 @@ export function ExperimentResultsList({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center justify-center w-10 relative bg-transparent h-full">
-                        <div className={cn('w-2 h-2 rounded-full', hasError ? 'bg-red-700' : 'bg-green-600')} />
+                        <div
+                          role="img"
+                          aria-label={hasError ? 'Error' : 'Success'}
+                          className={cn('w-2 h-2 rounded-full', hasError ? 'bg-red-700' : 'bg-green-600')}
+                        />
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>{hasError ? 'Error' : 'Success'}</TooltipContent>
