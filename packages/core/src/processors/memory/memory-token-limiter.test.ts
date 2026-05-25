@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
 import { getMemoryTokenLimiterBoundary, setMemoryTokenLimiterBoundary } from '../../memory';
@@ -7,6 +7,7 @@ import type { MemoryTokenLimiterBoundary } from '../../memory/types';
 import { RequestContext } from '../../request-context';
 
 import { MemoryTokenLimiter } from './memory-token-limiter';
+import { MessageHistory } from './message-history';
 
 function createMessage(
   id: string,
@@ -495,5 +496,103 @@ describe('Memory.getInputProcessors with nested lastMessages', () => {
     const historyProcessor = processors.find(p => p.id === 'message-history');
     expect(historyProcessor).toBeDefined();
     expect((historyProcessor as any).lastMessages).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('should fetch uncapped token-limited history in bounded pages', async () => {
+    const storage = {
+      listMessages: vi.fn(async ({ page = 0, perPage }: { page?: number; perPage?: number | false }) => ({
+        messages: Array.from({ length: perPage as number }, (_, index) =>
+          createMessage(
+            `mem-${page}-${index}`,
+            index % 2 === 0 ? 'user' : 'assistant',
+            'x'.repeat(1000),
+            'thread-1',
+            new Date(new Date('2024-01-01T10:00:00Z').getTime() + index * 1000),
+          ),
+        ),
+        total: 1_000_000,
+        page,
+        perPage,
+        hasMore: true,
+      })),
+    };
+
+    const history = new MessageHistory({
+      storage: storage as any,
+      lastMessages: Number.MAX_SAFE_INTEGER,
+      tokenLimit: { maxTokens: 100 },
+    });
+    const messageList = new MessageList();
+    messageList.add(createMessage('input-1', 'user', 'Hi'), 'input');
+
+    await history.processInput(createProcessArgs(messageList, { requestContext: createThreadContext('thread-1') }));
+
+    expect(storage.listMessages).toHaveBeenCalledTimes(1);
+    expect(storage.listMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 0,
+        perPage: 20,
+      }),
+    );
+  });
+
+  it('should paginate uncapped token-limited history backwards by createdAt cursor', async () => {
+    const firstBatch = Array.from({ length: 20 }, (_, index) =>
+      createMessage(
+        `mem-new-${index}`,
+        index % 2 === 0 ? 'user' : 'assistant',
+        'hi',
+        'thread-1',
+        new Date(new Date('2024-01-01T10:20:00Z').getTime() - index * 1000),
+      ),
+    );
+    const secondBatch = Array.from({ length: 5 }, (_, index) =>
+      createMessage(
+        `mem-old-${index}`,
+        index % 2 === 0 ? 'user' : 'assistant',
+        'hi',
+        'thread-1',
+        new Date(new Date('2024-01-01T09:20:00Z').getTime() - index * 1000),
+      ),
+    );
+    const storage = {
+      listMessages: vi.fn(
+        async ({ filter, page = 0, perPage }: { filter?: any; page?: number; perPage?: number | false }) => {
+          const isSecondPage = Boolean(filter?.dateRange?.end);
+          return {
+            messages: isSecondPage ? secondBatch : firstBatch,
+            total: 25,
+            page,
+            perPage,
+            hasMore: !isSecondPage,
+          };
+        },
+      ),
+    };
+
+    const history = new MessageHistory({
+      storage: storage as any,
+      lastMessages: Number.MAX_SAFE_INTEGER,
+      tokenLimit: { maxTokens: 10_000 },
+    });
+
+    await history.processInput(
+      createProcessArgs(new MessageList(), { requestContext: createThreadContext('thread-1') }),
+    );
+
+    expect(storage.listMessages).toHaveBeenCalledTimes(2);
+    expect(storage.listMessages).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        page: 0,
+        perPage: 20,
+        filter: expect.objectContaining({
+          dateRange: expect.objectContaining({
+            end: firstBatch.at(-1)!.createdAt,
+            endExclusive: true,
+          }),
+        }),
+      }),
+    );
   });
 });

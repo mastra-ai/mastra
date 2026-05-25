@@ -184,10 +184,11 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       if (existingThread && threadObject) {
         const updatedMemoryContext = requestContext.get('MastraMemory') as { thread?: StorageThreadType } | undefined;
         const updatedThread = updatedMemoryContext?.thread;
-        const hasMemoryTokenLimiterBoundary =
-          (updatedThread as any)?.metadata?.mastra?.memoryTokenLimiter &&
-          !(existingThread as any)?.metadata?.mastra?.memoryTokenLimiter;
-        if (hasMemoryTokenLimiterBoundary) {
+        const updatedLimiterMetadata = (updatedThread as any)?.metadata?.mastra?.memoryTokenLimiter;
+        const existingLimiterMetadata = (existingThread as any)?.metadata?.mastra?.memoryTokenLimiter;
+        const hasMemoryTokenLimiterBoundaryChange =
+          updatedLimiterMetadata && !deepEqual(existingLimiterMetadata, updatedLimiterMetadata);
+        if (hasMemoryTokenLimiterBoundaryChange) {
           threadObject = await memory.saveThread({
             thread: { ...threadObject, metadata: updatedThread!.metadata },
             memoryConfig,

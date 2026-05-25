@@ -737,6 +737,12 @@ https://mastra.ai/en/docs/memory/overview`,
                   ? Number.MAX_SAFE_INTEGER
                   : normalizedLM.maxMessages
                 : undefined,
+            tokenLimit:
+              normalizedLM.maxTokens !== undefined
+                ? {
+                    maxTokens: normalizedLM.maxTokens,
+                  }
+                : undefined,
           }),
         );
       }
