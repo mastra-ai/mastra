@@ -149,7 +149,7 @@ export function ScheduleTriggersList({
         );
 
         return isLinked ? (
-          <DataList.RowLink key={rowKey} to={paths.workflowRunLink(workflowId!, t.runId)} LinkComponent={Link}>
+          <DataList.RowLink key={rowKey} to={paths.workflowRunLink(workflowId!, t.runId!)} LinkComponent={Link}>
             {cells}
           </DataList.RowLink>
         ) : (
