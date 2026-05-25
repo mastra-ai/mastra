@@ -44,7 +44,11 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
       {filtered.map(s => (
         <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link}>
           <DataList.NameCell>{s.target.workflowId}</DataList.NameCell>
-          <DataList.IdCell id={s.id} />
+          <DataList.Cell height="compact" className="min-w-0">
+            <span className="block truncate font-mono text-ui-smd text-neutral3" title={s.id}>
+              {s.id}
+            </span>
+          </DataList.Cell>
           <DataList.Cell height="compact">
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
               <code className="font-mono text-ui-sm">{s.cron}</code>
