@@ -429,6 +429,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#status = 'suspended';
               self.#delayedPromises.suspendPayload.resolve(chunk.payload);
               self.#delayedPromises.resumeSchema.resolve(chunk.payload.resumeSchema);
+              await options?.onFinish?.({
+                finishReason: 'suspended',
+                suspendReason: chunk.type,
+                toolName: chunk.payload.toolName,
+                toolCallId: chunk.payload.toolCallId,
+                response: {},
+              });
               break;
             case 'raw':
               if (!self.#options.includeRawChunks) {

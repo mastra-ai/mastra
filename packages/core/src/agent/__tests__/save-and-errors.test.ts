@@ -2080,4 +2080,87 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       spy.mockRestore();
     }
   });
+
+  /**
+   * Regression test for orphaned AGENT_RUN spans on HITL suspends.
+   *
+   * When a tool with `requireApproval: true` is invoked, the stream emits a
+   * `tool-call-approval` chunk and terminates without a `finish` chunk. The
+   * suspend switch arm in MastraModelOutput must still fire `onFinish` so the
+   * span-ending pathway in map-results-step runs.
+   *
+   * Without this, the AGENT_RUN span stays open forever and the trace never
+   * appears in observability backends (Langfuse, Datadog, etc.).
+   */
+  it('should end the AGENT_RUN span when the stream suspends for tool-call-approval', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const findUserTool = createTool({
+        id: 'findUserTool',
+        description: 'Returns a user record',
+        inputSchema: z.object({ name: z.string() }),
+        requireApproval: true,
+        execute: async () => ({ name: 'Dero Israel', email: 'dero@mail.com' }),
+      });
+
+      const approvalModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'findUserTool',
+              input: '{"name":"Dero Israel"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-orphaned-span-suspend',
+        name: 'Test Orphaned Span Suspend',
+        model: approvalModel,
+        instructions: 'You are a helpful assistant.',
+        tools: { findUserTool },
+        memory: new MockMemory(),
+      });
+
+      const output = await agent.stream('Find the user with name - Dero Israel', {
+        memory: { thread: 'thread-suspend', resource: 'resource-suspend' },
+        modelSettings: { maxRetries: 0 },
+      });
+
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.end).toHaveBeenCalled();
+      expect(agentRunSpan.error).not.toHaveBeenCalled();
+      expect(agentRunSpan.end.mock.calls[0][0]).toMatchObject({
+        output: {
+          status: 'suspended',
+          reason: 'tool-call-approval',
+          toolName: 'findUserTool',
+          toolCallId: 'call-1',
+        },
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
