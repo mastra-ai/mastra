@@ -87,6 +87,7 @@ export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }:
         disabled={disabled || isPending}
         data-testid="agent-builder-delete-agent"
         variant="ghost"
+        size="sm"
       >
         Delete agent
       </Button>

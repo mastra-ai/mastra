@@ -5,8 +5,11 @@
  * This is a UI-only override — server calls still use real admin permissions.
  */
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import type { MastraClient, RouteResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
+import { useMutation } from '@tanstack/react-query';
+import { createContext, useCallback, useContext, useState  } from 'react';
+import type {ReactNode} from 'react';
 
 export type RoleImpersonationState = {
   /** The role currently being impersonated, or null */
@@ -25,46 +28,73 @@ export type RoleImpersonationState = {
 
 export const RoleImpersonationContext = createContext<RoleImpersonationState | null>(null);
 
+type RolePermissionsResponse = RouteResponse<'GET /auth/roles/:roleId/permissions'>;
+
+/**
+ * Makes a request to fetch the resolved permissions for a role.
+ * Exported for testing purposes.
+ *
+ * @internal
+ */
+export async function makeFetchRolePermissionsRequest(
+  client: MastraClient,
+  { roleId }: { roleId: string },
+): Promise<RolePermissionsResponse> {
+  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options || {};
+  const raw = (apiPrefix ?? '/api').trim();
+  const normalized = raw === '' ? '' : raw.startsWith('/') ? raw : `/${raw}`;
+  const prefix = normalized.replace(/\/+$/, '');
+
+  const response = await fetch(`${baseUrl}${prefix}/auth/roles/${encodeURIComponent(roleId)}/permissions`, {
+    credentials: 'include',
+    headers: {
+      ...clientHeaders,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch role permissions: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+type ImpersonationMutationResult = {
+  role: { id: string; name: string };
+  permissions: string[];
+};
+
 export function RoleImpersonationProvider({ children }: { children: ReactNode }) {
   const client = useMastraClient();
   const [impersonatedRole, setImpersonatedRole] = useState<{ id: string; name: string } | null>(null);
   const [impersonatedPermissions, setImpersonatedPermissions] = useState<string[] | null>(null);
-  const [isSwitching, setIsSwitching] = useState(false);
+
+  const mutation = useMutation<ImpersonationMutationResult, Error, { role: { id: string; name: string } }>({
+    mutationFn: async ({ role }) => {
+      const data = await makeFetchRolePermissionsRequest(client, { roleId: role.id });
+      return { role, permissions: data.permissions };
+    },
+    onSuccess: ({ role, permissions }) => {
+      setImpersonatedRole(role);
+      setImpersonatedPermissions(permissions);
+    },
+  });
+
+  const { mutateAsync, reset, isPending } = mutation;
 
   const startImpersonation = useCallback(
     async (role: { id: string; name: string }) => {
-      setIsSwitching(true);
-      try {
-        const { baseUrl = '', headers: clientHeaders = {}, apiPrefix } = client.options as any;
-        const raw = (apiPrefix || '/api').trim();
-        const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
-
-        const response = await fetch(`${baseUrl}${prefix}/auth/roles/${encodeURIComponent(role.id)}/permissions`, {
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            ...clientHeaders,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch role permissions: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setImpersonatedRole(role);
-        setImpersonatedPermissions(data.permissions);
-      } finally {
-        setIsSwitching(false);
-      }
+      await mutateAsync({ role });
     },
-    [client],
+    [mutateAsync],
   );
 
   const stopImpersonation = useCallback(() => {
     setImpersonatedRole(null);
     setImpersonatedPermissions(null);
-  }, []);
+    reset();
+  }, [reset]);
 
   return (
     <RoleImpersonationContext.Provider
@@ -74,7 +104,7 @@ export function RoleImpersonationProvider({ children }: { children: ReactNode })
         isImpersonating: impersonatedRole !== null,
         startImpersonation,
         stopImpersonation,
-        isSwitching,
+        isSwitching: isPending,
       }}
     >
       {children}
