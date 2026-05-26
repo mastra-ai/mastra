@@ -1,8 +1,8 @@
 import { Button, cn } from '@mastra/playground-ui';
 import { Star } from 'lucide-react';
 import type { MouseEvent } from 'react';
-import { useToggleStoredAgentFavorite } from '../hooks/use-stored-agent-favorite';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
+import { useToggleStoredAgentFavorite } from '@/domains/agent-builder/hooks/use-stored-agent-favorite';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { isAuthenticated } from '@/domains/auth/types';
 

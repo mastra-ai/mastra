@@ -22,7 +22,7 @@ import {
   useInstallBuilderRegistrySkill,
   usePopularBuilderRegistrySkills,
   useSearchBuilderRegistry,
-} from '@/domains/agents/hooks/use-builder-registries';
+} from '@/domains/agent-builder/hooks/use-builder-registries';
 
 // =============================================================================
 // Helpers

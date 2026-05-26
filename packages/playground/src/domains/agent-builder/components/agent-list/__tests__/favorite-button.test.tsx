@@ -7,7 +7,7 @@ vi.mock('@/domains/agent-builder', () => ({
   useBuilderAgentFeatures: () => ({ favorites: true }),
 }));
 
-vi.mock('../../hooks/use-stored-agent-favorite', () => ({
+vi.mock('@/domains/agent-builder/hooks/use-stored-agent-favorite', () => ({
   useToggleStoredAgentFavorite: () => ({ isPending: false, mutate: vi.fn() }),
 }));
 

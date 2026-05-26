@@ -3,7 +3,7 @@ import { toast } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import type { LibraryCopyOrigin } from '../utils/skill-origin';
+import type { LibraryCopyOrigin } from '@/domains/agent-builder/utils/skill-origin';
 
 export interface CopySkillParams {
   /** The public Library skill being copied. */

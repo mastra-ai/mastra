@@ -640,7 +640,11 @@ export const routes: RouteObject[] = [
           ]
         : []),
 
-      { index: true, element: <StudioIndexRedirect /> },
+      {
+        index: true,
+        element: <StudioIndexRedirect />,
+        handle: { crumbs: [{ id: 'home', label: 'Home' }] },
+      },
       { path: '/request-context', element: <RequestContext />, handle: navHandle('/request-context') },
     ],
   },

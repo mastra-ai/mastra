@@ -54,7 +54,7 @@ export const AgentPrimitivesProvider = ({ agentId, children }: AgentPrimitivesPr
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
-  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills(undefined, {
+  const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills({
     enabled: features.skills,
   });
   const { data: workspacesData } = useStoredWorkspaces();

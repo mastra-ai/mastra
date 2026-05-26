@@ -18,7 +18,7 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
   };
 });
 
-vi.mock('@/domains/agents/components/favorite-button', () => ({
+vi.mock('@/domains/agent-builder/components/agent-list/favorite-button', () => ({
   FavoriteButton: () => <button type="button" aria-label="Star agent" />,
 }));
 

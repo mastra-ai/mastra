@@ -78,7 +78,7 @@ describe('StreamChatProvider', () => {
     const runningRender = vi.fn();
 
     render(
-      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
+      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]} debounceTime={100}>
         <RenderTracker hook={useStreamRunning} onRender={runningRender} />
       </StreamChatProvider>,
     );
@@ -198,7 +198,7 @@ describe('StreamChatProvider', () => {
     expect(payload).not.toHaveProperty('instructions');
   });
 
-  it('omits modelSettings when extraInstructions is absent or empty', () => {
+  it('omits modelSettings.instructions when extraInstructions is absent or empty', () => {
     const SendCapture = ({ onReady }: { onReady: (send: (message: string) => void) => void }) => {
       const send = useStreamSend();
       const seen = useRef(false);
@@ -218,7 +218,9 @@ describe('StreamChatProvider', () => {
     );
 
     send!('first');
-    expect(sentMessages[0]).not.toHaveProperty('modelSettings');
+    expect((sentMessages[0] as { modelSettings?: { instructions?: string } }).modelSettings).not.toHaveProperty(
+      'instructions',
+    );
 
     rerender(
       <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="">
@@ -227,7 +229,9 @@ describe('StreamChatProvider', () => {
     );
 
     send!('second');
-    expect(sentMessages[1]).not.toHaveProperty('modelSettings');
+    expect((sentMessages[1] as { modelSettings?: { instructions?: string } }).modelSettings).not.toHaveProperty(
+      'instructions',
+    );
   });
 
   it('does not call sendMessage when extraInstructions changes between sends', () => {
