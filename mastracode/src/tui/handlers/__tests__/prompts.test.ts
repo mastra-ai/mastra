@@ -59,6 +59,73 @@ describe('handleAskQuestion goal mode', () => {
   });
 });
 
+describe('handleAskQuestion multi-select', () => {
+  it('responds with the selected values as a string[] when the user toggles and submits', async () => {
+    const { ctx, state } = createCtx();
+    const options = [
+      { label: 'Alpha', description: 'first' },
+      { label: 'Beta', description: 'second' },
+      { label: 'Gamma', description: 'third' },
+    ];
+
+    const promise = handleAskQuestion(ctx, 'q-multi', 'Pick all that apply', options, 'multi_select');
+
+    // Toggle Alpha, navigate to Gamma, toggle it, submit
+    state.activeInlineQuestion!.handleInput(' ');
+    state.activeInlineQuestion!.handleInput('\x1b[B');
+    state.activeInlineQuestion!.handleInput('\x1b[B');
+    state.activeInlineQuestion!.handleInput(' ');
+    state.activeInlineQuestion!.handleInput('\r');
+
+    await promise;
+
+    expect(state.harness.respondToQuestion).toHaveBeenCalledTimes(1);
+    expect(state.harness.respondToQuestion).toHaveBeenCalledWith({
+      questionId: 'q-multi',
+      answer: ['Alpha', 'Gamma'],
+    });
+  });
+
+  it('responds with an empty array when the user submits without toggling anything', async () => {
+    const { ctx, state } = createCtx();
+    const options = [{ label: 'Alpha' }, { label: 'Beta' }];
+
+    const promise = handleAskQuestion(ctx, 'q-empty', 'Pick all that apply', options, 'multi_select');
+
+    state.activeInlineQuestion!.handleInput('\r');
+    await promise;
+
+    expect(state.harness.respondToQuestion).toHaveBeenCalledWith({ questionId: 'q-empty', answer: [] });
+  });
+
+  it('still responds with "(skipped)" when the user cancels a multi-select prompt', async () => {
+    const { ctx, state } = createCtx();
+    const options = [{ label: 'Alpha' }, { label: 'Beta' }];
+
+    const promise = handleAskQuestion(ctx, 'q-cancel', 'Pick all that apply', options, 'multi_select');
+    state.activeInlineQuestion!.handleInput('\x1b');
+    await promise;
+
+    expect(state.harness.respondToQuestion).toHaveBeenCalledWith({ questionId: 'q-cancel', answer: '(skipped)' });
+  });
+
+  it('ignores selectionMode when no options are provided (falls back to free-text)', async () => {
+    const { ctx, state } = createCtx();
+
+    const promise = handleAskQuestion(ctx, 'q-text', 'What do you think?', undefined, 'multi_select');
+
+    // Free-text input — Enter submits empty string by default (allowEmptyInput is false).
+    // Use the underlying input directly to send a real answer.
+    (state.activeInlineQuestion as any).handleInput('h');
+    (state.activeInlineQuestion as any).handleInput('i');
+    (state.activeInlineQuestion as any).handleInput('\r');
+
+    await promise;
+
+    expect(state.harness.respondToQuestion).toHaveBeenCalledWith({ questionId: 'q-text', answer: 'hi' });
+  });
+});
+
 function createPlanApprovalCtx() {
   const sendSignal = vi.fn().mockReturnValue({
     id: 'sig-1',

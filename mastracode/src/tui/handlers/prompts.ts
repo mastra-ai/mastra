@@ -17,6 +17,8 @@ type HarnessV1PromptResponseSurface = {
   respondToToolSuspension: (opts: { toolCallId?: string; resumeData: unknown }) => Promise<void>;
 };
 
+type SelectionMode = 'single_select' | 'multi_select';
+
 /**
  * Process the next pending inline question from the queue.
  * Called when the current active question is resolved (submitted or cancelled).
@@ -50,8 +52,12 @@ export async function handleAskQuestion(
   questionId: string,
   question: string,
   options?: Array<{ label: string; description?: string }>,
+  selectionMode?: SelectionMode,
 ): Promise<void> {
   const { state } = ctx;
+  // `selectionMode` is only meaningful when options are present. Strip it
+  // otherwise so a free-text fallback doesn't render a checkbox list.
+  const effectiveSelectionMode = options && options.length > 0 ? selectionMode : undefined;
 
   return new Promise(resolve => {
     if (state.options.inlineQuestions) {
@@ -70,11 +76,18 @@ export async function handleAskQuestion(
             askUserComponent.activate({
               question,
               options,
+              selectionMode: effectiveSelectionMode,
               multiline: true,
               tui: state.ui,
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
                 state.harness.respondToQuestion({ questionId, answer });
+                resolve();
+                processNextInlineQuestion(state);
+              },
+              onSubmitMulti: values => {
+                state.activeInlineQuestion = undefined;
+                state.harness.respondToQuestion({ questionId, answer: values });
                 resolve();
                 processNextInlineQuestion(state);
               },
@@ -93,10 +106,17 @@ export async function handleAskQuestion(
               {
                 question,
                 options,
+                selectionMode: effectiveSelectionMode,
                 multiline: true,
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
                   state.harness.respondToQuestion({ questionId, answer });
+                  resolve();
+                  processNextInlineQuestion(state);
+                },
+                onSubmitMulti: values => {
+                  state.activeInlineQuestion = undefined;
+                  state.harness.respondToQuestion({ questionId, answer: values });
                   resolve();
                   processNextInlineQuestion(state);
                 },
@@ -142,11 +162,17 @@ export async function handleAskQuestion(
       const dialog = new AskQuestionDialogComponent({
         question,
         options,
+        selectionMode: effectiveSelectionMode,
         multiline: true,
         tui: state.ui,
         onSubmit: answer => {
           state.ui.hideOverlay();
           state.harness.respondToQuestion({ questionId, answer });
+          resolve();
+        },
+        onSubmitMulti: values => {
+          state.ui.hideOverlay();
+          state.harness.respondToQuestion({ questionId, answer: values });
           resolve();
         },
         onCancel: () => {

@@ -7,11 +7,19 @@
 import { Box, getKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, Component, TUI } from '@mariozechner/pi-tui';
 import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
+import { MultiSelectList } from './multi-select-list.js';
 import { MultilineInput } from './multiline-input.js';
+
+export type AskQuestionDialogSelectionMode = 'single_select' | 'multi_select';
 
 export interface AskQuestionDialogOptions {
   question: string;
   options?: Array<{ label: string; description?: string }>;
+  /**
+   * `multi_select` renders a checkbox list that submits `string[]`. Ignored
+   * when no `options` are provided.
+   */
+  selectionMode?: AskQuestionDialogSelectionMode;
   /**
    * Use a multiline editor for free-text input (Shift+Enter / \+Enter for new lines).
    * Defaults to false. Enable for prompts that legitimately want paragraph-length replies.
@@ -23,6 +31,11 @@ export interface AskQuestionDialogOptions {
   selectedOptionLabel?: string;
   tui?: TUI;
   onSubmit: (answer: string) => void;
+  /**
+   * Fires when a multi-select answer is submitted. When omitted, multi-select
+   * answers are joined with `, ` and forwarded to `onSubmit`.
+   */
+  onSubmitMulti?: (values: string[]) => void;
   onCancel: () => void;
 }
 
@@ -30,6 +43,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
 
   private selectList?: SelectList;
+  private multiSelectList?: MultiSelectList;
   private input?: Input | MultilineInput;
   private tui?: TUI;
   private multiline = false;
@@ -38,6 +52,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private allowCustomResponse = true;
   private selectedOptionLabel?: string;
   private onSubmit: (answer: string) => void;
+  private onSubmitMulti?: (values: string[]) => void;
   private onCancel: () => void;
 
   /** Children added by buildSelectMode/buildInputMode, tracked for removal on mode switch */
@@ -56,6 +71,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     super(2, 1, text => theme.bg('overlayBg', text));
 
     this.onSubmit = options.onSubmit;
+    this.onSubmitMulti = options.onSubmitMulti;
     this.onCancel = options.onCancel;
     this.tui = options.tui;
     this.multiline = Boolean(options.multiline);
@@ -75,10 +91,44 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     this.addChild(new Spacer(1));
 
     if (options.options && options.options.length > 0) {
-      this.buildSelectMode(options.options);
+      if (options.selectionMode === 'multi_select') {
+        this.buildMultiSelectMode(options.options);
+      } else {
+        this.buildSelectMode(options.options);
+      }
     } else {
       this.buildInputMode();
     }
+  }
+
+  private buildMultiSelectMode(opts: Array<{ label: string; description?: string }>): void {
+    const items: SelectItem[] = opts.map(opt => ({
+      value: opt.label,
+      label: opt.description ? `${opt.label}  ${theme.fg('dim', opt.description)}` : opt.label,
+    }));
+
+    this.multiSelectList = new MultiSelectList(items, Math.min(items.length, 8), getSelectListTheme());
+    this.multiSelectList.onSubmit = (values: string[]) => {
+      if (this.onSubmitMulti) {
+        this.onSubmitMulti(values);
+      } else {
+        this.onSubmit(values.join(', '));
+      }
+    };
+    this.multiSelectList.onCancel = () => {
+      this.onCancel();
+    };
+
+    this.modeChildren = [];
+    const selectChild = this.multiSelectList;
+    this.addChild(selectChild);
+    this.modeChildren.push(selectChild);
+    const spacer = new Spacer(1);
+    this.addChild(spacer);
+    this.modeChildren.push(spacer);
+    const hint = new Text(theme.fg('dim', '  ↑↓ to navigate · Space to toggle · Enter to submit · Esc to skip'), 0, 0);
+    this.addChild(hint);
+    this.modeChildren.push(hint);
   }
 
   private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
@@ -183,6 +233,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   handleInput(data: string): void {
     if (this.selectList) {
       this.selectList.handleInput(data);
+    } else if (this.multiSelectList) {
+      this.multiSelectList.handleInput(data);
     } else if (this.input) {
       const kb = getKeybindings();
       if (kb.matches(data, 'tui.select.cancel')) {

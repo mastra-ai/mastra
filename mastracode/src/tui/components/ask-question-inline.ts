@@ -23,11 +23,20 @@ import {
 } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
+import { MultiSelectList } from './multi-select-list.js';
 import { MultilineInput } from './multiline-input.js';
+
+export type AskQuestionSelectionMode = 'single_select' | 'multi_select';
 
 export interface AskQuestionInlineOptions {
   question: string;
   options?: Array<{ label: string; description?: string }>;
+  /**
+   * `single_select` shows a `SelectList`; `multi_select` shows a `MultiSelectList`
+   * where Space toggles per-option checkboxes and Enter submits a `string[]`.
+   * Ignored when no `options` are provided.
+   */
+  selectionMode?: AskQuestionSelectionMode;
   /** Format the text shown after an answer is selected. Defaults to `question → answer`. */
   formatResult?: (answer: string) => string;
   /** If provided, determines whether an answer should be shown with error styling (red ✗). */
@@ -43,6 +52,12 @@ export interface AskQuestionInlineOptions {
    */
   multiline?: boolean;
   onSubmit: (answer: string) => void;
+  /**
+   * Fires when a multi-select answer is submitted. When omitted, multi-select
+   * answers are joined with `, ` and forwarded to `onSubmit` so single-select
+   * consumers can opt out of the array shape entirely.
+   */
+  onSubmitMulti?: (values: string[]) => void;
   onCancel: () => void;
 }
 
@@ -53,12 +68,15 @@ export interface AskQuestionInlineOptions {
 class AskQuestionBorderedBox {
   questionLines: string[];
   private selectList?: SelectList;
+  private multiSelectList?: MultiSelectList;
   private input?: Input | MultilineInput;
   private hintText: string;
   items: Array<{ label: string; description?: string }>;
   private answered = false;
   private cancelled = false;
   private selectedValue?: string;
+  /** Set of selected labels in multi-select answered state. */
+  private selectedValues?: Set<string>;
   private answerIsNegative = false;
   /** True when created during streaming, before activate() is called */
   private streaming = false;
@@ -70,6 +88,7 @@ class AskQuestionBorderedBox {
     selectList?: SelectList,
     input?: Input | MultilineInput,
     streaming?: boolean,
+    multiSelectList?: MultiSelectList,
   ) {
     this.questionLines = questionLines;
     this.hintText = hintText;
@@ -77,16 +96,24 @@ class AskQuestionBorderedBox {
     this.selectList = selectList;
     this.input = input;
     this.streaming = streaming ?? false;
+    this.multiSelectList = multiSelectList;
   }
 
   invalidate() {
     this.selectList?.invalidate();
+    this.multiSelectList?.invalidate();
   }
 
-  setInteractive(selectList?: SelectList, input?: Input | MultilineInput, hintText?: string) {
+  setInteractive(
+    selectList: SelectList | undefined,
+    input: Input | MultilineInput | undefined,
+    hintText?: string,
+    multiSelectList?: MultiSelectList,
+  ) {
     this.streaming = false;
     this.selectList = selectList;
     this.input = input;
+    this.multiSelectList = multiSelectList;
     if (hintText) this.hintText = hintText;
   }
 
@@ -95,6 +122,13 @@ class AskQuestionBorderedBox {
     this.answered = true;
     this.selectedValue = selectedValue;
     this.answerIsNegative = isNegative;
+  }
+
+  setAnsweredMulti(selectedValues: string[]) {
+    this.streaming = false;
+    this.answered = true;
+    this.selectedValues = new Set(selectedValues);
+    this.answerIsNegative = false;
   }
 
   setCancelled() {
@@ -169,8 +203,21 @@ class AskQuestionBorderedBox {
         }
         const cancelLine = `${theme.fg('error', '✗')}  ${theme.fg('dim', '(cancelled)')}`;
         addLine(cancelLine, visibleWidth(cancelLine));
+      } else if (this.selectedValues) {
+        // Multi-select answered: ✓ on every selected item, dimmed unselected
+        for (const item of this.items) {
+          if (this.selectedValues.has(item.label)) {
+            const icon = theme.fg('success', '✓');
+            const label = theme.fg('text', item.label);
+            const line = `${icon}  ${label}`;
+            addLine(line, visibleWidth(line));
+          } else {
+            const line = theme.fg('dim', `   ${item.label}`);
+            addLine(line, visibleWidth(line));
+          }
+        }
       } else {
-        // ✓/✗ on selected, dimmed unselected
+        // Single-select answered: ✓/✗ on selected, dimmed unselected
         for (const item of this.items) {
           const isSelected = item.label === this.selectedValue;
           if (isSelected) {
@@ -202,10 +249,15 @@ class AskQuestionBorderedBox {
       const cancelLine = `${theme.fg('error', '✗')}  ${theme.fg('dim', '(cancelled)')}`;
       addLine(cancelLine, visibleWidth(cancelLine));
     } else {
-      // Interactive content (SelectList or Input)
+      // Interactive content (SelectList, MultiSelectList, or Input)
       if (this.selectList) {
         // SelectList renders its own lines — wrap each one with borders
         const selectLines = this.selectList.render(innerWidth);
+        for (const sLine of selectLines) {
+          addLine(sLine, visibleWidth(sLine));
+        }
+      } else if (this.multiSelectList) {
+        const selectLines = this.multiSelectList.render(innerWidth);
         for (const sLine of selectLines) {
           addLine(sLine, visibleWidth(sLine));
         }
@@ -231,9 +283,11 @@ class AskQuestionBorderedBox {
 export class AskQuestionInlineComponent extends Container implements Focusable {
   private borderedBox: AskQuestionBorderedBox;
   private selectList?: SelectList;
+  private multiSelectList?: MultiSelectList;
   private input?: Input | MultilineInput;
   private tui?: TUI;
   private onSubmit?: (answer: string) => void;
+  private onSubmitMulti?: (values: string[]) => void;
   private onCancel?: () => void;
   private isNegativeAnswer?: (answer: string) => boolean;
   private allowEmptyInput = false;
@@ -307,6 +361,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     if (options) {
       // Full construction with interactive elements
       this.onSubmit = options.onSubmit;
+      this.onSubmitMulti = options.onSubmitMulti;
       this.onCancel = options.onCancel;
       this.isNegativeAnswer = options.isNegativeAnswer;
       this.allowEmptyInput = Boolean(options.allowEmptyInput);
@@ -317,8 +372,13 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
 
       let hintText: string;
       if (options.options && options.options.length > 0) {
-        hintText = '↑↓ to navigate · Enter to select · Esc to skip';
-        this.buildSelectMode(options.options);
+        if (options.selectionMode === 'multi_select') {
+          hintText = '↑↓ to navigate · Space to toggle · Enter to submit · Esc to skip';
+          this.buildMultiSelectMode(options.options);
+        } else {
+          hintText = '↑↓ to navigate · Enter to select · Esc to skip';
+          this.buildSelectMode(options.options);
+        }
       } else {
         hintText = this.useMultiline()
           ? 'Enter to submit · Shift+Enter/\\+Enter for new line · Esc to skip'
@@ -332,6 +392,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         options.options || [],
         this.selectList,
         this.input,
+        false,
+        this.multiSelectList,
       );
     } else {
       // Streaming mode — empty bordered box, will be populated by updateArgs()
@@ -368,17 +430,20 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   activate(options: {
     question: string;
     options?: Array<{ label: string; description?: string }>;
+    selectionMode?: AskQuestionSelectionMode;
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
     allowCustomResponse?: boolean;
     multiline?: boolean;
     tui?: TUI;
     onSubmit: (answer: string) => void;
+    onSubmitMulti?: (values: string[]) => void;
     onCancel: () => void;
   }): void {
     if (this.answered) return;
     if (options.tui) this.tui = options.tui;
     this.onSubmit = options.onSubmit;
+    this.onSubmitMulti = options.onSubmitMulti;
     this.onCancel = options.onCancel;
     this.isNegativeAnswer = options.isNegativeAnswer;
     this.allowEmptyInput = Boolean(options.allowEmptyInput);
@@ -389,11 +454,21 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.borderedBox.questionLines = options.question.split('\n');
     this.borderedBox.items = options.options || [];
 
+    // Reset any leftover interactive state from a prior activation
+    this.selectList = undefined;
+    this.multiSelectList = undefined;
+    this.input = undefined;
+
     // Build interactive elements
     let hintText: string;
     if (options.options && options.options.length > 0) {
-      hintText = '↑↓ to navigate · Enter to select · Esc to skip';
-      this.buildSelectMode(options.options);
+      if (options.selectionMode === 'multi_select') {
+        hintText = '↑↓ to navigate · Space to toggle · Enter to submit · Esc to skip';
+        this.buildMultiSelectMode(options.options);
+      } else {
+        hintText = '↑↓ to navigate · Enter to select · Esc to skip';
+        this.buildSelectMode(options.options);
+      }
     } else {
       hintText = this.useMultiline()
         ? 'Enter to submit · Shift+Enter/\\+Enter for new line · Esc to skip'
@@ -402,10 +477,25 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     }
 
     // Switch bordered box out of streaming mode
-    this.borderedBox.setInteractive(this.selectList, this.input, hintText);
+    this.borderedBox.setInteractive(this.selectList, this.input, hintText, this.multiSelectList);
   }
 
   private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
+
+  private buildMultiSelectMode(opts: Array<{ label: string; description?: string }>): void {
+    const items: SelectItem[] = opts.map(opt => ({
+      value: opt.label,
+      label: opt.description ? `${opt.label}  ${theme.fg('dim', opt.description)}` : opt.label,
+    }));
+
+    this.multiSelectList = new MultiSelectList(items, Math.min(items.length, 8), getSelectListTheme());
+    this.multiSelectList.onSubmit = (values: string[]) => {
+      this.handleAnswer(values);
+    };
+    this.multiSelectList.onCancel = () => {
+      this.handleCancel();
+    };
+  }
 
   private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
     const items: SelectItem[] = opts.map(opt => ({
@@ -496,8 +586,23 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.borderedBox.setAnswered(answer, isNegative);
   }
 
-  private handleAnswer(answer: string): void {
+  private handleAnswer(answer: string | string[]): void {
     if (this.answered) return;
+
+    if (Array.isArray(answer)) {
+      this.answered = true;
+      this.borderedBox.setAnsweredMulti(answer);
+      if (this.onSubmitMulti) {
+        this.onSubmitMulti(answer);
+      } else {
+        // Fall back to the single-string callback so callers that wired only
+        // `onSubmit` still get a meaningful answer (mirrors how core's tool
+        // formatter joins multi-select values for storage).
+        this.onSubmit?.(answer.join(', '));
+      }
+      return;
+    }
+
     const isNegative = this.isNegativeAnswer?.(answer) ?? false;
     this.answer(answer, isNegative);
 
@@ -518,6 +623,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
 
     if (this.selectList) {
       this.selectList.handleInput(data);
+    } else if (this.multiSelectList) {
+      this.multiSelectList.handleInput(data);
     } else if (this.input) {
       const kb = getKeybindings();
       if (kb.matches(data, 'tui.select.cancel')) {

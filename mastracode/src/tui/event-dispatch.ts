@@ -363,7 +363,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     }
 
     case 'ask_question':
-      await handleAskQuestion(ectx, event.questionId, event.question, event.options);
+      await handleAskQuestion(ectx, event.questionId, event.question, event.options, event.selectionMode);
       break;
 
     case 'sandbox_access_request':
