@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { BuilderSettingsResponse } from '@mastra/client-js';
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
@@ -8,8 +9,19 @@ import { http, HttpResponse } from 'msw';
 import React, { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentBuilderAgentsPage from '..';
+import type { AuthCapabilities } from '@/domains/auth/types';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
+
+const builderEnabled: BuilderSettingsResponse = {
+  enabled: true,
+  features: { agent: {} },
+};
+
+const unauthenticatedCapabilities = {
+  enabled: true,
+  login: { type: 'credentials' as const },
+} satisfies AuthCapabilities;
 
 vi.mock('@mastra/playground-ui', async () => {
   const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
@@ -19,13 +31,6 @@ vi.mock('@mastra/playground-ui', async () => {
     usePlaygroundStore: () => ({ requestContext: undefined }),
   };
 });
-
-let currentUser: { id: string } | undefined = { id: 'user-1' };
-let isCurrentUserLoading = false;
-
-vi.mock('@/domains/auth/hooks/use-current-user', () => ({
-  useCurrentUser: () => ({ data: currentUser, isLoading: isCurrentUserLoading }),
-}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -56,6 +61,25 @@ const noopPaths = {
   experimentLink: () => '',
 } as never;
 
+function userHandler(user: { id: string } | null) {
+  return [
+    http.get(`${BASE_URL}/api/auth/me`, () => {
+      if (user === null) {
+        return HttpResponse.json(null, { status: 401 });
+      }
+      return HttpResponse.json(user);
+    }),
+    http.post(`${BASE_URL}/api/auth/refresh`, () => HttpResponse.json(null, { status: 401 })),
+  ];
+}
+
+function pendingUserHandler() {
+  return http.get(`${BASE_URL}/api/auth/me`, () => {
+    // Never resolves; the query stays in the loading state.
+    return new Promise<Response>(() => {});
+  });
+}
+
 function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -84,16 +108,23 @@ const baseAgent = {
   updatedAt: new Date().toISOString(),
 };
 
-describe('AgentBuilderAgentsPage', () => {
-  afterEach(() => {
-    cleanup();
-    currentUser = { id: 'user-1' };
-    isCurrentUserLoading = false;
-  });
+function defaultHandlers() {
+  return [
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(unauthenticatedCapabilities)),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderEnabled)),
+  ];
+}
 
+afterEach(() => {
+  cleanup();
+});
+
+describe('AgentBuilderAgentsPage', () => {
   it('passes authorId to the API when the current user is available', async () => {
     const capturedSearches: URLSearchParams[] = [];
     server.use(
+      ...defaultHandlers(),
+      ...userHandler({ id: 'user-1' }),
       http.get(`${BASE_URL}/api/stored/agents`, ({ request }) => {
         capturedSearches.push(new URL(request.url).searchParams);
         return HttpResponse.json({
@@ -118,9 +149,10 @@ describe('AgentBuilderAgentsPage', () => {
   });
 
   it('waits for the current user query before fetching agents', async () => {
-    isCurrentUserLoading = true;
     let requestCount = 0;
     server.use(
+      ...defaultHandlers(),
+      pendingUserHandler(),
       http.get(`${BASE_URL}/api/stored/agents`, () => {
         requestCount += 1;
         return HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false });
@@ -134,8 +166,9 @@ describe('AgentBuilderAgentsPage', () => {
   });
 
   it('renders the skeleton (not the empty state) while the current user is loading', async () => {
-    isCurrentUserLoading = true;
     server.use(
+      ...defaultHandlers(),
+      pendingUserHandler(),
       http.get(`${BASE_URL}/api/stored/agents`, () => {
         return HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false });
       }),
@@ -149,9 +182,10 @@ describe('AgentBuilderAgentsPage', () => {
   });
 
   it('omits authorId when no current user is available', async () => {
-    currentUser = undefined;
     let capturedSearch: URLSearchParams | null = null;
     server.use(
+      ...defaultHandlers(),
+      ...userHandler(null),
       http.get(`${BASE_URL}/api/stored/agents`, ({ request }) => {
         capturedSearch = new URL(request.url).searchParams;
         return HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false });

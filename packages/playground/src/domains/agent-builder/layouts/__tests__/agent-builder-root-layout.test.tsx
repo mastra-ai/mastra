@@ -1,29 +1,68 @@
 // @vitest-environment jsdom
+import type { BuilderSettingsResponse } from '@mastra/client-js';
+import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentBuilderRootLayout } from '../agent-builder-root-layout';
-
-const mockUseAuthCapabilities = vi.fn();
-const mockUseBuilderAgentAccess = vi.fn();
-
-vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
-  useAuthCapabilities: () => mockUseAuthCapabilities(),
-}));
-
-vi.mock('../../hooks/use-builder-agent-access', () => ({
-  useBuilderAgentAccess: () => mockUseBuilderAgentAccess(),
-}));
+import type { AuthCapabilities } from '@/domains/auth/types';
+import { server } from '@/test/msw-server';
 
 vi.mock('@/lib/link', () => ({
   Link: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a>,
 }));
 
+const BASE_URL = 'http://localhost:4111';
+
+const unauthenticatedCapabilities = {
+  enabled: true,
+  login: { type: 'credentials' as const },
+} satisfies AuthCapabilities;
+
+const authenticatedCapabilities = {
+  enabled: true,
+  login: { type: 'credentials' as const },
+  user: { id: 'user-1', email: 'u@example.com' },
+  capabilities: { user: true, session: true, sso: false, rbac: false, acl: false },
+  access: null,
+} satisfies AuthCapabilities;
+
+const authDisabledCapabilities = {
+  enabled: false,
+  login: { type: 'credentials' as const },
+} satisfies AuthCapabilities;
+
+const builderFullySetUp: BuilderSettingsResponse = {
+  enabled: true,
+  features: {
+    agent: {},
+  },
+};
+
+const builderDisabled: BuilderSettingsResponse = {
+  enabled: false,
+};
+
+function authHandler(capabilities: AuthCapabilities) {
+  return http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(capabilities));
+}
+
+function builderHandler(settings: BuilderSettingsResponse | { error: true }) {
+  return http.get(`${BASE_URL}/api/editor/builder/settings`, () => {
+    if ('error' in settings && settings.error) {
+      return HttpResponse.json({ error: 'boom' }, { status: 500 });
+    }
+    return HttpResponse.json(settings);
+  });
+}
+
 function renderAgentBuilderRoute(initialEntry: string) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
+      mutations: { retry: false },
     },
   });
 
@@ -35,7 +74,7 @@ function renderAgentBuilderRoute(initialEntry: string) {
       },
       {
         path: '/agent-builder',
-        element: <AgentBuilderRootLayout paths={{ agentsLink: () => '/agents' }} />,
+        element: <AgentBuilderRootLayout paths={{ agentsLink: () => '/agents' } as never} />,
         children: [
           {
             path: 'agents',
@@ -54,31 +93,23 @@ function renderAgentBuilderRoute(initialEntry: string) {
   );
 
   render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </MastraReactProvider>,
   );
 
   return router;
 }
 
+afterEach(() => {
+  server.resetHandlers();
+});
+
 describe('AgentBuilderRootLayout', () => {
-  beforeEach(() => {
-    mockUseAuthCapabilities.mockReset();
-    mockUseBuilderAgentAccess.mockReset();
-
-    mockUseBuilderAgentAccess.mockReturnValue({
-      isLoading: false,
-      denialReason: null,
-      hasAgentFeature: true,
-    });
-  });
-
   it('redirects unauthenticated users to login with the requested agent-builder route', async () => {
-    mockUseAuthCapabilities.mockReturnValue({
-      data: { enabled: true, login: { enabled: true } },
-      isLoading: false,
-    });
+    server.use(authHandler(unauthenticatedCapabilities), builderHandler(builderFullySetUp));
 
     const router = renderAgentBuilderRoute('/agent-builder/agents/create?draft=1#details');
 
@@ -91,14 +122,7 @@ describe('AgentBuilderRootLayout', () => {
   });
 
   it('renders agent-builder children for authenticated users with access', async () => {
-    mockUseAuthCapabilities.mockReturnValue({
-      data: {
-        enabled: true,
-        login: { enabled: true },
-        user: { id: 'user-1' },
-      },
-      isLoading: false,
-    });
+    server.use(authHandler(authenticatedCapabilities), builderHandler(builderFullySetUp));
 
     renderAgentBuilderRoute('/agent-builder/agents/create');
 
@@ -106,13 +130,26 @@ describe('AgentBuilderRootLayout', () => {
   });
 
   it('does not redirect when auth is disabled', async () => {
-    mockUseAuthCapabilities.mockReturnValue({
-      data: { enabled: false, login: { enabled: true } },
-      isLoading: false,
-    });
+    server.use(authHandler(authDisabledCapabilities), builderHandler(builderFullySetUp));
 
     renderAgentBuilderRoute('/agent-builder/agents');
 
     expect(await screen.findByText('Agent builder home')).toBeTruthy();
+  });
+
+  it('shows the not-configured screen when the builder is disabled', async () => {
+    server.use(authHandler(authenticatedCapabilities), builderHandler(builderDisabled));
+
+    renderAgentBuilderRoute('/agent-builder/agents');
+
+    expect(await screen.findByText('Agent Builder Not Configured')).toBeTruthy();
+  });
+
+  it('shows the error screen when the builder settings fail to load', async () => {
+    server.use(authHandler(authenticatedCapabilities), builderHandler({ error: true }));
+
+    renderAgentBuilderRoute('/agent-builder/agents');
+
+    expect(await screen.findByText('Failed to load Agent Builder configuration.')).toBeTruthy();
   });
 });
