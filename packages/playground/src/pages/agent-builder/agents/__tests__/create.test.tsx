@@ -1,47 +1,25 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderCreate from '../create';
+import {
+  emptyAgents,
+  emptyStoredSkills,
+  emptyTools,
+  emptyWorkflows,
+  settingsAllFeatures,
+  settingsPartialFeatures,
+} from './fixtures/builder';
+import { server } from '@/test/msw-server';
 
-const {
-  useBuilderAgentAccessMock,
-  useBuilderAgentFeaturesMock,
-  useToolsMock,
-  useAgentsMock,
-  useWorkflowsMock,
-  useStoredSkillsMock,
-  navigateSpy,
-} = vi.hoisted(() => ({
-  useBuilderAgentAccessMock: vi.fn(),
-  useBuilderAgentFeaturesMock: vi.fn(),
-  useToolsMock: vi.fn(),
-  useAgentsMock: vi.fn(),
-  useWorkflowsMock: vi.fn(),
-  useStoredSkillsMock: vi.fn(),
+const { navigateSpy, usePermissionsMock } = vi.hoisted(() => ({
   navigateSpy: vi.fn(),
-}));
-
-vi.mock('@/domains/agent-builder', () => ({
-  useBuilderAgentAccess: useBuilderAgentAccessMock,
-  useBuilderAgentFeatures: useBuilderAgentFeaturesMock,
-}));
-
-vi.mock('@/domains/agents/hooks/use-agents', () => ({
-  useAgents: useAgentsMock,
-}));
-
-vi.mock('@/domains/agents/hooks/use-stored-skills', () => ({
-  useStoredSkills: useStoredSkillsMock,
-}));
-
-vi.mock('@/domains/tools/hooks/use-all-tools', () => ({
-  useTools: useToolsMock,
-}));
-
-vi.mock('@/domains/workflows/hooks/use-workflows', () => ({
-  useWorkflows: useWorkflowsMock,
+  usePermissionsMock: vi.fn(),
 }));
 
 vi.mock('@/domains/agent-builder/components/agent-starter/agent-builder-starter', () => ({
@@ -54,6 +32,11 @@ vi.mock('@mastra/playground-ui', () => ({
       {children}
     </button>
   ),
+  usePlaygroundStore: () => ({ requestContext: undefined }),
+}));
+
+vi.mock('@/domains/auth/hooks/use-permissions', () => ({
+  usePermissions: usePermissionsMock,
 }));
 
 vi.mock('react-router', async importOriginal => {
@@ -67,99 +50,158 @@ vi.mock('react-router', async importOriginal => {
   };
 });
 
-const allFeatures = {
-  tools: true,
-  memory: true,
-  workflows: true,
-  agents: true,
-  avatarUpload: true,
-  skills: true,
-  model: true,
-  favorites: true,
-  browser: true,
+const BASE_URL = 'http://localhost:4111';
+
+const permissive = {
+  roles: [],
+  permissions: [],
+  isLoading: false,
+  isAuthenticated: true,
+  rbacEnabled: false,
+  hasPermission: () => true,
+  hasAllPermissions: () => true,
+  hasAnyPermission: () => true,
+  hasRole: () => true,
+  canEdit: () => true,
+  canDelete: () => true,
+  canExecute: () => true,
 };
 
-const renderCreate = () =>
-  render(
-    <MemoryRouter>
-      <AgentBuilderCreate />
-    </MemoryRouter>,
+const restrictive = {
+  ...permissive,
+  rbacEnabled: true,
+  hasPermission: () => false,
+  hasAllPermissions: () => false,
+  hasAnyPermission: () => false,
+};
+
+type Spy = ReturnType<typeof vi.fn<() => void>>;
+interface ListSpies {
+  tools: Spy;
+  agents: Spy;
+  workflows: Spy;
+  storedSkills: Spy;
+}
+
+const installListSpies = (): ListSpies => {
+  const spies: ListSpies = {
+    tools: vi.fn<() => void>(),
+    agents: vi.fn<() => void>(),
+    workflows: vi.fn<() => void>(),
+    storedSkills: vi.fn<() => void>(),
+  };
+  server.use(
+    http.get(`${BASE_URL}/api/tools`, () => {
+      spies.tools();
+      return HttpResponse.json(emptyTools);
+    }),
+    http.get(`${BASE_URL}/api/agents`, () => {
+      spies.agents();
+      return HttpResponse.json(emptyAgents);
+    }),
+    http.get(`${BASE_URL}/api/workflows`, () => {
+      spies.workflows();
+      return HttpResponse.json(emptyWorkflows);
+    }),
+    http.get(`${BASE_URL}/api/stored/skills`, () => {
+      spies.storedSkills();
+      return HttpResponse.json(emptyStoredSkills);
+    }),
   );
-
-const setAccess = (canWrite: boolean) => {
-  useBuilderAgentAccessMock.mockReturnValue({ canWrite });
+  return spies;
 };
 
-const setFeatures = (overrides: Partial<typeof allFeatures> = {}) => {
-  useBuilderAgentFeaturesMock.mockReturnValue({ ...allFeatures, ...overrides });
+const stubBuilderSettings = (response: typeof settingsAllFeatures) => {
+  server.use(http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(response)));
 };
+
+const renderCreate = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AgentBuilderCreate />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </MastraReactProvider>,
+  );
+};
+
+beforeEach(() => {
+  usePermissionsMock.mockReturnValue(permissive);
+});
 
 afterEach(() => {
   cleanup();
-  useBuilderAgentAccessMock.mockReset();
-  useBuilderAgentFeaturesMock.mockReset();
-  useToolsMock.mockReset();
-  useAgentsMock.mockReset();
-  useWorkflowsMock.mockReset();
-  useStoredSkillsMock.mockReset();
   navigateSpy.mockReset();
+  usePermissionsMock.mockReset();
 });
 
 describe('AgentBuilderCreate', () => {
-  it('redirects to the agents list when the user lacks write access', () => {
-    setAccess(false);
-    setFeatures();
+  it('redirects to the agents list when the user lacks write access', async () => {
+    usePermissionsMock.mockReturnValue(restrictive);
+    stubBuilderSettings(settingsAllFeatures);
+    const spies = installListSpies();
 
     renderCreate();
 
-    const navigate = screen.getByTestId('navigate');
+    const navigate = await screen.findByTestId('navigate');
     expect(navigate.getAttribute('data-to')).toBe('/agent-builder/agents');
     expect(navigate.getAttribute('data-replace')).toBe('true');
     expect(screen.queryByTestId('agent-builder-starter')).toBeNull();
+
+    // Cache-warming queries must NOT fire when the user has no write access.
+    // Give React-Query a chance to schedule and verify nothing went out.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(spies.tools).not.toHaveBeenCalled();
+    expect(spies.agents).not.toHaveBeenCalled();
+    expect(spies.workflows).not.toHaveBeenCalled();
+    expect(spies.storedSkills).not.toHaveBeenCalled();
   });
 
-  it('still warms the query caches before redirecting unauthorized users', () => {
-    setAccess(false);
-    setFeatures();
+  it('renders the starter and back button and warms every cache when canWrite + all features are on', async () => {
+    stubBuilderSettings(settingsAllFeatures);
+    const spies = installListSpies();
 
     renderCreate();
 
-    expect(useToolsMock).toHaveBeenCalledWith({ enabled: false });
-    expect(useAgentsMock).toHaveBeenCalledWith({ enabled: false });
-    expect(useWorkflowsMock).toHaveBeenCalledWith({ enabled: false });
-    expect(useStoredSkillsMock).toHaveBeenCalledWith({ enabled: false });
-  });
-
-  it('renders the starter and back button when the user can write', () => {
-    setAccess(true);
-    setFeatures();
-
-    renderCreate();
-
-    expect(screen.getByTestId('agent-builder-starter')).not.toBeNull();
+    expect(await screen.findByTestId('agent-builder-starter')).not.toBeNull();
     expect(screen.queryByTestId('navigate')).toBeNull();
     expect(screen.getByRole('button', { name: 'Agents list' })).not.toBeNull();
+
+    await waitFor(() => {
+      expect(spies.tools).toHaveBeenCalledTimes(1);
+      expect(spies.agents).toHaveBeenCalledTimes(1);
+      expect(spies.workflows).toHaveBeenCalledTimes(1);
+      expect(spies.storedSkills).toHaveBeenCalledTimes(1);
+    });
   });
 
-  it('warms each cache only when its feature flag and canWrite are both true', () => {
-    setAccess(true);
-    setFeatures({ tools: true, agents: false, workflows: true, skills: false });
+  it('only warms caches whose feature flag is enabled', async () => {
+    stubBuilderSettings(settingsPartialFeatures);
+    const spies = installListSpies();
 
     renderCreate();
 
-    expect(useToolsMock).toHaveBeenCalledWith({ enabled: true });
-    expect(useAgentsMock).toHaveBeenCalledWith({ enabled: false });
-    expect(useWorkflowsMock).toHaveBeenCalledWith({ enabled: true });
-    expect(useStoredSkillsMock).toHaveBeenCalledWith({ enabled: false });
+    await waitFor(() => {
+      expect(spies.tools).toHaveBeenCalledTimes(1);
+      expect(spies.workflows).toHaveBeenCalledTimes(1);
+    });
+    expect(spies.agents).not.toHaveBeenCalled();
+    expect(spies.storedSkills).not.toHaveBeenCalled();
   });
 
-  it('navigates back to the agents list with viewTransition when the back button is clicked', () => {
-    setAccess(true);
-    setFeatures();
+  it('navigates back to the agents list with viewTransition when the back button is clicked', async () => {
+    stubBuilderSettings(settingsAllFeatures);
+    installListSpies();
 
     renderCreate();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Agents list' }));
+    const back = await screen.findByRole('button', { name: 'Agents list' });
+    fireEvent.click(back);
 
     expect(navigateSpy).toHaveBeenCalledTimes(1);
     expect(navigateSpy).toHaveBeenCalledWith('/agent-builder/agents', { viewTransition: true });
