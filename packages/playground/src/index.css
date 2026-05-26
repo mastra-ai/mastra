@@ -58,12 +58,21 @@ html::-webkit-scrollbar-thumb:hover {
   margin-bottom: 5px;
 }
 
-@keyframes shimmer-text {
-  0% {
-    background-position: 200% 0;
+@keyframes slideDown {
+  from {
+    height: 0;
   }
-  100% {
-    background-position: -200% 0;
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
   }
 }
 
@@ -79,29 +88,6 @@ th:has(header) {
 }
 
 @layer base {
-  /*
-   * Keep both the height AND the snapshot scale stable during the
-   * edit ↔ view transition. The UA animation would otherwise stretch
-   * the captured raster to fill the tweening group box, making inner
-   * content appear to scale as the width changes. Rendering the snapshot
-   * at its natural pixel size with `object-fit: none` and a top-left
-   * anchor means it simply gets clipped / reveals empty area as the
-   * group's width morphs — no scaling, no vertical motion.
-   */
-  ::view-transition-group(agent-builder-frame) {
-    animation-duration: 320ms;
-    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-    height: 100%;
-  }
-  ::view-transition-old(agent-builder-frame),
-  ::view-transition-new(agent-builder-frame) {
-    animation-duration: 220ms;
-    height: 100%;
-    width: 100%;
-    object-fit: none;
-    object-position: top left;
-  }
-
   /*
    * Agent builder starter page — editorial serif minimal motion.
    * A slow aurora-like gradient drifts behind the content, and the
@@ -163,51 +149,11 @@ th:has(header) {
     animation: starter-enter 420ms var(--ease-out-custom) both;
   }
 
-  @keyframes skill-panel-slide-in {
-    from {
-      opacity: 0;
-      transform: translateX(24px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  .skill-panel-slide-in {
-    animation: skill-panel-slide-in 320ms var(--ease-out-custom) both;
-  }
-
-  .agent-step-banner {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 200%;
-    aspect-ratio: 1 / 1;
-    transform: translate(-50%, -50%) rotate(0deg);
-    transition: transform 500ms ease-out;
-  }
-
-  @keyframes agent-step-banner-spin {
-    from {
-      transform: translate(-50%, -50%) rotate(0deg);
-    }
-    to {
-      transform: translate(-50%, -50%) rotate(360deg);
-    }
-  }
-
-  .agent-step-banner-rotating {
-    animation: agent-step-banner-spin 8s linear infinite;
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,
     .starter-heading,
     .starter-prompt,
-    .starter-chip,
-    .skill-panel-slide-in,
-    .agent-step-banner-rotating {
+    .starter-chip {
       animation: none;
     }
   }
