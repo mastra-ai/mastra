@@ -10,6 +10,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentEdit from '../edit';
+import type * as AgentBuilderModule from '@/domains/agent-builder';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
@@ -23,7 +24,7 @@ vi.mock('@mastra/playground-ui', async () => {
 });
 
 vi.mock('@/domains/agent-builder', async () => {
-  const actual = await vi.importActual<typeof import('@/domains/agent-builder')>('@/domains/agent-builder');
+  const actual = await vi.importActual<typeof AgentBuilderModule>('@/domains/agent-builder');
   return {
     ...actual,
     useBuilderAgentFeatures: () => ({
