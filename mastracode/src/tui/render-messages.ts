@@ -660,7 +660,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           // Render ask_user with the proper question component
           if (content.name === 'ask_user' && toolResult?.type === 'tool_result') {
             const askArgs = content.args as
-              | { question?: string; options?: Array<{ label: string; description?: string }> }
+              | {
+                  question?: string;
+                  options?: Array<{ label: string; description?: string }>;
+                  selectionMode?: 'single_select' | 'multi_select';
+                }
               | undefined;
             const answer =
               typeof toolResult.result === 'string' ? toolResult.result : formatToolResult(toolResult.result);
@@ -671,6 +675,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 askArgs.options,
                 answer,
                 cancelled,
+                askArgs.selectionMode,
               );
               state.chatContainer.addChild(askComponent);
               continue;

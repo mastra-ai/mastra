@@ -298,21 +298,39 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   /**
    * Create a pre-answered instance for rendering from chat history.
    * No interactive elements — just shows the question and the answer in the bordered box.
+   *
+   * Multi-select answers arrive as a comma-joined string (`tools.ts` joins
+   * arrays with `, ` before storage). When `selectionMode === 'multi_select'`
+   * is supplied we reconstruct the original `string[]` by intersecting the
+   * comma-split parts with the known `options`, so the rendered history
+   * shows a ✓ next to every selected option instead of dimming all of them.
    */
   static fromHistory(
     question: string,
     options: Array<{ label: string; description?: string }> | undefined,
     answer: string,
     cancelled: boolean,
+    selectionMode?: AskQuestionSelectionMode,
   ): AskQuestionInlineComponent {
     const component = AskQuestionInlineComponent.createStreaming();
     component.updateArgs({ question, options });
     component.answered = true;
     if (cancelled) {
       component.borderedBox.setCancelled();
-    } else {
-      component.borderedBox.setAnswered(answer, false);
+      return component;
     }
+    if (selectionMode === 'multi_select' && options && options.length > 0) {
+      const parts = answer.split(/, ?/);
+      const selectedLabels = options.map(option => option.label).filter(label => parts.includes(label));
+      if (selectedLabels.length > 0) {
+        component.borderedBox.setAnsweredMulti(selectedLabels);
+        return component;
+      }
+      // Fall through: comma-split didn't match any option (labels with commas,
+      // mismatched options, etc.) — render as a single string answer so the
+      // user at least sees the raw value.
+    }
+    component.borderedBox.setAnswered(answer, false);
     return component;
   }
 
