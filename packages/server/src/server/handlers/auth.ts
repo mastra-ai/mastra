@@ -810,6 +810,68 @@ export const GET_PERMISSION_PATTERNS_ROUTE = createRoute({
 });
 
 // ============================================================================
+// GET /auth/fga/resource-types
+// ============================================================================
+
+const fgaResourceTypeSchema = z.object({
+  slug: z.string(),
+  relations: z.array(z.string()),
+  customRelations: z.array(z.string()),
+  parentResourceTypeSlugs: z.array(z.string()),
+  hasInstances: z.boolean(),
+});
+
+const fgaResourceTypesResponseSchema = z.object({
+  resourceTypes: z.array(fgaResourceTypeSchema),
+});
+
+export const GET_FGA_RESOURCE_TYPES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/fga/resource-types',
+  requiresAuth: true,
+  responseType: 'json',
+  responseSchema: fgaResourceTypesResponseSchema,
+  summary: 'Discover FGA resource types',
+  description:
+    'Returns resource types discovered from WorkOS FGA by observing roles and resource instances. ' +
+    'Types with no roles AND no instances will not appear. Use this to dynamically populate ' +
+    'resource type dropdowns or validate configuration.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    try {
+      const { mastra, user } = ctx as any;
+
+      const fga = getFGAProvider(mastra);
+      if (!fga) {
+        throw new HTTPException(404, { message: 'FGA provider not configured' });
+      }
+
+      // Check if provider supports describeResourceTypes
+      if (typeof (fga as any).describeResourceTypes !== 'function') {
+        throw new HTTPException(501, {
+          message: 'FGA provider does not support resource type discovery',
+        });
+      }
+
+      // Get organization ID from user, fallback to FGA provider's configured organizationId
+      const organizationId = user?.organizationId || (fga as any).organizationId;
+      if (!organizationId) {
+        throw new HTTPException(400, {
+          message:
+            'Organization ID required. Ensure user has organizationId set or FGA provider has organizationId configured.',
+        });
+      }
+
+      const resourceTypes = await (fga as any).describeResourceTypes(organizationId);
+      return { resourceTypes };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error discovering FGA resource types');
+    }
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -824,4 +886,5 @@ export const AUTH_ROUTES = [
   POST_CREDENTIALS_SIGN_UP_ROUTE,
   GET_ROLE_PERMISSIONS_ROUTE,
   GET_PERMISSION_PATTERNS_ROUTE,
+  GET_FGA_RESOURCE_TYPES_ROUTE,
 ] as const;
