@@ -289,6 +289,14 @@ export class HarnessLegacy<TState = {}> {
   private browserFn:
     | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
     | undefined = undefined;
+  /**
+   * True when the harness has an explicit browser opinion — either via
+   * `HarnessConfig.browser` or a `setBrowser()` call. Distinguishes
+   * "controller set undefined on purpose" (propagate to agents to clear)
+   * from "config never mentioned browser" (don't claim managed ownership
+   * so workspace-derived browsers can still flow in).
+   */
+  private browserConfigured = false;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
   private tokenUsage: TokenUsage = createEmptyTokenUsage();
   private sessionGrantedCategories = new Set<string>();
@@ -329,8 +337,10 @@ export class HarnessLegacy<TState = {}> {
     // Store browser: pre-built instance or dynamic factory
     if (config.browser && typeof config.browser !== 'function') {
       this.browser = config.browser;
+      this.browserConfigured = true;
     } else if (typeof config.browser === 'function') {
       this.browserFn = config.browser;
+      this.browserConfigured = true;
     }
 
     // Seed model from mode default if not set
@@ -362,6 +372,10 @@ export class HarnessLegacy<TState = {}> {
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
     this.browserFn = undefined;
+    // Claim managed ownership even when clearing to undefined — explicit
+    // setBrowser(undefined) is a real "disable browser" intent that the
+    // workspace must not silently override on the next request.
+    this.browserConfigured = true;
 
     const seen = new Set<Agent>();
     for (const mode of this.config.modes) {
@@ -643,9 +657,11 @@ export class HarnessLegacy<TState = {}> {
     if (workspaceForAgents && !agent.hasOwnWorkspace()) {
       agent.__setWorkspace(workspaceForAgents);
     }
-    if (typeof browserForAgents !== 'function') {
-      // Pass undefined too so clearing via setBrowser(undefined) propagates
-      // to agents resolved later (e.g. dynamic mode agents).
+    if (typeof browserForAgents !== 'function' && this.browserConfigured) {
+      // Propagate when the harness has an explicit browser opinion (config
+      // or setBrowser), including the deliberate undefined case. Without
+      // a configured browser we leave the agent untouched so workspace-
+      // derived browsers can still take effect.
       agent.__setManagedBrowser(browserForAgents);
     }
     if (this.config.pubsub && !agent.hasOwnPubSub()) {

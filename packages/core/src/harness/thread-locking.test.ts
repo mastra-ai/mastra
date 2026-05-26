@@ -197,6 +197,48 @@ describe('Harness thread locking', () => {
       expect(agent.browser).toBeUndefined();
       expect(agent.hasOwnBrowser()).toBe(false);
     });
+
+    it('does not claim managed browser ownership when the harness has no browser configured', async () => {
+      const agent = new Agent({
+        name: 'no-browser-agent',
+        instructions: 'You are a test agent.',
+        model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+      });
+      const setManaged = vi.spyOn(agent, '__setManagedBrowser');
+      const harnessWithoutBrowser = new HarnessLegacy({
+        id: 'no-browser-harness',
+        storage: new InMemoryStore(),
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      });
+
+      await harnessWithoutBrowser.init();
+
+      // Init-time propagation must skip __setManagedBrowser when the harness
+      // has no opinion — otherwise workspace-derived browsers would be
+      // silently blocked.
+      expect(setManaged).not.toHaveBeenCalled();
+    });
+
+    it('propagates explicit setBrowser(undefined) to mode agents', async () => {
+      const agent = new Agent({
+        name: 'cleared-agent',
+        instructions: 'You are a test agent.',
+        model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+      });
+      const harness = new HarnessLegacy({
+        id: 'cleared-harness',
+        storage: new InMemoryStore(),
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      });
+
+      await harness.init();
+      const setManaged = vi.spyOn(agent, '__setManagedBrowser');
+
+      harness.setBrowser(undefined);
+
+      expect(setManaged).toHaveBeenCalledTimes(1);
+      expect(setManaged).toHaveBeenCalledWith(undefined);
+    });
   });
 
   describe('selectOrCreateThread', () => {

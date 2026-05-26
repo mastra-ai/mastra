@@ -312,5 +312,26 @@ describe('Agent browser integration', () => {
       await agent.getWorkspace();
       expect(agent.browser).toBe(managed);
     });
+
+    it('blocks the workspace browser once a managed value is written, even undefined', async () => {
+      const workspaceBrowser = createMockBrowser([], { id: 'workspace' });
+      const workspaceWithBrowser = { browser: workspaceBrowser, __setLogger: () => {} } as any;
+      const agent = new Agent({
+        id: 'test-agent' as const,
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+        workspace: () => workspaceWithBrowser,
+      });
+
+      // Before any managed call the workspace browser propagates.
+      await agent.getWorkspace();
+      expect(agent.browser).toBe(workspaceBrowser);
+
+      // Clearing via managed must stick across subsequent workspace reconciliations.
+      agent.__setManagedBrowser(undefined);
+      await agent.getWorkspace();
+      expect(agent.browser).toBeUndefined();
+    });
   });
 });
