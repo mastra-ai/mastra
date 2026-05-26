@@ -62,9 +62,6 @@ async function sharedProcessMastraStream({
                   id: CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID,
                   domain: ErrorDomain.MASTRA,
                   category: ErrorCategory.USER,
-                  details: {
-                    chunkType: typeof json === 'object' && json && 'type' in json ? String(json.type) : 'unknown',
-                  },
                 },
                 cause,
               );

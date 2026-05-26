@@ -277,7 +277,6 @@ describe('processMastraStream', () => {
       // Top-level message should be the original error's message (no SDK `text` override)
       message: 'onChunk error',
       cause: { message: 'onChunk error' },
-      details: { chunkType: 'text-delta' },
     });
 
     expect(mockOnChunk).toHaveBeenCalledTimes(1);
