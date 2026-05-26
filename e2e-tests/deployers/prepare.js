@@ -18,7 +18,11 @@ export async function setupDeployerProject(pathToStoreFiles, tag, pkgManager, de
 
   await mkdir(newPath, { recursive: true });
   await cp(projectPath, newPath, { recursive: true });
-  await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\ndangerously-allow-all-builds=true\n');
+  await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\n');
+  await writeFile(
+    join(newPath, 'pnpm-workspace.yaml'),
+    'allowBuilds:\n  esbuild: true\n  sharp: true\n  protobufjs: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n',
+  );
 
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
   const env = {

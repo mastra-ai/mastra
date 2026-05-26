@@ -4,3 +4,7 @@ packages:
 allowBuilds:
   bcrypt: true
   esbuild: true
+  bufferutil: true
+  utf-8-validate: true
+  sharp: true
+  protobufjs: true

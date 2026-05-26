@@ -54,10 +54,10 @@ describe.for([['pnpm'] as const])(`%s bundler analysis`, ([pkgManager]) => {
         ),
       );
 
-      // Create .npmrc (required by pnpm v11 for build policy)
+      // Create pnpm-workspace.yaml (required by pnpm v11 for build policy)
       await writeFile(
-        join(fixturePath, '.npmrc'),
-        'dangerously-allow-all-builds=true\n',
+        join(fixturePath, 'pnpm-workspace.yaml'),
+        'allowBuilds:\n  esbuild: true\n  protobufjs: true\n  sharp: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n',
       );
 
       // Create tsconfig.json

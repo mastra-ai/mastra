@@ -263,12 +263,11 @@ export const createMastraProject = async ({
     if (pm === 'pnpm') {
       await fs.writeFile(
         'pnpm-workspace.yaml',
-        `onlyBuiltDependencies:
-  - esbuild
-  - sharp
+        `allowBuilds:
+  esbuild: true
+  sharp: true
 `,
       );
-      await fs.writeFile('.npmrc', 'dangerously-allow-all-builds=true\n');
     }
 
     s.stop('Project structure created');

@@ -91,20 +91,33 @@ export class Deps extends MastraBase {
   }
 
   private async writePnpmConfig(dir: string, options: ArchitectureOptions) {
-    const npmrcPath = path.join(dir, '.npmrc');
+    const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
 
-    const lines: string[] = ['dangerously-allow-all-builds=true'];
-    if (options.os?.length) {
-      lines.push(`supported-os=${options.os.join(',')}`);
+    const lines: string[] = [
+      'allowBuilds:',
+      '  esbuild: true',
+      '  sharp: true',
+      '  protobufjs: true',
+      '  workerd: true',
+      '  bufferutil: true',
+      '  utf-8-validate: true',
+    ];
+    if (options.os?.length || options.cpu?.length || options.libc?.length) {
+      lines.push('');
+      lines.push('supportedArchitectures:');
+      if (options.os?.length) {
+        lines.push(`  os: ${JSON.stringify(options.os)}`);
+      }
+      if (options.cpu?.length) {
+        lines.push(`  cpu: ${JSON.stringify(options.cpu)}`);
+      }
+      if (options.libc?.length) {
+        lines.push(`  libc: ${JSON.stringify(options.libc)}`);
+      }
     }
-    if (options.cpu?.length) {
-      lines.push(`supported-cpu=${options.cpu.join(',')}`);
-    }
-    if (options.libc?.length) {
-      lines.push(`supported-libc=${options.libc.join(',')}`);
-    }
+    lines.push('');
 
-    await fsPromises.appendFile(npmrcPath, '\n' + lines.join('\n') + '\n', 'utf-8');
+    await fsPromises.writeFile(workspaceYamlPath, lines.join('\n'), 'utf-8');
   }
 
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
@@ -146,7 +159,7 @@ export class Deps extends MastraBase {
       case 'yarn':
         return `${cmd}`;
       case 'pnpm':
-        return cmd === 'install' ? `${cmd} --ignore-workspace --loglevel=error` : `${cmd} --loglevel=error`;
+        return cmd === 'install' ? `${cmd} --loglevel=error` : `${cmd} --loglevel=error`;
       case 'bun':
         return cmd;
       default:

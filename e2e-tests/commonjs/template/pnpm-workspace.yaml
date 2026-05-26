@@ -1,0 +1,4 @@
+allowBuilds:
+  esbuild: true
+  sharp: true
+  protobufjs: true
