@@ -5,10 +5,14 @@ import { Memory } from '@mastra/memory';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Resolve this module's directory in a way that works in both CJS and ESM
+// builds. tsup emits both formats; `import.meta.url` is empty in CJS, so we
+// fall back to `__dirname` when running under CommonJS.
+declare const __dirname: string | undefined;
+const moduleDir =
+  typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
-const workspacePath = path.join(__dirname, 'workspace');
+const workspacePath = path.join(moduleDir, 'workspace');
 
 /**
  * Agent Builder Agent
