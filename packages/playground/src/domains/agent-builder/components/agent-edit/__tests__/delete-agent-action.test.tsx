@@ -84,7 +84,7 @@ describe('DeleteAgentPanelButton', () => {
     );
 
     const button = screen.getByTestId('agent-builder-delete-agent');
-    expect(button.getAttribute('aria-label')).toBe('Delete agent');
+    expect(button.textContent).toBe('Delete agent');
 
     fireEvent.click(button);
 

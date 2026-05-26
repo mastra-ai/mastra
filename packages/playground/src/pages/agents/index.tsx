@@ -1,7 +1,7 @@
 import {
   AgentIcon,
+  Button,
   ErrorState,
-  IconButton,
   ListSearch,
   NoDataPageLayout,
   PageHeader,
@@ -11,7 +11,6 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
@@ -72,17 +71,10 @@ function Agents() {
             </PageHeader>
           </PageLayout.Column>
           <PageLayout.Column className="flex justify-end gap-2">
-            {showCreateCta && (
-              <IconButton onClick={() => navigate(createRoute)} tooltip="Create an agent">
-                <Plus />
-              </IconButton>
-            )}
-            <IconButton
-              onClick={() => window.open('https://mastra.ai/en/docs/agents/overview', '_blank')}
-              tooltip="Go to Agents documentation"
-            >
-              <BookIcon />
-            </IconButton>
+            {showCreateCta && <Button onClick={() => navigate(createRoute)}>Create an agent</Button>}
+            <Button onClick={() => window.open('https://mastra.ai/en/docs/agents/overview', '_blank')}>
+              Go to Agents documentation
+            </Button>
           </PageLayout.Column>
         </PageLayout.Row>
         <div className="max-w-120">
