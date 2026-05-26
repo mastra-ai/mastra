@@ -464,6 +464,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/convex', label: 'Convex Storage' },
         { type: 'doc', id: 'storage/duckdb', label: 'DuckDB Storage' },
         { type: 'doc', id: 'storage/dynamodb', label: 'DynamoDB Storage' },
+        { type: 'doc', id: 'storage/spanner', label: 'Google Cloud Spanner Storage' },
         { type: 'doc', id: 'storage/lance', label: 'LanceDB Storage' },
         { type: 'doc', id: 'storage/libsql', label: 'libSQL Storage' },
         { type: 'doc', id: 'storage/mongodb', label: 'MongoDB Storage' },

@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 
 /**
  * Metadata for a slash command
@@ -135,7 +136,10 @@ export async function scanCommandDirectory(dirPath: string, rootDir?: string): P
  * Load custom slash commands from all configured directories
  * Priority: mastra project > claude project > opencode project > mastra user > claude user > opencode user
  */
-export async function loadCustomCommands(projectDir?: string): Promise<SlashCommandMetadata[]> {
+export async function loadCustomCommands(
+  projectDir?: string,
+  configDirName = DEFAULT_CONFIG_DIR,
+): Promise<SlashCommandMetadata[]> {
   // Use a Map so later (higher priority) sources override earlier ones with the same name
   const commandMap = new Map<string, SlashCommandMetadata>();
 
@@ -161,9 +165,9 @@ export async function loadCustomCommands(projectDir?: string): Promise<SlashComm
     addCommands(claudeUserCommands);
   }
 
-  // 3. Load from mastra user directory ~/.mastracode/commands
+  // 3. Load from mastra user directory ~/<configDirName>/commands
   if (homeDir) {
-    const mastraUserDir = path.join(homeDir, '.mastracode', 'commands');
+    const mastraUserDir = path.join(homeDir, configDirName, 'commands');
     const mastraUserCommands = await scanCommandDirectory(mastraUserDir);
     addCommands(mastraUserCommands);
   }
@@ -182,9 +186,9 @@ export async function loadCustomCommands(projectDir?: string): Promise<SlashComm
     addCommands(claudeProjectCommands);
   }
 
-  // 6. Load from mastra project directory .mastracode/commands (highest priority)
+  // 6. Load from mastra project directory <configDirName>/commands (highest priority)
   if (projectDir) {
-    const mastraProjectDir = path.join(projectDir, '.mastracode', 'commands');
+    const mastraProjectDir = path.join(projectDir, configDirName, 'commands');
     const mastraProjectCommands = await scanCommandDirectory(mastraProjectDir);
     addCommands(mastraProjectCommands);
   }
@@ -195,15 +199,15 @@ export async function loadCustomCommands(projectDir?: string): Promise<SlashComm
 /**
  * Get the commands directory path for a project
  */
-export function getProjectCommandsDir(projectDir: string): string {
-  return path.join(projectDir, '.mastracode', 'commands');
+export function getProjectCommandsDir(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
+  return path.join(projectDir, configDirName, 'commands');
 }
 
 /**
  * Initialize a commands directory with an example command
  */
-export async function initCommandsDirectory(projectDir: string): Promise<void> {
-  const commandsDir = getProjectCommandsDir(projectDir);
+export async function initCommandsDirectory(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): Promise<void> {
+  const commandsDir = getProjectCommandsDir(projectDir, configDirName);
 
   try {
     await fs.mkdir(commandsDir, { recursive: true });
