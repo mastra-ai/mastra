@@ -460,6 +460,150 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
+  it('does not continue the agentic loop when finishReason is tool-calls but all called tools are client tools (no execute)', async () => {
+    // Repro for https://github.com/mastra-ai/mastra/issues/14093 — when a client tool (no
+    // `execute` function) is the only thing the model calls, the server has nothing to run.
+    // Continuing the loop would re-invoke the model without adding a tool result, producing
+    // duplicate identical tool calls until maxSteps. The step must report isContinued=false
+    // so the outer dowhile stops and the tool-calls are returned to the caller.
+    const tools = {
+      getWeather: {
+        id: 'getWeather',
+        description: 'Get weather',
+        inputSchema: z.object({ location: z.string() }),
+        // No `execute` — this is a client tool. `listClientTools` strips execute before
+        // tools reach this loop, so this shape matches what we receive at runtime.
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'getWeather',
+                  input: '{"location":"Paris"}',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: { generateId: () => 'generated-id' },
+      logger: { error: vi.fn(), warn: vi.fn(), debug: vi.fn() } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(result.stepResult.reason).toBe('tool-calls');
+    expect(result.stepResult.isContinued).toBe(false);
+    expect(result.output.toolCalls).toEqual([
+      expect.objectContaining({ toolCallId: 'call-1', toolName: 'getWeather' }),
+    ]);
+  });
+
+  it('continues the agentic loop when at least one called tool has an execute function', async () => {
+    // Mirror of the client-tool case above: when the model calls a mix of (or only) tools
+    // that the server can actually execute, the loop must continue so tool results are
+    // appended and the model gets another turn.
+    const tools = {
+      getWeather: {
+        id: 'getWeather',
+        description: 'Get weather',
+        inputSchema: z.object({ location: z.string() }),
+        execute: vi.fn(async () => ({ temperature: 20 })),
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'getWeather',
+                  input: '{"location":"Paris"}',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: { generateId: () => 'generated-id' },
+      logger: { error: vi.fn(), warn: vi.fn(), debug: vi.fn() } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(result.stepResult.reason).toBe('tool-calls');
+    expect(result.stepResult.isContinued).toBe(true);
+  });
+
   it('merges model config headers with explicit modelSettings headers and lets modelSettings override duplicates', async () => {
     const doStream = vi.fn(async () => ({
       stream: convertArrayToReadableStream([

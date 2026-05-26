@@ -1926,10 +1926,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
-      // - OR there are non-provider-executed tool calls to process (some LLMs return finishReason 'stop' even with tool calls)
-      // - OR finishReason indicates more work (e.g., tool-use)
-      // Provider-executed tools (e.g. web_search) are handled server-side — the response already
-      // contains both the tool execution and the text output, so no additional loop iteration is needed.
+      // - OR there are server-executable tool calls to run next (some LLMs return finishReason
+      //   'stop' even with tool calls, which is why we don't gate this on finishReason alone)
+      // - OR finishReason='tool-calls' AND there are provider-executed tool calls — the results
+      //   were streamed inline and the model needs another turn to produce its final text
+      // - OR finishReason indicates more work in some unrecognized way (e.g., 'tool-use')
       //
       // NOTE: hasPendingToolCalls must NOT override finishReason='length'.
       // When the provider hits max_tokens mid-generation, it returns finishReason='length' and
@@ -1938,10 +1939,44 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // excluded 'length' from shouldContinue; this guard prevents hasPendingToolCalls from
       // inadvertently re-enabling it.
       // See: https://github.com/mastra-ai/mastra/issues/15717
-      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted) && finishReason !== 'length';
+      //
+      // Client tools (passed via `clientTools` / tools without an `execute` function) cannot be
+      // resolved server-side: `listClientTools` strips `execute` before the tool reaches this
+      // loop, so the server has nothing to run. When finishReason='tool-calls' and every called
+      // tool is a client tool (no execute, not provider-executed), continuing would re-invoke
+      // the model with no tool result added to the context, producing duplicate identical tool
+      // calls until maxSteps is reached. Treat a tool call as server-pending only if the server
+      // can actually execute it; treat 'tool-calls' as terminal unless something will produce a
+      // result the model needs to see (server-executable tools to run, or provider-executed
+      // tools whose results were just streamed).
+      // See: https://github.com/mastra-ai/mastra/issues/14093
+      const lookupToolByName = (name: string): unknown =>
+        stepTools?.[name] ||
+        findProviderToolByName(stepTools, name) ||
+        Object.values(stepTools ?? {}).find((t: any) => t && typeof t === 'object' && t.id === name) ||
+        tools?.[name] ||
+        findProviderToolByName(tools, name) ||
+        Object.values(tools ?? {}).find((t: any) => t && typeof t === 'object' && t.id === name);
+      const hasServerExecutableToolCalls =
+        toolCalls?.some(tc => {
+          if (tc.providerExecuted) return false;
+          const tool = lookupToolByName(tc.toolName);
+          return typeof (tool as { execute?: unknown } | undefined)?.execute === 'function';
+        }) ?? false;
+      const hasProviderExecutedToolCalls = toolCalls?.some(tc => tc.providerExecuted) ?? false;
+      // Non-empty resolved tool calls that contain no server-executable and no provider-executed
+      // entries are exclusively client tools — the server has nothing to run and continuing would
+      // duplicate the same calls until maxSteps. (An empty toolCalls list here means the model
+      // streamed tool-call chunks that have not been assembled into completed calls yet; the
+      // downstream pipeline handles that case, so we must not stop on its behalf.)
+      const allCalledToolsAreClientTools =
+        (toolCalls?.length ?? 0) > 0 && !hasServerExecutableToolCalls && !hasProviderExecutedToolCalls;
+      const hasPendingToolCalls = hasServerExecutableToolCalls && finishReason !== 'length';
+      const finishReasonWantsContinuation = allCalledToolsAreClientTools
+        ? false
+        : !['stop', 'error', 'length'].includes(finishReason);
       const shouldContinue =
-        shouldRetry ||
-        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
+        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || finishReasonWantsContinuation));
 
       // Reset retry count after a successful non-retry step; only consecutive retries carry forward.
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : 0;
