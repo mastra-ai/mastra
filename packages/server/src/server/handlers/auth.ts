@@ -872,6 +872,235 @@ export const GET_FGA_RESOURCE_TYPES_ROUTE = createRoute({
 });
 
 // ============================================================================
+// FGA Share Routes - Role assignment for resources
+// ============================================================================
+
+// GET /auth/fga/resource-types/:resourceType/roles - List roles for a resource type
+export const GET_FGA_RESOURCE_TYPE_ROLES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/fga/resource-types/:resourceType/roles',
+  requiresAuth: true,
+  responseType: 'json',
+  summary: 'List roles for a resource type',
+  description: 'Returns available roles that can be assigned on resources of this type.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    try {
+      const { mastra, resourceType } = ctx as any;
+
+      if (!resourceType) {
+        throw new HTTPException(400, { message: 'Resource type is required' });
+      }
+
+      const fga = getFGAProvider(mastra);
+      if (!fga) {
+        throw new HTTPException(404, { message: 'FGA provider not configured' });
+      }
+
+      // Use listResourceTypeRoles if available
+      if (typeof (fga as any).listResourceTypeRoles === 'function') {
+        const roles = await (fga as any).listResourceTypeRoles(resourceType);
+        return { roles };
+      }
+
+      // Fallback: return empty array
+      return { roles: [] };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error listing resource type roles');
+    }
+  },
+});
+
+// GET /auth/fga/resources/:resourceType/:resourceId/access - List who has access to a resource
+export const GET_FGA_RESOURCE_ACCESS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/fga/resources/:resourceType/:resourceId/access',
+  requiresAuth: true,
+  responseType: 'json',
+  summary: 'List users with access to a resource',
+  description: 'Returns all users who have been assigned roles on this resource.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    try {
+      const { mastra, resourceType, resourceId } = ctx as any;
+
+      if (!resourceType || !resourceId) {
+        throw new HTTPException(400, { message: 'Resource type and ID are required' });
+      }
+
+      const fga = getFGAProvider(mastra);
+      if (!fga) {
+        throw new HTTPException(404, { message: 'FGA provider not configured' });
+      }
+
+      // Get role assignments for this resource
+      if (typeof (fga as any).listResourceRoleAssignments !== 'function') {
+        return { access: [] };
+      }
+
+      const assignments = await (fga as any).listResourceRoleAssignments({
+        resourceType,
+        resourceId,
+      });
+
+      // Enrich with user details if auth provider supports it
+      const auth = mastra.getServer?.()?.auth ?? mastra.getStudio?.()?.auth;
+      const enrichedAccess = await Promise.all(
+        (assignments || []).map(async (assignment: any) => {
+          let userDetails: any = {};
+          if (auth && typeof auth.getUser === 'function' && assignment.userId) {
+            try {
+              userDetails = await auth.getUser(assignment.userId);
+            } catch {
+              // Ignore errors fetching user details
+            }
+          }
+          return {
+            membershipId: assignment.organizationMembershipId || assignment.membershipId,
+            userId: assignment.userId,
+            email: userDetails?.email,
+            name: userDetails?.name || userDetails?.firstName,
+            role: assignment.roleSlug || assignment.role?.slug,
+          };
+        }),
+      );
+
+      return { access: enrichedAccess };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error listing resource access');
+    }
+  },
+});
+
+// POST /auth/fga/resources/:resourceType/:resourceId/access - Assign role to user on resource
+export const POST_FGA_RESOURCE_ACCESS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/auth/fga/resources/:resourceType/:resourceId/access',
+  requiresAuth: true,
+  responseType: 'json',
+  summary: 'Assign role to user on resource',
+  description: 'Grants a user access to a resource by assigning them a role.',
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    try {
+      const { mastra, resourceType, resourceId, request } = ctx as any;
+
+      if (!resourceType || !resourceId) {
+        throw new HTTPException(400, { message: 'Resource type and ID are required' });
+      }
+
+      const body = await request.json();
+      const { membershipId, roleSlug } = body;
+
+      if (!membershipId || !roleSlug) {
+        throw new HTTPException(400, { message: 'membershipId and roleSlug are required' });
+      }
+
+      const fga = getFGAProvider(mastra);
+      if (!fga || typeof (fga as any).assignRole !== 'function') {
+        throw new HTTPException(501, { message: 'Role assignment not supported by this FGA provider' });
+      }
+
+      const result = await (fga as any).assignRole({
+        resourceType,
+        resourceId,
+        organizationMembershipId: membershipId,
+        roleSlug,
+      });
+
+      return { success: true, assignment: result };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error assigning role');
+    }
+  },
+});
+
+// DELETE /auth/fga/resources/:resourceType/:resourceId/access/:membershipId - Remove role from user on resource
+export const DELETE_FGA_RESOURCE_ACCESS_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/auth/fga/resources/:resourceType/:resourceId/access/:membershipId',
+  requiresAuth: true,
+  responseType: 'json',
+  summary: 'Remove role from user on resource',
+  description: "Revokes a user's access to a resource by removing their role assignment.",
+  tags: ['Auth', 'FGA'],
+  handler: async ctx => {
+    try {
+      const { mastra, resourceType, resourceId, membershipId, request } = ctx as any;
+
+      if (!resourceType || !resourceId || !membershipId) {
+        throw new HTTPException(400, { message: 'Resource type, ID, and membership ID are required' });
+      }
+
+      // Get roleSlug from query params
+      const url = new URL(request.url);
+      const roleSlug = url.searchParams.get('roleSlug');
+
+      if (!roleSlug) {
+        throw new HTTPException(400, { message: 'roleSlug query parameter is required' });
+      }
+
+      const fga = getFGAProvider(mastra);
+      if (!fga || typeof (fga as any).removeRole !== 'function') {
+        throw new HTTPException(501, { message: 'Role removal not supported by this FGA provider' });
+      }
+
+      await (fga as any).removeRole({
+        resourceType,
+        resourceId,
+        organizationMembershipId: membershipId,
+        roleSlug,
+      });
+
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error removing role');
+    }
+  },
+});
+
+// GET /auth/organization/members - List organization members for user search
+export const GET_ORGANIZATION_MEMBERS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/organization/members',
+  requiresAuth: true,
+  responseType: 'json',
+  summary: 'List organization members',
+  description: 'Returns members of the current organization for user search in share dialogs.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    try {
+      const { mastra, user } = ctx as any;
+
+      const auth = mastra.getServer?.()?.auth ?? mastra.getStudio?.()?.auth;
+      const fga = getFGAProvider(mastra);
+
+      // Get organization ID from user or FGA provider
+      const organizationId = user?.organizationId || (fga as any)?.organizationId;
+      if (!organizationId) {
+        throw new HTTPException(400, { message: 'Organization ID required' });
+      }
+
+      // Use listOrganizationMembers if available
+      if (auth && typeof auth.listOrganizationMembers === 'function') {
+        const members = await auth.listOrganizationMembers(organizationId);
+        return { members };
+      }
+
+      // Fallback: return empty array
+      return { members: [] };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error listing organization members');
+    }
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -887,4 +1116,9 @@ export const AUTH_ROUTES = [
   GET_ROLE_PERMISSIONS_ROUTE,
   GET_PERMISSION_PATTERNS_ROUTE,
   GET_FGA_RESOURCE_TYPES_ROUTE,
+  GET_FGA_RESOURCE_TYPE_ROLES_ROUTE,
+  GET_FGA_RESOURCE_ACCESS_ROUTE,
+  POST_FGA_RESOURCE_ACCESS_ROUTE,
+  DELETE_FGA_RESOURCE_ACCESS_ROUTE,
+  GET_ORGANIZATION_MEMBERS_ROUTE,
 ] as const;

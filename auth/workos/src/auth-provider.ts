@@ -727,4 +727,48 @@ export class MastraAuthWorkos
   getRedirectUri(): string {
     return this.redirectUri;
   }
+
+  /**
+   * List all members of an organization.
+   * Used for user search in share dialogs.
+   */
+  async listOrganizationMembers(
+    organizationId: string,
+  ): Promise<Array<{ membershipId: string; userId: string; email?: string; name?: string }>> {
+    try {
+      const response = await this.workos.userManagement.listOrganizationMemberships({
+        organizationId,
+      });
+
+      const memberships = await response.autoPagination();
+
+      // Fetch user details for each membership
+      const members = await Promise.all(
+        memberships.map(async membership => {
+          let email: string | undefined;
+          let name: string | undefined;
+
+          try {
+            const user = await this.workos.userManagement.getUser(membership.userId);
+            email = user.email;
+            name = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : undefined;
+          } catch {
+            // Ignore errors fetching user details
+          }
+
+          return {
+            membershipId: membership.id,
+            userId: membership.userId,
+            email,
+            name,
+          };
+        }),
+      );
+
+      return members;
+    } catch (error) {
+      console.error('[MastraAuthWorkos] Failed to list organization members:', error);
+      return [];
+    }
+  }
 }
