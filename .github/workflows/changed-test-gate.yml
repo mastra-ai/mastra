@@ -1,0 +1,94 @@
+name: Changed Test Gate
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changed-tests:
+    # This workflow runs PR code in the unprivileged pull_request sandbox, without
+    # secrets or write permissions. Keep PR Triage on pull_request_target for labels.
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+
+      - name: Restore changed test files from PR head
+        id: changed_tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch "${HEAD_REPO}" "${HEAD_SHA}" --depth=1
+          git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" FETCH_HEAD \
+            | grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
+            | sort > /tmp/changed-test-files || true
+
+          if [ ! -s /tmp/changed-test-files ]; then
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
+            echo "No changed test files detected."
+            exit 0
+          fi
+
+          while IFS= read -r file; do
+            git checkout FETCH_HEAD -- "$file"
+          done < /tmp/changed-test-files
+
+          echo "has_tests=true" >> "$GITHUB_OUTPUT"
+          echo "Changed test files:"
+          cat /tmp/changed-test-files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup pnpm
+        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          cache: true
+
+      - name: Setup Node.js
+        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.13.0
+
+      - name: Install dependencies
+        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
+        env:
+          TURBO_CACHE: local:rw
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+
+      - name: Run changed tests
+        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
+        shell: bash
+        env:
+          NODE_OPTIONS: '--max-old-space-size=8192'
+        run: |
+          set -euo pipefail
+          mapfile -t test_files < /tmp/changed-test-files
+          pnpm vitest run --passWithNoTests "${test_files[@]}"

@@ -1269,7 +1269,7 @@ describe('Agent Routes Authorization', () => {
 
       (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-id' };
+        return { accepted: true, runId: 'signal-run-with-context' };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
@@ -1281,6 +1281,7 @@ describe('Agent Routes Authorization', () => {
         threadId: 'signal-thread-with-context',
         ifIdle: {
           streamOptions: {
+            instructions: 'Use the fixture.',
             requestContext: {
               fixture: 'text-stream',
               [MASTRA_RESOURCE_ID_KEY]: 'user-b',
@@ -1289,7 +1290,9 @@ describe('Agent Routes Authorization', () => {
         },
       } as any);
 
-      expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
+      expect(result).toMatchObject({ accepted: true, runId: 'signal-run-with-context' });
+      expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
     });

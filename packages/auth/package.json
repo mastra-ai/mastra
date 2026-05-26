@@ -59,5 +59,8 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.32.0-0 <2.0.0-0"
   }
 }

@@ -1,5 +1,77 @@
 # mastracode
 
+## 0.21.0-alpha.6
+
+### Minor Changes
+
+- Added support for overriding Mastra Code's config directory so embedded and programmatic setups can store project configs outside the default `.mastracode` path. ([#13751](https://github.com/mastra-ai/mastra/pull/13751))
+
+### Patch Changes
+
+- Fixed custom slash commands so unresolved @ references remain literal instead of rendering read errors. ([#17032](https://github.com/mastra-ai/mastra/pull/17032))
+
+- Suppressed noisy gateway fetch errors when models.dev is unreachable. The registry no longer retries or logs errors on network failure since all model data is already bundled at publish time. ([#16984](https://github.com/mastra-ai/mastra/pull/16984))
+
+- Updated dependencies [[`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`c86f70d`](https://github.com/mastra-ai/mastra/commit/c86f70d11170c71701daf7b49366cd04d3a3f108), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0-alpha.6
+  - @mastra/observability@1.14.0-alpha.1
+
+## 0.20.1-alpha.5
+
+### Patch Changes
+
+- Fixed mode switching delay — Shift+Tab now updates instantly. Fixed modal lag when opening /om and /models. Fixed duplicate messages appearing when queueing with Ctrl+F. Blocked mode switching while agent is active. ([#17008](https://github.com/mastra-ai/mastra/pull/17008))
+
+- Fix Mastra Code TUI crash when ask_user option labels are wider than the terminal — long labels now wrap inside the bordered box, matching how question text already wraps. Reported in #17002. ([#17005](https://github.com/mastra-ai/mastra/pull/17005))
+
+- Updated dependencies [[`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd)]:
+  - @mastra/core@1.37.0-alpha.5
+
+## 0.20.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5)]:
+  - @mastra/core@1.37.0-alpha.4
+
+## 0.20.1-alpha.3
+
+### Patch Changes
+
+- Fixed MastraCode observer attachment mode persistence so Auto/On/Off choices are applied consistently across thread reloads. ([#16922](https://github.com/mastra-ai/mastra/pull/16922))
+
+- Improved responsiveness during streaming: reduced animation and text input lag by eliminating remaining event-loop blockers. Dynamic instruction building now uses async git branch detection and parallel binary resolution, and AGENTS.md reminders render compact loaded path notices without reading instruction files during streaming. ([#16951](https://github.com/mastra-ai/mastra/pull/16951))
+
+- Route Unix socket signal PubSub traffic through per-thread socket paths under `/tmp/mc/<resourceId>/<threadId>.sock` and guard concurrent socket initialization. ([#16939](https://github.com/mastra-ai/mastra/pull/16939))
+
+- Updated dependencies [[`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`ac442a4`](https://github.com/mastra-ai/mastra/commit/ac442a42fda0354ac2bcea772bf6691cb3e9dbb3), [`1e5c067`](https://github.com/mastra-ai/mastra/commit/1e5c067d2e20a781af670578180d1ee249806d41), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`8116436`](https://github.com/mastra-ai/mastra/commit/81164363eb225d774e41ff27da6a5ea611406688), [`c27c4b9`](https://github.com/mastra-ai/mastra/commit/c27c4b9f137df5414fca4e45896aceccff6b0ed5), [`08b3b59`](https://github.com/mastra-ai/mastra/commit/08b3b590dd960dee6c9a6e39272f8927d803db6e)]:
+  - @mastra/memory@1.20.0-alpha.1
+  - @mastra/core@1.37.0-alpha.3
+
+## 0.20.1-alpha.2
+
+### Patch Changes
+
+- Fixed slash commands so they run immediately while the agent is active instead of being queued, while message-sending slash commands still show pending UI until accepted. ([#16790](https://github.com/mastra-ai/mastra/pull/16790))
+
+  Improved Ctrl+F follow-up queueing for slash commands and replaced synchronous git branch detection with an async version to reduce event loop blocking during streaming.
+
+- Replaced the update notification modal with an inline component so it renders in the conversation flow and is scrollable on any terminal size. Changelog entries now display their full text instead of being truncated, with natural word-wrapping inside the bordered box. ([#16920](https://github.com/mastra-ai/mastra/pull/16920))
+
+- Added signal delivery option attributes API that conditionally merges branch `attributes` based on whether a signal is delivered to an active agent run (`ifActive.attributes`) or an idle run (`ifIdle.attributes`). This enables contextual signal delivery — for example, tagging user messages as `while-active` when the agent is actively working. ([#16923](https://github.com/mastra-ai/mastra/pull/16923))
+
+- Updated dependencies [[`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67)]:
+  - @mastra/core@1.37.0-alpha.2
+  - @mastra/memory@1.19.1-alpha.0
+
+## 0.20.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02)]:
+  - @mastra/core@1.37.0-alpha.1
+  - @mastra/observability@1.14.0-alpha.0
+
 ## 0.20.1-alpha.0
 
 ### Patch Changes

@@ -40,6 +40,7 @@ import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 export interface PendingSignalMessage {
   component: Component;
   text: string;
+  isInterjection?: boolean;
 }
 // =============================================================================
 // MastraTUIOptions
@@ -178,6 +179,8 @@ export interface TUIState {
   pendingSignalMessageComponentsById: Map<string, PendingSignalMessage>;
   /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
+  /** Pending user-message component ids for queued slash commands */
+  pendingSlashCommandMessageIds: string[];
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
   pendingApprovalDismiss: (() => void) | null;
 
@@ -193,7 +196,6 @@ export interface TUIState {
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
   activeActivationData?: OMMarkerData;
-  activeActivationTTLMarker?: OMMarkerComponent;
   activeActivationProviderChangeMarker?: OMMarkerComponent;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
@@ -211,6 +213,11 @@ export interface TUIState {
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
+
+  // ── Dedup ────────────────────────────────────────────────────────────
+  /** Texts of queued messages that were locally rendered and fired — used to
+   *  suppress the subscription echo that would otherwise create a duplicate. */
+  firedQueuedMessageTexts?: Map<string, number>;
 
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;
@@ -297,6 +304,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     followUpComponents: [],
     pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
+    pendingSlashCommandMessageIds: [],
     pendingApprovalDismiss: null,
 
     // Status line

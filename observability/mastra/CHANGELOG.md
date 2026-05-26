@@ -1,5 +1,25 @@
 # @mastra/observability
 
+## 1.14.0-alpha.1
+
+### Patch Changes
+
+- Paused observability uploads after invalid credentials so exporters stop repeatedly sending unauthorized requests. ([#16743](https://github.com/mastra-ai/mastra/pull/16743))
+
+- Updated dependencies [[`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0-alpha.6
+
+## 1.14.0-alpha.0
+
+### Minor Changes
+
+- Support ingesting client-side tool telemetry. Spans, logs, and duration metrics captured by the client SDK during tool execution are forwarded through the observability bus to your existing exporters. Client tool durations are reported via the existing `mastra_tool_duration_ms` metric with a `toolType: 'client'` label to distinguish them from server-side tool durations. ([#16425](https://github.com/mastra-ai/mastra/pull/16425))
+
+### Patch Changes
+
+- Updated dependencies [[`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02)]:
+  - @mastra/core@1.37.0-alpha.1
+
 ## 1.13.0
 
 ### Minor Changes
