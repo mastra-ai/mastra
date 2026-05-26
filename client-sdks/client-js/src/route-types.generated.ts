@@ -10666,7 +10666,7 @@ export type GetMemoryThreadsThreadIdMessages_QueryParams = {
 
 export type GetMemoryThreadsThreadIdMessages_Response = {
   messages: any[];
-  uiMessages: unknown;
+  uiMessages: any[] | null;
 };
 
 export type GetMemoryThreadsThreadIdMessages_Request = Simplify<
@@ -11339,7 +11339,7 @@ export type GetMemoryNetworkThreadsThreadIdMessages_QueryParams = {
 
 export type GetMemoryNetworkThreadsThreadIdMessages_Response = {
   messages: any[];
-  uiMessages: unknown;
+  uiMessages: any[] | null;
 };
 
 export type GetMemoryNetworkThreadsThreadIdMessages_Request = Simplify<

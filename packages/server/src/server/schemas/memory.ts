@@ -492,7 +492,7 @@ export const getThreadByIdResponseSchema = threadSchema;
  */
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
-  uiMessages: z.unknown(), // Converted messages in UI format
+  uiMessages: z.array(z.any()).nullable(), // Converted messages in UI format
 });
 
 /**
