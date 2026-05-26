@@ -6,7 +6,7 @@ export const useTools = (options?: { enabled?: boolean }) => {
   const { requestContext } = usePlaygroundStore();
   const client = useMastraClient();
   return useQuery({
-    queryKey: ['tools'],
+    queryKey: ['tools', requestContext],
     queryFn: () => client.listTools(requestContext),
     enabled: options?.enabled !== false,
   });
@@ -17,7 +17,7 @@ export const useTool = (toolId: string, options?: { enabled?: boolean }) => {
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['tool', toolId],
+    queryKey: ['tool', toolId, requestContext],
     queryFn: () => client.getTool(toolId).details(requestContext),
     enabled: options?.enabled !== false,
   });

@@ -38,7 +38,7 @@ gh-pr-comments
 make-moves
 
 Read relevant @.claude/skills/
-playground-msw-tests REQUIRED and PRIMARY test approach for packages/playground packages/playground-ui — Vitest + MSW + typed @mastra/client-js fixtures, ABOVE Playwright E2E
+playground-msw-tests RIMARY test approach for packages/playground packages/playground-ui — Vitest + MSW + typed @mastra/client-js fixtures
 e2e-tests-studio for packages/playground-ui packages/playground E2E behavior tests (use only when MSW cannot model the journey)
 mastra-docs
 react-best-practices
