@@ -304,7 +304,18 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       workspace: config.workspace
         ? {
             kind: 'shared' as const,
-            workspace: ({ requestContext }) => config.workspace!({ requestContext, mastra: this.mastra }),
+            workspace: ({ requestContext }) => {
+              if (!requestContext.has('harness')) {
+                requestContext.set('harness', {
+                  harnessId: MASTRACODE_HARNESS_NAME,
+                  getState: () => this.state,
+                  state: this.state,
+                  modeId: this.currentModeId,
+                });
+              }
+
+              return config.workspace!({ requestContext, mastra: this.mastra });
+            },
           }
         : undefined,
     });
