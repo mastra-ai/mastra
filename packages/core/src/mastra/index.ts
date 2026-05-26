@@ -3297,7 +3297,7 @@ export class Mastra<
     if (this.#heartbeatRegistration) return this.#heartbeatRegistration;
     this.#heartbeatRegistration = (async () => {
       const { buildHeartbeatWorkflow } = await import('../agent/heartbeat/workflow');
-      this.addWorkflow(buildHeartbeatWorkflow() as any);
+      this.addWorkflow(buildHeartbeatWorkflow());
       // Heartbeats are imperative — each `setHeartbeat()` call writes a row
       // to the schedules store. The workflow itself has no declarative
       // `schedule` config, so `#hasScheduledWorkflow` won't flip. Signal

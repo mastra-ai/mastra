@@ -14,10 +14,14 @@ export const HEARTBEAT_WORKFLOW_ID = '__mastra_heartbeat__';
 export const HEARTBEAT_SCHEDULE_PREFIX = 'hb_';
 
 /**
- * Outcome reported by a heartbeat tick. Persisted via `recordTrigger`'s
- * `metadata.heartbeatOutcome` field by the workflow step.
+ * Status reported by a single heartbeat run. Persisted via `recordTrigger`'s
+ * `metadata.heartbeatStatus` field by the workflow step.
+ *
+ * Distinct from `ScheduleTriggerOutcome` (which describes scheduler-level
+ * dispatch results like `published`/`failed`); this describes what the
+ * heartbeat tick itself did.
  */
-export type HeartbeatOutcome =
+export type HeartbeatRunStatus =
   | 'fired'
   | 'signal-accepted'
   | 'skipped-outside-hours'
@@ -57,7 +61,7 @@ export const HeartbeatInputSchema = z.object({
 export type HeartbeatInput = z.infer<typeof HeartbeatInputSchema>;
 
 export const HeartbeatOutputSchema = z.object({
-  outcome: z.enum([
+  status: z.enum([
     'fired',
     'signal-accepted',
     'skipped-outside-hours',

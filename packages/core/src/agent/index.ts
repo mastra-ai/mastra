@@ -8,7 +8,7 @@ export {
   HEARTBEAT_SCHEDULE_PREFIX,
   type HeartbeatInput,
   type HeartbeatOutput,
-  type HeartbeatOutcome,
+  type HeartbeatRunStatus,
   type SetHeartbeatOptions,
 } from './heartbeat';
 export * from './agent';

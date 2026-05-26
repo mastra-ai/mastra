@@ -8,6 +8,6 @@ export {
   HeartbeatOutputSchema,
   type HeartbeatInput,
   type HeartbeatOutput,
-  type HeartbeatOutcome,
+  type HeartbeatRunStatus,
   type SetHeartbeatOptions,
 } from './types';

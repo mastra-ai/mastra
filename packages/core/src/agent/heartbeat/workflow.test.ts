@@ -46,7 +46,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
 
     const result = await __internal.executeHeartbeat(mastra, baseInput());
 
-    expect(result.outcome).toBe('agent-missing');
+    expect(result.status).toBe('agent-missing');
     expect(storage.deleteSchedule).toHaveBeenCalledWith('hb_a1');
   });
 
@@ -64,7 +64,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
 
     const result = await __internal.executeHeartbeat(mastra, baseInput({ threadId: 't1', resourceId: 'r1' }));
 
-    expect(result.outcome).toBe('thread-missing');
+    expect(result.status).toBe('thread-missing');
     expect(storage.deleteSchedule).toHaveBeenCalledWith('hb_a1');
     expect(sendSignal).not.toHaveBeenCalled();
   });
@@ -75,7 +75,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
 
     const result = await __internal.executeHeartbeat(mastra, baseInput({ threadId: 't1' }));
 
-    expect(result.outcome).toBe('invalid-input');
+    expect(result.status).toBe('invalid-input');
     expect(agent.sendSignal).not.toHaveBeenCalled();
   });
 
@@ -95,7 +95,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
       baseInput({ threadId: 't1', resourceId: 'r1', prompt: 'ping' }),
     );
 
-    expect(result.outcome).toBe('signal-accepted');
+    expect(result.status).toBe('signal-accepted');
     expect(sendSignal).toHaveBeenCalledTimes(1);
     const [signal, target] = sendSignal.mock.calls[0]!;
     expect(signal).toEqual({ type: 'user-message', contents: 'ping' });
@@ -151,7 +151,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
       baseInput({ threadId: 't1', resourceId: 'r1', idleThresholdMs: 30_000 }),
     );
 
-    expect(result.outcome).toBe('skipped-idle-threshold');
+    expect(result.status).toBe('skipped-idle-threshold');
     expect(sendSignal).not.toHaveBeenCalled();
   });
 
@@ -163,7 +163,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
 
     const result = await __internal.executeHeartbeat(mastra, baseInput({ prompt: 'tick' }));
 
-    expect(result.outcome).toBe('fired');
+    expect(result.status).toBe('fired');
     expect(generate).toHaveBeenCalledWith('tick');
     expect(sendSignal).not.toHaveBeenCalled();
   });
@@ -188,7 +188,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
       }),
     );
 
-    expect(result.outcome).toBe('skipped-outside-hours');
+    expect(result.status).toBe('skipped-outside-hours');
     expect(generate).not.toHaveBeenCalled();
     expect(sendSignal).not.toHaveBeenCalled();
   });

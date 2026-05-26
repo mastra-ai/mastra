@@ -2,7 +2,7 @@ import type { z } from 'zod/v4';
 import type { Mastra } from '../../mastra';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import { HEARTBEAT_WORKFLOW_ID, HeartbeatInputSchema, HeartbeatOutputSchema } from './types';
-import type { HeartbeatInput, HeartbeatOutcome } from './types';
+import type { HeartbeatInput, HeartbeatRunStatus } from './types';
 
 /**
  * Returns `true` when `nowMs` (UTC ms) falls inside the daily window
@@ -50,7 +50,7 @@ async function selfClean(mastra: Mastra, scheduleId: string): Promise<void> {
 async function executeHeartbeat(
   mastra: Mastra,
   inputData: HeartbeatInput,
-): Promise<{ outcome: HeartbeatOutcome; reason?: string }> {
+): Promise<{ status: HeartbeatRunStatus; reason?: string }> {
   const { scheduleId, agentId, prompt, threadId, resourceId, activeHours, idleThresholdMs } = inputData;
 
   const agent = (() => {
@@ -62,28 +62,28 @@ async function executeHeartbeat(
   })();
   if (!agent) {
     await selfClean(mastra, scheduleId);
-    return { outcome: 'agent-missing', reason: `agent "${agentId}" no longer registered` };
+    return { status: 'agent-missing', reason: `agent "${agentId}" no longer registered` };
   }
 
   if (activeHours && !isWithinActiveHours(activeHours, Date.now())) {
-    return { outcome: 'skipped-outside-hours' };
+    return { status: 'skipped-outside-hours' };
   }
 
   if (threadId) {
     if (!resourceId) {
-      return { outcome: 'invalid-input', reason: 'resourceId required when threadId is set' };
+      return { status: 'invalid-input', reason: 'resourceId required when threadId is set' };
     }
     const memory = await agent.getMemory();
     if (memory) {
       const thread = await memory.getThreadById({ threadId });
       if (!thread) {
         await selfClean(mastra, scheduleId);
-        return { outcome: 'thread-missing', reason: `thread "${threadId}" not found` };
+        return { status: 'thread-missing', reason: `thread "${threadId}" not found` };
       }
       if (idleThresholdMs !== undefined) {
         const updatedAt = thread.updatedAt instanceof Date ? thread.updatedAt.getTime() : Number(thread.updatedAt);
         if (Number.isFinite(updatedAt) && Date.now() - updatedAt < idleThresholdMs) {
-          return { outcome: 'skipped-idle-threshold' };
+          return { status: 'skipped-idle-threshold' };
         }
       }
     }
@@ -100,11 +100,11 @@ async function executeHeartbeat(
         ifIdle: { behavior: inputData.ifIdle ?? 'wake' },
       },
     );
-    return { outcome: 'signal-accepted' };
+    return { status: 'signal-accepted' };
   }
 
   await agent.generate(prompt);
-  return { outcome: 'fired' };
+  return { status: 'fired' };
 }
 
 /**
@@ -135,7 +135,7 @@ export function buildHeartbeatWorkflow() {
         execute: async ({ inputData, mastra }) => {
           const parsed = HeartbeatInputSchema.safeParse(inputData);
           if (!parsed.success) {
-            return { outcome: 'invalid-input' as const, reason: parsed.error.message };
+            return { status: 'invalid-input' as const, reason: parsed.error.message };
           }
           return executeHeartbeat(mastra, parsed.data);
         },
