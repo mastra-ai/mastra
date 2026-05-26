@@ -330,26 +330,26 @@ export interface MastraFGAWorkosOptions {
    */
   logger?: IMastraLogger;
   /**
-   * Authorship configuration for automatic role assignment on resource creation.
+   * Ownership configuration for automatic role assignment on resource creation.
    *
-   * When enabled, registerResource() will automatically assign the author role
+   * When enabled, registerResource() will automatically assign the owner role
    * (or a fallback role) to the user who creates a resource.
    *
    * @example
    * ```typescript
-   * authorship: {
+   * ownership: {
    *   enabled: true,
-   *   authorRole: 'author',
-   *   fallbackRoles: ['owner', 'admin', 'editor'],
+   *   ownerRole: 'owner',
+   *   fallbackRoles: ['admin', 'editor'],
    * }
    * ```
    */
-  authorship?: {
-    /** Enable automatic author role assignment on resource creation */
+  ownership?: {
+    /** Enable automatic owner role assignment on resource creation */
     enabled: boolean;
-    /** Role to assign to creator (default: 'author') */
-    authorRole?: string;
-    /** Fallback roles to try if authorRole not found */
+    /** Role to assign to creator (default: 'owner') */
+    ownerRole?: string;
+    /** Fallback roles to try if ownerRole not found */
     fallbackRoles?: string[];
   };
 }

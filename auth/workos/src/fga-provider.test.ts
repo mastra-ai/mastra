@@ -840,27 +840,27 @@ describe('MastraFGAWorkos', () => {
   });
 
   describe('registerResource', () => {
-    let fgaWithAuthorship: MastraFGAWorkos;
+    let fgaWithOwnership: MastraFGAWorkos;
 
     beforeEach(() => {
       vi.clearAllMocks();
-      fgaWithAuthorship = new MastraFGAWorkos({
+      fgaWithOwnership = new MastraFGAWorkos({
         apiKey: 'test-key',
         clientId: 'test-client',
         organizationId: 'org-123',
-        authorship: {
+        ownership: {
           enabled: true,
-          authorRole: 'author',
-          fallbackRoles: ['owner', 'admin', 'editor'],
+          ownerRole: 'owner',
+          fallbackRoles: ['admin', 'editor'],
         },
       });
     });
 
-    it('should register resource and assign author role when type and role exist', async () => {
+    it('should register resource and assign owner role when type and role exist', async () => {
       // Mock describeResourceTypes
       mockAuthorization.listOrganizationRoles.mockResolvedValue({
         data: [
-          { slug: 'author', resourceTypeSlug: 'agent', type: 'OrganizationRole' },
+          { slug: 'owner', resourceTypeSlug: 'agent', type: 'OrganizationRole' },
           { slug: 'viewer', resourceTypeSlug: 'agent', type: 'EnvironmentRole' },
         ],
       });
@@ -881,7 +881,7 @@ describe('MastraFGAWorkos', () => {
       // Mock assignRole
       mockAuthorization.assignRole.mockResolvedValue({
         id: 'role-assignment-1',
-        role: { slug: 'author', id: 'role-1' },
+        role: { slug: 'owner', id: 'role-1' },
         resource: {
           id: 'fga-agent-1',
           externalId: 'my-agent',
@@ -889,7 +889,7 @@ describe('MastraFGAWorkos', () => {
         },
       });
 
-      const result = await fgaWithAuthorship.registerResource({
+      const result = await fgaWithOwnership.registerResource({
         user: testUser,
         resourceType: 'agent',
         resourceId: 'my-agent',
@@ -898,13 +898,13 @@ describe('MastraFGAWorkos', () => {
 
       expect(result.resource).not.toBeNull();
       expect(result.resource?.id).toBe('fga-agent-1');
-      expect(result.authorAssignment).not.toBeNull();
-      expect(result.authorAssignment?.role?.slug).toBe('author');
+      expect(result.ownerAssignment).not.toBeNull();
+      expect(result.ownerAssignment?.role?.slug).toBe('owner');
       expect(result.warnings).toHaveLength(0);
     });
 
-    it('should use fallback role when author role not found', async () => {
-      // Mock describeResourceTypes - no 'author' role, but 'editor' exists
+    it('should use fallback role when owner role not found', async () => {
+      // Mock describeResourceTypes - no 'owner' role, but 'editor' exists
       mockAuthorization.listOrganizationRoles.mockResolvedValue({
         data: [{ slug: 'editor', resourceTypeSlug: 'agent', type: 'EnvironmentRole' }],
       });
@@ -933,7 +933,7 @@ describe('MastraFGAWorkos', () => {
         },
       });
 
-      const result = await fgaWithAuthorship.registerResource({
+      const result = await fgaWithOwnership.registerResource({
         user: testUser,
         resourceType: 'agent',
         resourceId: 'my-agent',
@@ -941,8 +941,8 @@ describe('MastraFGAWorkos', () => {
       });
 
       expect(result.resource).not.toBeNull();
-      expect(result.authorAssignment).not.toBeNull();
-      expect(result.authorAssignment?.role?.slug).toBe('editor');
+      expect(result.ownerAssignment).not.toBeNull();
+      expect(result.ownerAssignment?.role?.slug).toBe('editor');
       expect(result.warnings).toContainEqual(expect.stringContaining("Using 'editor' instead"));
     });
 
@@ -954,7 +954,7 @@ describe('MastraFGAWorkos', () => {
         listMetadata: { after: undefined },
       });
 
-      const result = await fgaWithAuthorship.registerResource({
+      const result = await fgaWithOwnership.registerResource({
         user: testUser,
         resourceType: 'agent',
         resourceId: 'my-agent',
@@ -962,15 +962,15 @@ describe('MastraFGAWorkos', () => {
       });
 
       expect(result.resource).toBeNull();
-      expect(result.authorAssignment).toBeNull();
+      expect(result.ownerAssignment).toBeNull();
       expect(result.warnings).toHaveLength(1);
       expect(result.warnings[0]).toContain("Resource type 'agent' not found");
     });
 
-    it('should skip authorship when skipAuthorship is true', async () => {
+    it('should skip ownership when skipOwnership is true', async () => {
       // Mock describeResourceTypes
       mockAuthorization.listOrganizationRoles.mockResolvedValue({
-        data: [{ slug: 'author', resourceTypeSlug: 'agent', type: 'OrganizationRole' }],
+        data: [{ slug: 'owner', resourceTypeSlug: 'agent', type: 'OrganizationRole' }],
       });
       mockAuthorization.listResources.mockResolvedValue({
         data: [],
@@ -986,16 +986,16 @@ describe('MastraFGAWorkos', () => {
         organizationId: 'org-123',
       });
 
-      const result = await fgaWithAuthorship.registerResource({
+      const result = await fgaWithOwnership.registerResource({
         user: testUser,
         resourceType: 'agent',
         resourceId: 'my-agent',
         name: 'My Agent',
-        skipAuthorship: true,
+        skipOwnership: true,
       });
 
       expect(result.resource).not.toBeNull();
-      expect(result.authorAssignment).toBeNull();
+      expect(result.ownerAssignment).toBeNull();
       expect(mockAuthorization.assignRole).not.toHaveBeenCalled();
     });
 
@@ -1003,7 +1003,7 @@ describe('MastraFGAWorkos', () => {
       // Mock describeResourceTypes with team and agent types
       mockAuthorization.listOrganizationRoles.mockResolvedValue({
         data: [
-          { slug: 'author', resourceTypeSlug: 'agent', type: 'OrganizationRole' },
+          { slug: 'owner', resourceTypeSlug: 'agent', type: 'OrganizationRole' },
           { slug: 'admin', resourceTypeSlug: 'team', type: 'OrganizationRole' },
         ],
       });
@@ -1025,7 +1025,7 @@ describe('MastraFGAWorkos', () => {
       // Mock assignRole
       mockAuthorization.assignRole.mockResolvedValue({
         id: 'role-assignment-1',
-        role: { slug: 'author', id: 'role-1' },
+        role: { slug: 'owner', id: 'role-1' },
         resource: {
           id: 'fga-agent-1',
           externalId: 'my-agent',
@@ -1033,7 +1033,7 @@ describe('MastraFGAWorkos', () => {
         },
       });
 
-      const result = await fgaWithAuthorship.registerResource({
+      const result = await fgaWithOwnership.registerResource({
         user: testUser,
         resourceType: 'agent',
         resourceId: 'my-agent',
@@ -1054,7 +1054,7 @@ describe('MastraFGAWorkos', () => {
       // Mock describeResourceTypes with team and agent types
       mockAuthorization.listOrganizationRoles.mockResolvedValue({
         data: [
-          { slug: 'author', resourceTypeSlug: 'agent', type: 'OrganizationRole' },
+          { slug: 'owner', resourceTypeSlug: 'agent', type: 'OrganizationRole' },
           { slug: 'admin', resourceTypeSlug: 'team', type: 'OrganizationRole' },
         ],
       });
@@ -1076,7 +1076,7 @@ describe('MastraFGAWorkos', () => {
       // Mock assignRole
       mockAuthorization.assignRole.mockResolvedValue({
         id: 'role-assignment-1',
-        role: { slug: 'author', id: 'role-1' },
+        role: { slug: 'owner', id: 'role-1' },
         resource: {
           id: 'fga-agent-1',
           externalId: 'my-agent',
@@ -1084,7 +1084,7 @@ describe('MastraFGAWorkos', () => {
         },
       });
 
-      const result = await fgaWithAuthorship.registerResource({
+      const result = await fgaWithOwnership.registerResource({
         user: testUser,
         resourceType: 'agent',
         resourceId: 'my-agent',
