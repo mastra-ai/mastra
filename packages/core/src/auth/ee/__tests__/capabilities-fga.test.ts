@@ -3,9 +3,20 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import * as capabilitiesModule from '../capabilities';
 import { buildCapabilities } from '../capabilities';
 import type { IFGAProvider } from '../interfaces/fga';
 import { clearLicenseCache } from '../license';
+
+function isTemporaryRbacFgaBypassEnabled() {
+  return Boolean(
+    (
+      capabilitiesModule as {
+        TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE?: boolean;
+      }
+    ).TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE,
+  );
+}
 
 // Minimal mock auth provider that implements IUserProvider
 function createMockAuth(user: { id: string; email: string; name: string } | null = null) {
@@ -62,7 +73,7 @@ describe('FGA Capability Detection', () => {
     expect('capabilities' in result && result.capabilities.fga).toBe(false);
   });
 
-  it('temporarily includes fga: true when FGA provider is present without a license in production', async () => {
+  it('follows the temporary RBAC/FGA bypass flag for unlicensed FGA in production', async () => {
     process.env['NODE_ENV'] = 'production';
     delete process.env['MASTRA_EE_LICENSE'];
     const auth = createMockAuth({ id: 'user-1', email: 'test@test.com', name: 'Test' });
@@ -72,8 +83,12 @@ describe('FGA Capability Detection', () => {
       fga: fgaProvider,
     });
 
-    expect('capabilities' in result && result.capabilities.fga).toBe(true);
-    expect(auth.getCurrentUser).toHaveBeenCalled();
+    if (isTemporaryRbacFgaBypassEnabled()) {
+      expect('capabilities' in result && result.capabilities.fga).toBe(true);
+      expect(auth.getCurrentUser).toHaveBeenCalled();
+    } else {
+      expect('capabilities' in result && result.capabilities.fga).toBe(false);
+    }
   });
 
   it('should include fga: true in dev environments without license', async () => {

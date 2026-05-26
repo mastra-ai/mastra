@@ -5,7 +5,18 @@ import { PassThrough } from 'node:stream';
 import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as serverAdapterModule from './index';
 import { MastraServer } from './index';
+
+function isTemporaryRbacFgaBypassEnabled() {
+  return Boolean(
+    (
+      serverAdapterModule as {
+        TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE?: boolean;
+      }
+    ).TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE,
+  );
+}
 
 class TestMastraServer extends MastraServer<any, any, any> {
   stream = vi.fn();
@@ -708,7 +719,7 @@ describe('EE license validation', () => {
     vi.resetModules();
   });
 
-  it('temporarily allows FGA in production without a valid EE license', async () => {
+  it('follows the temporary RBAC/FGA bypass flag for unlicensed FGA in production', async () => {
     process.env['NODE_ENV'] = 'production';
     delete process.env['MASTRA_EE_LICENSE'];
 
@@ -719,7 +730,11 @@ describe('EE license validation', () => {
     });
     const adapter = new TestMastraServer({ app: {}, mastra });
 
-    await expect(adapter.validateEELicense()).resolves.toBeUndefined();
+    if (isTemporaryRbacFgaBypassEnabled()) {
+      await expect(adapter.validateEELicense()).resolves.toBeUndefined();
+    } else {
+      await expect(adapter.validateEELicense()).rejects.toThrow('[mastra/auth-ee] FGA is configured');
+    }
   });
 
   it('should allow FGA in production with a valid EE license', async () => {
@@ -736,7 +751,7 @@ describe('EE license validation', () => {
     await expect(adapter.validateEELicense()).resolves.toBeUndefined();
   });
 
-  it('temporarily allows both configured EE authorization features when both are unlicensed', async () => {
+  it('follows the temporary RBAC/FGA bypass flag when both authorization features are unlicensed', async () => {
     process.env['NODE_ENV'] = 'production';
     delete process.env['MASTRA_EE_LICENSE'];
 
@@ -754,7 +769,11 @@ describe('EE license validation', () => {
     });
     const adapter = new TestMastraServer({ app: {}, mastra });
 
-    await expect(adapter.validateEELicense()).resolves.toBeUndefined();
+    if (isTemporaryRbacFgaBypassEnabled()) {
+      await expect(adapter.validateEELicense()).resolves.toBeUndefined();
+    } else {
+      await expect(adapter.validateEELicense()).rejects.toThrow('[mastra/auth-ee] RBAC and FGA are configured');
+    }
   });
 });
 

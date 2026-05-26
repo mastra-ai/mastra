@@ -13,7 +13,7 @@ import { isLicenseValid, isDevEnvironment, getSafeLicenseSummary } from './licen
 
 // TODO: Temporary RBAC/FGA license bypass. Set to false or remove to restore
 // production EE license enforcement for configured RBAC/FGA providers.
-const TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE: boolean = true;
+export const TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE: boolean = true;
 
 /**
  * Public capabilities response (no authentication required).
