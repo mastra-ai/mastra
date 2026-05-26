@@ -15,6 +15,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { createSignal } from '../../agent/signals';
 import type { MastraDBMessage } from '../../agent/types';
 
 import { setupHarness } from './__test-utils__';
@@ -110,29 +111,20 @@ describe('Session.listMessages', () => {
     });
   });
 
-  it('maps persisted user-message signals from their stored text parts', async () => {
+  it('maps persisted user-message signals with delivery attributes and non-text parts', async () => {
     const { harness } = setupHarness();
     await harness.threads.create({ resourceId: 'r1', threadId: 'thread-signal-user', title: 't' });
     await seedMessages(harness, [
-      {
+      createSignal({
         id: 'sig-user-1',
-        role: 'signal',
-        threadId: 'thread-signal-user',
-        resourceId: 'r1',
-        createdAt: new Date('2026-05-10T00:00:00Z'),
         type: 'user-message',
-        content: {
-          format: 2,
-          parts: [{ type: 'text', text: 'hello from signal' }],
-          metadata: {
-            signal: {
-              id: 'sig-user-1',
-              type: 'user-message',
-              createdAt: '2026-05-10T00:00:00.000Z',
-            },
-          },
-        },
-      } as MastraDBMessage,
+        contents: [
+          { type: 'text', text: 'hello from signal' },
+          { type: 'file', data: 'abc123', mediaType: 'image/png' },
+        ],
+        attributes: { delivery: 'while-active' },
+        createdAt: new Date('2026-05-10T00:00:00Z'),
+      }).toDBMessage({ threadId: 'thread-signal-user', resourceId: 'r1' }),
     ]);
 
     const session = await harness.session({ resourceId: 'r1', threadId: 'thread-signal-user' });
@@ -142,7 +134,11 @@ describe('Session.listMessages', () => {
       expect.objectContaining({
         id: 'sig-user-1',
         role: 'user',
-        content: [{ type: 'text', text: 'hello from signal' }],
+        content: [
+          { type: 'text', text: 'hello from signal' },
+          { type: 'file', data: 'abc123', mediaType: 'image/png' },
+        ],
+        attributes: { delivery: 'while-active' },
       }),
     ]);
   });

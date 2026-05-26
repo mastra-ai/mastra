@@ -16,6 +16,7 @@ function createRuntime(
     resolveModel?: (modelId: string) => unknown;
     browser?: unknown;
     disabledTools?: string[];
+    memory?: any;
   } = {},
 ) {
   const agent = new Agent({
@@ -54,6 +55,7 @@ function createRuntime(
       ...options.initialState,
     },
     resolveModel: options.resolveModel,
+    memory: options.memory,
     browser: options.browser as never,
     disabledTools: options.disabledTools,
   });
@@ -68,6 +70,51 @@ describe('MastraCodeHarnessRuntime', () => {
     const runtime = createRuntime();
 
     expect(runtime.getMastra().getHarness(MASTRACODE_HARNESS_NAME)).toBe(runtime.core);
+  });
+
+  it('propagates configured memory to custom mode agents without their own memory', () => {
+    const customAgent = new Agent({
+      id: 'custom-agent',
+      name: 'Custom Agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    });
+
+    expect(customAgent.hasOwnMemory()).toBe(false);
+    createRuntime({
+      agents: {},
+      modes: [
+        {
+          id: 'custom',
+          name: 'Custom',
+          color: 'purple',
+          default: true,
+          defaultModelId: 'openai/gpt-4o-mini',
+          agent: customAgent,
+        },
+      ] as any,
+      memory: {} as any,
+    });
+
+    expect(customAgent.hasOwnMemory()).toBe(true);
+  });
+
+  it('creates a fresh startup thread when the matching project thread is held by a stale foreign lease', async () => {
+    const storage = new InMemoryStore({ id: `mc-runtime-lease-test-${Date.now()}-${Math.random()}` });
+    const first = createRuntime({ storage });
+    await first.init();
+    const lockedSession = (first as any).session;
+
+    const restarted = createRuntime({ storage });
+    await restarted.init();
+    const restartedSession = (restarted as any).session;
+
+    expect(restartedSession.id).not.toBe(lockedSession.id);
+    expect(restartedSession.threadId).not.toBe(lockedSession.threadId);
+    expect(restarted.getCurrentThreadId()).toBe(restartedSession.threadId);
+
+    await first.destroy();
+    await restarted.destroy();
   });
 
   it('restores Harness v1 thread metadata into MastraCode runtime state', async () => {
@@ -165,8 +212,8 @@ describe('MastraCodeHarnessRuntime', () => {
       ifIdle: { attributes: { delivery: 'message' } },
     }).accepted;
     const imageParts = [
-      { type: 'text', text: 'look' },
-      { type: 'file', data: 'abc123', mediaType: 'image/png' },
+      { type: 'text' as const, text: 'look' },
+      { type: 'file' as const, data: 'abc123', mediaType: 'image/png' },
     ];
     await runtime.sendSignal({ content: imageParts }).accepted;
     const acceptedReminder = await runtime.sendSignal({
@@ -189,6 +236,30 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(acceptedUser).toEqual({ id: 'sig-user', accepted: true });
     expect(acceptedReminder).toEqual({ id: 'sig-reminder', accepted: true });
 
+    await runtime.destroy();
+  });
+
+  it('persists saved system reminders without waking the Harness v1 session', async () => {
+    const runtime = createRuntime();
+    await runtime.init();
+    const injectSystemReminder = vi.fn();
+    (runtime as any).session.injectSystemReminder = injectSystemReminder;
+
+    const saved = await runtime.saveSystemReminderMessage({ message: 'done', reminderType: 'goal-judge' });
+    const messages = await runtime.listMessagesForThread({ threadId: runtime.getCurrentThreadId()! });
+
+    expect(injectSystemReminder).not.toHaveBeenCalled();
+    expect(saved).toMatchObject({
+      role: 'user',
+      content: [{ type: 'system_reminder', reminderType: 'goal-judge', message: 'done' }],
+    });
+    expect(messages).toEqual([
+      expect.objectContaining({
+        id: saved!.id,
+        role: 'user',
+        content: [expect.objectContaining({ type: 'system_reminder', message: 'done', reminderType: 'goal-judge' })],
+      }),
+    ]);
     await runtime.destroy();
   });
 

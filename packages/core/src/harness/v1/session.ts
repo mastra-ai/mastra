@@ -3715,21 +3715,31 @@ export class Session {
                 partialResult: payload.partialResult,
               });
             }
-          } else if (chunk.type === 'data-shell-output') {
+          } else if (
+            chunk.type === 'data-shell-output' ||
+            chunk.type === 'data-sandbox-stdout' ||
+            chunk.type === 'data-sandbox-stderr'
+          ) {
             const payload = data as { toolCallId?: unknown; output?: unknown; stream?: unknown } | undefined;
+            const stream =
+              chunk.type === 'data-sandbox-stdout'
+                ? 'stdout'
+                : chunk.type === 'data-sandbox-stderr'
+                  ? 'stderr'
+                  : payload?.stream;
             if (
               payload &&
               typeof payload.toolCallId === 'string' &&
               payload.toolCallId.length > 0 &&
               typeof payload.output === 'string' &&
-              (payload.stream === 'stdout' || payload.stream === 'stderr') &&
+              (stream === 'stdout' || stream === 'stderr') &&
               this._activeTools.has(payload.toolCallId)
             ) {
               this._emitTurnEvent({
                 type: 'shell_output',
                 toolCallId: payload.toolCallId,
                 output: payload.output,
-                stream: payload.stream,
+                stream,
               });
             }
           }

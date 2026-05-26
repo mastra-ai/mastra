@@ -552,6 +552,49 @@ describe('Session events — fullStream drain', () => {
     expect(end).toMatchObject({ type: 'tool_end', toolCallId: 'tc1', isError: false });
   });
 
+  it('normalizes sandbox stdout and stderr chunks into shell_output before tool_end', async () => {
+    const { harness, agent } = setup();
+    agent.chunks = [
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'execute_command', args: { command: 'echo hi' } },
+        runId: 'fake-run',
+      },
+      {
+        type: 'data-sandbox-stdout',
+        data: { toolCallId: 'tc1', output: 'hi\n' },
+        runId: 'fake-run',
+      },
+      {
+        type: 'data-sandbox-stderr',
+        data: { toolCallId: 'tc1', output: 'warn\n' },
+        runId: 'fake-run',
+      },
+      {
+        type: 'tool-result',
+        payload: { toolCallId: 'tc1', result: { exitCode: 0 } },
+        runId: 'fake-run',
+      },
+    ];
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+    await session.message({ content: 'hi' });
+
+    expect(events.map(e => e.type).filter(type => type === 'shell_output' || type === 'tool_end')).toEqual([
+      'shell_output',
+      'shell_output',
+      'tool_end',
+    ]);
+    expect(events.filter(e => e.type === 'shell_output')).toEqual([
+      expect.objectContaining({ type: 'shell_output', toolCallId: 'tc1', output: 'hi\n', stream: 'stdout' }),
+      expect.objectContaining({ type: 'shell_output', toolCallId: 'tc1', output: 'warn\n', stream: 'stderr' }),
+    ]);
+  });
+
   it('persists tool error events without poisoning event replay', async () => {
     const { harness, agent, storage } = setup();
     agent.chunks = [

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { createSignal } from '@mastra/core/agent';
 import type {
   AvailableModel,
   HarnessDisplayState,
@@ -19,6 +20,7 @@ import type {
 import { convertStoredMessageToHarnessMessage, defaultDisplayState } from '@mastra/core/harness';
 import {
   Harness as HarnessV1,
+  HarnessSessionLockedError,
   getHarnessWorkspaceActionPathInput,
   isHarnessWorkspaceFileMutationTool,
 } from '@mastra/core/harness/v1';
@@ -289,6 +291,13 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.state = { ...config.initialState };
     this.currentDisplayTasks = cloneTasks(this.state.tasks);
     const harnessV1Agents = toHarnessV1Agents(config.agents, config.modes);
+    if (config.memory) {
+      for (const agent of Object.values(harnessV1Agents)) {
+        if (!agent.hasOwnMemory()) {
+          agent.__setMemory(config.memory);
+        }
+      }
+    }
     const exposedSubagents = this.shouldExposeSubagentTool() ? config.subagents : [];
     const harnessV1Subagents =
       exposedSubagents.length > 0 ? { types: toHarnessV1Subagents(exposedSubagents) } : undefined;
@@ -628,6 +637,30 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         title: 'New thread',
         metadata: this.buildThreadMetadata(),
       }));
+    try {
+      await this.bindSessionForThread(thread);
+    } catch (err) {
+      if (!(err instanceof HarnessSessionLockedError) || existingThread === undefined) {
+        throw err;
+      }
+      const fallbackThread = await this.core.threads.create({
+        resourceId: this.resourceId,
+        title: 'New thread',
+        metadata: this.buildThreadMetadata(),
+      });
+      await this.bindSessionForThread(fallbackThread);
+      await this.ensureSessionState();
+      await this.syncSessionControls();
+      await this.resolveWorkspace().catch(() => undefined);
+      return toLegacyThread(fallbackThread);
+    }
+    await this.ensureSessionState();
+    await this.syncSessionControls();
+    await this.resolveWorkspace().catch(() => undefined);
+    return toLegacyThread(thread);
+  }
+
+  private async bindSessionForThread(thread: ThreadRecord): Promise<void> {
     await this.applyThreadMetadata(thread.metadata, { persist: false });
     this.bindActiveSession(
       await this.core.session({
@@ -637,10 +670,6 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         modelId: this.resolveModeModel(this.currentModeId),
       }),
     );
-    await this.ensureSessionState();
-    await this.syncSessionControls();
-    await this.resolveWorkspace().catch(() => undefined);
-    return toLegacyThread(thread);
   }
 
   async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
@@ -1135,7 +1164,9 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }): Promise<HarnessMessage | null> {
     const threadId = this.getCurrentThreadId();
     if (!threadId) return null;
-    const result = await this.requireSession().injectSystemReminder(normalizeMessageContent({ content: message }), {
+    const signal = createSignal({
+      type: 'system-reminder',
+      contents: normalizeMessageContent({ content: message }),
       attributes: toSystemReminderAttributes({ type: reminderType, role }),
       metadata: {
         systemReminder: {
@@ -1145,10 +1176,12 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         },
       },
     });
+    const memory = await this.getMemoryStorage();
+    await memory.saveMessages({ messages: [signal.toDBMessage({ threadId, resourceId: this.resourceId })] });
     return {
-      id: result.id,
+      id: signal.id,
       role,
-      createdAt: new Date(),
+      createdAt: signal.createdAt,
       content: [{ type: 'system_reminder', reminderType, message }],
     };
   }
