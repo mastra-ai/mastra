@@ -216,7 +216,7 @@ describe('createScorer', () => {
 
         await scorer.run(testData.scoringInput);
 
-        const [, options] = generateSpy.mock.calls[0] ?? [];
+        const [, options] = (generateSpy.mock.calls[0] ?? []) as any[];
         expect(options?.structuredOutput?.jsonPromptInjection).toBe(true);
       } finally {
         generateSpy.mockRestore();
@@ -252,7 +252,7 @@ describe('createScorer', () => {
 
         await scorer.run(testData.scoringInput);
 
-        const [, options] = generateSpy.mock.calls[0] ?? [];
+        const [, options] = (generateSpy.mock.calls[0] ?? []) as any[];
         expect(options?.structuredOutput?.jsonPromptInjection).toBe(false);
       } finally {
         generateSpy.mockRestore();
