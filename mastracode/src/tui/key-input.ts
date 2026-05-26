@@ -7,15 +7,17 @@
  * Falls back to xterm modifyOtherKeys (`\x1b[27;<mod>;<cp>~`) for terminals
  * without Kitty support.
  *
- * `Shift+<letter>` decodes to the uppercase letter so `Y`-vs-`y` shortcuts
- * survive both encodings. Shifted digits and symbols (`shift+1`, `shift+!`,
- * etc.) return `undefined` because pi-tui's `parseKey` does not collapse
- * them to a single shifted character. Ctrl/Alt/Super and non-printable keys
- * return `undefined` so modifier-bearing variants never alias a shortcut.
+ * Single-character `parseKey` results pass through unchanged — letters,
+ * digits, and unmodified punctuation (`y`, `?`, `0`). `Shift+<letter>`
+ * decodes to the uppercase letter so `Y`-vs-`y` shortcuts survive both
+ * encodings. Shifted digits and symbols (`shift+1`, `shift+!`, etc.) return
+ * `undefined` because pi-tui's `parseKey` does not collapse them to a
+ * single shifted glyph. Ctrl/Alt/Super and non-printable keys return
+ * `undefined` so modifier-bearing variants never alias a shortcut.
  *
- * Only letter shortcuts are part of this helper's supported contract.
- * Callers that want to react to space, digits-with-shift, or function keys
- * should use pi-tui's `matchesKey` directly.
+ * Callers that want to react to space or other keys whose `parseKey` name
+ * is multi-character (`space`, `enter`, `tab`, function keys) should use
+ * pi-tui's `matchesKey` directly.
  */
 import { parseKey } from '@mariozechner/pi-tui';
 

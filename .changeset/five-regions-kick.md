@@ -8,4 +8,4 @@ In iTerm2, Ghostty, WezTerm, kitty and similar terminals, pressing `y` / `n` / `
 
 The root cause was the Kitty keyboard protocol that pi-tui enables on supported terminals: printable keys arrive as CSI-u escape sequences (`\x1b[121u` for `y`) instead of raw bytes, so direct character comparisons silently dropped every press. Apple Terminal.app wasn't affected because it doesn't advertise the protocol.
 
-All four surfaces now decode through pi-tui's `parseKey` so the same shortcut works regardless of which keyboard protocol the terminal negotiates. `Shift+y` correctly maps to the uppercase `Y` YOLO shortcut; `Ctrl+Y` and `Alt+Y` no longer alias `Y`.
+All four surfaces now decode their shortcut keys through pi-tui's keyboard helpers so the same press works regardless of which keyboard protocol the terminal negotiates. `Shift+y` correctly maps to the uppercase `Y` YOLO shortcut; `Ctrl+Y` and `Alt+Y` no longer alias `Y`.
