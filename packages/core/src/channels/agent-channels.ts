@@ -35,6 +35,9 @@ import type {
   ChannelAdapterConfig,
   ChannelConfig,
   ChannelContext,
+  ChannelHandler,
+  ChannelHandlerConfig,
+  ChannelHandlerContext,
   ChannelHandlers,
   PostableMessage,
   StreamingConfig,
@@ -130,6 +133,25 @@ export class AgentChannels {
    * platform per AgentChannels instance.
    */
   private warnedToolDisplayFallback = new Set<string>();
+
+  /**
+   * Per-Mastra-thread set of `AbortController`s, one per in-flight handler
+   * invocation. We abort and clear all controllers for a thread when the
+   * underlying run aborts (observed as an `abort` chunk on the agent stream)
+   * or when channels shutdown, so `ctx.abortSignal` fires for every handler
+   * servicing the aborted run.
+   */
+  private handlerAbortControllers = new Map<string, Set<AbortController>>();
+
+  /**
+   * Maps each per-invocation `ChannelHandlerContext` back to the
+   * `StorageThreadType` we resolved up front in `resolveHandlerContext`, so
+   * `processChatMessage` can reuse the snapshot (and the
+   * `streamOptions.memory.thread` argument it carries) without resolving the
+   * thread a second time. Weak so the entry drops as soon as the handler
+   * frame is released.
+   */
+  private handlerThreadCache = new WeakMap<ChannelHandlerContext, StorageThreadType>();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -261,38 +283,38 @@ export class AgentChannels {
         ...this.chatOptions,
       });
 
-      // Default handler that routes messages to the agent
-      const defaultHandler = (chatThread: Thread, message: Message) =>
-        this.handleChatMessage(chatThread, message, mastra);
-
       // Register handlers with optional overrides
       const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
 
-      if (onDirectMessage !== false) {
-        chat.onDirectMessage((thread, message) => {
-          if (typeof onDirectMessage === 'function') {
-            return onDirectMessage(thread, message, defaultHandler);
+      // Build a per-invocation `ChannelHandlerContext`, dispatch to the
+      // (optionally overridden) handler, and clean up the abort controller
+      // when the handler resolves or rejects. We resolve the mastra thread +
+      // subscription up front so the same `ctx` is observable to both the
+      // wrapping handler and the default it can call into.
+      const dispatch = async (override: ChannelHandlerConfig, chatThread: Thread, message: Message): Promise<void> => {
+        const { ctx, release } = await this.resolveHandlerContext(chatThread, message, mastra);
+        const defaultHandler = (t: Thread, m: Message) => this.handleChatMessage(t, m, mastra, ctx);
+        try {
+          if (typeof override === 'function') {
+            await (override as ChannelHandler)(chatThread, message, defaultHandler, ctx);
+          } else {
+            await defaultHandler(chatThread, message);
           }
-          return defaultHandler(thread, message);
-        });
+        } finally {
+          release();
+        }
+      };
+
+      if (onDirectMessage !== false) {
+        chat.onDirectMessage((thread, message) => dispatch(onDirectMessage, thread, message));
       }
 
       if (onMention !== false) {
-        chat.onNewMention((thread, message) => {
-          if (typeof onMention === 'function') {
-            return onMention(thread, message, defaultHandler);
-          }
-          return defaultHandler(thread, message);
-        });
+        chat.onNewMention((thread, message) => dispatch(onMention, thread, message));
       }
 
       if (onSubscribedMessage !== false) {
-        chat.onSubscribedMessage((thread, message) => {
-          if (typeof onSubscribedMessage === 'function') {
-            return onSubscribedMessage(thread, message, defaultHandler);
-          }
-          return defaultHandler(thread, message);
-        });
+        chat.onSubscribedMessage((thread, message) => dispatch(onSubscribedMessage, thread, message));
       }
 
       // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
@@ -704,6 +726,18 @@ export class AgentChannels {
     }
     this.threadSubscriptions.clear();
     this.pendingApprovalCards.clear();
+    // Fire `ctx.abortSignal` for any handlers still in flight so they can
+    // unwind, then drop the controllers.
+    for (const set of this.handlerAbortControllers.values()) {
+      for (const controller of set) {
+        try {
+          controller.abort('channels-closed');
+        } catch {
+          // best-effort
+        }
+      }
+    }
+    this.handlerAbortControllers.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -825,13 +859,108 @@ export class AgentChannels {
   }
 
   /**
+   * Build a per-invocation `ChannelHandlerContext` for a chat message.
+   *
+   * Resolves the mastra thread up front and registers an `AbortController`
+   * in `handlerAbortControllers` so the consume-stream loop can fan out
+   * abort events to every in-flight handler servicing this thread's run.
+   * Also opens the thread subscription so `ctx.abort()` and
+   * `ctx.activeRunId()` reflect the live subscription handle as soon as
+   * it resolves.
+   *
+   * Returns `{ ctx, release }` — call `release()` in a `finally` to drop
+   * the abort controller from the per-thread set when the handler frame
+   * ends. The resolved `StorageThreadType` is cached on
+   * `handlerThreadCache` keyed by ctx so `processChatMessage` can reuse it.
+   */
+  private async resolveHandlerContext(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+  ): Promise<{ ctx: ChannelHandlerContext; release: () => void }> {
+    const platform = chatThread.adapter.name;
+    // chatThread.id is the stable per-conversation key (see processChatMessage).
+    const externalThreadId = chatThread.id;
+    const mastraThread = await this.getOrCreateThread({
+      externalThreadId,
+      channelId: chatThread.channelId,
+      platform,
+      // For a new thread, the current message author becomes the owner. For
+      // existing threads, getOrCreateThread returns the existing record so
+      // the persisted resourceId wins regardless of who's speaking now.
+      resourceId: `${platform}:${message.author.userId}`,
+      mastra,
+    });
+
+    const subscription = this.ensureThreadSubscription({
+      mastraThreadId: mastraThread.id,
+      resourceId: mastraThread.resourceId,
+      chatThread,
+      platform,
+    });
+
+    const controller = new AbortController();
+    let set = this.handlerAbortControllers.get(mastraThread.id);
+    if (!set) {
+      set = new Set();
+      this.handlerAbortControllers.set(mastraThread.id, set);
+    }
+    set.add(controller);
+
+    const ctx: ChannelHandlerContext = {
+      threadId: mastraThread.id,
+      resourceId: mastraThread.resourceId,
+      abortSignal: controller.signal,
+      abort: (_reason?: string) => subscription.abort(),
+      activeRunId: () => subscription.activeRunId(),
+    };
+    this.handlerThreadCache.set(ctx, mastraThread);
+
+    const release = () => {
+      const s = this.handlerAbortControllers.get(mastraThread.id);
+      if (s) {
+        s.delete(controller);
+        if (s.size === 0) this.handlerAbortControllers.delete(mastraThread.id);
+      }
+    };
+
+    return { ctx, release };
+  }
+
+  /**
+   * Abort every in-flight handler controller for a Mastra thread. Called
+   * when the consume-stream loop sees an `abort` chunk on the agent stream,
+   * so `ctx.abortSignal` fires for every handler servicing the run that
+   * just aborted — whether triggered from `ctx.abort()` here, another
+   * handler on the same thread, or `agent.abortRunStream()`.
+   */
+  private abortHandlerControllers(mastraThreadId: string, reason?: string): void {
+    const set = this.handlerAbortControllers.get(mastraThreadId);
+    if (!set || set.size === 0) return;
+    for (const controller of set) {
+      try {
+        controller.abort(reason);
+      } catch {
+        // best-effort
+      }
+    }
+    set.clear();
+    this.handlerAbortControllers.delete(mastraThreadId);
+  }
+
+  /**
    * Core handler wired to Chat SDK's onDirectMessage, onNewMention,
    * and onSubscribedMessage. Streams the Mastra agent response and
    * updates the channel message in real-time via edits.
    */
-  private async handleChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async handleChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    ctx?: ChannelHandlerContext,
+  ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra);
+      await this.processChatMessage(chatThread, message, mastra, ctx);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
@@ -851,21 +980,31 @@ export class AgentChannels {
     }
   }
 
-  private async processChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async processChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    ctx?: ChannelHandlerContext,
+  ): Promise<void> {
     const platform = chatThread.adapter.name;
 
-    // Map to a Mastra thread for memory/history.
-    // chatThread.id encodes channel + threadTs, so it's stable per conversation:
-    // each Slack thread (including top-level DM, DM thread reply, channel mention, and
-    // channel thread reply) gets its own mastra thread.
-    const externalThreadId = chatThread.id;
-    const mastraThread = await this.getOrCreateThread({
-      externalThreadId,
-      channelId: chatThread.channelId,
-      platform,
-      resourceId: `${platform}:${message.author.userId}`,
-      mastra,
-    });
+    // Reuse the thread that the per-invocation `ctx` resolved (so the
+    // subscription was already opened up front). Direct callers that bypass
+    // the handler dispatcher (and therefore don't have a ctx) get a fresh
+    // resolve so existing internal flows keep working.
+    const resolvedThread = ctx ? this.handlerThreadCache.get(ctx) : undefined;
+    const mastraThread =
+      resolvedThread ??
+      (await this.getOrCreateThread({
+        // chatThread.id encodes channel + threadTs, so it's stable per conversation:
+        // each Slack thread (DM, DM thread reply, channel mention, channel thread reply)
+        // gets its own mastra thread.
+        externalThreadId: chatThread.id,
+        channelId: chatThread.channelId,
+        platform,
+        resourceId: `${platform}:${message.author.userId}`,
+        mastra,
+      }));
 
     // Use the thread's resourceId for memory, not the current message author.
     // In multi-user threads (e.g. Slack channels), the thread is owned by whoever
@@ -1136,11 +1275,18 @@ export class AgentChannels {
     const subscriptionPromise = this.agent.subscribeToThread({ resourceId, threadId: mastraThreadId });
 
     // Wrap the eventual async iterator in a passthrough so we can hand callers a synchronous
-    // subscription record while the underlying handle is still resolving.
+    // subscription record while the underlying handle is still resolving. We also tap
+    // `abort` chunks here to fan out the abort to every in-flight handler controller for
+    // this Mastra thread — `ctx.abortSignal` fires regardless of where the abort was
+    // triggered (this handler, another handler, agent.abortRunStream, or shutdown).
+    const self = this;
     const stream: AsyncIterable<AgentChunkType<any>> = {
       [Symbol.asyncIterator]: async function* () {
         const sub = await subscriptionPromise;
         for await (const chunk of sub.stream) {
+          if (chunk.type === 'abort') {
+            self.abortHandlerControllers(mastraThreadId, 'agent-run-aborted');
+          }
           yield chunk;
         }
       },

@@ -286,14 +286,50 @@ export interface ChannelAdapterLegacyConfig extends ChannelAdapterBaseConfig {
 }
 
 /**
+ * Per-invocation context handed to a {@link ChannelHandler}. Exposes the
+ * resolved Mastra thread, the active run's abort signal, and a way to abort
+ * the run from inside the handler.
+ *
+ * The `abortSignal` is per handler invocation — it fires when the run the
+ * handler is implicitly servicing aborts, whether from `ctx.abort()` here, a
+ * concurrent handler on the same thread, `agent.abortRunStream()`, or
+ * channels shutdown. A new run on the same thread later gets a fresh signal
+ * in its own handler call.
+ */
+export interface ChannelHandlerContext {
+  /** The Mastra thread id resolved for this chat thread (memory/history scope). */
+  threadId: string;
+  /** The resourceId used for this thread (typically `${platform}:${userId}` for the thread owner). */
+  resourceId: string;
+  /**
+   * AbortSignal that fires when the active run on this thread is aborted —
+   * whether by `ctx.abort()`, another handler, `agent.abortRunStream()`, or
+   * channels shutdown. Safe to pass to async work inside the handler.
+   */
+  abortSignal: AbortSignal;
+  /**
+   * Abort the currently active run on this thread, if any.
+   * Returns `true` if a run was aborted, `false` if no run was active.
+   *
+   * The optional `reason` is accepted for forward-compat — the underlying
+   * runtime does not currently surface it to the aborted run.
+   */
+  abort: (reason?: string) => boolean;
+  /** The active runId on this thread, or `null` if idle. */
+  activeRunId: () => string | null;
+}
+
+/**
  * Handler function for channel events.
- * Receives the thread, message, and the default handler implementation.
+ * Receives the thread, message, the default handler implementation, and a
+ * per-invocation {@link ChannelHandlerContext}.
  * Call `defaultHandler` to run the built-in behavior, or ignore it to fully replace.
  */
 export type ChannelHandler = (
   thread: Thread,
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+  ctx: ChannelHandlerContext,
 ) => Promise<void>;
 
 /**
@@ -338,12 +374,20 @@ export interface ChannelConfig {
    * ```ts
    * handlers: {
    *   // Wrap the default handler with logging
-   *   onDirectMessage: async (thread, message, defaultHandler) => {
+   *   onDirectMessage: async (thread, message, defaultHandler, ctx) => {
    *     console.log('Received DM:', message.text);
    *     await defaultHandler(thread, message);
    *   },
-   *   // Disable mention handling entirely
-   *   onMention: false,
+   *   // Stop the active run when the user says "stop"
+   *   onMention: async (thread, message, defaultHandler, ctx) => {
+   *     if (message.text.trim().toLowerCase() === 'stop') {
+   *       if (ctx.abort()) await thread.post('⏹️ stopped');
+   *       return;
+   *     }
+   *     await defaultHandler(thread, message);
+   *   },
+   *   // Disable subscribed-message handling entirely
+   *   onSubscribedMessage: false,
    * }
    * ```
    */
