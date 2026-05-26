@@ -91,7 +91,7 @@ export abstract class Bundler extends MastraBundler {
     // pnpm v11 requires build policy via pnpm-workspace.yaml in the output directory
     await writeFile(
       join(outputDirectory, 'pnpm-workspace.yaml'),
-      'packages:\n  - \'.\'\nallowBuilds:\n  esbuild: true\n  sharp: true\n  protobufjs: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n',
+      'packages:\n  - \'.\'\nallowBuilds:\n  bcrypt: true\n  esbuild: true\n  sharp: true\n  protobufjs: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n',
     );
   }
 

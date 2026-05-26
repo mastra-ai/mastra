@@ -97,6 +97,7 @@ export class Deps extends MastraBase {
       'packages:',
       "  - '.'",
       'allowBuilds:',
+      '  bcrypt: true',
       '  esbuild: true',
       '  sharp: true',
       '  protobufjs: true',
