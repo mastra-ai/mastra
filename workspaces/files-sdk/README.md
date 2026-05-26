@@ -93,14 +93,14 @@ const workspace = new Workspace({
 
 ## Options
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `files` | `Files` | Yes | Pre-configured FilesSDK instance |
-| `id` | `string` | No | Unique filesystem ID (auto-generated) |
-| `displayName` | `string` | No | Human-friendly name for UI |
-| `icon` | `string` | No | Icon identifier |
-| `description` | `string` | No | Description for UI |
-| `readOnly` | `boolean` | No | Mount as read-only |
+| Option        | Type      | Required | Description                           |
+| ------------- | --------- | -------- | ------------------------------------- |
+| `files`       | `Files`   | Yes      | Pre-configured FilesSDK instance      |
+| `id`          | `string`  | No       | Unique filesystem ID (auto-generated) |
+| `displayName` | `string`  | No       | Human-friendly name for UI            |
+| `icon`        | `string`  | No       | Icon identifier                       |
+| `description` | `string`  | No       | Description for UI                    |
+| `readOnly`    | `boolean` | No       | Mount as read-only                    |
 
 ## License
 

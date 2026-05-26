@@ -183,7 +183,11 @@ describe('FilesSDKFilesystem', () => {
 
       await fs.writeFile('/test.txt', 'hello world');
 
-      expect(mockFiles.upload).toHaveBeenCalledWith('test.txt', expect.anything(), expect.objectContaining({ contentType: 'text/plain' }));
+      expect(mockFiles.upload).toHaveBeenCalledWith(
+        'test.txt',
+        expect.anything(),
+        expect.objectContaining({ contentType: 'text/plain' }),
+      );
     });
 
     it('calls upload with Buffer content', async () => {
@@ -191,18 +195,30 @@ describe('FilesSDKFilesystem', () => {
 
       await fs.writeFile('/data.bin', Buffer.from([1, 2, 3]));
 
-      expect(mockFiles.upload).toHaveBeenCalledWith('data.bin', expect.any(Uint8Array), expect.objectContaining({ contentType: 'application/octet-stream' }));
+      expect(mockFiles.upload).toHaveBeenCalledWith(
+        'data.bin',
+        expect.any(Uint8Array),
+        expect.objectContaining({ contentType: 'application/octet-stream' }),
+      );
     });
 
     it('detects MIME type from extension', async () => {
       const { fs, mockFiles } = createFs();
 
       await fs.writeFile('/page.html', '<html>');
-      expect(mockFiles.upload).toHaveBeenCalledWith('page.html', expect.anything(), expect.objectContaining({ contentType: 'text/html' }));
+      expect(mockFiles.upload).toHaveBeenCalledWith(
+        'page.html',
+        expect.anything(),
+        expect.objectContaining({ contentType: 'text/html' }),
+      );
 
       mockFiles.upload.mockClear();
       await fs.writeFile('/data.json', '{}');
-      expect(mockFiles.upload).toHaveBeenCalledWith('data.json', expect.anything(), expect.objectContaining({ contentType: 'application/json' }));
+      expect(mockFiles.upload).toHaveBeenCalledWith(
+        'data.json',
+        expect.anything(),
+        expect.objectContaining({ contentType: 'application/json' }),
+      );
     });
 
     it('respects mimeType option override', async () => {
@@ -210,7 +226,11 @@ describe('FilesSDKFilesystem', () => {
 
       await fs.writeFile('/file.txt', 'data', { mimeType: 'text/csv' });
 
-      expect(mockFiles.upload).toHaveBeenCalledWith('file.txt', expect.anything(), expect.objectContaining({ contentType: 'text/csv' }));
+      expect(mockFiles.upload).toHaveBeenCalledWith(
+        'file.txt',
+        expect.anything(),
+        expect.objectContaining({ contentType: 'text/csv' }),
+      );
     });
 
     it('checks overwrite=false and throws FileExistsError', async () => {
@@ -543,11 +563,7 @@ describe('FilesSDKFilesystem', () => {
     it('batch-deletes all keys for recursive rmdir', async () => {
       const { fs, mockFiles } = createFs();
       mockFiles.list.mockResolvedValueOnce({
-        items: [
-          { key: 'dir/a.txt' },
-          { key: 'dir/b.txt' },
-          { key: 'dir/sub/c.txt' },
-        ],
+        items: [{ key: 'dir/a.txt' }, { key: 'dir/b.txt' }, { key: 'dir/sub/c.txt' }],
         cursor: undefined,
       });
 
@@ -628,9 +644,7 @@ describe('FilesSDKFilesystem', () => {
 
     it('returns file stat from head()', async () => {
       const { fs, mockFiles } = createFs();
-      mockFiles.head.mockResolvedValueOnce(
-        createMockStoredFile('test.txt', 'hello'),
-      );
+      mockFiles.head.mockResolvedValueOnce(createMockStoredFile('test.txt', 'hello'));
 
       const st = await fs.stat('/test.txt');
 
