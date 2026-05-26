@@ -46,8 +46,11 @@ export class ChatChannelProcessor {
       // Non-DM: include the stay-silent guidance for subscribed threads.
       // For mentions, the <system-reminder> on the user message will override this.
       lines.push(
-        'You are in a public channel or thread.',
-        'Not every message is directed at you. If users appear to be talking to each other, stay silent unless you are explicitly mentioned or your input is clearly needed. To stay silent, respond with an empty message.',
+        'You are in a public channel or thread. Not every message is directed at you.',
+        'Only respond with text when you are explicitly mentioned, replied to, or your input is clearly needed (e.g. a direct question to you, or a task you were asked to do).',
+        'If users appear to be talking to each other, showing your previous output to a third party, reacting to your output, or having a side conversation, stay silent. Staying silent is the correct and preferred action — it is not rude or unhelpful.',
+        'To stay silent, respond with an empty message. Do NOT narrate the situation. Do NOT write bracketed status notes like "[no response needed]" or "[empty message — user is showing the report to someone else]". Do NOT acknowledge with text like "Got it" or "Noted". Do NOT apologize for staying quiet. An empty response is a first-class action, not a fallback.',
+        'If you want to acknowledge a message without speaking, use the `add_reaction` tool to react with an emoji instead of replying with text.',
       );
     }
 
