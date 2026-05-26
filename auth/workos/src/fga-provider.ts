@@ -113,7 +113,8 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   private permissionMapping: Record<string, string>;
   private logger?: IMastraLogger;
   private warnedResources = new Set<string>(); // Track warnings to avoid spam
-  private resourceTypesCache?: { types: FGAResourceTypeInfo[]; timestamp: number };
+  // Cache keyed by organizationId to avoid cross-org data leakage
+  private resourceTypesCache = new Map<string, { types: FGAResourceTypeInfo[]; timestamp: number }>();
   private readonly RESOURCE_TYPES_CACHE_TTL = 60_000; // 1 minute cache
   readonly requireForProtectedRoutes?: boolean;
   readonly auditProtectedRoutes?: boolean | 'warn' | 'error';
@@ -177,11 +178,19 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
 
     const { type: resourceType, id: resourceId } = params.resource;
     let allResourceNotFound = true;
+    let hasUnresolvedMembership = false;
+    let attemptedCheck = false;
     let deniedPermission: string | undefined;
 
     for (const permission of permissions) {
       const checkOptions = this.buildCheckOptions(user, { ...params, permission });
-      if (!checkOptions) continue;
+      if (!checkOptions) {
+        // buildCheckOptions returned null (e.g., membership resolution failed)
+        // This is NOT a "resource not found" case - it's a membership issue
+        hasUnresolvedMembership = true;
+        continue;
+      }
+      attemptedCheck = true;
       try {
         const result = await this.workos.authorization.check(checkOptions);
         allResourceNotFound = false; // Resource exists, we got a real response
@@ -194,8 +203,22 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       }
     }
 
+    // If we couldn't resolve membership for any check, deny access
+    // (don't let publicByDefault grant access when membership is the issue)
+    if (hasUnresolvedMembership && !attemptedCheck) {
+      const resourceKey = `${resourceType}:${resourceId}`;
+      if (!this.warnedResources.has(`membership:${resourceKey}`)) {
+        this.warnedResources.add(`membership:${resourceKey}`);
+        this.logger?.warn(
+          `[FGA] Access denied: cannot resolve organization membership for user. ` +
+            `Ensure fetchMemberships is enabled on MastraAuthWorkos when using FGA.`,
+        );
+      }
+      return false;
+    }
+
     // If all permissions resulted in "resource not found", apply publicByDefault behavior
-    if (allResourceNotFound) {
+    if (attemptedCheck && allResourceNotFound) {
       const resourceKey = `${resourceType}:${resourceId}`;
       if (this.publicByDefault) {
         // Only warn once per resource to avoid log spam
@@ -233,6 +256,9 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
    *
    * When `params.permission` is an array, ANY-of semantics apply: passes if any
    * single permission authorizes the user; throws if none do.
+   *
+   * Respects `publicByDefault` configuration - if enabled and the resource is
+   * not registered in WorkOS, the check passes (resource is considered public).
    */
   async require(user: WorkOSUser, params: FGACheckParams): Promise<void> {
     const permissions = Array.isArray(params.permission) ? params.permission : [params.permission];
@@ -240,23 +266,56 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       throw new FGADeniedError(user, params.resource, params.permission);
     }
 
+    const { type: resourceType, id: resourceId } = params.resource;
+    let allResourceNotFound = true;
+    let hasUnresolvedMembership = false;
+    let attemptedCheck = false;
     let lastError: unknown;
+
     for (const permission of permissions) {
       const checkOptions = this.buildCheckOptions(
         user,
         { ...params, permission },
         { strictMembershipResolution: true },
       );
-      if (!checkOptions) continue;
+      if (!checkOptions) {
+        hasUnresolvedMembership = true;
+        continue;
+      }
+      attemptedCheck = true;
 
       try {
         const result = await this.workos.authorization.check(checkOptions);
+        allResourceNotFound = false;
         if (result.authorized) return;
       } catch (error: any) {
         if (error instanceof FGADeniedError) throw error;
         if (isWorkOSResourceNotFoundError(error)) continue;
         lastError = error;
       }
+    }
+
+    // If we couldn't resolve membership for any check, throw membership error
+    if (hasUnresolvedMembership && !attemptedCheck) {
+      throw new WorkOSFGAMembershipResolutionError(user);
+    }
+
+    // If all permissions resulted in "resource not found", apply publicByDefault behavior
+    if (attemptedCheck && allResourceNotFound) {
+      if (this.publicByDefault) {
+        // Resource not registered but publicByDefault is enabled - allow access
+        const resourceKey = `${resourceType}:${resourceId}`;
+        if (!this.warnedResources.has(resourceKey)) {
+          this.warnedResources.add(resourceKey);
+          this.logger?.debug(
+            `[FGA] Resource '${resourceKey}' is not registered in WorkOS. ` +
+              `Access allowed because publicByDefault is enabled.`,
+          );
+        }
+        return;
+      }
+      // Resource not registered and publicByDefault is disabled - throw specific error
+      throw new WorkOSFGAResourceNotFoundError(resourceType, resourceId);
     }
 
     if (lastError) throw lastError;
@@ -695,9 +754,10 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
    * Results are cached for 1 minute to reduce API calls.
    */
   async describeResourceTypes(organizationId: string): Promise<FGAResourceTypeInfo[]> {
-    // Check cache first
-    if (this.resourceTypesCache && Date.now() - this.resourceTypesCache.timestamp < this.RESOURCE_TYPES_CACHE_TTL) {
-      return this.resourceTypesCache.types;
+    // Check cache first (keyed by organizationId to avoid cross-org data leakage)
+    const cached = this.resourceTypesCache.get(organizationId);
+    if (cached && Date.now() - cached.timestamp < this.RESOURCE_TYPES_CACHE_TTL) {
+      return cached.types;
     }
 
     // Fetch all resources (paginated)
@@ -773,8 +833,8 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       hasInstances: t.hasInstances,
     }));
 
-    // Cache the result
-    this.resourceTypesCache = { types: result, timestamp: Date.now() };
+    // Cache the result (keyed by organizationId)
+    this.resourceTypesCache.set(organizationId, { types: result, timestamp: Date.now() });
 
     return result;
   }
@@ -795,15 +855,21 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
    * Register a Mastra resource in FGA with optional ownership support.
    *
    * This method:
-   * 1. Checks if the resource type exists in WorkOS
-   * 2. Creates the FGA resource (with optional parent for hierarchy)
-   * 3. Auto-assigns the owner role if ownership is enabled
+   * 1. Translates resourceType via resourceMapping (if configured)
+   * 2. Checks if the resource type exists in WorkOS
+   * 3. Creates the FGA resource (with optional parent for hierarchy)
+   * 4. Auto-assigns the owner role if ownership is enabled
    *
    * @returns Registration result with resource, owner assignment, and warnings
    */
   async registerResource(params: FGARegisterResourceParams<WorkOSUser>): Promise<FGARegistrationResult> {
-    const { user, resourceType, resourceId, name, parentResource, skipOwnership } = params;
+    const { user, resourceType: inputResourceType, resourceId, name, parentResource, skipOwnership } = params;
     const warnings: string[] = [];
+
+    // Translate resourceType via resourceMapping (if configured)
+    // e.g., 'agent' might map to 'team' in WorkOS FGA
+    const mapping = this.getResourceMapping(inputResourceType);
+    const resourceType = mapping?.fgaResourceType ?? inputResourceType;
 
     // Get organization ID from user or provider config
     const organizationId = user.organizationId || this.organizationId;
