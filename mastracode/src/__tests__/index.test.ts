@@ -112,6 +112,10 @@ vi.mock('@mastra/observability', () => ({
 
 vi.mock('../harness/index.js', () => ({
   createHarnessV1SubagentAgents: vi.fn(() => ({})),
+  defaultStdioLeaseRecoveryPrompt: vi.fn(() => undefined),
+  MastraCodeSessionLeaseRecoveryError: class extends Error {
+    readonly name = 'MastraCodeSessionLeaseRecoveryError';
+  },
   MastraCodeHarnessRuntime: class {
     constructor(config: unknown) {
       harnessConstructorMock(config);

@@ -23,16 +23,34 @@ let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
+let activeTui: MastraTUI | undefined;
+
+// Reset extended terminal modes (bracketed paste, kitty progressive-enhancement
+// keyboard protocol, modifyOtherKeys) that pi-tui enables at startup. pi-tui
+// restores these via `TUI.stop()` on a clean exit, but a SIGKILL or unhandled
+// crash leaves the parent shell stuck — every subsequent keypress emits raw
+// CSI-u sequences. Calling this on every trappable exit path AND once at
+// launch time recovers cleanly from a previous ungraceful exit.
+function restoreTerminalKeyboardModes(): void {
+  if (!process.stdout.isTTY) return;
+  // \x1b[<u  — pop kitty kbd protocol layer
+  // \x1b[>4;0m — disable xterm modifyOtherKeys mode 2
+  // \x1b[?2004l — disable bracketed paste
+  // \x1b[?1l — leave cursor-key application mode
+  process.stdout.write('\x1b[<u\x1b[>4;0m\x1b[?2004l\x1b[?1l');
+}
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
   // ERR_STREAM_DESTROYED is non-fatal — happens routinely when streams close
   // during shutdown, cancelled LLM requests, or LSP/subprocess exits (#13548, #13549)
   if (isStreamDestroyedError(error)) return;
+  restoreTerminalKeyboardModes();
   handleFatalError(error);
 });
 process.on('unhandledRejection', reason => {
   if (isStreamDestroyedError(reason)) return;
+  restoreTerminalKeyboardModes();
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
@@ -104,6 +122,7 @@ async function tuiMain(pipedInput?: string | null) {
     inlineQuestions: true,
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
+  activeTui = tui;
   tui.run().catch(error => {
     handleFatalError(error);
   });
@@ -134,13 +153,23 @@ process.on('beforeExit', () => {
   void asyncCleanup();
 });
 process.on('exit', () => {
+  restoreTerminalKeyboardModes();
   restoreTerminalForeground();
   releaseAllThreadLocks();
 });
 process.on('SIGINT', () => {
+  activeTui?.stop();
+  restoreTerminalKeyboardModes();
   void asyncCleanup().finally(() => process.exit(0));
 });
 process.on('SIGTERM', () => {
+  activeTui?.stop();
+  restoreTerminalKeyboardModes();
+  void asyncCleanup().finally(() => process.exit(0));
+});
+process.on('SIGHUP', () => {
+  activeTui?.stop();
+  restoreTerminalKeyboardModes();
   void asyncCleanup().finally(() => process.exit(0));
 });
 
@@ -185,6 +214,10 @@ function handleFatalError(error: unknown): never {
 }
 
 async function main() {
+  // Recover from a possibly broken terminal left by a prior crashed instance
+  // (SIGKILL, OOM, etc) before pi-tui re-enables its extended modes. Safe to
+  // emit unconditionally — codes are no-ops on a clean terminal.
+  restoreTerminalKeyboardModes();
   if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
     return headlessMain();
   }
