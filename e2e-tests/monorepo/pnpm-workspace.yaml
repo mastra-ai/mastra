@@ -1,12 +1,6 @@
 packages:
   - '.'
 
-overrides:
-  '@mastra/core': link:../../packages/core
-  '@mastra/memory': link:../../packages/memory
-  mastra: link:../../packages/cli
-  '@internal/test-utils': link:../../packages/_test-utils
-
 allowBuilds:
   esbuild: true
   snyk: false

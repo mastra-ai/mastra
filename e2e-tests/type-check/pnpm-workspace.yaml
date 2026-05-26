@@ -1,10 +1,6 @@
 packages:
   - '.'
 
-overrides:
-  '@mastra/core': link:../../packages/core
-  mastra: link:../../packages/cli
-
 allowBuilds:
   esbuild: true
   snyk: false

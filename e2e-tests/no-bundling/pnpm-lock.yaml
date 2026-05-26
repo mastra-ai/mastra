@@ -4,14 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@mastra/core': link:../../packages/core
-  '@mastra/memory': link:../../packages/memory
-  mastra: link:../../packages/cli
-  '@mastra/deployer': link:../../packages/deployer
-  '@mastra/pg': link:../../stores/pg
-  '@mastra/loggers': link:../../packages/loggers
-
 importers:
 
   .:
