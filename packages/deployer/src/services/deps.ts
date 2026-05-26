@@ -101,6 +101,7 @@ export class Deps extends MastraBase {
       '  workerd: true',
       '  bufferutil: true',
       '  utf-8-validate: true',
+      'minimumReleaseAge: 0',
     ];
     if (options.os?.length || options.cpu?.length || options.libc?.length) {
       lines.push('');
@@ -159,7 +160,7 @@ export class Deps extends MastraBase {
       case 'yarn':
         return `${cmd}`;
       case 'pnpm':
-        return cmd === 'install' ? `${cmd} --loglevel=error` : `${cmd} --loglevel=error`;
+        return cmd === 'install' ? `${cmd} --ignore-workspace --loglevel=error` : `${cmd} --loglevel=error`;
       case 'bun':
         return cmd;
       default:

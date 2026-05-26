@@ -23,6 +23,7 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
   esbuild: true
   sharp: true
   protobufjs: true
+minimumReleaseAge: 0
 `,
   );
 
