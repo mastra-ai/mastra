@@ -11,10 +11,10 @@ import type {
 import { v4 as uuid } from '@lukeed/uuid';
 import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
-import { getErrorFromUnknown, MastraError } from '@mastra/core/error';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
+import type { ChunkType, FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
@@ -52,11 +52,7 @@ import type {
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
 import { processClientTools } from '../utils/process-client-tools';
-import {
-  CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID,
-  processMastraNetworkStream,
-  processMastraStream,
-} from '../utils/process-mastra-stream';
+import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
@@ -447,6 +443,20 @@ export class Agent extends BaseResource {
       let response: Response = streamResponse;
       let attempts = 0;
 
+      // Sentinel used to distinguish errors thrown by the caller's `onChunk`
+      // callback from transport errors. Callback errors should not trigger a
+      // reconnect — we'd otherwise mask user bugs by resubscribing forever.
+      // The sentinel never escapes this method: we unwrap and rethrow the
+      // original error so consumers see exactly what they threw.
+      const onChunkErrorSentinel = Symbol('onChunkErrorSentinel');
+      const guardedOnChunk = async (chunk: ChunkType) => {
+        try {
+          await onChunk(chunk);
+        } catch (cause) {
+          throw { [onChunkErrorSentinel]: true, cause };
+        }
+      };
+
       while (true) {
         if (!response.body) {
           throw new Error('No response body');
@@ -455,15 +465,12 @@ export class Agent extends BaseResource {
         try {
           await processMastraStream({
             stream: response.body as ReadableStream<Uint8Array>,
-            onChunk,
+            onChunk: guardedOnChunk,
             signal: this.options.abortSignal,
           });
         } catch (error) {
-          // Errors thrown by the caller's onChunk callback are not transport
-          // failures — rethrow immediately so we don't mask user bugs by
-          // resubscribing forever.
-          if (error instanceof MastraError && error.id === CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID) {
-            throw error;
+          if (typeof error === 'object' && error !== null && (error as any)[onChunkErrorSentinel]) {
+            throw (error as { cause: unknown }).cause;
           }
           if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
             throw error;

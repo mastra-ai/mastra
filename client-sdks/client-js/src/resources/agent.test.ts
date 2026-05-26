@@ -167,13 +167,10 @@ describe('Agent signal routes', () => {
     const callbackError = new Error('boom from onChunk');
     const onChunk = vi.fn().mockRejectedValue(callbackError);
 
-    await expect(
-      response.processDataStream({ onChunk, reconnect: { maxRetries: 5, delayMs: 0 } }),
-    ).rejects.toMatchObject({
-      id: 'CLIENT_JS_ONCHUNK_CALLBACK_THREW',
-      message: 'boom from onChunk',
-      cause: { message: 'boom from onChunk' },
-    });
+    // Consumer should receive the original error they threw, unwrapped.
+    await expect(response.processDataStream({ onChunk, reconnect: { maxRetries: 5, delayMs: 0 } })).rejects.toBe(
+      callbackError,
+    );
 
     expect(mockRequest).toHaveBeenCalledTimes(1);
     expect(onChunk).toHaveBeenCalledTimes(1);
