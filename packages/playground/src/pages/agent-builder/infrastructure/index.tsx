@@ -1,8 +1,8 @@
 import type { InfrastructureStatusResponse } from '@mastra/client-js';
 import { PageHeader, PageLayout, SectionCard, Txt } from '@mastra/playground-ui';
 
+import { useInfrastructureStatus } from '@/domains/agent-builder/hooks/use-infrastructure-status';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useInfrastructureStatus } from '@/domains/builder/hooks/use-infrastructure-status';
 
 const StatusBadge = ({ ok, label }: { ok: boolean; label: string }) => (
   <span

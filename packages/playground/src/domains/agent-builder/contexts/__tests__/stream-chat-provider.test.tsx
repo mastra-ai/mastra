@@ -78,7 +78,7 @@ describe('StreamChatProvider', () => {
     const runningRender = vi.fn();
 
     render(
-      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
+      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]} debounceTime={100}>
         <RenderTracker hook={useStreamRunning} onRender={runningRender} />
       </StreamChatProvider>,
     );

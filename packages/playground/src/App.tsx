@@ -640,7 +640,7 @@ export const routes: RouteObject[] = [
           ]
         : []),
 
-      { index: true, element: <StudioIndexRedirect /> },
+      { index: true, element: <StudioIndexRedirect />, handle: navHandle('/agents') },
       { path: '/request-context', element: <RequestContext />, handle: navHandle('/request-context') },
     ],
   },

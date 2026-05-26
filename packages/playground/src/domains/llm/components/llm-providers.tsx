@@ -6,7 +6,7 @@ import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { cleanProviderId, findProviderById } from '../utils';
 import { ProviderLogo } from './provider-logo';
-import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
+import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 
 export interface LLMProvidersProps {
   value: string;

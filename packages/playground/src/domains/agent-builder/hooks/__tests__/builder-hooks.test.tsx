@@ -273,12 +273,36 @@ describe('useAgentBuilderAllowedModels', () => {
 });
 
 describe('isModelNotAllowedError', () => {
-  it('returns the error message when the code matches', async () => {
-    const { isModelNotAllowedError } = await import('@/domains/builder');
-    const err = Object.assign(new Error('Choose another model'), { code: 'MODEL_NOT_ALLOWED' });
-    expect(isModelNotAllowedError(err)).toEqual({ message: 'Choose another model' });
-    expect(isModelNotAllowedError({ code: 'MODEL_NOT_ALLOWED' })).toEqual({ message: 'Model is not allowed' });
-    expect(isModelNotAllowedError({ code: 'OTHER' })).toBeNull();
+  it('matches status 422 + MODEL_NOT_ALLOWED responses and returns the parsed details', async () => {
+    const { isModelNotAllowedError } = await import('@/domains/agent-builder');
+    const { MODEL_NOT_ALLOWED_CODE } = await import('@mastra/core/agent-builder/ee');
+
+    const err = {
+      status: 422,
+      body: {
+        error: {
+          code: MODEL_NOT_ALLOWED_CODE,
+          message: 'Choose another model',
+          attempted: { provider: 'openai', modelId: 'gpt-4o' },
+          offendingLabel: 'openai/gpt-4o',
+        },
+      },
+    };
+    expect(isModelNotAllowedError(err)).toEqual({
+      message: 'Choose another model',
+      attempted: { provider: 'openai', modelId: 'gpt-4o' },
+      offendingLabel: 'openai/gpt-4o',
+    });
+
+    expect(isModelNotAllowedError({ status: 422, body: { error: { code: MODEL_NOT_ALLOWED_CODE } } })).toEqual({
+      message: 'Model not allowed by admin policy',
+      attempted: undefined,
+      offendingLabel: undefined,
+    });
+
+    expect(isModelNotAllowedError({ status: 400, body: { error: { code: MODEL_NOT_ALLOWED_CODE } } })).toBeNull();
+    expect(isModelNotAllowedError({ status: 422, body: { error: { code: 'OTHER' } } })).toBeNull();
+    expect(isModelNotAllowedError({ code: MODEL_NOT_ALLOWED_CODE })).toBeNull();
     expect(isModelNotAllowedError(null)).toBeNull();
   });
 });
@@ -819,18 +843,23 @@ describe('save and autosave hooks', () => {
   });
 
   it('shows model policy and unknown save errors', async () => {
+    const { MODEL_NOT_ALLOWED_CODE } = await import('@mastra/core/agent-builder/ee');
+    const policyError = {
+      status: 422,
+      body: { error: { code: MODEL_NOT_ALLOWED_CODE, message: 'Choose another model' } },
+    };
     useStoredAgentMutations.mockReturnValue({
       updateStoredAgent: {
-        mutateAsync: vi.fn().mockRejectedValue({ code: 'MODEL_NOT_ALLOWED', message: 'Choose another model' }),
+        mutateAsync: vi.fn().mockRejectedValue(policyError),
         isPending: true,
       },
     });
     const policyResult = renderHook(() => useSaveAgent({ agentId: 'agent-id' }));
     expect(policyResult.result.current.isSaving).toBe(true);
     await expect(policyResult.result.current.save({ name: 'Agent', instructions: '' } as any)).rejects.toEqual(
-      expect.objectContaining({ code: 'MODEL_NOT_ALLOWED' }),
+      policyError,
     );
-    expect(toast.error).toHaveBeenCalledWith('Model is not allowed');
+    expect(toast.error).toHaveBeenCalledWith('Choose another model');
 
     useStoredAgentMutations.mockReturnValue({
       updateStoredAgent: { mutateAsync: vi.fn().mockRejectedValue('bad'), isPending: false },

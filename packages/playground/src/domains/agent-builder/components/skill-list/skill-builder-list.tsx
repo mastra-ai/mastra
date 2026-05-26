@@ -2,8 +2,8 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
 import { CopyIcon, DownloadIcon, LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { SkillFavoriteButton } from '@/domains/agents/components/skill-favorite-button';
-import { getSkillOrigin } from '@/domains/agents/utils/skill-origin';
+import { SkillFavoriteButton } from '@/domains/agent-builder/components/skill-favorite-button';
+import { getSkillOrigin } from '@/domains/agent-builder/utils/skill-origin';
 
 export type SkillBuilderListProps = {
   skills: StoredSkillResponse[];

@@ -2,7 +2,7 @@ import type { StoredAgentResponse } from '@mastra/client-js';
 import { Avatar, EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
 import { LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { FavoriteButton } from '@/domains/agents/components/favorite-button';
+import { FavoriteButton } from '@/domains/agent-builder/components/favorite-button';
 import { useLinkComponent } from '@/lib/framework';
 
 export type AgentBuilderListProps = {

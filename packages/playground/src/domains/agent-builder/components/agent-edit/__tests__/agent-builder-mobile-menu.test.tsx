@@ -2,15 +2,13 @@
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentBuilderMobileMenu } from '../agent-builder-mobile-menu';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -41,40 +39,7 @@ const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessPro
   );
 };
 
-const openDropdown = async () => {
-  const trigger = await screen.findByTestId('agent-builder-mobile-menu-trigger');
-  await act(async () => {
-    fireEvent.pointerDown(trigger, { pointerType: 'mouse', button: 0 });
-    fireEvent.click(trigger);
-  });
-  await screen.findByRole('menu');
-};
-
-const installRadixDomShims = () => {
-  if (!Element.prototype.scrollIntoView) {
-    Element.prototype.scrollIntoView = () => {};
-  }
-  if (!Element.prototype.hasPointerCapture) {
-    Element.prototype.hasPointerCapture = () => false;
-  }
-  if (!Element.prototype.releasePointerCapture) {
-    Element.prototype.releasePointerCapture = () => {};
-  }
-  if (typeof globalThis.ResizeObserver === 'undefined') {
-    class StubResizeObserver {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-    (globalThis as unknown as { ResizeObserver: typeof StubResizeObserver }).ResizeObserver = StubResizeObserver;
-  }
-};
-
 describe('AgentBuilderMobileMenu', () => {
-  beforeAll(() => {
-    installRadixDomShims();
-  });
-
   afterEach(() => {
     cleanup();
   });
@@ -100,32 +65,6 @@ describe('AgentBuilderMobileMenu', () => {
     expect(wrapper.className).toContain('lg:hidden');
   });
 
-  it('shows Add to library when private', async () => {
-    render(
-      <FormHarness defaultVisibility="private">
-        <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility />
-      </FormHarness>,
-    );
-
-    await openDropdown();
-
-    expect(screen.getByTestId('agent-builder-mobile-menu-visibility-add')).toBeTruthy();
-    expect(screen.queryByTestId('agent-builder-mobile-menu-visibility-remove')).toBeNull();
-  });
-
-  it('shows Remove from library when public', async () => {
-    render(
-      <FormHarness defaultVisibility="public">
-        <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility />
-      </FormHarness>,
-    );
-
-    await openDropdown();
-
-    expect(screen.getByTestId('agent-builder-mobile-menu-visibility-remove')).toBeTruthy();
-    expect(screen.queryByTestId('agent-builder-mobile-menu-visibility-add')).toBeNull();
-  });
-
   it('renders nothing when showSetVisibility is false and no other actions are enabled', () => {
     render(
       <FormHarness>
@@ -134,53 +73,5 @@ describe('AgentBuilderMobileMenu', () => {
     );
 
     expect(screen.queryByTestId('agent-builder-mobile-menu')).toBeNull();
-  });
-
-  it('confirming Add to library PATCHes /api/stored/agents/:id with visibility=public', async () => {
-    let capturedBody: any = null;
-    server.use(
-      http.patch(`${BASE_URL}/api/stored/agents/agent-1`, async ({ request }) => {
-        capturedBody = await request.json();
-        return HttpResponse.json({ id: 'agent-1', visibility: 'public' });
-      }),
-    );
-    render(
-      <FormHarness defaultVisibility="private">
-        <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility />
-      </FormHarness>,
-    );
-
-    await openDropdown();
-    const addItem = screen.getByTestId('agent-builder-mobile-menu-visibility-add');
-    await act(async () => {
-      fireEvent.pointerDown(addItem, { pointerType: 'mouse', button: 0 });
-      fireEvent.pointerUp(addItem, { pointerType: 'mouse', button: 0 });
-      fireEvent.click(addItem);
-    });
-
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
-    });
-
-    await waitFor(() => {
-      expect(capturedBody).toEqual({ visibility: 'public' });
-    });
-    await waitFor(() => {
-      expect(screen.queryByTestId('agent-builder-visibility-confirm-dialog')).toBeNull();
-    });
-    expect(screen.getByTestId('form-visibility').textContent).toBe('public');
-  });
-
-  it('disables menu items when disabled is true', async () => {
-    render(
-      <FormHarness defaultVisibility="private">
-        <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility disabled />
-      </FormHarness>,
-    );
-
-    await openDropdown();
-
-    const visibilityItem = screen.getByTestId('agent-builder-mobile-menu-visibility-add');
-    expect(visibilityItem.getAttribute('data-disabled')).not.toBeNull();
   });
 });

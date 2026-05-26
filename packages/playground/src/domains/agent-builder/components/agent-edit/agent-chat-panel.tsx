@@ -87,7 +87,7 @@ export const AgentChatPanelProvider = ({
   );
 
   return (
-    <StreamChatProvider agentId={agentId} threadId={threadId} initialMessages={v5Messages}>
+    <StreamChatProvider agentId={agentId} threadId={threadId} initialMessages={v5Messages} debounceTime={100}>
       <AgentChatMetaContext.Provider value={meta}>{children}</AgentChatMetaContext.Provider>
     </StreamChatProvider>
   );

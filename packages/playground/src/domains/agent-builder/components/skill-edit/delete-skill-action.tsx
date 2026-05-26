@@ -2,7 +2,7 @@ import { AlertDialog, Button, DropdownMenu, toast } from '@mastra/playground-ui'
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useDeleteSkill } from '@/domains/agents/hooks/use-delete-skill';
+import { useDeleteSkill } from '@/domains/agent-builder/hooks/use-delete-skill';
 
 interface UseDeleteSkillActionParams {
   skillId: string;

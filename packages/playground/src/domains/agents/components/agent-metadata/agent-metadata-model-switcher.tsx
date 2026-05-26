@@ -4,7 +4,7 @@ import { Notice, Button, Spinner } from '@mastra/playground-ui';
 import { Lock, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
-import { useBuilderModelPolicy } from '@/domains/builder';
+import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {

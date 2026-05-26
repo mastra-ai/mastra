@@ -5,7 +5,7 @@ import { Lock, TriangleAlert } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAgent } from '../hooks/use-agent';
 import { useUpdateAgentModel } from '../hooks/use-agents';
-import { useBuilderModelPolicy } from '@/domains/builder';
+import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 // Triggers stay transparent; the wrapper owns the shared pill border/background.

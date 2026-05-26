@@ -7,7 +7,7 @@ import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Models } from '../models';
 
-vi.mock('@/domains/builder', () => ({
+vi.mock('@/domains/agent-builder', () => ({
   useBuilderModelPolicy: () => ({ active: false, pickerVisible: true }),
   useBuilderFilteredProviders: (providers: unknown) => providers,
   useBuilderFilteredModels: (models: unknown) => models,
@@ -31,13 +31,7 @@ vi.mock('@/domains/llm', () => ({
   }),
 }));
 
-const FormHarness = ({
-  agentId = 'agent_test',
-  children,
-}: {
-  agentId?: string;
-  children: ReactNode;
-}) => {
+const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; children: ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       model: { provider: 'openai', name: 'gpt-4o' },

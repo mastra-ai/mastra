@@ -28,9 +28,9 @@ import {
 } from './skill-file-tree';
 import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
+import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
 import { useWorkspaceInfo } from '@/domains/workspace/hooks';
 import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 

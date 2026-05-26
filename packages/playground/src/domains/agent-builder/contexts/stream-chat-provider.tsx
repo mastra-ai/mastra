@@ -62,12 +62,6 @@ export const StreamChatProvider = ({
       const payload: SendMessageArgs = {
         message,
         threadId: threadIdRef.current,
-        modelSettings: {
-          maxRetries: 3,
-          maxSteps: 100,
-          maxTokens: 1000,
-          temperature: 1,
-        },
       };
 
       if (tools !== undefined) {
@@ -91,10 +85,8 @@ export const StreamChatProvider = ({
     send(initialUserMessage);
   }, [initialUserMessage, initialMessages, send]);
 
-  const runningValue = useMemo<RunningContextValue>(
-    () => ({ isRunning: debounceTime === 0 ? isRunning : debouncedIsRunning }),
-    [debouncedIsRunning, isRunning, debounceTime],
-  );
+  const displayedIsRunning = debounceTime === 0 ? isRunning : debouncedIsRunning;
+  const runningValue = useMemo<RunningContextValue>(() => ({ isRunning: displayedIsRunning }), [displayedIsRunning]);
   const messagesValue = useMemo<MessagesContextValue>(() => ({ messages }), [messages]);
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
 

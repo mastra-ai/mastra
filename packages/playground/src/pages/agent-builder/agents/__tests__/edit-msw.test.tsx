@@ -10,6 +10,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentEdit from '../edit';
+import type * as AgentBuilderModule from '@/domains/agent-builder';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
@@ -22,19 +23,23 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-vi.mock('@/domains/agent-builder', () => ({
-  useBuilderAgentFeatures: () => ({
-    tools: false,
-    memory: false,
-    workflows: false,
-    agents: false,
-    skills: false,
-    avatarUpload: false,
-    model: false,
-    favorites: false,
-    browser: false,
-  }),
-}));
+vi.mock('@/domains/agent-builder', async importOriginal => {
+  const actual = await importOriginal<typeof AgentBuilderModule>();
+  return {
+    ...actual,
+    useBuilderAgentFeatures: () => ({
+      tools: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      skills: false,
+      avatarUpload: false,
+      model: false,
+      favorites: false,
+      browser: false,
+    }),
+  };
+});
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),

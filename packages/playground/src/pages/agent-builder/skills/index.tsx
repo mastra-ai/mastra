@@ -1,4 +1,4 @@
-import type { ListStoredSkillsParams, StoredSkillResponse } from '@mastra/client-js';
+import type { StoredSkillResponse } from '@mastra/client-js';
 import {
   Button,
   EmptyState,
@@ -19,15 +19,15 @@ import {
   SkillBuilderList,
   SkillBuilderListSkeleton,
 } from '@/domains/agent-builder/components/skill-list/skill-builder-list';
-import { BuilderAddSkillDialog } from '@/domains/agents/components/agent-cms-pages/builder-add-skill-dialog';
-import { useBuilderRegistries } from '@/domains/agents/hooks/use-builder-registries';
+import { BuilderAddSkillDialog } from '@/domains/agent-builder/components/skills/builder-add-skill-dialog';
+import { useBuilderRegistries } from '@/domains/agent-builder/hooks/use-builder-registries';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export default function AgentBuilderSkillsPage() {
   const navigate = useNavigate();
-  const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
+  const { isLoading: isCurrentUserLoading } = useCurrentUser();
   const { hasPermission, rbacEnabled } = usePermissions();
   const canWriteSkills = !rbacEnabled || hasPermission('stored-skills:write');
   const canReadSkills = !rbacEnabled || hasPermission('stored-skills:read');
@@ -36,15 +36,7 @@ export default function AgentBuilderSkillsPage() {
   const goToCreate = () => navigate('/agent-builder/skills/create', { viewTransition: true });
   const goToEdit = (skillId: string) => navigate(`/agent-builder/skills/${skillId}/edit`, { viewTransition: true });
 
-  const listParams = useMemo<ListStoredSkillsParams>(() => {
-    const params: ListStoredSkillsParams = {};
-    if (currentUser?.id) {
-      params.authorId = currentUser.id;
-    }
-    return params;
-  }, [currentUser?.id]);
-
-  const { data, isLoading, error } = useStoredSkills(listParams, { enabled: !isCurrentUserLoading });
+  const { data, isLoading, error } = useStoredSkills({ enabled: !isCurrentUserLoading });
   const [search, setSearch] = useState('');
 
   const skills = useMemo(() => data?.skills ?? [], [data?.skills]);

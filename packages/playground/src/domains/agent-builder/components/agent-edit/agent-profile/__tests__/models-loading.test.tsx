@@ -7,7 +7,7 @@ import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Models } from '../models';
 
-vi.mock('@/domains/builder', () => ({
+vi.mock('@/domains/agent-builder', () => ({
   useBuilderModelPolicy: () => ({ active: false, pickerVisible: true }),
   useBuilderFilteredProviders: (providers: unknown) => providers,
   useBuilderFilteredModels: (models: unknown) => models,

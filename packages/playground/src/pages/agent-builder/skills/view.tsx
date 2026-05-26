@@ -2,10 +2,10 @@ import { Button, MarkdownRenderer, Spinner } from '@mastra/playground-ui';
 import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
-import { CopySkillDialog } from '@/domains/agents/components/agent-cms-pages/copy-skill-dialog';
-import { SkillFavoriteButton } from '@/domains/agents/components/skill-favorite-button';
-import { useCopySkill } from '@/domains/agents/hooks/use-copy-skill';
-import { useStoredSkill } from '@/domains/agents/hooks/use-stored-skill';
+import { SkillFavoriteButton } from '@/domains/agent-builder/components/skill-favorite-button';
+import { CopySkillDialog } from '@/domains/agent-builder/components/skills/copy-skill-dialog';
+import { useCopySkill } from '@/domains/agent-builder/hooks/use-copy-skill';
+import { useStoredSkill } from '@/domains/agent-builder/hooks/use-stored-skill';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -52,7 +52,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
   const copySkill = useCopySkill();
 
   // Suggest a non-colliding copy name based on the caller's own skills.
-  const { data: ownSkillsData } = useStoredSkills(undefined, { enabled: canCopy });
+  const { data: ownSkillsData } = useStoredSkills({ enabled: canCopy });
   const ownSkillNames = (ownSkillsData?.skills ?? []).map(s => s.name);
 
   return (

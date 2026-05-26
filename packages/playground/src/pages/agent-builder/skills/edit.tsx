@@ -9,10 +9,10 @@ import { VisibilitySelect } from '@/domains/agent-builder/components/skill-edit/
 import { useAutosaveSkill } from '@/domains/agent-builder/hooks/use-autosave-skill';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
 import { useStarterUserMessage } from '@/domains/agent-builder/hooks/use-starter-user-message';
+import { useStoredSkill } from '@/domains/agent-builder/hooks/use-stored-skill';
 import { SkillWorkspaceLayout } from '@/domains/agent-builder/layouts/skill-workspace-layout';
 import { SkillChatComposer } from '@/domains/agents/components/agent-cms-pages/skill-chat-composer';
 import { SkillSimpleForm } from '@/domains/agents/components/agent-cms-pages/skill-simple-form';
-import { useStoredSkill } from '@/domains/agents/hooks/use-stored-skill';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
