@@ -12,6 +12,7 @@ export type SearchbarProps = {
   placeholder: string;
   debounceMs?: number;
   size?: FormElementSize;
+  className?: string;
 };
 
 const searchbarSizeClasses = {
@@ -21,7 +22,14 @@ const searchbarSizeClasses = {
   default: formElementSizes.default,
 };
 
-export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300, size = 'md' }: SearchbarProps) => {
+export const Searchbar = ({
+  onSearch,
+  label,
+  placeholder,
+  debounceMs = 300,
+  size = 'md',
+  className,
+}: SearchbarProps) => {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +74,7 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300, size
         transitions.all,
         'hover:border-neutral2',
         searchbarSizeClasses[size],
+        className,
       )}
     >
       <SearchIcon className={cn('text-neutral3 h-4 w-4', transitions.colors)} />

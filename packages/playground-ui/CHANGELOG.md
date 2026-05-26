@@ -1,5 +1,30 @@
 # @mastra/playground-ui
 
+## 30.0.0-alpha.7
+
+### Patch Changes
+
+- Design-system additions to support theming: ([#17059](https://github.com/mastra-ai/mastra/pull/17059))
+  - `Avatar` now accepts optional `color` and `textColor` props for per-instance tinting, and falls back to the initial when the image fails to load.
+  - `Searchbar` accepts an optional `className` to let consumers tune layout without forking.
+  - `TabList` accepts a `style` prop and the active-tab indicator now reads from the `--tab-indicator-color` CSS variable, letting parents theme the indicator (e.g. per-agent accent color).
+  - `stringToColor` now accepts any `number` for the `lightness` argument and defaults to `90` instead of `75` for a lighter fallback chip.
+  - Global `body` rule enables `font-smoothing` / `-webkit-font-smoothing` for crisper UI text.
+
+- Updated dependencies [[`f1b9f87`](https://github.com/mastra-ai/mastra/commit/f1b9f87a00505f15d4fe39f92de287674adc2198), [`168fa09`](https://github.com/mastra-ai/mastra/commit/168fa09d6b39114cb8c13bd06f1dccb9bc81c6cd), [`af2e1f8`](https://github.com/mastra-ai/mastra/commit/af2e1f8e2a2d2c4ba75167d5c93ca44395639eff)]:
+  - @mastra/react@0.4.1-alpha.7
+  - @mastra/core@1.37.0-alpha.7
+  - @mastra/client-js@1.21.0-alpha.7
+
+## 30.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0-alpha.6
+  - @mastra/client-js@1.21.0-alpha.6
+  - @mastra/react@0.4.1-alpha.6
+
 ## 30.0.0-alpha.5
 
 ### Patch Changes
