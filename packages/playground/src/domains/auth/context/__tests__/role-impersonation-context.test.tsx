@@ -12,8 +12,6 @@ import { adminPermissions, viewerPermissions } from './fixtures/role-permissions
 
 import { server } from '@/test/msw-server';
 
-
-
 const BASE_URL = 'http://localhost:4111';
 
 type ConsumerHandle = {
@@ -22,8 +20,14 @@ type ConsumerHandle = {
 };
 
 function TestConsumer({ onReady }: { onReady?: (handle: ConsumerHandle) => void }) {
-  const { isImpersonating, impersonatedRole, impersonatedPermissions, isSwitching, startImpersonation, stopImpersonation } =
-    useRoleImpersonation();
+  const {
+    isImpersonating,
+    impersonatedRole,
+    impersonatedPermissions,
+    isSwitching,
+    startImpersonation,
+    stopImpersonation,
+  } = useRoleImpersonation();
 
   if (onReady) {
     onReady({ start: startImpersonation, stop: stopImpersonation });
@@ -202,9 +206,7 @@ describe('RoleImpersonationProvider', () => {
   });
 
   it('clears state when stopImpersonation is called after a successful start', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/auth/roles/admin/permissions`, () => HttpResponse.json(adminPermissions)),
-    );
+    server.use(http.get(`${BASE_URL}/api/auth/roles/admin/permissions`, () => HttpResponse.json(adminPermissions)));
 
     const { handle } = renderConsumer();
 
