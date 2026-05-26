@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Agent } from '../agent';
-import { createSignal } from '../agent/signals';
-import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import type { MastraDBMessage } from '../agent/message-list/state/types';
+import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
+import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
@@ -103,38 +104,25 @@ function getRecordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
+function signalContentsToHarnessContent(contents: AgentSignalContents): HarnessMessageContent[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
-  if (!contents || typeof contents !== 'object') return [];
-
-  const content = (contents as { content?: unknown }).content;
-  if (typeof content === 'string') return [{ type: 'text', text: content }];
-  if (Array.isArray(content)) {
-    return content.flatMap((part): HarnessMessageContent[] => {
-      const record = getRecordValue(part);
-      if (!record) return [];
-      if (record.type === 'text' && typeof record.text === 'string') {
-        return [{ type: 'text', text: record.text }];
-      }
-      if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
-        if (record.mediaType.startsWith('image/')) {
-          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
-        }
-        return [
-          {
-            type: 'file',
-            data: record.data,
-            mediaType: record.mediaType,
-            filename: typeof record.filename === 'string' ? record.filename : undefined,
-          },
-        ];
-      }
-      return [];
-    });
-  }
-
-  return [];
+  return contents.flatMap((part): HarnessMessageContent[] => {
+    if (part.type === 'text') {
+      return [{ type: 'text', text: part.text }];
+    }
+    if (typeof part.data !== 'string') return [];
+    if (part.mediaType.startsWith('image/')) {
+      return [{ type: 'image', data: part.data, mimeType: part.mediaType }];
+    }
+    return [
+      {
+        type: 'file',
+        data: part.data,
+        mediaType: part.mediaType,
+        filename: part.filename,
+      },
+    ];
+  });
 }
 
 function toSystemReminderContent(
@@ -142,7 +130,7 @@ function toSystemReminderContent(
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
   const metadata = getRecordValue(payload.metadata);
-  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  const message = getStringValue(payload.contents);
   if (message === undefined) return undefined;
 
   return {
@@ -172,17 +160,25 @@ function toSystemReminderContent(
 
 function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
   const id = getStringValue(payload.id);
-  const contents = payload.contents ?? payload.message;
-  if (!id || contents === undefined) return undefined;
+  const rawContents = payload.contents;
+  if (!id || rawContents === undefined) return undefined;
 
-  const content = signalContentsToHarnessContent(contents);
+  const signal = createSignal({
+    id,
+    type: 'user-message',
+    contents: rawContents as AgentSignalContents,
+    attributes: getRecordValue(payload.attributes) as AgentSignalInput['attributes'],
+    createdAt: getStringValue(payload.createdAt),
+  });
+  const content = signalContentsToHarnessContent(signal.contents);
   if (content.length === 0) return undefined;
 
   return {
-    id,
+    id: signal.id,
     role: 'user',
     content,
-    createdAt: new Date(getStringValue(payload.createdAt) ?? Date.now()),
+    createdAt: signal.createdAt,
+    attributes: signal.attributes,
   };
 }
 
@@ -258,6 +254,9 @@ export class Harness<TState = {}> {
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
   private stateUpdateQueue: Promise<void> = Promise.resolve();
+  private switchModeVersion: number = 0;
+  private availableModelsCache: AvailableModel[] | null = null;
+  private availableModelsCacheTime: number = 0;
   #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
@@ -347,6 +346,7 @@ export class Harness<TState = {}> {
       this.#internalMastra = new Mastra({
         logger: false,
         storage: this.config.storage,
+        ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
       });
       await this.#internalMastra.getStorage()!.init();
@@ -379,28 +379,11 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Propagate harness-level Mastra, memory, workspace, and browser to mode agents (after workspace init)
-    const workspaceForAgents = this.workspaceFn ?? this.workspace;
-    const browserForAgents = this.browserFn ?? this.browser;
+    // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
     for (const mode of this.config.modes) {
       const agent = typeof mode.agent === 'function' ? null : mode.agent;
       if (!agent) continue;
-
-      const alreadyHasMastra = !!agent.getMastraInstance();
-
-      if (this.config.memory && !agent.hasOwnMemory()) {
-        agent.__setMemory(this.config.memory);
-      }
-      if (workspaceForAgents && !agent.hasOwnWorkspace()) {
-        agent.__setWorkspace(workspaceForAgents);
-      }
-      if (browserForAgents && !agent.hasOwnBrowser()) {
-        agent.setBrowser(browserForAgents as MastraBrowser);
-      }
-
-      if (this.#internalMastra && !alreadyHasMastra) {
-        this.#internalMastra.addAgent(agent);
-      }
+      this.propagateRuntimeServicesToAgent(agent);
     }
 
     this.startHeartbeats();
@@ -421,6 +404,7 @@ export class Harness<TState = {}> {
     await this.config.threadLock?.acquire(mostRecent.id);
     this.currentThreadId = mostRecent.id;
     await this.loadThreadMetadata();
+    await this.ensureCurrentAgentThreadSubscription();
 
     return mostRecent;
   }
@@ -559,25 +543,31 @@ export class Harness<TState = {}> {
 
     this.abort();
 
-    // Save current model to the outgoing mode before switching
     const currentModelId = this.getCurrentModelId();
-    if (currentModelId) {
-      await this.setThreadSetting({ key: `modeModelId_${this.currentModeId}`, value: currentModelId });
-    }
-
     const previousModeId = this.currentModeId;
+    const version = ++this.switchModeVersion;
+
+    // Update local state and emit events immediately so UIs can update
+    // without waiting for storage round-trips.
     this.currentModeId = modeId;
+    this.emit({ type: 'mode_changed', modeId, previousModeId });
+
+    // Save current model to the outgoing mode before switching
+    if (currentModelId) {
+      await this.setThreadSetting({ key: `modeModelId_${previousModeId}`, value: currentModelId });
+    }
+    if (this.switchModeVersion !== version) return;
 
     await this.setThreadSetting({ key: 'currentModeId', value: modeId });
+    if (this.switchModeVersion !== version) return;
 
     // Load the incoming mode's model
     const modeModelId = await this.loadModeModelId(modeId);
+    if (this.switchModeVersion !== version) return;
     if (modeModelId) {
       void this.setState({ currentModelId: modeModelId } as unknown as Partial<TState>);
       this.emit({ type: 'model_changed', modelId: modeModelId } as HarnessEvent);
     }
-
-    this.emit({ type: 'mode_changed', modeId, previousModeId });
   }
 
   /**
@@ -603,15 +593,38 @@ export class Harness<TState = {}> {
     return null;
   }
 
+  private propagateRuntimeServicesToAgent(agent: Agent): Agent {
+    const alreadyHasMastra = !!agent.getMastraInstance();
+    const workspaceForAgents = this.workspaceFn ?? this.workspace;
+    const browserForAgents = this.browserFn ?? this.browser;
+
+    if (this.config.memory && !agent.hasOwnMemory()) {
+      agent.__setMemory(this.config.memory);
+    }
+    if (workspaceForAgents && !agent.hasOwnWorkspace()) {
+      agent.__setWorkspace(workspaceForAgents);
+    }
+    if (browserForAgents && !agent.hasOwnBrowser()) {
+      agent.setBrowser(browserForAgents as MastraBrowser);
+    }
+    if (this.config.pubsub && !agent.hasOwnPubSub()) {
+      agent.__setPubSub(this.config.pubsub);
+    }
+
+    if (this.#internalMastra && !alreadyHasMastra) {
+      this.#internalMastra.addAgent(agent);
+    }
+
+    return agent;
+  }
+
   /**
    * Get the agent for the current mode.
    */
   private getCurrentAgent(): Agent {
     const mode = this.getCurrentMode();
-    if (typeof mode.agent === 'function') {
-      return mode.agent(this.state);
-    }
-    return mode.agent;
+    const agent = typeof mode.agent === 'function' ? mode.agent(this.state) : mode.agent;
+    return this.propagateRuntimeServicesToAgent(agent);
   }
 
   /**
@@ -724,6 +737,11 @@ export class Harness<TState = {}> {
    * `customModelCatalogProvider` hooks.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
+    const now = Date.now();
+    if (this.availableModelsCache && now - this.availableModelsCacheTime < 10_000) {
+      return this.availableModelsCache;
+    }
+
     try {
       const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
 
@@ -787,11 +805,19 @@ export class Harness<TState = {}> {
         }
       }
 
-      return [...modelsById.values()];
+      const result = [...modelsById.values()];
+      this.availableModelsCache = result;
+      this.availableModelsCacheTime = Date.now();
+      return result;
     } catch (error) {
       console.warn('Failed to load available models:', error);
       return [];
     }
+  }
+
+  invalidateAvailableModelsCache(): void {
+    this.availableModelsCache = null;
+    this.availableModelsCacheTime = 0;
   }
 
   private async getProviderApiKeyEnvVar(provider: string): Promise<string | undefined> {
@@ -930,6 +956,7 @@ export class Harness<TState = {}> {
 
     this.tokenUsage = createEmptyTokenUsage();
     this.emit({ type: 'thread_created', thread });
+    await this.ensureCurrentAgentThreadSubscription();
 
     return thread;
   }
@@ -1045,6 +1072,7 @@ export class Harness<TState = {}> {
     await this.loadThreadMetadata();
     this.tokenUsage = createEmptyTokenUsage();
     this.emit({ type: 'thread_created', thread: clonedThread });
+    await this.ensureCurrentAgentThreadSubscription();
 
     return clonedThread;
   }
@@ -1075,6 +1103,7 @@ export class Harness<TState = {}> {
     await this.loadThreadMetadata();
 
     this.emit({ type: 'thread_changed', threadId, previousThreadId });
+    await this.ensureCurrentAgentThreadSubscription();
   }
 
   async listThreads(options?: {
@@ -1575,16 +1604,36 @@ export class Harness<TState = {}> {
     void this.processSubscribedThreadStream(subscription);
   }
 
+  private async ensureCurrentAgentThreadSubscription(): Promise<void> {
+    if (!this.currentThreadId) return;
+    await this.ensureAgentThreadSubscription(this.getCurrentAgent(), this.currentThreadId);
+  }
+
   private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
     if (this.followUpQueue.length === 0) return;
 
     const next = this.followUpQueue.shift()!;
-    await this.sendMessage({
-      content: next.content,
-      requestContext: next.requestContext,
-      tracingContext: options?.tracingContext,
-      tracingOptions: options?.tracingOptions,
-    });
+    if (this.agentThreadSubscription) {
+      // When called from processSubscribedThreadStream → finishSubscribedStreamRun,
+      // sendMessage would deadlock: it waits for the new run to finish via
+      // waitForCurrentThreadStreamIdle, but the subscription consumer is blocked
+      // here and cannot advance the generator to process that run. Send the
+      // signal directly and let the subscription handle the run lifecycle.
+      const signal = this.sendSignal({
+        content: next.content,
+        requestContext: next.requestContext,
+        tracingContext: options?.tracingContext,
+        tracingOptions: options?.tracingOptions,
+      });
+      await signal.accepted;
+    } else {
+      await this.sendMessage({
+        content: next.content,
+        requestContext: next.requestContext,
+        tracingContext: options?.tracingContext,
+        tracingOptions: options?.tracingOptions,
+      });
+    }
   }
 
   private isActiveAgentThreadSubscription(subscription: AgentThreadSubscription<any>): boolean {
@@ -1697,12 +1746,16 @@ export class Harness<TState = {}> {
       | AgentSignalInput
       | {
           content: AgentSignalContents;
+          ifActive?: { attributes?: AgentSignalAttributes };
+          ifIdle?: { attributes?: AgentSignalAttributes };
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
         },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
+    const ifActive = 'content' in input ? input.ifActive : undefined;
+    const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const signal = createSignal('content' in input ? { type: 'user-message', contents: input.content } : input);
     const accepted = Promise.resolve().then(async () => {
       if (!this.currentThreadId) {
@@ -1713,10 +1766,12 @@ export class Harness<TState = {}> {
       const agent = this.getCurrentAgent();
       await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
 
-      if (this.agentThreadSubscription?.activeRunId()) {
+      if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
         const result = agent.sendSignal(signal, {
           resourceId: this.resourceId,
           threadId: this.currentThreadId,
+          ifActive,
+          ifIdle,
         });
         return { accepted: result.accepted, runId: result.runId };
       }
@@ -1741,7 +1796,8 @@ export class Harness<TState = {}> {
       const result = agent.sendSignal(signal, {
         resourceId: this.resourceId,
         threadId: this.currentThreadId,
-        ifIdle: { streamOptions: streamOptions as any },
+        ifActive,
+        ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
       return { accepted: result.accepted, runId: result.runId };
     });
@@ -1787,13 +1843,10 @@ export class Harness<TState = {}> {
           type: 'file' as const,
           data: f.data,
           mediaType: f.mediaType,
-          filename: f.filename,
+          ...(f.filename ? { filename: f.filename } : {}),
         };
       });
-      messageInput = {
-        role: 'user',
-        content: [{ type: 'text', text: content }, ...fileParts],
-      } as AgentSignalContents;
+      messageInput = [{ type: 'text', text: content }, ...fileParts];
     }
 
     const wasActive = this.isCurrentThreadStreamActive();
@@ -1961,36 +2014,46 @@ export class Harness<TState = {}> {
       };
     }
 
-    const signalMetadata = getRecordValue(msg.content.metadata?.signal);
-    if (signalMetadata?.type === 'user-message') {
-      const signalContent = signalContentsToHarnessContent(signalMetadata.contents ?? msg.content.content);
-      if (signalContent.length > 0) {
+    if (msg.role === 'signal') {
+      const signal = mastraDBMessageToSignal(msg as MastraDBMessage);
+
+      if (signal.type === 'user-message') {
+        const signalContent = signalContentsToHarnessContent(signal.contents);
+        if (signalContent.length > 0) {
+          return {
+            id: msg.id,
+            role: 'user',
+            content: signalContent,
+            createdAt: msg.createdAt,
+            attributes: signal.attributes,
+          };
+        }
+      }
+
+      if (signal.type === 'system-reminder') {
+        const reminder = toSystemReminderContent({
+          type: signal.type,
+          contents:
+            typeof signal.contents === 'string'
+              ? signal.contents
+              : signal.contents
+                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                  .map(p => p.text)
+                  .join('\n'),
+          attributes: signal.attributes ?? msg.content.metadata,
+          metadata: signal.metadata,
+        });
+        if (reminder) {
+          content.push(reminder);
+        }
+
         return {
           id: msg.id,
           role: 'user',
-          content: signalContent,
+          content,
           createdAt: msg.createdAt,
         };
       }
-    }
-
-    if (signalMetadata?.type === 'system-reminder') {
-      const reminder = toSystemReminderContent({
-        type: signalMetadata.type,
-        contents: signalMetadata.contents ?? msg.content.content,
-        attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
-        metadata: getRecordValue(signalMetadata.metadata),
-      });
-      if (reminder) {
-        content.push(reminder);
-      }
-
-      return {
-        id: msg.id,
-        role: 'user',
-        content,
-        createdAt: msg.createdAt,
-      };
     }
 
     for (const part of msg.content.parts) {
@@ -2677,7 +2740,8 @@ export class Harness<TState = {}> {
             triggeredBy: payload.triggeredBy,
             lastActivityAt: payload.lastActivityAt,
             ttlExpiredMs: payload.ttlExpiredMs,
-            activateAfterIdle: payload.config?.activateAfterIdle,
+            activateAfterIdle:
+              typeof payload.config?.activateAfterIdle === 'number' ? payload.config.activateAfterIdle : undefined,
             previousModel: payload.previousModel,
             currentModel: payload.currentModel,
           });

@@ -1165,7 +1165,10 @@ export const LIST_MESSAGES_ROUTE = createRoute({
             include,
             filter,
           });
-          return result;
+          return {
+            ...result,
+            uiMessages: result.messages,
+          };
         }
       }
 

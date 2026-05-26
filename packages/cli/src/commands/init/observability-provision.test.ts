@@ -335,6 +335,7 @@ describe('provisionObservabilityProject', () => {
     expect(result.projectId).toBe('p1');
     expect(result.projectName).toBe('my-app');
     expect(result.token).toBe('sk_my_app');
+    expect(resolveCurrentOrgMock).toHaveBeenCalledWith('test-token');
 
     // No picker, no name re-prompt, no list call.
     expect(selectMock).not.toHaveBeenCalled();

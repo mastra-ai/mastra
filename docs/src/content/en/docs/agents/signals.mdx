@@ -8,9 +8,9 @@ packages:
 
 # Signals
 
-:::warning Experimental
+:::experimental
 
-Agent signals are experimental. Breaking changes may occur without a major version bump until the API is stable.
+This feature is in alpha. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -98,6 +98,32 @@ agent.sendSignal(
 )
 ```
 
+## Identify users with attributes
+
+Use `attributes` to tag each signal with user identity. The signal type and attributes are rendered as XML so the model can distinguish who said what in a multi-user thread:
+
+```typescript title="src/mastra/signals.ts"
+agent.sendSignal(
+  {
+    type: 'user',
+    contents: 'Can we simplify the API surface?',
+    attributes: { name: 'Devin', from: 'slack' },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+The model receives:
+
+```xml
+<user name="Devin" from="slack">Can we simplify the API surface?</user>
+```
+
+The UI sees just the message contents but can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
+
 ## Send external event context
 
 Use custom signal types for system-generated context. Non-user signal types are rendered as XML-style user-role context so they can appear inside conversation history without looking like assistant output.
@@ -108,7 +134,7 @@ agent.sendSignal(
     type: 'system-reminder',
     contents: 'User X has left a new PR comment asking for a smaller API surface.',
     attributes: {
-      type: 'github',
+      source: 'github',
       pr: '123',
     },
   },
@@ -122,10 +148,50 @@ agent.sendSignal(
 The model receives the custom signal as context like this:
 
 ```xml
-<system-reminder type="github" pr="123">User X has left a new PR comment asking for a smaller API surface.</system-reminder>
+<system-reminder source="github" pr="123">User X has left a new PR comment asking for a smaller API surface.</system-reminder>
 ```
 
 Use XML-safe signal type names and attribute names. Signal type names and attribute names can contain letters, numbers, underscores, periods, and hyphens. They must start with a letter or underscore.
+
+## Delivery attributes
+
+Use `ifActive.attributes` and `ifIdle.attributes` to tag a signal with context that depends on whether the agent is active or idle at delivery time. Mastra resolves the correct branch when the signal is accepted.
+
+```typescript title="src/mastra/signals.ts"
+agent.sendSignal(
+  {
+    type: 'user-message',
+    contents: 'Also cover the edge cases.',
+    attributes: { source: 'chat' },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+    ifActive: { attributes: { delivery: 'while-active' } },
+    ifIdle: { attributes: { delivery: 'message' } },
+  },
+)
+```
+
+When the agent is working, the model sees:
+
+```xml
+<user-message source="chat" delivery="while-active">Also cover the edge cases.</user-message>
+```
+
+When the agent is idle:
+
+```xml
+<user-message source="chat" delivery="message">Also cover the edge cases.</user-message>
+```
+
+Top-level `attributes` always apply. The selected branch's `attributes` are merged into them at delivery time. The `ifActive.attributes` branch merges when the signal is delivered to a running agent loop. The `ifIdle.attributes` branch merges when the signal wakes an idle thread. If the selected branch or its `attributes` field is `undefined`, no extra attributes are added.
+
+Delivery attributes work with any signal type and can carry any key-value pairs. The `delivery` name shown above is not a special Mastra API field. It is a custom attribute name used for this example; you can use any attribute names that fit your application.
+
+:::note
+Visit [Agent.sendSignal() reference](/reference/agents/agent#sendsignalsignal-options) for the full signal input and options types.
+:::
 
 ## Use the client SDK
 

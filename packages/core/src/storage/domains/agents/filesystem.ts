@@ -64,11 +64,14 @@ export class FilesystemAgentsStorage extends AgentsStorage {
   async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     const { agent } = input;
     const now = new Date();
+    // Default visibility to 'private' when an authorId is set; leave undefined for legacy unowned rows.
+    const visibility = agent.visibility ?? (agent.authorId ? 'private' : undefined);
     const entity: StorageAgentType = {
       id: agent.id,
       status: 'draft',
       activeVersionId: undefined,
       authorId: agent.authorId,
+      visibility,
       metadata: agent.metadata,
       createdAt: now,
       updatedAt: now,
@@ -76,7 +79,7 @@ export class FilesystemAgentsStorage extends AgentsStorage {
 
     await this.helpers.createEntity(agent.id, entity);
 
-    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+    const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
     const filtered = stripUnusedFields(snapshotConfig);
     const versionId = crypto.randomUUID();
     await this.createVersion({
@@ -95,7 +98,7 @@ export class FilesystemAgentsStorage extends AgentsStorage {
     const { id, ...updates } = input;
     // Strip snapshot config fields that don't belong on the entity record
     const entityUpdates: Record<string, unknown> = {};
-    const entityFields = new Set(['authorId', 'metadata', 'activeVersionId', 'status']);
+    const entityFields = new Set(['authorId', 'visibility', 'metadata', 'activeVersionId', 'status']);
     for (const [key, value] of Object.entries(updates)) {
       if (entityFields.has(key)) {
         entityUpdates[key] = value;
@@ -109,13 +112,13 @@ export class FilesystemAgentsStorage extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page, perPage, orderBy, authorId, metadata, status } = args || {};
+    const { page, perPage, orderBy, authorId, visibility, metadata, status } = args || {};
     const result = await this.helpers.listEntities({
       page,
       perPage,
       orderBy,
       listKey: 'agents',
-      filters: { authorId, metadata, status },
+      filters: { authorId, visibility, metadata, status },
     });
     return result as unknown as StorageListAgentsOutput;
   }

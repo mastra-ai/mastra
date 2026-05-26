@@ -32,7 +32,17 @@ export interface ObservabilityPromptResult {
   token?: string;
 }
 
-export async function promptForObservability(): Promise<ObservabilityPromptResult> {
+interface ObservabilitySelectionEvent {
+  command?: 'create' | 'init';
+  enabled: boolean;
+  answer: 'yes' | 'no';
+  selection_method: 'interactive';
+}
+
+export async function promptForObservability(
+  command?: 'create' | 'init',
+  onObservabilitySelected?: (event: ObservabilitySelectionEvent) => void,
+): Promise<ObservabilityPromptResult> {
   // Loop so that if the browser-based auth flow fails (user closed the browser
   // tab, timed out, network error, …) we re-ask the same question instead of
   // leaving the user stuck. Picking "No" is always a clean escape hatch.
@@ -47,7 +57,17 @@ export async function promptForObservability(): Promise<ObservabilityPromptResul
     });
 
     if (p.isCancel(choice)) return {};
-    if (choice !== 'yes') return { enabled: false };
+
+    const answer = choice === 'yes' ? 'yes' : 'no';
+    const enabled = answer === 'yes';
+    onObservabilitySelected?.({
+      command,
+      enabled,
+      answer,
+      selection_method: 'interactive',
+    });
+
+    if (!enabled) return { enabled: false };
 
     // Only surface the logged-in user when creds already existed before getToken().
     // If they didn't, getToken() ran the browser login() flow which prints its own
@@ -733,7 +753,9 @@ export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }
 
 interface InteractivePromptArgs {
   options?: {
+    command?: 'create' | 'init';
     showBanner?: boolean;
+    onObservabilitySelected?: (event: ObservabilitySelectionEvent) => void;
   };
   skip?: {
     directory?: boolean;
@@ -747,7 +769,7 @@ interface InteractivePromptArgs {
 }
 
 export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
-  const { skip = {}, options: { showBanner = true } = {} } = args;
+  const { skip = {}, options: { command, showBanner = true, onObservabilitySelected } = {} } = args;
 
   if (showBanner) {
     p.intro(color.inverse(' Mastra Init '));
@@ -796,7 +818,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
       },
       observability: async () => {
         if (skip?.observability) return undefined;
-        return promptForObservability();
+        return promptForObservability(command, onObservabilitySelected);
       },
       configureMastraToolingForAgents: async () => {
         if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };
@@ -1067,7 +1089,7 @@ This is a **Mastra** project written in TypeScript. Mastra is a framework for bu
 
 \`\`\`bash
 npm run dev # Start Mastra Studio at localhost:4111 (long-running, use a separate terminal)
-npm run build # Build a production-ready server
+npm run build # Build a production-ready server (use a separate terminal)
 \`\`\`
 
 ## Project Structure

@@ -6,7 +6,8 @@ import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
-import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
+import type { AgentChannels } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/types';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type {
@@ -52,7 +53,7 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { CreatedAgentSignal } from './signals';
+import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
@@ -81,6 +82,7 @@ export type ToolsInput = Record<
 export type AgentInstructions = SystemMessage;
 
 export type {
+  AgentSignalAttributes,
   AgentSignalInput as AgentSignal,
   AgentSignalType,
   AgentSignalDataPart,
@@ -105,15 +107,19 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       runId: string;
       resourceId?: string;
       threadId?: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: never;
     }
   | {
       runId?: string;
       resourceId: string;
       threadId: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
-      ifIdle?: { behavior?: AgentSignalIdleBehavior; streamOptions?: AgentExecutionOptions<OUTPUT> };
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
+      ifIdle?: {
+        behavior?: AgentSignalIdleBehavior;
+        streamOptions?: AgentExecutionOptions<OUTPUT>;
+        attributes?: AgentSignalAttributes;
+      };
     };
 
 /**
@@ -252,6 +258,11 @@ export interface AgentConfig<
    * Description of the agent's purpose and capabilities.
    */
   description?: string;
+  /**
+   * Metadata for classifying or filtering the agent in clients. Can be a static
+   * record or a function that resolves the metadata from the request context.
+   */
+  metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
   /**
    * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
    * array of system messages, or a function that returns any of these types dynamically.
@@ -394,6 +405,11 @@ export interface AgentConfig<
    * Reference to the Mastra runtime instance (injected automatically).
    */
   mastra?: Mastra;
+  /**
+   * Pub/sub system for coordinating runtime services such as thread signals.
+   * When omitted, the agent uses its Mastra instance pubsub or the default in-memory pubsub.
+   */
+  pubsub?: PubSub;
   /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */

@@ -2,10 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
-import { Agent } from '../../agent';
-import type { MastraDBMessage } from '../../agent';
+import { Agent } from '../../agent/agent';
 import { MessageList, messagesAreEqual } from '../../agent/message-list';
-import type { MessageInput } from '../../agent/message-list';
+import type { MastraDBMessage, MessageInput } from '../../agent/message-list';
 import { isAgentCompatible } from '../../agent/subagent';
 import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
@@ -18,8 +17,14 @@ import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
-import type { OutputResult, Processor } from '../../processors';
-import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
+import {
+  ProcessorRunner,
+  ProcessorState,
+  ProcessorStepOutputSchema,
+  ProcessorStepSchema,
+  createProcessorSendSignal,
+} from '../../processors';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -34,14 +39,9 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
-import { Tool } from '../../tools';
+import { Tool } from '../../tools/tool';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
-import { Workflow, Run } from '../../workflows';
-// Direct import (bypassing the index) avoids a cycle: the index does a
-// side-effect import of `./evented`, so going through it from here would
-// re-enter an in-flight module evaluation and put `eventedCreateWorkflow` in TDZ.
-import type { AgentStepOptions } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
 import type {
@@ -62,7 +62,8 @@ import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
-import { __registerEventedCreateWorkflow } from '../workflow';
+import { Workflow, Run, __registerEventedCreateWorkflow } from '../workflow';
+import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
 import type { TripwireChunk } from './helpers';
@@ -753,7 +754,7 @@ function createStepFromProcessor<TProcessorId extends string>(
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
       z.infer<typeof ProcessorStepOutputSchema>
     >,
-    execute: async ({ inputData, requestContext, ...obsFields }) => {
+    execute: async ({ inputData, requestContext, outputWriter, ...obsFields }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
@@ -1012,15 +1013,40 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Base context for all processor methods - includes requestContext for memory processors
       // and observabilityContext for proper span nesting when processors call internal agents
       // state is per-processor state that persists across all method calls within this request
+      const processorWriter: ProcessorStreamWriter | undefined = outputWriter
+        ? {
+            custom: async <T extends { type: string }>(data: T) => {
+              await outputWriter(data as any);
+            },
+          }
+        : undefined;
+      const processorMessageList =
+        messageList ??
+        (Array.isArray(messages)
+          ? new MessageList()
+              .add(messages as MastraDBMessage[], 'input')
+              .addSystem((systemMessages ?? []) as CoreMessage[])
+          : undefined);
+
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
         state: processorState,
+        writer: processorWriter,
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        ...(processorMessageList
+          ? {
+              sendSignal: createProcessorSendSignal({
+                messageList: processorMessageList,
+                writer: processorWriter,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
+              }),
+            }
+          : {}),
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -1029,13 +1055,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         phase,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
-        messageList:
-          messageList ??
-          (Array.isArray(messages)
-            ? new MessageList()
-                .add(messages as MastraDBMessage[], 'input')
-                .addSystem((systemMessages ?? []) as CoreMessage[])
-            : undefined),
+        messageList: processorMessageList,
         stepNumber,
         systemMessages,
         streamParts,

@@ -628,7 +628,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       if (authConfig) {
         const hasPermission = await loadHasPermission();
         if (hasPermission) {
-          const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
+          const userPermissions = request.requestContext.get('mastra__userPermissions') as string[] | undefined;
           const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
           if (permissionError) {
@@ -770,7 +770,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
 
           if (hasPermission) {
-            const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
+            const userPermissions = request.requestContext.get('mastra__userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
             if (permissionError) {
               return reply.status(permissionError.status).send({
@@ -799,13 +799,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           request.headers as Record<string, string | string[] | undefined>,
           request.body,
           request.requestContext,
+          request.abortSignal,
         );
         if (!response) {
           reply.status(404).send({ error: 'Not Found' });
           return;
         }
         reply.hijack();
-        await this.writeCustomRouteResponse(response, reply.raw);
+        await this.writeCustomRouteResponse(response, reply.raw, request.abortSignal);
       };
 
       if (route.method === 'ALL') {

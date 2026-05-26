@@ -21,13 +21,15 @@ type WeatherFixtureServer = {
   process: ReturnType<typeof spawn>;
 };
 
+const WEATHER_FIXTURE_HOST = '127.0.0.1';
+
 async function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
 
     server.unref();
     server.on('error', reject);
-    server.listen(0, () => {
+    server.listen(0, WEATHER_FIXTURE_HOST, () => {
       const address = server.address();
       server.close(error => {
         if (error) {
@@ -49,7 +51,7 @@ async function getAvailablePort(): Promise<number> {
 async function startWeatherFixtureServer(): Promise<WeatherFixtureServer> {
   const port = await getAvailablePort();
   const childProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-    env: { ...process.env, WEATHER_SERVER_PORT: String(port) },
+    env: { ...process.env, WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST, WEATHER_SERVER_PORT: String(port) },
   });
 
   let resolved = false;
@@ -121,7 +123,7 @@ describe('MCPClient', () => {
           },
         },
         weather: {
-          url: new URL(`http://localhost:${weatherServerPort}/sse`), // Use the dynamic port
+          url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`), // Use the dynamic port
         },
       },
     });
@@ -152,7 +154,7 @@ describe('MCPClient', () => {
           },
         },
         weather: {
-          url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
         },
       });
     });
@@ -325,7 +327,7 @@ describe('MCPClient', () => {
         id: 'error-test-client',
         servers: {
           weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
           },
           nonexistentServer: {
             command: 'nonexistent-command',
@@ -421,7 +423,7 @@ describe('MCPClient', () => {
         id: 'error-test-client',
         servers: {
           weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
           },
           nonexistentServer: {
             command: 'nonexistent-command',
@@ -476,7 +478,7 @@ describe('MCPClient', () => {
             },
           },
           weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
           },
         },
       });
@@ -920,7 +922,7 @@ describe('MCPClient', () => {
         id: 'test-fault-isolation-tools',
         servers: {
           weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
@@ -945,7 +947,7 @@ describe('MCPClient', () => {
         id: 'test-fault-isolation-toolsets',
         servers: {
           weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
@@ -955,14 +957,14 @@ describe('MCPClient', () => {
       });
 
       try {
-        const toolsets = await vi.waitFor(async () => {
-          const result = await mixedMcp.listToolsets();
-          expect(result).toMatchObject({ weather: { getWeather: expect.any(Object) } });
+        const { toolsets, errors } = await vi.waitFor(async () => {
+          const result = await mixedMcp.listToolsetsWithErrors();
+          expect(result.toolsets, JSON.stringify(result.errors)).toMatchObject({ weather: { getWeather: expect.any(Object) } });
           return result;
         }, 10000);
 
         // Should still get weather toolset from the healthy server
-        expect(toolsets).toHaveProperty('weather');
+        expect(toolsets, JSON.stringify(errors)).toHaveProperty('weather');
         expect(toolsets.weather).toHaveProperty('getWeather');
         // Broken server should NOT be present (it failed)
         expect(toolsets).not.toHaveProperty('brokenServer');
@@ -976,7 +978,7 @@ describe('MCPClient', () => {
         id: 'test-fault-isolation-disconnect',
         servers: {
           weather: {
-            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',

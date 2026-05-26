@@ -1,5 +1,17 @@
 # @mastra/fastembed
 
+## 1.1.0
+
+### Minor Changes
+
+- Replace the abandoned `fastembed` npm dependency with a maintained, vendored implementation. The public API and all embedding models remain unchanged — no migration needed. ([#16772](https://github.com/mastra-ai/mastra/pull/16772))
+
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- Replace the abandoned `fastembed` npm dependency with a maintained, vendored implementation. The public API and all embedding models remain unchanged — no migration needed. ([#16772](https://github.com/mastra-ai/mastra/pull/16772))
+
 ## 1.0.1
 
 ### Patch Changes
