@@ -6,7 +6,7 @@ import { getOpenAIModel, getSingleDummyResponseModel } from './mock-model';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
-const mock = createGatewayMock();
+const mock = createGatewayMock({ exactMatch: true });
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
@@ -57,18 +57,16 @@ function toolhandlingE2ETests(version: 'v1' | 'v2' | 'v3') {
           ? toolCalls.find((tc: any) => tc.toolName === 'agent-researchAgent')
           : toolCalls.find((tc: any) => tc.payload?.toolName === 'agent-researchAgent');
 
-      expect(version === 'v1' ? toolCalls[0]?.result : toolCalls[0]?.payload?.result).toStrictEqual({
-        ...(version === 'v1'
-          ? {}
-          : {
-              subAgentResourceId: expect.any(String),
-              subAgentThreadId: expect.any(String),
-              subAgentToolResults: expect.any(Array),
-            }),
+      expect(agentToolCall).toBeDefined();
+
+      const agentToolResult = version === 'v1' ? agentToolCall?.result : agentToolCall?.payload?.result;
+
+      expect(agentToolResult).toStrictEqual({
+        subAgentResourceId: expect.any(String),
+        subAgentThreadId: expect.any(String),
+        subAgentToolResults: expect.any(Array),
         text: 'Dummy response',
       });
-
-      expect(agentToolCall).toBeDefined();
     }, 50000);
   });
 }

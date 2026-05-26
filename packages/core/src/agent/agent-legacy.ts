@@ -218,6 +218,88 @@ export interface AgentLegacyCapabilities {
   ): Promise<void>;
 }
 
+type LegacyToolResultContent = ReturnType<NonNullable<Tool['experimental_toToolResultContent']>>;
+type LegacyToolWithModelOutput = CoreTool & Partial<Pick<Tool, 'experimental_toToolResultContent'>>;
+
+function stringifyLegacyToolContent(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  try {
+    const json = JSON.stringify(value);
+    return json ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeLegacyToolResultContent(output: unknown): LegacyToolResultContent {
+  if (!output || typeof output !== 'object') {
+    return [{ type: 'text', text: stringifyLegacyToolContent(output) }];
+  }
+
+  const modelOutput = output as Record<string, unknown>;
+
+  if (modelOutput.type === 'text') {
+    return [{ type: 'text', text: stringifyLegacyToolContent(modelOutput.value ?? modelOutput.text ?? '') }];
+  }
+
+  if (modelOutput.type !== 'content' || !Array.isArray(modelOutput.value)) {
+    return [{ type: 'text', text: stringifyLegacyToolContent(output) }];
+  }
+
+  const parts = modelOutput.value.flatMap((part): LegacyToolResultContent => {
+    if (!part || typeof part !== 'object') {
+      return [{ type: 'text', text: stringifyLegacyToolContent(part) }];
+    }
+
+    const contentPart = part as Record<string, unknown>;
+    if (contentPart.type === 'text') {
+      return [{ type: 'text', text: stringifyLegacyToolContent(contentPart.text ?? '') }];
+    }
+
+    const mimeType =
+      typeof contentPart.mimeType === 'string'
+        ? contentPart.mimeType
+        : typeof contentPart.mediaType === 'string'
+          ? contentPart.mediaType
+          : undefined;
+    if (
+      typeof contentPart.data === 'string' &&
+      (contentPart.type === 'image' || (contentPart.type === 'media' && mimeType?.startsWith('image/')))
+    ) {
+      return [{ type: 'image', data: contentPart.data, ...(mimeType ? { mimeType } : {}) }];
+    }
+
+    return [{ type: 'text', text: stringifyLegacyToolContent(contentPart) }];
+  });
+
+  return parts.length > 0 ? parts : [{ type: 'text', text: '' }];
+}
+
+function applyLegacyToolModelOutput(tools: Record<string, CoreTool>): Record<string, CoreTool> {
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, tool]) => {
+      const legacyTool = tool as LegacyToolWithModelOutput;
+      if (!legacyTool.toModelOutput || legacyTool.experimental_toToolResultContent) {
+        return [name, tool];
+      }
+
+      return [
+        name,
+        {
+          ...tool,
+          experimental_toToolResultContent: result => {
+            const modelOutput = legacyTool.toModelOutput?.(result);
+            return normalizeLegacyToolResultContent(modelOutput ?? result);
+          },
+        } satisfies LegacyToolWithModelOutput,
+      ];
+    }),
+  );
+}
+
 /**
  * Handler class for legacy Agent functionality (v1 models).
  * Encapsulates all legacy-specific streaming and generation logic.
@@ -302,19 +384,21 @@ export class AgentLegacyHandler {
 
         const threadId = thread?.id;
 
-        let convertedTools = await this.capabilities.convertTools({
-          toolsets,
-          clientTools,
-          threadId,
-          resourceId,
-          runId,
-          requestContext,
-          ...innerObservabilityContext,
-          writableStream,
-          methodType: methodType === 'generate' ? 'generateLegacy' : 'streamLegacy',
-          memoryConfig,
-          inputProcessors,
-        });
+        let convertedTools = applyLegacyToolModelOutput(
+          await this.capabilities.convertTools({
+            toolsets,
+            clientTools,
+            threadId,
+            resourceId,
+            runId,
+            requestContext,
+            ...innerObservabilityContext,
+            writableStream,
+            methodType: methodType === 'generate' ? 'generateLegacy' : 'streamLegacy',
+            memoryConfig,
+            inputProcessors,
+          }),
+        );
 
         let messageList = new MessageList({
           threadId,
@@ -349,7 +433,7 @@ export class AgentLegacyHandler {
               resourceId,
             });
             if (inputStepResult.tools) {
-              convertedTools = inputStepResult.tools;
+              convertedTools = applyLegacyToolModelOutput(inputStepResult.tools);
             }
             if (inputStepResult.tripwire) {
               return {
@@ -456,7 +540,7 @@ export class AgentLegacyHandler {
             resourceId,
           });
           if (inputStepResult.tools) {
-            convertedTools = inputStepResult.tools;
+            convertedTools = applyLegacyToolModelOutput(inputStepResult.tools);
           }
           if (inputStepResult.tripwire) {
             return {

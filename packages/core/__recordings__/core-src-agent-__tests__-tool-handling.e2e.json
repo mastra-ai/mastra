@@ -208,7 +208,7 @@
       }
     },
     {
-      "hash": "e805b7bf457a5dc0",
+      "hash": "ee7f80b59dfaedef",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -241,7 +241,7 @@
             {
               "role": "tool",
               "tool_call_id": "call_PT0d286WNzsYZW8lnwi268G7",
-              "content": "{\"text\":\"Dummy response\"}"
+              "content": "[{\"type\":\"text\",\"text\":\"Dummy response\"}]"
             }
           ],
           "tools": [
@@ -539,7 +539,14 @@
                   "resumeData"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -711,7 +718,14 @@
                   "resumeData"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -857,7 +871,14 @@
                   "resumeData"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -1035,7 +1056,14 @@
                   "resumeData"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -1172,7 +1200,14 @@
                   "resumeData"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               }
             }
           ],
@@ -1343,7 +1378,14 @@
                   "resumeData"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -1489,7 +1531,14 @@
                   "resumeData"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               }
             }
           ],
@@ -1666,7 +1715,14 @@
                   "resumeData"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "threadId",
+                  "resourceId",
+                  "instructions",
+                  "maxSteps",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
