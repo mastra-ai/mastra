@@ -96,6 +96,7 @@ function isVersionNumberConflictError(error: unknown): boolean {
     message.includes('duplicate key') ||
     message.includes('unique_violation') ||
     message.includes('sqlite_constraint_unique') ||
+    (message.includes('version number') && message.includes('already exists')) ||
     message.includes('versionnumber')
   );
 }
