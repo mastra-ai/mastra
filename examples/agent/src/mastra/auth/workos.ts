@@ -44,6 +44,14 @@ export async function initWorkOS(): Promise<AuthResult> {
     // The provider falls through to the original permission string
     // when no mapping is found.
     permissionMapping: {},
+    // Enable ownership pattern - auto-assign owner role when resources are registered
+    ownership: {
+      enabled: true,
+      ownerRole: 'owner', // Preferred role - create in WorkOS Dashboard for full control
+      fallbackRoles: ['agent-operator', 'agent-viewer', 'admin', 'editor'], // Use existing roles as fallback
+    },
+    // Allow unregistered resources to be accessible (public by default)
+    publicByDefault: true,
   });
 
   console.log('[Auth] Using WorkOS authentication');
