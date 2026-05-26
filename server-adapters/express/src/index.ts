@@ -131,7 +131,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       // Use res.on('close') instead of req.on('close') because the request's 'close' event
       // fires when the request body is fully consumed (e.g., after express.json() parses it),
       // NOT when the client disconnects. The response's 'close' event fires when the underlying
-      // connection is actually closed, which is the correct signal for client disconnection.
+      // connection is actually closed, which is the correct signal for stream cleanup.
       res.on('close', () => {
         // Only abort if the response wasn't successfully completed
         if (!res.writableFinished) {
@@ -165,6 +165,11 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         if (done) break;
 
         if (value) {
+          if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+            res.write(value);
+            continue;
+          }
+
           // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
           const shouldRedact = this.streamOptions?.redact ?? true;
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
@@ -674,9 +679,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         req.headers as Record<string, string | string[] | undefined>,
         req.body,
         res.locals.requestContext,
+        res.locals.abortSignal,
       );
       if (!response) return next();
-      await this.writeCustomRouteResponse(response, res);
+      await this.writeCustomRouteResponse(response, res, res.locals.abortSignal);
     });
   }
 

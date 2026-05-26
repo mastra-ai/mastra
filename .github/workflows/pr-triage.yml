@@ -8,8 +8,12 @@ on:
       - ready_for_review
       - edited
       - synchronize
+  schedule:
+    - cron: '0 6 * * *'
 
 permissions:
+  contents: read
+  issues: write
   pull-requests: write
 
 concurrency:
@@ -17,75 +21,183 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check-permission:
-    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.pull_request.draft == false }}
+  issue-link-nudge:
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'pull_request_target' && github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
-      authorized: ${{ steps.check.outputs.authorized }}
+      needs_issue: ${{ steps.issue_link.outputs.needs_issue }}
+      summary: ${{ steps.issue_link.outputs.summary }}
     steps:
-      - name: Checkout (sparse — only .github/actions)
+      - name: Checkout automation scripts
         uses: actions/checkout@v5
         with:
-          sparse-checkout: .github/actions
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions
+            scripts/pr-issue-link
           sparse-checkout-cone-mode: false
+
       - name: Generate GitHub App token
         id: app_token
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-      - name: Check PR author org membership
-        id: check
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ steps.app_token.outputs.token }}
-          script: |
-            const username = context.payload.pull_request.user.login;
 
-            try {
-              await github.rest.orgs.checkMembershipForUser({
-                org: context.repo.owner,
-                username,
-              });
-              core.setOutput('authorized', 'true');
-              core.info(`PR author ${username} is an org member`);
-            } catch (error) {
-              if (error.status === 404) {
-                core.info(`PR author ${username} is not an org member`);
-                core.setOutput('authorized', 'false');
-                return;
-              }
-              throw error;
-            }
-  comment:
-    needs: check-permission
-    if: needs.check-permission.outputs.authorized == 'false'
+      - name: Setup pnpm and node
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: false
+          package-manager-cache: false
+          version: '10'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-workspace --ignore-scripts
+        working-directory: scripts/pr-issue-link
+
+      - name: Enforce linked issue
+        id: issue_link
+        run: npx tsx index.ts
+        working-directory: scripts/pr-issue-link
+        env:
+          MODE: nudge
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          STALE_DAYS: ${{ vars.PR_NEEDS_ISSUE_STALE_DAYS || '1' }}
+
+  complexity:
+    needs: issue-link-nudge
+    if: ${{ needs['issue-link-nudge'].outputs.needs_issue == 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
+    outputs:
+      summary: ${{ steps.complexity.outputs.summary }}
     steps:
-      - name: Checkout (sparse — only .github/actions)
+      - name: Checkout automation scripts
         uses: actions/checkout@v5
         with:
-          sparse-checkout: .github/actions
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions
+            scripts/pr-complexity
           sparse-checkout-cone-mode: false
 
       - name: Generate GitHub App token
         id: app_token
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-      - name: Add comment
-        uses: mshick/add-pr-comment@v2
+
+      - name: Setup pnpm and node
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          issue: ${{ github.event.pull_request.number }}
-          message-id: external-contributor-triage
-          repo-token: ${{ steps.app_token.outputs.token }}
-          message: |
-            Thank you for your contribution!
+          install-dependencies: false
+          package-manager-cache: false
+          version: '10'
 
-            Your PR needs to fix an existing issue. You are required to link issues (e.g. with `Fixes #1234`, `Closes #1234`) in your PR description. PRs without a linked issue may be closed.
+      - name: Install dependencies
+        run: pnpm install --ignore-workspace --ignore-scripts
+        working-directory: scripts/pr-complexity
 
-            Mastra uses CodeRabbit for automated code reviews. Please address all feedback from CodeRabbit by either making changes to your PR or leaving a comment explaining why you disagree with the feedback. Since CodeRabbit is an AI, it may occasionally provide incorrect feedback.
+      - name: Score PR complexity
+        id: complexity
+        run: npx tsx index.ts
+        working-directory: scripts/pr-complexity
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
 
-            Addressing CodeRabbit's feedback will greatly increase the chances of your PR being merged. We appreciate your understanding and cooperation in helping us maintain high code quality standards.
+  summarize:
+    needs:
+      - issue-link-nudge
+      - complexity
+    if: ${{ always() && github.repository == 'mastra-ai/mastra' && github.event_name == 'pull_request_target' && github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout automation scripts
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions
+            scripts/pr-automation-comment
+          sparse-checkout-cone-mode: false
+
+      - name: Generate GitHub App token
+        id: app_token
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Setup pnpm and node
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: false
+          package-manager-cache: false
+          version: '10'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-workspace --ignore-scripts
+        working-directory: scripts/pr-automation-comment
+
+      - name: Upsert PR automation comment
+        run: npx tsx index.ts
+        working-directory: scripts/pr-automation-comment
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ISSUE_SUMMARY: ${{ needs['issue-link-nudge'].outputs.summary }}
+          COMPLEXITY_SUMMARY: ${{ needs.complexity.outputs.summary }}
+
+  close-stale-unlinked:
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout automation scripts
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions
+            scripts/pr-issue-link
+          sparse-checkout-cone-mode: false
+
+      - name: Generate GitHub App token
+        id: app_token
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Setup pnpm and node
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: false
+          package-manager-cache: false
+          version: '10'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-workspace --ignore-scripts
+        working-directory: scripts/pr-issue-link
+
+      - name: Close stale PRs without linked issues
+        run: npx tsx index.ts
+        working-directory: scripts/pr-issue-link
+        env:
+          MODE: close-stale
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          STALE_DAYS: ${{ vars.PR_NEEDS_ISSUE_STALE_DAYS || '1' }}
