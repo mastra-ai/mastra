@@ -2194,7 +2194,7 @@ importers:
         version: 0.215.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: '>=0.50.0'
-        version: 0.56.1(@opentelemetry/api@1.9.1)(encoding@0.1.13)
+        version: 0.56.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-node':
         specifier: '>=0.50.0'
         version: 0.208.0(@opentelemetry/api@1.9.1)
@@ -2691,6 +2691,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.5(vitest@4.1.6)
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
 
   packages/_vendored/ai_v4:
     dependencies:
@@ -2879,9 +2882,6 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: ^0.21.0
         version: 0.21.0(zod@4.4.3)
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
     devDependencies:
       '@internal/ai-sdk-v5':
         specifier: workspace:*
@@ -2916,6 +2916,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
 
   packages/agent-builder:
     dependencies:
@@ -3122,9 +3125,6 @@ importers:
       yocto-spinner:
         specifier: ^1.1.0
         version: 1.2.0
-      zod:
-        specifier: ^3.25.0 || ^4.0.0
-        version: 3.25.76
     devDependencies:
       '@commander-js/extra-typings':
         specifier: ^14.0.0
@@ -3186,6 +3186,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
 
   packages/codemod:
     dependencies:
@@ -6331,7 +6334,7 @@ importers:
     dependencies:
       '@google-cloud/spanner':
         specifier: ^8.6.0
-        version: 8.7.1(encoding@0.1.13)
+        version: 8.7.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -35200,7 +35203,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/opentelemetry-resource-util@2.4.0(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.9.1))(encoding@0.1.13)':
+  '@google-cloud/opentelemetry-resource-util@2.4.0(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.9.1))':
     dependencies:
       '@opentelemetry/resources': 1.30.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.40.0
@@ -35250,14 +35253,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/spanner@8.7.1(encoding@0.1.13)':
+  '@google-cloud/spanner@8.7.1':
     dependencies:
       '@babel/core': 7.27.7
       '@babel/helpers': 7.27.6
       '@babel/traverse': 7.27.7
       '@google-cloud/common': 6.0.0
       '@google-cloud/monitoring': 5.3.2
-      '@google-cloud/opentelemetry-resource-util': 2.4.0(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.9.1))(encoding@0.1.13)
+      '@google-cloud/opentelemetry-resource-util': 2.4.0(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.9.1))
       '@google-cloud/precise-date': 5.0.0
       '@google-cloud/projectify': 5.0.0
       '@google-cloud/promisify': 5.0.0
@@ -36954,7 +36957,7 @@ snapshots:
 
   '@opentelemetry/api@1.9.1': {}
 
-  '@opentelemetry/auto-instrumentations-node@0.56.1(@opentelemetry/api@1.9.1)(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.56.1(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
@@ -37001,7 +37004,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 1.12.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resource-detector-azure': 0.6.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/resource-detector-container': 0.6.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resource-detector-gcp': 0.33.1(@opentelemetry/api@1.9.1)(encoding@0.1.13)
+      '@opentelemetry/resource-detector-gcp': 0.33.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 1.30.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-node': 0.57.2(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
@@ -38761,7 +38764,7 @@ snapshots:
       '@opentelemetry/core': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 2.7.1(@opentelemetry/api@1.9.1)
 
-  '@opentelemetry/resource-detector-gcp@0.33.1(@opentelemetry/api@1.9.1)(encoding@0.1.13)':
+  '@opentelemetry/resource-detector-gcp@0.33.1(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
@@ -44255,10 +44258,6 @@ snapshots:
       mime-types: 3.0.1
       negotiator: 1.0.0
 
-  acorn-import-attributes@1.9.5(acorn@8.15.0):
-    dependencies:
-      acorn: 8.15.0
-
   acorn-import-attributes@1.9.5(acorn@8.16.0):
     dependencies:
       acorn: 8.16.0
@@ -48652,8 +48651,8 @@ snapshots:
 
   import-in-the-middle@3.0.1:
     dependencies:
-      acorn: 8.15.0
-      acorn-import-attributes: 1.9.5(acorn@8.15.0)
+      acorn: 8.16.0
+      acorn-import-attributes: 1.9.5(acorn@8.16.0)
       cjs-module-lexer: 2.2.0
       module-details-from-path: 1.0.4
 
@@ -50799,7 +50798,7 @@ snapshots:
 
   mlly@1.8.0:
     dependencies:
-      acorn: 8.15.0
+      acorn: 8.16.0
       pathe: 2.0.3
       pkg-types: 1.3.1
       ufo: 1.6.1
@@ -55648,7 +55647,7 @@ snapshots:
   unplugin-utils@0.2.5:
     dependencies:
       pathe: 2.0.3
-      picomatch: 4.0.3
+      picomatch: 4.0.4
 
   unplugin@1.16.1:
     dependencies:
@@ -56522,7 +56521,7 @@ snapshots:
   webpack-bundle-analyzer@4.10.2(bufferutil@4.1.0):
     dependencies:
       '@discoveryjs/json-ext': 0.5.7
-      acorn: 8.15.0
+      acorn: 8.16.0
       acorn-walk: 8.3.2
       commander: 7.2.0
       debounce: 1.2.1

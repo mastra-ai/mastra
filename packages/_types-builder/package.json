@@ -15,6 +15,12 @@
       "import": {
         "default": "./src/embed-types.js"
       }
+    },
+    "./compile-zod": {
+      "import": {
+        "types": "./src/compile-zod.d.ts",
+        "default": "./src/compile-zod.js"
+      }
     }
   },
   "scripts": {},
@@ -31,6 +37,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:"
+    "@vitest/ui": "catalog:",
+    "zod": "catalog:"
   }
 }
