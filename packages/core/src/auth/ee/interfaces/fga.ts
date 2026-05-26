@@ -417,5 +417,5 @@ export interface IFGAManager<TUser = unknown> extends IFGAProvider<TUser> {
    * @param organizationId - The organization to query
    * @returns Array of resource type info with relations and hierarchy
    */
-  describeResourceTypes(organizationId: string): Promise<FGAResourceTypeInfo[]>;
+  describeResourceTypes?(organizationId: string): Promise<FGAResourceTypeInfo[]>;
 }
