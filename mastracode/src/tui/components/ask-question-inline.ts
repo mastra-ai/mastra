@@ -12,18 +12,11 @@
  * 3. **Answered** — After the user responds, the box freezes with ✓/✗ icons.
  */
 
-import {
-  Container,
-  getKeybindings,
-  Input,
-  SelectList,
-  Spacer,
-  visibleWidth,
-  wrapTextWithAnsi,
-} from '@mariozechner/pi-tui';
+import { Container, getKeybindings, Input, Spacer, visibleWidth, wrapTextWithAnsi } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import { MultilineInput } from './multiline-input.js';
+import { WrappingSelectList } from './wrapping-select-list.js';
 
 export interface AskQuestionInlineOptions {
   question: string;
@@ -52,7 +45,7 @@ export interface AskQuestionInlineOptions {
  */
 class AskQuestionBorderedBox {
   questionLines: string[];
-  private selectList?: SelectList;
+  private selectList?: WrappingSelectList;
   private input?: Input | MultilineInput;
   private hintText: string;
   items: Array<{ label: string; description?: string }>;
@@ -67,7 +60,7 @@ class AskQuestionBorderedBox {
     questionLines: string[],
     hintText: string,
     items: Array<{ label: string; description?: string }>,
-    selectList?: SelectList,
+    selectList?: WrappingSelectList,
     input?: Input | MultilineInput,
     streaming?: boolean,
   ) {
@@ -83,7 +76,7 @@ class AskQuestionBorderedBox {
     this.selectList?.invalidate();
   }
 
-  setInteractive(selectList?: SelectList, input?: Input | MultilineInput, hintText?: string) {
+  setInteractive(selectList?: WrappingSelectList, input?: Input | MultilineInput, hintText?: string) {
     this.streaming = false;
     this.selectList = selectList;
     this.input = input;
@@ -242,7 +235,7 @@ class AskQuestionBorderedBox {
 
 export class AskQuestionInlineComponent extends Container implements Focusable {
   private borderedBox: AskQuestionBorderedBox;
-  private selectList?: SelectList;
+  private selectList?: WrappingSelectList;
   private input?: Input | MultilineInput;
   private tui?: TUI;
   private onSubmit?: (answer: string) => void;
@@ -422,18 +415,18 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
     const items: SelectItem[] = opts.map(opt => ({
       value: opt.label,
-      label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
+      label: opt.description ? `${opt.label}  ${theme.fg('dim', opt.description)}` : opt.label,
     }));
 
     // Append a "Custom response..." option so the user can type a free-text answer
     if (this.allowCustomResponse) {
       items.push({
         value: AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE,
-        label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+        label: theme.fg('dim', '✎ Custom response...'),
       });
     }
 
-    this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+    this.selectList = new WrappingSelectList(items, Math.min(items.length, 8), getSelectListTheme());
 
     this.selectList.onSelect = (item: SelectItem) => {
       if (item.value === AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE) {
