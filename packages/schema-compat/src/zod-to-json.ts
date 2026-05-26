@@ -11,8 +11,15 @@ const PATCHED = Symbol('__mastra_patched__');
  * Recursively patch Zod v4 record schemas that are missing valueType.
  * This fixes a bug in Zod v4 where z.record(valueSchema) doesn't set def.valueType.
  * The single-arg form should set valueType but instead only sets keyType.
+ *
+ * Idempotent — marks patched schemas with a Symbol so repeat calls no-op.
+ *
+ * @internal Exported so the Zod v4 standard-schema adapter can apply the
+ * same patch before its native `toJSONSchema` call (the legacy `zodToJsonSchema`
+ * entry already calls it; the `applyCompatLayer` path otherwise wouldn't).
+ * Not part of the public API.
  */
-function patchRecordSchemas(schema: any): any {
+export function patchRecordSchemas(schema: any): any {
   if (!schema || typeof schema !== 'object') return schema;
 
   // Skip if already patched (idempotency check)
