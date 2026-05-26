@@ -4,3 +4,4 @@ export * from './user-menu';
 export * from './auth-status';
 export * from './login-page';
 export * from './auth-required';
+export * from './share-access-dialog';
