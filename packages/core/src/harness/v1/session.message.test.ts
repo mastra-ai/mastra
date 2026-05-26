@@ -308,8 +308,12 @@ describe('Session.message() — default path', () => {
     await session.setState({ yolo: true });
     await session.message({ content: 'state yolo' });
 
+    const turnYoloHarnessSlot = agent.calls[0]!.options.requestContext.get('harness');
+    const stateYoloHarnessSlot = agent.calls[1]!.options.requestContext.get('harness');
     expect(agent.calls[0]!.options.requireToolApproval).toBeUndefined();
     expect(agent.calls[1]!.options.requireToolApproval).toBeUndefined();
+    expect(turnYoloHarnessSlot.resolveToolPermission({ toolName: 'run_command', args: {} })).toBe('allow');
+    expect(stateYoloHarnessSlot.resolveToolPermission({ toolName: 'run_command', args: {} })).toBe('allow');
   });
 
   it('forwards the caller-supplied abortSignal (chained into the per-turn signal)', async () => {

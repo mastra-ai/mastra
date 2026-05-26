@@ -42,7 +42,8 @@ import { createDynamicTools } from './agents/tools.js';
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { createHarnessV1SubagentAgents, MastraCodeHarnessRuntime } from './harness/index.js';
+import { createHarnessV1SubagentAgents, defaultStdioLeaseRecoveryPrompt, MastraCodeHarnessRuntime } from './harness/index.js';
+import type { LeaseRecoveryPromptHandler } from './harness/index.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
@@ -138,7 +139,25 @@ export interface MastraCodeConfig {
   unixSocketPubSub?: boolean;
   /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
   crossProcessPubSub?: boolean;
+  /**
+   * Interactive prompt invoked during startup when a stale Harness v1 session
+   * lease is still held by another process. Defaults to a stdio readline
+   * prompt when stdin is a TTY (`(W)ait/(F)orce-claim/(N)ew thread/(Q)uit`).
+   * Set `MASTRACODE_LEASE_RECOVERY=wait|force-claim|new-thread|quit` to skip
+   * the prompt programmatically.
+   */
+  leaseRecoveryPrompt?: LeaseRecoveryPromptHandler;
 }
+
+export {
+  MastraCodeSessionLeaseRecoveryError,
+  defaultStdioLeaseRecoveryPrompt,
+} from './harness/index.js';
+export type {
+  LeaseRecoveryAction,
+  LeaseRecoveryPromptInfo,
+  LeaseRecoveryPromptHandler,
+} from './harness/index.js';
 
 export type MastraCodeHarnessPublic = Harness<Record<string, unknown>> & {
   actions: MastraCodeHarnessRuntime<Record<string, unknown>>['actions'];
@@ -291,6 +310,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     },
   });
 
+  const observabilityExporters = [
+    ...(observabilityDomain ? [new MastraStorageExporter({ strategy: 'event-sourced' as const })] : []),
+    new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
+  ];
+
   // Observability (tracing, scoring, feedback)
   const observability = new Observability({
     configs: {
@@ -334,10 +358,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           'harness.state.observationThreshold',
           'harness.state.reflectionThreshold',
         ],
-        exporters: [
-          new MastraStorageExporter({ strategy: 'event-sourced' }),
-          new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
-        ],
+        exporters: observabilityExporters,
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
@@ -668,6 +689,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     resolveModel,
     disabledTools: config?.disabledTools,
     browser: config?.browser,
+    leaseRecoveryPrompt: config?.leaseRecoveryPrompt ?? defaultStdioLeaseRecoveryPrompt(),
   });
 
   // Sync hookManager session ID on thread changes

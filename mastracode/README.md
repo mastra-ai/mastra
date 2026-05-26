@@ -212,6 +212,25 @@ Once saved, provider models appear in existing selectors like `/models` and `/su
 
 Custom providers are stored in `settings.json` in the same app data directory. If you save an API key, it is stored locally in plaintext, so use a machine/user profile you trust.
 
+### Recovering from a stale session lease
+
+If MastraCode crashes or is killed without a clean shutdown, the next launch can refuse to reopen the project's thread because the Harness v1 session lease for that thread is still held by the previous owner. The TUI now waits out the stale lease automatically (up to 60s) and emits status messages while it retries.
+
+If you know the other process is dead and do not want to wait, set the recovery action via environment variable:
+
+```bash
+# Force-claim the foreign lease immediately on the next startup
+MASTRACODE_LEASE_RECOVERY=force-claim mastracode
+
+# Abandon the current thread and start a fresh one
+MASTRACODE_LEASE_RECOVERY=new-thread mastracode
+
+# Fail fast with a recovery error instead of waiting
+MASTRACODE_LEASE_RECOVERY=quit mastracode
+```
+
+When stdin is a TTY and no env override is set, MastraCode also shows an interactive `(W)ait / (F)orce-claim / (N)ew thread / (Q)uit` prompt after 5 seconds of waiting.
+
 ### macOS sleep prevention
 
 On macOS, Mastra Code starts the built-in `caffeinate` utility while the agent is actively running, then stops it as soon as the run completes, errors, aborts, or the TUI exits. Idle sessions do not keep your machine awake.

@@ -26,6 +26,9 @@ const agentConstructorMock = vi.fn();
 
 const harnessConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
+const observabilityConstructorMock = vi.fn();
+const mastraStorageExporterConstructorMock = vi.fn();
+const mastraPlatformExporterConstructorMock = vi.fn();
 const harnessSubscribeMock = vi.fn();
 const harnessGetCurrentThreadIdMock = vi.fn();
 const harnessListThreadsMock = vi.fn();
@@ -88,8 +91,31 @@ vi.mock('@mastra/core/harness', () => ({
   taskCheckTool: {},
 }));
 
+vi.mock('@mastra/observability', () => ({
+  Observability: class {
+    constructor(config: unknown) {
+      observabilityConstructorMock(config);
+    }
+  },
+  MastraStorageExporter: class {
+    constructor(config: unknown) {
+      mastraStorageExporterConstructorMock(config);
+    }
+  },
+  MastraPlatformExporter: class {
+    constructor(config: unknown) {
+      mastraPlatformExporterConstructorMock(config);
+    }
+  },
+  SensitiveDataFilter: class {},
+}));
+
 vi.mock('../harness/index.js', () => ({
   createHarnessV1SubagentAgents: vi.fn(() => ({})),
+  defaultStdioLeaseRecoveryPrompt: vi.fn(() => undefined),
+  MastraCodeSessionLeaseRecoveryError: class extends Error {
+    readonly name = 'MastraCodeSessionLeaseRecoveryError';
+  },
   MastraCodeHarnessRuntime: class {
     constructor(config: unknown) {
       harnessConstructorMock(config);
@@ -271,6 +297,9 @@ describe('createMastraCode', () => {
     createVectorStoreMock.mockReset();
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
+    observabilityConstructorMock.mockReset();
+    mastraStorageExporterConstructorMock.mockReset();
+    mastraPlatformExporterConstructorMock.mockReset();
     harnessSubscribeMock.mockReset();
     harnessGetCurrentThreadIdMock.mockReset();
     harnessGetCurrentThreadIdMock.mockReturnValue(undefined);
@@ -320,6 +349,24 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(getDynamicMemoryMock).toHaveBeenCalled();
+  });
+
+  it('does not attach the local storage observability exporter when local tracing is disabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(mastraStorageExporterConstructorMock).not.toHaveBeenCalled();
+    expect(mastraPlatformExporterConstructorMock).toHaveBeenCalledOnce();
+    expect(observabilityConstructorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configs: expect.objectContaining({
+          default: expect.objectContaining({
+            exporters: [expect.any(Object)],
+          }),
+        }),
+      }),
+    );
   });
 
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {

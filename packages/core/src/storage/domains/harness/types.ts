@@ -155,6 +155,8 @@ export interface PendingResume {
   requestedAt: number;
   /** Present when this pending resume belongs to a queued turn. */
   queuedItemId?: string;
+  /** Whether the original turn ran with approval prompts disabled. */
+  yolo?: boolean;
   /** Mode whose backing agent produced this pending resume. */
   modeId?: string;
   /**

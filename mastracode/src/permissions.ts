@@ -62,7 +62,7 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
 };
 
 // Tools that never need approval regardless of policy
-const ALWAYS_ALLOW_TOOLS = new Set([
+export const ALWAYS_ALLOW_TOOL_NAMES = [
   'ask_user',
   'task_write',
   'task_update',
@@ -70,7 +70,9 @@ const ALWAYS_ALLOW_TOOLS = new Set([
   'task_check',
   'submit_plan',
   'request_access',
-]);
+] as const;
+
+const ALWAYS_ALLOW_TOOLS = new Set<string>(ALWAYS_ALLOW_TOOL_NAMES);
 
 /**
  * Get the category for a tool, or null if the tool is always-allowed.

@@ -1,7 +1,13 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import { getDynamicWorkspace } from '../agents/workspace.js';
 import { MASTRACODE_HARNESS_NAME } from './config.js';
 import { MastraCodeHarnessRuntime } from './runtime.js';
 
@@ -16,6 +22,7 @@ function createRuntime(
     resolveModel?: (modelId: string) => unknown;
     browser?: unknown;
     disabledTools?: string[];
+    workspace?: ConstructorParameters<typeof MastraCodeHarnessRuntime>[0]['workspace'];
     memory?: any;
   } = {},
 ) {
@@ -58,6 +65,7 @@ function createRuntime(
     memory: options.memory,
     browser: options.browser as never,
     disabledTools: options.disabledTools,
+    workspace: options.workspace,
   });
 }
 
@@ -70,6 +78,73 @@ describe('MastraCodeHarnessRuntime', () => {
     const runtime = createRuntime();
 
     expect(runtime.getMastra().getHarness(MASTRACODE_HARNESS_NAME)).toBe(runtime.core);
+  });
+
+  it('provides initial runtime state when Harness v1 initializes the shared workspace', async () => {
+    const projectPath = mkdtempSync(join(tmpdir(), 'mastracode-workspace-context-'));
+    let observedProjectPath: string | undefined;
+    const runtime = createRuntime({
+      projectPath,
+      workspace: ({ requestContext, mastra }) => {
+        const harnessContext = requestContext.get('harness') as
+          | { getState?: () => { projectPath?: string } }
+          | undefined;
+        observedProjectPath = harnessContext?.getState?.().projectPath;
+        return getDynamicWorkspace({ requestContext, mastra });
+      },
+    });
+
+    try {
+      await runtime.init();
+      expect(observedProjectPath).toBe(projectPath);
+      expect(runtime.getWorkspace()).toBeTruthy();
+    } finally {
+      await runtime.destroy();
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it('propagates the runtime workspace factory to Harness v1 agents', async () => {
+    const projectPath = mkdtempSync(join(tmpdir(), 'mastracode-agent-workspace-'));
+    const agent = new Agent({
+      id: 'code-agent',
+      name: 'Code Agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    });
+    let observedProjectPath: string | undefined;
+    const runtime = createRuntime({
+      projectPath,
+      agents: { 'code-agent': agent },
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          color: 'green',
+          default: true,
+          defaultModelId: 'anthropic/claude-haiku-4-5',
+          agent,
+        },
+      ] as any,
+      workspace: ({ requestContext, mastra }) => {
+        const harnessContext = requestContext.get('harness') as
+          | { getState?: () => { projectPath?: string } }
+          | undefined;
+        observedProjectPath = harnessContext?.getState?.().projectPath;
+        return getDynamicWorkspace({ requestContext, mastra });
+      },
+    });
+
+    try {
+      await runtime.init();
+      observedProjectPath = undefined;
+      const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
+      expect(workspace).toBeTruthy();
+      expect(observedProjectPath).toBe(projectPath);
+    } finally {
+      await runtime.destroy();
+      rmSync(projectPath, { recursive: true, force: true });
+    }
   });
 
   it('propagates configured memory to custom mode agents without their own memory', () => {
@@ -97,24 +172,6 @@ describe('MastraCodeHarnessRuntime', () => {
     });
 
     expect(customAgent.hasOwnMemory()).toBe(true);
-  });
-
-  it('creates a fresh startup thread when the matching project thread is held by a stale foreign lease', async () => {
-    const storage = new InMemoryStore({ id: `mc-runtime-lease-test-${Date.now()}-${Math.random()}` });
-    const first = createRuntime({ storage });
-    await first.init();
-    const lockedSession = (first as any).session;
-
-    const restarted = createRuntime({ storage });
-    await restarted.init();
-    const restartedSession = (restarted as any).session;
-
-    expect(restartedSession.id).not.toBe(lockedSession.id);
-    expect(restartedSession.threadId).not.toBe(lockedSession.threadId);
-    expect(restarted.getCurrentThreadId()).toBe(restartedSession.threadId);
-
-    await first.destroy();
-    await restarted.destroy();
   });
 
   it('restores Harness v1 thread metadata into MastraCode runtime state', async () => {
@@ -419,7 +476,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
 
@@ -455,7 +514,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
 
@@ -477,7 +538,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
 
@@ -493,6 +556,30 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.destroy();
   });
 
+  it('keeps MastraCode always-allowed tools allowed in Harness v1 permission rules', async () => {
+    const runtime = createRuntime({
+      initialState: {
+        permissionRules: {
+          categories: { execute: 'ask' },
+          tools: { task_write: 'deny', execute_command: 'ask' },
+        },
+      },
+    });
+    const setPolicy = vi.fn(async () => undefined);
+
+    await (runtime as any).syncPermissionRules({ permissions: { setPolicy } });
+
+    expect(setPolicy).not.toHaveBeenCalledWith({ toolName: 'task_write', policy: 'deny' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_write', policy: 'allow' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_update', policy: 'allow' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_complete', policy: 'allow' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_check', policy: 'allow' });
+    expect(setPolicy).toHaveBeenCalledWith({ toolName: 'execute_command', policy: 'ask' });
+    expect((runtime as any).filterActiveTools(['task_write', 'execute_command'])).toEqual(['task_write', 'execute_command']);
+
+    await runtime.destroy();
+  });
+
   it('filters active tools through prepareStep for non-admission messages', async () => {
     const runtime = createRuntime({ disabledTools: ['blocked_tool'] });
     const message = vi.fn(async () => undefined);
@@ -501,7 +588,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
 
@@ -700,9 +789,15 @@ describe('MastraCodeHarnessRuntime', () => {
     await runtime.init();
 
     expect((runtime as any).filterActiveTools(['read_file', 'shell'])).toEqual(['read_file']);
-    expect((runtime as any).session.permissions.getRules()).toEqual({
+    expect((runtime as any).session.permissions.getRules()).toMatchObject({
       categories: { execute: 'deny' },
-      tools: { read_file: 'allow' },
+      tools: {
+        read_file: 'allow',
+        task_write: 'allow',
+        task_update: 'allow',
+        task_complete: 'allow',
+        task_check: 'allow',
+      },
     });
 
     await runtime.destroy();
@@ -942,7 +1037,9 @@ describe('MastraCodeHarnessRuntime', () => {
       models: {
         current: () => 'anthropic/claude-haiku-4-5',
         switch: vi.fn(async () => undefined),
+        getSubagent: vi.fn(() => undefined),
       },
+      permissions: { setPolicy: vi.fn(async () => undefined) },
       setState: vi.fn(async () => undefined),
     };
     const selectOrCreateThread = vi.spyOn(runtime, 'selectOrCreateThread').mockImplementation(async () => {
@@ -971,5 +1068,429 @@ describe('MastraCodeHarnessRuntime', () => {
     runtime.setResourceId({ resourceId: 'resource-one' });
 
     expect(runtime.getCurrentThreadId()).toBe(currentThreadId);
+  });
+});
+
+// Structural type covering only the harness-storage methods the lease-recovery
+// tests exercise. Avoids `as any` while keeping the test self-contained.
+type TestHarnessStorage = {
+  loadSession: (opts: { harnessName: string; sessionId: string }) => Promise<{ ownerId?: string } | null>;
+  releaseSessionLease: (opts: { harnessName: string; sessionId: string; ownerId: string }) => Promise<void>;
+  acquireSessionLease: (opts: {
+    harnessName: string;
+    sessionId: string;
+    ownerId: string;
+    ttlMs: number;
+  }) => Promise<unknown>;
+};
+
+describe('MastraCodeHarnessRuntime — stale session lease recovery (MASTRA-4344)', () => {
+  it('waits out a stale foreign lease and adopts the previous session at startup', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    const storage = new InMemoryStore({ id: 'mc-runtime-stale-lease-startup' });
+    const firstRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-stale-lease-startup' });
+    const secondRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-stale-lease-startup' });
+
+    try {
+      await firstRuntime.init();
+      const threadId = firstRuntime.getCurrentThreadId();
+      const sessionId = firstRuntime.getCurrentSessionId();
+      if (!threadId || !sessionId) throw new Error('expected first runtime to bind a session');
+
+      const harnessStorage = (await storage.getStore('harness')) as TestHarnessStorage;
+      const stored = await harnessStorage.loadSession({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+      });
+      if (!stored?.ownerId) throw new Error('expected a live session owner');
+
+      await harnessStorage.releaseSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: stored.ownerId,
+      });
+      await harnessStorage.acquireSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: 'harness-foreign-owner',
+        ttlMs: 250,
+      });
+
+      const infoMessages: string[] = [];
+      secondRuntime.subscribe(event => {
+        if (event.type === 'info') infoMessages.push(event.message);
+      });
+
+      const initPromise = secondRuntime.init();
+      await vi.advanceTimersByTimeAsync(750);
+      await initPromise;
+
+      expect(secondRuntime.getCurrentThreadId()).toBe(threadId);
+      expect(secondRuntime.getCurrentSessionId()).toBe(sessionId);
+      expect(infoMessages.some(m => /lease|retrying/i.test(m))).toBe(true);
+      expect(infoMessages.some(m => /Recovered/i.test(m))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('throws MastraCodeSessionLeaseRecoveryError when the foreign lease outlasts the startup cap', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    const storage = new InMemoryStore({ id: 'mc-runtime-stale-lease-timeout' });
+    const firstRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-live-lease' });
+    const secondRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-live-lease' });
+
+    try {
+      await firstRuntime.init();
+      const sessionId = firstRuntime.getCurrentSessionId();
+      if (!sessionId) throw new Error('expected first runtime to bind a session');
+
+      const harnessStorage = (await storage.getStore('harness')) as TestHarnessStorage;
+      const stored = await harnessStorage.loadSession({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+      });
+      if (!stored?.ownerId) throw new Error('expected a live session owner');
+
+      await harnessStorage.releaseSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: stored.ownerId,
+      });
+      await harnessStorage.acquireSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: 'harness-still-running-owner',
+        ttlMs: 120_000,
+      });
+
+      const initPromise = secondRuntime.init().catch(err => err);
+      await vi.advanceTimersByTimeAsync(65_000);
+      const err = await initPromise;
+
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).name).toBe('MastraCodeSessionLeaseRecoveryError');
+      expect((err as { code: string }).code).toBe('mastracode.session_lease_recovery_failed');
+      expect((err as Error).message).toContain('Another MastraCode instance may still be running');
+      expect((err as { cause: { name?: string } }).cause?.name).toBe('HarnessSessionLockedError');
+      expect((err as { sessionId: string }).sessionId).toBe(sessionId);
+      expect((err as { currentOwnerId: string }).currentOwnerId).toBe('harness-still-running-owner');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('propagates non-locked errors from session() without retrying', async () => {
+    const runtime = createRuntime();
+    const sessionSpy = vi
+      .spyOn(runtime.core, 'session')
+      .mockRejectedValueOnce(new Error('storage offline'));
+
+    await expect(runtime.init()).rejects.toThrow('storage offline');
+    expect(sessionSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('adopts the existing session without waiting when the lease is reentrant for this process', async () => {
+    const storage = new InMemoryStore({ id: 'mc-runtime-reentrant-lease' });
+    const runtime = createRuntime({ storage, projectPath: '/tmp/mastracode-reentrant' });
+
+    const infoMessages: string[] = [];
+    runtime.subscribe(event => {
+      if (event.type === 'info') infoMessages.push(event.message);
+    });
+
+    await runtime.init();
+    const sessionId = runtime.getCurrentSessionId();
+
+    expect(sessionId).toBeDefined();
+    expect(infoMessages.some(m => /lease|retrying|Recovered/i.test(m))).toBe(false);
+  });
+
+  it('uses the short mid-session cap when re-binding a session lazily after the bound one is dropped', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    const storage = new InMemoryStore({ id: 'mc-runtime-midsession-cap' });
+    const firstRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-midsession' });
+    const secondRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-midsession' });
+
+    try {
+      await firstRuntime.init();
+      const sessionId = firstRuntime.getCurrentSessionId();
+      if (!sessionId) throw new Error('expected first runtime to bind a session');
+
+      const harnessStorage = (await storage.getStore('harness')) as TestHarnessStorage;
+      const stored = await harnessStorage.loadSession({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+      });
+      if (!stored?.ownerId) throw new Error('expected a live session owner');
+
+      await harnessStorage.releaseSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: stored.ownerId,
+      });
+      await harnessStorage.acquireSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: 'harness-still-running-owner',
+        ttlMs: 120_000,
+      });
+
+      const reboundPromise = secondRuntime
+        .selectOrCreateThread({ leaseRecoveryMode: 'midsession' })
+        .catch(err => err);
+      await vi.advanceTimersByTimeAsync(3_000);
+      const err = await reboundPromise;
+
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).name).toBe('MastraCodeSessionLeaseRecoveryError');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('honors MASTRACODE_LEASE_RECOVERY=force-claim across owner-change races', async () => {
+    const storage = new InMemoryStore({ id: 'mc-runtime-force-claim-race' });
+    const firstRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-force-claim' });
+
+    const restore = process.env.MASTRACODE_LEASE_RECOVERY;
+    process.env.MASTRACODE_LEASE_RECOVERY = 'force-claim';
+    try {
+      await firstRuntime.init();
+      const sessionId = firstRuntime.getCurrentSessionId();
+      if (!sessionId) throw new Error('expected first runtime to bind a session');
+
+      const harnessStorage = (await storage.getStore('harness')) as TestHarnessStorage;
+      const stored = await harnessStorage.loadSession({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+      });
+      if (!stored?.ownerId) throw new Error('expected a live session owner');
+
+      await harnessStorage.releaseSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: stored.ownerId,
+      });
+      await harnessStorage.acquireSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: 'harness-still-running-owner',
+        ttlMs: 120_000,
+      });
+
+      const secondRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-force-claim' });
+      const infoMessages: string[] = [];
+      secondRuntime.subscribe(event => {
+        if (event.type === 'info') infoMessages.push(event.message);
+      });
+      await secondRuntime.init();
+      expect(secondRuntime.getCurrentSessionId()).toBe(sessionId);
+      expect(infoMessages.some(m => /Released.*harness-still-running-owner/.test(m))).toBe(true);
+    } finally {
+      if (restore === undefined) {
+        delete process.env.MASTRACODE_LEASE_RECOVERY;
+      } else {
+        process.env.MASTRACODE_LEASE_RECOVERY = restore;
+      }
+    }
+  });
+
+  it('force-claims again across an owner-change race between release and retry', async () => {
+    const storage = new InMemoryStore({ id: 'mc-runtime-owner-change-race' });
+    const firstRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-owner-race' });
+
+    const restore = process.env.MASTRACODE_LEASE_RECOVERY;
+    process.env.MASTRACODE_LEASE_RECOVERY = 'force-claim';
+    try {
+      await firstRuntime.init();
+      const sessionId = firstRuntime.getCurrentSessionId();
+      if (!sessionId) throw new Error('expected first runtime to bind a session');
+
+      const harnessStorage = (await storage.getStore('harness')) as TestHarnessStorage;
+      const stored = await harnessStorage.loadSession({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+      });
+      if (!stored?.ownerId) throw new Error('expected a live session owner');
+
+      await harnessStorage.releaseSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: stored.ownerId,
+      });
+      await harnessStorage.acquireSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId,
+        ownerId: 'harness-owner-a',
+        ttlMs: 120_000,
+      });
+
+      const originalRelease = harnessStorage.releaseSessionLease.bind(harnessStorage);
+      let releaseCount = 0;
+      vi.spyOn(harnessStorage, 'releaseSessionLease').mockImplementation(async opts => {
+        await originalRelease(opts);
+        releaseCount += 1;
+        if (releaseCount === 1) {
+          // Racer process re-acquires the lease in the gap between our
+          // release and the next core.session() retry.
+          await harnessStorage.acquireSessionLease({
+            harnessName: MASTRACODE_HARNESS_NAME,
+            sessionId,
+            ownerId: 'harness-owner-b',
+            ttlMs: 120_000,
+          });
+        }
+      });
+
+      const secondRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-owner-race' });
+      const infoMessages: string[] = [];
+      secondRuntime.subscribe(event => {
+        if (event.type === 'info') infoMessages.push(event.message);
+      });
+      await secondRuntime.init();
+
+      expect(secondRuntime.getCurrentSessionId()).toBe(sessionId);
+      expect(releaseCount).toBeGreaterThanOrEqual(2);
+      expect(infoMessages.some(m => /Released.*harness-owner-a/.test(m))).toBe(true);
+      expect(infoMessages.some(m => /Released.*harness-owner-b/.test(m))).toBe(true);
+    } finally {
+      if (restore === undefined) {
+        delete process.env.MASTRACODE_LEASE_RECOVERY;
+      } else {
+        process.env.MASTRACODE_LEASE_RECOVERY = restore;
+      }
+    }
+  });
+
+  it('honors MASTRACODE_LEASE_RECOVERY=new-thread at startup by creating a fresh thread', async () => {
+    const storage = new InMemoryStore({ id: 'mc-runtime-new-thread-startup' });
+    const firstRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-new-thread' });
+    const secondRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-new-thread' });
+
+    const restore = process.env.MASTRACODE_LEASE_RECOVERY;
+    process.env.MASTRACODE_LEASE_RECOVERY = 'new-thread';
+    try {
+      await firstRuntime.init();
+      const lockedThreadId = firstRuntime.getCurrentThreadId();
+      const lockedSessionId = firstRuntime.getCurrentSessionId();
+      if (!lockedThreadId || !lockedSessionId) throw new Error('expected first runtime to bind a session');
+
+      const harnessStorage = (await storage.getStore('harness')) as TestHarnessStorage;
+      const stored = await harnessStorage.loadSession({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId: lockedSessionId,
+      });
+      if (!stored?.ownerId) throw new Error('expected a live session owner');
+
+      await harnessStorage.releaseSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId: lockedSessionId,
+        ownerId: stored.ownerId,
+      });
+      await harnessStorage.acquireSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId: lockedSessionId,
+        ownerId: 'harness-still-running-owner',
+        ttlMs: 120_000,
+      });
+
+      await secondRuntime.init();
+      expect(secondRuntime.getCurrentThreadId()).not.toBe(lockedThreadId);
+      expect(secondRuntime.getCurrentSessionId()).not.toBe(lockedSessionId);
+    } finally {
+      if (restore === undefined) {
+        delete process.env.MASTRACODE_LEASE_RECOVERY;
+      } else {
+        process.env.MASTRACODE_LEASE_RECOVERY = restore;
+      }
+    }
+  });
+
+  it('warns and ignores an unrecognized MASTRACODE_LEASE_RECOVERY value', async () => {
+    const storage = new InMemoryStore({ id: 'mc-runtime-invalid-env' });
+    const runtime = createRuntime({ storage, projectPath: '/tmp/mastracode-invalid-env' });
+
+    const restore = process.env.MASTRACODE_LEASE_RECOVERY;
+    process.env.MASTRACODE_LEASE_RECOVERY = 'force';
+    const infoMessages: string[] = [];
+    runtime.subscribe(event => {
+      if (event.type === 'info') infoMessages.push(event.message);
+    });
+    try {
+      await runtime.init();
+      expect(runtime.getCurrentSessionId()).toBeDefined();
+      expect(infoMessages.some(m => /invalid MASTRACODE_LEASE_RECOVERY/i.test(m))).toBe(true);
+    } finally {
+      if (restore === undefined) {
+        delete process.env.MASTRACODE_LEASE_RECOVERY;
+      } else {
+        process.env.MASTRACODE_LEASE_RECOVERY = restore;
+      }
+    }
+  });
+
+  it('does not leak the new-thread sentinel when switchThread hits a stale foreign lease', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    const storage = new InMemoryStore({ id: 'mc-runtime-switchthread-sentinel' });
+    const firstRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-switch-sentinel-a' });
+    const secondRuntime = createRuntime({ storage, projectPath: '/tmp/mastracode-switch-sentinel-b' });
+
+    try {
+      await firstRuntime.init();
+      const lockedThreadId = firstRuntime.getCurrentThreadId();
+      const lockedSessionId = firstRuntime.getCurrentSessionId();
+      if (!lockedThreadId || !lockedSessionId) throw new Error('expected first runtime to bind a session');
+
+      await secondRuntime.init();
+
+      const harnessStorage = (await storage.getStore('harness')) as TestHarnessStorage;
+      const stored = await harnessStorage.loadSession({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId: lockedSessionId,
+      });
+      if (!stored?.ownerId) throw new Error('expected a live session owner');
+
+      await harnessStorage.releaseSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId: lockedSessionId,
+        ownerId: stored.ownerId,
+      });
+      await harnessStorage.acquireSessionLease({
+        harnessName: MASTRACODE_HARNESS_NAME,
+        sessionId: lockedSessionId,
+        ownerId: 'harness-still-running-owner',
+        ttlMs: 120_000,
+      });
+
+      const restore = process.env.MASTRACODE_LEASE_RECOVERY;
+      process.env.MASTRACODE_LEASE_RECOVERY = 'new-thread';
+      try {
+        const switchPromise = secondRuntime.switchThread({ threadId: lockedThreadId }).catch(err => err);
+        await vi.advanceTimersByTimeAsync(65_000);
+        const err = await switchPromise;
+        // new-thread is not honored from switchThread (caller wants a SPECIFIC
+        // threadId); the env override down-converts to a clean recovery error
+        // instead of leaking MastraCodeLeaseRecoveryNewThreadError.
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).name).toBe('MastraCodeSessionLeaseRecoveryError');
+      } finally {
+        if (restore === undefined) {
+          delete process.env.MASTRACODE_LEASE_RECOVERY;
+        } else {
+          process.env.MASTRACODE_LEASE_RECOVERY = restore;
+        }
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

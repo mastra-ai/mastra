@@ -589,15 +589,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           };
         }
 
-        const toolRequiresApproval = await resolveToolRequiresApproval({
-          tool,
-          args,
-          requireToolApproval: harnessToolPermission ? harnessToolPermission === 'ask' : Boolean(requireToolApproval),
-          requestContext,
-          workspace: _internal?.stepWorkspace,
-          logger,
-          toolName: inputData.toolName,
-        });
+        const toolRequiresApproval =
+          harnessToolPermission === 'allow'
+            ? false
+            : await resolveToolRequiresApproval({
+                tool,
+                args,
+                requireToolApproval: harnessToolPermission ? harnessToolPermission === 'ask' : Boolean(requireToolApproval),
+                requestContext,
+                workspace: _internal?.stepWorkspace,
+                logger,
+                toolName: inputData.toolName,
+              });
 
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
