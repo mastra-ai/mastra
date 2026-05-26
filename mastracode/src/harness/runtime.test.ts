@@ -23,6 +23,8 @@ function createRuntime(
     browser?: unknown;
     disabledTools?: string[];
     workspace?: ConstructorParameters<typeof MastraCodeHarnessRuntime>[0]['workspace'];
+    memory?: ConstructorParameters<typeof MastraCodeHarnessRuntime>[0]['memory'];
+    pubsub?: ConstructorParameters<typeof MastraCodeHarnessRuntime>[0]['pubsub'];
   } = {},
 ) {
   const agent = new Agent({
@@ -64,6 +66,8 @@ function createRuntime(
     browser: options.browser as never,
     disabledTools: options.disabledTools,
     workspace: options.workspace,
+    memory: options.memory,
+    pubsub: options.pubsub,
   });
 }
 
@@ -1017,6 +1021,201 @@ describe('MastraCodeHarnessRuntime', () => {
   });
 });
 
+describe('MastraCodeHarnessRuntime — runtime service propagation to mode agents (MASTRA-4342)', () => {
+  type MastraMemoryStub = ConstructorParameters<typeof MastraCodeHarnessRuntime>[0]['memory'];
+  type PubSubStub = ConstructorParameters<typeof MastraCodeHarnessRuntime>[0]['pubsub'];
+
+  function memorySentinel(label: string): MastraMemoryStub {
+    return { __testMemory: label } as unknown as MastraMemoryStub;
+  }
+
+  function pubsubSentinel(label: string): PubSubStub {
+    return { __testPubSub: label } as unknown as PubSubStub;
+  }
+
+  function makeAgent(id: string, opts: { memory?: unknown; pubsub?: unknown } = {}) {
+    return new Agent({
+      id,
+      name: id,
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+      ...(opts.memory ? { memory: opts.memory as any } : {}),
+      ...(opts.pubsub ? { pubsub: opts.pubsub as any } : {}),
+    });
+  }
+
+  it('propagates runtime memory and pubsub to a static custom mode agent that owns neither', () => {
+    const memory = memorySentinel('runtime-memory');
+    const pubsub = pubsubSentinel('runtime-pubsub');
+    const codeAgent = makeAgent('code-agent');
+    const reviewAgent = makeAgent('review-agent');
+    const setMemorySpy = vi.spyOn(reviewAgent, '__setMemory');
+    const setPubSubSpy = vi.spyOn(reviewAgent, '__setPubSub');
+
+    createRuntime({
+      agents: { 'code-agent': codeAgent },
+      modes: [
+        { id: 'build', name: 'Build', default: true, agent: codeAgent },
+        { id: 'review', name: 'Review', agent: reviewAgent },
+      ],
+      memory,
+      pubsub,
+    });
+
+    expect(setMemorySpy).toHaveBeenCalledTimes(1);
+    expect(setMemorySpy).toHaveBeenCalledWith(memory);
+    expect(setPubSubSpy).toHaveBeenCalledTimes(1);
+    expect(setPubSubSpy).toHaveBeenCalledWith(pubsub);
+    expect(reviewAgent.hasOwnMemory()).toBe(true);
+    expect(reviewAgent.getPubSub()).toBe(pubsub);
+  });
+
+  it("preserves a custom mode agent's own memory and skips propagation", () => {
+    const runtimeMemory = memorySentinel('runtime-memory');
+    const ownMemory = memorySentinel('own-memory');
+    const reviewAgent = makeAgent('review-agent', { memory: ownMemory });
+    const setMemorySpy = vi.spyOn(reviewAgent, '__setMemory');
+
+    createRuntime({
+      agents: { 'code-agent': makeAgent('code-agent') },
+      modes: [{ id: 'review', name: 'Review', default: true, agent: reviewAgent }],
+      memory: runtimeMemory,
+    });
+
+    expect(setMemorySpy).not.toHaveBeenCalled();
+    expect(reviewAgent.hasOwnMemory()).toBe(true);
+  });
+
+  it("preserves a custom mode agent's own pubsub and skips propagation", () => {
+    const runtimePubSub = pubsubSentinel('runtime-pubsub');
+    const ownPubSub = pubsubSentinel('own-pubsub');
+    const reviewAgent = makeAgent('review-agent', { pubsub: ownPubSub });
+    const setPubSubSpy = vi.spyOn(reviewAgent, '__setPubSub');
+
+    createRuntime({
+      agents: { 'code-agent': makeAgent('code-agent') },
+      modes: [{ id: 'review', name: 'Review', default: true, agent: reviewAgent }],
+      pubsub: runtimePubSub,
+    });
+
+    expect(setPubSubSpy).not.toHaveBeenCalled();
+    expect(reviewAgent.hasOwnPubSub()).toBe(true);
+    expect(reviewAgent.getPubSub()).toBe(ownPubSub);
+  });
+
+  it('propagates only pubsub when memory is not configured', () => {
+    const pubsub = pubsubSentinel('runtime-pubsub');
+    const reviewAgent = makeAgent('review-agent');
+    const setMemorySpy = vi.spyOn(reviewAgent, '__setMemory');
+    const setPubSubSpy = vi.spyOn(reviewAgent, '__setPubSub');
+
+    createRuntime({
+      agents: { 'code-agent': makeAgent('code-agent') },
+      modes: [{ id: 'review', name: 'Review', default: true, agent: reviewAgent }],
+      pubsub,
+    });
+
+    expect(setMemorySpy).not.toHaveBeenCalled();
+    expect(setPubSubSpy).toHaveBeenCalledTimes(1);
+    expect(setPubSubSpy).toHaveBeenCalledWith(pubsub);
+  });
+
+  it('propagates only memory when pubsub is not configured', () => {
+    const memory = memorySentinel('runtime-memory');
+    const reviewAgent = makeAgent('review-agent');
+    const setMemorySpy = vi.spyOn(reviewAgent, '__setMemory');
+    const setPubSubSpy = vi.spyOn(reviewAgent, '__setPubSub');
+
+    createRuntime({
+      agents: { 'code-agent': makeAgent('code-agent') },
+      modes: [{ id: 'review', name: 'Review', default: true, agent: reviewAgent }],
+      memory,
+    });
+
+    expect(setMemorySpy).toHaveBeenCalledTimes(1);
+    expect(setMemorySpy).toHaveBeenCalledWith(memory);
+    expect(setPubSubSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not double-propagate when the same agent is reused across multiple modes', () => {
+    const memory = memorySentinel('runtime-memory');
+    const pubsub = pubsubSentinel('runtime-pubsub');
+    const sharedAgent = makeAgent('shared-agent');
+    const setMemorySpy = vi.spyOn(sharedAgent, '__setMemory');
+    const setPubSubSpy = vi.spyOn(sharedAgent, '__setPubSub');
+
+    createRuntime({
+      agents: { 'code-agent': makeAgent('code-agent') },
+      modes: [
+        { id: 'build', name: 'Build', default: true, agent: sharedAgent },
+        { id: 'plan', name: 'Plan', agent: sharedAgent },
+        { id: 'fast', name: 'Fast', agent: sharedAgent },
+      ],
+      memory,
+      pubsub,
+    });
+
+    expect(setMemorySpy).toHaveBeenCalledTimes(1);
+    expect(setPubSubSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('dedupes when the same agent appears in both config.agents and config.modes', () => {
+    const memory = memorySentinel('runtime-memory');
+    const pubsub = pubsubSentinel('runtime-pubsub');
+    const sharedAgent = makeAgent('code-agent');
+    const setMemorySpy = vi.spyOn(sharedAgent, '__setMemory');
+    const setPubSubSpy = vi.spyOn(sharedAgent, '__setPubSub');
+
+    createRuntime({
+      agents: { 'code-agent': sharedAgent },
+      modes: [{ id: 'build', name: 'Build', default: true, agent: sharedAgent }],
+      memory,
+      pubsub,
+    });
+
+    expect(setMemorySpy).toHaveBeenCalledTimes(1);
+    expect(setPubSubSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips dynamic mode agents during constructor-time propagation', () => {
+    const memory = memorySentinel('runtime-memory');
+    const pubsub = pubsubSentinel('runtime-pubsub');
+    const codeAgent = makeAgent('code-agent');
+    const dynamicAgent = makeAgent('dynamic-agent');
+    const dynamicSetMemorySpy = vi.spyOn(dynamicAgent, '__setMemory');
+    const dynamicSetPubSubSpy = vi.spyOn(dynamicAgent, '__setPubSub');
+
+    expect(() =>
+      createRuntime({
+        agents: { 'code-agent': codeAgent },
+        modes: [
+          { id: 'build', name: 'Build', default: true, agent: codeAgent },
+          { id: 'dynamic', name: 'Dynamic', agent: () => dynamicAgent },
+        ],
+        memory,
+        pubsub,
+      }),
+    ).not.toThrow();
+
+    expect(dynamicSetMemorySpy).not.toHaveBeenCalled();
+    expect(dynamicSetPubSubSpy).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when neither memory nor pubsub is configured', () => {
+    const reviewAgent = makeAgent('review-agent');
+    const setMemorySpy = vi.spyOn(reviewAgent, '__setMemory');
+    const setPubSubSpy = vi.spyOn(reviewAgent, '__setPubSub');
+
+    createRuntime({
+      agents: { 'code-agent': makeAgent('code-agent') },
+      modes: [{ id: 'review', name: 'Review', default: true, agent: reviewAgent }],
+    });
+
+    expect(setMemorySpy).not.toHaveBeenCalled();
+    expect(setPubSubSpy).not.toHaveBeenCalled();
+  });
+});
+
 // Structural type covering only the harness-storage methods the lease-recovery
 // tests exercise. Avoids `as any` while keeping the test self-contained.
 type TestHarnessStorage = {
@@ -1132,9 +1331,7 @@ describe('MastraCodeHarnessRuntime — stale session lease recovery (MASTRA-4344
 
   it('propagates non-locked errors from session() without retrying', async () => {
     const runtime = createRuntime();
-    const sessionSpy = vi
-      .spyOn(runtime.core, 'session')
-      .mockRejectedValueOnce(new Error('storage offline'));
+    const sessionSpy = vi.spyOn(runtime.core, 'session').mockRejectedValueOnce(new Error('storage offline'));
 
     await expect(runtime.init()).rejects.toThrow('storage offline');
     expect(sessionSpy).toHaveBeenCalledTimes(1);
@@ -1188,9 +1385,7 @@ describe('MastraCodeHarnessRuntime — stale session lease recovery (MASTRA-4344
         ttlMs: 120_000,
       });
 
-      const reboundPromise = secondRuntime
-        .selectOrCreateThread({ leaseRecoveryMode: 'midsession' })
-        .catch(err => err);
+      const reboundPromise = secondRuntime.selectOrCreateThread({ leaseRecoveryMode: 'midsession' }).catch(err => err);
       await vi.advanceTimersByTimeAsync(3_000);
       const err = await reboundPromise;
 

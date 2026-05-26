@@ -5,9 +5,5 @@ export {
 } from './config.js';
 export { MastraCodeHarnessRuntime, MastraCodeSessionLeaseRecoveryError } from './runtime.js';
 export { defaultStdioLeaseRecoveryPrompt } from './lease-recovery-prompt.js';
-export type {
-  LeaseRecoveryAction,
-  LeaseRecoveryPromptHandler,
-  LeaseRecoveryPromptInfo,
-} from './config.js';
+export type { LeaseRecoveryAction, LeaseRecoveryPromptHandler, LeaseRecoveryPromptInfo } from './config.js';
 export { createHarnessV1SubagentAgents } from './subagents.js';

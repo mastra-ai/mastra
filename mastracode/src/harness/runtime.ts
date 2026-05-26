@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { Agent } from '@mastra/core/agent';
 import type {
   AvailableModel,
   HarnessDisplayState,
@@ -49,11 +50,7 @@ import {
   toHarnessV1Subagents,
   toModelInfo,
 } from './config.js';
-import type {
-  LeaseRecoveryAction,
-  MastraCodeModelInfo,
-  MastraCodeRuntimeConfig,
-} from './config.js';
+import type { LeaseRecoveryAction, MastraCodeModelInfo, MastraCodeRuntimeConfig } from './config.js';
 import { MastraCodeHarnessEventProjector } from './events.js';
 import { emptyOMProgress, getOMModelState } from './observational-memory.js';
 
@@ -107,9 +104,7 @@ function formatRetryDelay(ms: number): string {
 
 function sessionLeaseRetryDelayMs(error: HarnessSessionLockedError): number {
   const expiresInMs =
-    Number.isFinite(error.expiresAt) && error.expiresAt > 0
-      ? error.expiresAt - Date.now()
-      : SESSION_LEASE_RETRY_MAX_MS;
+    Number.isFinite(error.expiresAt) && error.expiresAt > 0 ? error.expiresAt - Date.now() : SESSION_LEASE_RETRY_MAX_MS;
   return Math.min(
     SESSION_LEASE_RETRY_MAX_MS,
     Math.max(SESSION_LEASE_RETRY_MIN_MS, Math.ceil(expiresInMs + SESSION_LEASE_RETRY_GRACE_MS)),
@@ -126,8 +121,7 @@ export class MastraCodeSessionLeaseRecoveryError extends Error {
     public readonly expiresAt: number,
     options?: { cause?: unknown },
   ) {
-    const expiresIso =
-      Number.isFinite(expiresAt) && expiresAt > 0 ? new Date(expiresAt).toISOString() : 'unknown';
+    const expiresIso = Number.isFinite(expiresAt) && expiresAt > 0 ? new Date(expiresAt).toISOString() : 'unknown';
     super(
       `MastraCode could not reopen thread "${threadId}" because its Harness v1 session "${sessionId}" is still locked by another process (owner "${currentOwnerId}", lease expires at ${expiresIso}). Another MastraCode instance may still be running. Quit the other instance or retry after the lease expires.`,
       options,
@@ -416,6 +410,8 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
       this.setBrowser(config.browser);
     }
 
+    this.propagateRuntimeServicesToAgents(harnessV1Agents);
+
     this.projector = new MastraCodeHarnessEventProjector(
       event => this.emit(event),
       () => this.getDisplayState(),
@@ -699,9 +695,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     }
   }
 
-  async selectOrCreateThread(
-    options: { leaseRecoveryMode?: LeaseRecoveryMode } = {},
-  ): Promise<HarnessThread> {
+  async selectOrCreateThread(options: { leaseRecoveryMode?: LeaseRecoveryMode } = {}): Promise<HarnessThread> {
     const existing = await this.core.threads.list({
       resourceId: this.resourceId,
       perPage: false,
@@ -1597,6 +1591,23 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     }
   }
 
+  private propagateRuntimeServicesToAgents(agents: Record<string, Agent>): void {
+    const memory = this.config.memory;
+    const pubsub = this.config.pubsub;
+    if (!memory && !pubsub) return;
+    const seen = new Set<Agent>();
+    for (const agent of Object.values(agents)) {
+      if (seen.has(agent)) continue;
+      seen.add(agent);
+      if (memory && !agent.hasOwnMemory()) {
+        agent.__setMemory(memory);
+      }
+      if (pubsub && !agent.hasOwnPubSub()) {
+        agent.__setPubSub(pubsub);
+      }
+    }
+  }
+
   private withRuntimeHarnessContext(requestContext: RequestContext): RequestContext {
     if (requestContext.get('harness')) return requestContext;
 
@@ -1824,9 +1835,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   ): Promise<Session> {
     const allowNewThread = options.allowNewThread ?? false;
     const maxWaitMs =
-      mode === 'startup'
-        ? SESSION_LEASE_RECOVERY_STARTUP_WAIT_MS
-        : SESSION_LEASE_RECOVERY_MIDSESSION_WAIT_MS;
+      mode === 'startup' ? SESSION_LEASE_RECOVERY_STARTUP_WAIT_MS : SESSION_LEASE_RECOVERY_MIDSESSION_WAIT_MS;
     const startedAt = Date.now();
     let attempt = 0;
     const envOverride = resolveLeaseRecoveryEnvOverride();
@@ -1938,8 +1947,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
           // honor a new-thread choice — they must bind a specific threadId.
           // Down-convert to quit so the caller sees a clean recovery error
           // instead of the internal sentinel leaking out.
-          const action: LeaseRecoveryAction =
-            rawAction === 'new-thread' && !allowNewThread ? 'quit' : rawAction;
+          const action: LeaseRecoveryAction = rawAction === 'new-thread' && !allowNewThread ? 'quit' : rawAction;
           if (action === 'force-claim') {
             chosenPolicy = 'force-claim';
             try {
@@ -2013,7 +2021,9 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         }
       | undefined;
     if (!harnessStorage || typeof harnessStorage.releaseSessionLease !== 'function') {
-      throw new Error('MastraCode Harness storage does not expose releaseSessionLease; cannot force-claim session lease.');
+      throw new Error(
+        'MastraCode Harness storage does not expose releaseSessionLease; cannot force-claim session lease.',
+      );
     }
     await harnessStorage.releaseSessionLease({
       harnessName: MASTRACODE_HARNESS_NAME,

@@ -42,7 +42,11 @@ import { createDynamicTools } from './agents/tools.js';
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { createHarnessV1SubagentAgents, defaultStdioLeaseRecoveryPrompt, MastraCodeHarnessRuntime } from './harness/index.js';
+import {
+  createHarnessV1SubagentAgents,
+  defaultStdioLeaseRecoveryPrompt,
+  MastraCodeHarnessRuntime,
+} from './harness/index.js';
 import type { LeaseRecoveryPromptHandler } from './harness/index.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
@@ -149,15 +153,8 @@ export interface MastraCodeConfig {
   leaseRecoveryPrompt?: LeaseRecoveryPromptHandler;
 }
 
-export {
-  MastraCodeSessionLeaseRecoveryError,
-  defaultStdioLeaseRecoveryPrompt,
-} from './harness/index.js';
-export type {
-  LeaseRecoveryAction,
-  LeaseRecoveryPromptInfo,
-  LeaseRecoveryPromptHandler,
-} from './harness/index.js';
+export { MastraCodeSessionLeaseRecoveryError, defaultStdioLeaseRecoveryPrompt } from './harness/index.js';
+export type { LeaseRecoveryAction, LeaseRecoveryPromptInfo, LeaseRecoveryPromptHandler } from './harness/index.js';
 
 export type MastraCodeHarnessPublic = Harness<Record<string, unknown>> & {
   actions: MastraCodeHarnessRuntime<Record<string, unknown>>['actions'];
@@ -657,6 +654,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     storage,
     observability,
     memory,
+    pubsub: signalsPubSub,
     agents: {
       'code-agent': codeAgent,
       ...createHarnessV1SubagentAgents(subagents, getDynamicModel as never, { memory, pubsub: signalsPubSub }),

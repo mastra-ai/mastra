@@ -1,5 +1,6 @@
 import type { Agent } from '@mastra/core/agent';
 import type { MastraBrowser } from '@mastra/core/browser';
+import type { PubSub } from '@mastra/core/events';
 import type {
   CustomModelCatalogProvider,
   HarnessMode as LegacyHarnessMode,
@@ -52,6 +53,7 @@ export interface MastraCodeRuntimeConfig<TState extends Record<string, unknown>>
   storage: MastraCompositeStore;
   observability?: Observability;
   memory?: DynamicArgument<MastraMemory>;
+  pubsub?: PubSub;
   agents: Record<string, Agent>;
   modes: LegacyHarnessMode<TState>[];
   subagents: LegacyHarnessSubagent[];
