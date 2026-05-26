@@ -1,6 +1,5 @@
 ---
 '@mastra/client-js': patch
-'@internal/playground': patch
 ---
 
-Add skill create, edit, and view pages to the Agent Builder playground, plus matching `StoredSkill.favorite()`/`unfavorite()` methods on `@mastra/client-js`. The pages and supporting components ship as importable modules; router wiring lands in a follow-up.
+Add `StoredSkill.favorite()` and `StoredSkill.unfavorite()` methods, mirroring the existing `StoredAgent` favorite API. Both are idempotent and call `PUT`/`DELETE /api/stored/skills/:id/favorite`.
