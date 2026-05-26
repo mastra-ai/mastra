@@ -16,8 +16,22 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MastraServer } from '../index';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
+  const start = Date.now();
+  while (!assertion()) {
+    if (Date.now() - start > timeout) {
+      throw new Error('Timed out waiting for assertion');
+    }
+    await sleep(1);
+  }
+}
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Fastify Server Adapter', () => {
@@ -144,6 +158,7 @@ describe('Fastify Server Adapter', () => {
 
     afterEach(async () => {
       if (app) {
+        app.server.closeAllConnections?.();
         await app.close();
         app = null;
       }
@@ -739,6 +754,105 @@ describe('Fastify Server Adapter', () => {
       const data = await response.json();
       expect(data).toEqual({ message: 'Hello from custom route!' });
       await app.close();
+    });
+  });
+
+  describe('Custom route stream disconnect handling', () => {
+    let app: FastifyInstance | null = null;
+
+    afterEach(async () => {
+      if (app) {
+        app.server.closeAllConnections?.();
+        await app.close();
+        app = null;
+      }
+    });
+
+    it('cancels a custom route stream when the client cancels the response body', async () => {
+      const cancel = vi.fn();
+      const signalAbort = vi.fn();
+      const customRoutes = [
+        registerApiRoute('/custom/stream', {
+          method: 'GET',
+          handler: async c => {
+            c.req.raw.signal.addEventListener('abort', signalAbort);
+            return new Response(
+              new ReadableStream({
+                async pull(controller) {
+                  controller.enqueue(new TextEncoder().encode('chunk\n'));
+                  await sleep(5);
+                },
+                cancel,
+              }),
+            );
+          },
+        }),
+      ];
+
+      app = Fastify();
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+      const address = await app.listen({ port: 0 });
+
+      const response = await fetch(`${address}/custom/stream`);
+      const reader = response.body!.getReader();
+      await reader.read();
+      await reader.cancel();
+
+      await waitFor(() => cancel.mock.calls.length > 0);
+      await waitFor(() => signalAbort.mock.calls.length > 0);
+    });
+
+    it('does not cancel a custom POST stream when the completed request body closes normally', async () => {
+      const cancel = vi.fn();
+      const signalAbort = vi.fn();
+      const customRoutes = [
+        registerApiRoute('/custom/post-stream', {
+          method: 'POST',
+          handler: async c => {
+            c.req.raw.signal.addEventListener('abort', signalAbort);
+            return new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode('one\n'));
+                  setTimeout(() => {
+                    controller.enqueue(new TextEncoder().encode('two\n'));
+                    controller.enqueue(new TextEncoder().encode('three\n'));
+                    controller.close();
+                  }, 10);
+                },
+                cancel,
+              }),
+            );
+          },
+        }),
+      ];
+
+      app = Fastify();
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+      const address = await app.listen({ port: 0 });
+
+      const response = await fetch(`${address}/custom/post-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hello: 'world' }),
+      });
+
+      await expect(response.text()).resolves.toBe('one\ntwo\nthree\n');
+      await sleep(10);
+      expect(cancel).not.toHaveBeenCalled();
+      expect(signalAbort).not.toHaveBeenCalled();
     });
   });
 });

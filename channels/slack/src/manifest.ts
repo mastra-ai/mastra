@@ -36,6 +36,9 @@ export const DEFAULT_BOT_SCOPES = [
   // Reactions and files
   'reactions:write',
   'files:read',
+
+  // Assistant mode (enables thread context for DMs and AI Assistant surface)
+  'assistant:write',
 ] as const;
 
 /**
@@ -103,6 +106,11 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
       bot_user: {
         display_name: name,
         always_online: true,
+      },
+      // Required by Slack when `assistant:write` scope is present.
+      // Surfaces the app in the AI Assistant picker.
+      assistant_view: {
+        assistant_description: shortDescription,
       },
     },
     oauth_config: {
