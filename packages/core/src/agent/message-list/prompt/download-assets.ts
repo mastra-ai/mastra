@@ -21,9 +21,10 @@ export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; down
     if (!response.ok) {
       throw new MastraError({
         id: 'DOWNLOAD_ASSETS_FAILED',
-        text: 'Failed to download asset',
+        text: `Failed to download asset: ${urlText}`,
         domain: ErrorDomain.LLM,
         category: ErrorCategory.USER,
+        details: { url: urlText },
       });
     }
     return {
@@ -34,9 +35,10 @@ export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; down
     throw new MastraError(
       {
         id: 'DOWNLOAD_ASSETS_FAILED',
-        text: 'Failed to download asset',
+        text: `Failed to download asset: ${urlText}`,
         domain: ErrorDomain.LLM,
         category: ErrorCategory.USER,
+        details: { url: urlText },
       },
       error,
     );
