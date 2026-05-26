@@ -30,10 +30,8 @@ runs:
     # setup-node's cache: 'pnpm' runs `pnpm store path --silent` which returns
     # a bogus path on self-hosted runners where pnpm is installed into
     # ~/setup-pnpm/node_modules/.bin/.
-    - uses: pnpm/action-setup@v4
+    - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
       name: Install pnpm
-      env:
-        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       with:
         version: ${{ inputs.version || '' }}
         run_install: false

@@ -54,10 +54,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         name: Install pnpm
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           run_install: false
 
@@ -181,10 +179,8 @@ jobs:
             echo "files_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         name: Install pnpm
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           run_install: false
 
@@ -315,10 +311,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         name: Install pnpm
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           run_install: false
 
@@ -392,10 +386,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         name: Install pnpm
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           run_install: false
 
