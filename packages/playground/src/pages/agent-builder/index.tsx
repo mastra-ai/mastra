@@ -1,28 +1,10 @@
 import { Spinner } from '@mastra/playground-ui';
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router';
-import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
+
+import { Navigate } from 'react-router';
+import { useAgentBuilderInternalRedirect } from '@/domains/agent-builder/hooks/use-agent-builder-internal-redirect';
 
 export const AgentBuilderRoot = () => {
-  const navigate = useNavigate();
-  const { data: draftAgentsData, isLoading: isLoadingDraftAgents } = useStoredAgents({ status: 'draft' });
-  const { data: publishedAgentsData, isLoading: isLoadingPublishedAgents } = useStoredAgents({ status: 'published' });
-
-  const draftAgents = draftAgentsData?.agents ?? [];
-  const publishedAgents = publishedAgentsData?.agents ?? [];
-
-  const hasAgents = draftAgents.length > 0 || publishedAgents.length > 0;
-  const isLoading = isLoadingDraftAgents || isLoadingPublishedAgents;
-
-  useEffect(() => {
-    if (isLoading) return;
-
-    if (hasAgents) {
-      void navigate('/agent-builder/agents');
-    } else {
-      void navigate('/agent-builder/agents/create');
-    }
-  }, [isLoading, hasAgents, navigate]);
+  const { isLoading, hasAgents } = useAgentBuilderInternalRedirect();
 
   if (isLoading) {
     return (
@@ -32,5 +14,9 @@ export const AgentBuilderRoot = () => {
     );
   }
 
-  return null;
+  if (hasAgents) {
+    return <Navigate to="/agent-builder/agents" />;
+  }
+
+  return <Navigate to="/agent-builder/agents/create" />;
 };
