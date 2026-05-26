@@ -43,11 +43,9 @@ const SOURCE_MODE_WORKSPACE_DIRS = [
   'browser',
 ];
 
-function isSourceModeEnabled(sourceMode?: boolean) {
+function isRepoSourceModeRequested() {
   return (
-    sourceMode === true ||
-    process.env.MASTRA_SOURCE_MODE === '1' ||
-    ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')
+    process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')
   );
 }
 
@@ -59,18 +57,45 @@ function withSourceModeCondition(nodeOptions?: string) {
   return [nodeOptions, SOURCE_MODE_CONDITION].filter(Boolean).join(' ');
 }
 
+function packageRootFromCurrentModule() {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  return dirname(dirname(dirname(currentDir)));
+}
+
+function isMastraRepoWorkspaceRoot(workspaceRoot: string) {
+  return (
+    existsSync(join(workspaceRoot, 'pnpm-workspace.yaml')) &&
+    existsSync(join(workspaceRoot, 'packages', 'cli', 'src', 'index.ts')) &&
+    existsSync(join(workspaceRoot, 'packages', 'core', 'src'))
+  );
+}
+
 function getSourceModeWorkspaceRoot() {
-  if (process.env.MASTRA_SOURCE_MODE_WORKSPACE_ROOT) {
-    return process.env.MASTRA_SOURCE_MODE_WORKSPACE_ROOT;
+  const explicitWorkspaceRoot = process.env.MASTRA_SOURCE_MODE_WORKSPACE_ROOT;
+  if (explicitWorkspaceRoot && isMastraRepoWorkspaceRoot(explicitWorkspaceRoot)) {
+    return explicitWorkspaceRoot;
   }
 
-  const currentDir = dirname(fileURLToPath(import.meta.url));
-  return dirname(dirname(dirname(dirname(dirname(currentDir)))));
+  const packageRoot = packageRootFromCurrentModule();
+  const workspaceRoot = dirname(dirname(packageRoot));
+  if (existsSync(join(packageRoot, 'src', 'index.ts')) && isMastraRepoWorkspaceRoot(workspaceRoot)) {
+    return workspaceRoot;
+  }
+
+  return undefined;
+}
+
+function isSourceModeEnabled() {
+  return isRepoSourceModeRequested() && getSourceModeWorkspaceRoot() !== undefined;
 }
 
 function applySourceModeEnv(env?: Map<string, string>) {
-  const nodeOptions = withSourceModeCondition(env?.get('NODE_OPTIONS') ?? process.env.NODE_OPTIONS);
   const workspaceRoot = getSourceModeWorkspaceRoot();
+  if (!workspaceRoot) {
+    return;
+  }
+
+  const nodeOptions = withSourceModeCondition(env?.get('NODE_OPTIONS') ?? process.env.NODE_OPTIONS);
 
   process.env.MASTRA_REPO_RUN_FROM_SOURCE = process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? 'true';
   process.env.MASTRA_SOURCE_MODE = '1';
@@ -93,6 +118,10 @@ async function linkSourceModeWorkspacePackages(outputDir: string) {
   }
 
   const workspaceRoot = getSourceModeWorkspaceRoot();
+  if (!workspaceRoot) {
+    return;
+  }
+
   const nodeModulesDir = join(outputDir, 'node_modules');
   await mkdir(nodeModulesDir, { recursive: true });
 
@@ -222,7 +251,6 @@ interface StartOptions {
   inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: HTTPSOptions;
-  sourceMode?: boolean;
   mastraPackages?: MastraPackageInfo[];
   peerDepMismatches?: PeerDepMismatch[];
 }
@@ -541,7 +569,7 @@ async function rebundleAndRestart(
     }
 
     const env = await bundler.loadEnvVars();
-    if (isSourceModeEnabled(startOptions.sourceMode)) {
+    if (isSourceModeEnabled()) {
       applySourceModeEnv(env);
     }
 
@@ -582,7 +610,6 @@ export async function dev({
   customArgs,
   https,
   requestContextPresets,
-  sourceMode,
   debug,
 }: {
   dir?: string;
@@ -594,10 +621,9 @@ export async function dev({
   customArgs?: string[];
   https?: boolean;
   requestContextPresets?: string;
-  sourceMode?: boolean;
   debug: boolean;
 }) {
-  const effectiveSourceMode = isSourceModeEnabled(sourceMode);
+  const effectiveSourceMode = isSourceModeEnabled();
 
   if (effectiveSourceMode) {
     applySourceModeEnv();
@@ -690,7 +716,6 @@ export async function dev({
     inspectBrk,
     customArgs,
     https: httpsOptions,
-    sourceMode: effectiveSourceMode,
     mastraPackages,
     peerDepMismatches,
   };

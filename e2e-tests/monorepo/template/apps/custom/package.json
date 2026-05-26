@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
-    "dev:source-mode": "mastra dev --source-mode",
+    "dev:source-mode": "MASTRA_REPO_RUN_FROM_SOURCE=true mastra dev",
     "build": "mastra build",
     "start": "mastra start"
   },

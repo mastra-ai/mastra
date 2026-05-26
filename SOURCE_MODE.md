@@ -24,7 +24,7 @@ Opt regular local dev/test commands into source mode from your shell:
 export MASTRA_REPO_RUN_FROM_SOURCE=true
 ```
 
-With that environment variable set, package-local Vitest commands such as `pnpm test:core` and package-local `pnpm test` runs resolve Mastra workspace packages from source instead of requiring `dist/` artifacts. Root `pnpm test` switches to the curated source-safe local lane described below; external-service/API-key/known-infra lanes remain explicit. The repo-local `mastra` binary also treats `mastra dev` as source-mode when the source entrypoint is available.
+With that environment variable set, package-local Vitest commands such as `pnpm test:core` and package-local `pnpm test` runs resolve Mastra workspace packages from source instead of requiring `dist/` artifacts. Root `pnpm test` switches to the curated source-safe local lane described below; external-service/API-key/known-infra lanes remain explicit. The repo-local `mastra` binary also treats `mastra dev` as source-mode only when it can prove it is running from a linked Mastra repo checkout.
 
 For linked local projects, export the env var in the shell that runs the linked CLI, then run `mastra dev` normally:
 
@@ -33,7 +33,7 @@ export MASTRA_REPO_RUN_FROM_SOURCE=true
 mastra dev
 ```
 
-The CLI forwards `MASTRA_SOURCE_MODE=1`, `MASTRA_REPO_RUN_FROM_SOURCE=true`, `MASTRA_SOURCE_MODE_WORKSPACE_ROOT`, and `NODE_OPTIONS=--conditions=mastra-source` to the dev server process so linked workspace packages resolve through `mastra-source` exports.
+The CLI only honors `MASTRA_REPO_RUN_FROM_SOURCE=true` for `mastra dev` when the installed `mastra` package has linked-repo source files available (`packages/cli/src/index.ts`, the workspace root `pnpm-workspace.yaml`, and `packages/core/src`). Published package installs do not include that shape, so the env var is a no-op for regular users. When the guard passes, the CLI forwards `MASTRA_SOURCE_MODE=1`, `MASTRA_REPO_RUN_FROM_SOURCE=true`, `MASTRA_SOURCE_MODE_WORKSPACE_ROOT`, and `NODE_OPTIONS=--conditions=mastra-source` to the dev server process so linked workspace packages resolve through `mastra-source` exports.
 
 When full Studio assets are unavailable because `packages/playground/dist` has not been built, source-mode `mastra dev` still starts the API server and writes a minimal fallback Studio page. Build playground first if you need the full Studio UI during a no-build linked-project run; the fallback contract only proves the API/dev server path.
 
@@ -131,7 +131,7 @@ This keeps package imports flowing through `exports` conditions instead of a bro
 
 ## CI topology
 
-CI tests use the normal built-package path by default. This keeps source mode additive while local users and maintainers opt in with `MASTRA_REPO_RUN_FROM_SOURCE=true`, `MASTRA_SOURCE_MODE=1`, or `mastra dev --source-mode`.
+CI tests use the normal built-package path by default. This keeps source mode additive while local users and maintainers opt in with `MASTRA_REPO_RUN_FROM_SOURCE=true` or `MASTRA_SOURCE_MODE=1`.
 
 The PR topology keeps the artifact lane as the required package-output proof:
 

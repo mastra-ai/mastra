@@ -67,11 +67,7 @@ export async function getInputOptions(
           // keep workspace package imports on their public export specifiers so the
           // runtime resolves them through the package export map's mastra-source condition.
           if (isDev) {
-            if (
-              (process.env.MASTRA_SOURCE_MODE === '1' ||
-                ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')) &&
-              (id.startsWith('@mastra/') || id.startsWith('@internal/'))
-            ) {
+            if (process.env.MASTRA_SOURCE_MODE === '1' && (id.startsWith('@mastra/') || id.startsWith('@internal/'))) {
               return {
                 id,
                 external: true,

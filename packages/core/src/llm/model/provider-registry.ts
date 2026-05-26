@@ -34,9 +34,7 @@ export function isOfflineMode(): boolean {
 }
 
 function isSourceModeEnabled(): boolean {
-  return (
-    process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')
-  );
+  return process.env.MASTRA_SOURCE_MODE === '1';
 }
 
 function getEnabledGatewayIds(gateways: MastraModelGateway[]): Set<string> {

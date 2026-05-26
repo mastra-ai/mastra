@@ -17,8 +17,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   beforeAll(async () => {
     const cliEntry = path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`);
     const sourceModeCliEntry = path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `bin`, `mastra.mjs`);
-    const cliArgs =
-      process.env.MASTRA_SOURCE_MODE === '1' ? [sourceModeCliEntry, 'dev', '--source-mode'] : [cliEntry, 'dev'];
+    const cliArgs = process.env.MASTRA_SOURCE_MODE === '1' ? [sourceModeCliEntry, 'dev'] : [cliEntry, 'dev'];
 
     mastraServer = spawn(process.env.MASTRA_SOURCE_MODE === '1' ? process.execPath : 'pnpm', cliArgs, {
       stdio: 'pipe',

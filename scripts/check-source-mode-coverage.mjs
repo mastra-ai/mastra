@@ -117,6 +117,11 @@ for (const packageJsonPath of fixturePackageJsons) {
   if (typeof devScript === 'string' && devScript.includes('--source-mode')) {
     fail(`${packageJsonPath} has default dev script hardcoding --source-mode`);
   }
+
+  const sourceModeDevScript = packageJson.scripts?.['dev:source-mode'];
+  if (typeof sourceModeDevScript === 'string' && sourceModeDevScript.includes('--source-mode')) {
+    fail(`${packageJsonPath} still uses the removed --source-mode flag`);
+  }
 }
 
 if (failures.length) {

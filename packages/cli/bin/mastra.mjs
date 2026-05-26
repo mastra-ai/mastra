@@ -9,10 +9,14 @@ const binDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = dirname(binDir);
 const sourceEntry = join(packageRoot, 'src', 'index.ts');
 const distEntry = join(packageRoot, 'dist', 'index.js');
+const repoSourceModeRequested =
+  process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '');
+const workspaceRoot = dirname(dirname(packageRoot));
 const sourceMode =
-  process.env.MASTRA_SOURCE_MODE === '1' ||
-  ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '') ||
-  args.includes('--source-mode');
+  repoSourceModeRequested &&
+  existsSync(join(workspaceRoot, 'pnpm-workspace.yaml')) &&
+  existsSync(sourceEntry) &&
+  existsSync(join(workspaceRoot, 'packages', 'core', 'src'));
 
 function withSourceModeCondition(value) {
   const condition = '--conditions=mastra-source';
@@ -44,19 +48,14 @@ function run(command, commandArgs, env = process.env) {
 
 if (sourceMode && existsSync(sourceEntry)) {
   const localTsxBin = join(packageRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
-  const repoTsxBin = join(
-    dirname(dirname(packageRoot)),
-    'node_modules',
-    '.bin',
-    process.platform === 'win32' ? 'tsx.cmd' : 'tsx',
-  );
+  const repoTsxBin = join(workspaceRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
   const command = existsSync(localTsxBin) ? localTsxBin : existsSync(repoTsxBin) ? repoTsxBin : 'tsx';
 
   run(command, [sourceEntry, ...args], {
     ...process.env,
     MASTRA_REPO_RUN_FROM_SOURCE: process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? 'true',
     MASTRA_SOURCE_MODE: '1',
-    MASTRA_SOURCE_MODE_WORKSPACE_ROOT: dirname(dirname(packageRoot)),
+    MASTRA_SOURCE_MODE_WORKSPACE_ROOT: workspaceRoot,
     NODE_OPTIONS: withSourceModeCondition(process.env.NODE_OPTIONS),
   });
 } else {

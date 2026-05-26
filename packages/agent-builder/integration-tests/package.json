@@ -12,7 +12,7 @@
     "test:workflow": "vitest run ./src/workflow-builder-integration.test.ts",
     "test:workflow:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run ./src/workflow-builder-integration.test.ts",
     "dev": "mastra dev",
-    "dev:source-mode": "mastra dev --source-mode"
+    "dev:source-mode": "MASTRA_REPO_RUN_FROM_SOURCE=true mastra dev"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",

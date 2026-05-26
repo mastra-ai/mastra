@@ -38,7 +38,6 @@ function getMastraDevCommand(mastraDir: string) {
       args: [
         path.resolve(import.meta.dirname, `..`, `..`, `..`, `..`, `cli`, `bin`, `mastra.mjs`),
         'dev',
-        '--source-mode',
         '--dir',
         mastraDir,
       ],

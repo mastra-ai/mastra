@@ -11,9 +11,7 @@ import { devLogger } from '../../utils/dev-logger.js';
 import { shouldSkipDotenvLoading } from '../utils.js';
 
 function isSourceModeEnabled() {
-  return (
-    process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')
-  );
+  return process.env.MASTRA_SOURCE_MODE === '1';
 }
 
 export class DevBundler extends Bundler {

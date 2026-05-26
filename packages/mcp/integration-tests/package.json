@@ -6,7 +6,7 @@
     "test:mcp": "vitest run ./src/server.test.ts",
     "test:mcp:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run ./src/server.test.ts",
     "dev": "mastra dev",
-    "dev:source-mode": "mastra dev --source-mode"
+    "dev:source-mode": "MASTRA_REPO_RUN_FROM_SOURCE=true mastra dev"
   },
   "dependencies": {
     "@ai-sdk/react": "^1.2.12",
