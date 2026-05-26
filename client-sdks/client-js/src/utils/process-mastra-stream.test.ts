@@ -274,6 +274,8 @@ describe('processMastraStream', () => {
       }),
     ).rejects.toMatchObject({
       id: CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID,
+      // Top-level message should be the original error's message (no SDK `text` override)
+      message: 'onChunk error',
       cause: { message: 'onChunk error' },
       details: { chunkType: 'text-delta' },
     });

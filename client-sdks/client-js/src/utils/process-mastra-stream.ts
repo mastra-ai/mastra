@@ -62,7 +62,6 @@ async function sharedProcessMastraStream({
                   id: CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID,
                   domain: ErrorDomain.MASTRA,
                   category: ErrorCategory.USER,
-                  text: 'onChunk callback threw while processing a stream chunk',
                   details: {
                     chunkType: typeof json === 'object' && json && 'type' in json ? String(json.type) : 'unknown',
                   },

@@ -169,7 +169,11 @@ describe('Agent signal routes', () => {
 
     await expect(
       response.processDataStream({ onChunk, reconnect: { maxRetries: 5, delayMs: 0 } }),
-    ).rejects.toMatchObject({ id: 'CLIENT_JS_ONCHUNK_CALLBACK_THREW', cause: { message: 'boom from onChunk' } });
+    ).rejects.toMatchObject({
+      id: 'CLIENT_JS_ONCHUNK_CALLBACK_THREW',
+      message: 'boom from onChunk',
+      cause: { message: 'boom from onChunk' },
+    });
 
     expect(mockRequest).toHaveBeenCalledTimes(1);
     expect(onChunk).toHaveBeenCalledTimes(1);
