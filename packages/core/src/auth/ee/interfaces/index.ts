@@ -48,7 +48,7 @@ export type {
   FGAResourceTypeInfo,
   FGARegisterResourceParams,
   FGARegistrationResult,
-  FGAAuthorshipConfig,
+  FGAOwnershipConfig,
   FGACreateResourceParams,
   FGAUpdateResourceParams,
   FGADeleteResourceParams,

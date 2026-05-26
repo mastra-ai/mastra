@@ -120,9 +120,9 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   readonly resolveRouteFGA?: MastraFGAWorkosOptions['resolveRouteFGA'];
   readonly validatePermissions?: MastraFGAWorkosOptions['validatePermissions'];
   readonly publicByDefault: boolean;
-  readonly authorship?: {
+  readonly ownership?: {
     enabled: boolean;
-    authorRole: string;
+    ownerRole: string;
     fallbackRoles: string[];
   };
 
@@ -148,12 +148,12 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     this.validatePermissions = options.validatePermissions;
     this.publicByDefault = options.publicByDefault ?? false;
 
-    // Authorship configuration
-    if (options.authorship?.enabled) {
-      this.authorship = {
+    // Ownership configuration
+    if (options.ownership?.enabled) {
+      this.ownership = {
         enabled: true,
-        authorRole: options.authorship.authorRole || 'author',
-        fallbackRoles: options.authorship.fallbackRoles || ['owner', 'admin', 'editor'],
+        ownerRole: options.ownership.ownerRole || 'owner',
+        fallbackRoles: options.ownership.fallbackRoles || ['admin', 'editor'],
       };
     }
   }
@@ -792,17 +792,17 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   }
 
   /**
-   * Register a Mastra resource in FGA with optional authorship support.
+   * Register a Mastra resource in FGA with optional ownership support.
    *
    * This method:
    * 1. Checks if the resource type exists in WorkOS
    * 2. Creates the FGA resource (with optional parent for hierarchy)
-   * 3. Auto-assigns the author role if authorship is enabled
+   * 3. Auto-assigns the owner role if ownership is enabled
    *
-   * @returns Registration result with resource, author assignment, and warnings
+   * @returns Registration result with resource, owner assignment, and warnings
    */
   async registerResource(params: FGARegisterResourceParams<WorkOSUser>): Promise<FGARegistrationResult> {
-    const { user, resourceType, resourceId, name, parentResource, skipAuthorship } = params;
+    const { user, resourceType, resourceId, name, parentResource, skipOwnership } = params;
     const warnings: string[] = [];
 
     // Get organization ID from user or provider config
@@ -812,7 +812,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
         `Cannot register resource: no organizationId available. ` +
           `Ensure user has organizationId set or FGA provider has organizationId configured.`,
       );
-      return { resource: null, authorAssignment: null, warnings };
+      return { resource: null, ownerAssignment: null, warnings };
     }
 
     // 1. Check if resource type exists in WorkOS
@@ -826,7 +826,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
           `To enable protection, create '${resourceType}' resource type with roles in WorkOS Dashboard.`,
       );
       this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
-      return { resource: null, authorAssignment: null, warnings };
+      return { resource: null, ownerAssignment: null, warnings };
     }
 
     // 2. Resolve parent resource ID if hierarchical
@@ -867,40 +867,40 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       parentResourceId,
     });
 
-    // 4. Auto-assign author role (if enabled and role exists)
-    let authorAssignment: FGARoleAssignment | null = null;
+    // 4. Auto-assign owner role (if enabled and role exists)
+    let ownerAssignment: FGARoleAssignment | null = null;
 
-    if (!skipAuthorship && this.authorship?.enabled) {
+    if (!skipOwnership && this.ownership?.enabled) {
       const membershipId = this.resolveOrganizationMembershipId(user);
       if (!membershipId) {
         warnings.push(
-          `Cannot assign author role: no organization membership ID found for user. ` +
+          `Cannot assign owner role: no organization membership ID found for user. ` +
             `Ensure fetchMemberships is enabled on MastraAuthWorkos.`,
         );
         this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
       } else {
         // Find a suitable role to assign
-        const authorRoleName = this.authorship.authorRole;
-        const hasAuthorRole = typeInfo.relations.includes(authorRoleName);
+        const ownerRoleName = this.ownership.ownerRole;
+        const hasOwnerRole = typeInfo.relations.includes(ownerRoleName);
 
-        if (hasAuthorRole) {
-          // Assign the configured author role
-          authorAssignment = await this.assignRole({
+        if (hasOwnerRole) {
+          // Assign the configured owner role
+          ownerAssignment = await this.assignRole({
             organizationMembershipId: membershipId,
             resourceId: resource.id,
             resourceTypeSlug: resourceType,
-            roleSlug: authorRoleName,
+            roleSlug: ownerRoleName,
           });
 
           this.logger?.info(
-            `[FGA] Registered ${resourceType} '${name}' with '${authorRoleName}' role assigned to user.`,
+            `[FGA] Registered ${resourceType} '${name}' with '${ownerRoleName}' role assigned to user.`,
           );
         } else {
           // Try fallback roles
-          const fallbackRole = this.authorship.fallbackRoles.find(r => typeInfo.relations.includes(r));
+          const fallbackRole = this.ownership.fallbackRoles.find((r: string) => typeInfo.relations.includes(r));
 
           if (fallbackRole) {
-            authorAssignment = await this.assignRole({
+            ownerAssignment = await this.assignRole({
               organizationMembershipId: membershipId,
               resourceId: resource.id,
               resourceTypeSlug: resourceType,
@@ -908,7 +908,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
             });
 
             warnings.push(
-              `Role '${authorRoleName}' not found for '${resourceType}'. ` + `Using '${fallbackRole}' instead.`,
+              `Role '${ownerRoleName}' not found for '${resourceType}'. ` + `Using '${fallbackRole}' instead.`,
             );
             this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
             this.logger?.info(
@@ -916,7 +916,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
             );
           } else {
             warnings.push(
-              `No author/owner role found for '${resourceType}'. ` +
+              `No owner role found for '${resourceType}'. ` +
                 `Available roles: ${typeInfo.relations.join(', ')}. ` +
                 `User will not have automatic access to their created resource.`,
             );
@@ -926,6 +926,6 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       }
     }
 
-    return { resource, authorAssignment, warnings };
+    return { resource, ownerAssignment, warnings };
   }
 }

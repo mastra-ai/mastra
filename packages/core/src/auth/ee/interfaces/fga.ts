@@ -250,7 +250,7 @@ export interface FGAResourceTypeInfo {
 // ──────────────────────────────────────────────────────────────
 
 /**
- * Parameters for registering a resource with authorship support.
+ * Parameters for registering a resource with ownership support.
  */
 export interface FGARegisterResourceParams<TUser = unknown> {
   /** The user creating the resource */
@@ -263,31 +263,31 @@ export interface FGARegisterResourceParams<TUser = unknown> {
   name: string;
   /** Optional parent resource for hierarchy */
   parentResource?: { type: string; id: string };
-  /** Override: skip author role assignment */
-  skipAuthorship?: boolean;
+  /** Override: skip owner role assignment */
+  skipOwnership?: boolean;
 }
 
 /**
- * Result of registering a resource with authorship.
+ * Result of registering a resource with ownership.
  */
 export interface FGARegistrationResult {
   /** The created FGA resource (null if type doesn't exist in WorkOS) */
   resource: FGAResource | null;
-  /** The author role assignment (null if authorship disabled or no author role) */
-  authorAssignment: FGARoleAssignment | null;
-  /** Warnings (e.g., "resource type not found", "author role not found") */
+  /** The owner role assignment (null if ownership disabled or no owner role) */
+  ownerAssignment: FGARoleAssignment | null;
+  /** Warnings (e.g., "resource type not found", "owner role not found") */
   warnings: string[];
 }
 
 /**
- * Authorship configuration for FGA provider.
+ * Ownership configuration for FGA provider.
  */
-export interface FGAAuthorshipConfig {
-  /** Enable automatic author role assignment on resource creation */
+export interface FGAOwnershipConfig {
+  /** Enable automatic owner role assignment on resource creation */
   enabled: boolean;
-  /** Role to assign to creator (default: 'author', fallbacks: 'owner', 'admin', 'editor') */
-  authorRole?: string;
-  /** Fallback roles to try if authorRole not found */
+  /** Role to assign to creator (default: 'owner', fallbacks: 'admin', 'editor') */
+  ownerRole?: string;
+  /** Fallback roles to try if ownerRole not found */
   fallbackRoles?: string[];
 }
 
@@ -466,18 +466,18 @@ export interface IFGAManager<TUser = unknown> extends IFGAProvider<TUser> {
   describeResourceTypes(organizationId: string): Promise<FGAResourceTypeInfo[]>;
 
   /**
-   * Register a Mastra resource in FGA with optional authorship support.
+   * Register a Mastra resource in FGA with optional ownership support.
    *
    * This is the main entry point for integrating FGA with resource creation.
-   * When authorship is enabled, automatically assigns the author role to the creator.
+   * When ownership is enabled, automatically assigns the owner role to the creator.
    *
    * Behavior:
    * - If resource type doesn't exist in WorkOS, returns null resource with warning
-   * - If authorship enabled, assigns author role (or fallback) to creator
+   * - If ownership enabled, assigns owner role (or fallback) to creator
    * - If parent specified, creates hierarchical relationship
    *
    * @param params - Registration parameters including user, resource type, ID, name
-   * @returns Registration result with resource, author assignment, and warnings
+   * @returns Registration result with resource, owner assignment, and warnings
    */
   registerResource(params: FGARegisterResourceParams<TUser>): Promise<FGARegistrationResult>;
 
