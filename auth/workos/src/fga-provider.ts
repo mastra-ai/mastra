@@ -11,6 +11,7 @@ import type {
   IFGAManager,
   FGACheckParams,
   FGAResource,
+  FGAResourceTypeInfo,
   FGACreateResourceParams,
   FGAUpdateResourceParams,
   FGADeleteResourceParams,
@@ -21,6 +22,7 @@ import type {
   MastraFGAPermissionInput,
 } from '@mastra/core/auth/ee';
 import { FGADeniedError } from '@mastra/core/auth/ee';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { WorkOS } from '@workos-inc/node';
 
 import type { MastraFGAWorkosOptions, FGAResourceMappingEntry, WorkOSUser } from './types';
@@ -107,10 +109,13 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   private organizationId?: string;
   private resourceMapping: Record<string, FGAResourceMappingEntry>;
   private permissionMapping: Record<string, string>;
+  private logger?: IMastraLogger;
+  private warnedResources = new Set<string>(); // Track warnings to avoid spam
   readonly requireForProtectedRoutes?: boolean;
   readonly auditProtectedRoutes?: boolean | 'warn' | 'error';
   readonly resolveRouteFGA?: MastraFGAWorkosOptions['resolveRouteFGA'];
   readonly validatePermissions?: MastraFGAWorkosOptions['validatePermissions'];
+  readonly publicByDefault: boolean;
 
   constructor(options: MastraFGAWorkosOptions) {
     const apiKey = options.apiKey ?? process.env.WORKOS_API_KEY;
@@ -127,10 +132,12 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     this.organizationId = options.organizationId;
     this.resourceMapping = options.resourceMapping ?? {};
     this.permissionMapping = options.permissionMapping ?? {};
+    this.logger = options.logger;
     this.requireForProtectedRoutes = options.requireForProtectedRoutes;
     this.auditProtectedRoutes = options.auditProtectedRoutes;
     this.resolveRouteFGA = options.resolveRouteFGA;
     this.validatePermissions = options.validatePermissions;
+    this.publicByDefault = options.publicByDefault ?? false;
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -150,17 +157,56 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     const permissions = Array.isArray(params.permission) ? params.permission : [params.permission];
     if (permissions.length === 0) return false;
 
+    const { type: resourceType, id: resourceId } = params.resource;
+    let allResourceNotFound = true;
+    let deniedPermission: string | undefined;
+
     for (const permission of permissions) {
       const checkOptions = this.buildCheckOptions(user, { ...params, permission });
       if (!checkOptions) continue;
       try {
         const result = await this.workos.authorization.check(checkOptions);
+        allResourceNotFound = false; // Resource exists, we got a real response
         if (result.authorized) return true;
+        // Track which permission was denied for logging
+        deniedPermission = String(permission);
       } catch (error: any) {
         if (isWorkOSResourceNotFoundError(error)) continue;
         throw error;
       }
     }
+
+    // If all permissions resulted in "resource not found", apply publicByDefault behavior
+    if (allResourceNotFound) {
+      const resourceKey = `${resourceType}:${resourceId}`;
+      if (this.publicByDefault) {
+        // Only warn once per resource to avoid log spam
+        if (!this.warnedResources.has(resourceKey)) {
+          this.warnedResources.add(resourceKey);
+          this.logger?.debug(
+            `[FGA] Resource '${resourceKey}' is not registered in WorkOS. ` +
+              `Access allowed because publicByDefault is enabled.`,
+          );
+        }
+        return true;
+      } else {
+        if (!this.warnedResources.has(resourceKey)) {
+          this.warnedResources.add(resourceKey);
+          this.logger?.warn(
+            `[FGA] Access denied: resource '${resourceKey}' is not registered in WorkOS. ` +
+              `Register it using createResource() or enable publicByDefault to allow unregistered resources.`,
+          );
+        }
+        return false;
+      }
+    }
+
+    // Resource exists but user doesn't have permission - always warn (this is a real access issue)
+    this.logger?.warn(
+      `[FGA] Access denied: user does not have '${deniedPermission}' permission on '${resourceType}:${resourceId}'. ` +
+        `Assign the appropriate role to the user in WorkOS dashboard or via assignRole().`,
+    );
+
     return false;
   }
 
@@ -424,10 +470,17 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   ): string | undefined {
     if (user?.organizationMembershipId) return user.organizationMembershipId;
     if (!user?.memberships?.length) {
-      console.warn(
+      const loggerMsg =
+        '[FGA] Cannot resolve organization membership for user. ' +
+        'Ensure fetchMemberships is enabled on MastraAuthWorkos when using FGA.';
+      const consoleMsg =
         '[MastraFGAWorkos] Cannot resolve organization membership for user <redacted>. ' +
-          'Ensure fetchMemberships is enabled on MastraAuthWorkos when using FGA.',
-      );
+        'Ensure fetchMemberships is enabled on MastraAuthWorkos when using FGA.';
+      if (this.logger) {
+        this.logger.warn(loggerMsg);
+      } else {
+        console.warn(consoleMsg);
+      }
       if (options?.strictMembershipResolution) {
         throw new WorkOSFGAMembershipResolutionError(user);
       }
@@ -439,7 +492,11 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       const match = user.memberships.find(m => m.organizationId === this.organizationId);
       if (match) return match.id;
 
-      console.warn('[MastraFGAWorkos] User <redacted> does not belong to configured organization <redacted>.');
+      if (this.logger) {
+        this.logger.warn('[FGA] User does not belong to configured organization.');
+      } else {
+        console.warn('[MastraFGAWorkos] User <redacted> does not belong to configured organization <redacted>.');
+      }
       if (options?.strictMembershipResolution) {
         throw new WorkOSFGAMembershipResolutionError(user);
       }
@@ -599,5 +656,96 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       organizationId: resource.organizationId,
       parentResourceId: resource.parentResourceId,
     };
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Resource Type Discovery (Alida's workaround)
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Discover resource types from WorkOS by combining roles and resources data.
+   *
+   * This uses a workaround since WorkOS doesn't expose a direct schema API:
+   * - Roles grouped by resourceTypeSlug give us types and their relations
+   * - Resources with parentResourceId give us hierarchy information
+   *
+   * Caveats:
+   * - Types with no roles AND no instances won't appear
+   * - Parent type derivation depends on existing instances
+   * - Relations are role slugs, not OpenFGA-style relation tuples
+   */
+  async describeResourceTypes(organizationId: string): Promise<FGAResourceTypeInfo[]> {
+    // Fetch all resources (paginated)
+    const allResources: any[] = [];
+    let resourcesAfter: string | undefined;
+    do {
+      const result = await this.workos.authorization.listResources({
+        organizationId,
+        limit: 100,
+        after: resourcesAfter,
+      });
+      allResources.push(...(result.data ?? []));
+      resourcesAfter = result.listMetadata?.after ?? undefined;
+    } while (resourcesAfter);
+
+    // Fetch all roles for the organization
+    const { data: roles } = await this.workos.authorization.listOrganizationRoles(organizationId);
+
+    // Build resource type map
+    const types = new Map<
+      string,
+      {
+        slug: string;
+        relations: Set<string>;
+        customRelations: Set<string>;
+        parentResourceTypeSlugs: Set<string>;
+        hasInstances: boolean;
+      }
+    >();
+
+    const ensure = (slug: string) => {
+      if (!types.has(slug)) {
+        types.set(slug, {
+          slug,
+          relations: new Set(),
+          customRelations: new Set(),
+          parentResourceTypeSlugs: new Set(),
+          hasInstances: false,
+        });
+      }
+      return types.get(slug)!;
+    };
+
+    // Derive resource types and relations from roles
+    for (const role of roles) {
+      const entry = ensure(role.resourceTypeSlug);
+      entry.relations.add(role.slug);
+      // OrganizationRole = custom org-specific role
+      if (role.type === 'OrganizationRole') {
+        entry.customRelations.add(role.slug);
+      }
+    }
+
+    // Derive parent types from resource instances
+    const idToTypeSlug = new Map(allResources.map(r => [r.id, r.resourceTypeSlug]));
+    for (const resource of allResources) {
+      const entry = ensure(resource.resourceTypeSlug);
+      entry.hasInstances = true;
+      if (resource.parentResourceId) {
+        const parentSlug = idToTypeSlug.get(resource.parentResourceId);
+        if (parentSlug) {
+          entry.parentResourceTypeSlugs.add(parentSlug);
+        }
+      }
+    }
+
+    // Convert to array format
+    return [...types.values()].map(t => ({
+      slug: t.slug,
+      relations: [...t.relations],
+      customRelations: [...t.customRelations],
+      parentResourceTypeSlugs: [...t.parentResourceTypeSlugs],
+      hasInstances: t.hasInstances,
+    }));
   }
 }
