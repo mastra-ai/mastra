@@ -52,7 +52,7 @@ const ANALYTICS_OBSERVABILITY_TYPES = new Set([
   'ObservabilityStorageClickhouseVNext',
   'ObservabilityStorageDuckDB',
   'ObservabilityInMemory',
-  'ObservabilitySpanner',
+  "ObservabilitySpanner",
 ]);
 
 const PERIOD_PARAM = 'period';
