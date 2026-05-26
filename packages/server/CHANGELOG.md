@@ -1,5 +1,103 @@
 # @mastra/server
 
+## 1.37.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`168fa09`](https://github.com/mastra-ai/mastra/commit/168fa09d6b39114cb8c13bd06f1dccb9bc81c6cd)]:
+  - @mastra/core@1.37.0-alpha.7
+
+## 1.37.0-alpha.6
+
+### Patch Changes
+
+- Developers can now cancel long-running custom API route work when clients disconnect. Node-based adapters pass abort signals into custom route handlers, clean up response streams correctly, and still surface upstream response body errors. ([#16335](https://github.com/mastra-ai/mastra/pull/16335))
+
+  ```ts
+  registerApiRoute('/stream', {
+    method: 'GET',
+    handler: async c => {
+      const stream = await agent.stream(prompt, {
+        abortSignal: c.req.raw.signal,
+      });
+
+      return stream.toTextStreamResponse();
+    },
+  });
+  ```
+
+- Updated dependencies [[`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0-alpha.6
+
+## 1.37.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd)]:
+  - @mastra/core@1.37.0-alpha.5
+
+## 1.37.0-alpha.4
+
+### Minor Changes
+
+- Connecting or disconnecting an agent through a channel (e.g. Slack) now requires the same write permission as editing the underlying stored agent. The check runs on `POST /channels/:platform/connect` and `POST /channels/:platform/:agentId/disconnect` whenever the target agent has a record in the stored-agents store. Callers without write access receive a `404 Not found`, matching the behavior of the stored-agent edit routes. Agents defined in code (no stored-agents record) are unaffected and continue to honor only the route's existing auth requirement. ([#16949](https://github.com/mastra-ai/mastra/pull/16949))
+
+  The caller must either own the stored agent, have admin bypass, or hold `agents:edit` (or a scoped `agents:edit:<agentId>`).
+
+  ```http
+  POST /channels/slack/connect
+  Authorization: Bearer <token-with-agents:edit>
+  Content-Type: application/json
+
+  { "agentId": "support-bot" }
+  ```
+
+  ```http
+  POST /channels/slack/support-bot/disconnect
+  Authorization: Bearer <token-with-agents:edit>
+  ```
+
+  `@mastra/core` is bumped as a patch to ship the regenerated permission definitions that back this check.
+
+- Gate stored-workspace handlers by author. Previously any authenticated caller within a tenant could list, read, update, or delete another user's workspace. ([#16974](https://github.com/mastra-ai/mastra/pull/16974))
+
+  **Behavior changes**
+  - `POST /stored/workspaces` — server stamps `authorId` from the authenticated caller; any body-provided `authorId` is ignored.
+  - `GET /stored/workspaces/:id`, `PATCH /stored/workspaces/:id`, `DELETE /stored/workspaces/:id` — return `404 Not found` unless the caller is the owner, an admin (`*`), or holds `stored-workspaces:<action>[:<id>]`.
+  - `GET /stored/workspaces` — filters to the caller's own rows plus legacy unowned records; admins still see every row.
+  - Legacy workspaces created before this change (no `authorId`) remain accessible to any authenticated caller for backwards compatibility.
+
+  **Example**
+
+  ```ts
+  // Client POST body — authorId is ignored if sent
+  await fetch('/stored/workspaces', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'My workspace', authorId: 'someone-else' }),
+  });
+
+  // Stored row — authorId is stamped from the authenticated caller
+  // {
+  //   id: 'my-workspace',
+  //   name: 'My workspace',
+  //   authorId: 'user_abc123', // from requestContext, NOT from body
+  //   ...
+  // }
+  ```
+
+  **Migration**
+  - Existing rows with `authorId === null/undefined` remain readable/writable by any authenticated caller — no action required for backwards compatibility.
+  - To lock down legacy rows, backfill `authorId` directly in the `workspaces` table with the original creator's id.
+  - For service accounts or tooling that need cross-user access, grant `stored-workspaces:*` (or per-id `stored-workspaces:<action>:<id>`) instead of relying on the legacy unowned bypass.
+  - Admins (callers with `*`) continue to see and mutate every row regardless of `authorId`.
+
+  The `@mastra/core` patch regenerates `permissions.generated.ts` to include the `auth` and `infrastructure` resources that already had routes on `main`.
+
+### Patch Changes
+
+- Updated dependencies [[`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5)]:
+  - @mastra/core@1.37.0-alpha.4
+
 ## 1.37.0-alpha.3
 
 ### Patch Changes
