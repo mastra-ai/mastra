@@ -18,6 +18,10 @@ inputs:
     description: 'Path to pnpm-lock.yaml for cache key (useful when checkout is not at workspace root)'
     required: false
     default: ''
+  version:
+    description: 'Explicit pnpm version (overrides packageManager detection)'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -28,7 +32,10 @@ runs:
     # ~/setup-pnpm/node_modules/.bin/.
     - uses: pnpm/action-setup@v4
       name: Install pnpm
+      env:
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       with:
+        version: ${{ inputs.version || '' }}
         run_install: false
         package_json_file: ${{ inputs.package-json-file || 'package.json' }}
         cache: ${{ inputs.package-manager-cache == 'true' }}

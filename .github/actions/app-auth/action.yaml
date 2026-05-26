@@ -1,8 +1,8 @@
 name: 'Dane App Auth'
 description: 'Create GitHub App installation token, expose outputs, set .netrc'
 inputs:
-  app-id:
-    description: 'GitHub App ID'
+  client-id:
+    description: 'GitHub App Client ID'
     required: true
   private-key:
     description: 'GitHub App private key'
@@ -35,7 +35,7 @@ runs:
     - id: app-token
       uses: actions/create-github-app-token@v3
       with:
-        app-id: ${{ inputs.app-id }}
+        client-id: ${{ inputs.client-id }}
         private-key: ${{ inputs.private-key }}
         owner: ${{ inputs.owner }}
         repositories: ${{ inputs.repositories }}

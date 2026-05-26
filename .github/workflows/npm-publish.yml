@@ -56,6 +56,8 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           run_install: false
 
@@ -159,7 +161,7 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
       - name: Re-checkout with app token
@@ -181,6 +183,8 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           run_install: false
 
@@ -301,7 +305,7 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
       - name: Re-checkout with app token
@@ -313,6 +317,8 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           run_install: false
 
@@ -376,7 +382,7 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
       - name: Re-checkout with app token
@@ -388,6 +394,8 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           run_install: false
 
