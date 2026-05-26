@@ -96,6 +96,11 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
       const config = loaded.config as UserWorkspaceConfig;
 
       if (!hasNestedProjects) {
+        if (!SOURCE_MODE) {
+          projects.push(projectDir);
+          continue;
+        }
+
         projects.push(
           withSourceModeConfig({
             ...config,
@@ -103,11 +108,7 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
               ...config.test,
               name: config.test?.name ?? `unit:${projectDir}`,
               root: `./${projectDir}`,
-              ...(SOURCE_MODE
-                ? { exclude: [...(config.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES] }
-                : config.test?.exclude
-                  ? { exclude: config.test.exclude }
-                  : {}),
+              exclude: [...(config.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES],
             },
           }),
         );
@@ -133,7 +134,7 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
               ...projectConfig,
               test: {
                 ...projectConfig.test,
-                name: projectConfig.test?.name ?? `unit:${projectDir}`,
+                ...(SOURCE_MODE && !projectConfig.test?.name ? { name: `unit:${projectDir}` } : {}),
                 root: `./${projectDir}`,
                 ...(SOURCE_MODE
                   ? { exclude: [...(projectConfig.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES] }
