@@ -62,8 +62,11 @@ vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
 vi.mock('@/domains/auth/hooks/use-role-impersonation', () => ({
   useRoleImpersonation: () => ({
     impersonatedRole: null,
-    setImpersonatedRole: () => {},
-    clearImpersonation: () => {},
+    impersonatedPermissions: null,
+    isImpersonating: false,
+    isSwitching: false,
+    startImpersonation: async () => {},
+    stopImpersonation: () => {},
   }),
 }));
 

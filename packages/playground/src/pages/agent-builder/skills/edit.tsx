@@ -6,6 +6,7 @@ import { AutosaveIndicator } from '@/domains/agent-builder/components/agent-edit
 import { DeleteSkillPanelButton } from '@/domains/agent-builder/components/skill-edit/delete-skill-action';
 import { SkillBuilderMobileMenu } from '@/domains/agent-builder/components/skill-edit/skill-builder-mobile-menu';
 import { VisibilitySelect } from '@/domains/agent-builder/components/skill-edit/visibility-select';
+import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { useAutosaveSkill } from '@/domains/agent-builder/hooks/use-autosave-skill';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
 import { useStarterUserMessage } from '@/domains/agent-builder/hooks/use-starter-user-message';
@@ -69,7 +70,9 @@ const AgentBuilderSkillEditPage = ({ id, storedSkill, initialUserMessage }: Page
 
   return (
     <FormProvider {...formMethods}>
-      <AgentBuilderSkillEditReady id={id} initialUserMessage={initialUserMessage} />
+      <AgentColorProvider agentId={id}>
+        <AgentBuilderSkillEditReady id={id} initialUserMessage={initialUserMessage} />
+      </AgentColorProvider>
     </FormProvider>
   );
 };

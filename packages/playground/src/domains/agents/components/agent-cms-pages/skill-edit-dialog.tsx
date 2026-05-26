@@ -16,6 +16,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, CopyIcon, Globe, LockIcon, Pe
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
+
 import { useCreateSkill } from '../../hooks/use-create-skill';
 import { useUpdateSkill } from '../../hooks/use-update-skill';
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
@@ -28,6 +29,7 @@ import {
 } from './skill-file-tree';
 import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
+import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
@@ -326,15 +328,17 @@ export function SkillEditDialog({
           /* Create/Edit mode — single scrollable column: chat on top, form below */
           <div className="flex flex-col gap-4">
             {/* Chat section — always on top */}
-            <SkillChatComposer
-              sessionKey={chatSessionKey}
-              hasFields={hasFields}
-              onFieldsPopulated={handleFieldsPopulated}
-              formState={{ name, description, instructions }}
-              onNameChange={handleNameChange}
-              onDescriptionChange={setDescription}
-              onInstructionsChange={handleInstructionsChange}
-            />
+            <AgentColorProvider agentId={skill?.id ?? chatSessionKey}>
+              <SkillChatComposer
+                sessionKey={chatSessionKey}
+                hasFields={hasFields}
+                onFieldsPopulated={handleFieldsPopulated}
+                formState={{ name, description, instructions }}
+                onNameChange={handleNameChange}
+                onDescriptionChange={setDescription}
+                onInstructionsChange={handleInstructionsChange}
+              />
+            </AgentColorProvider>
 
             {/* Form section — revealed after agent populates or user expands */}
             {showForm ? (
