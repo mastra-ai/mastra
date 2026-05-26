@@ -8,4 +8,3 @@ overrides:
 allowBuilds:
   esbuild: true
   snyk: false
-  snyk: set this to true or false
