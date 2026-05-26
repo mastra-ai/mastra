@@ -643,7 +643,9 @@ export class HarnessLegacy<TState = {}> {
     if (workspaceForAgents && !agent.hasOwnWorkspace()) {
       agent.__setWorkspace(workspaceForAgents);
     }
-    if (browserForAgents && typeof browserForAgents !== 'function') {
+    if (typeof browserForAgents !== 'function') {
+      // Pass undefined too so clearing via setBrowser(undefined) propagates
+      // to agents resolved later (e.g. dynamic mode agents).
       agent.__setManagedBrowser(browserForAgents);
     }
     if (this.config.pubsub && !agent.hasOwnPubSub()) {

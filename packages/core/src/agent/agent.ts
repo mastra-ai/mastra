@@ -5889,7 +5889,11 @@ export class Agent<
 
     // Inject browser context for BrowserContextProcessor
     // Check both agent's browser (SDK providers) and workspace's browser (CLI providers)
-    const browser = this.#browser ?? earlyWorkspace?.browser;
+    // Only fall back to the workspace browser when no higher-priority source
+    // owns this slot — otherwise a managed `undefined` (e.g. `/browser off`)
+    // could be silently overridden by whatever the workspace exposes.
+    const allowWorkspaceBrowserFallback = !this.#hasExplicitBrowser && !this.#hasManagedBrowser;
+    const browser = this.#browser ?? (allowWorkspaceBrowserFallback ? earlyWorkspace?.browser : undefined);
     if (browser && !requestContext.has('browser')) {
       // Get threadId early for browser context - can come from requestContext, options, or snapshot
       // Normalize memory.thread which can be a string or { id, ... } object
