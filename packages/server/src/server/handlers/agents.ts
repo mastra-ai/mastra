@@ -1721,9 +1721,17 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       });
 
       let cleanedUp = false;
+      let heartbeat: ReturnType<typeof setTimeout> | undefined;
+      const clearHeartbeat = () => {
+        if (heartbeat) {
+          clearTimeout(heartbeat);
+          heartbeat = undefined;
+        }
+      };
       const cleanup = (closeController?: ReadableStreamDefaultController) => {
         if (cleanedUp) return;
         cleanedUp = true;
+        clearHeartbeat();
         subscription.abort();
         subscription.unsubscribe();
         if (closeController) {
@@ -1735,18 +1743,36 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
 
       return new ReadableStream({
         async start(controller) {
+          const scheduleHeartbeat = () => {
+            if (cleanedUp) return;
+            clearHeartbeat();
+            heartbeat = setTimeout(() => {
+              heartbeat = undefined;
+              if (cleanedUp) return;
+              try {
+                controller.enqueue(': heartbeat\n\n');
+              } catch {
+                cleanup();
+                return;
+              }
+              scheduleHeartbeat();
+            }, 25_000);
+          };
           const abortCleanup = () => cleanup(controller);
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
+          scheduleHeartbeat();
 
           try {
             for await (const part of subscription.stream) {
               controller.enqueue(part);
+              scheduleHeartbeat();
             }
             cleanup(controller);
           } catch (error) {
             cleanup();
             controller.error(error);
           } finally {
+            clearHeartbeat();
             abortSignal?.removeEventListener('abort', abortCleanup);
           }
         },
