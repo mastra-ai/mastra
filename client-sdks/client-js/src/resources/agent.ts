@@ -77,6 +77,42 @@ type ClientToolObservabilityEnvelope = {
   payload?: Record<string, unknown>;
 };
 
+type SignalRuntimeOptions = StreamParamsBaseWithoutMessages<any>;
+type SignalRuntimeOptionsEntry = {
+  streamOptions: SignalRuntimeOptions;
+  timeout: ReturnType<typeof setTimeout>;
+};
+
+const SIGNAL_RUNTIME_OPTIONS_TTL_MS = 5 * 60 * 1000;
+const signalRuntimeOptionsByRunId = new Map<string, SignalRuntimeOptionsEntry>();
+const latestSignalRuntimeOptionsByThread = new Map<string, SignalRuntimeOptionsEntry>();
+
+const createSignalRuntimeOptionsEntry = (
+  store: Map<string, SignalRuntimeOptionsEntry>,
+  key: string,
+  streamOptions: SignalRuntimeOptions,
+): SignalRuntimeOptionsEntry => {
+  const timeout = setTimeout(() => store.delete(key), SIGNAL_RUNTIME_OPTIONS_TTL_MS);
+  (timeout as { unref?: () => void }).unref?.();
+  return { streamOptions, timeout };
+};
+
+const setSignalRuntimeOptionsEntry = (
+  store: Map<string, SignalRuntimeOptionsEntry>,
+  key: string,
+  streamOptions: SignalRuntimeOptions,
+): void => {
+  const existing = store.get(key);
+  if (existing) clearTimeout(existing.timeout);
+  store.set(key, createSignalRuntimeOptionsEntry(store, key, streamOptions));
+};
+
+const deleteSignalRuntimeOptionsEntry = (store: Map<string, SignalRuntimeOptionsEntry>, key: string): void => {
+  const existing = store.get(key);
+  if (existing) clearTimeout(existing.timeout);
+  store.delete(key);
+};
+
 const noopClientToolObserve: ToolObserve = {
   async span<T>(_name: string, fn: () => Promise<T> | T): Promise<T> {
     return fn();
@@ -354,6 +390,72 @@ export class Agent extends BaseResource {
     return queryString ? `${delimiter}${queryString}` : '';
   }
 
+  private getSignalRuntimeRunKey(runId: string): string {
+    return `${this.options.baseUrl}|${this.apiPrefix}|${this.agentId}|${runId}`;
+  }
+
+  private getSignalRuntimeThreadKey({
+    resourceId,
+    threadId,
+  }: {
+    resourceId?: string;
+    threadId?: string;
+  }): string | undefined {
+    if (!threadId) return undefined;
+    return `${this.options.baseUrl}|${this.apiPrefix}|${this.agentId}|${resourceId ?? ''}|${threadId}`;
+  }
+
+  private setSignalRuntimeOptions({
+    runId,
+    resourceId,
+    threadId,
+    streamOptions,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    streamOptions: SignalRuntimeOptions;
+  }): void {
+    const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
+    if (runId) {
+      setSignalRuntimeOptionsEntry(signalRuntimeOptionsByRunId, this.getSignalRuntimeRunKey(runId), streamOptions);
+      if (threadKey) deleteSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey);
+      return;
+    }
+
+    if (threadKey) {
+      setSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey, streamOptions);
+    }
+  }
+
+  private getSignalRuntimeOptions({
+    runId,
+    resourceId,
+    threadId,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+  }): SignalRuntimeOptions | undefined {
+    if (runId) {
+      const runOptions = signalRuntimeOptionsByRunId.get(this.getSignalRuntimeRunKey(runId));
+      if (runOptions) return runOptions.streamOptions;
+    }
+
+    const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
+    return threadKey ? latestSignalRuntimeOptionsByThread.get(threadKey)?.streamOptions : undefined;
+  }
+
+  private deleteSignalRuntimeOptions(runId?: string): void {
+    if (!runId) return;
+    deleteSignalRuntimeOptionsEntry(signalRuntimeOptionsByRunId, this.getSignalRuntimeRunKey(runId));
+  }
+
+  private deleteLatestSignalRuntimeOptions({ resourceId, threadId }: { resourceId?: string; threadId?: string }): void {
+    const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
+    if (threadKey) deleteSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey);
+  }
+
   /**
    * Retrieves details about the agent
    * @param requestContext - Optional request context to pass as query parameter
@@ -403,11 +505,53 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
-    return this.request(`/agents/${this.agentId}/signals`, {
-      method: 'POST',
-      body: params,
-    });
+  async sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
+    if (streamOptions) {
+      this.setSignalRuntimeOptions({
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+        streamOptions,
+      });
+    }
+
+    const body = params.ifIdle?.streamOptions
+      ? {
+          ...params,
+          ifIdle: {
+            ...params.ifIdle,
+            streamOptions: {
+              ...params.ifIdle.streamOptions,
+              requestContext: parseClientRequestContext(params.ifIdle.streamOptions.requestContext),
+              clientTools: processClientTools(params.ifIdle.streamOptions.clientTools),
+            },
+          },
+        }
+      : params;
+
+    let response: { accepted: true; runId: string };
+    try {
+      response = await this.request<{ accepted: true; runId: string }>(`/agents/${this.agentId}/signals`, {
+        method: 'POST',
+        body,
+      });
+    } catch (error) {
+      if (streamOptions) {
+        this.deleteLatestSignalRuntimeOptions({ resourceId: params.resourceId, threadId: params.threadId });
+      }
+      throw error;
+    }
+
+    if (streamOptions) {
+      this.setSignalRuntimeOptions({
+        runId: response.runId,
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+        streamOptions,
+      });
+    }
+
+    return response;
   }
 
   /**
@@ -418,10 +562,11 @@ export class Agent extends BaseResource {
       processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
     }
   > {
+    const { resourceId, threadId } = params;
     const requestSubscription = () =>
       this.request(`/agents/${this.agentId}/threads/subscribe`, {
         method: 'POST',
-        body: params,
+        body: { resourceId, threadId },
         stream: true,
       }) as Promise<Response>;
 
@@ -433,7 +578,158 @@ export class Agent extends BaseResource {
       throw new Error('No response body');
     }
 
+    const agent = this;
+
     streamResponse.processDataStream = async ({ onChunk, reconnect }: ProcessAgentThreadStreamOptions) => {
+      const pendingToolCallsByRunId = new Map<
+        string,
+        Array<{
+          toolCallId: string;
+          toolName: string;
+          args?: unknown;
+          observability?: ClientToolObservabilityContext;
+        }>
+      >();
+
+      const handleSubscribedChunk = async (chunk: ChunkType) => {
+        if (chunk.type === 'tool-call') {
+          const payload = (
+            chunk as {
+              payload?: {
+                toolCallId?: string;
+                toolName?: string;
+                args?: unknown;
+                observability?: ClientToolObservabilityContext;
+              };
+            }
+          ).payload;
+          const toolCallId = payload?.toolCallId;
+          const toolName = payload?.toolName;
+          const runId = (chunk as { runId?: string }).runId;
+          if (!toolCallId || !toolName || !runId) return;
+
+          const pendingToolCalls = pendingToolCallsByRunId.get(runId) ?? [];
+          pendingToolCalls.push({ toolCallId, toolName, args: payload.args, observability: payload.observability });
+          pendingToolCallsByRunId.set(runId, pendingToolCalls);
+          return;
+        }
+
+        if (chunk.type !== 'finish') return;
+
+        const runId = (chunk as { runId?: string }).runId;
+        const finishPayload = chunk as {
+          payload?: {
+            stepResult?: { reason?: string };
+            messages?: { nonUser?: CoreMessage[] };
+          };
+        };
+        if (!runId) return;
+        if (finishPayload.payload?.stepResult?.reason !== 'tool-calls') {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
+
+        const pendingToolCalls = pendingToolCallsByRunId.get(runId);
+        pendingToolCallsByRunId.delete(runId);
+        if (!pendingToolCalls?.length) {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
+
+        const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
+        const activeClientTools = activeRuntimeOptions?.clientTools;
+        if (!activeClientTools) {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
+
+        const activeRequestContext = activeRuntimeOptions.requestContext;
+        const processedClientTools = processClientTools(activeClientTools);
+        const processedRequestContext = parseClientRequestContext(activeRequestContext);
+
+        const toolResultMessages: CoreMessage[] = [];
+        for (const toolCall of pendingToolCalls) {
+          const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
+          if (!clientTool || typeof clientTool.execute !== 'function') continue;
+
+          let result: unknown;
+          let observability: ClientToolObservabilityEnvelope | undefined;
+          try {
+            const execution = await executeClientToolWithObservability({
+              clientTool,
+              args: toolCall.args,
+              toolName: toolCall.toolName,
+              parentContext: toolCall.observability,
+              executeContext: {
+                requestContext: activeRequestContext as RequestContext,
+                tracingContext: { currentSpan: undefined },
+                agent: {
+                  agentId: agent.agentId,
+                  messages: finishPayload.payload?.messages?.nonUser ?? [],
+                  toolCallId: toolCall.toolCallId,
+                  suspend: async () => {},
+                  threadId,
+                  resourceId,
+                },
+              },
+            });
+            result = execution.result;
+            observability = execution.observability;
+          } catch (error) {
+            result = { error: String(error) };
+          }
+
+          const toolResultContent: Record<string, unknown> = {
+            type: 'tool-result',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            result,
+          };
+
+          if (observability) {
+            toolResultContent.__mastraObservability = observability;
+          }
+
+          await onChunk({
+            type: 'tool-result',
+            runId,
+            payload: toolResultContent,
+          } as never);
+
+          toolResultMessages.push({
+            role: 'tool',
+            content: [toolResultContent],
+          } as unknown as CoreMessage);
+        }
+
+        if (toolResultMessages.length === 0) {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
+
+        try {
+          const continuation = await agent.streamUntilIdle(
+            [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
+            {
+              ...activeRuntimeOptions,
+              runId: uuid(),
+              requestContext: processedRequestContext,
+              memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+              clientTools: processedClientTools,
+            } as never,
+          );
+          try {
+            void continuation.body?.cancel?.();
+          } catch {
+            // ignore
+          }
+        } catch (error) {
+          console.error('Error running client-tool continuation:', error);
+        } finally {
+          agent.deleteSignalRuntimeOptions(runId);
+        }
+      };
+
       const reconnectOptions =
         reconnect === true
           ? { maxRetries: Infinity, delayMs: 1000 }
@@ -452,6 +748,7 @@ export class Agent extends BaseResource {
       const guardedOnChunk = async (chunk: ChunkType) => {
         try {
           await onChunk(chunk);
+          await handleSubscribedChunk(chunk);
         } catch (cause) {
           throw { [onChunkErrorSentinel]: true, cause };
         }
