@@ -36,10 +36,6 @@ program
   .name('create-mastra')
   .description('Create a new Mastra project')
   .argument('[project-name]', 'Directory name of the project')
-  .option(
-    '-p, --project-name <string>',
-    'Project name that will be used in package.json and as the project directory name.',
-  )
   .option('--default', 'Quick start with defaults (src, OpenAI, examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows, scorers)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras)')
@@ -59,7 +55,7 @@ program
     analytics.trackCommandExecution({
       command: 'create',
       args: {
-        projectName: projectNameArg || args.projectName,
+        projectName: projectNameArg,
         components: args.components,
         llmProvider: args.llm,
         addExample: args.example,
@@ -68,8 +64,6 @@ program
         observability: args.observe,
       },
       execution: async () => {
-        // TODO(major): Remove args.projectName in favor of projectNameArg
-        const projectName = projectNameArg || args.projectName;
         const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
 
         if (args.default) {
@@ -79,7 +73,7 @@ program
             addExample: true,
             createVersionTag,
             timeout,
-            projectName,
+            projectName: projectNameArg,
             mcpServer: args.mcp,
             directory: 'src/',
             template: args.template,
@@ -96,7 +90,7 @@ program
           llmApiKey: args.llmApiKey,
           createVersionTag,
           timeout,
-          projectName,
+          projectName: projectNameArg,
           directory: args.dir,
           mcpServer: args.mcp,
           template: args.template,

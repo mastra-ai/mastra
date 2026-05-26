@@ -14,7 +14,6 @@ interface CreateProjectArgs {
   example?: boolean;
   timeout?: string | boolean;
   dir?: string;
-  projectName?: string;
   mcp?: Editor;
   skills?: string[];
   template?: string | boolean;
@@ -23,8 +22,6 @@ interface CreateProjectArgs {
 }
 
 export const createProject = async (projectNameArg: string | undefined, args: CreateProjectArgs) => {
-  // TODO(major): Remove args.projectName in favor of projectNameArg
-  const projectName = projectNameArg || args.projectName;
   if (args.observability !== undefined) {
     analytics.trackEvent('cli_observability_selected', {
       command: 'create',
@@ -36,7 +33,7 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
 
   await analytics.trackCommandExecution({
     command: 'create',
-    args: { ...args, projectName },
+    args: { ...args, projectName: projectNameArg },
     execution: async () => {
       const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
       if (args.default) {
@@ -60,7 +57,7 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
         addExample: args.example,
         llmApiKey: args.llmApiKey,
         timeout,
-        projectName,
+        projectName: projectNameArg,
         directory: args.dir,
         mcpServer: args.mcp,
         skills: args.skills,
