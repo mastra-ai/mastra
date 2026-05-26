@@ -123,14 +123,24 @@ export function convertStoredMessageToHarnessMessage(msg: StoredMessageRow): Har
     return { id: msg.id, role: 'user', content, createdAt: msg.createdAt };
   }
 
-  if (signal?.type === 'user-message') {
-    const contents = signal.contents;
+  const userSignalAttributes =
+    signal?.type === 'user-message' && typeof signal.attributes === 'object' && signal.attributes !== null
+      ? (signal.attributes as Record<string, string | number | boolean | null | undefined>)
+      : undefined;
+
+  if (signal?.type === 'user-message' && typeof signal.contents === 'string') {
     content.push({
       type: 'text',
-      text: typeof contents === 'string' ? contents : textFromParts(),
+      text: signal.contents,
     });
 
-    return { id: msg.id, role: 'user', content, createdAt: msg.createdAt };
+    return {
+      id: msg.id,
+      role: 'user',
+      content,
+      ...(userSignalAttributes ? { attributes: userSignalAttributes } : {}),
+      createdAt: msg.createdAt,
+    };
   }
 
   for (const part of msg.content.parts) {
@@ -283,5 +293,11 @@ export function convertStoredMessageToHarnessMessage(msg: StoredMessageRow): Har
     content.push({ type: 'text', text: msg.content.content });
   }
 
-  return { id: msg.id, role: msg.role === 'signal' ? 'user' : msg.role, content, createdAt: msg.createdAt };
+  return {
+    id: msg.id,
+    role: msg.role === 'signal' ? 'user' : msg.role,
+    content,
+    ...(userSignalAttributes ? { attributes: userSignalAttributes } : {}),
+    createdAt: msg.createdAt,
+  };
 }

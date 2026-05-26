@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { createSignal } from '@mastra/core/agent';
 import type {
   AvailableModel,
   HarnessDisplayState,
@@ -372,6 +373,13 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
     this.state = { ...config.initialState };
     this.currentDisplayTasks = cloneTasks(this.state.tasks);
     const harnessV1Agents = toHarnessV1Agents(config.agents, config.modes);
+    if (config.memory) {
+      for (const agent of Object.values(harnessV1Agents)) {
+        if (!agent.hasOwnMemory()) {
+          agent.__setMemory(config.memory);
+        }
+      }
+    }
     const workspaceFactory: RuntimeWorkspaceFactory | undefined = config.workspace
       ? ({ requestContext, mastra }) =>
           config.workspace!({
@@ -1230,7 +1238,9 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }): Promise<HarnessMessage | null> {
     const threadId = this.getCurrentThreadId();
     if (!threadId) return null;
-    const result = await this.requireSession().injectSystemReminder(normalizeMessageContent({ content: message }), {
+    const signal = createSignal({
+      type: 'system-reminder',
+      contents: normalizeMessageContent({ content: message }),
       attributes: toSystemReminderAttributes({ type: reminderType, role }),
       metadata: {
         systemReminder: {
@@ -1240,10 +1250,12 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
         },
       },
     });
+    const memory = await this.getMemoryStorage();
+    await memory.saveMessages({ messages: [signal.toDBMessage({ threadId, resourceId: this.resourceId })] });
     return {
-      id: result.id,
+      id: signal.id,
       role,
-      createdAt: new Date(),
+      createdAt: signal.createdAt,
       content: [{ type: 'system_reminder', reminderType, message }],
     };
   }
