@@ -1,13 +1,8 @@
 import { generateTypes } from '@internal/types-builder';
-import esbuildCompileZod from '@internal/types-builder/compile-zod';
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: {
-    index: 'src/index.ts',
-    'scorers/prebuilt/index': 'src/scorers/prebuilt/index.ts',
-    'scorers/utils': 'src/scorers/utils.ts',
-  },
+  entry: ['src/index.ts'],
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,
@@ -16,7 +11,7 @@ export default defineConfig({
     preset: 'smallest',
   },
   sourcemap: true,
-  esbuildPlugins: [esbuildCompileZod()],
+  external: ['@mastra/core', 'files-sdk'],
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },
