@@ -210,4 +210,73 @@ describe('Agent browser integration', () => {
       expect(browser.getSessionId('thread-456')).toBe('browser-123:thread-456');
     });
   });
+
+  describe('__setManagedBrowser', () => {
+    it('updates the browser without claiming explicit ownership', () => {
+      const browser = createMockBrowser();
+      const agent = new Agent({
+        id: 'test-agent' as const,
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+      });
+
+      expect(agent.hasOwnBrowser()).toBe(false);
+      agent.__setManagedBrowser(browser);
+      expect(agent.browser).toBe(browser);
+      expect(agent.hasOwnBrowser()).toBe(false);
+    });
+
+    it('lets the same caller update the browser repeatedly', () => {
+      const first = createMockBrowser([], { id: 'first' });
+      const second = createMockBrowser([], { id: 'second' });
+      const agent = new Agent({
+        id: 'test-agent' as const,
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+      });
+
+      agent.__setManagedBrowser(first);
+      expect(agent.browser).toBe(first);
+      agent.__setManagedBrowser(second);
+      expect(agent.browser).toBe(second);
+      agent.__setManagedBrowser(undefined);
+      expect(agent.browser).toBeUndefined();
+      expect(agent.hasOwnBrowser()).toBe(false);
+    });
+
+    it('does not overwrite a browser the agent owns explicitly', () => {
+      const explicit = createMockBrowser([], { id: 'explicit' });
+      const managed = createMockBrowser([], { id: 'managed' });
+      const agent = new Agent({
+        id: 'test-agent' as const,
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+        browser: explicit,
+      });
+
+      expect(agent.hasOwnBrowser()).toBe(true);
+      agent.__setManagedBrowser(managed);
+      expect(agent.browser).toBe(explicit);
+      expect(agent.hasOwnBrowser()).toBe(true);
+    });
+
+    it('does not overwrite a browser set via setBrowser()', () => {
+      const explicit = createMockBrowser([], { id: 'explicit' });
+      const managed = createMockBrowser([], { id: 'managed' });
+      const agent = new Agent({
+        id: 'test-agent' as const,
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+      });
+
+      agent.setBrowser(explicit);
+      expect(agent.hasOwnBrowser()).toBe(true);
+      agent.__setManagedBrowser(managed);
+      expect(agent.browser).toBe(explicit);
+    });
+  });
 });

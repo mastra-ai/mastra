@@ -1,3 +1,4 @@
+import type { Agent } from '@mastra/core/agent';
 import type { MastraBrowser } from '@mastra/core/browser';
 
 import type { BrowserProvider, BrowserSettings, StagehandEnv } from '../../onboarding/settings.js';
@@ -81,16 +82,23 @@ async function checkAndConfirmProviderMismatch(
 
 /**
  * Apply browser settings to all mode agents and track the active settings.
+ *
+ * Uses `__setManagedBrowser` so the agent's `hasOwnBrowser()` precedence is
+ * honored — an agent that was wired with its own browser at construction
+ * keeps it. Dedupes so a single agent shared across modes is updated once
+ * per call.
  */
 function applyBrowserToAgents(
   ctx: SlashCommandContext,
   browser: MastraBrowser | undefined,
   browserSettings?: BrowserSettings,
 ): void {
-  const modes = ctx.harness.listModes();
-  for (const mode of modes) {
-    const agent = typeof mode.agent === 'function' ? mode.agent(ctx.state.harness.getState()) : mode.agent;
-    agent.setBrowser(browser);
+  const seen = new Set<Agent>();
+  for (const mode of ctx.harness.listModes()) {
+    const agent = (typeof mode.agent === 'function' ? mode.agent(ctx.state.harness.getState()) : mode.agent) as Agent;
+    if (seen.has(agent)) continue;
+    seen.add(agent);
+    agent.__setManagedBrowser(browser);
   }
   // Track the active browser settings in harness state
   ctx.harness.setState({ [ACTIVE_BROWSER_KEY]: browserSettings } as any);

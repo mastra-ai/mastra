@@ -846,6 +846,22 @@ export class Agent<
   }
 
   /**
+   * Updates the browser instance from a higher-level controller (workspace,
+   * CLI `/browser` command, or harness) without claiming explicit ownership.
+   *
+   * Unlike `setBrowser()`, this leaves `hasOwnBrowser()` unchanged so the
+   * same caller can update the browser repeatedly across the agent's
+   * lifetime, while agents constructed with their own browser keep it.
+   * Mirrors the precedence rule used by `#setBrowserFromWorkspace`.
+   *
+   * @internal Used by Harness and MastraCode runtime/slash-command flows.
+   */
+  __setManagedBrowser(browser: MastraBrowser | undefined): void {
+    if (this.#hasExplicitBrowser) return;
+    this.#browser = browser;
+  }
+
+  /**
    * Gets the skills processors to add to input processors when workspace has skills.
    * @internal
    */

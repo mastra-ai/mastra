@@ -953,14 +953,14 @@ describe('MastraCodeHarnessRuntime', () => {
 
   it('applies startup and live browser instances to mode agents', () => {
     const browser = { name: 'browser' };
-    const setBrowser = vi.fn();
+    const setManaged = vi.fn();
     const agent = new Agent({
       id: 'code-agent',
       name: 'Code Agent',
       instructions: 'test',
       model: 'openai/gpt-4o-mini' as any,
     }) as any;
-    agent.setBrowser = setBrowser;
+    agent.__setManagedBrowser = setManaged;
     agent.hasOwnBrowser = () => false;
 
     const runtime = createRuntime({
@@ -969,10 +969,94 @@ describe('MastraCodeHarnessRuntime', () => {
       browser,
     });
 
-    expect(setBrowser).toHaveBeenCalledWith(browser);
+    expect(setManaged).toHaveBeenCalledWith(browser);
     const nextBrowser = { name: 'next-browser' };
     runtime.setBrowser(nextBrowser);
-    expect(setBrowser).toHaveBeenCalledWith(nextBrowser);
+    expect(setManaged).toHaveBeenCalledWith(nextBrowser);
+  });
+
+  it('dedupes browser propagation when the same agent appears in modes and config.agents', () => {
+    const setManaged = vi.fn();
+    const agent = new Agent({
+      id: 'shared-agent',
+      name: 'Shared',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    }) as any;
+    agent.__setManagedBrowser = setManaged;
+    agent.hasOwnBrowser = () => false;
+
+    const runtime = createRuntime({
+      agents: { 'shared-agent': agent },
+      modes: [{ id: 'build', name: 'Build', default: true, agent }],
+    });
+
+    setManaged.mockClear();
+    runtime.setBrowser({ name: 'live' });
+    expect(setManaged).toHaveBeenCalledTimes(1);
+    expect(setManaged).toHaveBeenCalledWith({ name: 'live' });
+  });
+
+  it('keeps reaching managed agents across setBrowser cycles without self-poisoning', () => {
+    const setManaged = vi.fn();
+    const agent = new Agent({
+      id: 'managed-agent',
+      name: 'Managed',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    }) as any;
+    agent.__setManagedBrowser = setManaged;
+    agent.hasOwnBrowser = () => false;
+
+    const runtime = createRuntime({
+      agents: { 'managed-agent': agent },
+      modes: [{ id: 'build', name: 'Build', default: true, agent }],
+    });
+
+    setManaged.mockClear();
+    runtime.setBrowser({ name: 'first' });
+    runtime.setBrowser(undefined);
+    runtime.setBrowser({ name: 'second' });
+
+    expect(setManaged).toHaveBeenCalledTimes(3);
+    expect(setManaged).toHaveBeenNthCalledWith(1, { name: 'first' });
+    expect(setManaged).toHaveBeenNthCalledWith(2, undefined);
+    expect(setManaged).toHaveBeenNthCalledWith(3, { name: 'second' });
+  });
+
+  it('falls back to setBrowser when __setManagedBrowser is unavailable, respecting hasOwnBrowser', () => {
+    const setBrowserOwned = vi.fn();
+    const setBrowserManaged = vi.fn();
+    const ownedAgent = new Agent({
+      id: 'owned-agent',
+      name: 'Owned',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    }) as any;
+    const managedAgent = new Agent({
+      id: 'managed-agent',
+      name: 'Managed',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    }) as any;
+    ownedAgent.__setManagedBrowser = undefined;
+    ownedAgent.setBrowser = setBrowserOwned;
+    ownedAgent.hasOwnBrowser = () => true;
+    managedAgent.__setManagedBrowser = undefined;
+    managedAgent.setBrowser = setBrowserManaged;
+    managedAgent.hasOwnBrowser = () => false;
+
+    const runtime = createRuntime({
+      agents: { owned: ownedAgent, managed: managedAgent },
+      modes: [{ id: 'build', name: 'Build', default: true, agent: managedAgent }],
+    });
+
+    setBrowserOwned.mockClear();
+    setBrowserManaged.mockClear();
+    runtime.setBrowser({ name: 'live' });
+    expect(setBrowserOwned).not.toHaveBeenCalled();
+    expect(setBrowserManaged).toHaveBeenCalledTimes(1);
+    expect(setBrowserManaged).toHaveBeenCalledWith({ name: 'live' });
   });
 
   it('creates a session lazily after changing resource id before headless send', async () => {
@@ -1132,9 +1216,7 @@ describe('MastraCodeHarnessRuntime — stale session lease recovery (MASTRA-4344
 
   it('propagates non-locked errors from session() without retrying', async () => {
     const runtime = createRuntime();
-    const sessionSpy = vi
-      .spyOn(runtime.core, 'session')
-      .mockRejectedValueOnce(new Error('storage offline'));
+    const sessionSpy = vi.spyOn(runtime.core, 'session').mockRejectedValueOnce(new Error('storage offline'));
 
     await expect(runtime.init()).rejects.toThrow('storage offline');
     expect(sessionSpy).toHaveBeenCalledTimes(1);
@@ -1188,9 +1270,7 @@ describe('MastraCodeHarnessRuntime — stale session lease recovery (MASTRA-4344
         ttlMs: 120_000,
       });
 
-      const reboundPromise = secondRuntime
-        .selectOrCreateThread({ leaseRecoveryMode: 'midsession' })
-        .catch(err => err);
+      const reboundPromise = secondRuntime.selectOrCreateThread({ leaseRecoveryMode: 'midsession' }).catch(err => err);
       await vi.advanceTimersByTimeAsync(3_000);
       const err = await reboundPromise;
 
