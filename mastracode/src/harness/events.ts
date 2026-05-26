@@ -161,6 +161,13 @@ export class MastraCodeHarnessEventProjector {
             questionId: itemId,
             question: payload.question ?? 'The agent needs your input.',
             options: payload.options,
+            // selectionMode reaches the TUI only when projected through this
+            // path; drop anything we don't recognize so a malformed payload
+            // can't end up as a stringy "mode".
+            selectionMode:
+              payload.selectionMode === 'single_select' || payload.selectionMode === 'multi_select'
+                ? payload.selectionMode
+                : undefined,
           } as unknown as LegacyHarnessEvent,
         ];
       case 'plan-approval':

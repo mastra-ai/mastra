@@ -1,4 +1,4 @@
-import { getKeybindings, visibleWidth } from '@mariozechner/pi-tui';
+import { getKeybindings, truncateToWidth } from '@mariozechner/pi-tui';
 import type { Component, SelectItem, SelectListTheme } from '@mariozechner/pi-tui';
 
 /**
@@ -44,6 +44,11 @@ export class MultiSelectList implements Component {
 
   handleInput(keyData: string): void {
     const kb = getKeybindings();
+    if (this.items.length === 0) {
+      if (kb.matches(keyData, 'tui.select.confirm')) this.onSubmit?.([]);
+      else if (kb.matches(keyData, 'tui.select.cancel')) this.onCancel?.();
+      return;
+    }
     if (kb.matches(keyData, 'tui.select.up')) {
       this.selectedIndex = this.selectedIndex === 0 ? this.items.length - 1 : this.selectedIndex - 1;
       return;
@@ -96,8 +101,9 @@ export class MultiSelectList implements Component {
       const styled = isCursor
         ? this.theme.selectedText(`${cursor}${checkbox}${label}`)
         : `${cursor}${checkbox}${label}`;
-      const truncated = visibleWidth(styled) > width ? styled.slice(0, Math.max(0, width)) : styled;
-      lines.push(truncated);
+      // ANSI-aware truncation: labels embed pre-styled descriptions, so a raw
+      // String.slice would cut mid-escape and corrupt the terminal output.
+      lines.push(truncateToWidth(styled, Math.max(0, width), ''));
     }
 
     if (startIndex > 0 || endIndex < this.items.length) {

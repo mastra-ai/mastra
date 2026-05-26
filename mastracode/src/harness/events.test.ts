@@ -124,6 +124,63 @@ describe('MastraCodeHarnessEventProjector', () => {
     });
   });
 
+  it('forwards multi-select selectionMode through the generic ask_question projection', async () => {
+    const { events, projector } = createProjector({
+      pending: {
+        itemId: 'q-multi',
+        payload: {
+          question: 'Pick all that apply',
+          options: [{ label: 'Alpha' }, { label: 'Beta' }],
+          selectionMode: 'multi_select',
+        },
+      },
+    });
+
+    await projector.project({
+      type: 'suspension_required',
+      kind: 'question',
+      toolCallId: 'tool-multi',
+      id: 'e1',
+      timestamp: 1,
+    } as HarnessV1Event);
+
+    expect(events[0]).toMatchObject({
+      type: 'ask_question',
+      questionId: 'q-multi',
+      question: 'Pick all that apply',
+      selectionMode: 'multi_select',
+    });
+  });
+
+  it('drops unrecognized selectionMode values on the ask_question projection', async () => {
+    const { events, projector } = createProjector({
+      pending: {
+        itemId: 'q-bogus',
+        payload: {
+          question: 'Pick one',
+          options: [{ label: 'Alpha' }],
+          selectionMode: 'checkboxes',
+        },
+      },
+    });
+
+    await projector.project({
+      type: 'suspension_required',
+      kind: 'question',
+      toolCallId: 'tool-bogus',
+      id: 'e1',
+      timestamp: 1,
+    } as HarnessV1Event);
+
+    expect(events[0]).toMatchObject({
+      type: 'ask_question',
+      questionId: 'q-bogus',
+      question: 'Pick one',
+    });
+    expect(events[0]).not.toHaveProperty('selectionMode', 'checkboxes');
+    expect((events[0] as { selectionMode?: unknown }).selectionMode).toBeUndefined();
+  });
+
   it('keeps malformed sandbox-like questions on the generic ask_question path', async () => {
     const { events, projector } = createProjector({
       pending: {

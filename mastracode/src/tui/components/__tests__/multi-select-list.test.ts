@@ -101,4 +101,11 @@ describe('MultiSelectList', () => {
     list.setToggled(['c']);
     expect(list.getToggled()).toEqual(['c']);
   });
+
+  it('does not crash when items is empty', () => {
+    const list = new MultiSelectList([], 5, makeTheme());
+    expect(() => list.handleInput(' ')).not.toThrow();
+    expect(() => list.handleInput('\x1b[B')).not.toThrow();
+    expect(list.getToggled()).toEqual([]);
+  });
 });
