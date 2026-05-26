@@ -1,5 +1,19 @@
 # @mastra/hono
 
+## 1.4.19-alpha.8
+
+### Patch Changes
+
+- Improved agent thread subscription resilience by keeping server streams active during idle periods and allowing the JavaScript client to reconnect when subscription streams close or resubscribe requests fail. ([#17045](https://github.com/mastra-ai/mastra/pull/17045))
+
+  Enable automatic reconnection with `subscription.processDataStream({ onChunk: chunk => console.log(chunk), reconnect: true })`.
+
+- Fixed SSE streams so browser clients can connect to long-lived subscriptions before the first stream event is available. ([#16540](https://github.com/mastra-ai/mastra/pull/16540))
+
+- Updated dependencies [[`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`4084113`](https://github.com/mastra-ai/mastra/commit/408411370fc48a822e8b616b3b63f9409774e0e9), [`bc01b1b`](https://github.com/mastra-ai/mastra/commit/bc01b1bfafe381d90af909f8bce7eeb4eee779f2)]:
+  - @mastra/core@1.37.0-alpha.8
+  - @mastra/server@1.37.0-alpha.8
+
 ## 1.4.19-alpha.7
 
 ### Patch Changes
