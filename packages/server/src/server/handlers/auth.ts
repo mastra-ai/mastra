@@ -875,12 +875,56 @@ export const GET_FGA_RESOURCE_TYPES_ROUTE = createRoute({
 // FGA Share Routes - Role assignment for resources
 // ============================================================================
 
+// Schemas for FGA share routes
+const fgaResourceTypePathSchema = z.object({ resourceType: z.string() });
+const fgaResourceRolesResponseSchema = z.object({
+  roles: z.array(z.object({ slug: z.string(), name: z.string().optional(), description: z.string().optional() })),
+});
+
+const fgaResourceAccessPathSchema = z.object({ resourceType: z.string(), resourceId: z.string() });
+const fgaResourceAccessResponseSchema = z.object({
+  access: z.array(
+    z.object({
+      membershipId: z.string().optional(),
+      userId: z.string().optional(),
+      email: z.string().optional(),
+      name: z.string().optional(),
+      role: z.string().optional(),
+    }),
+  ),
+});
+
+const fgaResourceAccessDeletePathSchema = z.object({
+  resourceType: z.string(),
+  resourceId: z.string(),
+  membershipId: z.string(),
+});
+const fgaResourceAccessDeleteResponseSchema = z.object({ success: z.boolean() });
+
+const fgaResourceAccessPostResponseSchema = z.object({
+  success: z.boolean(),
+  assignment: z.any().optional(),
+});
+
+const fgaOrganizationMembersResponseSchema = z.object({
+  members: z.array(
+    z.object({
+      id: z.string().optional(),
+      email: z.string().optional(),
+      name: z.string().optional(),
+      organizationMembershipId: z.string().optional(),
+    }),
+  ),
+});
+
 // GET /auth/fga/resource-types/:resourceType/roles - List roles for a resource type
 export const GET_FGA_RESOURCE_TYPE_ROLES_ROUTE = createRoute({
   method: 'GET',
   path: '/auth/fga/resource-types/:resourceType/roles',
   requiresAuth: true,
   responseType: 'json',
+  pathParamSchema: fgaResourceTypePathSchema,
+  responseSchema: fgaResourceRolesResponseSchema,
   summary: 'List roles for a resource type',
   description: 'Returns available roles that can be assigned on resources of this type.',
   tags: ['Auth', 'FGA'],
@@ -918,6 +962,8 @@ export const GET_FGA_RESOURCE_ACCESS_ROUTE = createRoute({
   path: '/auth/fga/resources/:resourceType/:resourceId/access',
   requiresAuth: true,
   responseType: 'json',
+  pathParamSchema: fgaResourceAccessPathSchema,
+  responseSchema: fgaResourceAccessResponseSchema,
   summary: 'List users with access to a resource',
   description: 'Returns all users who have been assigned roles on this resource.',
   tags: ['Auth', 'FGA'],
@@ -980,6 +1026,8 @@ export const POST_FGA_RESOURCE_ACCESS_ROUTE = createRoute({
   path: '/auth/fga/resources/:resourceType/:resourceId/access',
   requiresAuth: true,
   responseType: 'json',
+  pathParamSchema: fgaResourceAccessPathSchema,
+  responseSchema: fgaResourceAccessPostResponseSchema,
   summary: 'Assign role to user on resource',
   description: 'Grants a user access to a resource by assigning them a role.',
   tags: ['Auth', 'FGA'],
@@ -1024,6 +1072,8 @@ export const DELETE_FGA_RESOURCE_ACCESS_ROUTE = createRoute({
   path: '/auth/fga/resources/:resourceType/:resourceId/access/:membershipId',
   requiresAuth: true,
   responseType: 'json',
+  pathParamSchema: fgaResourceAccessDeletePathSchema,
+  responseSchema: fgaResourceAccessDeleteResponseSchema,
   summary: 'Remove role from user on resource',
   description: "Revokes a user's access to a resource by removing their role assignment.",
   tags: ['Auth', 'FGA'],
@@ -1069,6 +1119,7 @@ export const GET_ORGANIZATION_MEMBERS_ROUTE = createRoute({
   path: '/auth/organization/members',
   requiresAuth: true,
   responseType: 'json',
+  responseSchema: fgaOrganizationMembersResponseSchema,
   summary: 'List organization members',
   description: 'Returns members of the current organization for user search in share dialogs.',
   tags: ['Auth'],

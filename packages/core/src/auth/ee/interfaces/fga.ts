@@ -463,7 +463,7 @@ export interface IFGAManager<TUser = unknown> extends IFGAProvider<TUser> {
    * @param organizationId - The organization to query
    * @returns Array of resource type info with relations and hierarchy
    */
-  describeResourceTypes(organizationId: string): Promise<FGAResourceTypeInfo[]>;
+  describeResourceTypes?(organizationId: string): Promise<FGAResourceTypeInfo[]>;
 
   /**
    * Register a Mastra resource in FGA with optional ownership support.
@@ -479,7 +479,7 @@ export interface IFGAManager<TUser = unknown> extends IFGAProvider<TUser> {
    * @param params - Registration parameters including user, resource type, ID, name
    * @returns Registration result with resource, owner assignment, and warnings
    */
-  registerResource(params: FGARegisterResourceParams<TUser>): Promise<FGARegistrationResult>;
+  registerResource?(params: FGARegisterResourceParams<TUser>): Promise<FGARegistrationResult>;
 
   /**
    * Check if a resource type exists in the FGA schema.
@@ -489,5 +489,5 @@ export interface IFGAManager<TUser = unknown> extends IFGAProvider<TUser> {
    * @param resourceTypeSlug - The resource type to check
    * @returns True if the type exists (has roles or instances)
    */
-  hasResourceType(organizationId: string, resourceTypeSlug: string): Promise<boolean>;
+  hasResourceType?(organizationId: string, resourceTypeSlug: string): Promise<boolean>;
 }
