@@ -1,26 +1,43 @@
 // @vitest-environment jsdom
-import type { StoredAgentResponse } from '@mastra/client-js';
-import { TooltipProvider } from '@mastra/playground-ui';
+import type { BuilderSettingsResponse, StoredAgentResponse } from '@mastra/client-js';
+import type * as PlaygroundUi from '@mastra/playground-ui';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentBuilderList, AgentBuilderListSkeleton } from '../agent-builder-list';
 import type { AgentBuilderListProps } from '../agent-builder-list';
+import type { AuthCapabilities } from '@/domains/auth/types';
 import { LinkComponentProvider } from '@/lib/framework';
+import { server } from '@/test/msw-server';
 
-vi.mock('@mastra/playground-ui', async importOriginal => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
+// Tooltip primitives render their content lazily on hover; flatten them for
+// these structural tests so we can assert on the inline tooltip copy directly.
+// This is a UI-rendering seam only — it does NOT hide data/auth flow.
+vi.mock('@mastra/playground-ui', async () => {
+  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
   return {
     ...actual,
-    TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   };
 });
 
-vi.mock('@/domains/agent-builder/components/agent-list/favorite-button', () => ({
-  FavoriteButton: () => <button type="button" aria-label="Star agent" />,
-}));
+const BASE_URL = 'http://localhost:4111';
+
+const unauthenticatedCapabilities = {
+  enabled: true,
+  login: { type: 'credentials' as const },
+} satisfies AuthCapabilities;
+
+const settingsFavoritesOn: BuilderSettingsResponse = {
+  enabled: true,
+  features: {
+    agent: { favorites: true },
+  },
+};
 
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
   <a {...props}>{children}</a>
@@ -50,12 +67,26 @@ const noopPaths = {
 } as never;
 
 function renderList({ agents, search, ...props }: AgentBuilderListProps) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+  // Seed default handlers so the FavoriteButton instances rendered inside each
+  // row resolve their auth + builder-settings queries via MSW. Individual tests
+  // can still override these via server.use(...) before rendering.
+  server.use(
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(unauthenticatedCapabilities)),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(settingsFavoritesOn)),
+  );
+
   return render(
-    <TooltipProvider>
-      <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
-        <AgentBuilderList agents={agents} search={search} {...props} />
-      </LinkComponentProvider>
-    </TooltipProvider>,
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
+          <AgentBuilderList agents={agents} search={search} {...props} />
+        </LinkComponentProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>,
   );
 }
 

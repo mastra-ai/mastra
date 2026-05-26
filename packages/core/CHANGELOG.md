@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.37.0-alpha.7
+
+### Patch Changes
+
+- Fixed a crash that could occur when background execution is enabled for tools with Zod v3 input schemas. ([#16915](https://github.com/mastra-ai/mastra/pull/16915))
+
+  Tools with Zod v3, Zod v4, and JSON Schema input definitions now work consistently with background execution.
+
 ## 1.37.0-alpha.6
 
 ### Minor Changes

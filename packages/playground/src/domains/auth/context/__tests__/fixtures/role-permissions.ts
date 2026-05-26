@@ -9,10 +9,5 @@ export const adminPermissions: RolePermissionsResponse = {
 
 export const viewerPermissions: RolePermissionsResponse = {
   roleId: 'viewer',
-  permissions: ['agents:read', 'tools:read'],
-};
-
-export const emptyPermissions: RolePermissionsResponse = {
-  roleId: 'restricted',
-  permissions: [],
+  permissions: ['stored-agents:read', 'stored-skills:read'],
 };
