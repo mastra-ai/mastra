@@ -19,7 +19,9 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
   await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\n');
   await writeFile(
     join(newPath, 'pnpm-workspace.yaml'),
-    `allowBuilds:
+    `packages:
+  - '.'
+allowBuilds:
   esbuild: true
   sharp: true
   protobufjs: true

@@ -88,7 +88,11 @@ export abstract class Bundler extends MastraBundler {
       ),
     );
 
-    // pnpm v11 inherits build policy from the parent workspace pnpm-workspace.yaml
+    // pnpm v11 requires build policy via pnpm-workspace.yaml in the output directory
+    await writeFile(
+      join(outputDirectory, 'pnpm-workspace.yaml'),
+      'packages:\n  - \'.\'\nallowBuilds:\n  esbuild: true\n  sharp: true\n  protobufjs: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n',
+    );
   }
 
   protected createBundler(inputOptions: InputOptions, outputOptions: Partial<OutputOptions> & { dir: string }) {

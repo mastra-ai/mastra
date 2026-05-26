@@ -94,6 +94,8 @@ export class Deps extends MastraBase {
     const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
 
     const lines: string[] = [
+      'packages:',
+      "  - '.'",
       'allowBuilds:',
       '  esbuild: true',
       '  sharp: true',
@@ -160,7 +162,7 @@ export class Deps extends MastraBase {
       case 'yarn':
         return `${cmd}`;
       case 'pnpm':
-        return cmd === 'install' ? `${cmd} --loglevel=error` : `${cmd} --loglevel=error`;
+        return cmd === 'install' ? `${cmd} --ignore-workspace --loglevel=error` : `${cmd} --loglevel=error`;
       case 'bun':
         return cmd;
       default:

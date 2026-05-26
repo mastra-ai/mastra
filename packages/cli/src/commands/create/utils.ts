@@ -263,7 +263,9 @@ export const createMastraProject = async ({
     if (pm === 'pnpm') {
       await fs.writeFile(
         'pnpm-workspace.yaml',
-        `allowBuilds:
+        `packages:
+  - '.'
+allowBuilds:
   esbuild: true
   sharp: true
 `,
