@@ -103,6 +103,9 @@ importers:
       husky:
         specifier: ^9.1.7
         version: 9.1.7
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0(bufferutil@4.1.0)
       lint-staged:
         specifier: ^16.4.0
         version: 16.4.0
