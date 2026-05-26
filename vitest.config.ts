@@ -103,9 +103,11 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
               ...config.test,
               name: config.test?.name ?? `unit:${projectDir}`,
               root: `./${projectDir}`,
-              exclude: SOURCE_MODE
-                ? [...(config.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES]
-                : config.test?.exclude,
+              ...(SOURCE_MODE
+                ? { exclude: [...(config.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES] }
+                : config.test?.exclude
+                  ? { exclude: config.test.exclude }
+                  : {}),
             },
           }),
         );
@@ -133,9 +135,11 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
                 ...projectConfig.test,
                 name: projectConfig.test?.name ?? `unit:${projectDir}`,
                 root: `./${projectDir}`,
-                exclude: SOURCE_MODE
-                  ? [...(projectConfig.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES]
-                  : projectConfig.test?.exclude,
+                ...(SOURCE_MODE
+                  ? { exclude: [...(projectConfig.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES] }
+                  : projectConfig.test?.exclude
+                    ? { exclude: projectConfig.test.exclude }
+                    : {}),
               },
             }),
           );
