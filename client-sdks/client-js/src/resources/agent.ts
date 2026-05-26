@@ -1170,6 +1170,7 @@ export class Agent extends BaseResource {
     update,
     onToolCall,
     onFinish,
+    onStreamChunk,
     getCurrentDate = () => new Date(),
     lastMessage,
   }: {
@@ -1177,6 +1178,7 @@ export class Agent extends BaseResource {
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
     onToolCall?: UseChatOptions['onToolCall'];
     onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    onStreamChunk?: (chunk: any) => void;
     generateId?: () => string;
     getCurrentDate?: () => Date;
     lastMessage: UIMessage | undefined;
@@ -1277,6 +1279,8 @@ export class Agent extends BaseResource {
       // TODO: casting as any here because the stream types were all typed as any before in core.
       // but this is completely wrong and this fn is probably broken. Remove ":any" and you'll see a bunch of type errors
       onChunk: async (chunk: any) => {
+        onStreamChunk?.(chunk);
+
         switch (chunk.type) {
           case 'tripwire': {
             message.parts.push({
@@ -1406,6 +1410,7 @@ export class Agent extends BaseResource {
                 execUpdate();
               }
             }
+            break;
           }
 
           case 'tool-call-input-streaming-start': {
@@ -1565,6 +1570,7 @@ export class Agent extends BaseResource {
     try {
       let toolCalls: ToolInvocation[] = [];
       let messages: UIMessage[] = [];
+      let streamRunId: string | undefined = processedParams.runId;
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
@@ -1644,7 +1650,7 @@ export class Agent extends BaseResource {
                 // Without this, the React-side `dynamic-tool` part is stuck in
                 // `input-available` forever because the server stream never emits
                 // a terminal chunk for client-executed tools.
-                const runId: string = processedParams.runId ?? toolCall.toolCallId;
+                const runId: string = streamRunId ?? toolCall.toolCallId;
                 let result: unknown;
                 let observability: ClientToolObservabilityEnvelope | undefined;
                 let synthetic:
@@ -1834,6 +1840,11 @@ export class Agent extends BaseResource {
             // No tool calls - wait for pipe to complete then close the stream
             await pipePromise;
             controller.close();
+          }
+        },
+        onStreamChunk: chunk => {
+          if (!streamRunId && typeof chunk.runId === 'string') {
+            streamRunId = chunk.runId;
           }
         },
         lastMessage: undefined,
