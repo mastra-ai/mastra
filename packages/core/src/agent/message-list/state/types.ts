@@ -73,18 +73,22 @@ export type MastraSourceUrlPart = Omit<LegacySourcePart, 'providerMetadata'> & {
   createdAt?: number;
 };
 
+// Named intermediate types to avoid TS2589 (type instantiation excessively deep)
+// when MastraMessagePart is used in contexts with deep type inference (e.g. @hono/zod-openapi).
+type MastraStandardUIV4Part = Exclude<UIMessageV4['parts'][number], { type: 'tool-invocation' | 'source' | 'step-start' }>;
+type MastraStandardUIV4PartWithMetadata = PartWithProviderMetadata<MastraStandardUIV4Part>;
+type MastraDataUIPart = PartWithProviderMetadata<AIV5Type.DataUIPart<AIV5.UIDataTypes>>;
+
 // Canonical stored part type. It starts from the v4 UI part model and extends
 // it with provider metadata, AI SDK v5 data parts, and v6-only persisted parts
 // such as approval-aware tool invocations and source documents.
 export type MastraMessagePart =
-  | PartWithProviderMetadata<
-      Exclude<UIMessageV4['parts'][number], { type: 'tool-invocation' | 'source' | 'step-start' }>
-    >
+  | MastraStandardUIV4PartWithMetadata
   | MastraStepStartPart
   | MastraToolInvocationPart
   | MastraSourceUrlPart
   | MastraSourceDocumentPart
-  | PartWithProviderMetadata<AIV5Type.DataUIPart<AIV5.UIDataTypes>>;
+  | MastraDataUIPart;
 
 // V4-compatible part type (excludes DataUIPart which V4 doesn't support)
 export type UIMessageV4Part = UIMessageV4['parts'][number] & MastraPartExtensions;
