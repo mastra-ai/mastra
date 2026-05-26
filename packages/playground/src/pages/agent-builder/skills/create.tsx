@@ -11,7 +11,7 @@ export default function AgentBuilderSkillsCreate() {
   const { hasPermission, rbacEnabled } = usePermissions();
   const canWrite = !rbacEnabled || hasPermission('stored-skills:write');
   // Warm caches the edit page needs on first paint.
-  useStoredSkills(undefined, { enabled: canWrite });
+  useStoredSkills({ enabled: canWrite });
   useStoredWorkspaces();
   useBuilderSettings();
   const navigate = useNavigate();

@@ -108,12 +108,6 @@ import { useAutosaveSkill } from '../use-autosave-skill';
 import { useAvailableAgentTools } from '../use-available-agent-tools';
 import { useBuilderAgentAccess } from '../use-builder-agent-access';
 import { useBuilderAgentFeatures } from '../use-builder-agent-features';
-import {
-  useBuilderModelPolicy,
-  useBuilderPickerVisibility,
-  useBuilderSettings,
-  useIsBuilderEnabled,
-} from '../use-builder-settings';
 import { useCanCreateAgent } from '../use-can-create-agent';
 import { useChannelConnectToast } from '../use-channel-connect-toast';
 import { useChatDraft } from '../use-chat-draft';
@@ -122,6 +116,12 @@ import { useSaveAgent } from '../use-save-agent';
 import { useStarterUserMessage } from '../use-starter-user-message';
 import { useVisibilityChange as useAgentVisibilityChange } from '../use-visibility-change-agent';
 import { useVisibilityChange as useSkillVisibilityChange } from '../use-visibility-change-skill';
+import {
+  useBuilderModelPolicy,
+  useBuilderPickerVisibility,
+  useBuilderSettings,
+  useIsBuilderEnabled,
+} from '@/domains/builder/hooks/use-builder-settings';
 
 const builderSettings = {
   enabled: true,
@@ -274,7 +274,7 @@ describe('useAgentBuilderAllowedModels', () => {
 
 describe('isModelNotAllowedError', () => {
   it('returns the error message when the code matches', async () => {
-    const { isModelNotAllowedError } = await import('@/domains/builder');
+    const { isModelNotAllowedError } = await import('@/domains/agent-builder/utils/is-model-not-allowed');
     const err = Object.assign(new Error('Choose another model'), { code: 'MODEL_NOT_ALLOWED' });
     expect(isModelNotAllowedError(err)).toEqual({ message: 'Choose another model' });
     expect(isModelNotAllowedError({ code: 'MODEL_NOT_ALLOWED' })).toEqual({ message: 'Model is not allowed' });

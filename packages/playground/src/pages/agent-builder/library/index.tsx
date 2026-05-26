@@ -1,4 +1,4 @@
-import type { ListStoredAgentsParams, ListStoredSkillsParams } from '@mastra/client-js';
+import type { ListStoredAgentsParams } from '@mastra/client-js';
 import {
   EmptyState,
   ErrorState,
@@ -36,14 +36,13 @@ export default function AgentBuilderLibraryPage() {
   const { canUseFavorites } = useBuilderAgentAccess();
 
   const agentListParams = useMemo<ListStoredAgentsParams>(() => ({ visibility: 'public' }), []);
-  const skillListParams = useMemo<ListStoredSkillsParams>(() => ({ visibility: 'public' }), []);
 
   const { data: agentsData, isLoading: agentsLoading, error: agentsError } = useStoredAgents(agentListParams);
   const {
     data: skillsData,
     isLoading: skillsLoading,
     error: skillsError,
-  } = useStoredSkills(skillListParams, { enabled: tab === 'skills' && features.skills });
+  } = useStoredSkills({ enabled: tab === 'skills' && features.skills });
 
   const agents = agentsData?.agents ?? [];
   const skills = skillsData?.skills ?? [];
