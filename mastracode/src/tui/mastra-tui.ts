@@ -8,6 +8,7 @@ import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
+import { MastraCodeSessionLeaseRecoveryError } from '../harness/index.js';
 import {
   OnboardingInlineComponent,
   getAvailableModePacks,
@@ -514,8 +515,21 @@ export class MastraTUI {
   private async init(): Promise<void> {
     if (this.state.isInitialized) return;
 
-    // Initialize harness (but don't select thread yet)
-    await this.state.harness.init();
+    const unsubscribeStartupInfo = this.state.harness.subscribe((event: HarnessEvent) => {
+      if (event.type === 'info') {
+        process.stderr.write(`${event.message}\n`);
+      }
+    });
+    try {
+      await this.state.harness.init();
+    } catch (err) {
+      if (err instanceof MastraCodeSessionLeaseRecoveryError) {
+        process.stderr.write(`${err.message}\n`);
+      }
+      throw err;
+    } finally {
+      unsubscribeStartupInfo();
+    }
 
     // Check for existing threads and prompt for resume
     await promptForThreadSelection(this.state);

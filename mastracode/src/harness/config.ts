@@ -30,6 +30,23 @@ export interface MastraCodeModelInfo {
   metadata?: Readonly<Record<string, unknown>>;
 }
 
+export type LeaseRecoveryAction = 'wait' | 'force-claim' | 'new-thread' | 'quit';
+
+export interface LeaseRecoveryPromptInfo {
+  threadId: string;
+  sessionId: string;
+  currentOwnerId: string;
+  expiresAt: number;
+  secondsWaited: number;
+  /** When false, the `new-thread` action must not be offered. Set by callers
+   * that need to bind to a specific threadId (createThread, switchThread). */
+  allowNewThread: boolean;
+}
+
+export type LeaseRecoveryPromptHandler = (
+  info: LeaseRecoveryPromptInfo,
+) => LeaseRecoveryAction | Promise<LeaseRecoveryAction>;
+
 export interface MastraCodeRuntimeConfig<TState extends Record<string, unknown>> {
   resourceId: string;
   storage: MastraCompositeStore;
@@ -49,6 +66,7 @@ export interface MastraCodeRuntimeConfig<TState extends Record<string, unknown>>
   resolveModel?: (modelId: string) => unknown;
   disabledTools?: string[];
   browser?: DynamicArgument<MastraBrowser | undefined>;
+  leaseRecoveryPrompt?: LeaseRecoveryPromptHandler;
 }
 
 /**
