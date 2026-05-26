@@ -55,7 +55,7 @@ const DeleteAgentDialog = ({ open, onOpenChange, agentName, isPending, onConfirm
           Cancel
         </AlertDialog.Cancel>
         <Button
-          variant="destructive"
+          variant="primary"
           data-testid="agent-builder-delete-agent-confirm"
           disabled={isPending}
           onClick={() => {
