@@ -683,14 +683,19 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       const fgaProvider = mastra.getServer?.()?.fga;
       const user = requestContext?.get('user');
       if ((fgaProvider as any)?.ownership?.enabled && user) {
-        const result = await (fgaProvider as any).registerResource({
-          user,
-          resourceType: 'agent',
-          resourceId: id,
-          name,
-        });
-        for (const warning of result.warnings) {
-          mastra.getLogger().warn(`[FGA] ${warning}`);
+        try {
+          const result = await (fgaProvider as any).registerResource({
+            user,
+            resourceType: 'agent',
+            resourceId: id,
+            name,
+          });
+          for (const warning of result.warnings) {
+            mastra.getLogger().warn(`[FGA] ${warning}`);
+          }
+        } catch (fgaError) {
+          // Log but don't fail - FGA registration is optional enhancement
+          mastra.getLogger().warn(`[FGA] Failed to register agent ${id}: ${fgaError}`);
         }
       }
 
