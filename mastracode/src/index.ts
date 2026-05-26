@@ -10,7 +10,6 @@ import type {
   HarnessMode,
   HarnessSubagent,
 } from '@mastra/core/harness';
-import type { PublicSchema } from '@mastra/core/schema';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
 import {
@@ -20,6 +19,7 @@ import {
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { PublicSchema } from '@mastra/core/schema';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
