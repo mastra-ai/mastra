@@ -49,10 +49,15 @@ export interface FilesSDKFilesystemOptions extends MastraFilesystemOptions {
  * Strips leading slashes, resolves `.`/`./` to empty string.
  */
 function toKey(path: string): string {
-  let key = path.replace(/^\/+/, '');
+  // Strip leading slashes (avoid regex backtracking concerns flagged by CodeQL
+  // — these are character-class loops that are linear, but explicit indexing
+  // sidesteps any analyzer false positives).
+  let start = 0;
+  while (start < path.length && path.charCodeAt(start) === 47 /* "/" */) start++;
+  let end = path.length;
+  while (end > start && path.charCodeAt(end - 1) === 47) end--;
+  const key = path.slice(start, end);
   if (key === '.' || key === './') return '';
-  // Remove trailing slash (keys don't end with /)
-  key = key.replace(/\/+$/, '');
   return key;
 }
 
@@ -254,10 +259,11 @@ export class FilesSDKFilesystem extends MastraFilesystem {
     this.assertWritable('writeFile');
     const key = toKey(path);
 
-    // Respect overwrite option (default: true)
-    if (options?.overwrite === false) {
-      const fileExists = await this._files.exists(key);
-      if (fileExists) throw new FileExistsError(path);
+    // Respect overwrite option (default: true). Use isFile() rather than
+    // _files.exists() so leftover empty directories (some adapters) don't
+    // incorrectly trigger FileExistsError.
+    if (options?.overwrite === false && (await this.isFile(key))) {
+      throw new FileExistsError(path);
     }
 
     const body = toBody(content);
@@ -335,7 +341,7 @@ export class FilesSDKFilesystem extends MastraFilesystem {
     const fromKey = toKey(src);
     const toKey_ = toKey(dest);
 
-    if (options?.overwrite === false && (await this._files.exists(toKey_))) {
+    if (options?.overwrite === false && (await this.isFile(toKey_))) {
       throw new FileExistsError(dest);
     }
 
@@ -360,6 +366,7 @@ export class FilesSDKFilesystem extends MastraFilesystem {
 
   async mkdir(_path: string, _options?: { recursive?: boolean }): Promise<void> {
     await this.ensureReady();
+    this.assertWritable('mkdir');
     // No-op: object storage creates "directories" implicitly on file write.
   }
 

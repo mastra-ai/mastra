@@ -235,16 +235,32 @@ describe('FilesSDKFilesystem', () => {
 
     it('checks overwrite=false and throws FileExistsError', async () => {
       const { fs, mockFiles } = createFs();
-      mockFiles.exists.mockResolvedValueOnce(true);
+      // isFile() uses list() with the exact key; return a matching item to
+      // signal an existing real file.
+      mockFiles.list.mockResolvedValueOnce({ items: [{ key: 'existing.txt', size: 4 }], cursor: undefined });
 
       await expect(fs.writeFile('/existing.txt', 'data', { overwrite: false })).rejects.toThrow(/existing\.txt/);
     });
 
     it('allows write when overwrite=false and file does not exist', async () => {
       const { fs, mockFiles } = createFs();
-      mockFiles.exists.mockResolvedValueOnce(false);
+      mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
 
       await fs.writeFile('/new.txt', 'data', { overwrite: false });
+
+      expect(mockFiles.upload).toHaveBeenCalled();
+    });
+
+    it('treats a leftover directory key as not an existing file when overwrite=false', async () => {
+      const { fs, mockFiles } = createFs();
+      // list() returns a child under "prefix/", not an exact-key match — so
+      // isFile() should treat the path as not an existing file.
+      mockFiles.list.mockResolvedValueOnce({
+        items: [{ key: 'leftover/child.txt', size: 0 }],
+        cursor: undefined,
+      });
+
+      await fs.writeFile('/leftover', 'data', { overwrite: false });
 
       expect(mockFiles.upload).toHaveBeenCalled();
     });
@@ -355,7 +371,7 @@ describe('FilesSDKFilesystem', () => {
 
     it('throws FileExistsError when overwrite=false and dest exists', async () => {
       const { fs, mockFiles } = createFs();
-      mockFiles.exists.mockResolvedValueOnce(true);
+      mockFiles.list.mockResolvedValueOnce({ items: [{ key: 'dest.txt', size: 0 }], cursor: undefined });
 
       await expect(fs.copyFile('/src.txt', '/dest.txt', { overwrite: false })).rejects.toThrow(/dest\.txt/);
       expect(mockFiles.copy).not.toHaveBeenCalled();
@@ -363,7 +379,7 @@ describe('FilesSDKFilesystem', () => {
 
     it('allows copy when overwrite=false and dest does not exist', async () => {
       const { fs, mockFiles } = createFs();
-      mockFiles.exists.mockResolvedValueOnce(false);
+      mockFiles.list.mockResolvedValueOnce({ items: [], cursor: undefined });
 
       await fs.copyFile('/src.txt', '/dest.txt', { overwrite: false });
 
@@ -742,6 +758,12 @@ describe('FilesSDKFilesystem', () => {
       const { fs } = createFs({ readOnly: true });
 
       await expect(fs.moveFile('/a.txt', '/b.txt')).rejects.toThrow();
+    });
+
+    it('throws on mkdir', async () => {
+      const { fs } = createFs({ readOnly: true });
+
+      await expect(fs.mkdir('/newdir')).rejects.toThrow();
     });
 
     it('throws on rmdir', async () => {
