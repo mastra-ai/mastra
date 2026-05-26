@@ -20,6 +20,48 @@ import type { StandardSchemaWithJSON } from '../standard-schema/standard-schema.
 import type { ModelInformation } from '../types';
 import { isOptional, isNullable, isNull, isObj, isArr, isUnion, isString, isNumber, isIntersection } from '../zodTypes';
 
+/**
+ * `$ref` and `definitions` aren't part of OpenAPI 3.0's `Schema` Object — Google
+ * rejects both. Zod emits them for recursive schemas (`z.lazy(...)`). We can't
+ * truly inline a recursive ref (it loops), so the pragmatic shape is: expand the
+ * outer ref one level, then collapse any further refs to the same definition into
+ * opaque `{type: 'object'}` nodes. The outer shape stays informative; the model
+ * just doesn't get to see the recursive depth.
+ */
+function inlineRefsAndDropDefinitions(root: Record<string, any>): Record<string, any> {
+  if (!root || typeof root !== 'object') return root;
+  const definitions = root.definitions as Record<string, any> | undefined;
+  if (!definitions) return root;
+
+  const refToKey = (ref: string): string | null => {
+    const match = /^#\/definitions\/(.+)$/.exec(ref);
+    return match ? match[1] : null;
+  };
+
+  const inline = (node: any, seen: Set<string>): any => {
+    if (Array.isArray(node)) return node.map(child => inline(child, seen));
+    if (!node || typeof node !== 'object') return node;
+
+    if (typeof node.$ref === 'string') {
+      const key = refToKey(node.$ref);
+      if (!key || !definitions[key] || seen.has(key)) {
+        return { type: 'object' };
+      }
+      return inline(definitions[key], new Set([...seen, key]));
+    }
+
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(node)) {
+      out[k] = inline(v, seen);
+    }
+    return out;
+  };
+
+  const inlined = inline(root, new Set());
+  delete inlined.definitions;
+  return inlined;
+}
+
 function fixAISDKNullableUnionTypes(schema: Record<string, any>): Record<string, any> {
   if (typeof schema !== 'object' || schema === null) {
     return schema;
@@ -159,13 +201,16 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   }
 
   public processToJSONSchema(schema: PublicSchema<any>, io?: 'input' | 'output'): JSONSchema7 {
-    return super.processToJSONSchema(schema, io);
+    const out = super.processToJSONSchema(schema, io);
+    const nullableFixed = fixAISDKNullableUnionTypes(out as Record<string, any>);
+    return inlineRefsAndDropDefinitions(nullableFixed) as JSONSchema7;
   }
 
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
     const compat = this.processToCompatSchema(zodSchema);
     const transformedJsonSchema = standardSchemaToJSONSchema(compat);
-    const fixedJsonSchema = fixAISDKNullableUnionTypes(transformedJsonSchema as Record<string, any>) as JSONSchema7;
+    const nullableFixed = fixAISDKNullableUnionTypes(transformedJsonSchema as Record<string, any>);
+    const fixedJsonSchema = inlineRefsAndDropDefinitions(nullableFixed) as JSONSchema7;
 
     return jsonSchema(fixedJsonSchema, {
       validate: (value: unknown) => {
@@ -220,6 +265,43 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
     // Handle union schemas in post-processing (after children are processed)
     if (isUnionSchema(schema)) {
       this.defaultUnionHandler(schema);
+    }
+
+    // OpenAPI 3.0 Schema Object has `anyOf` but no `oneOf`. Gemini's tool-calling
+    // models can't read `oneOf` schemas correctly even though REST tolerates the
+    // payload (issue #17057), and Live's setup validator rejects it outright.
+    const node = schema as JSONSchema7 & { oneOf?: JSONSchema7[]; anyOf?: JSONSchema7[]; const?: unknown };
+    if (Array.isArray(node.oneOf)) {
+      node.anyOf = Array.isArray(node.anyOf) ? [...node.anyOf, ...node.oneOf] : node.oneOf;
+      delete node.oneOf;
+    }
+
+    // OpenAPI 3.0 Schema Object has `enum` but no `const`.
+    if (typeof node.const === 'string') {
+      if (!Array.isArray(node.enum)) node.enum = [node.const];
+      delete node.const;
+    }
+
+    // OpenAPI 3.0 Schema Object has no `additionalProperties` — neither the
+    // OpenAI-strict-mode `false` form nor the `z.record` sub-schema form.
+    if ('additionalProperties' in node) delete node.additionalProperties;
+
+    // OpenAPI 3.0 Schema Object has no `propertyNames` either (emitted by Zod
+    // record output for the string-key constraint).
+    if ('propertyNames' in node) delete (node as any).propertyNames;
+
+    // `$schema` is a JSON Schema dialect marker; OpenAPI 3.0 has no equivalent.
+    if ('$schema' in node) delete (node as any).$schema;
+
+    // OpenAPI 3.0 (and `@google/genai`'s `Schema` typedef) declares `items?: Schema`
+    // (singular). The Draft-4 tuple form `items: [...]` makes Gemini REST return
+    // `400 Unknown name "items" ... Proto field is not repeating, cannot start list`.
+    // Collapse the per-position branches into a single `anyOf` (loses position info,
+    // keeps type hints).
+    const itemsHolder = node as JSONSchema7 & { items?: JSONSchema7 | JSONSchema7[] };
+    if (Array.isArray(itemsHolder.items)) {
+      const branches = itemsHolder.items.filter((s): s is JSONSchema7 => Boolean(s) && typeof s === 'object');
+      itemsHolder.items = branches.length === 1 ? branches[0] : ({ anyOf: branches } as JSONSchema7);
     }
   }
 
