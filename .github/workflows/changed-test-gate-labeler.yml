@@ -31,7 +31,7 @@ jobs:
         id: app_token
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
       - name: Setup pnpm and node
@@ -39,6 +39,7 @@ jobs:
         with:
           install-dependencies: false
           package-manager-cache: false
+          version: '10'
 
       - name: Install dependencies
         run: pnpm install --ignore-workspace --ignore-scripts
