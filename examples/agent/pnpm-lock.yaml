@@ -11,7 +11,6 @@ overrides:
   '@mastra/auth-workos': link:../../auth/workos
   '@mastra/auth-cloud': link:../../auth/cloud
   '@mastra/core': link:../../packages/core
-  '@mastra/daytona': link:../../workspaces/daytona
   '@mastra/duckdb': link:../../stores/duckdb
   '@mastra/editor': link:../../packages/editor
   '@mastra/loggers': link:../../packages/loggers
@@ -20,7 +19,6 @@ overrides:
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/mcp': link:../../packages/mcp
   '@mastra/libsql': link:../../stores/libsql
-  '@mastra/stagehand': link:../../browser/stagehand
   '@mastra/observability': link:../../observability/mastra
   '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
@@ -37,9 +35,6 @@ importers:
       '@ai-sdk/provider':
         specifier: ^2.0.0
         version: 2.0.1
-      '@hono/node-ws':
-        specifier: ^1.1.1
-        version: 1.3.1(@hono/node-server@1.19.14(hono@4.12.16))(hono@4.12.16)
       '@mastra/auth-auth0':
         specifier: link:../../auth/auth0
         version: link:../../auth/auth0
@@ -64,9 +59,6 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
-      '@mastra/daytona':
-        specifier: link:../../workspaces/daytona
-        version: link:../../workspaces/daytona
       '@mastra/duckdb':
         specifier: link:../../stores/duckdb
         version: link:../../stores/duckdb
@@ -94,9 +86,6 @@ importers:
       '@mastra/slack':
         specifier: link:../../channels/slack
         version: link:../../channels/slack
-      '@mastra/stagehand':
-        specifier: link:../../browser/stagehand
-        version: link:../../browser/stagehand
       '@mastra/voice-openai':
         specifier: link:../../voice/openai
         version: link:../../voice/openai
@@ -121,9 +110,6 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
-      ws:
-        specifier: ^8.18.0
-        version: 8.20.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -387,13 +373,6 @@ packages:
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
-
-  '@hono/node-ws@1.3.1':
-    resolution: {integrity: sha512-vo/MwCnpJAVHBkGzWjCJ28wF45fYHAfbPZcH2rodZODHtch2GHA94KtMfusmVycTUtsLAsaNsHhtY6P8X3RQsA==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      '@hono/node-server': ^1.19.11
-      hono: ^4.6.0
 
   '@inquirer/ansi@1.0.2':
     resolution: {integrity: sha512-S8qNSZiYzFd0wAcyG5AXCvUHC5Sr7xpZ9wZ2py9XR88jUz8wooStVx5M6dRzczbBWjic9NP7+rY0Xi7qqK/aMQ==}
@@ -1162,18 +1141,6 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  ws@8.20.0:
-    resolution: {integrity: sha512-sAt8BhgNbzCtgGbt2OxmpuryO63ZoDk/sqaB/znQm94T4fCEsy/yV+7CdC1kJhOU9lboAEU7R3kquuycDoibVA==}
-    engines: {node: '>=10.0.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: '>=5.0.2'
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
@@ -1365,15 +1332,6 @@ snapshots:
   '@hono/node-server@1.19.14(hono@4.12.16)':
     dependencies:
       hono: 4.12.16
-
-  '@hono/node-ws@1.3.1(@hono/node-server@1.19.14(hono@4.12.16))(hono@4.12.16)':
-    dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.16)
-      hono: 4.12.16
-      ws: 8.20.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
 
   '@inquirer/ansi@1.0.2': {}
 
@@ -2094,8 +2052,6 @@ snapshots:
       strip-ansi: 6.0.1
 
   wrappy@1.0.2: {}
-
-  ws@8.20.0: {}
 
   y18n@5.0.8: {}
 
