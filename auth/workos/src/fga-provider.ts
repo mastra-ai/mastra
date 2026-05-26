@@ -528,6 +528,99 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     }));
   }
 
+  /**
+   * List role assignments for a specific resource.
+   * Used for share dialogs to show who has access to a resource.
+   */
+  async listResourceRoleAssignments(params: {
+    resourceType: string;
+    resourceId: string;
+  }): Promise<Array<{ organizationMembershipId: string; roleSlug: string; userId?: string }>> {
+    try {
+      // Translate resourceType via mapping if configured
+      const mappedType = this.resourceMapping[params.resourceType]?.fgaResourceType ?? params.resourceType;
+
+      // Find the resource by listing and filtering
+      const resources = await this.workos.authorization.listResources({
+        resourceTypeSlug: mappedType,
+        organizationId: this.organizationId,
+      });
+
+      const resource = resources.data.find((r: any) => r.externalId === params.resourceId);
+      if (!resource) {
+        return [];
+      }
+
+      // List all role assignments that reference this resource
+      // WorkOS listRoleAssignments doesn't support resourceId filter, so we need to
+      // list all org members and check who has access to this resource
+      const orgMembers = await this.workos.userManagement.listOrganizationMemberships({
+        organizationId: this.organizationId!,
+      });
+
+      const assignments: Array<{ organizationMembershipId: string; roleSlug: string; userId?: string }> = [];
+
+      // For each membership, get their role assignments and filter for this resource
+      for (const member of orgMembers.data) {
+        try {
+          const memberAssignments = await this.workos.authorization.listRoleAssignments({
+            organizationMembershipId: member.id,
+          });
+
+          for (const ra of memberAssignments.data) {
+            if (ra.resource?.id === resource.id || ra.resource?.externalId === params.resourceId) {
+              assignments.push({
+                organizationMembershipId: member.id,
+                roleSlug: (ra as any).role?.slug,
+                userId: member.userId,
+              });
+            }
+          }
+        } catch {
+          // Skip members we can't fetch assignments for
+        }
+      }
+
+      return assignments;
+    } catch (error) {
+      console.error('[MastraFGAWorkos] Failed to list resource role assignments:', error);
+      return [];
+    }
+  }
+
+  /**
+   * List roles available for a specific resource type.
+   * Used for share dialogs to show available roles.
+   */
+  async listResourceTypeRoles(
+    resourceType: string,
+  ): Promise<Array<{ slug: string; name?: string; description?: string }>> {
+    try {
+      // Translate resourceType via mapping if configured
+      const mappedType = this.resourceMapping[resourceType]?.fgaResourceType ?? resourceType;
+
+      if (!this.organizationId) {
+        return [];
+      }
+
+      const result = await this.workos.authorization.listOrganizationRoles(this.organizationId);
+
+      // Filter roles by resource type slug
+      const roles = result.data
+        .filter((role: any) => role.resourceTypeSlug === mappedType)
+        .map((role: any) => ({
+          slug: role.slug,
+          name: role.name,
+          description: role.description,
+        }));
+
+      return roles;
+    } catch (error) {
+      console.error('[MastraFGAWorkos] Failed to list resource type roles:', error);
+      return [];
+    }
+  }
+
   // ──────────────────────────────────────────────────────────────
   // Internal helpers
   // ──────────────────────────────────────────────────────────────
@@ -974,7 +1067,9 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
             });
 
             warnings.push(
-              `Role '${ownerRoleName}' not found for '${resourceType}'. ` + `Using '${fallbackRole}' instead.`,
+              `Role '${ownerRoleName}' not found for '${resourceType}'. Using '${fallbackRole}' instead. ` +
+                `To use '${ownerRoleName}', create it in WorkOS Dashboard > Authorization > Roles > Create Role ` +
+                `with resource type '${resourceType}'.`,
             );
             this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
             this.logger?.info(
@@ -984,7 +1079,9 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
             warnings.push(
               `No owner role found for '${resourceType}'. ` +
                 `Available roles: ${typeInfo.relations.join(', ')}. ` +
-                `User will not have automatic access to their created resource.`,
+                `User will not have automatic access to their created resource. ` +
+                `To fix: Create an '${ownerRoleName}' role in WorkOS Dashboard > Authorization > Roles > Create Role ` +
+                `with resource type '${resourceType}', or update your ownership.fallbackRoles config to include one of: ${typeInfo.relations.join(', ')}.`,
             );
             this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
           }
