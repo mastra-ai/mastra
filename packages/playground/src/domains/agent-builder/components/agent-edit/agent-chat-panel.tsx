@@ -96,9 +96,11 @@ export const AgentChatPanelProvider = ({
 interface AgentChatPanelChatProps {
   /** When true, renders the browser thumbnail above the composer */
   hasBrowser?: boolean;
+  /** Hide the sidebar button in the browser thumbnail (no sidebar available in Agent Builder) */
+  hideBrowserSidebar?: boolean;
 }
 
-export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatProps) => {
+export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = false }: AgentChatPanelChatProps) => {
   const isRunning = useStreamRunning();
   const send = useStreamSend();
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
@@ -106,7 +108,7 @@ export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatPro
   return (
     <div className="flex h-full min-h-0 flex-col">
       <AgentChatMessageList onStarterPromptSelect={setDraft} />
-      {hasBrowser && <BrowserThumbnailSlot />}
+      {hasBrowser && <BrowserThumbnailSlot hideSidebar={hideBrowserSidebar} />}
       <ChatComposer
         draft={draft}
         onDraftChange={setDraft}
@@ -125,12 +127,12 @@ export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatPro
 };
 
 /** Shows the browser thumbnail when a session is active and not in modal/sidebar mode */
-const BrowserThumbnailSlot = () => {
+const BrowserThumbnailSlot = ({ hideSidebar = false }: { hideSidebar?: boolean }) => {
   const { hasSession, viewMode } = useBrowserSession();
   if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') return null;
   return (
     <div className="mx-auto mb-2 w-full max-w-3xl">
-      <BrowserThumbnail />
+      <BrowserThumbnail hideSidebar={hideSidebar} />
     </div>
   );
 };

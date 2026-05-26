@@ -6,6 +6,7 @@ import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
 import { useAuthCapabilities } from '@/domains/auth/hooks';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { isAuthenticated } from '@/domains/auth/types';
@@ -94,6 +95,8 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
           )}
         </div>
       )}
+
+      <ImpersonationBanner />
 
       <MainSidebar.Nav>
         <MainSidebar.NavSection>

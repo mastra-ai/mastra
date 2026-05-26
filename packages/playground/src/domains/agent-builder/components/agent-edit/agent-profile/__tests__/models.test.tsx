@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-// Tests that interact with @base-ui/react Checkbox click handlers are skipped:
-// jsdom does not implement PointerEvent, which Base UI requires for click dispatch.
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -129,7 +127,7 @@ describe('Models', () => {
     expect(anthropicCheckbox.getAttribute('aria-checked')).toBe('true');
   });
 
-  it.skip('unchecking a provider badge hides that provider section and cards', () => {
+  it('unchecking a provider badge hides that provider section and cards', () => {
     const { getByTestId, queryByTestId } = render(
       <FormHarness>
         <Models />
@@ -144,7 +142,7 @@ describe('Models', () => {
     expect(queryByTestId('model-card-openai-gpt-4o')).toBeTruthy();
   });
 
-  it.skip('re-checking a provider badge restores it', () => {
+  it('re-checking a provider badge restores it', () => {
     const { getByTestId, queryByTestId } = render(
       <FormHarness>
         <Models />
@@ -160,7 +158,7 @@ describe('Models', () => {
     expect(queryByTestId('model-card-anthropic-claude-3-5-sonnet')).toBeTruthy();
   });
 
-  it.skip('unchecking all providers shows the dedicated empty-state copy', () => {
+  it('unchecking all providers shows the dedicated empty-state copy', () => {
     const { getByTestId, getByText } = render(
       <FormHarness>
         <Models />
@@ -191,7 +189,7 @@ describe('Models', () => {
     expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
   });
 
-  it.skip('combines provider filter and search: searching for a hidden provider yields the search empty state', async () => {
+  it('combines provider filter and search: searching for a hidden provider yields the search empty state', async () => {
     const { getByTestId, findByText } = render(
       <FormHarness>
         <Models />
