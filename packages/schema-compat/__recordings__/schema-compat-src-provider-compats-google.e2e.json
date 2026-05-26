@@ -7,7 +7,7 @@
   },
   "recordings": [
     {
-      "hash": "6cfe65fc154e6243",
+      "hash": "73781c32f1e396ad",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
         "method": "POST",
@@ -81,7 +81,7 @@
                   "type": "string"
                 },
                 "stringCuid": {
-                  "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                  "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                   "format": "cuid",
                   "type": "string"
                 },
@@ -332,7 +332,7 @@
       }
     },
     {
-      "hash": "77234633a0d7e59b",
+      "hash": "66a0c9e77df6650e",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
         "method": "POST",
@@ -421,7 +421,7 @@
                         "type": "string"
                       },
                       "stringCuid": {
-                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                         "format": "cuid",
                         "type": "string"
                       },
@@ -724,7 +724,7 @@
       }
     },
     {
-      "hash": "f1640c368e05fc8b",
+      "hash": "ede3025175b07c4c",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
         "method": "POST",
@@ -937,7 +937,7 @@
                         "type": "string"
                       },
                       "stringCuid": {
-                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                         "format": "cuid",
                         "type": "string"
                       },
@@ -1186,7 +1186,7 @@
       }
     },
     {
-      "hash": "dbc32a6cc2fd5ab7",
+      "hash": "1ef4fab30add160f",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
         "method": "POST",
@@ -1275,7 +1275,7 @@
                         "type": "string"
                       },
                       "stringCuid": {
-                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                         "format": "cuid",
                         "type": "string"
                       },
@@ -1578,7 +1578,7 @@
       }
     },
     {
-      "hash": "cfda9397bc7c125f",
+      "hash": "750dac6372f146d8",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
         "method": "POST",
@@ -1791,7 +1791,7 @@
                         "type": "string"
                       },
                       "stringCuid": {
-                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$",
                         "format": "cuid",
                         "type": "string"
                       },

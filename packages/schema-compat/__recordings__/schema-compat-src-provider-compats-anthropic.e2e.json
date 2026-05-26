@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "d193ba3251eb3b82",
+      "hash": "94dd74e277d85b66",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -66,7 +66,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",
@@ -432,7 +432,7 @@
       }
     },
     {
-      "hash": "43550433c9a1e13a",
+      "hash": "417b56ce9e49c4ae",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -489,7 +489,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",
@@ -859,7 +859,7 @@
       }
     },
     {
-      "hash": "8bba6a4ebe106165",
+      "hash": "aaa71db0ff75ac9b",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -997,7 +997,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",
@@ -1305,7 +1305,7 @@
       }
     },
     {
-      "hash": "228117b9b6669bd6",
+      "hash": "5e60c0e312e85ef0",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -1362,7 +1362,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",
@@ -1732,7 +1732,7 @@
       }
     },
     {
-      "hash": "38c49cb1e5df2300",
+      "hash": "611a136e86d2b2e8",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -1870,7 +1870,7 @@
                   "stringCuid": {
                     "type": "string",
                     "format": "cuid",
-                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$"
+                    "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][0-9a-z]{6,}$"
                   },
                   "stringRegex": {
                     "type": "string",
