@@ -1,3 +1,6 @@
+packages:
+  - '.'
+
 overrides:
   '@mastra/ai-sdk': link:../../../client-sdks/ai-sdk
   '@mastra/client-js': link:../../../client-sdks/client-js

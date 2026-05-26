@@ -1,5 +1,11 @@
+packages:
+  - '.'
+
 overrides:
   '@mastra/core': link:../../core
-  '@mastra/mcp': link:../
-  '@mastra/client-js': link:../../../client-sdks/client-js
-  mastra: link:../../cli
+  '@mastra/mcp': link:../../mcp
+  '@internal/test-utils': link:../../_test-utils
+
+allowBuilds:
+  esbuild: false
+  sharp: false

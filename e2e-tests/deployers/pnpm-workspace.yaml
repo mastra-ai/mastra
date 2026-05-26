@@ -1,6 +1,16 @@
+packages:
+  - '.'
+
 overrides:
-  ssri: '>=6.0.2'
+  '@mastra/core': link:../../packages/core
+  '@mastra/memory': link:../../packages/memory
+  mastra: link:../../packages/cli
+  '@mastra/deployer': link:../../packages/deployer
+  '@mastra/deployer-cloudflare': link:../../packages/deployer-cloudflare
+  '@mastra/pg': link:../../stores/pg
+  '@internal/test-utils': link:../../packages/_test-utils
 
 allowBuilds:
   esbuild: true
   snyk: false
+  snyk: set this to true or false

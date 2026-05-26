@@ -1,5 +1,5 @@
-overrides:
-  ssri: '>=6.0.2'
+packages:
+  - '.'
 
 allowBuilds:
   esbuild: true

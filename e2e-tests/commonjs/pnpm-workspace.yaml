@@ -1,3 +1,6 @@
+packages:
+  - '.'
+
 overrides:
   ssri: '>=6.0.2'
 
