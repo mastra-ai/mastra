@@ -1,5 +1,5 @@
-import { useBuilderSettings } from './use-builder-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 
 export type DenialReason = 'permission-denied' | 'not-configured' | 'error' | null;
 
