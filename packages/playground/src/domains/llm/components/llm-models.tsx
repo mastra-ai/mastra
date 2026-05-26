@@ -3,7 +3,7 @@ import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui';
 import { useMemo } from 'react';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
 import { useLLMProviders } from '../hooks/use-llm-providers';
-import { useBuilderFilteredModels, useBuilderModelPolicy } from '@/domains/builder';
+import { useBuilderFilteredModels, useBuilderModelPolicy } from '@/domains/agent-builder';
 
 export interface LLMModelsProps {
   value: string;

@@ -10,8 +10,8 @@ import { Integrations } from './integrations';
 import { Models } from './models';
 import { Skills } from './skills';
 import { Tools } from './tools';
+import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
-import { useBuilderModelPolicy } from '@/domains/builder';
 
 export interface AgentProfileTabsProps {
   agentId: string;

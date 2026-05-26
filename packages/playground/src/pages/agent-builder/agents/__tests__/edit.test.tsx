@@ -117,7 +117,7 @@ vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
 }));
-vi.mock('@/domains/builder', () => ({
+vi.mock('@/domains/agent-builder', () => ({
   useBuilderModelPolicy: () => ({ active: false }),
 }));
 

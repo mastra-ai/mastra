@@ -8,9 +8,9 @@ import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentSearchbar } from '../agent-searchbar';
 import { AgentSelectableCard } from '../agent-selectable-card';
+import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
 import { toProviders } from '@/domains/agent-builder/services/to-providers';
-import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
 import { ProviderLogo, cleanProviderId, useAllModels, useLLMProviders } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 

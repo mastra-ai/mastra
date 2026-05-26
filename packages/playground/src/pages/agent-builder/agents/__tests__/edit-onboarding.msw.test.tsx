@@ -22,19 +22,23 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-vi.mock('@/domains/agent-builder', () => ({
-  useBuilderAgentFeatures: () => ({
-    tools: false,
-    memory: false,
-    workflows: false,
-    agents: false,
-    skills: false,
-    avatarUpload: false,
-    model: false,
-    favorites: false,
-    browser: false,
-  }),
-}));
+vi.mock('@/domains/agent-builder', async () => {
+  const actual = await vi.importActual<typeof import('@/domains/agent-builder')>('@/domains/agent-builder');
+  return {
+    ...actual,
+    useBuilderAgentFeatures: () => ({
+      tools: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+      skills: false,
+      avatarUpload: false,
+      model: false,
+      favorites: false,
+      browser: false,
+    }),
+  };
+});
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),

@@ -40,7 +40,7 @@ vi.mock('../../../contexts/agent-primitives-context', () => ({
   useAgentPrimitives: () => primitivesMock,
 }));
 
-vi.mock('../../../../builder', () => ({
+vi.mock('../../../../agent-builder', () => ({
   useBuilderPickerVisibility: () => ({
     visibleTools: null,
     visibleAgents: null,

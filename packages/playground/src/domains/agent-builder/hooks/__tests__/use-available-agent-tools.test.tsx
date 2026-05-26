@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BuilderPickerVisibility } from '../../../builder';
+import type { BuilderPickerVisibility } from '../../../agent-builder';
 import { useAvailableAgentTools } from '../use-available-agent-tools';
 
 let pickerMock: BuilderPickerVisibility;
 
-vi.mock('../../../builder', () => ({
+vi.mock('../../../agent-builder', () => ({
   useBuilderPickerVisibility: () => pickerMock,
 }));
 

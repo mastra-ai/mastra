@@ -36,7 +36,7 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
   useBuilderAgentFeatures: () => builderFeatures,
 }));
 
-vi.mock('@/domains/builder', () => ({
+vi.mock('@/domains/agent-builder', () => ({
   useBuilderModelPolicy: () => modelPolicy,
   useBuilderFilteredModels: () => [],
   useBuilderFilteredProviders: () => [],

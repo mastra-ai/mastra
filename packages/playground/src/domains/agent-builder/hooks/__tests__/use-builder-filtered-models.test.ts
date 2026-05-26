@@ -3,7 +3,10 @@ import type { BuilderModelPolicy, Provider } from '@mastra/client-js';
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ModelInfo } from '../../../llm/hooks/use-filtered-models';
-import { useBuilderFilteredModels, useBuilderFilteredProviders } from '../use-builder-filtered-models';
+import {
+  useBuilderFilteredModels,
+  useBuilderFilteredProviders,
+} from '../../../agent-builder/hooks/use-builder-filtered-models';
 
 const providers: Provider[] = [
   { id: 'openai', name: 'OpenAI', envVar: 'OPENAI_API_KEY', connected: true, models: ['gpt-4o', 'gpt-4o-mini'] },

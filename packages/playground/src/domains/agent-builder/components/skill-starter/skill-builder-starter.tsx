@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
+import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 const EXAMPLES = [

@@ -121,7 +121,7 @@ import {
   useBuilderPickerVisibility,
   useBuilderSettings,
   useIsBuilderEnabled,
-} from '@/domains/builder/hooks/use-builder-settings';
+} from '@/domains/agent-builder/hooks/use-builder-settings';
 
 const builderSettings = {
   enabled: true,

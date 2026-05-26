@@ -4,7 +4,7 @@ import { Navigate, useNavigate } from 'react-router';
 import { SkillBuilderStarter } from '@/domains/agent-builder/components/skill-starter/skill-builder-starter';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useBuilderSettings } from '@/domains/builder/hooks/use-builder-settings';
+import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 export default function AgentBuilderSkillsCreate() {
