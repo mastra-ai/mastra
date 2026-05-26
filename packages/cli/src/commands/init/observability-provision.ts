@@ -69,8 +69,7 @@ export async function provisionObservabilityProject({
   token?: string;
 } = {}): Promise<ObservabilityProvisionResult> {
   const token = providedToken ?? (await getToken());
-  const { orgId, orgName } =
-    mode === 'create' ? await resolveCurrentOrg(token) : await resolveCurrentOrg(token, { forcePrompt: true });
+  const { orgId, orgName } = await resolveCurrentOrg(token, { forcePrompt: true });
 
   let project: ObservabilityProject;
   if (observabilityProject) {
