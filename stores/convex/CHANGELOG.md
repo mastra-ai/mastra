@@ -1,5 +1,65 @@
 # @mastra/convex
 
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- Convex can now persist channel installations and provider configuration. ([#16718](https://github.com/mastra-ai/mastra/pull/16718))
+
+  ```ts
+  import { ConvexStore } from '@mastra/convex';
+
+  const storage = new ConvexStore({
+    id: 'app-storage',
+    deploymentUrl: process.env.CONVEX_URL!,
+    adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+  });
+
+  const channels = await storage.getStore('channels');
+
+  await channels?.saveInstallation({
+    id: 'slack-agent-1',
+    platform: 'slack',
+    agentId: 'agent-1',
+    status: 'active',
+    webhookId: 'webhook-1',
+    data: { teamId: 'T123', botUserId: 'U123' },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  ```
+
+- Workflow schedules can now be stored in Convex. ([#16710](https://github.com/mastra-ai/mastra/pull/16710))
+
+  ```ts
+  import { ConvexStore } from '@mastra/convex';
+
+  const storage = new ConvexStore({
+    id: 'app-storage',
+    deploymentUrl: process.env.CONVEX_URL!,
+    adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+  });
+
+  const schedules = await storage.getStore('schedules');
+
+  await schedules?.createSchedule({
+    id: 'daily-summary',
+    target: { type: 'workflow', workflowId: 'summary-workflow' },
+    cron: '0 9 * * *',
+    status: 'active',
+    nextFireAt: Date.now(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  ```
+
+### Patch Changes
+
+- Improved Convex background task reliability with safer lifecycle updates, faster filtering, and smoother upgrades from older storage rows. ([#16724](https://github.com/mastra-ai/mastra/pull/16724))
+
+- Updated dependencies [[`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0-alpha.6
+
 ## 1.1.0
 
 ### Minor Changes
