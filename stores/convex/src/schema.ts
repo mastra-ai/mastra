@@ -15,8 +15,11 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
 } from '@mastra/core/storage/constants';
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
@@ -136,6 +139,56 @@ export const mastraScoresTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[
   .index('by_created', ['createdAt']);
 
 /**
+ * Schedules table - stores workflow scheduler state.
+ *
+ * Schedule times are represented as JavaScript millisecond timestamps. Target
+ * and metadata payloads are serialized JSON strings because user-provided JSON
+ * can contain Convex-reserved field names such as `$schema`.
+ */
+export const mastraSchedulesTable = defineTable({
+  id: v.string(),
+  target: v.string(),
+  cron: v.string(),
+  timezone: v.optional(v.union(v.string(), v.null())),
+  status: v.string(),
+  next_fire_at: v.number(),
+  last_fire_at: v.optional(v.union(v.number(), v.null())),
+  last_run_id: v.optional(v.union(v.string(), v.null())),
+  created_at: v.number(),
+  updated_at: v.number(),
+  metadata: v.optional(v.union(v.string(), v.null())),
+  owner_type: v.optional(v.union(v.string(), v.null())),
+  owner_id: v.optional(v.union(v.string(), v.null())),
+  workflow_id: v.optional(v.union(v.string(), v.null())),
+})
+  .index('by_record_id', ['id'])
+  .index('by_status_next_fire_at', ['status', 'next_fire_at'])
+  .index('by_workflow_status', ['workflow_id', 'status'])
+  .index('by_workflow_id', ['workflow_id'])
+  .index('by_owner', ['owner_type', 'owner_id'])
+  .index('by_owner_id', ['owner_id'])
+  .index('by_created', ['created_at']);
+
+/**
+ * Schedule trigger table - stores scheduler trigger history.
+ */
+export const mastraScheduleTriggersTable = defineTable({
+  id: v.string(),
+  schedule_id: v.string(),
+  run_id: v.optional(v.union(v.string(), v.null())),
+  scheduled_fire_at: v.number(),
+  actual_fire_at: v.number(),
+  outcome: v.string(),
+  error: v.optional(v.union(v.string(), v.null())),
+  trigger_kind: v.string(),
+  parent_trigger_id: v.optional(v.union(v.string(), v.null())),
+  metadata: v.optional(v.union(v.string(), v.null())),
+})
+  .index('by_record_id', ['id'])
+  .index('by_schedule_actual', ['schedule_id', 'actual_fire_at'])
+  .index('by_parent_trigger', ['parent_trigger_id']);
+
+/**
  * Channel installations table - stores platform app installations for agents.
  *
  * Platform data is serialized as a JSON string because user/platform payloads
@@ -172,6 +225,54 @@ export const mastraChannelConfigTable = defineTable({
 })
   .index('by_record_id', ['id'])
   .index('by_platform', ['platform']);
+
+/**
+ * Background tasks table - stores durable background task state.
+ *
+ * JSON-like payloads are stored as encoded strings to match the existing
+ * Convex storage serialization used by this adapter.
+ *
+ * Optional fields are stored as null when cleared so partial Convex patches can
+ * preserve the existing task row while explicitly removing suspended state.
+ */
+export const mastraBackgroundTasksTable = defineTable({
+  id: v.string(),
+  tool_call_id: v.string(),
+  tool_name: v.string(),
+  agent_id: v.string(),
+  run_id: v.string(),
+  thread_id: v.union(v.string(), v.null()),
+  resource_id: v.union(v.string(), v.null()),
+  status: v.union(
+    v.literal('pending'),
+    v.literal('running'),
+    v.literal('suspended'),
+    v.literal('completed'),
+    v.literal('failed'),
+    v.literal('cancelled'),
+    v.literal('timed_out'),
+  ),
+  args: v.string(),
+  result: v.union(v.string(), v.null()),
+  error: v.union(v.string(), v.null()),
+  suspend_payload: v.union(v.string(), v.null()),
+  retry_count: v.number(),
+  max_retries: v.number(),
+  timeout_ms: v.number(),
+  createdAt: v.string(),
+  startedAt: v.union(v.string(), v.null()),
+  suspendedAt: v.union(v.string(), v.null()),
+  completedAt: v.union(v.string(), v.null()),
+})
+  .index('by_record_id', ['id'])
+  .index('by_status_created', ['status', 'createdAt'])
+  .index('by_agent_status', ['agent_id', 'status'])
+  .index('by_run', ['run_id'])
+  .index('by_tool_call', ['tool_call_id'])
+  .index('by_thread', ['thread_id'])
+  .index('by_resource', ['resource_id'])
+  .index('by_tool', ['tool_name'])
+  .index('by_created', ['createdAt']);
 
 // ============================================================================
 // Vector Tables - Not in core schemas (vector-specific)
@@ -315,8 +416,11 @@ export {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
 };
 
 // Additional table name constants for vector tables (not in core)
