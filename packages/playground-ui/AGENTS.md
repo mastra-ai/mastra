@@ -7,6 +7,7 @@ Use the `playground-msw-tests` skill for business hooks, data components,
 gating, and React Query flows.
 
 Rules:
+
 - Drive the real @mastra/client-js + React Query stack; only mock the network.
 - Never `vi.mock` our own data hooks, services, or auth gating.
 - Fixtures live in nearby `__tests__/fixtures/` folders and MUST be typed with

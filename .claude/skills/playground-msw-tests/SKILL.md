@@ -99,9 +99,7 @@ afterEach(() => cleanup());
 
 describe('Subject', () => {
   it('renders the happy path', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(happyPathResponse)),
-    );
+    server.use(http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(happyPathResponse)));
 
     renderSubject();
 
@@ -162,7 +160,9 @@ Defer the MSW handler's resolution with a promise gate:
 ```ts
 const gate = (() => {
   let resolve: () => void = () => {};
-  const promise = new Promise<void>(r => { resolve = r; });
+  const promise = new Promise<void>(r => {
+    resolve = r;
+  });
   return { promise, resolve };
 })();
 
