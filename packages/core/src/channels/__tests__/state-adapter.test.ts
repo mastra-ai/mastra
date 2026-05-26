@@ -102,10 +102,29 @@ describe('MastraStateAdapter', () => {
         },
       });
 
+      await memoryStore.saveThread({
+        thread: {
+          id: 'thread-agent-b',
+          title: 'Agent B thread',
+          resourceId: 'discord:user1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: `agent-b:${externalThreadId}`,
+            channel_externalChannelId: 'discord:guild1:channel1',
+          },
+        },
+      });
+
       await agentA.subscribe(externalThreadId);
 
       expect(await agentA.isSubscribed(externalThreadId)).toBe(true);
       expect(await agentB.isSubscribed(externalThreadId)).toBe(false);
+
+      await agentB.subscribe(externalThreadId);
+
+      expect(await agentB.isSubscribed(externalThreadId)).toBe(true);
     });
   });
 
