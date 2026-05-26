@@ -6,6 +6,19 @@
 
 When the agent calls `ask_user` with `selectionMode: 'multi_select'`, the dialog now renders a checkbox list:
 
+```ts
+await ask_user({
+  question: 'Which features do you want to enable?',
+  options: [
+    { label: 'Tracing' },
+    { label: 'Cost tracking' },
+    { label: 'Long-running judge' },
+  ],
+  selectionMode: 'multi_select',
+});
+// answer arrives as `string[]`, e.g. ['Tracing', 'Cost tracking']
+```
+
 - `↑/↓` to move the cursor between options
 - `Space` to toggle the focused option
 - `Enter` submits the selected values as a `string[]`
