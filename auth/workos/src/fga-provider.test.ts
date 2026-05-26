@@ -1,7 +1,6 @@
 /**
  * @license Mastra Enterprise License - see ee/LICENSE
  */
-import { FGADeniedError } from '@mastra/core/auth/ee';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
@@ -360,7 +359,8 @@ describe('MastraFGAWorkos', () => {
       ).rejects.toThrow('FGA denied');
     });
 
-    it('should throw FGADeniedError when WorkOS reports the resource is missing', async () => {
+    it('should throw WorkOSFGAResourceNotFoundError when WorkOS reports the resource is missing', async () => {
+      // With publicByDefault=false (default), missing resources throw specific error
       mockAuthorization.check.mockRejectedValue({ status: 404, code: 'entity_not_found' });
 
       await expect(
@@ -368,7 +368,7 @@ describe('MastraFGAWorkos', () => {
           resource: { type: 'agent', id: 'agent-1' },
           permission: 'agents:execute',
         }),
-      ).rejects.toBeInstanceOf(FGADeniedError);
+      ).rejects.toThrow('is not registered in WorkOS');
     });
   });
 
@@ -1120,6 +1120,153 @@ describe('MastraFGAWorkos', () => {
 
       const result = await fga.hasResourceType('org-123', 'nonexistent');
       expect(result).toBe(false);
+    });
+  });
+
+  // Regression tests for CodeRabbit review comments
+  describe('regression: unresolved membership with publicByDefault', () => {
+    it('should deny access when membership cannot be resolved even with publicByDefault=true', async () => {
+      const fgaPublicByDefault = new MastraFGAWorkos({
+        apiKey: 'sk_test_123',
+        clientId: 'client_test_123',
+        publicByDefault: true,
+        resourceMapping: {},
+        permissionMapping: {},
+      });
+
+      // User without organizationMembershipId
+      const userWithoutMembership = {
+        id: 'user-1',
+        workosId: 'user_01234567890',
+        // No organizationMembershipId
+      };
+
+      // check() should return false when membership cannot be resolved
+      // (publicByDefault should NOT grant access when the issue is membership, not resource existence)
+      const result = await fgaPublicByDefault.check(userWithoutMembership, {
+        resource: { type: 'agent', id: 'agent-1' },
+        permission: 'agents:read',
+      });
+
+      expect(result).toBe(false);
+      // Should NOT have called WorkOS API since we couldn't resolve membership
+      expect(mockAuthorization.check).not.toHaveBeenCalled();
+    });
+
+    it('should throw membership error in require() when membership cannot be resolved', async () => {
+      const fgaPublicByDefault = new MastraFGAWorkos({
+        apiKey: 'sk_test_123',
+        clientId: 'client_test_123',
+        publicByDefault: true,
+        resourceMapping: {},
+        permissionMapping: {},
+      });
+
+      const userWithoutMembership = {
+        id: 'user-1',
+        workosId: 'user_01234567890',
+      };
+
+      await expect(
+        fgaPublicByDefault.require(userWithoutMembership, {
+          resource: { type: 'agent', id: 'agent-1' },
+          permission: 'agents:read',
+        }),
+      ).rejects.toThrow(WorkOSFGAMembershipResolutionError);
+    });
+  });
+
+  describe('regression: describeResourceTypes cache should be org-scoped', () => {
+    it('should cache resource types per organization', async () => {
+      // Setup: org-1 has agent type, org-2 has workflow type
+      mockAuthorization.listOrganizationRoles
+        .mockResolvedValueOnce({
+          data: [{ slug: 'viewer', resourceTypeSlug: 'agent', type: 'EnvironmentRole' }],
+        })
+        .mockResolvedValueOnce({
+          data: [{ slug: 'operator', resourceTypeSlug: 'workflow', type: 'EnvironmentRole' }],
+        });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      // First call for org-1
+      const typesOrg1 = await fga.describeResourceTypes('org-1');
+      expect(typesOrg1).toHaveLength(1);
+      expect(typesOrg1[0].slug).toBe('agent');
+
+      // Second call for org-2 should NOT return org-1's cached types
+      const typesOrg2 = await fga.describeResourceTypes('org-2');
+      expect(typesOrg2).toHaveLength(1);
+      expect(typesOrg2[0].slug).toBe('workflow');
+
+      // Verify both orgs were queried
+      expect(mockAuthorization.listOrganizationRoles).toHaveBeenCalledTimes(2);
+      expect(mockAuthorization.listOrganizationRoles).toHaveBeenCalledWith('org-1');
+      expect(mockAuthorization.listOrganizationRoles).toHaveBeenCalledWith('org-2');
+    });
+
+    it('should use cached result for same organization', async () => {
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({
+        data: [{ slug: 'viewer', resourceTypeSlug: 'agent', type: 'EnvironmentRole' }],
+      });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      // First call
+      await fga.describeResourceTypes('org-1');
+      // Second call (should use cache)
+      await fga.describeResourceTypes('org-1');
+
+      // Should only have called API once
+      expect(mockAuthorization.listOrganizationRoles).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('regression: require() should respect publicByDefault', () => {
+    it('should allow access when resource not found and publicByDefault=true', async () => {
+      const fgaPublicByDefault = new MastraFGAWorkos({
+        apiKey: 'sk_test_123',
+        clientId: 'client_test_123',
+        publicByDefault: true,
+        resourceMapping: {},
+        permissionMapping: {},
+      });
+
+      // Simulate resource not found
+      mockAuthorization.check.mockRejectedValue({ status: 404, code: 'entity_not_found' });
+
+      // Should NOT throw - publicByDefault should allow access
+      await expect(
+        fgaPublicByDefault.require(testUser, {
+          resource: { type: 'agent', id: 'agent-1' },
+          permission: 'agents:read',
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should throw WorkOSFGAResourceNotFoundError when resource not found and publicByDefault=false', async () => {
+      const fgaPrivateByDefault = new MastraFGAWorkos({
+        apiKey: 'sk_test_123',
+        clientId: 'client_test_123',
+        publicByDefault: false,
+        resourceMapping: {},
+        permissionMapping: {},
+      });
+
+      // Simulate resource not found
+      mockAuthorization.check.mockRejectedValue({ status: 404, code: 'entity_not_found' });
+
+      // Should throw specific error
+      await expect(
+        fgaPrivateByDefault.require(testUser, {
+          resource: { type: 'agent', id: 'agent-1' },
+          permission: 'agents:read',
+        }),
+      ).rejects.toThrow('is not registered in WorkOS');
     });
   });
 });
