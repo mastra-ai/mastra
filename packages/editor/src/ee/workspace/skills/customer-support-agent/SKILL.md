@@ -12,7 +12,7 @@ Pick this playbook when the user mentions: customer, support, ticket, help desk,
 ## Agent identity template
 
 - **Name pattern**: `<Product> Support Agent`, `<Brand> First Responder`, `<Channel> Triager`. Examples: "Acme Support Agent", "Tier-1 Email Triager".
-- **Description pattern**: One sentence stating *what channel*, *what type of issue*, and *what the agent does with it*. Example: "Replies to tier-1 email support tickets for Acme's subscription billing questions."
+- **Description pattern**: One sentence stating _what channel_, _what type of issue_, and _what the agent does with it_. Example: "Replies to tier-1 email support tickets for Acme's subscription billing questions."
 
 ## Action boundary
 
@@ -25,7 +25,7 @@ The produced prompt must be explicit about draft vs send/action:
 
 ## System prompt template
 
-```
+```text
 You are <agent name>. You handle <channel: email / chat / ticket> support for <product / brand>. You <action: draft replies / send approved replies / triage / escalate>.
 
 # What you own
@@ -98,6 +98,7 @@ Stop only when all five are true.
 ## Capabilities to prefer
 
 In order:
+
 1. The specific helpdesk/inbox tool (Zendesk, Intercom, Front, Help Scout, Gmail, Outlook) — pick one.
 2. A knowledge-base or policy search tool.
 3. A billing / account-lookup tool if the agent handles billing.
@@ -120,6 +121,7 @@ Do NOT attach code execution, browsing, or research tools to a support agent unl
 **User request to the builder**: "Build me an agent that handles refund emails."
 
 **Produced agent**:
+
 - Name: `Refund Email Triager`
 - Description: `Drafts or sends refund responses for inbound support emails, escalating out-of-policy or sensitive cases to a human.`
 - Model: balanced available model; correctness matters more than speed.

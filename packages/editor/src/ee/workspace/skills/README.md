@@ -6,7 +6,7 @@ This directory holds the **builder agent's own playbooks**: opinionated guides t
 
 The word "skills" means two things in this codebase. Don't conflate them:
 
-1. **Builder authoring skills (this directory).** Read-only Markdown playbooks that teach the builder agent *how to write a great system prompt* for a given archetype. Loaded via the workspace skill tools (`skill`, `skill_search`, `skill_read`) wired up automatically because `agent-builder-agent.ts` configures a `Workspace` with `skills: ['skills']`.
+1. **Builder authoring skills (this directory).** Read-only Markdown playbooks that teach the builder agent _how to write a great system prompt_ for a given archetype. Loaded via the workspace skill tools (`skill`, `skill_search`, `skill_read`) wired up automatically because `agent-builder-agent.ts` configures a `Workspace` with `skills: ['skills']`.
 2. **User-attachable agent skills (the product feature).** Stored skills the end-user can attach to the agent they're building. Created via the `createSkillTool` client tool. Persisted to the editor's skill store; surfaced via `useAvailableSkills`. These are **not** what lives in this directory.
 
 Builder authoring skills must never be attached to produced agents or mentioned to users. Produced agents can only reference user-facing capabilities that exist in the form snapshot.
@@ -19,7 +19,7 @@ At runtime the builder agent receives three workspace tools:
 - `skill` — activate a skill; returns the full `SKILL.md` content as a tool result.
 - `skill_read` — read a specific file inside a skill directory (references, scripts, assets).
 
-The builder's system prompt (see `../agent-builder-agent.ts`) instructs it to:
+The builder's system prompt (see `../../agent-builder-agent.ts`) instructs it to:
 
 1. Classify the user's outcome into one archetype.
 2. `skill_search` for that archetype.
@@ -114,13 +114,13 @@ Every archetype `SKILL.md` follows this structure so the builder sees a consiste
 
 ## Current archetypes
 
-| Skill | When the builder picks it |
-| --- | --- |
-| `coding-agent` | Writes, edits, reviews, or refactors source code. |
-| `spreadsheet-agent` | Reads or writes tabular data (Sheets, Excel, Airtable, CSV). |
-| `research-agent` | Researches a topic and produces a citation-backed report. |
-| `customer-support-agent` | Triages or replies to inbound support messages. |
-| `content-writer-agent` | Drafts blog posts, social, newsletters, marketing copy. |
-| `ops-automation-agent` | Runs recurring or event-driven internal automation. |
-| `generic-assistant` | Fallback for general-purpose personal helpers. |
-| `agent-prompt-quality-bar` | Meta-skill: universal run contract + final audit rubric. |
+| Skill                      | When the builder picks it                                    |
+| -------------------------- | ------------------------------------------------------------ |
+| `coding-agent`             | Writes, edits, reviews, or refactors source code.            |
+| `spreadsheet-agent`        | Reads or writes tabular data (Sheets, Excel, Airtable, CSV). |
+| `research-agent`           | Researches a topic and produces a citation-backed report.    |
+| `customer-support-agent`   | Triages or replies to inbound support messages.              |
+| `content-writer-agent`     | Drafts blog posts, social, newsletters, marketing copy.      |
+| `ops-automation-agent`     | Runs recurring or event-driven internal automation.          |
+| `generic-assistant`        | Fallback for general-purpose personal helpers.               |
+| `agent-prompt-quality-bar` | Meta-skill: universal run contract + final audit rubric.     |

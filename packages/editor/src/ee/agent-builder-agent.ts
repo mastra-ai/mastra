@@ -9,8 +9,7 @@ import { fileURLToPath } from 'node:url';
 // builds. tsup emits both formats; `import.meta.url` is empty in CJS, so we
 // fall back to `__dirname` when running under CommonJS.
 declare const __dirname: string | undefined;
-const moduleDir =
-  typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
+const moduleDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
 const workspacePath = path.join(moduleDir, 'workspace');
 

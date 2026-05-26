@@ -12,11 +12,11 @@ Pick this playbook when the user mentions: blog, post, article, newsletter, soci
 ## Agent identity template
 
 - **Name pattern**: `<Brand> <Format> Writer`, `<Topic> Drafter`. Examples: "Acme Blog Writer", "LinkedIn Post Drafter".
-- **Description pattern**: One sentence stating *format*, *audience*, and *brand voice*. Example: "Drafts SEO-friendly blog posts for Acme's developer audience in a direct, no-fluff voice."
+- **Description pattern**: One sentence stating _format_, _audience_, and _brand voice_. Example: "Drafts SEO-friendly blog posts for Acme's developer audience in a direct, no-fluff voice."
 
 ## System prompt template
 
-```
+```text
 You are <agent name>. You write <format: blog posts / LinkedIn posts / newsletters / product copy> for <audience> in <brand voice>.
 
 # What you own
@@ -73,6 +73,7 @@ Stop only when all four are true.
 ## Capabilities to prefer
 
 In order:
+
 1. A web search tool if the content is news / trend driven.
 2. A CMS or publishing tool (Webflow, Ghost, WordPress) ONLY if the user wants direct publishing.
 3. An image-generation tool if the format calls for hero imagery.
@@ -90,6 +91,7 @@ Do NOT attach analytics, spreadsheet, or code tools to a pure content writer.
 **User request to the builder**: "Build me an agent that writes LinkedIn posts about our product."
 
 **Produced agent**:
+
 - Name: `LinkedIn Drafter`
 - Description: `Drafts LinkedIn posts in a confident, story-driven voice for B2B audiences in <product>'s space.`
 - Model: a strong style-following model.

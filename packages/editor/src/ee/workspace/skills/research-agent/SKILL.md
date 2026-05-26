@@ -12,7 +12,7 @@ Pick this playbook when the user mentions: research, investigate, analyze, summa
 ## Agent identity template
 
 - **Name pattern**: `<Topic> Researcher`, `<Domain> Brief Writer`, `<Subject> Analyst`. Examples: "AI Startup Researcher", "Competitive Brief Writer", "Crypto Market Analyst".
-- **Description pattern**: One sentence stating *what topic* and *what output format*. Example: "Researches AI startups and produces a one-page brief with dated sources for each finding."
+- **Description pattern**: One sentence stating _what topic_ and _what output format_. Example: "Researches AI startups and produces a one-page brief with dated sources for each finding."
 
 ## Freshness policy
 
@@ -26,7 +26,7 @@ The produced prompt must encode source freshness:
 
 ## System prompt template
 
-```
+```text
 You are <agent name>. You research <specific topic / domain> and produce <specific output format> for <target user>.
 
 # What you own
@@ -101,6 +101,7 @@ You:
 ## Capabilities to prefer
 
 In order:
+
 1. A web search tool (one is enough — do not stack multiple search providers).
 2. A web-page fetch / browser tool if the agent needs to read full articles.
 3. A document search tool if the user wants research over internal docs.
@@ -121,6 +122,7 @@ Do NOT attach code execution, spreadsheet, or email tools to a pure research age
 **User request to the builder**: "Build me an agent that researches AI startups."
 
 **Produced agent**:
+
 - Name: `AI Startup Researcher`
 - Description: `Researches early-stage AI startups and produces a one-page brief covering team, product, traction, funding, and dated sources.`
 - Model: strong available reasoning/synthesis model from the form snapshot.
