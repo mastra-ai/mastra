@@ -11,6 +11,10 @@ import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
 import { isLicenseValid, isDevEnvironment, getSafeLicenseSummary } from './license';
 
+// TODO: Temporary RBAC/FGA license bypass. Set to false or remove to restore
+// production EE license enforcement for configured RBAC/FGA providers.
+const TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE: boolean = true;
+
 /**
  * Public capabilities response (no authentication required).
  * Contains just enough info to render the login page.
@@ -250,6 +254,9 @@ export async function buildCapabilities(
   const isSimple = isSimpleAuth(auth);
   const isDev = isDevEnvironment();
   const isLicensedOrCloud = hasLicense || isCloud || isSimple || isDev;
+  const hasAuthorizationProvider = !!options?.rbac || !!options?.fga;
+  const canUseRBACFGA =
+    isLicensedOrCloud || (TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE && hasAuthorizationProvider);
 
   // Build login configuration (always public)
   let login: PublicAuthCapabilities['login'] = null;
@@ -303,7 +310,7 @@ export async function buildCapabilities(
 
   // Try to get current user (requires session)
   let user: EEUser | null = null;
-  if (implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud) {
+  if (implementsInterface<IUserProvider>(auth, 'getCurrentUser') && canUseRBACFGA) {
     try {
       user = await auth.getCurrentUser(request);
     } catch {
@@ -320,14 +327,14 @@ export async function buildCapabilities(
 
   // Get RBAC provider from options (if configured)
   const rbacProvider = options?.rbac;
-  const hasRBAC = !!rbacProvider && isLicensedOrCloud;
+  const hasRBAC = !!rbacProvider && canUseRBACFGA;
 
   // Get FGA provider from options (if configured)
-  const hasFGA = !!options?.fga && isLicensedOrCloud;
+  const hasFGA = !!options?.fga && canUseRBACFGA;
 
   // Build capability flags
   const capabilities: CapabilityFlags = {
-    user: implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud,
+    user: implementsInterface<IUserProvider>(auth, 'getCurrentUser') && canUseRBACFGA,
     session: implementsInterface<ISessionProvider>(auth, 'createSession') && isLicensedOrCloud,
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,

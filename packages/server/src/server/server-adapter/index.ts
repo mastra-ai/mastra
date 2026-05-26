@@ -37,6 +37,10 @@ export {
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 
+// TODO: Temporary RBAC/FGA license bypass. Set to false or remove to restore
+// production EE license enforcement for configured RBAC/FGA providers.
+const TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE: boolean = true;
+
 export interface OpenAPIConfig {
   title?: string;
   version?: string;
@@ -603,6 +607,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     );
 
     if (configuredFeatures.length === 0) return;
+    if (TEMPORARILY_ALLOW_RBAC_FGA_WITHOUT_EE_LICENSE) return;
 
     try {
       const { isEEEnabled } = await import('@mastra/core/auth/ee');

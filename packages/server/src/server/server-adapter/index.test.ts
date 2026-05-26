@@ -708,7 +708,7 @@ describe('EE license validation', () => {
     vi.resetModules();
   });
 
-  it('should reject FGA in production without a valid EE license', async () => {
+  it('temporarily allows FGA in production without a valid EE license', async () => {
     process.env['NODE_ENV'] = 'production';
     delete process.env['MASTRA_EE_LICENSE'];
 
@@ -719,7 +719,7 @@ describe('EE license validation', () => {
     });
     const adapter = new TestMastraServer({ app: {}, mastra });
 
-    await expect(adapter.validateEELicense()).rejects.toThrow('FGA is configured but no valid EE license was found');
+    await expect(adapter.validateEELicense()).resolves.toBeUndefined();
   });
 
   it('should allow FGA in production with a valid EE license', async () => {
@@ -736,7 +736,7 @@ describe('EE license validation', () => {
     await expect(adapter.validateEELicense()).resolves.toBeUndefined();
   });
 
-  it('should mention both configured EE authorization features when both are unlicensed', async () => {
+  it('temporarily allows both configured EE authorization features when both are unlicensed', async () => {
     process.env['NODE_ENV'] = 'production';
     delete process.env['MASTRA_EE_LICENSE'];
 
@@ -754,9 +754,7 @@ describe('EE license validation', () => {
     });
     const adapter = new TestMastraServer({ app: {}, mastra });
 
-    await expect(adapter.validateEELicense()).rejects.toThrow(
-      'RBAC and FGA are configured but no valid EE license was found',
-    );
+    await expect(adapter.validateEELicense()).resolves.toBeUndefined();
   });
 });
 

@@ -62,7 +62,7 @@ describe('FGA Capability Detection', () => {
     expect('capabilities' in result && result.capabilities.fga).toBe(false);
   });
 
-  it('should include fga: false when FGA provider present but no license in production', async () => {
+  it('temporarily includes fga: true when FGA provider is present without a license in production', async () => {
     process.env['NODE_ENV'] = 'production';
     delete process.env['MASTRA_EE_LICENSE'];
     const auth = createMockAuth({ id: 'user-1', email: 'test@test.com', name: 'Test' });
@@ -72,8 +72,8 @@ describe('FGA Capability Detection', () => {
       fga: fgaProvider,
     });
 
-    expect(result).toEqual({ enabled: true, login: null });
-    expect(auth.getCurrentUser).not.toHaveBeenCalled();
+    expect('capabilities' in result && result.capabilities.fga).toBe(true);
+    expect(auth.getCurrentUser).toHaveBeenCalled();
   });
 
   it('should include fga: true in dev environments without license', async () => {
