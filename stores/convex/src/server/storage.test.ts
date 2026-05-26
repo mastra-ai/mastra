@@ -821,24 +821,20 @@ describe('mastraStorage bulk mutations', () => {
     ];
     const query = vi.fn((table: string) => ({
       withIndex: vi.fn((indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
-        const eqFilters: Array<{ field: string; value: string }> = [];
+        const eqValues: string[] = [];
         const localBuilder: TestQueryBuilder = {
-          eq: vi.fn((field: string, value: string) => {
-            eqFilters.push({ field, value: String(value) });
+          eq: vi.fn((_field: string, value: string) => {
+            eqValues.push(String(value));
             return localBuilder;
           }),
         };
         queryBuilder(builder);
         queryBuilder(localBuilder);
         return {
-          take: vi.fn(async () =>
-            table === 'mastra_documents'
-              ? legacyDocs
-              : typedDocs.filter(doc => eqFilters.every(({ field, value }) => doc[field] === value)),
-          ),
+          take: vi.fn(async () => (table === 'mastra_documents' ? legacyDocs : typedDocs)),
           unique: vi.fn(async () =>
             table === 'mastra_background_tasks' && indexName === 'by_record_id'
-              ? (typedDocs.find(doc => eqFilters.every(({ field, value }) => doc[field] === value)) ?? null)
+              ? (typedDocs.find(doc => doc.id === eqValues[0]) ?? null)
               : null,
           ),
         };
