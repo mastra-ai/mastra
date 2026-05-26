@@ -59,7 +59,8 @@ export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'chil
   /**
    * When true, render `children` as the interactive element.
    * Use for `<button>` items or custom router Links. Item classes are forwarded
-   * to the slotted element. `link` and `LinkComponent` are ignored.
+   * to the slotted element. `link.url` and `LinkComponent` are ignored; other
+   * `link` presentation fields still apply when supplied.
    */
   asChild?: boolean;
 };
@@ -97,13 +98,15 @@ export function MainSidebarNavLink({
   let interactiveEl: React.ReactNode = null;
 
   if (asChild) {
-    if (React.isValidElement<SlottedNavChildProps>(children)) {
-      interactiveEl = React.cloneElement(children, {
-        className: cn(itemClassName, children.props.className),
-      });
-    } else {
-      interactiveEl = children;
+    if (!React.isValidElement<SlottedNavChildProps>(children)) {
+      throw new Error(
+        'MainSidebarNavLink requires a valid React element child when `asChild` is true so it can apply `SlottedNavChildProps` and merge `itemClassName`.',
+      );
     }
+
+    interactiveEl = React.cloneElement(children, {
+      className: cn(itemClassName, children.props.className),
+    });
   } else if (link) {
     interactiveEl = (
       <Link href={link.url} {...linkParams} className={itemClassName}>

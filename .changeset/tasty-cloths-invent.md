@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Removed the remaining Radix UI runtime dependencies from Playground UI while preserving the SideDialog, MainSidebar, and accessibility helper behavior. SideDialog now uses the Drawer primitive so nested levels share the drawer stacking behavior.
+Improved `@mastra/playground-ui` stability by removing legacy runtime UI dependencies without changing `SideDialog`, `MainSidebar`, or accessibility behavior. Nested `SideDialog` levels now stack consistently, so multi-level flows behave predictably.
