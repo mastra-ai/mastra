@@ -679,6 +679,21 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         await agentsStore.create({ agent: input });
       }
 
+      // Register with FGA if ownership is enabled
+      const fgaProvider = mastra.getServer?.()?.fga;
+      const user = requestContext?.get('user');
+      if ((fgaProvider as any)?.ownership?.enabled && user) {
+        const result = await (fgaProvider as any).registerResource({
+          user,
+          resourceType: 'agent',
+          resourceId: id,
+          name,
+        });
+        for (const warning of result.warnings) {
+          mastra.getLogger().warn(`[FGA] ${warning}`);
+        }
+      }
+
       // Publish the initial version so the agent is immediately usable.
       // Without this, the thin record stays as status='draft' with activeVersionId=null,
       // which makes the agent unreachable via status='published' resolution.
