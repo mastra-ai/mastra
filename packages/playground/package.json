@@ -91,7 +91,7 @@
     "superjson": "^2.2.6",
     "use-debounce": "^10.1.0",
     "zod": "^3.25.0",
-    "zod-v4": "npm:zod@4.3.6",
+    "zod-v4": "npm:zod@^4.4.3",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
