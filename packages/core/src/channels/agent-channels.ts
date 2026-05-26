@@ -248,7 +248,7 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore);
+        this.stateAdapter = new MastraStateAdapter(memoryStore, this.agent.id);
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
@@ -1357,9 +1357,11 @@ export class AgentChannels {
       );
     }
 
+    const scopedExternalThreadId = `${this.agent.id}:${externalThreadId}`;
+
     const metadata = {
       channel_platform: platform,
-      channel_externalThreadId: externalThreadId,
+      channel_externalThreadId: scopedExternalThreadId,
       channel_externalChannelId: channelId,
     };
 

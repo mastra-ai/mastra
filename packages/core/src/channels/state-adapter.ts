@@ -18,6 +18,7 @@ interface CachedValue<T = unknown> {
  */
 export class MastraStateAdapter implements StateAdapter {
   private memoryStore: MemoryStorage;
+  private agentId: string;
   private connected = false;
   private connectPromise: Promise<void> | null = null;
 
@@ -27,8 +28,9 @@ export class MastraStateAdapter implements StateAdapter {
   private readonly lists = new Map<string, { values: unknown[]; expiresAt: number | null }>();
   private readonly queues = new Map<string, QueueEntry[]>();
 
-  constructor(memoryStore: MemoryStorage) {
+  constructor(memoryStore: MemoryStorage, agentId: string) {
     this.memoryStore = memoryStore;
+    this.agentId = agentId;
   }
 
   async connect(): Promise<void> {
@@ -234,9 +236,16 @@ export class MastraStateAdapter implements StateAdapter {
    * Find a Mastra thread by its external (SDK) thread ID.
    * External thread IDs are stored in `channel_externalThreadId` metadata.
    */
+  private getScopedThreadId(externalThreadId: string): string {
+    return `${this.agentId}:${externalThreadId}`;
+  }
   private async findThreadByExternalId(externalThreadId: string) {
     const { threads } = await this.memoryStore.listThreads({
-      filter: { metadata: { channel_externalThreadId: externalThreadId } },
+      filter: {
+        metadata: {
+          channel_externalThreadId: this.getScopedThreadId(externalThreadId),
+        },
+      },
       perPage: 1,
     });
     return threads[0] ?? null;
