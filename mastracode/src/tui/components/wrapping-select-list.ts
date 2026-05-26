@@ -1,13 +1,8 @@
 /**
  * Drop-in replacement for pi-tui's `SelectList` that wraps long item labels
  * across multiple terminal rows with a `↳ ` continuation marker instead of
- * truncating them. Mirrors fzf's `--wrap` design: continuation rows align with
- * the prefix column, and arrow keys still move item-to-item — not row-to-row —
- * so navigation stays predictable regardless of label length.
- *
- * Used by the `ask_user` interactive picker, where agent-generated option
- * labels (file paths, code snippets, sentence-form choices) can easily exceed
- * the terminal width.
+ * truncating them. Arrow keys move item-to-item — not row-to-row — so
+ * navigation stays predictable regardless of label height.
  */
 
 import { getKeybindings, wrapTextWithAnsi } from '@mariozechner/pi-tui';
