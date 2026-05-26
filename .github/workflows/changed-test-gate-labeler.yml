@@ -39,7 +39,7 @@ jobs:
         with:
           install-dependencies: false
           package-manager-cache: false
-          version: "10"
+          version: '10'
 
       - name: Install dependencies
         run: pnpm install --ignore-workspace --ignore-scripts
