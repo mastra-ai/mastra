@@ -585,6 +585,52 @@ describe('Koa Server Adapter', () => {
       expect(finish.payload.metadata.request).toBeUndefined();
     });
 
+    it('should pass SSE comment chunks through without data wrapping', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-comment',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(': heartbeat\n\n');
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).toContain(': heartbeat\n\n');
+      expect(text).toContain('data: {"type":"text-delta","payload":{"text":"hello"}}\n\n');
+      expect(text).not.toContain('data: ": heartbeat');
+    });
+
     it('should NOT redact sensitive data when streamOptions.redact is false', async () => {
       const app = new Koa();
       app.use(bodyParser());

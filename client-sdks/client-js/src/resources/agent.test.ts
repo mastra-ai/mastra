@@ -146,6 +146,42 @@ describe('Agent signal routes', () => {
     expect(onChunk).toHaveBeenNthCalledWith(1, firstChunk);
     expect(onChunk).toHaveBeenNthCalledWith(2, secondChunk);
   });
+
+  it('retries failed resubscribe requests within the reconnect limit', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const firstChunk = { type: 'text-delta', runId: 'run-1', from: 'AGENT', payload: { id: 'text-1', text: 'first' } };
+    const secondChunk = {
+      type: 'text-delta',
+      runId: 'run-2',
+      from: 'AGENT',
+      payload: { id: 'text-2', text: 'second' },
+    };
+    const encode = (chunk: unknown) => new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`);
+    const responseFor = (chunk: unknown) =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encode(chunk));
+            controller.close();
+          },
+        }),
+      );
+    const mockRequest = vi
+      .fn()
+      .mockResolvedValueOnce(responseFor(firstChunk))
+      .mockRejectedValueOnce(new Error('temporary reconnect failure'))
+      .mockResolvedValueOnce(responseFor(secondChunk));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const response = await agent.subscribeToThread({ resourceId: 'resource-123', threadId: 'thread-123' });
+    const onChunk = vi.fn();
+
+    await response.processDataStream({ onChunk, reconnect: { maxRetries: 2, delayMs: 0 } });
+
+    expect(mockRequest).toHaveBeenCalledTimes(3);
+    expect(onChunk).toHaveBeenNthCalledWith(1, firstChunk);
+    expect(onChunk).toHaveBeenNthCalledWith(2, secondChunk);
+  });
 });
 
 describe('Agent.stream', () => {

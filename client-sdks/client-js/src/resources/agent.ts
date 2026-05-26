@@ -464,9 +464,28 @@ export class Agent extends BaseResource {
           return;
         }
 
-        attempts++;
-        await new Promise(resolve => setTimeout(resolve, reconnectOptions.delayMs));
-        response = await requestSubscription();
+        while (attempts < reconnectOptions.maxRetries) {
+          attempts++;
+
+          if (this.options.abortSignal?.aborted) {
+            return;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, reconnectOptions.delayMs));
+
+          if (this.options.abortSignal?.aborted) {
+            return;
+          }
+
+          try {
+            response = await requestSubscription();
+            break;
+          } catch (error) {
+            if (this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+              throw error;
+            }
+          }
+        }
       }
     };
 

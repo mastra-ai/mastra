@@ -1715,9 +1715,17 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       });
 
       let cleanedUp = false;
+      let heartbeat: ReturnType<typeof setTimeout> | undefined;
+      const clearHeartbeat = () => {
+        if (heartbeat) {
+          clearTimeout(heartbeat);
+          heartbeat = undefined;
+        }
+      };
       const cleanup = (closeController?: ReadableStreamDefaultController) => {
         if (cleanedUp) return;
         cleanedUp = true;
+        clearHeartbeat();
         subscription.abort();
         subscription.unsubscribe();
         if (closeController) {
@@ -1729,11 +1737,18 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
 
       return new ReadableStream({
         async start(controller) {
-          let heartbeat: ReturnType<typeof setTimeout> | undefined;
           const scheduleHeartbeat = () => {
-            if (heartbeat) clearTimeout(heartbeat);
+            if (cleanedUp) return;
+            clearHeartbeat();
             heartbeat = setTimeout(() => {
-              controller.enqueue(': heartbeat\n\n');
+              heartbeat = undefined;
+              if (cleanedUp) return;
+              try {
+                controller.enqueue(': heartbeat\n\n');
+              } catch {
+                cleanup();
+                return;
+              }
               scheduleHeartbeat();
             }, 25_000);
           };
@@ -1751,7 +1766,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
             cleanup();
             controller.error(error);
           } finally {
-            if (heartbeat) clearTimeout(heartbeat);
+            clearHeartbeat();
             abortSignal?.removeEventListener('abort', abortCleanup);
           }
         },

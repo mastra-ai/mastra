@@ -137,7 +137,7 @@ export interface SubscribeAgentThreadParams {
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface ProcessAgentThreadStreamOptions {
-  onChunk: (chunk: ChunkType) => Promise<void>;
+  onChunk: (chunk: ChunkType) => void | Promise<void>;
   reconnect?:
     | boolean
     | {

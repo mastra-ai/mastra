@@ -222,7 +222,7 @@ await subscription.processDataStream({
 })
 ```
 
-Use `reconnect: true` for long-lived subscriptions. The client resubscribes when the stream closes, such as after a proxy idle timeout or a dropped network connection.
+Use `reconnect: true` for long-lived subscriptions. The client resubscribes when the stream closes or a reconnect request fails, such as after a proxy idle timeout or a dropped network connection.
 
 ## Keep custom SSE subscriptions alive
 
