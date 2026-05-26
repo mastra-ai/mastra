@@ -107,7 +107,9 @@ export class WrappingSelectList implements Component {
     return wrapped.map((chunk, index) => {
       const prefix = index === 0 ? (isSelected ? SELECTED_PREFIX : UNSELECTED_PREFIX) : CONTINUATION_PREFIX;
       const rendered = `${prefix}${chunk}`;
-      return isSelected ? this.theme.selectedText(rendered) : prefix === CONTINUATION_PREFIX ? this.theme.description(rendered) : rendered;
+      if (isSelected) return this.theme.selectedText(rendered);
+      if (prefix === CONTINUATION_PREFIX) return this.theme.description(rendered);
+      return rendered;
     });
   }
 
