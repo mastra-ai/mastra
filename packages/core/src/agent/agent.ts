@@ -12,7 +12,7 @@ import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
-import type { ChannelConfig } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -680,6 +680,9 @@ export class Agent<
     }
     this.#agentChannels = agentChannels;
     agentChannels.__setAgent(this);
+    if (this.logger) {
+      agentChannels.__setLogger(this.logger);
+    }
   }
 
   /**
@@ -2434,6 +2437,7 @@ export class Agent<
   __registerPrimitives(p: MastraPrimitives) {
     if (p.logger) {
       this.__setLogger(p.logger);
+      this.#agentChannels?.__setLogger(p.logger);
     }
 
     // Store primitives for later use when creating LLM instances
@@ -4301,20 +4305,9 @@ export class Agent<
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
                 });
-                const subAgentToolResultsLegacy = generateResult.toolResults?.map((toolResult: any) => ({
-                  toolName: toolResult.toolName,
-                  toolCallId: toolResult.toolCallId,
-                  result: toolResult.result,
-                  args: toolResult.args,
-                  isError: toolResult.isError,
-                }));
-
                 result = {
                   text: generateResult.text,
-                  subAgentThreadId,
-                  subAgentResourceId,
-                  subAgentToolResults: subAgentToolResultsLegacy,
-                  usage: generateResult.usage,
+                  ...(generateResult.usage ? { usage: generateResult.usage } : {}),
                 };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&

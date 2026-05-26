@@ -36,7 +36,7 @@ catalog:
   react-dom: ^19.2.5
   typescript: ^6.0.3
   vitest: 4.1.5
-  zod: ^4.3.6
+  zod: ^4.4.3
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.3': patches/@changesets__get-dependents-graph.patch

@@ -5,6 +5,7 @@ import {
   type ChannelPlatformInfo,
   type ChannelInstallationInfo,
   type ChannelConnectResult,
+  type ChannelAdapterConfig,
   AgentChannels,
 } from '@mastra/core/channels';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
@@ -23,7 +24,7 @@ import {
   type SlackConfigTokens,
   type StoredSlashCommand,
 } from './schemas';
-import type { SlackProviderConfig, SlashCommandConfig, SlackConnectOptions } from './types';
+import type { SlackProviderConfig, SlashCommandConfig, SlackConnectOptions, SlackAdapterChannelConfig } from './types';
 
 const PLATFORM = 'slack';
 
@@ -748,6 +749,53 @@ export class SlackProvider implements ChannelProvider {
   }
 
   /**
+   * Resolve the per-adapter config applied to the Slack entry in
+   * `AgentChannels.adapters`. Top-level fields on `SlackProviderConfig` win;
+   * the deprecated `adapterConfig` is merged in as a fallback for backwards
+   * compatibility. Undefined values are filtered so they don't clobber the
+   * fallback or preserved options.
+   */
+  #resolveSlackAdapterConfig(): SlackAdapterChannelConfig {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- intentional read of deprecated alias for back-compat
+    const {
+      adapterConfig,
+      cors,
+      gateway,
+      formatError,
+      streaming: topLevelStreaming,
+      typingStatus,
+      toolDisplay: topLevelToolDisplay,
+    } = this.#channelConfig;
+    const topLevel = {
+      cors,
+      gateway,
+      formatError,
+      streaming: topLevelStreaming,
+      typingStatus,
+      toolDisplay: topLevelToolDisplay,
+    };
+    const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
+    const filteredAdapterConfig = Object.fromEntries(
+      Object.entries(adapterConfig ?? {}).filter(([, value]) => value !== undefined),
+    );
+    // SlackProvider opinionated defaults — these render well in Slack's AI Assistant UI
+    // but aren't appropriate for every platform, so they live here rather than in core.
+    //   - `streaming: true`         — Slack supports native message streaming.
+    //   - `toolDisplay: 'grouped'`  — tools collapse into a single "Thinking Steps" widget (streaming only).
+    // Users can opt out of any of these by passing the field at the top level (or via `adapterConfig`).
+    // Keep in sync with the `@default` JSDoc on `SlackAdapterChannelConfig` in ./types.ts.
+    const merged = { ...filteredAdapterConfig, ...filteredTopLevel } as Partial<SlackAdapterChannelConfig>;
+    const streaming = merged.streaming ?? true;
+    // `'grouped'` requires streaming; fall back to `'cards'` when streaming is off.
+    const toolDisplay = merged.toolDisplay ?? (streaming ? 'grouped' : 'cards');
+    return {
+      ...merged,
+      streaming,
+      toolDisplay,
+    } as SlackAdapterChannelConfig;
+  }
+
+  /**
    * Create AgentChannels for an agent with the Slack adapter.
    * SlackProvider owns the AgentChannels lifecycle for platform-managed agents.
    *
@@ -758,8 +806,13 @@ export class SlackProvider implements ChannelProvider {
    * previous instance are torn down before we replace it.
    */
   #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
-    const { adapterConfig } = this.#channelConfig;
-    const slackEntry = adapterConfig ? { adapter, ...adapterConfig } : adapter;
+    const adapterConfig = this.#resolveSlackAdapterConfig();
+    // The spread merges fields from a SlackAdapterChannelConfig union; TS can't
+    // confirm which branch the runtime object satisfies, but the merge always
+    // produces a valid ChannelAdapterConfig at runtime.
+    const slackEntry = (Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter) as
+      | ChannelAdapterConfig
+      | SlackAdapter;
     const existing = agent.getChannels() as AgentChannels | undefined;
     const existingConfig = existing?.channelConfig;
     existing?.close();

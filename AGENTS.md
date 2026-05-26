@@ -38,7 +38,8 @@ gh-pr-comments
 make-moves
 
 Read relevant @.claude/skills/
-e2e-tests-studio REQUIRED for packages/playground-ui packages/playground E2E behavior tests
+playground-msw-tests PRIMARY test approach for packages/playground packages/playground-ui
+e2e-tests-studio SECONDARY test approach for packages/playground-ui packages/playground
 mastra-docs
 react-best-practices
 tailwind-best-practices
