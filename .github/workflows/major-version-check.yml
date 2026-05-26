@@ -106,7 +106,7 @@ jobs:
         id: app_token
         uses: ./.github/actions/app-auth
         with:
-          client-id: ${{ secrets.DANE_CLIENT_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
       - name: Check if major version bump is allowed
