@@ -1,4 +1,14 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
+
+/**
+ * Stable error id used to distinguish errors thrown by a caller-supplied
+ * `onChunk` callback from transport errors. Consumers that wrap
+ * `processMastraStream` (e.g. the thread subscription reconnect loop) can
+ * check `error.id === CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID` to decide whether
+ * to retry the stream.
+ */
+export const CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID = 'CLIENT_JS_ONCHUNK_CALLBACK_THREW' as const;
 
 async function sharedProcessMastraStream({
   stream,
@@ -44,7 +54,22 @@ async function sharedProcessMastraStream({
             continue;
           }
           if (json) {
-            await onChunk(json);
+            try {
+              await onChunk(json);
+            } catch (cause) {
+              throw new MastraError(
+                {
+                  id: CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID,
+                  domain: ErrorDomain.MASTRA,
+                  category: ErrorCategory.USER,
+                  text: 'onChunk callback threw while processing a stream chunk',
+                  details: {
+                    chunkType: typeof json === 'object' && json && 'type' in json ? String(json.type) : 'unknown',
+                  },
+                },
+                cause,
+              );
+            }
           }
         }
       }

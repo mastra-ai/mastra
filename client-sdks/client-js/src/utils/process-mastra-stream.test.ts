@@ -2,7 +2,7 @@ import { ReadableStream } from 'node:stream/web';
 import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { processMastraStream } from './process-mastra-stream';
+import { CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID, processMastraStream } from './process-mastra-stream';
 
 describe('processMastraStream', () => {
   let mockOnChunk: ReturnType<typeof vi.fn>;
@@ -251,7 +251,7 @@ describe('processMastraStream', () => {
     expect(releaseLockSpy).toHaveBeenCalled();
   });
 
-  it('should propagate onChunk errors to the caller', async () => {
+  it('should wrap onChunk errors in a MastraError and propagate to the caller', async () => {
     const testChunk: ChunkType = {
       type: 'text-delta',
       runId: 'run-123',
@@ -266,13 +266,17 @@ describe('processMastraStream', () => {
     const onChunkError = new Error('onChunk error');
     mockOnChunk.mockRejectedValueOnce(onChunkError);
 
-    // Should propagate the error from onChunk
+    // Should propagate a tagged MastraError wrapping the original error as cause
     await expect(
       processMastraStream({
         stream,
         onChunk: mockOnChunk,
       }),
-    ).rejects.toThrow('onChunk error');
+    ).rejects.toMatchObject({
+      id: CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID,
+      cause: { message: 'onChunk error' },
+      details: { chunkType: 'text-delta' },
+    });
 
     expect(mockOnChunk).toHaveBeenCalledTimes(1);
     expect(mockOnChunk).toHaveBeenCalledWith(testChunk);

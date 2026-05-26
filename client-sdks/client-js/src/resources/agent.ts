@@ -11,7 +11,7 @@ import type {
 import { v4 as uuid } from '@lukeed/uuid';
 import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
-import { getErrorFromUnknown } from '@mastra/core/error';
+import { getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
@@ -52,7 +52,11 @@ import type {
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
 import { processClientTools } from '../utils/process-client-tools';
-import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
+import {
+  CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID,
+  processMastraNetworkStream,
+  processMastraStream,
+} from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
@@ -455,6 +459,12 @@ export class Agent extends BaseResource {
             signal: this.options.abortSignal,
           });
         } catch (error) {
+          // Errors thrown by the caller's onChunk callback are not transport
+          // failures — rethrow immediately so we don't mask user bugs by
+          // resubscribing forever.
+          if (error instanceof MastraError && error.id === CLIENT_JS_ONCHUNK_CALLBACK_ERROR_ID) {
+            throw error;
+          }
           if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
             throw error;
           }

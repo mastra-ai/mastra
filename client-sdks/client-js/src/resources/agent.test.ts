@@ -147,6 +147,34 @@ describe('Agent signal routes', () => {
     expect(onChunk).toHaveBeenNthCalledWith(2, secondChunk);
   });
 
+  it('does not reconnect when the onChunk callback throws', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const firstChunk = { type: 'text-delta', runId: 'run-1', from: 'AGENT', payload: { id: 'text-1', text: 'first' } };
+    const encode = (chunk: unknown) => new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`);
+    const mockRequest = vi.fn().mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encode(firstChunk));
+            controller.close();
+          },
+        }),
+      ),
+    );
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const response = await agent.subscribeToThread({ resourceId: 'resource-123', threadId: 'thread-123' });
+    const callbackError = new Error('boom from onChunk');
+    const onChunk = vi.fn().mockRejectedValue(callbackError);
+
+    await expect(
+      response.processDataStream({ onChunk, reconnect: { maxRetries: 5, delayMs: 0 } }),
+    ).rejects.toMatchObject({ id: 'CLIENT_JS_ONCHUNK_CALLBACK_THREW', cause: { message: 'boom from onChunk' } });
+
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+    expect(onChunk).toHaveBeenCalledTimes(1);
+  });
+
   it('retries failed resubscribe requests within the reconnect limit', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const firstChunk = { type: 'text-delta', runId: 'run-1', from: 'AGENT', payload: { id: 'text-1', text: 'first' } };
