@@ -38,8 +38,8 @@ gh-pr-comments
 make-moves
 
 Read relevant @.claude/skills/
-playground-msw-tests RIMARY test approach for packages/playground packages/playground-ui — Vitest + MSW + typed @mastra/client-js fixtures
-e2e-tests-studio for packages/playground-ui packages/playground E2E behavior tests (use only when MSW cannot model the journey)
+playground-msw-tests PRIMARY test approach for packages/playground packages/playground-ui
+e2e-tests-studio SECONDARY test approach for packages/playground-ui packages/playground
 mastra-docs
 react-best-practices
 tailwind-best-practices
