@@ -14,13 +14,7 @@ interface RenderOptions {
   agentId?: string;
 }
 
-const FormHarness = ({
-  agentId = 'agent_test',
-  children,
-}: {
-  agentId?: string;
-  children: React.ReactNode;
-}) => {
+const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; children: React.ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {} as AgentBuilderEditFormValues,
   });

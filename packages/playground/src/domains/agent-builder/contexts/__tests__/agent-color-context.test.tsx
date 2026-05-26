@@ -8,14 +8,7 @@ import { AgentColorProvider, useAgentColor } from '../agent-color-context';
 const Consumer = ({ observed }: { observed: AgentColors[] }) => {
   const color = useAgentColor();
   observed.push(color);
-  return (
-    <div
-      data-testid="consumer"
-      data-bg={color.background}
-      data-fg={color.foreground}
-      data-tint={color.tint}
-    />
-  );
+  return <div data-testid="consumer" data-bg={color.background} data-fg={color.foreground} data-tint={color.tint} />;
 };
 
 describe('AgentColorProvider', () => {

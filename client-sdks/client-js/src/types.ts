@@ -40,7 +40,7 @@ import type {
   StorageConditionalField,
   StoredProcessorGraph,
 } from '@mastra/core/storage';
-
+import type { ChunkType } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type {
   TimeTravelContext,
@@ -136,6 +136,21 @@ export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
+}
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface ProcessAgentThreadStreamOptions {
+  onChunk: (chunk: ChunkType) => void | Promise<void>;
+  reconnect?:
+    | boolean
+    | {
+        /** Maximum reconnect attempts after the initial stream ends or errors. Defaults to Infinity. */
+        maxRetries?: number;
+        /** Delay between reconnect attempts in milliseconds. Defaults to 1000. */
+        delayMs?: number;
+      };
 }
 
 export interface RequestOptions {

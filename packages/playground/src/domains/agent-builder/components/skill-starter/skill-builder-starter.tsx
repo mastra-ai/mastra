@@ -3,9 +3,9 @@ import { ArrowUpIcon, BookOpen, FileText, GraduationCap, Wrench } from 'lucide-r
 import { nanoid } from 'nanoid';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 const EXAMPLES = [

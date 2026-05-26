@@ -14,7 +14,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
+import type { ChunkType, FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
@@ -42,6 +42,7 @@ import type {
   ListAgentVersionsResponse,
   SendAgentSignalParams,
   SubscribeAgentThreadParams,
+  ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
@@ -414,39 +415,95 @@ export class Agent extends BaseResource {
    */
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
     Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
+      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
     }
   > {
-    const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
-      method: 'POST',
-      body: params,
-      stream: true,
-    })) as Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
+    const requestSubscription = () =>
+      this.request(`/agents/${this.agentId}/threads/subscribe`, {
+        method: 'POST',
+        body: params,
+        stream: true,
+      }) as Promise<Response>;
+
+    const streamResponse = (await requestSubscription()) as Response & {
+      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
     };
 
     if (!streamResponse.body) {
       throw new Error('No response body');
     }
 
-    streamResponse.processDataStream = async ({
-      onChunk,
-    }: {
-      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-    }) => {
-      await processMastraStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
-        signal: this.options.abortSignal,
-      });
+    streamResponse.processDataStream = async ({ onChunk, reconnect }: ProcessAgentThreadStreamOptions) => {
+      const reconnectOptions =
+        reconnect === true
+          ? { maxRetries: Infinity, delayMs: 1000 }
+          : reconnect
+            ? { maxRetries: reconnect.maxRetries ?? Infinity, delayMs: reconnect.delayMs ?? 1000 }
+            : null;
+      let response: Response = streamResponse;
+      let attempts = 0;
+
+      // Sentinel used to distinguish errors thrown by the caller's `onChunk`
+      // callback from transport errors. Callback errors should not trigger a
+      // reconnect — we'd otherwise mask user bugs by resubscribing forever.
+      // The sentinel never escapes this method: we unwrap and rethrow the
+      // original error so consumers see exactly what they threw.
+      const onChunkErrorSentinel = Symbol('onChunkErrorSentinel');
+      const guardedOnChunk = async (chunk: ChunkType) => {
+        try {
+          await onChunk(chunk);
+        } catch (cause) {
+          throw { [onChunkErrorSentinel]: true, cause };
+        }
+      };
+
+      while (true) {
+        if (!response.body) {
+          throw new Error('No response body');
+        }
+
+        try {
+          await processMastraStream({
+            stream: response.body as ReadableStream<Uint8Array>,
+            onChunk: guardedOnChunk,
+            signal: this.options.abortSignal,
+          });
+        } catch (error) {
+          if (typeof error === 'object' && error !== null && (error as any)[onChunkErrorSentinel]) {
+            throw (error as { cause: unknown }).cause;
+          }
+          if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+            throw error;
+          }
+        }
+
+        if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+          return;
+        }
+
+        while (attempts < reconnectOptions.maxRetries) {
+          attempts++;
+
+          if (this.options.abortSignal?.aborted) {
+            return;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, reconnectOptions.delayMs));
+
+          if (this.options.abortSignal?.aborted) {
+            return;
+          }
+
+          try {
+            response = await requestSubscription();
+            break;
+          } catch (error) {
+            if (this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+              throw error;
+            }
+          }
+        }
+      }
     };
 
     return streamResponse;
