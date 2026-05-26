@@ -71,3 +71,23 @@ describe('builderAgent system prompt — identity-first ordering contract', () =
     expect(stepDBody).toContain('`set-agent-description`');
   });
 });
+
+describe('builderAgent — server-side Slack connect tool', () => {
+  it('registers connect-agent-to-slack as a server tool', async () => {
+    const tools = await builderAgent.listTools();
+    expect(Object.keys(tools ?? {})).toContain('connect-agent-to-slack');
+  });
+
+  it('documents the Slack connect flow in the system prompt', async () => {
+    const instructions = await getInstructions();
+
+    expect(instructions).toMatch(/Connecting the agent to channels/);
+    expect(instructions).toContain('`connect-agent-to-slack`');
+    // The model must surface the tool's message verbatim and never fabricate URLs.
+    expect(instructions).toMatch(/verbatim/i);
+    // The model must read agentId from the snapshot, not guess.
+    expect(instructions).toMatch(/Agent id/);
+    // Failure path must tell the user to ask their admin.
+    expect(instructions).toMatch(/admin/i);
+  });
+});

@@ -5,6 +5,8 @@ import { Memory } from '@mastra/memory';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { connectAgentToSlackTool } from './tools/connect-agent-to-slack';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -42,6 +44,9 @@ const memory = new Memory();
  * - set-agent-model (gated by features.model + models available)
  * - set-agent-browser-enabled (gated by features.browser)
  * - createSkillTool (gated by features.skills) — only when a needed capability does not exist
+ *
+ * Server tools (registered directly on this agent, NOT injected by the playground):
+ * - connect-agent-to-slack — always available; generates a Slack connect link for the edited agent.
  */
 
 export const builderAgent = new Agent({
@@ -207,8 +212,20 @@ The system prompt written into \`set-agent-instructions\` MUST include all of th
 - Never produce a system prompt without explicit completion criteria.
 - Never attach a capability “just in case.” Every tool, agent, workflow, or skill must directly support the requested outcome.
 - The final message to the user must be concise, friendly, and focused on what the configured agent can now do.
-- The final message should make clear that the agent starts with initial parameters and can be adjusted later.`,
+- The final message should make clear that the agent starts with initial parameters and can be adjusted later.
+
+# Connecting the agent to channels
+
+You also have a server tool, \`connect-agent-to-slack\`, for wiring the edited agent into Slack. Strict rules:
+
+- Only call \`connect-agent-to-slack\` when the user EXPLICITLY asks to connect this agent to Slack. Never proactively attach Slack to a freshly built agent.
+- Read the agent's id from the form snapshot (the line labeled "Agent id"). Pass that exact value as \`agentId\`. If the snapshot says the agent is unsaved or there is no id, tell the user they need to save the agent first and do not call the tool.
+- When the tool returns \`success: true\`, surface the tool's \`message\` field verbatim to the user. Do not paraphrase it, do not rewrite the URL, and do not invent or guess a slack.com link yourself. The user must be able to click the exact URL the tool returned.
+- When the tool returns \`success: false\`, tell the user that Slack is not set up for this project and they should ask their admin to configure it. Do not retry the tool.`,
   model: 'openai/gpt-5.5',
   memory,
   workspace,
+  tools: {
+    'connect-agent-to-slack': connectAgentToSlackTool,
+  },
 });

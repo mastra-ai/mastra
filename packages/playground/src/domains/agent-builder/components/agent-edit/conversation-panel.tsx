@@ -101,6 +101,7 @@ export const ConversationPanelProvider = ({
     initialMessageToolsReady && !isConversationLoading && !hasExistingConversation ? initialUserMessage : undefined;
 
   const extraInstructions = buildFormSnapshotInstructions(formValues, {
+    agentId,
     availableAgentTools,
     availableSkills,
     availableWorkspaces,

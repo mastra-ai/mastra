@@ -262,4 +262,16 @@ describe('buildFormSnapshotInstructions', () => {
 
     expect(result).toContain('- Browser enabled: true');
   });
+
+  it('renders the supplied agentId on the Agent id line', () => {
+    const result = buildFormSnapshotInstructions(baseValues, buildOptions({ agentId: 'agent-123' }));
+
+    expect(result).toContain('- Agent id: agent-123');
+  });
+
+  it('marks the agent as (unsaved) when no agentId is supplied', () => {
+    const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+    expect(result).toContain('- Agent id: (unsaved)');
+  });
 });

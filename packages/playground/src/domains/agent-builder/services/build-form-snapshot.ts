@@ -11,6 +11,7 @@ export interface AvailableWorkspaceLike {
 }
 
 export interface BuildFormSnapshotOptions {
+  agentId?: string;
   availableAgentTools: AgentTool[];
   availableSkills: StoredSkillResponse[];
   availableWorkspaces: AvailableWorkspaceLike[];
@@ -55,7 +56,7 @@ export function buildFormSnapshotInstructions(
   values: AgentBuilderEditFormValues,
   options: BuildFormSnapshotOptions,
 ): string {
-  const { availableAgentTools, availableSkills, availableWorkspaces, availableModels, features } = options;
+  const { agentId, availableAgentTools, availableSkills, availableWorkspaces, availableModels, features } = options;
 
   const lines: string[] = [];
   lines.push('## Current agent configuration (read-only context)');
@@ -65,6 +66,7 @@ export function buildFormSnapshotInstructions(
   );
   lines.push('');
 
+  lines.push(`- Agent id: ${agentId && agentId.length > 0 ? agentId : '(unsaved)'}`);
   lines.push(`- Name: ${renderQuoted(values.name)}`);
   lines.push(`- Description: ${renderQuoted(values.description)}`);
   lines.push(`- Instructions: ${renderInstructions(values.instructions)}`);
