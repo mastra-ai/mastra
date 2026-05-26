@@ -8,8 +8,11 @@ import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
+const AGENT_BUILDER_AGENTS_ROUTE = '/agent-builder/agents';
+
 export default function AgentBuilderCreate() {
   const { canWrite } = useBuilderAgentAccess();
+  const navigate = useNavigate();
   // Warm the ['tools'], ['agents', requestContext], ['workflows', requestContext], and
   // ['stored-skills'] tanstack-query caches while the user types their prompt, so the
   // edit page can dispatch the initial message with a tools- and skills-aware schema on
@@ -18,13 +21,10 @@ export default function AgentBuilderCreate() {
   useTools({ enabled: canWrite && features.tools });
   useAgents({ enabled: canWrite && features.agents });
   useWorkflows({ enabled: canWrite && features.workflows });
-  useStoredSkills(undefined, { enabled: canWrite && features.skills });
-  const navigate = useNavigate();
+  useStoredSkills({ enabled: canWrite && features.skills });
 
-  // Redirect users without write permission back to the agents list
-  if (!canWrite) {
-    return <Navigate to="/agent-builder/agents" replace />;
-  }
+  if (!canWrite) return <Navigate to={AGENT_BUILDER_AGENTS_ROUTE} replace />;
+
   return (
     <>
       <div className="absolute top-3 left-3 md:top-6 md:left-6 z-10">
@@ -32,7 +32,7 @@ export default function AgentBuilderCreate() {
           size="icon-sm"
           variant="ghost"
           onClick={() =>
-            navigate('/agent-builder/agents', {
+            navigate(AGENT_BUILDER_AGENTS_ROUTE, {
               viewTransition: true,
             })
           }
@@ -42,6 +42,7 @@ export default function AgentBuilderCreate() {
           <ArrowLeftIcon />
         </Button>
       </div>
+
       <AgentBuilderStarter />
     </>
   );

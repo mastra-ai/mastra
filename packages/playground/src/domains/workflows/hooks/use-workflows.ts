@@ -13,6 +13,6 @@ export const useWorkflows = (options?: { enabled?: boolean }) => {
       // Filter out processor workflows - they're shown on the Processors tab instead
       return Object.fromEntries(Object.entries(workflows).filter(([_, workflow]) => !workflow.isProcessorWorkflow));
     },
-    enabled: options?.enabled ?? true,
+    enabled: options?.enabled !== false,
   });
 };
