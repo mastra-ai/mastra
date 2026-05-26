@@ -1,15 +1,20 @@
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
-import { execa } from 'execa';
 import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
 import { shouldSkipDotenvLoading } from '../utils.js';
+
+function isSourceModeEnabled() {
+  return (
+    process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')
+  );
+}
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
@@ -44,25 +49,24 @@ export class DevBundler extends Bundler {
     return Promise.resolve([]);
   }
 
-  private async getSourceModeStudioPath(packagedStudioPath: string): Promise<string> {
+  private async getSourceModeStudioPath(packagedStudioPath: string): Promise<string | null> {
     try {
       const playgroundPackageJsonPath = fileURLToPath(import.meta.resolve('@internal/playground/package.json'));
       const playgroundRoot = dirname(playgroundPackageJsonPath);
       const playgroundDist = join(playgroundRoot, 'dist');
 
-      if (!(await fsExtra.pathExists(join(playgroundDist, 'index.html')))) {
-        devLogger.info('Building Studio assets for source mode...');
-        await execa('pnpm', ['--dir', playgroundRoot, 'build'], { stdio: 'inherit' });
+      if (await fsExtra.pathExists(join(playgroundDist, 'index.html'))) {
+        return playgroundDist;
       }
-
-      return playgroundDist;
-    } catch (error) {
-      if (await fsExtra.pathExists(join(packagedStudioPath, 'index.html'))) {
-        return packagedStudioPath;
-      }
-
-      throw error;
+    } catch {
+      // ignore and fall back to packaged assets below
     }
+
+    if (await fsExtra.pathExists(join(packagedStudioPath, 'index.html'))) {
+      return packagedStudioPath;
+    }
+
+    return null;
   }
 
   async prepare(outputDirectory: string): Promise<void> {
@@ -73,14 +77,22 @@ export class DevBundler extends Bundler {
 
     const studioServePath = join(outputDirectory, this.outputDir, 'studio');
     const packagedStudioPath = join(dirname(__dirname), 'dist', 'studio');
-    const studioSourcePath =
-      process.env.MASTRA_SOURCE_MODE === '1'
-        ? await this.getSourceModeStudioPath(packagedStudioPath)
-        : packagedStudioPath;
+    const studioSourcePath = isSourceModeEnabled()
+      ? await this.getSourceModeStudioPath(packagedStudioPath)
+      : packagedStudioPath;
 
-    await fsExtra.copy(studioSourcePath, studioServePath, {
-      overwrite: true,
-    });
+    if (studioSourcePath) {
+      await fsExtra.copy(studioSourcePath, studioServePath, {
+        overwrite: true,
+      });
+      return;
+    }
+
+    await mkdir(studioServePath, { recursive: true });
+    await writeFile(
+      join(studioServePath, 'index.html'),
+      '<!doctype html><html><head><title>Mastra</title></head><body><main>Mastra dev server running in source mode. Studio assets are unavailable because packages/playground/dist has not been built.</main></body></html>',
+    );
   }
 
   async watch(
@@ -97,7 +109,7 @@ export class DevBundler extends Bundler {
     const sourcemapEnabled = !!bundlerOptions?.sourcemap;
     const sourceModeTemplatePath = join(packageRoot, 'src', 'public', 'templates', 'dev.entry.js');
     const templatePath =
-      process.env.MASTRA_SOURCE_MODE === '1' && (await fsExtra.pathExists(sourceModeTemplatePath))
+      isSourceModeEnabled() && (await fsExtra.pathExists(sourceModeTemplatePath))
         ? sourceModeTemplatePath
         : join(__dirname, 'templates', 'dev.entry.js');
 

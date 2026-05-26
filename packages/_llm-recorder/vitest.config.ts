@@ -1,10 +1,13 @@
 import { defineConfig } from 'vitest/config';
+import { withSourceModeConfig } from '../../scripts/vitest-source-mode-config';
 
-export default defineConfig({
-  test: {
-    include: ['src/**/*.test.ts'],
-    environment: 'node',
-    testTimeout: 30000,
-    hookTimeout: 30000,
-  },
-});
+export default defineConfig(
+  withSourceModeConfig({
+    test: {
+      include: ['src/**/*.test.ts'],
+      environment: 'node',
+      testTimeout: 30000,
+      hookTimeout: 30000,
+    },
+  }),
+);

@@ -18,13 +18,34 @@ Synchronize source export entries after adding or changing package exports:
 pnpm source-exports:sync
 ```
 
-Run unit Vitest projects from source without a prebuild:
+Opt regular local dev/test commands into source mode from your shell:
+
+```sh
+export MASTRA_REPO_RUN_FROM_SOURCE=true
+```
+
+With that environment variable set, package-local Vitest commands such as `pnpm test:core` and package-local `pnpm test` runs resolve Mastra workspace packages from source instead of requiring `dist/` artifacts. Root `pnpm test` switches to the curated source-safe local lane described below; external-service/API-key/known-infra lanes remain explicit. The repo-local `mastra` binary also treats `mastra dev` as source-mode when the source entrypoint is available.
+
+For linked local projects, export the env var in the shell that runs the linked CLI, then run `mastra dev` normally:
+
+```sh
+export MASTRA_REPO_RUN_FROM_SOURCE=true
+mastra dev
+```
+
+The CLI forwards `MASTRA_SOURCE_MODE=1`, `MASTRA_REPO_RUN_FROM_SOURCE=true`, `MASTRA_SOURCE_MODE_WORKSPACE_ROOT`, and `NODE_OPTIONS=--conditions=mastra-source` to the dev server process so linked workspace packages resolve through `mastra-source` exports.
+
+When full Studio assets are unavailable because `packages/playground/dist` has not been built, source-mode `mastra dev` still starts the API server and writes a minimal fallback Studio page. Build playground first if you need the full Studio UI during a no-build linked-project run; the fallback contract only proves the API/dev server path.
+
+Source-mode build scripts are no-build type checks rather than artifact builders. For example, `MASTRA_REPO_RUN_FROM_SOURCE=true pnpm build:cli` skips JS bundling and declaration emit, validates source exports, and runs a package-bounded CLI typecheck. The bounded typecheck shims workspace package imports so it checks the CLI source shape and local type usage without recursively typechecking transitive workspace sources. It does not replace full declaration generation, package artifact validation, or transitive workspace type validation. Without the env var, `pnpm build:cli` keeps the normal Turbo artifact build.
+
+Run the source-safe local project groups explicitly from source without a prebuild:
 
 ```sh
 pnpm test:source-mode
 ```
 
-`pnpm test:source-mode` invokes `scripts/run-source-mode-tests.mjs`, which sets `MASTRA_SOURCE_MODE=1` and `NODE_OPTIONS="--conditions=mastra-source"`, then runs the source-safe unit project groups sequentially. Splitting the groups avoids Vite/Vitest project-initialization recursion while preserving the no-build contract.
+`pnpm test:source-mode` invokes `scripts/run-source-mode-tests.mjs`, which sets `MASTRA_SOURCE_MODE=1` and `NODE_OPTIONS="--conditions=mastra-source"`, then runs the curated source-safe project groups sequentially. This is the same lane root `pnpm test` uses when `MASTRA_REPO_RUN_FROM_SOURCE=true` is set. Splitting the groups avoids Vite/Vitest project-initialization recursion while preserving the no-build contract. It intentionally does not attempt every API-key, external-service, Docker-only, or known-infra-sensitive suite in the repository.
 
 Run the no-dist smoke proof for representative packages:
 
@@ -92,18 +113,25 @@ The validation script fails if an eligible export lacks `mastra-source`, points 
 
 ## Vitest behavior
 
-Root `vitest.config.ts` centralizes source-mode config. When `MASTRA_SOURCE_MODE=1`, it enables:
+Root `vitest.config.ts` centralizes source-mode config. When `MASTRA_REPO_RUN_FROM_SOURCE=true` or `MASTRA_SOURCE_MODE=1`, it enables:
 
 - resolver conditions: `mastra-source`, `node`
 - SSR external conditions matching source mode
 - workspace dependency inlining for `@mastra/*`, `@internal/*`, and `mastra`
-- a small source-mode test exclusion list for artifact-only/CJS import probes, external-service projects such as Redis, and existing local-environment-sensitive tests that are still covered by the artifact lane
+- repo-root-relative aliases for internal test setup files
+- a source-mode test exclusion list for artifact-only/CJS import probes and existing local-environment-sensitive tests that are still covered by the artifact lane
+
+Every Vitest config is expected to use `withSourceModeConfig()` unless it is intentionally allowlisted. Run the coverage audit after adding or moving tests:
+
+```sh
+pnpm source-mode:check
+```
 
 This keeps package imports flowing through `exports` conditions instead of a broad alias map, while still letting Vitest/Vite transform workspace TypeScript source.
 
 ## CI topology
 
-CI tests use the normal built-package path by default. This keeps source mode additive while local users and maintainers opt in with `MASTRA_SOURCE_MODE=1`, `NODE_OPTIONS="--conditions=mastra-source"`, or `mastra dev --source-mode`.
+CI tests use the normal built-package path by default. This keeps source mode additive while local users and maintainers opt in with `MASTRA_REPO_RUN_FROM_SOURCE=true`, `MASTRA_SOURCE_MODE=1`, or `mastra dev --source-mode`.
 
 The PR topology keeps the artifact lane as the required package-output proof:
 

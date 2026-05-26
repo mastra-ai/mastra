@@ -19,6 +19,12 @@ vi.mock('../auth/credentials.js', () => ({
   getToken: vi.fn(),
   loadCredentials: vi.fn(),
 }));
+vi.mock('../auth/credentials.ts', () => ({
+  getToken: vi.fn(),
+  loadCredentials: vi.fn(),
+}));
+
+vi.resetModules();
 
 const { promptForObservability, writeObservabilityEnv } = await import('./utils');
 const prompts = await import('@clack/prompts');

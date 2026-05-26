@@ -21,6 +21,8 @@ const PACKAGE_ROOTS = [
   'workspaces',
 ];
 
+const NESTED_PACKAGE_ROOTS = ['packages/_vendored'];
+
 const GENERATED_EXPORT_EXCEPTIONS = {
   // These package exports point at artifact entries that do not have checked-in source entrypoints.
   // Keep exceptions explicit and documented; do not use this for ordinary src-backed exports.
@@ -51,6 +53,17 @@ function packageManifestPaths() {
   const paths = [];
 
   for (const rootName of PACKAGE_ROOTS) {
+    const root = join(ROOT, rootName);
+    if (!existsSync(root)) continue;
+
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const manifestPath = join(root, entry.name, 'package.json');
+      if (existsSync(manifestPath)) paths.push(manifestPath);
+    }
+  }
+
+  for (const rootName of NESTED_PACKAGE_ROOTS) {
     const root = join(ROOT, rootName);
     if (!existsSync(root)) continue;
 

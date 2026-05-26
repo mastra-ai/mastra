@@ -804,7 +804,7 @@
     "generate:providers": "pnpx tsx scripts/generate-providers.ts",
     "generate:model-router": "pnpx tsx scripts/generate-providers.ts && pnpx tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
-    "test": "npm run test:unit"
+    "test": "pnpm test:unit"
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.3.13",

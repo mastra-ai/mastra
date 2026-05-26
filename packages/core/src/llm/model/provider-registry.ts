@@ -32,6 +32,12 @@ export function isOfflineMode(): boolean {
   return value === 'true' || value === '1';
 }
 
+function isSourceModeEnabled(): boolean {
+  return (
+    process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')
+  );
+}
+
 function getEnabledGatewayIds(gateways: MastraModelGateway[]): Set<string> {
   const enabledGatewayIds = new Set<string>();
 
@@ -245,7 +251,8 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
 
   // Dynamic loading mode: sync global cache to local before loading.
   // Source-mode test runs must not create build artifacts.
-  if (process.env.MASTRA_SOURCE_MODE !== '1') {
+  const sourceMode = isSourceModeEnabled();
+  if (!sourceMode) {
     syncGlobalCacheToLocal();
   }
 
@@ -256,15 +263,13 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
 
   // Dynamic loading mode: load from file system for live updates
   const packageRoot = getPackageRoot();
-  const possiblePaths: string[] = [
-    // Built: in dist/ relative to package root (first priority - what gets distributed)
-    path.join(packageRoot, 'dist', 'provider-registry.json'),
-    // Development: in src/ relative to package root
+  const sourcePaths = [
     path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json'),
-    // Fallback: relative to cwd (for monorepo setups)
     path.join(process.cwd(), 'packages/core/src/llm/model/provider-registry.json'),
     path.join(process.cwd(), 'src/llm/model/provider-registry.json'),
   ];
+  const builtPath = path.join(packageRoot, 'dist', 'provider-registry.json');
+  const possiblePaths: string[] = sourceMode ? [...sourcePaths, builtPath] : [builtPath, ...sourcePaths];
 
   const errors: string[] = [];
 
@@ -550,28 +555,40 @@ export class GatewayRegistry {
         console.warn('[GatewayRegistry] Failed to write to global cache:', error);
       }
 
-      // Write to dist/ (the bundled location that gets distributed)
-      const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
-      const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
+      const sourceMode = isSourceModeEnabled();
+      const registry = { providers, models, version: '1.0.0' };
 
-      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
-      // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
+      if (sourceMode) {
+        if (writeToSrc) {
+          const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
+          const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
+          await writeRegistryFiles(srcJsonPath, srcTypesPath, providers, models);
+        }
+        registryData = registry;
+      } else {
+        // Write to dist/ (the bundled location that gets distributed)
+        const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
+        const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
 
-      // Copy to src/ only when explicitly requested (e.g., running the generation script)
-      const shouldWriteToSrc = writeToSrc;
-      if (shouldWriteToSrc) {
-        const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
-        const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
+        await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
+        // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 
-        // Copy the already-generated files
-        await fs.promises.copyFile(distJsonPath, srcJsonPath);
-        await fs.promises.copyFile(distTypesPath, srcTypesPath);
-        // console.debug(`[GatewayRegistry] ✅ Copied registry files to src/ (${writeToSrc ? 'manual' : 'dynamic loading'})`);
-      }
+        // Copy to src/ only when explicitly requested (e.g., running the generation script)
+        const shouldWriteToSrc = writeToSrc;
+        if (shouldWriteToSrc) {
+          const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
+          const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
 
-      // Clear the in-memory cache to force reload (dynamic loading only)
-      if (this.useDynamicLoading) {
-        registryData = null;
+          // Copy the already-generated files
+          await fs.promises.copyFile(distJsonPath, srcJsonPath);
+          await fs.promises.copyFile(distTypesPath, srcTypesPath);
+          // console.debug(`[GatewayRegistry] ✅ Copied registry files to src/ (${writeToSrc ? 'manual' : 'dynamic loading'})`);
+        }
+
+        // Clear the in-memory cache to force reload (dynamic loading only)
+        if (this.useDynamicLoading) {
+          registryData = null;
+        }
       }
 
       this.lastRefreshTime = new Date();

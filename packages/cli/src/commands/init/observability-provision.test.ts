@@ -1,21 +1,28 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-vi.mock('../auth/credentials.js', () => ({
-  getToken: vi.fn(),
-}));
-
-vi.mock('../auth/orgs.js', () => ({
-  resolveCurrentOrg: vi.fn(),
-}));
-
-vi.mock('../auth/client.js', () => ({
-  MASTRA_PLATFORM_API_URL: 'https://platform.test',
-  platformFetch: vi.fn(),
-  authHeaders: (token: string, orgId?: string) => ({
-    Authorization: `Bearer ${token}`,
-    ...(orgId ? { 'X-Mastra-Organization-Id': orgId } : {}),
+const authMocks = vi.hoisted(() => ({
+  credentials: () => ({
+    getToken: vi.fn(),
+  }),
+  orgs: () => ({
+    resolveCurrentOrg: vi.fn(),
+  }),
+  client: () => ({
+    MASTRA_PLATFORM_API_URL: 'https://platform.test',
+    platformFetch: vi.fn(),
+    authHeaders: (token: string, orgId?: string) => ({
+      Authorization: `Bearer ${token}`,
+      ...(orgId ? { 'X-Mastra-Organization-Id': orgId } : {}),
+    }),
   }),
 }));
+
+vi.mock('../auth/credentials.js', authMocks.credentials);
+vi.mock('../auth/credentials.ts', authMocks.credentials);
+vi.mock('../auth/orgs.js', authMocks.orgs);
+vi.mock('../auth/orgs.ts', authMocks.orgs);
+vi.mock('../auth/client.js', authMocks.client);
+vi.mock('../auth/client.ts', authMocks.client);
 
 vi.mock('@clack/prompts', () => ({
   select: vi.fn(),

@@ -9,7 +9,18 @@ const groups = [
   ['unit:observability/*'],
   ['unit:client-sdks/*'],
   ['unit:server-adapters/*'],
+  ['unit:stores/*'],
+  ['unit:integrations/*'],
+  ['unit:channels/*'],
+  ['e2e:browser/*'],
 ];
+
+function pnpmCommand(commandArgs) {
+  const npmExecPath = process.env.npm_execpath;
+  return npmExecPath
+    ? { command: process.execPath, args: [npmExecPath, ...commandArgs] }
+    : { command: 'pnpm', args: commandArgs };
+}
 
 const env = {
   ...process.env,
@@ -27,13 +38,18 @@ function argsForGroup(groupIndex) {
   });
 }
 
+console.log(
+  '[source-mode] Running curated source-safe project groups; external-service/API-key/infra lanes are explicit.',
+);
+
 for (const [groupIndex, projects] of groups.entries()) {
   const args = ['vitest', 'run'];
   for (const project of projects) args.push('--project', project);
   args.push('--passWithNoTests', ...argsForGroup(groupIndex));
 
   console.log(`\n[source-mode] pnpm ${args.join(' ')}`);
-  const result = spawnSync('pnpm', args, { stdio: 'inherit', env });
+  const { command, args: commandArgs } = pnpmCommand(args);
+  const result = spawnSync(command, commandArgs, { stdio: 'inherit', env });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }

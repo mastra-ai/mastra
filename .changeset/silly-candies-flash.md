@@ -113,4 +113,4 @@
 '@mastra/vercel': patch
 ---
 
-Added dev-only source-mode export conditions so workspace tests can resolve packages from checked-in TypeScript source without prebuilding artifacts.
+Added dev-only source-mode export conditions so workspace tests can resolve packages from checked-in TypeScript source without prebuilding artifacts. Source-mode dev bundling also preserves workspace package import specifiers so runtime resolution flows through package exports instead of emitted source-path imports.

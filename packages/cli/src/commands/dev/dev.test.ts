@@ -453,6 +453,7 @@ describe('dev command - inspect flag behavior', () => {
         expect(execaMock.mock.calls[0][1]).toContain('--import');
         expect(execaMock.mock.calls[0][1]).toContainEqual(expect.stringContaining('tsx/dist/loader.mjs'));
         expect(execaMock.mock.calls[0][2].env).toMatchObject({
+          MASTRA_REPO_RUN_FROM_SOURCE: 'true',
           MASTRA_SOURCE_MODE: '1',
           NODE_OPTIONS: '--max-old-space-size=4096 --conditions=mastra-source',
         });

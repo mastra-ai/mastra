@@ -43,6 +43,14 @@ const SOURCE_MODE_WORKSPACE_DIRS = [
   'browser',
 ];
 
+function isSourceModeEnabled(sourceMode?: boolean) {
+  return (
+    sourceMode === true ||
+    process.env.MASTRA_SOURCE_MODE === '1' ||
+    ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')
+  );
+}
+
 function withSourceModeCondition(nodeOptions?: string) {
   if (nodeOptions?.split(/\s+/).includes(SOURCE_MODE_CONDITION)) {
     return nodeOptions;
@@ -64,9 +72,11 @@ function applySourceModeEnv(env?: Map<string, string>) {
   const nodeOptions = withSourceModeCondition(env?.get('NODE_OPTIONS') ?? process.env.NODE_OPTIONS);
   const workspaceRoot = getSourceModeWorkspaceRoot();
 
+  process.env.MASTRA_REPO_RUN_FROM_SOURCE = process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? 'true';
   process.env.MASTRA_SOURCE_MODE = '1';
   process.env.MASTRA_SOURCE_MODE_WORKSPACE_ROOT = workspaceRoot;
   process.env.NODE_OPTIONS = nodeOptions;
+  env?.set('MASTRA_REPO_RUN_FROM_SOURCE', process.env.MASTRA_REPO_RUN_FROM_SOURCE);
   env?.set('MASTRA_SOURCE_MODE', '1');
   env?.set('MASTRA_SOURCE_MODE_WORKSPACE_ROOT', workspaceRoot);
   env?.set('NODE_OPTIONS', nodeOptions);
@@ -78,7 +88,7 @@ function isPathInside(parent: string, child: string) {
 }
 
 async function linkSourceModeWorkspacePackages(outputDir: string) {
-  if (process.env.MASTRA_SOURCE_MODE !== '1') {
+  if (!isSourceModeEnabled()) {
     return;
   }
 
@@ -98,25 +108,35 @@ async function linkSourceModeWorkspacePackages(outputDir: string) {
       return;
     }
 
+    const canLinkDependency = async (sourcePath: string) => {
+      const realSourcePath = await realpath(sourcePath).catch(() => resolve(sourcePath));
+      return realSourcePath !== realOutputDir && !isPathInside(realOutputDir, realSourcePath);
+    };
+
     for (const entry of await readdir(sourceNodeModules, { withFileTypes: true })) {
       if (entry.name === '.bin' || entry.name === '@mastra') {
         continue;
       }
 
       const sourcePath = join(sourceNodeModules, entry.name);
+      if (!(await canLinkDependency(sourcePath))) {
+        continue;
+      }
+
       if (entry.name.startsWith('@')) {
         const scopeDir = join(nodeModulesDir, entry.name);
         await mkdir(scopeDir, { recursive: true });
         for (const scopedEntry of await readdir(sourcePath, { withFileTypes: true })) {
+          const scopedSourcePath = join(sourcePath, scopedEntry.name);
+          if (!(await canLinkDependency(scopedSourcePath))) {
+            continue;
+          }
+
           const linkPath = join(scopeDir, scopedEntry.name);
           if (existsSync(linkPath)) {
             continue;
           }
-          await symlink(
-            join(sourcePath, scopedEntry.name),
-            linkPath,
-            process.platform === 'win32' ? 'junction' : 'dir',
-          );
+          await symlink(scopedSourcePath, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
         }
         continue;
       }
@@ -146,6 +166,8 @@ async function linkSourceModeWorkspacePackages(outputDir: string) {
       if (!existsSync(packageJsonPath)) {
         continue;
       }
+
+      await linkNodeModules(join(packageDir, 'node_modules'));
 
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8')) as { name?: string };
       const packageJsonName = packageJson.name;
@@ -265,7 +287,7 @@ const startServer = async (
       commands.push(...startOptions.customArgs);
     }
 
-    if (process.env.MASTRA_SOURCE_MODE === '1') {
+    if (isSourceModeEnabled()) {
       commands.push('--import', import.meta.resolve('tsx'));
     }
     commands.push(join(dotMastraPath, 'index.mjs'));
@@ -519,7 +541,7 @@ async function rebundleAndRestart(
     }
 
     const env = await bundler.loadEnvVars();
-    if (startOptions.sourceMode) {
+    if (isSourceModeEnabled(startOptions.sourceMode)) {
       applySourceModeEnv(env);
     }
 
@@ -575,7 +597,9 @@ export async function dev({
   sourceMode?: boolean;
   debug: boolean;
 }) {
-  if (sourceMode) {
+  const effectiveSourceMode = isSourceModeEnabled(sourceMode);
+
+  if (effectiveSourceMode) {
     applySourceModeEnv();
     devLogger.info('Source mode enabled; resolving Mastra packages with the mastra-source condition.');
   }
@@ -594,7 +618,7 @@ export async function dev({
   const discoveredTools = bundler.getAllToolPaths(mastraDir, tools ?? []);
 
   const loadedEnv = await bundler.loadEnvVars();
-  if (sourceMode) {
+  if (effectiveSourceMode) {
     applySourceModeEnv(loadedEnv);
   }
 
@@ -666,7 +690,7 @@ export async function dev({
     inspectBrk,
     customArgs,
     https: httpsOptions,
-    sourceMode,
+    sourceMode: effectiveSourceMode,
     mastraPackages,
     peerDepMismatches,
   };

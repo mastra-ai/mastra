@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -66,12 +67,6 @@ vi.mock('fs-extra', () => {
   };
 });
 
-vi.mock('execa', () => {
-  return {
-    execa: vi.fn().mockResolvedValue(undefined),
-  };
-});
-
 // Import DevBundler after mocks
 
 describe('DevBundler', () => {
@@ -100,7 +95,6 @@ describe('DevBundler', () => {
       process.env.MASTRA_SOURCE_MODE = '1';
       const devBundler = new DevBundler();
       const fsExtra = await import('fs-extra');
-      const { execa } = await import('execa');
       vi.mocked(fsExtra.pathExists as unknown as () => Promise<boolean>).mockResolvedValue(true);
 
       const tmpDir = '.test-tmp';
@@ -112,30 +106,24 @@ describe('DevBundler', () => {
           join(tmpDir, 'output', 'studio'),
           { overwrite: true },
         );
-        expect(execa).not.toHaveBeenCalled();
       } finally {
         await remove(tmpDir);
       }
     });
 
-    it('should build playground assets when source mode studio dist is missing', async () => {
+    it('should write a source mode fallback page when studio assets are missing', async () => {
       process.env.MASTRA_SOURCE_MODE = '1';
       const devBundler = new DevBundler();
       const fsExtra = await import('fs-extra');
-      const { execa } = await import('execa');
       vi.mocked(fsExtra.pathExists as unknown as () => Promise<boolean>).mockResolvedValue(false);
 
       const tmpDir = '.test-tmp';
       try {
         await devBundler.prepare(tmpDir);
 
-        expect(execa).toHaveBeenCalledWith('pnpm', ['--dir', expect.stringMatching(/packages\/playground$/), 'build'], {
-          stdio: 'inherit',
-        });
-        expect(fsExtra.copy).toHaveBeenCalledWith(
-          expect.stringMatching(/packages\/playground\/dist$/),
-          join(tmpDir, 'output', 'studio'),
-          { overwrite: true },
+        expect(fsExtra.copy).not.toHaveBeenCalled();
+        await expect(readFile(join(tmpDir, 'output', 'studio', 'index.html'), 'utf-8')).resolves.toContain(
+          'Mastra dev server running in source mode',
         );
       } finally {
         await remove(tmpDir);
