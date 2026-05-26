@@ -10709,9 +10709,9 @@ export type GetMemoryThreadsThreadIdWorkingMemory_QueryParams = {
 };
 
 export type GetMemoryThreadsThreadIdWorkingMemory_Response = {
-  workingMemory: unknown;
+  workingMemory: unknown | null;
   source: 'thread' | 'resource';
-  workingMemoryTemplate: unknown;
+  workingMemoryTemplate: unknown | null;
   threadExists: boolean;
 };
 
