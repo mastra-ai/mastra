@@ -160,7 +160,7 @@ export class Deps extends MastraBase {
       case 'yarn':
         return `${cmd}`;
       case 'pnpm':
-        return cmd === 'install' ? `${cmd} --ignore-workspace --loglevel=error` : `${cmd} --loglevel=error`;
+        return cmd === 'install' ? `${cmd} --loglevel=error` : `${cmd} --loglevel=error`;
       case 'bun':
         return cmd;
       default:

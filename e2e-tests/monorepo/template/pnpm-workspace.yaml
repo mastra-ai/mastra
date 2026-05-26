@@ -8,3 +8,4 @@ allowBuilds:
   utf-8-validate: true
   sharp: true
   protobufjs: true
+  workerd: true
