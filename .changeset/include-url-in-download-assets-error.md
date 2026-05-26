@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Include the failing URL in the `DOWNLOAD_ASSETS_FAILED` error thrown from `downloadFromUrl`. The error's `text` now reads `Failed to download asset: <url>` and `details.url` is populated. Previously the URL was nowhere in the error chain (`text` was a fixed string, `details` was empty, and the inner cause from `fetchWithRetry` only carries the HTTP status), which made it impossible to identify which media URL failed when an agent has multiple parts or to drive downstream recovery (e.g. replacing the dead URL with a placeholder on retry).
+Asset download errors now include the failing URL so callers can identify which media link broke and recover from it (e.g. drop the dead part on retry). The URL appears redacted (query string and fragment stripped) in the error message and in full on `error.details.url`.

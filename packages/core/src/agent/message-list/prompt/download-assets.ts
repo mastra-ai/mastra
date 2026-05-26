@@ -3,8 +3,26 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { fetchWithRetry } from '../../../utils/fetchWithRetry';
 import type { AIV5Type } from '../types';
 
+/**
+ * Strip query string and fragment from a URL for inclusion in human-readable
+ * error text. Signed-URL query params (e.g. AWS pre-signed `X-Amz-Signature`,
+ * WhatsApp media tokens, GCS `X-Goog-Signature`) carry secrets that should not
+ * land in logs — but the scheme, host, and path are still useful for diagnosis.
+ *
+ * The full, unredacted URL is preserved on `error.details.url` for callers that
+ * need to react programmatically (e.g. matching a failing URL back to the
+ * specific message part for recovery). Mirrors the project convention of
+ * redacting at the human-facing log boundary while keeping structured fields
+ * raw (see `SENSITIVE_KEYS` in `tools/validation.ts` and `redactHeaders` in
+ * server config).
+ */
+function redactUrlForLog(url: URL): string {
+  return `${url.origin}${url.pathname}`;
+}
+
 export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; downloadRetries: number }) => {
   const urlText = url.toString();
+  const safeUrl = redactUrlForLog(url);
 
   try {
     const response = await fetchWithRetry(
@@ -21,7 +39,7 @@ export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; down
     if (!response.ok) {
       throw new MastraError({
         id: 'DOWNLOAD_ASSETS_FAILED',
-        text: `Failed to download asset: ${urlText}`,
+        text: `Failed to download asset: ${safeUrl}`,
         domain: ErrorDomain.LLM,
         category: ErrorCategory.USER,
         details: { url: urlText },
@@ -35,7 +53,7 @@ export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; down
     throw new MastraError(
       {
         id: 'DOWNLOAD_ASSETS_FAILED',
-        text: `Failed to download asset: ${urlText}`,
+        text: `Failed to download asset: ${safeUrl}`,
         domain: ErrorDomain.LLM,
         category: ErrorCategory.USER,
         details: { url: urlText },
