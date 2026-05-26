@@ -36,8 +36,9 @@ export const FavoriteButton = ({
 }: FavoriteButtonProps) => {
   const features = useBuilderAgentFeatures();
   const toggle = useToggleStoredAgentFavorite(agentId);
-  const { data: capabilities } = useAuthCapabilities();
+  const { data: capabilities, isLoading } = useAuthCapabilities();
 
+  if (isLoading) return null;
   if (!features.favorites) return null;
 
   const signedIn = capabilities ? isAuthenticated(capabilities) : false;

@@ -22,6 +22,7 @@ function getAvatarUrl(agent: StoredAgentResponse): string | undefined {
   if (meta && typeof meta === 'object' && 'avatarUrl' in meta) {
     return meta.avatarUrl as string | undefined;
   }
+
   return undefined;
 }
 
@@ -50,6 +51,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
   const filtered = useMemo(() => {
     const q = (search ?? '').trim().toLowerCase();
     if (!q) return agents;
+
     return agents.filter(a => {
       const name = a.name?.toLowerCase() ?? '';
       const description = a.description?.toLowerCase() ?? '';
