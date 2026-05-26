@@ -17,7 +17,7 @@ export async function setupMonorepo(pathToStoreFiles, pkgManager) {
   await mkdir(newPath, { recursive: true });
   await cp(monorepoPath, newPath, { recursive: true });
   await cp(join(__dirname, '..', '..', 'tsconfig.node.json'), join(newPath, 'tsconfig.json'));
-  await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\n');
+  await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\ndangerously-allow-all-builds=true\n');
   await appendFile(join(newPath, 'pnpm-workspace.yaml'), '\nminimumReleaseAge: 0\n');
 
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];

@@ -16,7 +16,7 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
 
   await mkdir(newPath, { recursive: true });
   await cp(templatePath, newPath, { recursive: true });
-  await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\n');
+  await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\ndangerously-allow-all-builds=true\n');
   await writeFile(
     join(newPath, 'pnpm-workspace.yaml'),
     `allowBuilds:
