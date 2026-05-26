@@ -4,12 +4,9 @@ import { decodePrintableShortcut } from '../key-input.js';
 
 describe('decodePrintableShortcut', () => {
   describe('literal single-character input', () => {
-    it.each([['y'], ['n'], ['a'], ['Y'], ['c'], ['r'], ['0'], ['?']])(
-      'returns the literal %j unchanged',
-      input => {
-        expect(decodePrintableShortcut(input)).toBe(input);
-      },
-    );
+    it.each([['y'], ['n'], ['a'], ['Y'], ['c'], ['r'], ['0'], ['?']])('returns the literal %j unchanged', input => {
+      expect(decodePrintableShortcut(input)).toBe(input);
+    });
 
     it('rejects control characters', () => {
       expect(decodePrintableShortcut('\x03')).toBeUndefined();
@@ -113,12 +110,9 @@ describe('decodePrintableShortcut', () => {
   });
 
   describe('non-printable and malformed input', () => {
-    it.each([['\x1b[A'], ['\x1b[B'], ['\r'], ['\t']])(
-      'returns undefined for navigation/whitespace key %j',
-      input => {
-        expect(decodePrintableShortcut(input)).toBeUndefined();
-      },
-    );
+    it.each([['\x1b[A'], ['\x1b[B'], ['\r'], ['\t']])('returns undefined for navigation/whitespace key %j', input => {
+      expect(decodePrintableShortcut(input)).toBeUndefined();
+    });
 
     it.each([['\x1b[u'], ['\x1b[abcu'], [''], ['yes']])(
       'returns undefined for malformed/multi-byte input %j',

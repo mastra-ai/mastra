@@ -351,11 +351,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       }
     } else if (kb.matches(keyData, 'tui.select.cancel')) {
       this.onCancelCallback();
-    } else if (
-      decodePrintableShortcut(keyData) === 'c' &&
-      this.onCloneCallback &&
-      !this.searchInput.getValue()
-    ) {
+    } else if (decodePrintableShortcut(keyData) === 'c' && this.onCloneCallback && !this.searchInput.getValue()) {
       const selected = this.filteredThreads[this.selectedIndex];
       if (selected) {
         this.onCloneCallback(selected);
