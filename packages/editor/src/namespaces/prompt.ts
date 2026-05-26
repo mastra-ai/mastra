@@ -66,6 +66,18 @@ function getProvidedConfigFields(input: StorageUpdatePromptBlockInput): Partial<
   return config;
 }
 
+function getProvidedRecordFields(input: StorageUpdatePromptBlockInput): StorageUpdatePromptBlockInput | null {
+  const { id, authorId, activeVersionId, metadata, status } = input;
+  const recordFields: StorageUpdatePromptBlockInput = { id };
+
+  if (authorId !== undefined) recordFields.authorId = authorId;
+  if (activeVersionId !== undefined) recordFields.activeVersionId = activeVersionId;
+  if (metadata !== undefined) recordFields.metadata = metadata;
+  if (status !== undefined) recordFields.status = status;
+
+  return Object.keys(recordFields).length > 1 ? recordFields : null;
+}
+
 function getChangedFields(
   previousConfig: Partial<StoragePromptBlockSnapshotType>,
   providedConfig: Partial<StoragePromptBlockSnapshotType>,
@@ -73,6 +85,62 @@ function getChangedFields(
   return PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS.filter(
     field => field in providedConfig && !deepEqual(previousConfig[field], providedConfig[field]),
   );
+}
+
+function isVersionNumberConflictError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  return (
+    (message.includes('unique') && message.includes('constraint')) ||
+    message.includes('duplicate key') ||
+    message.includes('unique_violation') ||
+    message.includes('sqlite_constraint_unique') ||
+    message.includes('versionnumber')
+  );
+}
+
+async function createPromptBlockVersionWithRetry(
+  store: PromptBlocksStorage,
+  blockId: string,
+  providedConfig: Partial<StoragePromptBlockSnapshotType>,
+  maxRetries = 3,
+): Promise<boolean> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const latestVersion = await store.getLatestVersion(blockId);
+      if (!latestVersion) return false;
+
+      const previousConfig = extractConfigFromVersion(latestVersion);
+      const changedFields = getChangedFields(previousConfig, providedConfig);
+      if (changedFields.length === 0) return false;
+
+      await store.createVersion({
+        ...previousConfig,
+        ...providedConfig,
+        id: crypto.randomUUID(),
+        blockId,
+        versionNumber: latestVersion.versionNumber + 1,
+        changedFields,
+        changeMessage: 'Auto-saved after edit',
+      });
+
+      return true;
+    } catch (error) {
+      lastError = error;
+
+      if (isVersionNumberConflictError(error) && attempt < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1)));
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw lastError;
 }
 
 export class EditorPromptNamespace extends CrudEditorNamespace<
@@ -124,23 +192,14 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
       throw new Error(`Prompt block with id ${input.id} not found`);
     }
 
-    await store.update(input);
-
     const providedConfig = getProvidedConfigFields(input);
-    const latestVersion = Object.keys(providedConfig).length > 0 ? await store.getLatestVersion(input.id) : null;
-    const previousConfig = latestVersion ? extractConfigFromVersion(latestVersion) : null;
-    const changedFields = previousConfig ? getChangedFields(previousConfig, providedConfig) : [];
+    if (Object.keys(providedConfig).length > 0) {
+      await createPromptBlockVersionWithRetry(store, input.id, providedConfig);
+    }
 
-    if (latestVersion && previousConfig && changedFields.length > 0) {
-      await store.createVersion({
-        ...previousConfig,
-        ...providedConfig,
-        id: crypto.randomUUID(),
-        blockId: input.id,
-        versionNumber: latestVersion.versionNumber + 1,
-        changedFields,
-        changeMessage: 'Auto-saved after edit',
-      });
+    const recordFields = getProvidedRecordFields(input);
+    if (recordFields) {
+      await store.update(recordFields);
     }
 
     this._cache.delete(input.id);

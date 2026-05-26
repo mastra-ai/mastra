@@ -25,6 +25,8 @@ describe('EditorPromptNamespace', () => {
       name: 'SDK Updatable Block',
       content: 'Initial content',
     });
+    const promptStore = await storage.getStore('promptBlocks');
+    const updateSpy = vi.spyOn(promptStore!, 'update');
 
     const updated = await prompt.update({
       id: 'sdk-updatable-block',
@@ -43,6 +45,7 @@ describe('EditorPromptNamespace', () => {
       },
     });
 
+    expect(updateSpy).not.toHaveBeenCalled();
     expect(updated.name).toBe('SDK Updated Block');
     expect(updated.content).toBe('Updated content');
     expect(updated.rules).toEqual({
@@ -63,7 +66,6 @@ describe('EditorPromptNamespace', () => {
     expect(persisted!.rules).toEqual(updated.rules);
     expect(persisted!.requestContextSchema).toEqual(updated.requestContextSchema);
 
-    const promptStore = await storage.getStore('promptBlocks');
     const versions = await promptStore!.listVersions({ blockId: 'sdk-updatable-block' });
     expect(versions.versions).toHaveLength(2);
     expect(versions.versions[0]!.changedFields).toEqual(['name', 'content', 'rules', 'requestContextSchema']);
