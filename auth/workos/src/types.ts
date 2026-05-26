@@ -329,6 +329,29 @@ export interface MastraFGAWorkosOptions {
    * and other FGA-related events that help diagnose access control issues.
    */
   logger?: IMastraLogger;
+  /**
+   * Authorship configuration for automatic role assignment on resource creation.
+   *
+   * When enabled, registerResource() will automatically assign the author role
+   * (or a fallback role) to the user who creates a resource.
+   *
+   * @example
+   * ```typescript
+   * authorship: {
+   *   enabled: true,
+   *   authorRole: 'author',
+   *   fallbackRoles: ['owner', 'admin', 'editor'],
+   * }
+   * ```
+   */
+  authorship?: {
+    /** Enable automatic author role assignment on resource creation */
+    enabled: boolean;
+    /** Role to assign to creator (default: 'author') */
+    authorRole?: string;
+    /** Fallback roles to try if authorRole not found */
+    fallbackRoles?: string[];
+  };
 }
 
 // ============================================================================
