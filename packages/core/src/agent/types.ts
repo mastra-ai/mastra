@@ -6,7 +6,8 @@ import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
-import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
+import type { AgentChannels } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/types';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type {

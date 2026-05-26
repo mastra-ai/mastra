@@ -150,37 +150,49 @@ class AskQuestionBorderedBox {
     // Empty separator
     addLine('', 0);
 
+    // Wrap a labelled option line so long labels don't overflow the bordered box.
+    // Mirrors the free-text answered branch below: first wrapped line keeps the
+    // styled prefix (icon/spaces), continuation lines indent 3 spaces.
+    const continuationPrefix = '   ';
+    const addWrappedOptionLine = (prefix: string, label: string, style: (s: string) => string) => {
+      const prefixVis = visibleWidth(prefix);
+      const wrapped = wrapTextWithAnsi(label, Math.max(1, innerWidth - prefixVis));
+      wrapped.forEach((line, index) => {
+        const linePrefix = index === 0 ? prefix : continuationPrefix;
+        const content = `${linePrefix}${style(line)}`;
+        addLine(content, visibleWidth(linePrefix) + visibleWidth(line));
+      });
+    };
+
     if (this.streaming) {
       // Streaming: show option labels as they arrive (dimmed, no interactivity)
+      const dim = (s: string) => theme.fg('dim', s);
       for (const item of this.items) {
-        const line = theme.fg('dim', `   ${item.label}`);
-        addLine(line, visibleWidth(line));
+        addWrappedOptionLine(continuationPrefix, item.label, dim);
       }
       // Waiting indicator
       const waiting = theme.fg('dim', '…');
       addLine(waiting, visibleWidth(waiting));
     } else if (this.answered && this.items.length > 0) {
       // Render frozen item list
+      const dim = (s: string) => theme.fg('dim', s);
       if (this.cancelled) {
         // All items dimmed, cancelled notice
         for (const item of this.items) {
-          const line = theme.fg('dim', `   ${item.label}`);
-          addLine(line, visibleWidth(line));
+          addWrappedOptionLine(continuationPrefix, item.label, dim);
         }
         const cancelLine = `${theme.fg('error', '✗')}  ${theme.fg('dim', '(cancelled)')}`;
         addLine(cancelLine, visibleWidth(cancelLine));
       } else {
         // ✓/✗ on selected, dimmed unselected
+        const text = (s: string) => theme.fg('text', s);
         for (const item of this.items) {
           const isSelected = item.label === this.selectedValue;
           if (isSelected) {
             const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
-            const label = theme.fg('text', item.label);
-            const line = `${icon}  ${label}`;
-            addLine(line, visibleWidth(line));
+            addWrappedOptionLine(`${icon}  `, item.label, text);
           } else {
-            const line = theme.fg('dim', `   ${item.label}`);
-            addLine(line, visibleWidth(line));
+            addWrappedOptionLine(continuationPrefix, item.label, dim);
           }
         }
       }

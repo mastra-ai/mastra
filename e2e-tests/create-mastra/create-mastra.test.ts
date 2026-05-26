@@ -29,6 +29,7 @@ describe('create mastra', () => {
           env: {
             ...process.env,
             npm_config_registry: registry,
+            npm_config_minimum_release_age: '0',
           },
         },
       );
