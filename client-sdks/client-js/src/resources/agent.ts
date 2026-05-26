@@ -1170,6 +1170,7 @@ export class Agent extends BaseResource {
     update,
     onToolCall,
     onFinish,
+    onStreamChunk,
     getCurrentDate = () => new Date(),
     lastMessage,
   }: {
@@ -1177,6 +1178,7 @@ export class Agent extends BaseResource {
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
     onToolCall?: UseChatOptions['onToolCall'];
     onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    onStreamChunk?: (chunk: any) => void;
     generateId?: () => string;
     getCurrentDate?: () => Date;
     lastMessage: UIMessage | undefined;
@@ -1277,6 +1279,8 @@ export class Agent extends BaseResource {
       // TODO: casting as any here because the stream types were all typed as any before in core.
       // but this is completely wrong and this fn is probably broken. Remove ":any" and you'll see a bunch of type errors
       onChunk: async (chunk: any) => {
+        onStreamChunk?.(chunk);
+
         switch (chunk.type) {
           case 'tripwire': {
             message.parts.push({
@@ -1406,6 +1410,7 @@ export class Agent extends BaseResource {
                 execUpdate();
               }
             }
+            break;
           }
 
           case 'tool-call-input-streaming-start': {
@@ -1565,6 +1570,7 @@ export class Agent extends BaseResource {
     try {
       let toolCalls: ToolInvocation[] = [];
       let messages: UIMessage[] = [];
+      let streamRunId: string | undefined = processedParams.runId;
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
@@ -1637,24 +1643,122 @@ export class Agent extends BaseResource {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
-                const { result, observability } = await executeClientToolWithObservability({
-                  clientTool,
-                  args: toolCall?.args,
-                  toolName: toolCall.toolName,
-                  parentContext: getClientToolObservabilityContext(toolCall),
-                  executeContext: {
-                    requestContext: processedParams.requestContext as RequestContext,
-                    tracingContext: { currentSpan: undefined },
-                    agent: {
-                      agentId: this.agentId,
-                      messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                      toolCallId: toolCall?.toolCallId,
-                      suspend: async () => {},
-                      threadId,
-                      resourceId,
+
+                // Synthesize a Mastra-shaped terminal chunk so React's toUIMessage
+                // reducer flips the matching `dynamic-tool` part from
+                // `input-available` to `output-available` / `output-error`.
+                // Without this, the React-side `dynamic-tool` part is stuck in
+                // `input-available` forever because the server stream never emits
+                // a terminal chunk for client-executed tools.
+                const runId: string = streamRunId ?? toolCall.toolCallId;
+                let result: unknown;
+                let observability: ClientToolObservabilityEnvelope | undefined;
+                let synthetic:
+                  | {
+                      type: 'tool-result';
+                      runId: string;
+                      from: 'AGENT';
+                      payload: {
+                        toolCallId: string;
+                        toolName: string;
+                        result: unknown;
+                        isError: boolean;
+                        providerExecuted: false;
+                      };
+                    }
+                  | {
+                      type: 'tool-error';
+                      runId: string;
+                      from: 'AGENT';
+                      payload: {
+                        toolCallId: string;
+                        toolName: string;
+                        error: unknown;
+                        args?: unknown;
+                        providerExecuted: false;
+                      };
+                    };
+
+                try {
+                  ({ result, observability } = await executeClientToolWithObservability({
+                    clientTool,
+                    args: toolCall?.args,
+                    toolName: toolCall.toolName,
+                    parentContext: getClientToolObservabilityContext(toolCall),
+                    executeContext: {
+                      requestContext: processedParams.requestContext as RequestContext,
+                      tracingContext: { currentSpan: undefined },
+                      agent: {
+                        agentId: this.agentId,
+                        messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                        toolCallId: toolCall?.toolCallId,
+                        suspend: async () => {},
+                        threadId,
+                        resourceId,
+                      },
                     },
-                  },
-                });
+                  }));
+
+                  synthetic = {
+                    type: 'tool-result',
+                    runId,
+                    from: 'AGENT',
+                    payload: {
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      result,
+                      isError: false,
+                      providerExecuted: false,
+                    },
+                  };
+                } catch (error) {
+                  synthetic = {
+                    type: 'tool-error',
+                    runId,
+                    from: 'AGENT',
+                    payload: {
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      error,
+                      args: toolCall?.args,
+                      providerExecuted: false,
+                    },
+                  };
+                  // Mirror the executed-result message-patching path so the
+                  // internal `messages[]` carries the error too (matches the
+                  // existing legacy reducer's expectations for the recursive
+                  // request body).
+                  result = { error: error instanceof Error ? error.message : String(error) };
+                }
+
+                // Wait for the server-side stream pipe to finish before
+                // enqueueing the synthetic chunk so the React reducer observes
+                // the server `finish` chunk first, then our terminal tool chunk.
+                try {
+                  await pipePromise;
+                } catch {
+                  // pipePromise already has its own .catch; ignore here.
+                }
+
+                try {
+                  const errorForSerialization = synthetic.type === 'tool-error' ? synthetic.payload.error : undefined;
+                  const serializedError =
+                    errorForSerialization instanceof Error
+                      ? {
+                          name: errorForSerialization.name,
+                          message: errorForSerialization.message,
+                          stack: errorForSerialization.stack,
+                        }
+                      : errorForSerialization;
+                  const payloadForWire =
+                    synthetic.type === 'tool-error'
+                      ? { ...synthetic, payload: { ...synthetic.payload, error: serializedError } }
+                      : synthetic;
+                  const sseLine = `data: ${JSON.stringify(payloadForWire)}\n\n`;
+                  controller.enqueue(new TextEncoder().encode(sseLine));
+                } catch (enqueueErr) {
+                  console.error('Failed to enqueue synthetic tool-result chunk:', enqueueErr);
+                }
 
                 const lastMessageRaw = messages[messages.length - 1];
                 const lastMessage: UIMessage | undefined =
@@ -1736,6 +1840,11 @@ export class Agent extends BaseResource {
             // No tool calls - wait for pipe to complete then close the stream
             await pipePromise;
             controller.close();
+          }
+        },
+        onStreamChunk: chunk => {
+          if (!streamRunId && typeof chunk.runId === 'string') {
+            streamRunId = chunk.runId;
           }
         },
         lastMessage: undefined,

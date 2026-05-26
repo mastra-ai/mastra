@@ -1,5 +1,15 @@
 # @mastra/react
 
+## 0.4.1-alpha.7
+
+### Patch Changes
+
+- Added support for reasoning-start and reasoning-end stream chunks so reasoning blocks are opened and closed with provider metadata preserved. ([#17061](https://github.com/mastra-ai/mastra/pull/17061))
+
+- Updated dependencies [[`168fa09`](https://github.com/mastra-ai/mastra/commit/168fa09d6b39114cb8c13bd06f1dccb9bc81c6cd), [`af2e1f8`](https://github.com/mastra-ai/mastra/commit/af2e1f8e2a2d2c4ba75167d5c93ca44395639eff)]:
+  - @mastra/core@1.37.0-alpha.7
+  - @mastra/client-js@1.21.0-alpha.7
+
 ## 0.4.1-alpha.6
 
 ### Patch Changes

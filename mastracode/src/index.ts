@@ -19,6 +19,7 @@ import {
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { PublicSchema } from '@mastra/core/schema';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
@@ -64,6 +65,7 @@ import { getCopilotModelCatalog, setAuthStorage as setGitHubCopilotAuthStorage }
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
 import { stateSchema } from './schema.js';
+import type { MastraCodeState } from './schema.js';
 
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
@@ -88,7 +90,7 @@ export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
   /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
-  modes?: HarnessMode<Record<string, unknown>>[];
+  modes?: HarnessMode<MastraCodeState>[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
@@ -112,11 +114,11 @@ export interface MastraCodeConfig {
   /** Path to a custom settings.json file. Default: global settings */
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
-  initialState?: Record<string, unknown>;
+  initialState?: Partial<MastraCodeState>;
   /** Override heartbeat handlers. Default: gateway-sync */
   heartbeatHandlers?: HeartbeatHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
-  workspace?: HarnessConfig['workspace'];
+  workspace?: HarnessConfig<MastraCodeState>['workspace'];
   /** Override the config directory name. Default: '.mastracode'. Replaces '.mastracode' in all project-level and global config paths (MCP, hooks, commands, database, skills, agent instructions). */
   configDir?: string;
   /** Programmatic MCP server configurations, merged with (and overriding) file-based configs. */
@@ -134,9 +136,9 @@ export interface MastraCodeConfig {
    * Use this when your models are served by a custom provider (e.g. Augment)
    * that mastracode's `resolveModel` cannot resolve.
    */
-  memory?: HarnessConfig['memory'];
+  memory?: HarnessConfig<MastraCodeState>['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
-  browser?: HarnessConfig['browser'];
+  browser?: HarnessConfig<MastraCodeState>['browser'];
   /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
   pubsub?: PubSub;
   /** Use Mastra Code's built-in Unix socket PubSub for local cross-process signal routing. */
@@ -393,7 +395,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
-  const defaultModes: HarnessMode<Record<string, unknown>>[] = [
+  const defaultModes: HarnessMode<MastraCodeState>[] = [
     {
       id: 'build',
       name: 'Build',
@@ -512,7 +514,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   });
 
   // Build initial state with global preferences
-  const globalInitialState: Record<string, unknown> = {};
+  const globalInitialState: Partial<MastraCodeState> = {};
   if (effectiveObserverModel) {
     globalInitialState.observerModelId = effectiveObserverModel;
   }
@@ -546,14 +548,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       globalInitialState[`subagentModelId_${key}`] = modelId;
     }
   }
-  const harness = new Harness({
+  const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
+  const harness = new Harness<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
     observability,
     memory,
     pubsub: signalsPubSub,
-    stateSchema,
+    stateSchema: typedStateSchema,
     subagents,
     resolveModel: modelId => resolveModel(modelId) as LanguageModel,
     toolCategoryResolver: getToolCategory,
