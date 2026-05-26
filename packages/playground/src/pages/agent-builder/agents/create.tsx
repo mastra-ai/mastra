@@ -21,7 +21,7 @@ export default function AgentBuilderCreate() {
   useTools({ enabled: canWrite && features.tools });
   useAgents({ enabled: canWrite && features.agents });
   useWorkflows({ enabled: canWrite && features.workflows });
-  useStoredSkills(undefined, { enabled: canWrite && features.skills });
+  useStoredSkills({ enabled: canWrite && features.skills });
 
   if (!canWrite) return <Navigate to={AGENT_BUILDER_AGENTS_ROUTE} replace />;
 
