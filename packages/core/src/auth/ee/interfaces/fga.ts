@@ -228,6 +228,23 @@ export interface FGAListResourcesOptions {
   after?: string;
 }
 
+/**
+ * Information about a resource type discovered from the FGA provider.
+ * Derived from observed state (roles and resource instances), not schema.
+ */
+export interface FGAResourceTypeInfo {
+  /** Resource type slug (e.g., 'agent', 'team', 'workflow') */
+  slug: string;
+  /** All role slugs defined for this type (e.g., ['viewer', 'editor', 'admin']) */
+  relations: string[];
+  /** Org-specific custom roles (subset of relations) */
+  customRelations: string[];
+  /** Parent resource type slugs derived from instances */
+  parentResourceTypeSlugs: string[];
+  /** Whether any instances of this type exist */
+  hasInstances: boolean;
+}
+
 // ──────────────────────────────────────────────────────────────
 // Provider Interface (read-only checks)
 // ──────────────────────────────────────────────────────────────
@@ -385,4 +402,20 @@ export interface IFGAManager<TUser = unknown> extends IFGAProvider<TUser> {
    * List role assignments for an organization membership.
    */
   listRoleAssignments(options: FGAListRoleAssignmentsOptions): Promise<FGARoleAssignment[]>;
+
+  /**
+   * Discover resource types from the FGA provider.
+   *
+   * Returns observed state: types that have roles defined or instances created.
+   * Types with no roles AND no instances won't appear (WorkOS API limitation).
+   *
+   * Use this for:
+   * - Dynamically populating resource type dropdowns in UI
+   * - Validating config against actual WorkOS state
+   * - Understanding hierarchy for FGA enforcement
+   *
+   * @param organizationId - The organization to query
+   * @returns Array of resource type info with relations and hierarchy
+   */
+  describeResourceTypes(organizationId: string): Promise<FGAResourceTypeInfo[]>;
 }

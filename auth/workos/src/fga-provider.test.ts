@@ -20,6 +20,7 @@ vi.mock('@workos-inc/node', () => {
     assignRole: vi.fn(),
     removeRole: vi.fn(),
     listRoleAssignments: vi.fn(),
+    listOrganizationRoles: vi.fn(),
   };
   (globalThis as any).__mockAuthorization = auth;
   return {
@@ -749,6 +750,90 @@ describe('MastraFGAWorkos', () => {
       const result = await fga.listRoleAssignments({ organizationMembershipId: 'om-123' });
       expect(result).toHaveLength(1);
       expect(result[0].role.slug).toBe('editor');
+    });
+  });
+
+  describe('describeResourceTypes()', () => {
+    it('should derive resource types from roles and resources', async () => {
+      // Mock roles response
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({
+        data: [
+          { slug: 'viewer', resourceTypeSlug: 'agent', type: 'EnvironmentRole' },
+          { slug: 'operator', resourceTypeSlug: 'agent', type: 'EnvironmentRole' },
+          { slug: 'team-admin', resourceTypeSlug: 'team', type: 'OrganizationRole' },
+          { slug: 'team-viewer', resourceTypeSlug: 'team', type: 'EnvironmentRole' },
+        ],
+      });
+
+      // Mock resources response (with hierarchy)
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [
+          { id: 'team-1', resourceTypeSlug: 'team', parentResourceId: null },
+          { id: 'agent-1', resourceTypeSlug: 'agent', parentResourceId: 'team-1' },
+          { id: 'agent-2', resourceTypeSlug: 'agent', parentResourceId: 'team-1' },
+        ],
+        listMetadata: { after: undefined },
+      });
+
+      const result = await fga.describeResourceTypes('org-123');
+
+      // Should have both types
+      expect(result).toHaveLength(2);
+
+      // Agent type
+      const agentType = result.find(t => t.slug === 'agent');
+      expect(agentType).toBeDefined();
+      expect(agentType!.relations).toEqual(['viewer', 'operator']);
+      expect(agentType!.customRelations).toEqual([]);
+      expect(agentType!.parentResourceTypeSlugs).toEqual(['team']);
+      expect(agentType!.hasInstances).toBe(true);
+
+      // Team type
+      const teamType = result.find(t => t.slug === 'team');
+      expect(teamType).toBeDefined();
+      expect(teamType!.relations).toEqual(['team-admin', 'team-viewer']);
+      expect(teamType!.customRelations).toEqual(['team-admin']); // OrganizationRole
+      expect(teamType!.parentResourceTypeSlugs).toEqual([]);
+      expect(teamType!.hasInstances).toBe(true);
+    });
+
+    it('should handle types with roles but no instances', async () => {
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({
+        data: [{ slug: 'viewer', resourceTypeSlug: 'workflow', type: 'EnvironmentRole' }],
+      });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      const result = await fga.describeResourceTypes('org-123');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].slug).toBe('workflow');
+      expect(result[0].relations).toEqual(['viewer']);
+      expect(result[0].hasInstances).toBe(false);
+    });
+
+    it('should paginate through resources', async () => {
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({ data: [] });
+
+      // First page
+      mockAuthorization.listResources
+        .mockResolvedValueOnce({
+          data: [{ id: 'agent-1', resourceTypeSlug: 'agent' }],
+          listMetadata: { after: 'cursor-1' },
+        })
+        // Second page
+        .mockResolvedValueOnce({
+          data: [{ id: 'agent-2', resourceTypeSlug: 'agent' }],
+          listMetadata: { after: undefined },
+        });
+
+      const result = await fga.describeResourceTypes('org-123');
+
+      expect(mockAuthorization.listResources).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(1);
+      expect(result[0].hasInstances).toBe(true);
     });
   });
 });

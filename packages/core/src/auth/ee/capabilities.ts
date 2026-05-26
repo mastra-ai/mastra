@@ -390,10 +390,11 @@ export async function buildCapabilities(
         const getPermissionsForRole = rbacProvider.getPermissionsForRole?.bind(rbacProvider);
         if (getPermissionsForRole) {
           // Use allSettled so one failing role lookup doesn't drop the whole picker.
+          // Call as method to preserve `this` context.
           const rolePermissions = await Promise.allSettled(
             allRoles.map(async role => ({
               role,
-              perms: await getPermissionsForRole(role.id),
+              perms: await rbacProvider.getPermissionsForRole!(role.id),
             })),
           );
           availableRoles = rolePermissions.flatMap(result => {

@@ -45,6 +45,7 @@ export type {
   FGARouteResolver,
   FGARouteResolverContext,
   FGAResource,
+  FGAResourceTypeInfo,
   FGACreateResourceParams,
   FGAUpdateResourceParams,
   FGADeleteResourceParams,
