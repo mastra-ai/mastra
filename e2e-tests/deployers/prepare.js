@@ -21,7 +21,7 @@ export async function setupDeployerProject(pathToStoreFiles, tag, pkgManager, de
   await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\n');
   await writeFile(
     join(newPath, 'pnpm-workspace.yaml'),
-    'packages:\n  - \'.\'\nallowBuilds:\n  esbuild: true\n  sharp: true\n  protobufjs: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n',
+    "packages:\n  - '.'\nallowBuilds:\n  esbuild: true\n  sharp: true\n  protobufjs: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n",
   );
 
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
