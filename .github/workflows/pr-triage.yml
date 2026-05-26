@@ -34,7 +34,6 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: |
-            package.json
             .github/actions
             scripts/pr-issue-link
           sparse-checkout-cone-mode: false
@@ -81,7 +80,6 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: |
-            package.json
             .github/actions
             scripts/pr-complexity
           sparse-checkout-cone-mode: false
@@ -127,7 +125,6 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: |
-            package.json
             .github/actions
             scripts/pr-automation-comment
           sparse-checkout-cone-mode: false
@@ -170,7 +167,6 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: |
-            package.json
             .github/actions
             scripts/pr-issue-link
           sparse-checkout-cone-mode: false
