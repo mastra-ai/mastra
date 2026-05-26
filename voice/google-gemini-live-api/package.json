@@ -33,11 +33,13 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@google/genai": "^1.45.0",
+    "@mastra/schema-compat": "workspace:*",
     "google-auth-library": "^10.6.1",
     "ws": "^8.20.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
     "@types/node": "22.19.15",
@@ -49,8 +51,7 @@
     "tsx": "^4.21.0",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "catalog:",
-    "zod-to-json-schema": "^3.25.1"
+    "zod": "catalog:"
   },
   "homepage": "https://mastra.ai",
   "repository": {

@@ -46,15 +46,6 @@ vi.mock('google-auth-library', () => {
   return { GoogleAuth: MockGoogleAuth };
 });
 
-// Mock zod-to-json-schema
-vi.mock('zod-to-json-schema', () => ({
-  zodToJsonSchema: vi.fn().mockImplementation(() => ({
-    type: 'object',
-    properties: {},
-    $schema: 'http://json-schema.org/draft-07/schema#',
-  })),
-}));
-
 describe('GeminiLiveVoice', () => {
   let voice: GeminiLiveVoice;
   let mockWs: any;

@@ -31,9 +31,9 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
+    "@mastra/schema-compat": "workspace:*",
     "openai-realtime-api": "^1.0.8",
-    "ws": "^8.20.0",
-    "zod-to-json-schema": "^3.25.1"
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
