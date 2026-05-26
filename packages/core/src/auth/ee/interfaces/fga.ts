@@ -246,6 +246,52 @@ export interface FGAResourceTypeInfo {
 }
 
 // ──────────────────────────────────────────────────────────────
+// Authorship Types
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Parameters for registering a resource with authorship support.
+ */
+export interface FGARegisterResourceParams<TUser = unknown> {
+  /** The user creating the resource */
+  user: TUser;
+  /** Mastra resource type (agent, workflow, thread) */
+  resourceType: string;
+  /** Resource ID (externalId in WorkOS) */
+  resourceId: string;
+  /** Human-readable name */
+  name: string;
+  /** Optional parent resource for hierarchy */
+  parentResource?: { type: string; id: string };
+  /** Override: skip author role assignment */
+  skipAuthorship?: boolean;
+}
+
+/**
+ * Result of registering a resource with authorship.
+ */
+export interface FGARegistrationResult {
+  /** The created FGA resource (null if type doesn't exist in WorkOS) */
+  resource: FGAResource | null;
+  /** The author role assignment (null if authorship disabled or no author role) */
+  authorAssignment: FGARoleAssignment | null;
+  /** Warnings (e.g., "resource type not found", "author role not found") */
+  warnings: string[];
+}
+
+/**
+ * Authorship configuration for FGA provider.
+ */
+export interface FGAAuthorshipConfig {
+  /** Enable automatic author role assignment on resource creation */
+  enabled: boolean;
+  /** Role to assign to creator (default: 'author', fallbacks: 'owner', 'admin', 'editor') */
+  authorRole?: string;
+  /** Fallback roles to try if authorRole not found */
+  fallbackRoles?: string[];
+}
+
+// ──────────────────────────────────────────────────────────────
 // Provider Interface (read-only checks)
 // ──────────────────────────────────────────────────────────────
 
@@ -418,4 +464,30 @@ export interface IFGAManager<TUser = unknown> extends IFGAProvider<TUser> {
    * @returns Array of resource type info with relations and hierarchy
    */
   describeResourceTypes(organizationId: string): Promise<FGAResourceTypeInfo[]>;
+
+  /**
+   * Register a Mastra resource in FGA with optional authorship support.
+   *
+   * This is the main entry point for integrating FGA with resource creation.
+   * When authorship is enabled, automatically assigns the author role to the creator.
+   *
+   * Behavior:
+   * - If resource type doesn't exist in WorkOS, returns null resource with warning
+   * - If authorship enabled, assigns author role (or fallback) to creator
+   * - If parent specified, creates hierarchical relationship
+   *
+   * @param params - Registration parameters including user, resource type, ID, name
+   * @returns Registration result with resource, author assignment, and warnings
+   */
+  registerResource(params: FGARegisterResourceParams<TUser>): Promise<FGARegistrationResult>;
+
+  /**
+   * Check if a resource type exists in the FGA schema.
+   * Uses cached describeResourceTypes() result for efficiency.
+   *
+   * @param organizationId - The organization to query
+   * @param resourceTypeSlug - The resource type to check
+   * @returns True if the type exists (has roles or instances)
+   */
+  hasResourceType(organizationId: string, resourceTypeSlug: string): Promise<boolean>;
 }
