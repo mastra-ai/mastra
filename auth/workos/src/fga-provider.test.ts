@@ -51,6 +51,8 @@ const mockAuthorization = (globalThis as any).__mockAuthorization;
 
 const testUser = {
   id: 'user-1',
+  workosId: 'user_01234567890',
+  organizationId: 'org-123',
   organizationMembershipId: 'om-123',
   teamId: 'team-1',
 };
@@ -834,6 +836,290 @@ describe('MastraFGAWorkos', () => {
       expect(mockAuthorization.listResources).toHaveBeenCalledTimes(2);
       expect(result).toHaveLength(1);
       expect(result[0].hasInstances).toBe(true);
+    });
+  });
+
+  describe('registerResource', () => {
+    let fgaWithAuthorship: MastraFGAWorkos;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      fgaWithAuthorship = new MastraFGAWorkos({
+        apiKey: 'test-key',
+        clientId: 'test-client',
+        organizationId: 'org-123',
+        authorship: {
+          enabled: true,
+          authorRole: 'author',
+          fallbackRoles: ['owner', 'admin', 'editor'],
+        },
+      });
+    });
+
+    it('should register resource and assign author role when type and role exist', async () => {
+      // Mock describeResourceTypes
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({
+        data: [
+          { slug: 'author', resourceTypeSlug: 'agent', type: 'OrganizationRole' },
+          { slug: 'viewer', resourceTypeSlug: 'agent', type: 'EnvironmentRole' },
+        ],
+      });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      // Mock createResource
+      mockAuthorization.createResource.mockResolvedValue({
+        id: 'fga-agent-1',
+        resourceTypeSlug: 'agent',
+        externalId: 'my-agent',
+        name: 'My Agent',
+        organizationId: 'org-123',
+      });
+
+      // Mock assignRole
+      mockAuthorization.assignRole.mockResolvedValue({
+        id: 'role-assignment-1',
+        role: { slug: 'author', id: 'role-1' },
+        resource: {
+          id: 'fga-agent-1',
+          externalId: 'my-agent',
+          resourceTypeSlug: 'agent',
+        },
+      });
+
+      const result = await fgaWithAuthorship.registerResource({
+        user: testUser,
+        resourceType: 'agent',
+        resourceId: 'my-agent',
+        name: 'My Agent',
+      });
+
+      expect(result.resource).not.toBeNull();
+      expect(result.resource?.id).toBe('fga-agent-1');
+      expect(result.authorAssignment).not.toBeNull();
+      expect(result.authorAssignment?.role?.slug).toBe('author');
+      expect(result.warnings).toHaveLength(0);
+    });
+
+    it('should use fallback role when author role not found', async () => {
+      // Mock describeResourceTypes - no 'author' role, but 'editor' exists
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({
+        data: [{ slug: 'editor', resourceTypeSlug: 'agent', type: 'EnvironmentRole' }],
+      });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      // Mock createResource
+      mockAuthorization.createResource.mockResolvedValue({
+        id: 'fga-agent-1',
+        resourceTypeSlug: 'agent',
+        externalId: 'my-agent',
+        name: 'My Agent',
+        organizationId: 'org-123',
+      });
+
+      // Mock assignRole
+      mockAuthorization.assignRole.mockResolvedValue({
+        id: 'role-assignment-1',
+        role: { slug: 'editor', id: 'role-1' },
+        resource: {
+          id: 'fga-agent-1',
+          externalId: 'my-agent',
+          resourceTypeSlug: 'agent',
+        },
+      });
+
+      const result = await fgaWithAuthorship.registerResource({
+        user: testUser,
+        resourceType: 'agent',
+        resourceId: 'my-agent',
+        name: 'My Agent',
+      });
+
+      expect(result.resource).not.toBeNull();
+      expect(result.authorAssignment).not.toBeNull();
+      expect(result.authorAssignment?.role?.slug).toBe('editor');
+      expect(result.warnings).toContainEqual(expect.stringContaining("Using 'editor' instead"));
+    });
+
+    it('should return null resource and warning when type not found', async () => {
+      // Mock describeResourceTypes - empty, no types
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({ data: [] });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      const result = await fgaWithAuthorship.registerResource({
+        user: testUser,
+        resourceType: 'agent',
+        resourceId: 'my-agent',
+        name: 'My Agent',
+      });
+
+      expect(result.resource).toBeNull();
+      expect(result.authorAssignment).toBeNull();
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toContain("Resource type 'agent' not found");
+    });
+
+    it('should skip authorship when skipAuthorship is true', async () => {
+      // Mock describeResourceTypes
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({
+        data: [{ slug: 'author', resourceTypeSlug: 'agent', type: 'OrganizationRole' }],
+      });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      // Mock createResource
+      mockAuthorization.createResource.mockResolvedValue({
+        id: 'fga-agent-1',
+        resourceTypeSlug: 'agent',
+        externalId: 'my-agent',
+        name: 'My Agent',
+        organizationId: 'org-123',
+      });
+
+      const result = await fgaWithAuthorship.registerResource({
+        user: testUser,
+        resourceType: 'agent',
+        resourceId: 'my-agent',
+        name: 'My Agent',
+        skipAuthorship: true,
+      });
+
+      expect(result.resource).not.toBeNull();
+      expect(result.authorAssignment).toBeNull();
+      expect(mockAuthorization.assignRole).not.toHaveBeenCalled();
+    });
+
+    it('should create resource with parent hierarchy', async () => {
+      // Mock describeResourceTypes with team and agent types
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({
+        data: [
+          { slug: 'author', resourceTypeSlug: 'agent', type: 'OrganizationRole' },
+          { slug: 'admin', resourceTypeSlug: 'team', type: 'OrganizationRole' },
+        ],
+      });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [{ id: 'fga-team-1', resourceTypeSlug: 'team', externalId: 'sales-team' }],
+        listMetadata: { after: undefined },
+      });
+
+      // Mock createResource
+      mockAuthorization.createResource.mockResolvedValue({
+        id: 'fga-agent-1',
+        resourceTypeSlug: 'agent',
+        externalId: 'my-agent',
+        name: 'My Agent',
+        organizationId: 'org-123',
+        parentResourceId: 'fga-team-1',
+      });
+
+      // Mock assignRole
+      mockAuthorization.assignRole.mockResolvedValue({
+        id: 'role-assignment-1',
+        role: { slug: 'author', id: 'role-1' },
+        resource: {
+          id: 'fga-agent-1',
+          externalId: 'my-agent',
+          resourceTypeSlug: 'agent',
+        },
+      });
+
+      const result = await fgaWithAuthorship.registerResource({
+        user: testUser,
+        resourceType: 'agent',
+        resourceId: 'my-agent',
+        name: 'My Agent',
+        parentResource: { type: 'team', id: 'sales-team' },
+      });
+
+      expect(result.resource).not.toBeNull();
+      expect(mockAuthorization.createResource).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parentResourceId: 'fga-team-1',
+        }),
+      );
+      expect(result.warnings).toHaveLength(0);
+    });
+
+    it('should warn when parent resource not found', async () => {
+      // Mock describeResourceTypes with team and agent types
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({
+        data: [
+          { slug: 'author', resourceTypeSlug: 'agent', type: 'OrganizationRole' },
+          { slug: 'admin', resourceTypeSlug: 'team', type: 'OrganizationRole' },
+        ],
+      });
+      // No team resources exist
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      // Mock createResource (without parent)
+      mockAuthorization.createResource.mockResolvedValue({
+        id: 'fga-agent-1',
+        resourceTypeSlug: 'agent',
+        externalId: 'my-agent',
+        name: 'My Agent',
+        organizationId: 'org-123',
+      });
+
+      // Mock assignRole
+      mockAuthorization.assignRole.mockResolvedValue({
+        id: 'role-assignment-1',
+        role: { slug: 'author', id: 'role-1' },
+        resource: {
+          id: 'fga-agent-1',
+          externalId: 'my-agent',
+          resourceTypeSlug: 'agent',
+        },
+      });
+
+      const result = await fgaWithAuthorship.registerResource({
+        user: testUser,
+        resourceType: 'agent',
+        resourceId: 'my-agent',
+        name: 'My Agent',
+        parentResource: { type: 'team', id: 'nonexistent-team' },
+      });
+
+      expect(result.resource).not.toBeNull();
+      expect(result.warnings).toContainEqual(expect.stringContaining('not found in FGA'));
+    });
+  });
+
+  describe('hasResourceType', () => {
+    it('should return true when type exists', async () => {
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({
+        data: [{ slug: 'viewer', resourceTypeSlug: 'agent', type: 'EnvironmentRole' }],
+      });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      const result = await fga.hasResourceType('org-123', 'agent');
+      expect(result).toBe(true);
+    });
+
+    it('should return false when type does not exist', async () => {
+      mockAuthorization.listOrganizationRoles.mockResolvedValue({ data: [] });
+      mockAuthorization.listResources.mockResolvedValue({
+        data: [],
+        listMetadata: { after: undefined },
+      });
+
+      const result = await fga.hasResourceType('org-123', 'nonexistent');
+      expect(result).toBe(false);
     });
   });
 });

@@ -12,6 +12,8 @@ import type {
   FGACheckParams,
   FGAResource,
   FGAResourceTypeInfo,
+  FGARegisterResourceParams,
+  FGARegistrationResult,
   FGACreateResourceParams,
   FGAUpdateResourceParams,
   FGADeleteResourceParams,
@@ -111,11 +113,18 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   private permissionMapping: Record<string, string>;
   private logger?: IMastraLogger;
   private warnedResources = new Set<string>(); // Track warnings to avoid spam
+  private resourceTypesCache?: { types: FGAResourceTypeInfo[]; timestamp: number };
+  private readonly RESOURCE_TYPES_CACHE_TTL = 60_000; // 1 minute cache
   readonly requireForProtectedRoutes?: boolean;
   readonly auditProtectedRoutes?: boolean | 'warn' | 'error';
   readonly resolveRouteFGA?: MastraFGAWorkosOptions['resolveRouteFGA'];
   readonly validatePermissions?: MastraFGAWorkosOptions['validatePermissions'];
   readonly publicByDefault: boolean;
+  readonly authorship?: {
+    enabled: boolean;
+    authorRole: string;
+    fallbackRoles: string[];
+  };
 
   constructor(options: MastraFGAWorkosOptions) {
     const apiKey = options.apiKey ?? process.env.WORKOS_API_KEY;
@@ -138,6 +147,15 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     this.resolveRouteFGA = options.resolveRouteFGA;
     this.validatePermissions = options.validatePermissions;
     this.publicByDefault = options.publicByDefault ?? false;
+
+    // Authorship configuration
+    if (options.authorship?.enabled) {
+      this.authorship = {
+        enabled: true,
+        authorRole: options.authorship.authorRole || 'author',
+        fallbackRoles: options.authorship.fallbackRoles || ['owner', 'admin', 'editor'],
+      };
+    }
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -673,8 +691,15 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
    * - Types with no roles AND no instances won't appear
    * - Parent type derivation depends on existing instances
    * - Relations are role slugs, not OpenFGA-style relation tuples
+   *
+   * Results are cached for 1 minute to reduce API calls.
    */
   async describeResourceTypes(organizationId: string): Promise<FGAResourceTypeInfo[]> {
+    // Check cache first
+    if (this.resourceTypesCache && Date.now() - this.resourceTypesCache.timestamp < this.RESOURCE_TYPES_CACHE_TTL) {
+      return this.resourceTypesCache.types;
+    }
+
     // Fetch all resources (paginated)
     const allResources: any[] = [];
     let resourcesAfter: string | undefined;
@@ -739,13 +764,168 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       }
     }
 
-    // Convert to array format
-    return [...types.values()].map(t => ({
+    // Convert to array format and cache
+    const result = [...types.values()].map(t => ({
       slug: t.slug,
       relations: [...t.relations],
       customRelations: [...t.customRelations],
       parentResourceTypeSlugs: [...t.parentResourceTypeSlugs],
       hasInstances: t.hasInstances,
     }));
+
+    // Cache the result
+    this.resourceTypesCache = { types: result, timestamp: Date.now() };
+
+    return result;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Authorship Support
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Check if a resource type exists in the FGA schema (cached).
+   */
+  async hasResourceType(organizationId: string, resourceTypeSlug: string): Promise<boolean> {
+    const types = await this.describeResourceTypes(organizationId);
+    return types.some(t => t.slug === resourceTypeSlug);
+  }
+
+  /**
+   * Register a Mastra resource in FGA with optional authorship support.
+   *
+   * This method:
+   * 1. Checks if the resource type exists in WorkOS
+   * 2. Creates the FGA resource (with optional parent for hierarchy)
+   * 3. Auto-assigns the author role if authorship is enabled
+   *
+   * @returns Registration result with resource, author assignment, and warnings
+   */
+  async registerResource(params: FGARegisterResourceParams<WorkOSUser>): Promise<FGARegistrationResult> {
+    const { user, resourceType, resourceId, name, parentResource, skipAuthorship } = params;
+    const warnings: string[] = [];
+
+    // Get organization ID from user or provider config
+    const organizationId = user.organizationId || this.organizationId;
+    if (!organizationId) {
+      warnings.push(
+        `Cannot register resource: no organizationId available. ` +
+          `Ensure user has organizationId set or FGA provider has organizationId configured.`,
+      );
+      return { resource: null, authorAssignment: null, warnings };
+    }
+
+    // 1. Check if resource type exists in WorkOS
+    const types = await this.describeResourceTypes(organizationId);
+    const typeInfo = types.find(t => t.slug === resourceType);
+
+    if (!typeInfo) {
+      warnings.push(
+        `Resource type '${resourceType}' not found in WorkOS (or has no roles defined). ` +
+          `Resource '${name}' will be publicly accessible (no FGA protection). ` +
+          `To enable protection, create '${resourceType}' resource type with roles in WorkOS Dashboard.`,
+      );
+      this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
+      return { resource: null, authorAssignment: null, warnings };
+    }
+
+    // 2. Resolve parent resource ID if hierarchical
+    let parentResourceId: string | undefined;
+    if (parentResource) {
+      const parentTypeInfo = types.find(t => t.slug === parentResource.type);
+      if (parentTypeInfo) {
+        // Look up the parent's FGA resource by externalId
+        const parentResources = await this.listResources({
+          organizationId,
+          resourceTypeSlug: parentResource.type,
+        });
+        const parent = parentResources.find(r => r.externalId === parentResource.id);
+        parentResourceId = parent?.id;
+
+        if (!parentResourceId) {
+          warnings.push(
+            `Parent ${parentResource.type} '${parentResource.id}' not found in FGA. ` +
+              `Resource will be created without parent hierarchy.`,
+          );
+          this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
+        }
+      } else {
+        warnings.push(
+          `Parent resource type '${parentResource.type}' not found in WorkOS. ` +
+            `Resource will be created without parent hierarchy.`,
+        );
+        this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
+      }
+    }
+
+    // 3. Create the FGA resource
+    const resource = await this.createResource({
+      resourceTypeSlug: resourceType,
+      externalId: resourceId,
+      name,
+      organizationId,
+      parentResourceId,
+    });
+
+    // 4. Auto-assign author role (if enabled and role exists)
+    let authorAssignment: FGARoleAssignment | null = null;
+
+    if (!skipAuthorship && this.authorship?.enabled) {
+      const membershipId = this.resolveOrganizationMembershipId(user);
+      if (!membershipId) {
+        warnings.push(
+          `Cannot assign author role: no organization membership ID found for user. ` +
+            `Ensure fetchMemberships is enabled on MastraAuthWorkos.`,
+        );
+        this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
+      } else {
+        // Find a suitable role to assign
+        const authorRoleName = this.authorship.authorRole;
+        const hasAuthorRole = typeInfo.relations.includes(authorRoleName);
+
+        if (hasAuthorRole) {
+          // Assign the configured author role
+          authorAssignment = await this.assignRole({
+            organizationMembershipId: membershipId,
+            resourceId: resource.id,
+            resourceTypeSlug: resourceType,
+            roleSlug: authorRoleName,
+          });
+
+          this.logger?.info(
+            `[FGA] Registered ${resourceType} '${name}' with '${authorRoleName}' role assigned to user.`,
+          );
+        } else {
+          // Try fallback roles
+          const fallbackRole = this.authorship.fallbackRoles.find(r => typeInfo.relations.includes(r));
+
+          if (fallbackRole) {
+            authorAssignment = await this.assignRole({
+              organizationMembershipId: membershipId,
+              resourceId: resource.id,
+              resourceTypeSlug: resourceType,
+              roleSlug: fallbackRole,
+            });
+
+            warnings.push(
+              `Role '${authorRoleName}' not found for '${resourceType}'. ` + `Using '${fallbackRole}' instead.`,
+            );
+            this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
+            this.logger?.info(
+              `[FGA] Registered ${resourceType} '${name}' with '${fallbackRole}' role assigned to user.`,
+            );
+          } else {
+            warnings.push(
+              `No author/owner role found for '${resourceType}'. ` +
+                `Available roles: ${typeInfo.relations.join(', ')}. ` +
+                `User will not have automatic access to their created resource.`,
+            );
+            this.logger?.warn(`[FGA] ${warnings[warnings.length - 1]}`);
+          }
+        }
+      }
+    }
+
+    return { resource, authorAssignment, warnings };
   }
 }
