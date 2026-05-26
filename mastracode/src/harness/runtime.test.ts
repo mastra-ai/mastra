@@ -575,6 +575,7 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_complete', policy: 'allow' });
     expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_check', policy: 'allow' });
     expect(setPolicy).toHaveBeenCalledWith({ toolName: 'execute_command', policy: 'ask' });
+    expect((runtime as any).filterActiveTools(['task_write', 'execute_command'])).toEqual(['task_write', 'execute_command']);
 
     await runtime.destroy();
   });

@@ -182,6 +182,28 @@ describe('Session — suspend capture on message()', () => {
     expect(session.getDisplayState().pending?.kind).toBe('tool-approval');
   });
 
+  it('persists per-turn yolo on pendingResume and restores it for resume', async () => {
+    const { harness, agent } = setup();
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      runId: 'run-yolo',
+      suspendPayload: { toolCallId: 'tc-yolo', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const first = await session.message({ content: 'do it', yolo: true });
+
+    expect(session.getRecord().pendingResume).toMatchObject({ yolo: true });
+    agent.enqueueRun({ finishReason: 'stop', runId: first.runId, text: 'done' });
+
+    await session.respondToToolApproval({ approved: true });
+
+    expect(agent.resumeCalls).toHaveLength(1);
+    expect(agent.resumeCalls[0]!.options.requireToolApproval).toBeUndefined();
+    const harnessContext = agent.resumeCalls[0]!.options.requestContext.get('harness') as any;
+    expect(harnessContext.resolveToolPermission({ toolName: 'shell' })).toBe('allow');
+  });
+
   it('classifies as "tool-suspension" when the chunk carries a suspendPayload field', async () => {
     const { harness, agent } = setup();
     agent.enqueueRun({

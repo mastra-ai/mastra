@@ -1752,6 +1752,7 @@ export class MastraCodeHarnessRuntime<TState extends Record<string, unknown>> {
   }
 
   private isToolDenied(toolName: string): boolean {
+    if ((ALWAYS_ALLOW_TOOL_NAMES as readonly string[]).includes(toolName)) return false;
     const rules =
       (this.state.permissionRules as
         | { categories?: Record<string, PermissionPolicy>; tools?: Record<string, PermissionPolicy> }

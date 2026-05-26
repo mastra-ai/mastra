@@ -3924,7 +3924,7 @@ export class Session {
         const full = result as FullOutput<unknown>;
         this._recordTurnCompletion(full);
         await Promise.race([
-          this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId),
+          this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId, opts.yolo),
           activeTurnWaiter.promise,
         ]);
         this._emitTurnEvent({
@@ -4223,7 +4223,7 @@ export class Session {
         })
         .then(async full => {
           await Promise.race([
-            this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId),
+            this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId, opts.yolo),
             activeTurnWaiter.promise,
           ]);
           this._emitTurnEvent({
@@ -4299,7 +4299,7 @@ export class Session {
         }
       }
       await Promise.race([
-        this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId),
+        this._maybeCaptureSuspend(full, undefined, effectiveModeId, effectiveModelId, opts.yolo),
         activeTurnWaiter.promise,
       ]);
       this._emitTurnEvent({
@@ -5474,6 +5474,7 @@ export class Session {
     queuedItemId = this._currentQueuedItemId,
     modeId = this._record.modeId,
     modelId = this._modelIdForQueuedItem(queuedItemId),
+    yolo = ((this._record.state ?? {}) as { yolo?: unknown }).yolo === true,
   ): Promise<void> {
     if (full.finishReason !== 'suspended') return;
     const payload = full.suspendPayload as
@@ -5488,6 +5489,13 @@ export class Session {
       // suspend() (question, plan approval, sandbox access). The later
       // generic suspended payload is only the transport signal; do not
       // downgrade the explicit pending kind or emit a duplicate prompt.
+      if (yolo === true && existing.yolo !== true) {
+        await this._flushUpdate(prev => {
+          const current = prev.pendingResume;
+          if (!current || current.runId !== full.runId || current.toolCallId !== payload.toolCallId) return prev;
+          return { ...prev, pendingResume: { ...current, yolo: true } };
+        });
+      }
       return;
     }
     const pending: PendingResume = {
@@ -5499,6 +5507,7 @@ export class Session {
       source: 'parent',
       requestedAt: Date.now(),
       ...(queuedItemId !== undefined ? { queuedItemId } : {}),
+      ...(yolo === true ? { yolo: true } : {}),
       modeId,
       runtimeDependencies: this._harness._runtimeDependenciesForMode(modeId, modelId),
       payload: this._buildResumePayload(kind, payload),
@@ -7199,12 +7208,13 @@ export class Session {
       assertResumedTurnNotDeleted();
       const mode = this._harness._getMode(resumeModeId);
       const toolsets = this._buildToolsets(mode, undefined);
+      const resumeYolo = pending.yolo === true || ((this._record.state ?? {}) as { yolo?: unknown }).yolo === true;
       const requestContext = await Promise.race([
         this._buildRequestContext({
           modeId: resumeModeId,
           modelId: resumeRuntimeDependencies.modelId ?? this._record.modelId,
           abortSignal: turnAbortController.signal,
-          yolo: ((this._record.state ?? {}) as { yolo?: unknown }).yolo === true,
+          yolo: resumeYolo,
         }),
         activeTurnWaiter.promise,
       ]);
@@ -7212,7 +7222,7 @@ export class Session {
         memory: { thread: this.threadId, resource: this.resourceId },
         requestContext,
         ...(toolsets ? { toolsets } : {}),
-        ...(this._shouldRequireToolApproval() ? { requireToolApproval: true } : {}),
+        ...(this._shouldRequireToolApproval(resumeYolo) ? { requireToolApproval: true } : {}),
         runId: pending.runId,
         toolCallId: pending.toolCallId,
         abortSignal: turnAbortController.signal,
@@ -7330,7 +7340,13 @@ export class Session {
       // Mirror message()'s post-run hook so the next respond* call sees the
       // new pending record.
       await Promise.race([
-        this._maybeCaptureSuspend(full, pendingQueuedItemId, resumeModeId, resumeRuntimeDependencies.modelId),
+        this._maybeCaptureSuspend(
+          full,
+          pendingQueuedItemId,
+          resumeModeId,
+          resumeRuntimeDependencies.modelId,
+          pending.yolo === true || ((this._record.state ?? {}) as { yolo?: unknown }).yolo === true,
+        ),
         activeTurnWaiter.promise,
       ]);
 
@@ -8974,7 +8990,7 @@ export class Session {
   ): Promise<FullOutput<unknown>> {
     if (!opts.skipTokenAccounting) this._recordTurnCompletion(full);
     await this._raceActiveTurnWaiter(
-      this._maybeCaptureSuspend(full, item.id, modeId ?? item.mode ?? this._record.modeId),
+      this._maybeCaptureSuspend(full, item.id, modeId ?? item.mode ?? this._record.modeId, undefined, item.yolo),
       activeTurnWaiter,
     );
     this._emitTurnEvent({
@@ -9070,7 +9086,13 @@ export class Session {
   }
 
   private async _registerQuestion(
-    params: RegisterQuestionParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
+    params: RegisterQuestionParams & {
+      runId?: string;
+      toolCallId?: string;
+      modeId?: string;
+      modelId?: string;
+      yolo?: boolean;
+    },
   ): Promise<void> {
     this._assertOpenForTurn('ctx.registerQuestion');
     if (typeof params.questionId !== 'string' || params.questionId.length === 0) {
@@ -9099,6 +9121,7 @@ export class Session {
       toolName: ASK_USER_TOOL_NAME,
       source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
       requestedAt: Date.now(),
+      ...(params.yolo === true ? { yolo: true } : {}),
       modeId: params.modeId ?? this._record.modeId,
       runtimeDependencies: this._harness._runtimeDependenciesForMode(
         params.modeId ?? this._record.modeId,
@@ -9133,7 +9156,13 @@ export class Session {
   }
 
   private async _registerSandboxAccess(
-    params: RegisterSandboxAccessParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
+    params: RegisterSandboxAccessParams & {
+      runId?: string;
+      toolCallId?: string;
+      modeId?: string;
+      modelId?: string;
+      yolo?: boolean;
+    },
   ): Promise<void> {
     this._assertOpenForTurn('ctx.registerSandboxAccess');
     if (typeof params.requestId !== 'string' || params.requestId.length === 0) {
@@ -9173,6 +9202,7 @@ export class Session {
       toolCallId,
       source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
       requestedAt: Date.now(),
+      ...(params.yolo === true ? { yolo: true } : {}),
       modeId,
       runtimeDependencies: this._harness._runtimeDependenciesForMode(
         modeId,
@@ -9224,7 +9254,13 @@ export class Session {
   }
 
   private async _registerPlanApproval(
-    params: RegisterPlanApprovalParams & { runId?: string; toolCallId?: string; modeId?: string; modelId?: string },
+    params: RegisterPlanApprovalParams & {
+      runId?: string;
+      toolCallId?: string;
+      modeId?: string;
+      modelId?: string;
+      yolo?: boolean;
+    },
   ): Promise<void> {
     this._assertOpenForTurn('ctx.registerPlanApproval');
     if (typeof params.planId !== 'string' || params.planId.length === 0) {
@@ -9251,6 +9287,7 @@ export class Session {
       toolName: SUBMIT_PLAN_TOOL_NAME,
       source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
       requestedAt: Date.now(),
+      ...(params.yolo === true ? { yolo: true } : {}),
       modeId: submittingModeId,
       runtimeDependencies: this._harness._runtimeDependenciesForMode(
         submittingModeId,
@@ -9767,11 +9804,12 @@ export class Session {
         session._emitTurnEvent(event as EmitInput);
       }) as HarnessRequestContext<unknown>['emitEvent'],
       abortSignal: turn.abortSignal,
-      registerQuestion: params => session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
+      registerQuestion: params =>
+        session._registerQuestion({ ...params, modeId: turn.modeId, modelId: turn.modelId, yolo: turn.yolo }),
       registerPlanApproval: params =>
-        session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
+        session._registerPlanApproval({ ...params, modeId: turn.modeId, modelId: turn.modelId, yolo: turn.yolo }),
       registerSandboxAccess: params =>
-        session._registerSandboxAccess({ ...params, modeId: turn.modeId, modelId: turn.modelId }),
+        session._registerSandboxAccess({ ...params, modeId: turn.modeId, modelId: turn.modelId, yolo: turn.yolo }),
       resolveToolPermission: params =>
         turn.yolo === true
           ? 'allow'
