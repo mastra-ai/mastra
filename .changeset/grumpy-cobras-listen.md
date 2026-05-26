@@ -2,8 +2,10 @@
 '@mastra/core': patch
 ---
 
-**Added `Agent.__setManagedBrowser()` so controllers can update an agent's browser without claiming ownership.**
+**Fixed browser propagation from controllers (CLI commands, harness wrappers) silently losing effect on the next agent run.**
 
-Higher-level callers (workspace propagation, the MastraCode `/browser` command, custom harnesses) often need to push a new browser instance onto an agent while still respecting agents that were configured with their own browser at construction. `Agent.setBrowser()` always flips `hasOwnBrowser()` to `true`, which made repeated controller updates impossible to distinguish from an explicit user setting.
+Higher-level controllers that update an agent's browser were not stable across the workspace reconciliation that runs before each agent invocation: the new browser was either cleared by `getWorkspace()` when no workspace was configured, or overwritten by the workspace's own browser slot when set. After the update, the controller's browser sticks across subsequent runs, and dedicated controller calls can update the browser repeatedly without being mistaken for an explicit user configuration.
 
-`__setManagedBrowser()` updates the agent's browser only when the agent does not own one explicitly, and leaves `hasOwnBrowser()` unchanged — mirroring the existing workspace-browser precedence rule. This is an internal API for harness/runtime integrators; application code should keep using `setBrowser()`.
+Agents constructed with their own browser, or updated via `Agent.setBrowser()`, continue to win against any controller update — the precedence rule is unchanged.
+
+`Harness.setBrowser()` and the harness's per-agent service propagation now route through the same controller-managed path, so harness-level browser updates inherit the same stability and stop double-applying when a single agent is registered across multiple modes.

@@ -278,5 +278,39 @@ describe('Agent browser integration', () => {
       agent.__setManagedBrowser(managed);
       expect(agent.browser).toBe(explicit);
     });
+
+    it('survives subsequent getWorkspace() calls when no workspace is configured', async () => {
+      const managed = createMockBrowser([], { id: 'managed' });
+      const agent = new Agent({
+        id: 'test-agent' as const,
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+      });
+
+      agent.__setManagedBrowser(managed);
+      expect(agent.browser).toBe(managed);
+
+      // Without a managed-ownership flag, the workspace reconciliation in
+      // getWorkspace() would clear the browser the controller just set.
+      await agent.getWorkspace();
+      expect(agent.browser).toBe(managed);
+    });
+
+    it('survives a workspace that has no browser of its own', async () => {
+      const managed = createMockBrowser([], { id: 'managed' });
+      const workspaceWithoutBrowser = { browser: undefined, __setLogger: () => {} } as any;
+      const agent = new Agent({
+        id: 'test-agent' as const,
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+        workspace: () => workspaceWithoutBrowser,
+      });
+
+      agent.__setManagedBrowser(managed);
+      await agent.getWorkspace();
+      expect(agent.browser).toBe(managed);
+    });
   });
 });

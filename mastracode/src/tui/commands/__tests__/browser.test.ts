@@ -1,3 +1,4 @@
+import { Agent } from '@mastra/core/agent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const settingsMock = vi.hoisted(() => ({
@@ -175,6 +176,47 @@ describe('/browser apply propagation', () => {
     await handleBrowserCommand(ctx, ['off']);
 
     expect(stableAgent.__setManagedBrowser).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates a real Agent instance through the managed-browser path on /browser on', async () => {
+    const realAgent = new Agent({
+      id: 'real-agent',
+      name: 'Real Agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+    });
+    settingsMock.loadSettings.mockReturnValue(enabledSettings());
+    settingsMock.createBrowserFromSettings.mockResolvedValueOnce({ name: 'real-browser' });
+    const { ctx } = createCtx([{ id: 'mode-a', agent: realAgent }]);
+
+    await handleBrowserCommand(ctx, ['on']);
+
+    expect(realAgent.browser).toEqual({ name: 'real-browser' });
+    expect(realAgent.hasOwnBrowser()).toBe(false);
+
+    settingsMock.loadSettings.mockReturnValue(disabledSettings());
+    await handleBrowserCommand(ctx, ['off']);
+
+    expect(realAgent.browser).toBeUndefined();
+    expect(realAgent.hasOwnBrowser()).toBe(false);
+  });
+
+  it('leaves a constructor-owned real Agent untouched on /browser off', async () => {
+    const explicit = { providerType: 'sdk', id: 'user-browser', getTools: () => ({}) } as any;
+    const realAgent = new Agent({
+      id: 'real-agent',
+      name: 'Real Agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini' as any,
+      browser: explicit,
+    });
+    settingsMock.loadSettings.mockReturnValue(disabledSettings());
+    const { ctx } = createCtx([{ id: 'mode-a', agent: realAgent }]);
+
+    await handleBrowserCommand(ctx, ['off']);
+
+    expect(realAgent.browser).toBe(explicit);
+    expect(realAgent.hasOwnBrowser()).toBe(true);
   });
 
   it('treats dynamic-mode agents resolved to fresh instances as distinct (no dedupe)', async () => {

@@ -350,6 +350,7 @@ export class Agent<
   #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   #browser?: MastraBrowser;
   #hasExplicitBrowser = false;
+  #hasManagedBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
@@ -846,19 +847,26 @@ export class Agent<
   }
 
   /**
-   * Updates the browser instance from a higher-level controller (workspace,
-   * CLI `/browser` command, or harness) without claiming explicit ownership.
+   * Updates the browser instance from a higher-level controller (CLI
+   * `/browser` command, harness wrapper, or future workspace-derived setter)
+   * without claiming explicit ownership.
    *
    * Unlike `setBrowser()`, this leaves `hasOwnBrowser()` unchanged so the
    * same caller can update the browser repeatedly across the agent's
    * lifetime, while agents constructed with their own browser keep it.
-   * Mirrors the precedence rule used by `#setBrowserFromWorkspace`.
+   *
+   * The managed browser is sticky against later workspace reconciliation:
+   * `#setBrowserFromWorkspace` skips the agent once any managed value has
+   * been written. Without that, a controller-set browser would be wiped on
+   * the next `getWorkspace()` call when the workspace has no browser of its
+   * own.
    *
    * @internal Used by Harness and MastraCode runtime/slash-command flows.
    */
   __setManagedBrowser(browser: MastraBrowser | undefined): void {
     if (this.#hasExplicitBrowser) return;
     this.#browser = browser;
+    this.#hasManagedBrowser = true;
   }
 
   /**
@@ -1687,7 +1695,7 @@ export class Agent<
 
       if (!resolvedWorkspace) {
         // Clear derived browser when factory returns no workspace
-        if (!this.#hasExplicitBrowser) {
+        if (!this.#hasExplicitBrowser && !this.#hasManagedBrowser) {
           this.#browser = undefined;
         }
         return undefined;
@@ -1714,7 +1722,7 @@ export class Agent<
     const globalWorkspace = this.#mastra?.getWorkspace();
     if (globalWorkspace) {
       this.#setBrowserFromWorkspace(globalWorkspace);
-    } else if (!this.#hasExplicitBrowser) {
+    } else if (!this.#hasExplicitBrowser && !this.#hasManagedBrowser) {
       // Clear derived browser when no workspace available
       this.#browser = undefined;
     }
@@ -1728,8 +1736,11 @@ export class Agent<
    * @internal
    */
   #setBrowserFromWorkspace(workspace: AnyWorkspace): void {
-    // Skip if agent has an explicitly configured browser (SDK approach takes precedence)
-    if (this.#hasExplicitBrowser) {
+    // Skip if a higher-priority source already owns the browser slot.
+    // Explicit ownership (SDK approach) wins outright; a managed browser
+    // set by a controller (CLI / harness) stays sticky so the workspace
+    // can't silently clear it on the next request.
+    if (this.#hasExplicitBrowser || this.#hasManagedBrowser) {
       return;
     }
 

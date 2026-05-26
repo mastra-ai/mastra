@@ -354,16 +354,22 @@ export class HarnessLegacy<TState = {}> {
   }
 
   /**
-   * Sets or updates the harness-level browser and propagates it to static mode agents.
+   * Sets or updates the harness-level browser and propagates it to static
+   * mode agents. Uses the managed-browser setter so subsequent calls keep
+   * reaching the same agents instead of being mistaken for explicit
+   * user setBrowser() updates, and dedupes shared agent instances.
    */
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
     this.browserFn = undefined;
 
+    const seen = new Set<Agent>();
     for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent || agent.hasOwnBrowser()) continue;
-      agent.setBrowser(browser);
+      if (typeof mode.agent === 'function') continue;
+      const agent = mode.agent;
+      if (seen.has(agent)) continue;
+      seen.add(agent);
+      agent.__setManagedBrowser(browser);
     }
   }
 
@@ -637,8 +643,8 @@ export class HarnessLegacy<TState = {}> {
     if (workspaceForAgents && !agent.hasOwnWorkspace()) {
       agent.__setWorkspace(workspaceForAgents);
     }
-    if (browserForAgents && typeof browserForAgents !== 'function' && !agent.hasOwnBrowser()) {
-      agent.setBrowser(browserForAgents);
+    if (browserForAgents && typeof browserForAgents !== 'function') {
+      agent.__setManagedBrowser(browserForAgents);
     }
     if (this.config.pubsub && !agent.hasOwnPubSub()) {
       agent.__setPubSub(this.config.pubsub);
