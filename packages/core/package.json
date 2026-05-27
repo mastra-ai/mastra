@@ -807,7 +807,7 @@
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.72",
     "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.89",
     "@ast-grep/napi": "^0.40.5",
-    "@babel/core": "^7.29.0",
+    "@babel/core": "^7.29.7",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
