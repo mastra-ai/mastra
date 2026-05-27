@@ -1,5 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
@@ -45,15 +46,6 @@ vi.mock('google-auth-library', () => {
 
   return { GoogleAuth: MockGoogleAuth };
 });
-
-// Mock zod-to-json-schema
-vi.mock('zod-to-json-schema', () => ({
-  zodToJsonSchema: vi.fn().mockImplementation(() => ({
-    type: 'object',
-    properties: {},
-    $schema: 'http://json-schema.org/draft-07/schema#',
-  })),
-}));
 
 describe('GeminiLiveVoice', () => {
   let voice: GeminiLiveVoice;
@@ -1111,6 +1103,96 @@ describe('GeminiLiveVoice', () => {
       expect(usage.outputTokens).toBe(2);
       expect(usage.totalTokens).toBe(3);
       expect(['audio', 'text', 'video']).toContain(usage.modality);
+    });
+  });
+
+  describe('Zod schema → JSON Schema for tool parameters', () => {
+    async function captureToolParameters(zodSchema: unknown): Promise<any> {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+      v.addTools({
+        probe: {
+          id: 'probe',
+          description: 'probe tool',
+          inputSchema: zodSchema,
+          execute: vi.fn() as any,
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      const toolEntry = setupMsg.setup.tools?.[0];
+      // The wire shape (camelCase `functionDeclarations` vs snake_case `function_declarations`) is
+      // tracked separately in #17018; pick whichever container the current setup builder produced.
+      const declarations = toolEntry?.functionDeclarations ?? toolEntry?.function_declarations;
+      return declarations?.[0]?.parameters;
+    }
+
+    it('converts ZodUnion to a real JSON Schema (not the empty fallback)', async () => {
+      const params = await captureToolParameters(z.object({ value: z.union([z.string(), z.number()]) }));
+      const value = params.properties.value;
+      // The old hand-rolled converter dropped unions to `{ type: 'object', properties: {} }`.
+      // zod-to-json now emits a union via `anyOf` / `oneOf`. We don't pin the exact keyword —
+      // both forms describe "string or number" faithfully and are what we care about.
+      const branches = value.anyOf ?? value.oneOf;
+      expect(branches).toBeDefined();
+      expect(branches.map((b: any) => b.type).sort()).toEqual(['number', 'string']);
+    });
+
+    it('converts ZodLiteral to a const-style JSON Schema', async () => {
+      const params = await captureToolParameters(z.object({ mode: z.literal('strict') }));
+      const mode = params.properties.mode;
+      // Faithful conversion preserves the literal value via `const` or single-element `enum`.
+      const literalValue =
+        mode.const ?? (Array.isArray(mode.enum) && mode.enum.length === 1 ? mode.enum[0] : undefined);
+      expect(literalValue).toBe('strict');
+    });
+
+    it('converts ZodDiscriminatedUnion (tagged union) to a branched JSON Schema', async () => {
+      const params = await captureToolParameters(
+        z.object({
+          event: z.discriminatedUnion('kind', [
+            z.object({ kind: z.literal('click'), x: z.number() }),
+            z.object({ kind: z.literal('hover'), seconds: z.number() }),
+          ]),
+        }),
+      );
+      const event = params.properties.event;
+      const branches = event.anyOf ?? event.oneOf;
+      expect(branches).toBeDefined();
+      expect(branches).toHaveLength(2);
+      // Each branch must be an object with its discriminator + its own payload field — i.e. the
+      // type information actually survived the conversion.
+      for (const branch of branches) {
+        expect(branch.type).toBe('object');
+        expect(Object.keys(branch.properties)).toContain('kind');
+      }
+    });
+
+    it('converts a nullable field to a faithful nullable JSON Schema', async () => {
+      const params = await captureToolParameters(z.object({ note: z.string().nullable() }));
+      const note = params.properties.note;
+      // Accept any faithful encoding (anyOf [string, null]; `type: ['string','null']`; or `nullable: true`).
+      const acceptableNullable =
+        (Array.isArray(note.type) && note.type.includes('null')) ||
+        note.nullable === true ||
+        (Array.isArray(note.anyOf) && note.anyOf.some((b: any) => b.type === 'null'));
+      expect(acceptableNullable).toBe(true);
+    });
+
+    it('passes through a tool that already supplies a JSON Schema in inputSchema unchanged', async () => {
+      const jsonSchema = {
+        type: 'object',
+        properties: { q: { type: 'string' } },
+        required: ['q'],
+      };
+      const params = await captureToolParameters(jsonSchema);
+      expect(params).toEqual(jsonSchema);
     });
   });
 });

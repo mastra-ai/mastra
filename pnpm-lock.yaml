@@ -6807,6 +6807,9 @@ importers:
       '@google/genai':
         specifier: ^1.45.0
         version: 1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(bufferutil@4.1.0)
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../../packages/schema-compat
       google-auth-library:
         specifier: ^10.6.1
         version: 10.6.2
@@ -6853,9 +6856,6 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
-      zod-to-json-schema:
-        specifier: ^3.25.1
-        version: 3.25.1(zod@4.4.3)
 
   voice/inworld:
     dependencies:
