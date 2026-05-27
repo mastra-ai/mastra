@@ -11,7 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
+import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, getSafeBundlerExternals } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
@@ -353,7 +353,7 @@ export async function analyzeBundle(
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
-  const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals].filter(Boolean) as string[];
+  const allExternals = getSafeBundlerExternals(userExternals);
 
   // Collect pino transports detected across all entries
   const detectedPinoTransports = new Set<string>();
@@ -431,7 +431,7 @@ export async function analyzeBundle(
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
       ...bundlerOptions,
-      externals: bundlerOptions?.externals ?? allExternals,
+      externals: bundlerOptions?.externals === true ? true : allExternals,
       isDev,
     },
     projectRoot,
