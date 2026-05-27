@@ -2,4 +2,8 @@
 '@mastra/core': patch
 ---
 
-Fix infinite agentic loop with client tools (no `execute`). When the model finished with `tool-calls` and every called tool was a client tool — that is, a tool whose `execute` function was stripped by `listClientTools` because it runs on the caller's side — the outer dowhile loop treated the tool calls as "pending" and re-invoked the model without adding a tool result. The model then produced the same tool call again, repeating until `maxSteps` was reached. The loop now considers a tool call "pending" only if the server can actually execute it (the resolved tool has an `execute` function) or the model already resolved it (`providerExecuted`). Mixed turns with at least one server-executable tool still continue as before.
+Fixed an infinite agentic loop when a step ends with `finishReason: 'tool-calls'` and all called tools are client-only.
+
+Previously, Mastra could call the model again without any new tool result, which repeated the same tool calls until `maxSteps`.
+
+Now, Mastra only continues when at least one called tool can run on the server or when a provider-executed tool result requires another model turn.
