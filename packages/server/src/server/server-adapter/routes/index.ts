@@ -120,6 +120,7 @@ export type ServerRoute<
   path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream', defaults to 'stream'
+  sseFlushOnConnect?: boolean;
   // Method signature is bivariant in params, allowing heterogeneous route arrays
   // while still preserving specific param types on individual routes.
   handler(params: TParams & ServerContext): ReturnType<ServerRouteHandler<TParams, TResponse, TResponseType>>;

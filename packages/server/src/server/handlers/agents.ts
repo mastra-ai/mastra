@@ -1683,6 +1683,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   path: '/agents/:agentId/threads/subscribe',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
+  sseFlushOnConnect: true,
   pathParamSchema: agentIdPathParams,
   bodySchema: subscribeAgentThreadBodySchema,
   responseSchema: streamResponseSchema,

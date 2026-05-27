@@ -1,5 +1,25 @@
 # @mastra/editor
 
+## 0.10.1
+
+### Patch Changes
+
+- Added optional constructor argument support to `createBuilderAgent()` so callers can override agent defaults while the canonical `id`, `name`, and `description` are preserved. ([#17109](https://github.com/mastra-ai/mastra/pull/17109))
+
+  ```ts
+  // Before — could only use the built-in defaults
+  const builder = createBuilderAgent();
+
+  // After — pass overrides while keeping the canonical identity
+  const builder = createBuilderAgent({
+    model: openai('gpt-4o'),
+    instructions: 'Custom instructions for this deployment',
+  });
+  ```
+
+- Updated dependencies [[`21db1a4`](https://github.com/mastra-ai/mastra/commit/21db1a4b8ac058d5a4fbe38b516cc1b81e526915)]:
+  - @mastra/core@1.37.1
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes
