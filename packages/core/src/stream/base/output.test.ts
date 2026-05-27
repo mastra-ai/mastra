@@ -525,8 +525,12 @@ describe('MastraModelOutput', () => {
       expect(finishPayload.toolCalls).toEqual([]);
       expect(finishPayload.toolResults).toEqual([]);
       expect(finishPayload.steps).toEqual([]);
-      expect(finishPayload.usage).toEqual({});
-      expect(finishPayload.totalUsage).toEqual({});
+      expect(finishPayload.usage).toEqual({ inputTokens: undefined, outputTokens: undefined, totalTokens: undefined });
+      expect(finishPayload.totalUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
       expect(finishPayload.response).toEqual({});
       expect(finishPayload.content).toEqual([]);
     });

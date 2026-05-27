@@ -1629,13 +1629,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       dynamicToolCalls: [],
       dynamicToolResults: [],
       content: [],
-      usage: {},
+      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
       warnings: [],
       providerMetadata: undefined,
       request: {},
       response: {},
       steps: [],
-      totalUsage: {},
+      totalUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
       object: undefined as OUTPUT,
     };
   }
