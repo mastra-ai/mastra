@@ -13,12 +13,12 @@ vi.mock('posthog-node', () => ({
   },
 }));
 
-function createCapturingModel(captured: { system?: string }) {
+function createCapturingModel(captured: { systemMessages: string[] }) {
   return new MockLanguageModelV2({
     doGenerate: async options => {
-      const systemMessage = options.prompt.find((msg: any) => msg.role === 'system');
-      captured.system =
-        typeof systemMessage?.content === 'string' ? systemMessage.content : JSON.stringify(systemMessage?.content);
+      captured.systemMessages = options.prompt
+        .filter((msg: any) => msg.role === 'system')
+        .map((msg: any) => (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)));
 
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -60,8 +60,8 @@ function mcpTool({
 }
 
 describe('Agent MCP server instructions', () => {
-  it('adds MCP instructions to the final system prompt', async () => {
-    const captured: { system?: string } = {};
+  it('adds MCP instructions as a separate system message', async () => {
+    const captured: { systemMessages: string[] } = { systemMessages: [] };
     const agent = new Agent({
       id: 'mcp-agent',
       name: 'mcp-agent',
@@ -78,13 +78,17 @@ describe('Agent MCP server instructions', () => {
 
     await agent.generate('Run the migration');
 
-    expect(captured.system).toContain('You are helpful.');
-    expect(captured.system).toContain('## Guidance from MCP server "db-tools"');
-    expect(captured.system).toContain('Always call validate_schema before migrate_schema.');
+    // Base instructions remain in their own system message
+    expect(captured.systemMessages[0]).toBe('You are helpful.');
+    // MCP guidance is a separate system message
+    const mcpMessage = captured.systemMessages.find(msg => msg.includes('Guidance from MCP server'));
+    expect(mcpMessage).toBeDefined();
+    expect(mcpMessage).toContain('## Guidance from MCP server "db-tools"');
+    expect(mcpMessage).toContain('Always call validate_schema before migrate_schema.');
   });
 
   it('handles multiple MCP servers in stable server-name order', async () => {
-    const captured: { system?: string } = {};
+    const captured: { systemMessages: string[] } = { systemMessages: [] };
     const agent = new Agent({
       id: 'mcp-agent',
       name: 'mcp-agent',
@@ -111,21 +115,23 @@ describe('Agent MCP server instructions', () => {
       },
     });
 
-    const expected = `Use tools carefully.
+    // Base instructions stay separate
+    expect(captured.systemMessages[0]).toBe('Use tools carefully.');
 
-## Guidance from MCP server "alpha"
+    const mcpMessage = captured.systemMessages.find(msg => msg.includes('Guidance from MCP server'));
+    expect(mcpMessage).toBeDefined();
 
-Use alpha first.
+    // Alpha before zeta (alphabetical)
+    const alphaIdx = mcpMessage!.indexOf('alpha');
+    const zetaIdx = mcpMessage!.indexOf('zeta');
+    expect(alphaIdx).toBeLessThan(zetaIdx);
 
-## Guidance from MCP server "zeta"
-
-Use zeta last.`;
-
-    expect(captured.system).toBe(expected);
+    expect(mcpMessage).toContain('## Guidance from MCP server "alpha"\n\nUse alpha first.');
+    expect(mcpMessage).toContain('## Guidance from MCP server "zeta"\n\nUse zeta last.');
   });
 
   it('does not duplicate guidance when multiple tools come from the same MCP server', async () => {
-    const captured: { system?: string } = {};
+    const captured: { systemMessages: string[] } = { systemMessages: [] };
     const agent = new Agent({
       id: 'mcp-agent',
       name: 'mcp-agent',
@@ -147,11 +153,12 @@ Use zeta last.`;
 
     await agent.generate('Run migration');
 
-    expect(captured.system?.match(/Guidance from MCP server "db-tools"/g)).toHaveLength(1);
+    const allText = captured.systemMessages.join('\n');
+    expect(allText.match(/Guidance from MCP server "db-tools"/g)).toHaveLength(1);
   });
 
   it('skips empty, disabled, and truncates long MCP instructions', async () => {
-    const captured: { system?: string } = {};
+    const captured: { systemMessages: string[] } = { systemMessages: [] };
     const agent = new Agent({
       id: 'mcp-agent',
       name: 'mcp-agent',
@@ -180,10 +187,35 @@ Use zeta last.`;
 
     await agent.generate('Run checks');
 
-    expect(captured.system).toContain('## Guidance from MCP server "long"\n\n1234');
-    expect(captured.system).not.toContain('empty');
-    expect(captured.system).not.toContain('disabled');
-    expect(captured.system).not.toContain('Do not forward this.');
-    expect(captured.system).not.toContain('567890');
+    const allText = captured.systemMessages.join('\n');
+    expect(allText).toContain('## Guidance from MCP server "long"\n\n1234');
+    expect(allText).not.toContain('empty');
+    expect(allText).not.toContain('disabled');
+    expect(allText).not.toContain('Do not forward this.');
+    expect(allText).not.toContain('567890');
+  });
+
+  it('does not add an MCP system message when no tools have instructions', async () => {
+    const captured: { systemMessages: string[] } = { systemMessages: [] };
+    const agent = new Agent({
+      id: 'mcp-agent',
+      name: 'mcp-agent',
+      instructions: 'You are helpful.',
+      model: createCapturingModel(captured),
+      tools: {
+        plain: createTool({
+          id: 'plain',
+          description: 'plain tool',
+          inputSchema: z.object({}),
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+
+    await agent.generate('Hello');
+
+    // Only the base instructions system message, no MCP guidance
+    const mcpMessage = captured.systemMessages.find(msg => msg.includes('Guidance from MCP server'));
+    expect(mcpMessage).toBeUndefined();
   });
 });

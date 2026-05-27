@@ -75,7 +75,7 @@ import { createTool } from '../tools';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
-import type { CoreTool, ToolPayloadTransformPolicy } from '../tools/types';
+import type { CoreTool, McpMetadata, ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
@@ -168,15 +168,6 @@ type ProcessorWorkflowChildrenContainer = {
   }>;
 };
 
-type ToolWithMcpInstructions = {
-  mcpMetadata?: {
-    serverName?: string;
-    serverInstructions?: string;
-    forwardInstructions?: boolean;
-    instructionsMaxLength?: number;
-  };
-};
-
 function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
   if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
     return Promise.resolve(value).then(cb);
@@ -194,7 +185,7 @@ function truncateMcpInstructions(instructions: string, maxLength?: number): stri
   return instructions.length > resolvedMaxLength ? instructions.slice(0, resolvedMaxLength) : instructions;
 }
 
-function buildMcpServerGuidance(tools: Array<ToolWithMcpInstructions | undefined>): string | undefined {
+function buildMcpServerGuidance(tools: Array<{ mcpMetadata?: McpMetadata } | undefined>): string | undefined {
   const instructionsByServer = new Map<
     string,
     {
@@ -233,39 +224,6 @@ function buildMcpServerGuidance(tools: Array<ToolWithMcpInstructions | undefined
     .filter((entry): entry is string => Boolean(entry));
 
   return guidance.length > 0 ? guidance.join('\n\n') : undefined;
-}
-
-function appendMcpServerGuidance(instructions: AgentInstructions, guidance?: string): AgentInstructions {
-  if (!guidance) {
-    return instructions;
-  }
-
-  const appendToText = (content: string) => (content.includes(guidance) ? content : `${content}\n\n${guidance}`);
-
-  if (typeof instructions === 'string') {
-    return appendToText(instructions);
-  }
-
-  if (Array.isArray(instructions)) {
-    if (instructions.some(msg => (typeof msg === 'string' ? msg : msg.content)?.includes(guidance))) {
-      return instructions;
-    }
-
-    if (instructions.every(msg => typeof msg === 'string')) {
-      return [...instructions, guidance] as AgentInstructions;
-    }
-
-    return [...instructions, { role: 'system', content: guidance }] as AgentInstructions;
-  }
-
-  if (typeof instructions.content === 'string') {
-    return {
-      ...instructions,
-      content: appendToText(instructions.content),
-    } as AgentInstructions;
-  }
-
-  return instructions;
 }
 
 function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {
@@ -1806,16 +1764,16 @@ export class Agent<
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
   }): Promise<string | undefined> {
-    const tools: Array<ToolWithMcpInstructions | undefined> = [];
+    const tools: Array<{ mcpMetadata?: McpMetadata } | undefined> = [];
 
     const assignedTools = await this.listTools({ requestContext });
-    tools.push(...(Object.values(assignedTools || {}) as ToolWithMcpInstructions[]));
+    tools.push(...(Object.values(assignedTools || {}) as { mcpMetadata?: McpMetadata }[]));
 
     for (const toolset of Object.values(toolsets || {})) {
-      tools.push(...(Object.values(toolset || {}) as ToolWithMcpInstructions[]));
+      tools.push(...(Object.values(toolset || {}) as { mcpMetadata?: McpMetadata }[]));
     }
 
-    tools.push(...(Object.values(clientTools || {}) as ToolWithMcpInstructions[]));
+    tools.push(...(Object.values(clientTools || {}) as { mcpMetadata?: McpMetadata }[]));
 
     if (tools.length === 0) {
       return undefined;
@@ -5799,13 +5757,12 @@ export class Agent<
         resourceId,
       }) ||
       randomUUID();
-    const baseInstructions = options.instructions || (await this.getInstructions({ requestContext }));
+    const instructions = options.instructions || (await this.getInstructions({ requestContext }));
     const mcpServerGuidance = await this.getMcpServerGuidance({
       requestContext,
       toolsets: options.toolsets,
       clientTools: options.clientTools,
     });
-    const instructions = appendMcpServerGuidance(baseInstructions, mcpServerGuidance);
 
     // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
@@ -5922,6 +5879,7 @@ export class Agent<
       agentSpan: agentSpan!,
       methodType,
       instructions,
+      mcpServerGuidance,
       memoryConfig,
       memory,
       saveQueueManager,

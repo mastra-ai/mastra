@@ -504,6 +504,7 @@ export class InternalMastraMCPClient extends MastraBase {
         this.client.onclose = () => {
           this.log('debug', `MCP server connection closed`);
           this.isConnected = null;
+          this.serverInstructions = undefined;
           if (typeof originalOnClose === 'function') {
             originalOnClose();
           }
@@ -831,7 +832,7 @@ export class InternalMastraMCPClient extends MastraBase {
             serverInstructions: this.serverInstructions,
             forwardInstructions: this.forwardInstructions,
             instructionsMaxLength: this.instructionsMaxLength,
-          } as any,
+          },
           execute: async (
             input: any,
             context?: {
