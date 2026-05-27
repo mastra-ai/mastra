@@ -1,5 +1,80 @@
 # @mastra/editor
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- Added optional constructor argument support to `createBuilderAgent()` so callers can override agent defaults while the canonical `id`, `name`, and `description` are preserved. ([#17109](https://github.com/mastra-ai/mastra/pull/17109))
+
+  ```ts
+  // Before — could only use the built-in defaults
+  const builder = createBuilderAgent();
+
+  // After — pass overrides while keeping the canonical identity
+  const builder = createBuilderAgent({
+    model: openai('gpt-4o'),
+    instructions: 'Custom instructions for this deployment',
+  });
+  ```
+
+## 0.10.0
+
+### Minor Changes
+
+- Ship `EditorAgentBuilder` and Agent Builder runtime through the `@mastra/editor/ee` subpath. ([#16948](https://github.com/mastra-ai/mastra/pull/16948))
+  - Adds `EditorAgentBuilder` class and supporting types under `@mastra/editor/ee` (dormant unless `MastraEditorConfig.builder` is configured).
+  - Wires builder resolution on `MastraEditor`: `hasEnabledBuilderConfig()`, `resolveBuilder()`, `ensureBuilderWorkspaces()`, and `reconcileBuilderWorkspaces()`.
+  - Adds builder defaults plumbing in the agent namespace (`applyBuilderDefaults`, `BUILDER_BASELINE_DEFAULTS` enabling `observationalMemory: true` by default for Builder-created agents).
+  - Adds a defense-in-depth license guard inside `MastraEditor.resolveBuilder()` that mirrors the server-startup check in `MastraServer.validateAgentBuilderLicense()`. Dev environments bypass via `isEEEnabled()`; production without a valid `MASTRA_EE_LICENSE` throws `[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.`
+  - Bumps the `@mastra/core` peer dependency to `>=1.34.0-0 <2.0.0-0` to cover the `@mastra/core/agent-builder/ee` and `@mastra/core/auth/ee` subpaths consumed by the builder runtime.
+
+  Opt-in usage:
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const editor = new MastraEditor({
+    builder: {
+      enabled: true,
+      configuration: {
+        agent: {
+          models: { default: { provider: 'openai', modelId: 'gpt-4o-mini' } },
+        },
+      },
+    },
+  });
+
+  new Mastra({ storage, editor });
+
+  // Later, on demand:
+  const builder = await editor.resolveBuilder();
+  // `builder` is undefined when the builder is not configured/enabled.
+  // In production it requires a valid MASTRA_EE_LICENSE; dev environments bypass.
+  ```
+
+  This is plumbing — no UI consumer ships in this release.
+
+### Patch Changes
+
+- Removed zod as a required peer dependency. Internal schemas now use plain JSON Schema objects instead of zod runtime. ([#16726](https://github.com/mastra-ai/mastra/pull/16726))
+
+- Updated dependencies [[`cfa2e3a`](https://github.com/mastra-ai/mastra/commit/cfa2e3a5292322f48bb28b4d257d631da7f9d3cc), [`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`ac442a4`](https://github.com/mastra-ai/mastra/commit/ac442a42fda0354ac2bcea772bf6691cb3e9dbb3), [`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`9d2c663`](https://github.com/mastra-ai/mastra/commit/9d2c663b88f5b12bc3fea1c97f40b4eeb3665df1), [`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`d72dc4b`](https://github.com/mastra-ai/mastra/commit/d72dc4b12d832546c05c20255fa96fe4eb515900), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`1e5c067`](https://github.com/mastra-ai/mastra/commit/1e5c067d2e20a781af670578180d1ee249806d41), [`168fa09`](https://github.com/mastra-ai/mastra/commit/168fa09d6b39114cb8c13bd06f1dccb9bc81c6cd), [`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`8116436`](https://github.com/mastra-ai/mastra/commit/81164363eb225d774e41ff27da6a5ea611406688), [`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`c27c4b9`](https://github.com/mastra-ai/mastra/commit/c27c4b9f137df5414fca4e45896aceccff6b0ed5), [`08b3b59`](https://github.com/mastra-ai/mastra/commit/08b3b590dd960dee6c9a6e39272f8927d803db6e), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5), [`4084113`](https://github.com/mastra-ai/mastra/commit/408411370fc48a822e8b616b3b63f9409774e0e9), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0
+  - @mastra/memory@1.20.0
+  - @mastra/mcp@1.8.1
+
+## 0.10.0-alpha.3
+
+### Patch Changes
+
+- Removed zod as a required peer dependency. Internal schemas now use plain JSON Schema objects instead of zod runtime. ([#16726](https://github.com/mastra-ai/mastra/pull/16726))
+
+- Updated dependencies [[`9d2c663`](https://github.com/mastra-ai/mastra/commit/9d2c663b88f5b12bc3fea1c97f40b4eeb3665df1), [`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`4084113`](https://github.com/mastra-ai/mastra/commit/408411370fc48a822e8b616b3b63f9409774e0e9)]:
+  - @mastra/mcp@1.8.1-alpha.0
+  - @mastra/memory@1.20.0-alpha.2
+  - @mastra/core@1.37.0-alpha.8
+
 ## 0.10.0-alpha.2
 
 ### Minor Changes

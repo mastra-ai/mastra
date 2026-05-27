@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.10.1-alpha.5",
+  "version": "1.10.2-alpha.0",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -27,7 +27,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "MASTRA_AUTO_DETECT_URL=true vite",
     "build": "vite build",
     "build:lib": "vite build",
     "build:watch": "vite build --watch",
@@ -63,6 +63,7 @@
     "@mastra/schema-compat": "workspace:*",
     "@mcp-ui/client": "^7.1.0",
     "@posthog/react": "^1.9.0",
+    "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-hover-card": "^1.1.15",
     "@radix-ui/react-tooltip": "^1.2.8",
@@ -73,6 +74,7 @@
     "@xyflow/react": "^12.10.1",
     "date-fns": "catalog:",
     "lucide-react": "^0.522.0",
+    "nanoid": "^5.1.7",
     "papaparse": "^5.5.3",
     "posthog-js": "^1.369.3",
     "prism-react-renderer": "^2.4.1",
@@ -90,7 +92,7 @@
     "superjson": "^2.2.6",
     "use-debounce": "^10.1.0",
     "zod": "^3.25.0",
-    "zod-v4": "npm:zod@4.3.6",
+    "zod-v4": "npm:zod@^4.4.3",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

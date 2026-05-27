@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 
+import '@mastra/playground-ui/style.css';
 import '@/index.css';
 
 import { createRoot } from 'react-dom/client';

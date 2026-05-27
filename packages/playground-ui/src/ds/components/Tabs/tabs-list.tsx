@@ -20,9 +20,15 @@ export type TabListProps = {
   children: React.ReactNode;
   className?: string;
   sticky?: boolean;
+  /**
+   * Optional inline styles applied to the underlying tab list element.
+   * To override the active tab indicator color, set the `--tab-indicator-color`
+   * CSS variable, e.g. `style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}`.
+   */
+  style?: React.CSSProperties;
 } & VariantProps<typeof tabListVariants>;
 
-export const TabList = ({ children, className, variant, sticky }: TabListProps) => {
+export const TabList = ({ children, className, variant, sticky, style }: TabListProps) => {
   const resolvedVariant = variant ?? 'line';
 
   return (
@@ -30,12 +36,13 @@ export const TabList = ({ children, className, variant, sticky }: TabListProps) 
       <BaseTabs.List
         data-variant={resolvedVariant}
         className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }), className)}
+        style={style}
       >
         {children}
         {resolvedVariant === 'line' && (
           <BaseTabs.Indicator
             className={cn(
-              'absolute bottom-0 left-0 bg-neutral3',
+              'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--neutral3))]',
               'w-[var(--active-tab-width)] h-0.5',
               'transition-all duration-200 ease-in-out',
             )}
@@ -45,7 +52,7 @@ export const TabList = ({ children, className, variant, sticky }: TabListProps) 
         {(resolvedVariant === 'pill' || resolvedVariant === 'pill-ghost') && (
           <BaseTabs.Indicator
             className={cn(
-              'absolute top-1/2 left-0 z-0 rounded-full bg-surface4',
+              'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--surface4))]',
               'w-[var(--active-tab-width)] h-[calc(100%-0.5rem)]',
               'transition-all duration-200 ease-in-out',
             )}
