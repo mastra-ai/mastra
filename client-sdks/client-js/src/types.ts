@@ -1356,6 +1356,24 @@ export interface DeleteStoredAgentResponse {
   message: string;
 }
 
+/**
+ * A single agent that references another agent as a sub-agent
+ */
+export interface StoredAgentDependent {
+  id: string;
+  name: string;
+}
+
+/**
+ * Response for listing dependents of a stored agent.
+ * `hiddenCount` aggregates dependents the caller cannot read; it is only
+ * non-zero when the target agent is public.
+ */
+export interface StoredAgentDependentsResponse {
+  dependents: StoredAgentDependent[];
+  hiddenCount: number;
+}
+
 // ============================================================================
 // Stored Scorer Definition Types
 // ============================================================================
