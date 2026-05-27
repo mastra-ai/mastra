@@ -535,7 +535,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: toolbar + EntityList + Detail Panel */}
+      {/* Main layout: toolbar + List + Detail Panel */}
       <Columns className={featuredItem ? 'grid-cols-[1fr_1fr]' : ''}>
         <Column>
           <Column.Toolbar>
