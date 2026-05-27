@@ -7722,9 +7722,6 @@ importers:
       '@internal/voice':
         specifier: workspace:*
         version: link:../../packages/_internals/voice
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
