@@ -462,7 +462,7 @@ describe('MastraModelOutput', () => {
       expect((await output.totalUsage)?.raw).toEqual(rawUsage);
     });
 
-    it('should call onFinish with complete payload fields when the stream suspends', async () => {
+    it('should call onFinish with the suspended payload shape when the stream suspends', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });
       let finishPayload: any;
@@ -513,27 +513,21 @@ describe('MastraModelOutput', () => {
 
       await output.consumeStream();
 
+      // Core fields the AGENT_RUN span end reads.
       expect(finishPayload).toMatchObject({
         finishReason: 'suspended',
         suspendReason: 'tool-call-approval',
         toolName: 'findUserTool',
         toolCallId: 'call-1',
-        text: 'partial answer',
-        usage: {},
-        response: {
-          messages: [],
-          dbMessages: [],
-          uiMessages: [],
-        },
-        steps: [],
       });
-      expect(finishPayload.totalUsage).toEqual({
-        inputTokens: undefined,
-        outputTokens: undefined,
-        totalTokens: 0,
-      });
-      expect(finishPayload.toolCalls).toHaveLength(1);
+      // Type-only fillers are empty defaults; no consumer reads them on suspend.
+      expect(finishPayload.text).toBe('');
+      expect(finishPayload.toolCalls).toEqual([]);
       expect(finishPayload.toolResults).toEqual([]);
+      expect(finishPayload.steps).toEqual([]);
+      expect(finishPayload.usage).toEqual({});
+      expect(finishPayload.totalUsage).toEqual({});
+      expect(finishPayload.response).toEqual({});
       expect(finishPayload.content).toEqual([]);
     });
 

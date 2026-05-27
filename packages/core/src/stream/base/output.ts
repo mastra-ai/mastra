@@ -1607,42 +1607,39 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     toolName: string;
     toolCallId: string;
   } {
-    const reasoning = Object.values(this.#bufferedReasoningDetails || {});
-    const content = this.messageList.get.response.aiV5.stepContent();
-    const toolCalls = this.#toolCalls;
-    const toolResults = this.#toolResults;
-
+    // The only consumer of this payload is the AGENT_RUN span end in map-results-step.ts,
+    // which reads finishReason + suspendReason/toolName/toolCallId and nothing else.
+    // The remaining fields exist solely to satisfy the MastraOnFinishCallback type
+    // (LLMStepResult), not any runtime consumer — the user-facing onFinish is not invoked
+    // on suspend — so we fill them with empty defaults instead of reconstructing buffered
+    // text/tool/message state. That reconstruction (messageList.get.response.* / stepContent)
+    // would materialize a response+content snapshot from a half-finished, mid-suspend stream:
+    // work that's immediately discarded and could surface inconsistent partial data.
     return {
-      ...(this.#model.modelId && this.#model.provider && this.#model.version ? { model: this.#model } : {}),
       finishReason: 'suspended',
       suspendReason: chunk.type,
       toolName: chunk.payload.toolName,
       toolCallId: chunk.payload.toolCallId,
-      text: this.#bufferedText.join(''),
-      reasoning,
-      reasoningText: this.#bufferedReasoning.length
-        ? this.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
-        : undefined,
-      sources: this.#bufferedSources,
-      files: this.#bufferedFiles,
-      toolCalls,
-      toolResults,
-      staticToolCalls: toolCalls.filter(toolCall => toolCall?.payload?.dynamic === false),
-      staticToolResults: toolResults.filter(toolResult => toolResult?.payload?.dynamic === false),
-      dynamicToolCalls: toolCalls.filter(toolCall => toolCall?.payload?.dynamic === true),
-      dynamicToolResults: toolResults.filter(toolResult => toolResult?.payload?.dynamic === true),
-      content,
-      usage: this.#usageCount,
-      warnings: this.#warnings,
+      // --- type-only fillers; not read by any consumer on suspend ---
+      text: '',
+      reasoning: [],
+      reasoningText: undefined,
+      sources: [],
+      files: [],
+      toolCalls: [],
+      toolResults: [],
+      staticToolCalls: [],
+      staticToolResults: [],
+      dynamicToolCalls: [],
+      dynamicToolResults: [],
+      content: [],
+      usage: {},
+      warnings: [],
       providerMetadata: undefined,
-      request: this.#request || {},
-      response: {
-        messages: this.messageList.get.response.aiV5.model(),
-        dbMessages: this.messageList.get.response.db(),
-        uiMessages: this.messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
-      },
-      steps: this.#bufferedSteps,
-      totalUsage: this.#getTotalUsage(),
+      request: {},
+      response: {},
+      steps: [],
+      totalUsage: {},
       object: undefined as OUTPUT,
     };
   }
