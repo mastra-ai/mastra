@@ -56,6 +56,8 @@ function restoreDist() {
   }
 }
 
+let exitStatus = 0;
+
 try {
   for (const relativePath of DIST_DIRS) moveDistAway(relativePath);
 
@@ -79,8 +81,13 @@ try {
       },
     );
 
-    if (result.status !== 0) process.exit(result.status ?? 1);
+    if (result.status !== 0) {
+      exitStatus = result.status ?? 1;
+      break;
+    }
   }
 } finally {
   restoreDist();
 }
+
+process.exit(exitStatus);
