@@ -1,14 +1,18 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 
-import type { ProcessInputStepArgs, ProcessInputStepResult } from '../processors/index';
+import type { MessageList } from '../agent/message-list/index';
+import type { ProcessInputStepArgs } from '../processors/index';
 import type { ChannelContext } from './types';
 
 /**
  * Input processor that injects channel context into agent prompts.
  *
- * Uses `processInputStep` to add a system message on every step of the agentic loop.
- * Since system messages are reset between steps, injecting on every step ensures the
- * context is stable and prompt-cacheable.
+ * Uses `processInputStep` to add a tagged system message on every step of the agentic loop.
+ * The message is added directly to `args.messageList` under the `chat-channel-context` tag
+ * (rather than returning `systemMessages`) so it composes with other processors' tagged
+ * system messages (e.g. observational memory) instead of clobbering their tags via the
+ * runner's `replaceAllSystemMessages` path. `addSystem` deduplicates by content within a
+ * tag, so repeated calls across steps are safe.
  *
  * All output rendering (tool cards, text messages, approval prompts) is handled by
  * `AgentChannels.consumeAgentStream` which iterates the outer `fullStream`.
@@ -16,8 +20,8 @@ import type { ChannelContext } from './types';
 export class ChatChannelProcessor {
   readonly id = 'chat-channel-context';
 
-  processInputStep(args: ProcessInputStepArgs): ProcessInputStepResult | undefined {
-    const ctx = args.requestContext?.get('channel') as ChannelContext | undefined;
+  processInputStep({ messageList, requestContext }: ProcessInputStepArgs): { messageList: MessageList } | undefined {
+    const ctx = requestContext?.get('channel') as ChannelContext | undefined;
     if (!ctx) return undefined;
 
     // Stable system message — same across all messages for this platform/bot combo.
@@ -55,6 +59,7 @@ export class ChatChannelProcessor {
     }
 
     const systemMessage: CoreMessageV4 = { role: 'system', content: lines.join('\n') };
-    return { systemMessages: [...args.systemMessages, systemMessage] };
+    messageList.addSystem(systemMessage, this.id);
+    return { messageList };
   }
 }
