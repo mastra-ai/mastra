@@ -2081,17 +2081,6 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
     }
   });
 
-  /**
-   * Regression test for orphaned AGENT_RUN spans on HITL suspends.
-   *
-   * When a tool with `requireApproval: true` is invoked, the stream emits a
-   * `tool-call-approval` chunk and terminates without a `finish` chunk. The
-   * suspend switch arm in MastraModelOutput must still fire `onFinish` so the
-   * span-ending pathway in map-results-step runs.
-   *
-   * Without this, the AGENT_RUN span stays open forever and the trace never
-   * appears in observability backends (Langfuse, Datadog, etc.).
-   */
   it('should end the AGENT_RUN span when the stream suspends for tool-call-approval', async () => {
     const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
 
@@ -2110,7 +2099,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
           warnings: [],
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'response-metadata', id: 'id-0', modelId: '__GATEWAY_OPENAI_MODEL__', timestamp: new Date(0) },
             {
               type: 'tool-call',
               toolCallId: 'call-1',

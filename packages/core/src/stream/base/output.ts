@@ -147,6 +147,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
   #streamFinished = false;
+  #finishCallbackSent = false;
   #emitter = new EventEmitter();
   #bufferedSteps: LLMStepResult<OUTPUT>[] = [];
   #bufferedReasoningDetails: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]> = {};
@@ -429,13 +430,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#status = 'suspended';
               self.#delayedPromises.suspendPayload.resolve(chunk.payload);
               self.#delayedPromises.resumeSchema.resolve(chunk.payload.resumeSchema);
-              await options?.onFinish?.({
-                finishReason: 'suspended',
-                suspendReason: chunk.type,
-                toolName: chunk.payload.toolName,
-                toolCallId: chunk.payload.toolCallId,
-                response: {},
-              });
+              if (!self.#finishCallbackSent) {
+                self.#finishCallbackSent = true;
+                await options?.onFinish?.(self.#createSuspendedOnFinishPayload(chunk));
+              }
               break;
             case 'raw':
               if (!self.#options.includeRawChunks) {
@@ -1017,7 +1015,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                           : undefined,
                 };
 
-                await options?.onFinish?.(onFinishPayload);
+                if (!self.#finishCallbackSent) {
+                  self.#finishCallbackSent = true;
+                  await options?.onFinish?.(onFinishPayload);
+                }
               }
 
               self.#closeTransportIfNeeded();
@@ -1596,6 +1597,53 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       cachedInputTokens: this.#usageCount.cachedInputTokens,
       cacheCreationInputTokens: this.#usageCount.cacheCreationInputTokens,
       ...(this.#usageCount.raw !== undefined && { raw: this.#usageCount.raw }),
+    };
+  }
+
+  #createSuspendedOnFinishPayload(
+    chunk: Extract<ChunkType<OUTPUT>, { type: 'tool-call-approval' | 'tool-call-suspended' }>,
+  ): MastraOnFinishCallbackArgs<OUTPUT> & {
+    suspendReason: 'tool-call-approval' | 'tool-call-suspended';
+    toolName: string;
+    toolCallId: string;
+  } {
+    const reasoning = Object.values(this.#bufferedReasoningDetails || {});
+    const content = this.messageList.get.response.aiV5.stepContent();
+    const toolCalls = this.#toolCalls;
+    const toolResults = this.#toolResults;
+
+    return {
+      ...(this.#model.modelId && this.#model.provider && this.#model.version ? { model: this.#model } : {}),
+      finishReason: 'suspended',
+      suspendReason: chunk.type,
+      toolName: chunk.payload.toolName,
+      toolCallId: chunk.payload.toolCallId,
+      text: this.#bufferedText.join(''),
+      reasoning,
+      reasoningText: this.#bufferedReasoning.length
+        ? this.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
+        : undefined,
+      sources: this.#bufferedSources,
+      files: this.#bufferedFiles,
+      toolCalls,
+      toolResults,
+      staticToolCalls: toolCalls.filter(toolCall => toolCall?.payload?.dynamic === false),
+      staticToolResults: toolResults.filter(toolResult => toolResult?.payload?.dynamic === false),
+      dynamicToolCalls: toolCalls.filter(toolCall => toolCall?.payload?.dynamic === true),
+      dynamicToolResults: toolResults.filter(toolResult => toolResult?.payload?.dynamic === true),
+      content,
+      usage: this.#usageCount,
+      warnings: this.#warnings,
+      providerMetadata: undefined,
+      request: this.#request || {},
+      response: {
+        messages: this.messageList.get.response.aiV5.model(),
+        dbMessages: this.messageList.get.response.db(),
+        uiMessages: this.messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+      },
+      steps: this.#bufferedSteps,
+      totalUsage: this.#getTotalUsage(),
+      object: undefined as OUTPUT,
     };
   }
 

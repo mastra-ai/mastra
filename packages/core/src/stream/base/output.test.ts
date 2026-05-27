@@ -462,6 +462,81 @@ describe('MastraModelOutput', () => {
       expect((await output.totalUsage)?.raw).toEqual(rawUsage);
     });
 
+    it('should call onFinish with complete payload fields when the stream suspends', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: 'partial answer' },
+        },
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'findUserTool',
+            args: { name: 'Dero Israel' },
+            providerExecuted: false,
+          },
+        },
+        {
+          type: 'tool-call-approval',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'findUserTool',
+            args: { name: 'Dero Israel' },
+            resumeSchema: '{}',
+          },
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload).toMatchObject({
+        finishReason: 'suspended',
+        suspendReason: 'tool-call-approval',
+        toolName: 'findUserTool',
+        toolCallId: 'call-1',
+        text: 'partial answer',
+        usage: {},
+        response: {
+          messages: [],
+          dbMessages: [],
+          uiMessages: [],
+        },
+        steps: [],
+      });
+      expect(finishPayload.totalUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: 0,
+      });
+      expect(finishPayload.toolCalls).toHaveLength(1);
+      expect(finishPayload.toolResults).toEqual([]);
+      expect(finishPayload.content).toEqual([]);
+    });
+
     it('should keep the latest step raw usage across multiple steps', async () => {
       const runId = 'test-run';
       const firstRaw = {
