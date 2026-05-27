@@ -35,7 +35,6 @@ import {
   collectSeriesByDimensions,
   COMPLEX_GROUP_BY_EXCLUDED,
   dimensionsFromRow,
-  FEEDBACK_TYPED_COLUMNS,
   percentileSelectSql,
   percentileSeriesFromRows,
   resolveGroupBy,
@@ -44,6 +43,7 @@ import {
   validatePercentiles,
 } from './olap';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
+import { FEEDBACK_TYPED_COLUMNS } from './signal-schema';
 import { buildInsert, FEEDBACK_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------

@@ -39,7 +39,6 @@ import {
   COST_SUMMARY_SELECT,
   costSummaryFromRow,
   dimensionsFromRow,
-  METRIC_TYPED_COLUMNS,
   percentileSelectSql,
   percentileSeriesFromRows,
   pushLabelExclusions,
@@ -49,6 +48,7 @@ import {
   validatePercentiles,
 } from './olap';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
+import { METRIC_TYPED_COLUMNS } from './signal-schema';
 import { buildInsert, METRIC_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------

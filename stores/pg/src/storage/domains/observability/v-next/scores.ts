@@ -38,12 +38,12 @@ import {
   percentileSelectSql,
   percentileSeriesFromRows,
   resolveGroupBy,
-  SCORE_TYPED_COLUMNS,
   seriesNameFromDimensions,
   shiftRange,
   validatePercentiles,
 } from './olap';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
+import { SCORE_TYPED_COLUMNS } from './signal-schema';
 import { buildInsert, SCORE_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------

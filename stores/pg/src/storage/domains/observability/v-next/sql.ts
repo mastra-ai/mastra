@@ -8,24 +8,18 @@
 
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { qualifiedTable } from './ddl';
-
-const JSONB_COLUMNS = new Set([
-  'attributes',
-  'scope',
-  'links',
-  'input',
-  'output',
-  'error',
-  'metadataRaw',
-  'metadata',
-  'metadataSearch',
-  'requestContext',
-  'data',
-  'labels',
-  'costMetadata',
-]);
-
-const TEXT_ARRAY_COLUMNS = new Set(['tags']);
+import {
+  buildNamedSelectColumns,
+  buildSelectColumns,
+  FEEDBACK_EVENT_COLUMNS,
+  JSONB_COLUMNS,
+  LOG_EVENT_COLUMNS,
+  METRIC_EVENT_COLUMNS,
+  SCORE_EVENT_COLUMNS,
+  SPAN_EVENT_COLUMNS,
+  SPAN_LIGHT_SELECT_COLUMN_NAMES,
+  TEXT_ARRAY_COLUMNS,
+} from './signal-schema';
 
 /**
  * Encode a JS value for a `$N::jsonb` cast. Always `JSON.stringify` so a
@@ -88,77 +82,19 @@ ON CONFLICT DO NOTHING`;
  * column the row→record converters expect.
  */
 export const SPAN_SELECT_COLUMNS = `
-  "cursorId",
-  "traceId", "spanId", "parentSpanId", "experimentId",
-  "entityType", "entityId", "entityName", "entityVersionId",
-  "parentEntityType", "parentEntityId", "parentEntityName", "parentEntityVersionId",
-  "rootEntityType", "rootEntityId", "rootEntityName", "rootEntityVersionId",
-  "userId", "organizationId", "resourceId",
-  "runId", "sessionId", "threadId", "requestId",
-  "environment", "executionSource", "serviceName",
-  "name", "spanType", "isEvent", "startedAt", "endedAt",
-  "tags", "metadataSearch",
-  "attributes", "scope", "links", "input", "output", "error", "metadataRaw", "requestContext"
-`;
+${buildSelectColumns(SPAN_EVENT_COLUMNS)}`;
 
 export const SPAN_LIGHT_SELECT_COLUMNS = `
-  "cursorId",
-  "traceId", "spanId", "parentSpanId",
-  "name", "entityType", "entityId", "entityName",
-  "spanType", "error", "isEvent",
-  "startedAt", "endedAt"
-`;
+${buildNamedSelectColumns(SPAN_LIGHT_SELECT_COLUMN_NAMES)}`;
 
 export const METRIC_SELECT_COLUMNS = `
-  "cursorId",
-  "metricId", "timestamp", "name", "value",
-  "traceId", "spanId", "experimentId",
-  "entityType", "entityId", "entityName", "entityVersionId",
-  "parentEntityType", "parentEntityId", "parentEntityName", "parentEntityVersionId",
-  "rootEntityType", "rootEntityId", "rootEntityName", "rootEntityVersionId",
-  "userId", "organizationId", "resourceId",
-  "runId", "sessionId", "threadId", "requestId",
-  "environment", "executionSource", "serviceName",
-  "provider", "model", "estimatedCost", "costUnit",
-  "tags", "labels", "costMetadata", "metadata", "scope"
-`;
+${buildSelectColumns(METRIC_EVENT_COLUMNS)}`;
 
 export const LOG_SELECT_COLUMNS = `
-  "cursorId",
-  "logId", "timestamp", "level", "message",
-  "traceId", "spanId", "experimentId",
-  "entityType", "entityId", "entityName", "entityVersionId",
-  "parentEntityType", "parentEntityId", "parentEntityName", "parentEntityVersionId",
-  "rootEntityType", "rootEntityId", "rootEntityName", "rootEntityVersionId",
-  "userId", "organizationId", "resourceId",
-  "runId", "sessionId", "threadId", "requestId",
-  "environment", "executionSource", "serviceName",
-  "tags", "data", "metadata", "scope"
-`;
+${buildSelectColumns(LOG_EVENT_COLUMNS)}`;
 
 export const SCORE_SELECT_COLUMNS = `
-  "cursorId",
-  "scoreId", "timestamp", "scorerId", "scorerVersion", "scoreSource", "score", "reason",
-  "traceId", "spanId", "experimentId", "scoreTraceId",
-  "entityType", "entityId", "entityName", "entityVersionId",
-  "parentEntityType", "parentEntityId", "parentEntityName", "parentEntityVersionId",
-  "rootEntityType", "rootEntityId", "rootEntityName", "rootEntityVersionId",
-  "userId", "organizationId", "resourceId",
-  "runId", "sessionId", "threadId", "requestId",
-  "environment", "executionSource", "serviceName",
-  "tags", "metadata", "scope"
-`;
+${buildSelectColumns(SCORE_EVENT_COLUMNS)}`;
 
 export const FEEDBACK_SELECT_COLUMNS = `
-  "cursorId",
-  "feedbackId", "timestamp", "feedbackSource", "feedbackType",
-  "valueString", "valueNumber", "comment", "feedbackUserId", "sourceId",
-  "traceId", "spanId", "experimentId",
-  "entityType", "entityId", "entityName", "entityVersionId",
-  "parentEntityType", "parentEntityId", "parentEntityName", "parentEntityVersionId",
-  "rootEntityType", "rootEntityId", "rootEntityName", "rootEntityVersionId",
-  "userId", "organizationId", "resourceId",
-  "runId", "sessionId", "threadId", "requestId",
-  "environment", "executionSource", "serviceName",
-  "tags", "metadata", "scope"
-`;
+${buildSelectColumns(FEEDBACK_EVENT_COLUMNS)}`;
