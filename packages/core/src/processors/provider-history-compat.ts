@@ -221,6 +221,17 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+export function isMaybeGoogle(
+  model:
+    | string
+    | { provider?: string; modelId?: string }
+    | ((...args: any[]) => any)
+    | { model: any; enabled?: boolean }[]
+    | unknown,
+): boolean {
+  return matchesProviderPrefix(model, 'google');
+}
+
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
  * assistant messages. Returns `undefined` if no changes were necessary.
@@ -306,6 +317,49 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: Gemini first-user-message requirement
+// ---------------------------------------------------------------------------
+
+/**
+ * Gemini requires the first non-system message to be from the user role.
+ * When the conversation history starts with an assistant message (e.g. after
+ * a recall window slices off the leading user turn), this rule inserts a
+ * minimal user message (`"."`) so Gemini does not reject the request.
+ *
+ * Previously this was applied unconditionally to all providers via
+ * `ensureGeminiCompatibleMessages` in the message list. Now it is scoped to
+ * Google models only and runs as a preemptive prompt rewrite.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/7287
+ * @see https://github.com/mastra-ai/mastra/issues/8053
+ */
+export const geminiEnsureFirstUserMessage: CompatRule = {
+  name: 'gemini-ensure-first-user-message',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeGoogle(model)) return undefined;
+
+    const firstNonSystemIndex = prompt.findIndex(m => m.role !== 'system');
+
+    if (firstNonSystemIndex === -1) {
+      // Only system messages or empty — pass through unchanged.
+      return undefined;
+    }
+
+    if (prompt[firstNonSystemIndex]?.role !== 'assistant') {
+      return undefined;
+    }
+
+    // First non-system is assistant; insert a minimal user message before it.
+    const result = [...prompt];
+    result.splice(firstNonSystemIndex, 0, {
+      role: 'user' as const,
+      content: [{ type: 'text' as const, text: '.' }],
+    });
+    return result;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
 
@@ -317,6 +371,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicToolIdFormat,
   cerebrasStripReasoningContent,
   anthropicStripForeignReasoningContent,
+  geminiEnsureFirstUserMessage,
 ];
 
 // ---------------------------------------------------------------------------

@@ -39,7 +39,6 @@ import type {
   SerializedMessageListState,
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
-import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
 export class MessageList {
@@ -479,7 +478,7 @@ export class MessageList {
 
         const messages = [...systemMessages, ...modelMessages];
 
-        return ensureGeminiCompatibleMessages(messages, this.logger);
+        return messages;
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -604,8 +603,6 @@ export class MessageList {
           });
         }
 
-        messages = ensureGeminiCompatibleMessages(messages, this.logger);
-
         return messages
           .map(aiV5ModelMessageToV2PromptMessage)
           .filter(
@@ -636,7 +633,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
         const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
 
-        return ensureGeminiCompatibleMessages(messages, this.logger);
+        return messages;
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -644,9 +641,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
 
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
-        let messages = [...systemMessages, ...coreMessages];
-
-        messages = ensureGeminiCompatibleMessages(messages, this.logger);
+        const messages = [...systemMessages, ...coreMessages];
 
         return messages.map(aiV4CoreMessageToV1PromptMessage);
       },

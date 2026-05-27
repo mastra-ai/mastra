@@ -5,8 +5,10 @@ import { MessageList } from '../agent/message-list';
 import {
   anthropicStripForeignReasoningContent,
   cerebrasStripReasoningContent,
+  geminiEnsureFirstUserMessage,
   isMaybeAnthropic,
   isMaybeCerebras,
+  isMaybeGoogle,
   ProviderHistoryCompat,
 } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
@@ -520,6 +522,121 @@ describe('cerebrasStripReasoningContent', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// isMaybeGoogle
+// ---------------------------------------------------------------------------
+
+describe('isMaybeGoogle', () => {
+  it('matches google provider object', () => {
+    expect(isMaybeGoogle({ provider: 'google', modelId: 'gemini-2.0-flash' })).toBe(true);
+    expect(isMaybeGoogle({ provider: 'google.generativeai', modelId: 'gemini-2.5-flash' })).toBe(true);
+  });
+
+  it('matches google/ gateway prefix in string form', () => {
+    expect(isMaybeGoogle('google/gemini-2.0-flash')).toBe(true);
+  });
+
+  it('matches google/ gateway prefix in modelId', () => {
+    expect(isMaybeGoogle({ provider: 'openai-compatible.chat', modelId: 'google/gemini-2.0-flash' })).toBe(true);
+  });
+
+  it('does not match non-google providers', () => {
+    expect(isMaybeGoogle({ provider: 'openai.chat', modelId: 'gpt-4o' })).toBe(false);
+    expect(isMaybeGoogle({ provider: 'anthropic.messages', modelId: 'claude-haiku-4-5-20251001' })).toBe(false);
+    expect(isMaybeGoogle({ provider: 'cerebras.chat', modelId: 'zai-glm-4.7' })).toBe(false);
+  });
+
+  it('does not match null/undefined/function', () => {
+    expect(isMaybeGoogle(null)).toBe(false);
+    expect(isMaybeGoogle(undefined)).toBe(false);
+    expect(isMaybeGoogle(() => {})).toBe(false);
+  });
+
+  it('matches inside a fallback array', () => {
+    expect(isMaybeGoogle([{ model: { provider: 'google', modelId: 'gemini-2.0-flash' } }])).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiEnsureFirstUserMessage
+// ---------------------------------------------------------------------------
+
+describe('geminiEnsureFirstUserMessage', () => {
+  it('inserts a user message when first non-system is assistant on Google', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] },
+    ];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'google', modelId: 'gemini-2.0-flash' },
+    });
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(3);
+    expect(result![0]!.role).toBe('system');
+    expect(result![1]!.role).toBe('user');
+    expect((result![1] as any).content).toEqual([{ type: 'text', text: '.' }]);
+    expect(result![2]!.role).toBe('assistant');
+  });
+
+  it('returns undefined when first non-system is already user', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'hey' }] },
+    ];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'google', modelId: 'gemini-2.0-flash' },
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for non-Google models', () => {
+    const prompt: LanguageModelV2Prompt = [{ role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] }];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'openai.chat', modelId: 'gpt-4o' },
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for system-only prompts', () => {
+    const prompt: LanguageModelV2Prompt = [{ role: 'system', content: 'sys' }];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'google', modelId: 'gemini-2.0-flash' },
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for empty prompts', () => {
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt: [],
+      model: { provider: 'google', modelId: 'gemini-2.0-flash' },
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('handles assistant as very first message (no system)', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    ];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'google.generativeai', modelId: 'gemini-2.5-flash' },
+    });
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(3);
+    expect(result![0]!.role).toBe('user');
+    expect(result![1]!.role).toBe('assistant');
+    expect(result![2]!.role).toBe('user');
+  });
+});
+
 describe('ProviderHistoryCompat.processLLMRequest', () => {
   it('strips reasoning parts from the prompt on cerebras', async () => {
     const handler = new ProviderHistoryCompat();
@@ -569,13 +686,34 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect(await handler.processLLMRequest(args)).toBeUndefined();
   });
 
-  it('returns undefined for non-cerebras models even if reasoning is present', async () => {
+  it('returns undefined for non-cerebras/non-google models even if reasoning is present', async () => {
     const handler = new ProviderHistoryCompat();
     const args = makeRequestArgs(promptWithReasoning(), {
       provider: 'openai.chat',
       modelId: 'gpt-4o',
     });
     expect(await handler.processLLMRequest(args)).toBeUndefined();
+  });
+
+  it('inserts user message for Google model when first non-system is assistant', async () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'system', content: 'sys' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] },
+    ];
+    const args = makeRequestArgs(prompt, {
+      provider: 'google',
+      modelId: 'gemini-2.0-flash',
+    });
+
+    const result = await handler.processLLMRequest(args);
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    const p = (result as { prompt: LanguageModelV2Prompt }).prompt;
+    expect(p).toHaveLength(3);
+    expect(p[0]!.role).toBe('system');
+    expect(p[1]!.role).toBe('user');
+    expect(p[2]!.role).toBe('assistant');
   });
 
   it('strips reasoning when a generic provider object has a cerebras-prefixed modelId', async () => {

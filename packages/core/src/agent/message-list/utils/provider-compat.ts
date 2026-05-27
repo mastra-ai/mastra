@@ -1,7 +1,5 @@
-import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, ToolResultPart } from '@internal/ai-sdk-v5';
 
-import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../state/types';
 import { getResponseProviderItemId } from './response-item-metadata';
 import type { ResponseItemIdProvider } from './response-item-metadata';
@@ -12,54 +10,6 @@ import type { ResponseItemIdProvider } from './response-item-metadata';
 export type ToolResultWithInput = ToolResultPart & {
   input: Record<string, unknown>;
 };
-
-// ============================================================================
-// Gemini Compatibility
-// ============================================================================
-
-/**
- * Ensures message array is compatible with Gemini API requirements.
- *
- * Gemini API requires:
- * 1. The first non-system message must be from the user role
- * 2. Cannot have only system messages - at least one user/assistant is required
- *
- * @param messages - Array of model messages to validate and fix
- * @param logger - Optional logger for warnings
- * @returns Modified messages array that satisfies Gemini requirements
- *
- * @see https://github.com/mastra-ai/mastra/issues/7287 - Tool call ordering
- * @see https://github.com/mastra-ai/mastra/issues/8053 - Single turn validation
- * @see https://github.com/mastra-ai/mastra/issues/13045 - Empty thread support
- */
-export function ensureGeminiCompatibleMessages<T extends ModelMessage | CoreMessageV4>(
-  messages: T[],
-  logger?: IMastraLogger,
-): T[] {
-  const result = [...messages];
-
-  // Ensure first non-system message is user
-  const firstNonSystemIndex = result.findIndex(m => m.role !== 'system');
-
-  if (firstNonSystemIndex === -1) {
-    // Only system messages or empty — warn and pass through unchanged.
-    // Providers that support system-only prompts (Anthropic, OpenAI) will work natively.
-    // Providers that don't (Gemini) will return their own error.
-    if (result.length > 0) {
-      logger?.warn(
-        'No user or assistant messages in the request. Some providers (e.g. Gemini) require at least one user message to generate a response.',
-      );
-    }
-  } else if (result[firstNonSystemIndex]?.role === 'assistant') {
-    // First non-system is assistant, insert user message before it
-    result.splice(firstNonSystemIndex, 0, {
-      role: 'user',
-      content: '.',
-    } as T);
-  }
-
-  return result;
-}
 
 // ============================================================================
 // Anthropic Compatibility
