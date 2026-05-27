@@ -326,46 +326,16 @@ export interface ChannelHandlers {
 }
 
 /**
- * Customize (or disable) the system message added by `ChatChannelProcessor`,
- * which tells the agent what channel/platform a request is coming from.
+ * Customize (or disable) the system message added by `ChatChannelProcessor`.
  *
- * - `undefined` (default) — built-in template runs.
- * - `false` — `ChatChannelProcessor` is not added to the processor pipeline.
- * - `string` — used verbatim as the system message content.
- * - `(ctx) => string | undefined` — dynamic content per request. Return
- *   `undefined` (or `''`) to skip the channel system message entirely for
- *   this request. To compose with the default for some cases, import
- *   `defaultChannelSystemMessage` from `@mastra/core/channels`.
+ * - `false` — processor is not added at all.
+ * - `string` — used verbatim.
+ * - function — built per request; return `undefined` or `''` to skip. Call
+ *   `defaultChannelSystemMessage(ctx)` to compose with the built-in default.
  *
- * @remarks
- * **Keep the resolved content stable per thread.** This system message is
- * placed near the front of the prompt and is a prime candidate for provider
- * prompt caching. If your function returns different content on every turn
- * (e.g. current timestamp, last user message, fast-changing state), you'll
- * invalidate the cache for every request and pay full input-token cost.
- *
- * Branch only on inputs that are stable for the life of the thread —
- * `platform`, `isDM`, `userName`, channel/user IDs, bot name. For anything
- * that changes mid-conversation (live status, recent events, user-visible
- * counters), prefer sending a signal into the thread rather than mutating
- * the system message.
- *
- * @example
- * ```ts
- * import { defaultChannelSystemMessage } from '@mastra/core/channels';
- *
- * // Disable entirely
- * systemMessage: false
- *
- * // Static replacement
- * systemMessage: 'You are talking to a user via Slack.'
- *
- * // Dynamic — override only for DMs, default otherwise
- * // (isDM is thread-stable, so this is cache-safe)
- * systemMessage: (ctx) => ctx.isDM
- *   ? `You are in a DM on ${ctx.platform} with ${ctx.userName ?? 'a user'}.`
- *   : defaultChannelSystemMessage(ctx)
- * ```
+ * Keep the resolved content stable per thread so it stays prompt-cacheable:
+ * branch only on thread-stable inputs (`platform`, `isDM`, `userName`, IDs).
+ * For mid-conversation state, send a signal into the thread instead.
  */
 export type ChannelSystemMessageOption = false | string | ((ctx: ChannelContext) => string | undefined);
 
