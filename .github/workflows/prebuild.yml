@@ -198,7 +198,7 @@ jobs:
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      changed: ${{ steps.changes.outputs.changed == 'true' || steps.integration-test-manifest.outputs.changed == 'true' }}
+      changed: ${{ steps.changes.outputs.changed }}
     permissions:
       contents: read
     steps:
@@ -218,15 +218,6 @@ jobs:
           packages: '@mastra/memory'
           tasks: 'build,test'
           base-ref: 'origin/main'
-
-      - name: Check for memory integration test manifest changes
-        id: integration-test-manifest
-        run: |
-          if git diff --name-only origin/main...HEAD | grep -qx 'packages/memory/integration-tests/package.json'; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
 
   memory-test:
     name: Memory Tests
