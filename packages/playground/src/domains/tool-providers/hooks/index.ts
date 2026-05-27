@@ -1,3 +1,10 @@
 export * from './use-tool-providers';
 export * from './use-toolkits';
 export * from './use-provider-tools';
+export * from './use-existing-connections';
+export * from './use-authorize';
+export type { AuthorizeArgs, AuthorizeResult, UseAuthorizeOptions } from './use-authorize';
+export * from './use-disconnect-connection';
+export type { DisconnectConnectionArgs } from './use-disconnect-connection';
+export * from './use-all-provider-tools';
+export type { AvailableIntegrationTool } from './use-all-provider-tools';
