@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-65211c04",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should strip workflow tools when toolChoice is none with structured output",
-    "createdAt": "2026-05-18T10:50:50.791Z",
-    "updatedAt": "2026-05-20T14:04:36.785Z"
+    "createdAt": "2026-05-27T21:06:54.071Z",
+    "updatedAt": "2026-05-27T21:08:26.022Z"
   },
   "recordings": [
     {
@@ -43,7 +43,7 @@
             ]
           }
         },
-        "timestamp": 1779285875495
+        "timestamp": 1779916105061
       },
       "response": {
         "status": 200,
@@ -51,9 +51,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:04:36 GMT",
+          "date": "Wed, 27 May 2026 21:08:26 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1260",
+          "server-timing": "gfet4t7; dur=845",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -66,19 +66,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"summary\": \"Regular exercise offers numerous physical and mental health benefits, including improved cardiovascular health, weight management, mood enhancement, and reduced risk of chronic diseases.\"\n}"
+                    "text": "{\n  \"summary\": \"Regular exercise offers numerous benefits, including improved cardiovascular health, weight management, mood enhancement, and increased longevity. It's recommended to engage in at least 150 minutes of moderate-intensity or 75 minutes of vigorous-intensity aerobic activity per week, along with strength training exercises targeting all major muscle groups at least two days a week.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.0672562380094786
+              "avgLogprobs": -0.10533493380003338
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 21,
-            "candidatesTokenCount": 37,
-            "totalTokenCount": 58,
+            "candidatesTokenCount": 79,
+            "totalTokenCount": 100,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -88,13 +88,13 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 37
+                "tokenCount": 79
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "c78NaoKrJvuC7M8Pv7iduAI"
+          "responseId": "SV0Xavi3Fq2U_uMP8efLGQ"
         },
         "isStreaming": false
       }

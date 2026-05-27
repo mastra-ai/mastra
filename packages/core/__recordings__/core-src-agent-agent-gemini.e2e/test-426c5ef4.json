@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-426c5ef4",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle generation with structured output",
-    "createdAt": "2026-05-18T10:50:49.845Z",
-    "updatedAt": "2026-05-20T14:04:35.487Z"
+    "createdAt": "2026-05-27T21:06:53.287Z",
+    "updatedAt": "2026-05-27T21:08:25.049Z"
   },
   "recordings": [
     {
@@ -46,7 +46,7 @@
             ]
           }
         },
-        "timestamp": 1779285874612
+        "timestamp": 1779916104273
       },
       "response": {
         "status": 200,
@@ -54,9 +54,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:04:35 GMT",
+          "date": "Wed, 27 May 2026 21:08:25 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=844",
+          "server-timing": "gfet4t7; dur=642",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -97,7 +97,7 @@
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "cr8Nav-NLbeBnsEPoqiQsQI"
+          "responseId": "SF0Xau6WI_m__uMPheLYSQ"
         },
         "isStreaming": false
       }

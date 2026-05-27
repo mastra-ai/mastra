@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-b843af0f",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle messages with only assistant role",
-    "createdAt": "2026-05-18T10:50:53.466Z",
-    "updatedAt": "2026-05-20T14:04:40.786Z"
+    "createdAt": "2026-05-27T21:06:58.434Z",
+    "updatedAt": "2026-05-27T21:08:29.206Z"
   },
   "recordings": [
     {
@@ -40,7 +40,7 @@
             ]
           }
         },
-        "timestamp": 1779285880003
+        "timestamp": 1779916108519
       },
       "response": {
         "status": 200,
@@ -48,9 +48,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:04:40 GMT",
+          "date": "Wed, 27 May 2026 21:08:29 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=753",
+          "server-timing": "gfet4t7; dur=573",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -63,19 +63,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": " What is your query? I'm ready to assist you. Just let me know what you need!\n"
+                    "text": " Please provide the query or task you have in mind. I'm ready to assist!\n"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.28215252269398083
+              "avgLogprobs": -0.29381405679803146
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 15,
-            "candidatesTokenCount": 22,
-            "totalTokenCount": 37,
+            "candidatesTokenCount": 19,
+            "totalTokenCount": 34,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -85,13 +85,13 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 22
+                "tokenCount": 19
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "eL8Nas-GCNmGnsEPocvqmQI"
+          "responseId": "TF0Xaq-9MqG9_uMPrMurWQ"
         },
         "isStreaming": false
       }

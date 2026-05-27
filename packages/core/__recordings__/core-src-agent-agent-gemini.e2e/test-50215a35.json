@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-50215a35",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle basic network generation with Gemini",
-    "createdAt": "2026-05-18T10:50:56.087Z",
-    "updatedAt": "2026-05-20T14:04:43.947Z"
+    "createdAt": "2026-05-27T21:07:01.295Z",
+    "updatedAt": "2026-05-27T21:08:32.425Z"
   },
   "recordings": [
     {
@@ -65,7 +65,7 @@
             ]
           }
         },
-        "timestamp": 1779285880811
+        "timestamp": 1779916109230
       },
       "response": {
         "status": 200,
@@ -73,9 +73,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:04:42 GMT",
+          "date": "Wed, 27 May 2026 21:08:30 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1219",
+          "server-timing": "gfet4t7; dur=883",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -88,19 +88,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"What is the capital of France?\",\n  \"selectionReason\": \"The user is asking a question, and the helperAgent is designed to answer questions.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"What is the capital of France?\",\n  \"selectionReason\": \"The helperAgent is best suited to answer general knowledge questions like this.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.057895753343226546
+              "avgLogprobs": -0.09963947534561157
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 845,
-            "candidatesTokenCount": 59,
-            "totalTokenCount": 904,
+            "candidatesTokenCount": 56,
+            "totalTokenCount": 901,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -110,13 +110,13 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 59
+                "tokenCount": 56
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "eb8NaumMAq2mkdUPm5GYsAc"
+          "responseId": "TV0Xarr0IbuV_uMPkKeZIA"
         },
         "isStreaming": false
       }
@@ -154,7 +154,7 @@
             ]
           }
         },
-        "timestamp": 1779285882076
+        "timestamp": 1779916110261
       },
       "response": {
         "status": 200,
@@ -163,17 +163,17 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:04:42 GMT",
+          "date": "Wed, 27 May 2026 21:08:30 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=632",
+          "server-timing": "gfet4t7; dur=538",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Paris\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 34,\"totalTokenCount\": 34,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 34}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"er8NarPXEOikgLUPqMWt6A8\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 32,\"candidatesTokenCount\": 2,\"totalTokenCount\": 34,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 32}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"er8NarPXEOikgLUPqMWt6A8\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Paris\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 34,\"totalTokenCount\": 34,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 34}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"Tl0XasekJ7m91LsPmo6kyAQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 32,\"candidatesTokenCount\": 2,\"totalTokenCount\": 34,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 32}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"Tl0XasekJ7m91LsPmo6kyAQ\"}\r\n\r\n"
         ],
         "chunkTimings": [0, 0],
         "isStreaming": true
@@ -224,7 +224,7 @@
             ]
           }
         },
-        "timestamp": 1779285882752
+        "timestamp": 1779916110947
       },
       "response": {
         "status": 200,
@@ -233,22 +233,22 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:04:43 GMT",
+          "date": "Wed, 27 May 2026 21:08:31 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=634",
+          "server-timing": "gfet4t7; dur=609",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"e78Nap_GAa-E1dkPn8LH0QM\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"e78Nap_GAa-E1dkPn8LH0QM\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The agent has provided\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"e78Nap_GAa-E1dkPn8LH0QM\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the capital of France, which is Paris.\\\",\\n  \\\"finalResult\\\": \\\"The\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"e78Nap_GAa-E1dkPn8LH0QM\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" capital of France is Paris.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 801,\"candidatesTokenCount\": 45,\"totalTokenCount\": 846,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 801}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 45}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"e78Nap_GAa-E1dkPn8LH0QM\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"T10Xapu8I7m91LsPmo6kyAQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"T10Xapu8I7m91LsPmo6kyAQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The helperAgent has\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"T10Xapu8I7m91LsPmo6kyAQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" provided the answer to the question.\\\",\\n  \\\"finalResult\\\": \\\"The capital of France is\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"T10Xapu8I7m91LsPmo6kyAQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" Paris.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 801,\"candidatesTokenCount\": 43,\"totalTokenCount\": 844,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 801}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 43}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"T10Xapu8I7m91LsPmo6kyAQ\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 48, 94, 74],
+        "chunkTimings": [0, 4, 55, 127, 46],
         "isStreaming": true
       }
     }

@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-c1a4b69b",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle conversation ending with tool result in network (with follow-up user message)",
-    "createdAt": "2026-05-18T10:51:11.563Z",
-    "updatedAt": "2026-05-20T14:05:09.117Z"
+    "createdAt": "2026-05-27T21:07:43.014Z",
+    "updatedAt": "2026-05-27T21:08:50.617Z"
   },
   "recordings": [
     {
@@ -100,7 +100,7 @@
             ]
           }
         },
-        "timestamp": 1779285907959
+        "timestamp": 1779916129232
       },
       "response": {
         "status": 200,
@@ -108,9 +108,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:09 GMT",
+          "date": "Wed, 27 May 2026 21:08:50 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1119",
+          "server-timing": "gfet4t7; dur=1270",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -123,19 +123,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Given the weather in San Francisco is sunny and 72°F, is this good weather for a picnic? Please answer yes or no.\",\n  \"selectionReason\": \"The user wants to know if the weather is good for a picnic, so I should ask an agent to make that determination.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Given the weather in San Francisco is Sunny and 72°F, is this good weather for a picnic? Please answer yes or no, and briefly explain why.\",\n  \"selectionReason\": \"The user is asking a question that requires reasoning based on the weather information. An agent is best suited to provide a comprehensive answer.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.1734658804806796
+              "avgLogprobs": -0.2095526634378636
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 924,
-            "candidatesTokenCount": 88,
-            "totalTokenCount": 1012,
+            "candidatesTokenCount": 94,
+            "totalTokenCount": 1018,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -145,13 +145,13 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 88
+                "tokenCount": 94
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "lL8Nat7KBJeekdUPhdSF8AU"
+          "responseId": "YV0XaruaIYLWjMcPypytyAU"
         },
         "isStreaming": false
       }

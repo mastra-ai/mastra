@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-99f429d7",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle conversation ending with tool result in network (agentic loop pattern)",
-    "createdAt": "2026-05-18T10:51:13.671Z",
-    "updatedAt": "2026-05-20T14:05:11.250Z"
+    "createdAt": "2026-05-27T21:07:45.709Z",
+    "updatedAt": "2026-05-27T21:08:53.149Z"
   },
   "recordings": [
     {
@@ -92,7 +92,7 @@
             ]
           }
         },
-        "timestamp": 1779285909145
+        "timestamp": 1779916130640
       },
       "response": {
         "status": 200,
@@ -100,9 +100,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:10 GMT",
+          "date": "Wed, 27 May 2026 21:08:51 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1005",
+          "server-timing": "gfet4t7; dur=1094",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -115,19 +115,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"testTool\",\n  \"primitiveType\": \"tool\",\n  \"prompt\": \"{\\\"location\\\": \\\"San Francisco\\\"}\",\n  \"selectionReason\": \"The user asked for the weather, and I already called the weather tool with the location \\\"San Francisco\\\". Calling it again will not add anything.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"none\",\n  \"prompt\": \"none\",\n  \"selectionReason\": \"The tool has already provided a satisfactory summary of the weather information. Therefore, no further action is required, and no additional tools or agents need to be invoked.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.21886658668518066
+              "avgLogprobs": -0.25422533820657167
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 906,
-            "candidatesTokenCount": 72,
-            "totalTokenCount": 978,
+            "candidatesTokenCount": 68,
+            "totalTokenCount": 974,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -137,19 +137,19 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 72
+                "tokenCount": 68
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "lb8NaveSEKivkdUPjs7xiQM"
+          "responseId": "Yl0Xao2tOsbi_uMP9-qOIQ"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "ab20f9674a6fc12a",
+      "hash": "f89e9e3d5886d055",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -180,7 +180,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "\n    The tool testTool has contributed to the task.\n    This is the result: {\"weather\":\"Sunny, 72°F\"}\n    \n    \n\nPrimitives already executed: tool \"weather-tool\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: \n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the tool testTool has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                  "text": "\n    The none none has contributed to the task.\n    This is the result: \"The tool has already provided a satisfactory summary of the weather information. Therefore, no further action is required, and no additional tools or agents need to be invoked.\"\n    \n    \n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: \n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the none none has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
                 }
               ]
             }
@@ -193,7 +193,7 @@
             ]
           }
         },
-        "timestamp": 1779285910186
+        "timestamp": 1779916131883
       },
       "response": {
         "status": 200,
@@ -202,22 +202,22 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:05:10 GMT",
+          "date": "Wed, 27 May 2026 21:08:52 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=581",
+          "server-timing": "gfet4t7; dur=437",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 807,\"totalTokenCount\": 807,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 807}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"lr8Nap-1FqeT1dkP_7DvoQo\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 807,\"totalTokenCount\": 807,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 807}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"lr8Nap-1FqeT1dkP_7DvoQo\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The weather information has been retrieved\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 807,\"totalTokenCount\": 807,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 807}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"lr8Nap-1FqeT1dkP_7DvoQo\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" and summarized.\\\",\\n  \\\"finalResult\\\": \\\"The weather is sunny with a temperature\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 807,\"totalTokenCount\": 807,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 807}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"lr8Nap-1FqeT1dkP_7DvoQo\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" of 72°F.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 851,\"candidatesTokenCount\": 48,\"totalTokenCount\": 899,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 851}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 48}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"lr8Nap-1FqeT1dkP_7DvoQo\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 816,\"totalTokenCount\": 816,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 816}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ZF0XarvNDZSHlNsP2_O0mAg\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 816,\"totalTokenCount\": 816,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 816}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ZF0XarvNDZSHlNsP2_O0mAg\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The previous tool call provided a\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 816,\"totalTokenCount\": 816,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 816}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ZF0XarvNDZSHlNsP2_O0mAg\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" satisfactory summary of the weather information, and no further action is required as per the instructions\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 816,\"totalTokenCount\": 816,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 816}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ZF0XarvNDZSHlNsP2_O0mAg\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \". The user query has been addressed.\\\",\\n  \\\"finalResult\\\": \\\"The weather information has been summarized and no further actions are needed.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 860,\"candidatesTokenCount\": 69,\"totalTokenCount\": 929,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 860}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 69}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ZF0XarvNDZSHlNsP2_O0mAg\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 0, 133, 69],
+        "chunkTimings": [0, 0, 0, 70, 203],
         "isStreaming": true
       }
     }

@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-ec76f34b",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle messages starting with assistant-with-tool-call in network",
-    "createdAt": "2026-05-18T10:51:14.719Z",
-    "updatedAt": "2026-05-20T14:05:12.559Z"
+    "createdAt": "2026-05-27T21:07:47.225Z",
+    "updatedAt": "2026-05-27T21:08:55.775Z"
   },
   "recordings": [
     {
@@ -100,7 +100,7 @@
             ]
           }
         },
-        "timestamp": 1779285911278
+        "timestamp": 1779916133173
       },
       "response": {
         "status": 200,
@@ -108,9 +108,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:12 GMT",
+          "date": "Wed, 27 May 2026 21:08:54 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1247",
+          "server-timing": "gfet4t7; dur=885",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -123,19 +123,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"agent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"The test tool returned the following result: `{\\\"test_tool_response\\\": {\\\"content\\\": \\\"previous result\\\", \\\"name\\\": \\\"test-tool\\\"}}`. Can you explain what this means?\",\n  \"selectionReason\": \"The user wants to understand the output of the test tool. An agent is best suited to explain the result in a user-friendly way.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"none\",\n  \"prompt\": \"none\",\n  \"selectionReason\": \"The response from the test tool does not require further explanation. The user task has been completed.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.1675449482445578
+              "avgLogprobs": -0.31148823824795807
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 909,
-            "candidatesTokenCount": 103,
-            "totalTokenCount": 1012,
+            "candidatesTokenCount": 55,
+            "totalTokenCount": 964,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -145,15 +145,88 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 103
+                "tokenCount": 55
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "l78Nap20GNXmnsEPyJukOA"
+          "responseId": "ZV0XavbzHoS2_uMPoquy0AM"
         },
         "isStreaming": false
+      }
+    },
+    {
+      "hash": "a0be17633dd1ff8f",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["isComplete", "completionReason"],
+              "type": "object",
+              "properties": {
+                "isComplete": {
+                  "description": "Whether the task is complete",
+                  "type": "boolean"
+                },
+                "completionReason": {
+                  "description": "Explanation of why the task is or is not complete",
+                  "type": "string"
+                },
+                "finalResult": {
+                  "description": "The final result text to return to the user. omit if primitive result is sufficient",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "\n    The none none has contributed to the task.\n    This is the result: \"The response from the test tool does not require further explanation. The user task has been completed.\"\n    \n    \n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: Explain what this result means.\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the none none has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You help users understand tool results. Explain tool outputs clearly.\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n          \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n           - **testTool**: A test tool, input schema: {\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"],\"additionalProperties\":false}\n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1779916134182
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Wed, 27 May 2026 21:08:54 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=541",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 809,\"totalTokenCount\": 809,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 809}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"Zl0Xau-KJImi6dgP9NXG-Qk\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 809,\"totalTokenCount\": 809,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 809}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"Zl0Xau-KJImi6dgP9NXG-Qk\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The provided result indicates\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 809,\"totalTokenCount\": 809,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 809}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"Zl0Xau-KJImi6dgP9NXG-Qk\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" that the task has been completed and does not require further explanation.\\\",\\n  \\\"final\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 809,\"totalTokenCount\": 809,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 809}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"Zl0Xau-KJImi6dgP9NXG-Qk\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Result\\\": \\\"The test tool's response is self-explanatory and fulfills the original task requirement. No further clarification is needed.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 853,\"candidatesTokenCount\": 65,\"totalTokenCount\": 918,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 853}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 65}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"Zl0Xau-KJImi6dgP9NXG-Qk\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 0, 112, 123, 212],
+        "isStreaming": true
       }
     }
   ]
