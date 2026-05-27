@@ -1,0 +1,28 @@
+services:
+  timescale:
+    image: timescale/timescaledb:latest-pg16
+    container_name: 'pg-vnext-timescale'
+    ports:
+      - '5435:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-mastra}
+    volumes:
+      - pgdata-timescale:/var/lib/postgresql/data
+
+  partman:
+    image: huntress/postgres-partman:14
+    container_name: 'pg-vnext-partman'
+    ports:
+      - '5436:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-mastra}
+    volumes:
+      - pgdata-partman:/var/lib/postgresql/data
+
+volumes:
+  pgdata-timescale:
+  pgdata-partman:

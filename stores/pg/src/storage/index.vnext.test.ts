@@ -1,4 +1,4 @@
-import { createObservabilityTests } from '@internal/storage-test-utils';
+import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ObservabilityPG } from './domains/observability';
@@ -7,6 +7,8 @@ import { TEST_CONFIG } from './test-utils';
 import { PostgresStore, PostgresStoreVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+const SHARED_SUITE_PARTITION_NOW = new Date('2026-01-02T12:00:00.000Z');
 
 /**
  * The local `TEST_CONFIG` is a host-based primary config (typed as the union
@@ -113,14 +115,31 @@ const sharedSuiteStore = new PostgresStoreVNext({
 });
 
 describe('PostgresStoreVNext / shared observability suite', () => {
+  let dateNowSpy: ReturnType<typeof vi.spyOn> | undefined;
+
   beforeAll(async () => {
+    dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(SHARED_SUITE_PARTITION_NOW.getTime());
     await sharedSuiteStore.init();
   });
   afterAll(async () => {
-    await sharedSuiteStore.close();
+    try {
+      await sharedSuiteStore.close();
+    } finally {
+      dateNowSpy?.mockRestore();
+    }
   });
 
-  // Only run the observability tests here so we don't double-run the suite
-  // that index.test.ts already covers for the legacy PostgresStore.
-  createObservabilityTests({ storage: sharedSuiteStore });
+  createObservabilityVNextTests({
+    getStorage: async () => {
+      const observability = await sharedSuiteStore.getStore('observability');
+      if (!observability) {
+        throw new Error('observability store was not initialized');
+      }
+      return observability;
+    },
+    capabilities: {
+      label: 'Postgres vNext',
+      preferredStrategy: 'insert-only',
+    },
+  });
 });

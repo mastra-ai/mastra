@@ -165,14 +165,14 @@ export async function ensureTimescaleHypertables(client: DbClient, schema: strin
   for (const table of ALL_SIGNAL_TABLES) {
     const tableExpr = qualifiedTable(schema, table);
     // SIGNAL_TIME_COLUMN values are hardcoded constants (`endedAt` /
-    // `timestamp`). Inline them as quoted identifier literals so we avoid the
-    // `$N::name` overload-resolution path on `create_hypertable(regclass,
-    // name, ...)` — some Timescale versions fail to bind that signature when
-    // the column name is passed as a parameter.
-    const timeColumn = `"${SIGNAL_TIME_COLUMN[table]}"`;
+    // `timestamp`). Inline them as string literals so `create_hypertable()`
+    // receives a column name, not a SQL identifier from the surrounding
+    // SELECT. Parameterizing this via `$N::name` has also been flaky on some
+    // Timescale versions.
+    const timeColumn = SIGNAL_TIME_COLUMN[table].replace(/'/g, "''");
 
     await client.none(
-      `SELECT create_hypertable($1::regclass, ${timeColumn}, chunk_time_interval => INTERVAL '1 day', if_not_exists => true)`,
+      `SELECT create_hypertable($1::regclass, '${timeColumn}', chunk_time_interval => INTERVAL '1 day', if_not_exists => true)`,
       [tableExpr],
     );
   }
@@ -183,9 +183,8 @@ export async function ensureTimescaleHypertables(client: DbClient, schema: strin
 // ---------------------------------------------------------------------------
 
 /**
- * Registers each signal table with pg_partman as a daily-interval parent.
- * Pre-creates today's partition manually (partman doesn't always backfill on
- * first run depending on version) and lets partman create future partitions.
+ * Registers each signal table with pg_partman as a daily-interval parent and
+ * lets partman create the child partitions.
  *
  * Retention is intentionally NOT configured here — it stays opt-in via the
  * future Mastra CLI surface.
@@ -196,8 +195,6 @@ export async function ensureTimescaleHypertables(client: DbClient, schema: strin
  * `'native'` and let this adapter manage partitions itself.
  */
 export async function ensurePartmanHypertables(client: DbClient, schema: string): Promise<void> {
-  await ensureNativePartitions(client, schema, { futureDays: 0, includeYesterday: false });
-
   for (const table of ALL_SIGNAL_TABLES) {
     // pg_partman stores `parent_table` in canonical `format('%I.%I', ...)`
     // form — quoted only when the identifier requires it. Use the same

@@ -137,6 +137,12 @@ function wrapError(op: string, error: unknown, details?: Record<string, unknown>
   );
 }
 
+function isDuplicateRelationError(error: unknown): boolean {
+  const code = (error as { code?: string } | undefined)?.code;
+  const message = (error as { message?: string } | undefined)?.message ?? '';
+  return code === '42P07' || /already exists/i.test(message);
+}
+
 export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   readonly #client: DbClient;
   readonly #schema: string;
@@ -186,10 +192,18 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       const ddlMode = mode === 'timescale' ? 'timescale' : 'partitioned';
 
       for (const ddl of allTableDDL(this.#schema, ddlMode)) {
-        await this.#client.none(ddl);
+        try {
+          await this.#client.none(ddl);
+        } catch (error) {
+          if (!isDuplicateRelationError(error)) throw error;
+        }
       }
       for (const ddl of allIndexDDL(this.#schema)) {
-        await this.#client.none(ddl);
+        try {
+          await this.#client.none(ddl);
+        } catch (error) {
+          if (!isDuplicateRelationError(error)) throw error;
+        }
       }
 
       this.#partitionMode = await setupPartitioning(this.#client, this.#schema, {
