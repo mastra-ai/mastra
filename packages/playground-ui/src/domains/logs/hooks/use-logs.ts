@@ -2,8 +2,9 @@ import type { ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useInView } from '@/hooks/use-in-view';
+
 import type { LogRecord } from '../types';
+import { useInView } from '@/hooks/use-in-view';
 
 interface UseLogsReturn {
   data: LogRecord[] | undefined;
