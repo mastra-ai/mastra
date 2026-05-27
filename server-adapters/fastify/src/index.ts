@@ -200,6 +200,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       'Transfer-Encoding': 'chunked',
     });
 
+    if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+      reply.raw.write(': connected\n\n');
+    }
+
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
 
@@ -224,6 +228,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         if (done) break;
 
         if (value) {
+          if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+            reply.raw.write(value);
+            continue;
+          }
+
           // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
           const shouldRedact = this.streamOptions?.redact ?? true;
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
