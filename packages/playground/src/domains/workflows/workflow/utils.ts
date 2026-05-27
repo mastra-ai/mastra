@@ -137,11 +137,12 @@ const getStepNodeAndEdge = ({
   let nextNodeIds: string[] = [];
   let nextStepIds: string[] = [];
   if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
-    const nextStepId = allPrevNodeIds?.includes(nextStepFlow.step.id)
-      ? `${nextStepFlow.step.id}-${yIndex + 1}`
-      : nextStepFlow.step.id;
-    nextNodeIds = [nextStepId];
-    nextStepIds = [nextStepFlow.step.id];
+    const stepId = nextStepFlow.step?.id;
+    if (stepId) {
+      const nextStepId = allPrevNodeIds?.includes(stepId) ? `${stepId}-${yIndex + 1}` : stepId;
+      nextNodeIds = [nextStepId];
+      nextStepIds = [stepId];
+    }
   }
   if (nextStepFlow?.type === 'sleep' || nextStepFlow?.type === 'sleepUntil') {
     const nextStepId = allPrevNodeIds?.includes(nextStepFlow.id) ? `${nextStepFlow.id}-${yIndex + 1}` : nextStepFlow.id;
@@ -150,19 +151,24 @@ const getStepNodeAndEdge = ({
   }
   if (nextStepFlow?.type === 'parallel') {
     nextNodeIds =
-      nextStepFlow?.steps.map(step => {
-        const stepId = step.step.id;
-        const nextStepId = allPrevNodeIds?.includes(stepId) ? `${stepId}-${yIndex + 1}` : stepId;
-        return nextStepId;
-      }) || [];
-    nextStepIds = nextStepFlow?.steps.map(step => step.step.id) || [];
+      nextStepFlow?.steps
+        ?.filter(step => step?.step?.id)
+        .map(step => {
+          const stepId = step.step.id;
+          const nextStepId = allPrevNodeIds?.includes(stepId) ? `${stepId}-${yIndex + 1}` : stepId;
+          return nextStepId;
+        }) || [];
+    nextStepIds = nextStepFlow?.steps?.filter(step => step?.step?.id).map(step => step.step.id) || [];
   }
   if (nextStepFlow?.type === 'conditional') {
-    nextNodeIds = nextStepFlow?.serializedConditions.map(cond => cond.id) || [];
-    nextStepIds = nextStepFlow?.steps?.map(step => step.step.id) || [];
+    nextNodeIds = nextStepFlow?.serializedConditions?.filter(cond => cond?.id).map(cond => cond.id) || [];
+    nextStepIds = nextStepFlow?.steps?.filter(step => step?.step?.id).map(step => step.step.id) || [];
   }
 
   if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
+    if (!stepFlow.step?.id) {
+      return { nodes: [], edges: [], nextPrevNodeIds: [], nextPrevStepIds: [] };
+    }
     const hasGraph = stepFlow.step.component === 'WORKFLOW';
     const nodeId = allPrevNodeIds?.includes(stepFlow.step.id) ? `${stepFlow.step.id}-${yIndex}` : stepFlow.step.id;
     const nodes = [
@@ -317,6 +323,9 @@ const getStepNodeAndEdge = ({
 
   if (stepFlow.type === 'loop') {
     const { step: _step, serializedCondition, loopType } = stepFlow;
+    if (!_step?.id || !serializedCondition?.id) {
+      return { nodes: [], edges: [], nextPrevNodeIds: [], nextPrevStepIds: [] };
+    }
     const hasGraph = _step.component === 'WORKFLOW';
     const nodes = [
       {
@@ -385,7 +394,7 @@ const getStepNodeAndEdge = ({
     let nodes: Node[] = [];
     let edges: Edge[] = [];
     let nextPrevStepIds: string[] = [];
-    stepFlow.steps.forEach((_stepFlow, index) => {
+    stepFlow.steps?.forEach((_stepFlow, index) => {
       const {
         nodes: _nodes,
         edges: _edges,
@@ -419,7 +428,8 @@ const getStepNodeAndEdge = ({
     let nodes: Node[] = [];
     let edges: Edge[] = [];
     let nextPrevStepIds: string[] = [];
-    stepFlow.steps.forEach((_stepFlow, index) => {
+    stepFlow.steps?.forEach((_stepFlow, index) => {
+      const condition = stepFlow.serializedConditions?.[index];
       const {
         nodes: _nodes,
         edges: _edges,
@@ -431,7 +441,7 @@ const getStepNodeAndEdge = ({
         prevNodeIds,
         prevStepIds,
         nextStepFlow,
-        condition: stepFlow.serializedConditions[index],
+        condition: condition?.id ? condition : undefined,
         allPrevNodeIds,
       });
       nodes.push(..._nodes);
@@ -463,36 +473,44 @@ export const constructNodesAndEdges = ({
     return { nodes: [], edges: [] };
   }
 
-  let nodes: Node[] = [];
-  let edges: Edge[] = [];
+  try {
+    let nodes: Node[] = [];
+    let edges: Edge[] = [];
 
-  let prevNodeIds: string[] = [];
-  let prevStepIds: string[] = [];
-  let allPrevNodeIds: string[] = [];
+    let prevNodeIds: string[] = [];
+    let prevStepIds: string[] = [];
+    let allPrevNodeIds: string[] = [];
 
-  for (let index = 0; index < stepGraph.length; index++) {
-    const {
-      nodes: _nodes,
-      edges: _edges,
-      nextPrevNodeIds,
-      nextPrevStepIds,
-    } = getStepNodeAndEdge({
-      stepFlow: stepGraph[index],
-      xIndex: index,
-      yIndex: index,
-      prevNodeIds,
-      prevStepIds,
-      nextStepFlow: index === stepGraph.length - 1 ? undefined : stepGraph[index + 1],
-      allPrevNodeIds,
-    });
-    nodes.push(..._nodes);
-    edges.push(..._edges);
-    prevNodeIds = nextPrevNodeIds;
-    prevStepIds = nextPrevStepIds;
-    allPrevNodeIds.push(...prevNodeIds);
+    for (let index = 0; index < stepGraph.length; index++) {
+      const entry = stepGraph[index];
+      if (!entry) continue;
+
+      const {
+        nodes: _nodes,
+        edges: _edges,
+        nextPrevNodeIds,
+        nextPrevStepIds,
+      } = getStepNodeAndEdge({
+        stepFlow: entry,
+        xIndex: index,
+        yIndex: index,
+        prevNodeIds,
+        prevStepIds,
+        nextStepFlow: index === stepGraph.length - 1 ? undefined : stepGraph[index + 1],
+        allPrevNodeIds,
+      });
+      nodes.push(..._nodes);
+      edges.push(..._edges);
+      prevNodeIds = nextPrevNodeIds;
+      prevStepIds = nextPrevStepIds;
+      allPrevNodeIds.push(...prevNodeIds);
+    }
+
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
+
+    return { nodes: layoutedNodes, edges: layoutedEdges };
+  } catch {
+    // Return empty graph on malformed step data to prevent crash
+    return { nodes: [], edges: [] };
   }
-
-  const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
-
-  return { nodes: layoutedNodes, edges: layoutedEdges };
 };
