@@ -215,7 +215,10 @@ describe('MastraCodeHarnessRuntime', () => {
       expect(session).toBeDefined();
       vi.spyOn(session!, '_internalAwaitFlushChain').mockRejectedValueOnce(failure);
 
-      await expect(runtime.destroy()).rejects.toBe(failure);
+      await expect(runtime.destroy()).rejects.toMatchObject({
+        name: 'HarnessStorageError',
+        cause: failure,
+      });
 
       expect(runtime.getWorkspace()).toBeUndefined();
       expect(listener).toHaveBeenCalledWith({ type: 'workspace_status_changed', status: 'destroying' });

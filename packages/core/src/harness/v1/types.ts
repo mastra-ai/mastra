@@ -937,8 +937,8 @@ export interface HarnessConfigCommon {
 
   /**
    * Periodic background handlers owned by the Harness lifecycle. Configured
-   * handlers start during `init()`, must have unique ids, call `unref?.()`
-   * on their timers, and are stopped during `shutdown()`.
+   * handlers start during `init()`, must have unique ids, run on timers that
+   * the harness `unref`s internally, and are stopped during `shutdown()`.
    */
   heartbeatHandlers?: HeartbeatHandler[];
 
