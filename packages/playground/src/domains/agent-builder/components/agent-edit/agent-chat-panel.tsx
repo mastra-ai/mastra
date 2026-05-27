@@ -137,18 +137,6 @@ const BrowserThumbnailSlot = ({ hideSidebar = false }: { hideSidebar?: boolean }
   );
 };
 
-interface AgentChatPanelProps extends Omit<AgentChatPanelProviderProps, 'children'> {}
-
-/**
- * Combined provider + chat. Useful for tests and any single-pane consumer that
- * does not need to expose `isRunning` to surrounding layout slots.
- */
-export const AgentChatPanel = (props: AgentChatPanelProps) => (
-  <AgentChatPanelProvider {...props}>
-    <AgentChatPanelChat />
-  </AgentChatPanelProvider>
-);
-
 interface AgentChatMessageListProps {
   onStarterPromptSelect: (prompt: string) => void;
 }

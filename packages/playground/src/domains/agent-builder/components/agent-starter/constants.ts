@@ -1,6 +1,6 @@
 import { GraduationCap, MessageCircleQuestion, MessagesSquare, Wrench } from 'lucide-react';
 
-export const FALLBACK_MODEL = { provider: 'google', name: 'gemini-2.5-flash' } as const;
+export const FALLBACK_MODEL = { provider: 'openai', name: 'gpt-5.4' } as const;
 
 export const EXAMPLES = [
   {
