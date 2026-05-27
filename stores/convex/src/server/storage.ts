@@ -284,6 +284,11 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
   }
 });
 
+function parseStoredSnapshot(stored: unknown, runId: string): Record<string, any> {
+  if (typeof stored === 'string') return JSON.parse(stored);
+  return JSON.parse(JSON.stringify(stored ?? createEmptyWorkflowSnapshot(runId)));
+}
+
 /**
  * Handle operations on typed tables (threads, messages, etc.)
  * Records are stored with their `id` field as a regular field (not _id).
@@ -651,13 +656,9 @@ export async function handleTypedOperation(
         return { ok: false, error: `Workflow snapshot not found for runId ${request.runId}` };
       }
 
-      const snapshot =
-        typeof existing.snapshot === 'string'
-          ? JSON.parse(existing.snapshot)
-          : JSON.parse(JSON.stringify(existing.snapshot ?? createEmptyWorkflowSnapshot(request.runId)));
-
+      const snapshot = parseStoredSnapshot(existing.snapshot, request.runId);
       if (!snapshot.context) {
-        throw new Error(`Snapshot for runId ${request.runId} is missing or has invalid context`);
+        return { ok: false, error: `Snapshot for runId ${request.runId} is missing or has invalid context` };
       }
 
       const context = mergeWorkflowStepResult({
@@ -691,13 +692,9 @@ export async function handleTypedOperation(
         return { ok: false, error: `Workflow snapshot not found for runId ${request.runId}` };
       }
 
-      const snapshot =
-        typeof existing.snapshot === 'string'
-          ? JSON.parse(existing.snapshot)
-          : JSON.parse(JSON.stringify(existing.snapshot ?? createEmptyWorkflowSnapshot(request.runId)));
-
+      const snapshot = parseStoredSnapshot(existing.snapshot, request.runId);
       if (!snapshot.context) {
-        throw new Error(`Snapshot for runId ${request.runId} is missing or has invalid context`);
+        return { ok: false, error: `Snapshot for runId ${request.runId} is missing or has invalid context` };
       }
 
       const mergedSnapshot = { ...snapshot, ...JSON.parse(request.opts) };
