@@ -14,5 +14,3 @@ new Agent({
   },
 });
 ```
-
-For finer-grained control, register your own input processor with `id: 'chat-channel-context'` — it shadows the built-in one, so you don't need to disable it separately.

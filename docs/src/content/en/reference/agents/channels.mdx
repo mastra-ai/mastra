@@ -94,7 +94,7 @@ export const supportAgent = new Agent({
     isOptional: true,
     defaultValue: '{ maxMessages: 10, addSystemMessage: true }',
     description:
-      "How the agent picks up context about the current thread. `maxMessages` controls how many recent platform messages are fetched on first mention (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from. For finer-grained control over the system message, register your own input processor with `id: 'chat-channel-context'`, which shadows the built-in one.",
+      'How the agent picks up context about the current thread. `maxMessages` controls how many recent platform messages are fetched on first mention (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from.',
   },
   {
     name: 'chatOptions',

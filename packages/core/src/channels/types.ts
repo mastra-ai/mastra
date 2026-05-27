@@ -438,11 +438,7 @@ export interface ChannelConfig {
     /**
      * Whether to add a built-in system message telling the agent which
      * channel/platform a request came from (DM vs public, bot identity, etc.).
-     * Defaults to `true`.
-     *
-     * Set to `false` to skip it entirely. For finer-grained control, register
-     * your own input processor with `id: 'chat-channel-context'`, which
-     * shadows the built-in one without needing to disable it here.
+     * Set to `false` to skip it entirely.
      *
      * @default true
      */
