@@ -6,7 +6,7 @@ import {
   Drawer,
   DrawerBody,
   DrawerClose,
-  DrawerContent,
+  DrawerShell,
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
@@ -25,7 +25,7 @@ describe('Drawer', () => {
       render(
         <Drawer defaultOpen>
           <DrawerTrigger>Open</DrawerTrigger>
-          <DrawerContent>
+          <DrawerShell>
             <DrawerHeader>
               <DrawerTitle>Title</DrawerTitle>
               <DrawerDescription>Description</DrawerDescription>
@@ -36,7 +36,7 @@ describe('Drawer', () => {
                 <Button variant="outline">Cancel</Button>
               </DrawerClose>
             </DrawerFooter>
-          </DrawerContent>
+          </DrawerShell>
         </Drawer>,
       ),
     ).not.toThrow();
@@ -51,9 +51,9 @@ describe('Drawer', () => {
         <DrawerTrigger asChild>
           <Button>Open drawer</Button>
         </DrawerTrigger>
-        <DrawerContent>
+        <DrawerShell>
           <DrawerTitle>Title</DrawerTitle>
-        </DrawerContent>
+        </DrawerShell>
       </Drawer>,
     );
 
@@ -67,9 +67,9 @@ describe('Drawer', () => {
         <DrawerTrigger asChild>
           <Button>Open drawer</Button>
         </DrawerTrigger>
-        <DrawerContent>
+        <DrawerShell>
           <DrawerTitle>Revealed title</DrawerTitle>
-        </DrawerContent>
+        </DrawerShell>
       </Drawer>,
     );
 
@@ -82,9 +82,9 @@ describe('Drawer', () => {
     const onOpenChange = vi.fn();
     render(
       <Drawer defaultOpen onOpenChange={onOpenChange}>
-        <DrawerContent>
+        <DrawerShell>
           <DrawerTitle>Title</DrawerTitle>
-        </DrawerContent>
+        </DrawerShell>
       </Drawer>,
     );
 
@@ -96,14 +96,14 @@ describe('Drawer', () => {
     const onOpenChange = vi.fn();
     render(
       <Drawer defaultOpen onOpenChange={onOpenChange}>
-        <DrawerContent>
+        <DrawerShell>
           <DrawerTitle>Title</DrawerTitle>
           <DrawerFooter>
             <DrawerClose asChild>
               <Button variant="outline">Cancel</Button>
             </DrawerClose>
           </DrawerFooter>
-        </DrawerContent>
+        </DrawerShell>
       </Drawer>,
     );
 
@@ -114,9 +114,9 @@ describe('Drawer', () => {
   it('maps the `side` prop to the matching Base UI swipe direction', () => {
     render(
       <Drawer side="right" defaultOpen>
-        <DrawerContent>
+        <DrawerShell>
           <DrawerTitle>Right drawer</DrawerTitle>
-        </DrawerContent>
+        </DrawerShell>
       </Drawer>,
     );
 
@@ -130,9 +130,9 @@ describe('Drawer', () => {
   it('keeps pointer events on the viewport for a modal drawer', () => {
     render(
       <Drawer defaultOpen>
-        <DrawerContent>
+        <DrawerShell>
           <DrawerTitle>Modal drawer</DrawerTitle>
-        </DrawerContent>
+        </DrawerShell>
       </Drawer>,
     );
 
@@ -148,9 +148,9 @@ describe('Drawer', () => {
   it('opts the viewport out of pointer events for a non-modal drawer', () => {
     render(
       <Drawer defaultOpen>
-        <DrawerContent hideBackdrop>
+        <DrawerShell hideBackdrop>
           <DrawerTitle>Non-modal drawer</DrawerTitle>
-        </DrawerContent>
+        </DrawerShell>
       </Drawer>,
     );
 
