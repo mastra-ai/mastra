@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { MastraVoice } from '@internal/voice';
 import type { ToolsInput, VoiceEventType, VoiceConfig } from '@internal/voice';
-import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
+import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import type { WebSocket as WSType } from 'ws';
 import { WebSocket } from 'ws';
 import { AudioStreamManager, ConnectionManager, ContextManager, AuthManager, EventManager } from './managers';
@@ -2035,14 +2035,19 @@ export class GeminiLiveVoice extends MastraVoice<
   }
 
   /**
-   * Convert Zod schema to JSON Schema for tool parameters
+   * Convert a schema to Gemini-compatible JSON Schema using GoogleSchemaCompatLayer.
+   * This ensures the output conforms to the OpenAPI 3.0 Schema Object subset
+   * that Gemini's wire validator expects.
    * @private
    */
   private convertZodSchemaToJsonSchema(schema: unknown): unknown {
     try {
-      return this.sanitizeToolParameters(
-        standardSchemaToJSONSchema(toStandardSchema(schema as never), { io: 'input' }),
-      );
+      const compat = new GoogleSchemaCompatLayer({
+        provider: 'google',
+        modelId: 'gemini-live',
+        supportsStructuredOutputs: false,
+      });
+      return compat.processToJSONSchema(schema as any);
     } catch (error) {
       this.log('Failed to convert Zod schema to JSON schema', { error, schema });
       return {
@@ -2051,67 +2056,6 @@ export class GeminiLiveVoice extends MastraVoice<
         description: 'Schema conversion failed',
       };
     }
-  }
-
-  /**
-   * Recursively sanitize JSON Schema into the OpenAPI 3.0 Schema Object subset
-   * that Gemini Live's wire validator accepts. Gemini rejects several standard
-   * JSON Schema keywords with `1007 Unknown name "..."`.
-   * See https://github.com/mastra-ai/mastra/issues/17020
-   */
-  private sanitizeToolParameters(schema: unknown): unknown {
-    if (Array.isArray(schema)) {
-      return schema.map(item => this.sanitizeToolParameters(item));
-    }
-
-    if (!schema || typeof schema !== 'object') {
-      return schema;
-    }
-
-    const obj = schema as Record<string, unknown>;
-    const sanitized: Record<string, unknown> = {};
-
-    for (const [key, value] of Object.entries(obj)) {
-      // Strip keys Gemini rejects outright
-      if (key === '$schema' || key === 'additionalProperties') {
-        continue;
-      }
-
-      // Rewrite `oneOf` → `anyOf` (Gemini accepts anyOf but rejects oneOf)
-      if (key === 'oneOf') {
-        sanitized['anyOf'] = this.sanitizeToolParameters(value);
-        continue;
-      }
-
-      // Rewrite `const: value` → `enum: [value]`
-      if (key === 'const') {
-        sanitized['enum'] = [value];
-        continue;
-      }
-
-      sanitized[key] = this.sanitizeToolParameters(value);
-    }
-
-    // Rewrite nullable anyOf patterns: `{ anyOf: [{ type: T }, { type: 'null' }] }` → `{ type: T, nullable: true }`
-    if (Array.isArray(sanitized['anyOf'])) {
-      const variants = sanitized['anyOf'] as Record<string, unknown>[];
-      const nonNull = variants.filter(v => v && typeof v === 'object' && v['type'] !== 'null');
-      const hasNull = variants.some(v => v && typeof v === 'object' && v['type'] === 'null');
-
-      if (hasNull && nonNull.length === 1) {
-        // Collapse to the single non-null variant with nullable: true
-        const base = nonNull[0]!;
-        delete sanitized['anyOf'];
-        Object.assign(sanitized, base);
-        sanitized['nullable'] = true;
-      } else if (hasNull && nonNull.length > 1) {
-        // Multiple non-null variants — keep anyOf but drop the null variant
-        sanitized['anyOf'] = nonNull;
-        sanitized['nullable'] = true;
-      }
-    }
-
-    return sanitized;
   }
 
   /**
