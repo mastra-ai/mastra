@@ -122,7 +122,7 @@ export function DatasetExperimentsList({
         }
 
         return (
-          <DataList.Row key={experiment.id}>
+          <DataList.RowWrapper key={experiment.id}>
             <DataList.SelectCell
               checked={isSelected}
               onToggle={() => onToggleSelection(experiment.id)}
@@ -131,7 +131,7 @@ export function DatasetExperimentsList({
             <DataList.RowButton flushLeft colStart={2} featured={isSelected} onClick={handleRowClick}>
               {rowCells}
             </DataList.RowButton>
-          </DataList.Row>
+          </DataList.RowWrapper>
         );
       })}
     </DataList>

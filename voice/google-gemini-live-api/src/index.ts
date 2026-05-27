@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { ToolsInput } from '@mastra/core/agent';
-import { MastraVoice } from '@mastra/core/voice';
-import type { VoiceEventType, VoiceConfig } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
+import type { ToolsInput, VoiceEventType, VoiceConfig } from '@internal/voice';
+import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { WebSocket as WSType } from 'ws';
 import { WebSocket } from 'ws';
 import { AudioStreamManager, ConnectionManager, ContextManager, AuthManager, EventManager } from './managers';
@@ -26,7 +26,7 @@ type GeminiEventName = Extract<keyof GeminiLiveEventMap, string>;
 /**
  * Default configuration values
  */
-const DEFAULT_MODEL: GeminiVoiceModel = 'gemini-2.0-flash-exp';
+const DEFAULT_MODEL: GeminiVoiceModel = 'gemini-2.5-flash-native-audio-preview-12-2025';
 const DEFAULT_VOICE: GeminiVoiceName = 'Puck';
 
 /**
@@ -2036,29 +2036,11 @@ export class GeminiLiveVoice extends MastraVoice<
    * Convert Zod schema to JSON Schema for tool parameters
    * @private
    */
-  private convertZodSchemaToJsonSchema(schema: any): unknown {
+  private convertZodSchemaToJsonSchema(schema: unknown): unknown {
     try {
-      // Try to use the schema's toJSON method if available
-      if (typeof schema.toJSON === 'function') {
-        return schema.toJSON();
-      }
-
-      // Try to use the schema's _def property if available (Zod internal)
-      if (schema._def) {
-        return this.convertZodDefToJsonSchema(schema._def);
-      }
-
-      // If it's already a plain object, return as is
-      if (typeof schema === 'object' && !schema.safeParse) {
-        return schema;
-      }
-
-      // Default fallback
-      return {
-        type: 'object',
-        properties: {},
-        description: schema.description || '',
-      };
+      return this.sanitizeToolParameters(
+        standardSchemaToJSONSchema(toStandardSchema(schema as never), { io: 'input' }),
+      );
     } catch (error) {
       this.log('Failed to convert Zod schema to JSON schema', { error, schema });
       return {
@@ -2069,67 +2051,26 @@ export class GeminiLiveVoice extends MastraVoice<
     }
   }
 
-  /**
-   * Convert Zod definition to JSON Schema
-   * @private
-   */
-  private convertZodDefToJsonSchema(def: any): unknown {
-    switch (def.typeName) {
-      case 'ZodString':
-        return {
-          type: 'string',
-          description: def.description || '',
-        };
-      case 'ZodNumber':
-        return {
-          type: 'number',
-          description: def.description || '',
-        };
-      case 'ZodBoolean':
-        return {
-          type: 'boolean',
-          description: def.description || '',
-        };
-      case 'ZodArray':
-        return {
-          type: 'array',
-          items: this.convertZodDefToJsonSchema(def.type._def),
-          description: def.description || '',
-        };
-      case 'ZodObject':
-        const properties: Record<string, unknown> = {};
-        const required: string[] = [];
-
-        for (const [key, value] of Object.entries(def.shape())) {
-          properties[key] = this.convertZodDefToJsonSchema((value as any)._def);
-          if ((value as any)._def.typeName === 'ZodOptional') {
-            // Optional field, don't add to required
-          } else {
-            required.push(key);
-          }
-        }
-
-        return {
-          type: 'object',
-          properties,
-          required: required.length > 0 ? required : undefined,
-          description: def.description || '',
-        };
-      case 'ZodOptional':
-        return this.convertZodDefToJsonSchema(def.innerType._def);
-      case 'ZodEnum':
-        return {
-          type: 'string',
-          enum: def.values,
-          description: def.description || '',
-        };
-      default:
-        return {
-          type: 'object',
-          properties: {},
-          description: def.description || '',
-        };
+  private sanitizeToolParameters(schema: unknown): unknown {
+    if (Array.isArray(schema)) {
+      return schema.map(item => this.sanitizeToolParameters(item));
     }
+
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+
+    const sanitized: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(schema)) {
+      if (key === '$schema' || key === 'additionalProperties') {
+        continue;
+      }
+
+      sanitized[key] = this.sanitizeToolParameters(value);
+    }
+
+    return sanitized;
   }
 
   /**

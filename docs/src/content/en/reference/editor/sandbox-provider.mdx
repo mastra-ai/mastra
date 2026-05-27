@@ -1,0 +1,92 @@
+---
+title: "Reference: SandboxProvider | Editor"
+description: "Reference for SandboxProvider, the interface that registers a sandbox implementation with MastraEditor."
+packages:
+  - "@mastra/core"
+---
+
+# SandboxProvider
+
+`SandboxProvider` is the interface a package implements to register a sandbox with [`MastraEditor`](/reference/editor/mastra-editor). The editor calls `createSandbox(config)` at workspace hydration time, using the `provider` id from the stored [`StorageWorkspaceRef`](/reference/editor/storage-workspace-ref) sandbox config as the lookup key.
+
+The built-in `local` sandbox provider is auto-registered. External providers (for example, E2B) are supplied via `MastraEditorConfig.sandboxes`.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+import { e2bSandboxProvider } from '@mastra/e2b'
+
+new MastraEditor({
+  sandboxes: {
+    [e2bSandboxProvider.id]: e2bSandboxProvider,
+  },
+})
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Unique provider identifier (for example, `"local"`, `"e2b"`). Must match `StorageSandboxConfig.provider` on every stored workspace that uses this provider.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable name for UI display.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Short description shown in the workspace sandbox picker.',
+    isOptional: true,
+  },
+  {
+    name: 'configSchema',
+    type: 'Record<string, unknown>',
+    description: 'JSON Schema describing provider-specific configuration. Used by the UI to render config forms.',
+    isOptional: true,
+  },
+  {
+    name: 'createSandbox',
+    type: '(config: TConfig) => WorkspaceSandbox | Promise<WorkspaceSandbox>',
+    description:
+      'Create a runtime `WorkspaceSandbox` instance from the stored config. Called at workspace hydration time.',
+  },
+]}
+/>
+
+## Implementing a provider
+
+```typescript title="src/providers/my-sandbox.ts"
+import type { SandboxProvider, WorkspaceSandbox } from '@mastra/core/editor'
+
+export const mySandboxProvider: SandboxProvider<{ apiKey: string }> = {
+  id: 'my-sandbox',
+  name: 'My Sandbox',
+  description: 'Cloud sandbox for command execution.',
+  configSchema: {
+    type: 'object',
+    required: ['apiKey'],
+    properties: {
+      apiKey: { type: 'string' },
+    },
+  },
+  async createSandbox(config): Promise<WorkspaceSandbox> {
+    return createMySandbox({ apiKey: config.apiKey })
+  },
+}
+```
+
+Once registered, admins can reference the provider from an inline workspace config or a stored [`StorageWorkspaceRef`](/reference/editor/storage-workspace-ref).
+
+## Related
+
+- [Workspace](/docs/agent-builder/workspace) — concept and worked examples.
+- [StorageWorkspaceRef](/reference/editor/storage-workspace-ref) — stored configuration consumed by `createSandbox`.
+- [FilesystemProvider](/reference/editor/filesystem-provider) — sibling provider for file access.
+- [MastraEditor class](/reference/editor/mastra-editor) — provider registry.
