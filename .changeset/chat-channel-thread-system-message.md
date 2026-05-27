@@ -2,13 +2,15 @@
 '@mastra/core': minor
 ---
 
-Added `channels.addProcessor` to opt out of the built-in `ChatChannelProcessor`. By default, `AgentChannels` adds a `ChatChannelProcessor` that injects a short system message telling the agent which channel/platform a request came from. Pass `addProcessor: false` to skip it entirely:
+Added `channels.threadContext.addSystemMessage` to opt out of the built-in channel system message. By default, `AgentChannels` injects a short system message telling the agent which channel/platform a request came from (DM vs public, bot identity, etc.). Set `addSystemMessage: false` to skip it:
 
 ```ts
 new Agent({
   channels: {
     adapters: { slack: createSlackAdapter() },
-    addProcessor: false,
+    threadContext: {
+      addSystemMessage: false,
+    },
   },
 });
 ```

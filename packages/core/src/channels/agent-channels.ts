@@ -672,11 +672,11 @@ export class AgentChannels {
   /**
    * Returns channel input processors (e.g. system prompt injection).
    *
-   * - Skipped entirely when `channels.addProcessor` is `false`.
+   * - Skipped entirely when `channels.threadContext.addSystemMessage` is `false`.
    * - Skipped if the user already added a processor with the same id.
    */
   getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
-    if (this.channelConfig.addProcessor === false) return [];
+    if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
     if (hasProcessor) return [];
     return [new ChatChannelProcessor()];

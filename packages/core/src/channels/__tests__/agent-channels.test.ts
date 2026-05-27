@@ -102,10 +102,10 @@ describe('AgentChannels', () => {
       expect(processors[0]!.id).toBe('chat-channel-context');
     });
 
-    it('skips ChatChannelProcessor entirely when addProcessor is false', () => {
+    it('skips ChatChannelProcessor entirely when threadContext.addSystemMessage is false', () => {
       const disabled = new AgentChannels({
         adapters: { test: createMockAdapter('test') },
-        addProcessor: false,
+        threadContext: { addSystemMessage: false },
       });
       expect(disabled.getInputProcessors()).toEqual([]);
     });

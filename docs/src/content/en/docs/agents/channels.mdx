@@ -95,21 +95,23 @@ When a user mentions the agent mid-conversation in a channel thread, the agent m
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-DM threads.
 
-### Disabling the default channel processor
+### Disabling the channel system message
 
-Mastra adds a short system message telling the agent which channel and platform a request came from (DM vs public channel, platform name, bot display name) via the built-in `ChatChannelProcessor`. Set `addProcessor: false` to skip it entirely:
+Mastra adds a short system message telling the agent which channel and platform a request came from (DM vs public channel, platform name, bot display name). Set `threadContext.addSystemMessage: false` to skip it entirely:
 
 ```typescript
 new Agent({
   name: 'support-agent',
   channels: {
     adapters: { slack: createSlackAdapter() },
-    addProcessor: false,
+    threadContext: {
+      addSystemMessage: false,
+    },
   },
 })
 ```
 
-For most customization, register your own input processor with `id: 'chat-channel-context'` instead — it shadows the built-in one, so you don't need to disable it separately.
+For finer-grained control, register your own input processor with `id: 'chat-channel-context'` — it shadows the built-in one, so you don't need to disable it separately.
 
 ## Tool approval
 
