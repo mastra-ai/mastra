@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.37.1
+
+### Patch Changes
+
+- End the AGENT_RUN observability span when an agent stream suspends for human-in-the-loop tool approval (`tool-call-approval`) or tool `suspend()` (`tool-call-suspended`). Previously these terminations left the span open, so traces never reached observability backends like Langfuse, Braintrust, or Datadog. The span output now includes the suspend reason, tool name, and tool call ID. ([#17097](https://github.com/mastra-ai/mastra/pull/17097))
+
 ## 1.37.0
 
 ### Minor Changes
