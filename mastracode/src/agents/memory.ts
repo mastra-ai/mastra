@@ -6,7 +6,6 @@ import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { Subconscious } from '@mastra/memory/processors';
-import type { z } from 'zod';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
 import type { MastraCodeState } from '../schema';
 import { getOmScope } from '../utils/project';
@@ -91,7 +90,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
     const caveman = state?.cavemanObservations ?? false;
-    const subconsciousEnabled = state?.subconsciousEnabled ?? false;
+    const subconsciousEnabled = state?.subconsciousEnabled === true;
 
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments ?? 'auto';
@@ -115,10 +114,10 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             name: 'MastraCode Subconscious',
             filesystem: new LocalFilesystem({ basePath: subconsciousWorkspacePath }),
           }),
-          signal: {
-            ifActive: { behavior: 'deliver' },
-            ifIdle: { behavior: 'persist' },
-          },
+          // signal: {
+          //   ifActive: { behavior: 'deliver' },
+          //   ifIdle: { behavior: 'persist' },
+          // },
         })
       : undefined;
 
@@ -137,6 +136,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           activateOnProviderChange: true,
           observation: {
             bufferTokens: isResourceScope ? false : 1 / 5,
+            bufferOnIdle: subconsciousEnabled,
             bufferActivation: isResourceScope ? undefined : 2000,
             model: getObserverModel,
             messageTokens: obsThreshold,

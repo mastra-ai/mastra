@@ -147,10 +147,10 @@ function formatMarker(data: OMMarkerData): string {
       return theme.fg('error', `  ✗ ${label} failed${tokens}: ${data.error}`);
     }
     case 'om_extraction_end': {
-      return theme.fg('success', `  ✓ Extracted ${label.toLowerCase()} values: ${formatExtractedValues(data.extractedValues)}`);
+      return theme.fg('success', `  ✓ ${label} extraction values: ${formatExtractedValues(data.extractedValues)}`);
     }
     case 'om_extraction_failed': {
-      return theme.fg('error', `  ✗ Extracting ${label.toLowerCase()} values failed: ${data.error}`);
+      return theme.fg('error', `  ✗ ${label} extraction failed: ${data.error}`);
     }
     case 'om_buffering_start': {
       const tokens = data.tokensToBuffer > 0 ? ` ~${formatTokens(data.tokensToBuffer)} tokens` : '';

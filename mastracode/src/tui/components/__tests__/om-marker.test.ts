@@ -122,7 +122,7 @@ describe('OMMarkerComponent activation rendering', () => {
     const extractionText = stripAnsi(extractionMarker.render(120).join('\n'));
     const failedText = stripAnsi(failedMarker.render(120).join('\n'));
 
-    expect(extractionText).toContain('✓ Extracted observation values: active-topic, subconscious');
-    expect(failedText).toContain('✗ Extracting reflection values failed: Schema mismatch');
+    expect(extractionText).toContain('✓ Observation extraction values: active-topic, subconscious');
+    expect(failedText).toContain('✗ Reflection extraction failed: Schema mismatch');
   });
 });

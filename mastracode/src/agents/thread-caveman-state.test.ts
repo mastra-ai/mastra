@@ -125,4 +125,22 @@ describe('restoreOMThreadStateForCurrentThread', () => {
     expect(harness.setState).not.toHaveBeenCalled();
     expect(harness.setThreadSetting).toHaveBeenCalledWith({ key: 'observeAttachments', value: false });
   });
+
+  it('mirrors persisted Subconscious metadata into harness state', async () => {
+    const harness = createHarness({ metadata: { subconsciousEnabled: true }, state: { subconsciousEnabled: false } });
+
+    await restoreOMThreadStateForCurrentThread(harness as never);
+
+    expect(harness.setState).toHaveBeenCalledWith({ subconsciousEnabled: true });
+    expect(harness.setThreadSetting).not.toHaveBeenCalled();
+  });
+
+  it('seeds missing Subconscious metadata from current harness state', async () => {
+    const harness = createHarness({ metadata: {}, state: { subconsciousEnabled: true } });
+
+    await restoreOMThreadStateForCurrentThread(harness as never);
+
+    expect(harness.setState).not.toHaveBeenCalled();
+    expect(harness.setThreadSetting).toHaveBeenCalledWith({ key: 'subconsciousEnabled', value: true });
+  });
 });

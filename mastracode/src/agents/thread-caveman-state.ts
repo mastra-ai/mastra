@@ -14,6 +14,10 @@ const THREAD_STATE_SETTINGS: ThreadStateSetting[] = [
     key: 'observeAttachments',
     isValid: (value: unknown): value is 'auto' | boolean => value === 'auto' || typeof value === 'boolean',
   },
+  {
+    key: 'subconsciousEnabled',
+    isValid: (value: unknown): value is boolean => typeof value === 'boolean',
+  },
 ];
 
 function getStateValue(harness: Harness<Record<string, unknown>>, setting: ThreadStateSetting): unknown {
