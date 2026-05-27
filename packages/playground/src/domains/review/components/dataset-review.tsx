@@ -828,7 +828,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                 );
 
                 return (
-                  <DataList.Row key={item.id}>
+                  <DataList.RowWrapper key={item.id}>
                     {!showCompleted ? (
                       <DataList.SelectCell
                         checked={selectedItemIds.has(item.id)}
@@ -853,7 +853,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                     >
                       {rowCells}
                     </DataList.RowButton>
-                  </DataList.Row>
+                  </DataList.RowWrapper>
                 );
               })}
             </DataList>

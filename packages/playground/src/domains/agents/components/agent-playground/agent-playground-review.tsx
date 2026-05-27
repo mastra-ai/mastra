@@ -839,7 +839,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                 );
 
                 return (
-                  <DataList.Row key={item.id}>
+                  <DataList.RowWrapper key={item.id}>
                     {!showCompleted ? (
                       <DataList.SelectCell
                         checked={selectedItemIds.has(item.id)}
@@ -864,7 +864,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     >
                       {rowCells}
                     </DataList.RowButton>
-                  </DataList.Row>
+                  </DataList.RowWrapper>
                 );
               })}
             </DataList>
