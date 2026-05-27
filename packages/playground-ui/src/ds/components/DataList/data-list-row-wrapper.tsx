@@ -3,7 +3,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 import { dataListRowOuterStyles } from './shared';
 import { cn } from '@/lib/utils';
 
-export type DataListRowProps = ComponentPropsWithoutRef<'div'>;
+export type DataListRowWrapperProps = ComponentPropsWithoutRef<'div'>;
 
 /**
  * Non-interactive grid wrapper. Used to host a leading or trailing cell (e.g. a
@@ -14,12 +14,18 @@ export type DataListRowProps = ComponentPropsWithoutRef<'div'>;
  * Carries the row-level border + `.data-list-row` marker so separators and
  * sibling-aware rules behave the same in wrapped and standalone rows.
  */
-export const DataListRow = forwardRef<HTMLDivElement, DataListRowProps>(({ children, className, ...rest }, ref) => {
-  return (
-    <div ref={ref} className={cn('grid grid-cols-subgrid gap-0 mx-1', ...dataListRowOuterStyles, className)} {...rest}>
-      {children}
-    </div>
-  );
-});
+export const DataListRowWrapper = forwardRef<HTMLDivElement, DataListRowWrapperProps>(
+  ({ children, className, ...rest }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={cn('grid grid-cols-subgrid gap-0 mx-1', ...dataListRowOuterStyles, className)}
+        {...rest}
+      >
+        {children}
+      </div>
+    );
+  },
+);
 
-DataListRow.displayName = 'DataListRow';
+DataListRowWrapper.displayName = 'DataListRowWrapper';
