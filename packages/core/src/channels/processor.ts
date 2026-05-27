@@ -8,13 +8,7 @@ import type { ChannelContext, ChannelSystemMessageOption } from './types';
  * Options for {@link ChatChannelProcessor}.
  */
 export interface ChatChannelProcessorOptions {
-  /**
-   * Customize the system message content. See {@link ChannelSystemMessageOption}.
-   *
-   * Note: passing `false` here is a no-op — the only way to fully disable the
-   * processor is to set `threadContext.systemMessage: false` on `ChannelConfig`,
-   * which causes `AgentChannels` to skip adding the processor entirely.
-   */
+  /** See {@link ChannelSystemMessageOption}. */
   systemMessage?: ChannelSystemMessageOption;
 }
 
