@@ -391,12 +391,13 @@ export class GoalManager {
         maxSteps: JUDGE_MAX_STEPS,
         structuredOutput: {
           schema: judgeSchema,
+          errorStrategy: 'warn' as const,
         },
       };
 
-      const stream = await judgeAgent.stream(prompt, streamOpts);
+      const stream = await judgeAgent.stream(prompt, streamOpts as any);
       await this.consumeJudgeStream(stream, options.onActivity);
-      const output = (await stream.getFullOutput()).object as z.infer<typeof judgeSchema> | undefined;
+      const output = (await stream.getFullOutput()).object as GoalJudgeResult | undefined;
       if (output) {
         return { decision: output.decision, reason: output.reason };
       }
@@ -408,9 +409,9 @@ export class GoalManager {
       // follow-up prompt asking it to respond with the required JSON. The judge
       // has memory, so it sees its own previous messages.
       options.onActivity?.('retrying (no structured decision)');
-      const retryStream = await judgeAgent.stream(JUDGE_RETRY_PROMPT, streamOpts);
+      const retryStream = await judgeAgent.stream(JUDGE_RETRY_PROMPT, streamOpts as any);
       await this.consumeJudgeStream(retryStream, options.onActivity);
-      const retryOutput = (await retryStream.getFullOutput()).object as z.infer<typeof judgeSchema> | undefined;
+      const retryOutput = (await retryStream.getFullOutput()).object as GoalJudgeResult | undefined;
       if (retryOutput) {
         return { decision: retryOutput.decision, reason: retryOutput.reason };
       }
