@@ -37,17 +37,9 @@ jobs:
           set -euo pipefail
 
           git fetch "${HEAD_REPO}" "${HEAD_SHA}" --depth=1
-
-          # Configs gate workspace discovery, so restore them alongside tests.
-          test_pattern='(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$'
-          config_pattern='(^|/)vitest\.(config|workspace|setup)\.[a-z]+$'
-          combined_pattern="${test_pattern}|${config_pattern}"
-
           git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" FETCH_HEAD \
-            | grep -E "${combined_pattern}" \
-            | sort > /tmp/changed-files || true
-
-          grep -E "${test_pattern}" /tmp/changed-files > /tmp/changed-test-files || true
+            | grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
+            | sort > /tmp/changed-test-files || true
 
           if [ ! -s /tmp/changed-test-files ]; then
             echo "has_tests=false" >> "$GITHUB_OUTPUT"
@@ -57,7 +49,7 @@ jobs:
 
           while IFS= read -r file; do
             git checkout FETCH_HEAD -- "$file"
-          done < /tmp/changed-files
+          done < /tmp/changed-test-files
 
           echo "has_tests=true" >> "$GITHUB_OUTPUT"
           echo "Changed test files:"
@@ -100,21 +92,10 @@ jobs:
           set -euo pipefail
           mapfile -t test_files < /tmp/changed-test-files
 
-          # `--passWithNoTests` exits 0 both when tests pass and when no project matches the file —
-          # capture output so we can tell those apart.
           set +e
-          vitest_output=$(pnpm vitest run --passWithNoTests "${test_files[@]}" 2>&1)
+          pnpm vitest run --passWithNoTests "${test_files[@]}"
           test_status=$?
           set -e
-
-          echo "$vitest_output"
-
-          if echo "$vitest_output" | grep -qE "No test files found"; then
-            echo "::error title=Workspace gap::Changed test files are not discoverable by the root vitest workspace. The gate cannot validate them."
-            echo "::error::Files affected: ${test_files[*]}"
-            echo "::error::Likely causes: the package is listed in EXCLUDED_DIRS of root vitest.config.ts, or it has no vitest.config.ts that matches the root PROJECT_GLOBS."
-            exit 1
-          fi
 
           if [ "$test_status" -eq 0 ]; then
             echo "::error::Changed tests passed against the base branch. They should fail before the PR code is applied."
