@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./connect": {
+      "import": {
+        "types": "./dist/connect.d.ts",
+        "default": "./dist/connect.js"
+      },
+      "require": {
+        "types": "./dist/connect.d.ts",
+        "default": "./dist/connect.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
