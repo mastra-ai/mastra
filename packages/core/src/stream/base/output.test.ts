@@ -520,7 +520,7 @@ describe('MastraModelOutput', () => {
         toolName: 'findUserTool',
         toolCallId: 'call-1',
       });
-      // Type-only fillers are empty defaults; no consumer reads them on suspend.
+      // Empty defaults keep the suspended callback payload contract-complete.
       expect(finishPayload.text).toBe('');
       expect(finishPayload.toolCalls).toEqual([]);
       expect(finishPayload.toolResults).toEqual([]);

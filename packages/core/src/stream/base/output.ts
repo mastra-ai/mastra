@@ -1607,20 +1607,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     toolName: string;
     toolCallId: string;
   } {
-    // The only consumer of this payload is the AGENT_RUN span end in map-results-step.ts,
-    // which reads finishReason + suspendReason/toolName/toolCallId and nothing else.
-    // The remaining fields exist solely to satisfy the MastraOnFinishCallback type
-    // (LLMStepResult), not any runtime consumer — the user-facing onFinish is not invoked
-    // on suspend — so we fill them with empty defaults instead of reconstructing buffered
-    // text/tool/message state. That reconstruction (messageList.get.response.* / stepContent)
-    // would materialize a response+content snapshot from a half-finished, mid-suspend stream:
-    // work that's immediately discarded and could surface inconsistent partial data.
+    // Suspend flow invokes options?.onFinish so map-results-step.ts can close the AGENT_RUN span.
+    // That span path only reads finishReason + suspendReason/toolName/toolCallId. The remaining
+    // LLMStepResult fields are empty defaults to satisfy the MastraOnFinishCallback shape without
+    // reconstructing partial buffered text/tool/message state from a half-finished stream.
     return {
       finishReason: 'suspended',
       suspendReason: chunk.type,
       toolName: chunk.payload.toolName,
       toolCallId: chunk.payload.toolCallId,
-      // --- type-only fillers; not read by any consumer on suspend ---
+      // Empty defaults for the LLMStepResult/MastraOnFinishCallback shape.
       text: '',
       reasoning: [],
       reasoningText: undefined,
