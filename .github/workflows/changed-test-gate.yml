@@ -92,10 +92,26 @@ jobs:
           set -euo pipefail
           mapfile -t test_files < /tmp/changed-test-files
 
+          # `--passWithNoTests` makes vitest exit 0 when no project in the root
+          # workspace matches a given file. That's indistinguishable from
+          # "tests ran and passed" — so a PR adding tests in a package excluded
+          # from the workspace (e.g. `packages/playground-ui`) silently exits 0
+          # and the gate then mis-reports it as "tests passed against base".
+          # Capture stderr/stdout so we can detect that no-discovery case and
+          # surface it as a workspace-config error instead.
           set +e
-          pnpm vitest run --passWithNoTests "${test_files[@]}"
+          vitest_output=$(pnpm vitest run --passWithNoTests "${test_files[@]}" 2>&1)
           test_status=$?
           set -e
+
+          echo "$vitest_output"
+
+          if echo "$vitest_output" | grep -qE "No test files found"; then
+            echo "::error title=Workspace gap::Changed test files are not discoverable by the root vitest workspace. The gate cannot validate them."
+            echo "::error::Files affected: ${test_files[*]}"
+            echo "::error::Likely causes: the package is listed in EXCLUDED_DIRS of root vitest.config.ts, or it has no vitest.config.ts that matches the root PROJECT_GLOBS."
+            exit 1
+          fi
 
           if [ "$test_status" -eq 0 ]; then
             echo "::error::Changed tests passed against the base branch. They should fail before the PR code is applied."
