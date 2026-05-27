@@ -1,6 +1,8 @@
 import { LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
+import { Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
@@ -53,6 +55,8 @@ export function AppSidebar() {
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
+  const { isVisible: isAgentBuilderVisible } = useAgentBuilderSidebarVisibility();
+  const isAgentBuilderActive = pathname === '/agent-builder' || pathname.startsWith('/agent-builder/');
 
   const filterItem = (item: NavItem) => {
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
@@ -104,6 +108,23 @@ export function AppSidebar() {
           </span>
         )}
       </div>
+
+      {isAgentBuilderVisible && (
+        <div className="mb-2">
+          <MainSidebar.NavList>
+            <MainSidebar.NavLink
+              LinkComponent={Link}
+              state={state}
+              link={{
+                name: 'Agent Builder',
+                url: '/agent-builder',
+                icon: <Wrench />,
+              }}
+              isActive={isAgentBuilderActive}
+            />
+          </MainSidebar.NavList>
+        </div>
+      )}
 
       <ImpersonationBanner />
 
