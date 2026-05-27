@@ -666,7 +666,7 @@
       }
     },
     {
-      "hash": "9c25553eef542787",
+      "hash": "e2e2792c3f5ab7bc",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -676,15 +676,6 @@
             {
               "role": "system",
               "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code."
-            },
-            {
-              "role": "user",
-              "content": [
-                {
-                  "type": "input_text",
-                  "text": "."
-                }
-              ]
             },
             {
               "type": "item_reference",
@@ -913,7 +904,8 @@
           "metadata": {}
         },
         "isStreaming": false
-      }
+      },
+      "lookupHashes": ["9c25553eef542787"]
     },
     {
       "hash": "8e8c60a2cc04841c",
@@ -1382,7 +1374,7 @@
               "native_finish_reason": "stop",
               "message": {
                 "role": "assistant",
-                "content": "Let\u2019s work it out step by step:\n\n1. **Identify the numbers** \u2013 The problem says \u201c2 + 2\u201d, which tells us we have two numbers: the first 2 and the second 2.\n\n2. **Understand the operation** \u2013 The + sign means addition, which combines the values of the two numbers.\n\n3. **Perform the addition** \u2013  \n   - Start with the first number: 2  \n   - Add the second number: 2 \u2192 \\(2 + 2\\)\n\n4. **Compute the result** \u2013  \n   - \\(2 + 2 = 4\\)\n\nSo, \\(2 + 2\\) equals **4**.",
+                "content": "Let’s work it out step by step:\n\n1. **Identify the numbers** – The problem says “2 + 2”, which tells us we have two numbers: the first 2 and the second 2.\n\n2. **Understand the operation** – The + sign means addition, which combines the values of the two numbers.\n\n3. **Perform the addition** –  \n   - Start with the first number: 2  \n   - Add the second number: 2 → \\(2 + 2\\)\n\n4. **Compute the result** –  \n   - \\(2 + 2 = 4\\)\n\nSo, \\(2 + 2\\) equals **4**.",
                 "refusal": null,
                 "reasoning": "The user asks \"What is 2+2? Think through this carefully.\" They want a careful reasoning. The assistant should show the reasoning: adding 2 and 2 gives 4. Probably not more. The user is instructing to think through carefully, so we should show steps. It's straightforward. They might want a reasoning demonstration. Let's give reasoned answer.\n",
                 "reasoning_details": [
@@ -1400,7 +1392,7 @@
             "prompt_tokens": 96,
             "completion_tokens": 214,
             "total_tokens": 310,
-            "cost": 4.236e-5,
+            "cost": 0.00004236,
             "is_byok": false,
             "prompt_tokens_details": {
               "cached_tokens": 0,
@@ -1409,9 +1401,9 @@
               "video_tokens": 0
             },
             "cost_details": {
-              "upstream_inference_cost": 4.236e-5,
-              "upstream_inference_prompt_cost": 3.84e-6,
-              "upstream_inference_completions_cost": 3.852e-5
+              "upstream_inference_cost": 0.00004236,
+              "upstream_inference_prompt_cost": 0.00000384,
+              "upstream_inference_completions_cost": 0.00003852
             },
             "completion_tokens_details": {
               "reasoning_tokens": 75,
@@ -4527,7 +4519,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The weather in Tokyo is sunny, with a current temperature of 70\u00b0F, and it feels like 65\u00b0F."
+                  "text": "The weather in Tokyo is sunny, with a current temperature of 70°F, and it feels like 65°F."
                 }
               ],
               "role": "assistant"
@@ -4968,7 +4960,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The weather in London is sunny, with a current temperature of 70\u00b0F, and it feels like 65\u00b0F."
+                  "text": "The weather in London is sunny, with a current temperature of 70°F, and it feels like 65°F."
                 }
               ],
               "role": "assistant"
@@ -7898,7 +7890,7 @@
       }
     },
     {
-      "hash": "04025992b8516944",
+      "hash": "e2e2792c3f5ab7bc",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -7908,15 +7900,6 @@
             {
               "role": "system",
               "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code."
-            },
-            {
-              "role": "user",
-              "content": [
-                {
-                  "type": "input_text",
-                  "text": "."
-                }
-              ]
             },
             {
               "type": "item_reference",
@@ -8145,7 +8128,8 @@
           "metadata": {}
         },
         "isStreaming": false
-      }
+      },
+      "lookupHashes": ["04025992b8516944"]
     },
     {
       "hash": "0abf4ad4170bd7fb",
@@ -8293,7 +8277,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The weather in London is sunny, with a current temperature of 70\u00b0F, and it feels like 65\u00b0F."
+                  "text": "The weather in London is sunny, with a current temperature of 70°F, and it feels like 65°F."
                 }
               ],
               "role": "assistant"
