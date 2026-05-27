@@ -148,7 +148,15 @@
     "@internal/voice": "0.0.0"
   },
   "changesets": [
+    "breezy-crews-poke",
+    "dull-peaches-pump",
     "fine-countess-voice-utils",
-    "green-birds-knock"
+    "green-birds-knock",
+    "hot-aliens-sing",
+    "lovely-boxes-train",
+    "mighty-cameras-dig",
+    "social-points-add",
+    "tasty-cloths-invent",
+    "wide-cities-jog"
   ]
 }
