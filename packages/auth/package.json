@@ -36,9 +36,9 @@
     "jwks-rsa": "^3.2.2"
   },
   "devDependencies": {
+    "@internal/auth": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
@@ -59,8 +59,5 @@
   },
   "engines": {
     "node": ">=22.13.0"
-  },
-  "peerDependencies": {
-    "@mastra/core": ">=1.32.0-0 <2.0.0-0"
   }
 }

@@ -1,3 +1,4 @@
+import type { MastraAuthConfig as InternalMastraAuthConfig } from '@internal/auth/types';
 import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
@@ -8,7 +9,6 @@ import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
-import type { AuthenticateTokenFn } from './request-types';
 
 type RouteFGAConfig = FGARouteConfig;
 
@@ -54,56 +54,7 @@ export type ContextWithMastra = Context<{
   };
 }>;
 
-export type MastraAuthConfig<TUser = unknown> = {
-  /**
-   * Protected paths for the server
-   */
-  protected?: (RegExp | string | [string, Methods | Methods[]])[];
-
-  /**
-   * Public paths for the server
-   */
-  public?: (RegExp | string | [string, Methods | Methods[]])[];
-
-  /**
-   * Public paths for the server
-   */
-  authenticateToken?: AuthenticateTokenFn<TUser, Promise<TUser>>;
-
-  /**
-   * Maps the authenticated user to a resource ID for memory/thread scoping.
-   * When provided, the returned value is set as `MASTRA_RESOURCE_ID_KEY` on the request context
-   * after successful authentication, enabling per-user memory isolation.
-   */
-  mapUserToResourceId?(user: TUser): string | undefined | null;
-
-  /**
-   * Authorization function for the server
-   */
-  authorize?: (path: string, method: string, user: TUser, context: ContextWithMastra) => Promise<boolean>;
-
-  /**
-   * Rules for the server
-   */
-  rules?: {
-    /**
-     * Path for the rule
-     */
-    path?: RegExp | string | string[];
-    /**
-     * Method for the rule
-     */
-    methods?: Methods | Methods[];
-    /**
-     * Condition for the rule
-     */
-    condition?: (user: TUser) => Promise<boolean> | boolean;
-    /**
-     * Allow the rule
-     */
-    allow?: boolean;
-  }[];
-};
+export type MastraAuthConfig<TUser = unknown> = InternalMastraAuthConfig<TUser, ContextWithMastra>;
 
 export type HttpLoggingConfig = {
   /**

@@ -1,5 +1,5 @@
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
+import { MastraAuthProvider } from '@internal/auth/provider';
 
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';

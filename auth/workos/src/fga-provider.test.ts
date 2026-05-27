@@ -1,7 +1,7 @@
 /**
  * @license Mastra Enterprise License - see ee/LICENSE
  */
-import { FGADeniedError } from '@mastra/core/auth/ee';
+import { FGADeniedError } from '@internal/auth/ee';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
@@ -30,7 +30,7 @@ vi.mock('@workos-inc/node', () => {
   };
 });
 
-vi.mock('@mastra/core/auth/ee', () => ({
+vi.mock('@internal/auth/ee', () => ({
   FGADeniedError: class FGADeniedError extends Error {
     user: any;
     resource: any;

@@ -5,11 +5,11 @@ import type {
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
-} from '@mastra/core/auth';
-import type { EEUser, IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
-import { MastraAuthProvider } from '@mastra/core/server';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
+} from '@internal/auth';
+import type { EEUser, IRBACProvider, RoleMapping } from '@internal/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission } from '@internal/auth/ee';
+import { MastraAuthProvider } from '@internal/auth/provider';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 
 type HonoRequestLike = {
   raw?: Request;

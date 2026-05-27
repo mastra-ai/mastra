@@ -2,15 +2,14 @@
  * Shared types for WorkOS integration.
  */
 
-import type { JwtPayload } from '@mastra/auth';
 import type {
   EEUser,
   FGARouteResolver,
   MastraFGAPermission,
   MastraFGAPermissionInput,
   RoleMapping,
-} from '@mastra/core/auth/ee';
-import type { RequestContext } from '@mastra/core/di';
+} from '@internal/auth/ee';
+import type { JwtPayload } from '@mastra/auth';
 import type { User, OrganizationMembership } from '@workos-inc/node';
 
 // ============================================================================
@@ -238,7 +237,7 @@ export interface FGAResourceMappingEntry {
    * Derive the FGA resource ID from request/user context.
    * Return `undefined` to fall back to the raw Mastra resource ID.
    */
-  deriveId?: (ctx: { user: any; resourceId?: string; requestContext?: RequestContext }) => string | undefined;
+  deriveId?: (ctx: { user: any; resourceId?: string; requestContext?: unknown }) => string | undefined;
 }
 
 export type MastraFGAPermissionMapping = Partial<Record<MastraFGAPermission, string>> & Record<string, string>;
@@ -248,7 +247,7 @@ export type MastraFGAPermissionMapping = Partial<Record<MastraFGAPermission, str
  *
  * @example
  * ```typescript
- * import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+ * import { MastraFGAPermissions } from '@internal/auth/ee';
  *
  * new MastraFGAWorkos({
  *   resourceMapping: {
