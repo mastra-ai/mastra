@@ -33,7 +33,7 @@
   "dependencies": {
     "@mastra/observability": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.215.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
     "@opentelemetry/resources": "^2.7.0",
     "@opentelemetry/sdk-trace-base": "^2.7.0",
     "@opentelemetry/semantic-conventions": "^1.40.0"
