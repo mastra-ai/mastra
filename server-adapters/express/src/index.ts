@@ -156,6 +156,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     res.setHeader('Transfer-Encoding', 'chunked');
     res.flushHeaders();
 
+    if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+      res.write(': connected\n\n');
+    }
+
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
 

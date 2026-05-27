@@ -105,7 +105,7 @@ export function ExperimentResultsList({
             }
 
             return (
-              <DataList.Row key={result.id}>
+              <DataList.RowWrapper key={result.id}>
                 <DataList.SelectCell
                   checked={selectedIds!.has(result.id)}
                   onToggle={() => onToggleSelect!(result.id)}
@@ -119,7 +119,7 @@ export function ExperimentResultsList({
                 >
                   {rowCells}
                 </DataList.RowButton>
-              </DataList.Row>
+              </DataList.RowWrapper>
             );
           })}
 

@@ -1,5 +1,5 @@
 import type { Readable } from 'node:stream';
-import { MastraVoice } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
 
 interface GladiaConfig {
   apiKey: string;
