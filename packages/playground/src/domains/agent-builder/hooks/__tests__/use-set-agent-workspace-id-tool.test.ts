@@ -5,10 +5,7 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
 
 import type { AgentBuilderEditFormValues } from '../../schemas';
-import {
-  SET_AGENT_WORKSPACE_ID_TOOL_NAME,
-  useSetAgentWorkspaceIdTool,
-} from '../use-set-agent-workspace-id-tool';
+import { SET_AGENT_WORKSPACE_ID_TOOL_NAME, useSetAgentWorkspaceIdTool } from '../use-set-agent-workspace-id-tool';
 
 const availableWorkspaces = [
   { id: 'ws-1', name: 'Workspace One' },

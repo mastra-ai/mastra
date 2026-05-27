@@ -5,7 +5,10 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
 
 import type { AgentBuilderEditFormValues } from '../../schemas';
-import { SET_AGENT_BROWSER_ENABLED_TOOL_NAME, useSetAgentBrowserEnabledTool } from '../use-set-agent-browser-enabled-tool';
+import {
+  SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
+  useSetAgentBrowserEnabledTool,
+} from '../use-set-agent-browser-enabled-tool';
 
 const renderTool = () => {
   const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = { current: null };

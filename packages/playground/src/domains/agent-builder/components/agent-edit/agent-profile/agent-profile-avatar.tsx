@@ -71,13 +71,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
         </>
       ) : (
         <div data-testid="agent-configure-avatar-display">
-          <Avatar
-            src={draftAvatarUrl}
-            name={draftName}
-            size="lg"
-            color={avatarColor}
-            textColor={avatarTextColor}
-          />
+          <Avatar src={draftAvatarUrl} name={draftName} size="lg" color={avatarColor} textColor={avatarTextColor} />
         </div>
       )}
     </div>

@@ -43,12 +43,12 @@ export function useSetAgentToolsTool({ availableAgentTools }: UseSetAgentToolsTo
                 .string()
                 .min(1)
                 .describe(
-                  'A short, human-readable display name for this tool in Title Case (max ~3 words), derived from the tool\'s description.',
+                  "A short, human-readable display name for this tool in Title Case (max ~3 words), derived from the tool's description.",
                 ),
             }),
           )
           .describe(
-            "Tools to enable on the agent. Each entry must include both the tool `id` and a concise human-readable `name`.",
+            'Tools to enable on the agent. Each entry must include both the tool `id` and a concise human-readable `name`.',
           ),
       }),
       outputSchema: z.object({ success: z.boolean() }),

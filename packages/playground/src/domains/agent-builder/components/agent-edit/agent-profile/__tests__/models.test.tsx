@@ -31,13 +31,7 @@ vi.mock('@/domains/llm', () => ({
   }),
 }));
 
-const FormHarness = ({
-  agentId = 'agent_test',
-  children,
-}: {
-  agentId?: string;
-  children: ReactNode;
-}) => {
+const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; children: ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       model: { provider: 'openai', name: 'gpt-4o' },

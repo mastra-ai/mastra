@@ -8,13 +8,7 @@ import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import type { AgentTool } from '../../../../types/agent-tool';
 import { Tools } from '../tools';
 
-const FormHarness = ({
-  agentId = 'agent_test',
-  children,
-}: {
-  agentId?: string;
-  children: ReactNode;
-}) => {
+const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; children: ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       tools: {},
