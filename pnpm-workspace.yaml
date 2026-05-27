@@ -80,10 +80,6 @@ trustPolicyExclude:
   - 'tinyexec@1.2.2'
   # 0.7.4 is published with provenance attestation rather than trusted publisher.
   - 'prettier-plugin-tailwindcss@0.7.4'
-  # 4.0.0-beta.59 is published with provenance attestation rather than trusted publisher.
-  - 'effect@4.0.0-beta.59'
-  # 1.2.2 is published with provenance attestation rather than trusted publisher.
-  - 'tinyexec@1.2.2'
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15

@@ -46,7 +46,7 @@ jobs:
         working-directory: ./e2e-tests/monorepo
         run: pnpm test
         env:
-          NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
 
   e2e-no-bundling:
     name: E2E no-bundling
@@ -79,7 +79,7 @@ jobs:
         working-directory: ./e2e-tests/no-bundling
         run: pnpm test
         env:
-          NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
 
   e2e-create-mastra:
     name: E2E create-mastra
@@ -112,7 +112,7 @@ jobs:
         working-directory: ./e2e-tests/create-mastra
         run: pnpm test
         env:
-          NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
 
   e2e-commonjs:
     name: E2E CommonJS
@@ -176,7 +176,7 @@ jobs:
         working-directory: ./e2e-tests/deployers
         run: pnpm test
         env:
-          NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
 
   e2e-type-check:
     name: E2E Type check
