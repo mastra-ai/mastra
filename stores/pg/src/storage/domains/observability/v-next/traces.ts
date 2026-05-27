@@ -32,6 +32,10 @@ import { rowToSpanRecord } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
 import { SPAN_SELECT_COLUMNS } from './sql';
 
+function asIsoTimestamp(value: unknown): string {
+  return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
+}
+
 export async function getRootSpan(
   client: DbClient,
   schema: string,
@@ -71,19 +75,19 @@ function buildListTracesFilters(
 
   if (filters.startedAt?.start) {
     conditions.push(`r."startedAt" ${filters.startedAt.startExclusive ? '>' : '>='} $${i++}`);
-    params.push(filters.startedAt.start.toISOString());
+    params.push(asIsoTimestamp(filters.startedAt.start));
   }
   if (filters.startedAt?.end) {
     conditions.push(`r."startedAt" ${filters.startedAt.endExclusive ? '<' : '<='} $${i++}`);
-    params.push(filters.startedAt.end.toISOString());
+    params.push(asIsoTimestamp(filters.startedAt.end));
   }
   if (filters.endedAt?.start) {
     conditions.push(`r."endedAt" ${filters.endedAt.startExclusive ? '>' : '>='} $${i++}`);
-    params.push(filters.endedAt.start.toISOString());
+    params.push(asIsoTimestamp(filters.endedAt.start));
   }
   if (filters.endedAt?.end) {
     conditions.push(`r."endedAt" ${filters.endedAt.endExclusive ? '<' : '<='} $${i++}`);
-    params.push(filters.endedAt.end.toISOString());
+    params.push(asIsoTimestamp(filters.endedAt.end));
   }
   if (filters.spanType !== undefined) {
     conditions.push(`r."spanType" = $${i++}`);
@@ -365,19 +369,19 @@ function buildListBranchesFilters(
 
   if (filters.startedAt?.start) {
     conditions.push(`r."startedAt" ${filters.startedAt.startExclusive ? '>' : '>='} $${i++}`);
-    params.push(filters.startedAt.start.toISOString());
+    params.push(asIsoTimestamp(filters.startedAt.start));
   }
   if (filters.startedAt?.end) {
     conditions.push(`r."startedAt" ${filters.startedAt.endExclusive ? '<' : '<='} $${i++}`);
-    params.push(filters.startedAt.end.toISOString());
+    params.push(asIsoTimestamp(filters.startedAt.end));
   }
   if (filters.endedAt?.start) {
     conditions.push(`r."endedAt" ${filters.endedAt.startExclusive ? '>' : '>='} $${i++}`);
-    params.push(filters.endedAt.start.toISOString());
+    params.push(asIsoTimestamp(filters.endedAt.start));
   }
   if (filters.endedAt?.end) {
     conditions.push(`r."endedAt" ${filters.endedAt.endExclusive ? '<' : '<='} $${i++}`);
-    params.push(filters.endedAt.end.toISOString());
+    params.push(asIsoTimestamp(filters.endedAt.end));
   }
   if (filters.traceId !== undefined) {
     conditions.push(`r."traceId" = $${i++}`);

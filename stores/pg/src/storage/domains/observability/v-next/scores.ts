@@ -26,18 +26,24 @@ import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_SCORE_EVENTS } from './ddl';
 import { applyCommonFilters, applySingleOrArrayFilter, newFilterAccumulator, whereOrEmpty } from './filters';
 import { rowToScoreRecord, scoreRecordToRow } from './helpers';
+import { listSignalDelta, listSignalPage } from './listing';
 import {
   aggregationSql,
+  bucketDate,
   bucketSql,
   changePercent,
+  collectSeriesByDimensions,
   COMPLEX_GROUP_BY_EXCLUDED,
   dimensionsFromRow,
+  percentileSelectSql,
+  percentileSeriesFromRows,
   resolveGroupBy,
   SCORE_TYPED_COLUMNS,
   seriesNameFromDimensions,
   shiftRange,
+  validatePercentiles,
 } from './olap';
-import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
+import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { buildInsert, SCORE_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------
@@ -121,41 +127,23 @@ async function listScoresPage(
   filters: ListScoresArgs['filters'],
   page: number,
   perPage: number,
-  orderField: 'timestamp',
+  orderField: 'timestamp' | 'score',
   orderDir: 'ASC' | 'DESC',
 ): Promise<ListScoresResponse> {
-  const acc = newFilterAccumulator();
-  applyScoreFilters(acc, filters);
-  const whereClause = whereOrEmpty(acc);
-
-  const countRow = await client.oneOrNone<{ count: string }>(
-    `SELECT COUNT(*)::text AS count FROM ${table} ${whereClause}`,
-    acc.params,
-  );
-  const count = Number(countRow?.count ?? 0);
-
-  let scores: ScoreRecord[] = [];
-  if (count > 0) {
-    const rows = await client.manyOrNone<Record<string, any>>(
-      `SELECT ${SCORE_SELECT_COLUMNS}
-       FROM ${table}
-       ${whereClause}
-       ORDER BY "${orderField}" ${orderDir}
-       LIMIT $${acc.next++} OFFSET $${acc.next++}`,
-      [...acc.params, perPage, page * perPage],
-    );
-    scores = rows.map(rowToScoreRecord);
-  }
-
-  const deltaCursor = deltaPollingFeatureEnabled()
-    ? await readScoresStreamHeadCursor(client, table, filters)
-    : undefined;
-
-  return {
-    pagination: { total: count, page, perPage, hasMore: (page + 1) * perPage < count },
-    scores,
-    ...(deltaCursor !== undefined ? { deltaCursor } : {}),
-  };
+  return listSignalPage({
+    client,
+    table,
+    filters,
+    page,
+    perPage,
+    orderField,
+    orderDir,
+    includeDeltaCursor: deltaPollingFeatureEnabled(),
+    selectColumns: SCORE_SELECT_COLUMNS,
+    responseKey: 'scores',
+    applyFilters: applyScoreFilters,
+    mapRow: rowToScoreRecord,
+  });
 }
 
 async function listScoresDelta(
@@ -165,57 +153,17 @@ async function listScoresDelta(
   after: string | undefined,
   limit: number,
 ): Promise<ListScoresResponse> {
-  if (after === undefined) {
-    const deltaCursor = await readScoresStreamHeadCursor(client, table, filters);
-    return { scores: [], delta: { limit, hasMore: false }, deltaCursor };
-  }
-
-  const afterId = validateCursorId(after);
-  const acc = newFilterAccumulator();
-  applyScoreFilters(acc, filters);
-  acc.conditions.push(`"cursorId" > $${acc.next++}::bigint`);
-  acc.params.push(afterId);
-
-  const rows = await client.manyOrNone<Record<string, any>>(
-    `SELECT ${SCORE_SELECT_COLUMNS}
-     FROM ${table}
-     ${whereOrEmpty(acc)}
-     ORDER BY "cursorId" ASC
-     LIMIT $${acc.next++}`,
-    [...acc.params, limit + 1],
-  );
-
-  const hasMore = rows.length > limit;
-  const visible = rows.slice(0, limit);
-  const deltaCursor =
-    visible.length > 0
-      ? encodeDeltaCursor(visible[visible.length - 1]!.cursorId)
-      : await readScoresStreamHeadCursor(client, table, filters);
-
-  return {
-    scores: visible.map(rowToScoreRecord),
-    delta: { limit, hasMore },
-    deltaCursor,
-  };
-}
-
-async function readScoresStreamHeadCursor(
-  client: DbClient,
-  table: string,
-  filters: ListScoresArgs['filters'],
-): Promise<string> {
-  const acc = newFilterAccumulator();
-  applyScoreFilters(acc, filters);
-  const filtered = await client.oneOrNone<{ cursorId: string | null }>(
-    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table} ${whereOrEmpty(acc)}`,
-    acc.params,
-  );
-  if (filtered?.cursorId != null) return encodeDeltaCursor(filtered.cursorId);
-
-  const head = await client.oneOrNone<{ cursorId: string | null }>(
-    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table}`,
-  );
-  return encodeDeltaCursor(head?.cursorId);
+  return listSignalDelta({
+    client,
+    table,
+    filters,
+    after,
+    limit,
+    selectColumns: SCORE_SELECT_COLUMNS,
+    responseKey: 'scores',
+    applyFilters: applyScoreFilters,
+    mapRow: rowToScoreRecord,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -332,21 +280,22 @@ export async function getScoreTimeSeries(
     `;
     const rows = await client.manyOrNone<Record<string, unknown>>(sql, acc.params);
 
-    const seriesMap = new Map<string, { name: string; points: { timestamp: Date; value: number }[] }>();
-    for (const row of rows) {
-      const dimValues = resolved.map(e => row[e.alias]);
-      const seriesKey = JSON.stringify(dimValues);
-      let entry = seriesMap.get(seriesKey);
-      if (!entry) {
-        entry = { name: seriesNameFromDimensions(dimValues), points: [] };
-        seriesMap.set(seriesKey, entry);
-      }
-      entry.points.push({
-        timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
-        value: Number(row.value ?? 0),
-      });
-    }
-    return { series: Array.from(seriesMap.values()) };
+    return {
+      series: collectSeriesByDimensions(
+        rows,
+        resolved,
+        dimValues => ({
+          name: seriesNameFromDimensions(dimValues),
+          points: [] as { timestamp: Date; value: number }[],
+        }),
+        (entry, row) => {
+          entry.points.push({
+            timestamp: bucketDate(row.bucket),
+            value: Number(row.value ?? 0),
+          });
+        },
+      ),
+    };
   }
 
   const acc = newFilterAccumulator();
@@ -369,7 +318,7 @@ export async function getScoreTimeSeries(
       {
         name: seriesName,
         points: rows.map(row => ({
-          timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+          timestamp: bucketDate(row.bucket),
           value: Number(row.value ?? 0),
         })),
       },
@@ -386,23 +335,14 @@ export async function getScorePercentiles(
   schema: string,
   args: GetScorePercentilesArgs,
 ): Promise<GetScorePercentilesResponse> {
-  if (!args.percentiles.length) {
-    throw new Error('Percentiles must include at least one value between 0 and 1.');
-  }
-  for (const p of args.percentiles) {
-    if (!Number.isFinite(p) || p < 0 || p > 1) {
-      throw new Error(`Percentile value must be a finite number between 0 and 1, got ${p}`);
-    }
-  }
+  validatePercentiles(args.percentiles);
 
   const bucket = bucketSql('"timestamp"', args.interval);
   const acc = newFilterAccumulator();
   pushScoreIdentity(acc, args.scorerId, args.scoreSource);
   applyScoreFilters(acc, args.filters);
 
-  const percentileSelect = args.percentiles
-    .map((p, i) => `percentile_cont(${p}) WITHIN GROUP (ORDER BY "score") AS p${i}`)
-    .join(', ');
+  const percentileSelect = percentileSelectSql(args.percentiles, '"score"');
 
   const sql = `
     SELECT ${bucket} AS bucket, ${percentileSelect}
@@ -413,13 +353,5 @@ export async function getScorePercentiles(
   `;
   const rows = await client.manyOrNone<Record<string, unknown>>(sql, acc.params);
 
-  return {
-    series: args.percentiles.map((p, i) => ({
-      percentile: p,
-      points: rows.map(row => ({
-        timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
-        value: Number(row[`p${i}`] ?? 0),
-      })),
-    })),
-  };
+  return { series: percentileSeriesFromRows(rows, args.percentiles) };
 }

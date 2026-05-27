@@ -1,7 +1,6 @@
+import type { ConnectionOptions } from 'node:tls';
 import type { PoolConfig } from 'pg';
 import { parse } from 'pg-connection-string';
-
-import type { ConnectionStringConfig } from '../shared/config';
 
 /**
  * Builds the `pg.Pool` options for a connection-string based config.
@@ -21,7 +20,12 @@ import type { ConnectionStringConfig } from '../shared/config';
  * @see https://github.com/mastra-ai/mastra/issues/17307
  */
 export function buildConnectionStringPoolConfig(
-  config: ConnectionStringConfig,
+  config: {
+    connectionString: string;
+    ssl?: ConnectionOptions | boolean;
+    max?: number;
+    idleTimeoutMillis?: number;
+  },
   defaults: { max: number; idleTimeoutMillis: number },
 ): PoolConfig {
   // `parse` returns ports as strings and may include an `ssl` key derived from

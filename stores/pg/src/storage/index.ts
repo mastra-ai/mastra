@@ -44,6 +44,46 @@ const DEFAULT_MAX_CONNECTIONS = 20;
 /** Default idle timeout in milliseconds */
 const DEFAULT_IDLE_TIMEOUT_MS = 30000;
 
+type ConnectionStringPoolConfig = {
+  connectionString: string;
+  ssl?: ConnectionOptions | boolean;
+  max?: number;
+  idleTimeoutMillis?: number;
+};
+
+type HostPoolConfig = {
+  host: string;
+  port?: number;
+  database: string;
+  user: string;
+  password: string;
+  ssl?: ConnectionOptions | boolean;
+  max?: number;
+  idleTimeoutMillis?: number;
+};
+
+function createConnectionStringPool(config: ConnectionStringPoolConfig): Pool {
+  return new Pool(
+    buildConnectionStringPoolConfig(config, {
+      max: DEFAULT_MAX_CONNECTIONS,
+      idleTimeoutMillis: DEFAULT_IDLE_TIMEOUT_MS,
+    }),
+  );
+}
+
+function createHostPool(config: HostPoolConfig): Pool {
+  return new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: config.ssl,
+    max: config.max ?? DEFAULT_MAX_CONNECTIONS,
+    idleTimeoutMillis: config.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
+  });
+}
+
 /**
  * All storage domain classes, in order. Each provides a static getExportDDL method
  * that returns the complete DDL (tables, constraints, indexes, triggers) for that domain.
@@ -204,25 +244,11 @@ export class PostgresStore extends MastraCompositeStore {
 
   private createPool(config: PostgresStoreConfig): Pool {
     if (isConnectionStringConfig(config)) {
-      return new Pool(
-        buildConnectionStringPoolConfig(config, {
-          max: DEFAULT_MAX_CONNECTIONS,
-          idleTimeoutMillis: DEFAULT_IDLE_TIMEOUT_MS,
-        }),
-      );
+      return createConnectionStringPool(config);
     }
 
     if (isHostConfig(config)) {
-      return new Pool({
-        host: config.host,
-        port: config.port,
-        database: config.database,
-        user: config.user,
-        password: config.password,
-        ssl: config.ssl,
-        max: config.max ?? DEFAULT_MAX_CONNECTIONS,
-        idleTimeoutMillis: config.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
-      });
+      return createHostPool(config);
     }
 
     if (isCloudSqlConfig(config)) {
@@ -446,25 +472,11 @@ export class PostgresStoreVNext extends PostgresStore {
       return { client: new PoolAdapter(cfg.pool), pool: cfg.pool, owned: false };
     }
     if ('connectionString' in cfg && typeof cfg.connectionString === 'string') {
-      const pool = new Pool({
-        connectionString: cfg.connectionString,
-        ssl: cfg.ssl,
-        max: cfg.max ?? DEFAULT_MAX_CONNECTIONS,
-        idleTimeoutMillis: cfg.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
-      });
+      const pool = createConnectionStringPool(cfg);
       return { client: new PoolAdapter(pool), pool, owned: true };
     }
     if ('host' in cfg) {
-      const pool = new Pool({
-        host: cfg.host,
-        port: cfg.port,
-        database: cfg.database,
-        user: cfg.user,
-        password: cfg.password,
-        ssl: cfg.ssl,
-        max: cfg.max ?? DEFAULT_MAX_CONNECTIONS,
-        idleTimeoutMillis: cfg.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
-      });
+      const pool = createHostPool(cfg);
       return { client: new PoolAdapter(pool), pool, owned: true };
     }
     // Cloud SQL connector / pg ClientConfig style — pass through to pg.Pool.

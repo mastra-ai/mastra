@@ -239,24 +239,29 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     return ['delta-polling'] as const;
   }
 
+  async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      wrapError(op, error, details);
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Tracing — writes
   // -------------------------------------------------------------------------
 
   override async createSpan(args: CreateSpanArgs): Promise<void> {
-    try {
-      await tracingOps.createSpan(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('CREATE_SPAN', error, { traceId: args.span.traceId, spanId: args.span.spanId });
-    }
+    await this.#run('CREATE_SPAN', () => tracingOps.createSpan(this.#client, this.#schema, args), {
+      traceId: args.span.traceId,
+      spanId: args.span.spanId,
+    });
   }
 
   override async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
-    try {
-      await tracingOps.batchCreateSpans(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('BATCH_CREATE_SPANS', error, { count: args.records.length });
-    }
+    await this.#run('BATCH_CREATE_SPANS', () => tracingOps.batchCreateSpans(this.#client, this.#schema, args), {
+      count: args.records.length,
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -264,59 +269,43 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
-    try {
-      return await tracingOps.getSpan(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_SPAN', error, { traceId: args.traceId, spanId: args.spanId });
-    }
+    return this.#run('GET_SPAN', () => tracingOps.getSpan(this.#client, this.#schema, args), {
+      traceId: args.traceId,
+      spanId: args.spanId,
+    });
   }
 
   override async getSpans(args: GetSpansArgs): Promise<GetSpansResponse> {
-    try {
-      return await tracingOps.getSpans(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_SPANS', error, { traceId: args.traceId, count: args.spanIds.length });
-    }
+    return this.#run('GET_SPANS', () => tracingOps.getSpans(this.#client, this.#schema, args), {
+      traceId: args.traceId,
+      count: args.spanIds.length,
+    });
   }
 
   override async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
-    try {
-      return await tracesOps.getRootSpan(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_ROOT_SPAN', error, { traceId: args.traceId });
-    }
+    return this.#run('GET_ROOT_SPAN', () => tracesOps.getRootSpan(this.#client, this.#schema, args), {
+      traceId: args.traceId,
+    });
   }
 
   override async getTrace(args: GetTraceArgs): Promise<GetTraceResponse | null> {
-    try {
-      return await tracingOps.getTrace(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_TRACE', error, { traceId: args.traceId });
-    }
+    return this.#run('GET_TRACE', () => tracingOps.getTrace(this.#client, this.#schema, args), {
+      traceId: args.traceId,
+    });
   }
 
   override async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
-    try {
-      return await tracingOps.getTraceLight(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_TRACE_LIGHT', error, { traceId: args.traceId });
-    }
+    return this.#run('GET_TRACE_LIGHT', () => tracingOps.getTraceLight(this.#client, this.#schema, args), {
+      traceId: args.traceId,
+    });
   }
 
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
-    try {
-      return await tracesOps.listTraces(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('LIST_TRACES', error);
-    }
+    return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#client, this.#schema, args));
   }
 
   override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
-    try {
-      return await tracesOps.listBranches(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('LIST_BRANCHES', error);
-    }
+    return this.#run('LIST_BRANCHES', () => tracesOps.listBranches(this.#client, this.#schema, args));
   }
 
   // -------------------------------------------------------------------------
@@ -324,51 +313,35 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async batchCreateLogs(args: BatchCreateLogsArgs): Promise<void> {
-    try {
-      await logsOps.batchCreateLogs(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('BATCH_CREATE_LOGS', error, { count: args.logs.length });
-    }
+    await this.#run('BATCH_CREATE_LOGS', () => logsOps.batchCreateLogs(this.#client, this.#schema, args), {
+      count: args.logs.length,
+    });
   }
 
   override async batchCreateMetrics(args: BatchCreateMetricsArgs): Promise<void> {
-    try {
-      await metricsOps.batchCreateMetrics(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('BATCH_CREATE_METRICS', error, { count: args.metrics.length });
-    }
+    await this.#run('BATCH_CREATE_METRICS', () => metricsOps.batchCreateMetrics(this.#client, this.#schema, args), {
+      count: args.metrics.length,
+    });
   }
 
   override async createScore(args: CreateScoreArgs): Promise<void> {
-    try {
-      await scoresOps.createScore(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('CREATE_SCORE', error);
-    }
+    await this.#run('CREATE_SCORE', () => scoresOps.createScore(this.#client, this.#schema, args));
   }
 
   override async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
-    try {
-      await scoresOps.batchCreateScores(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('BATCH_CREATE_SCORES', error, { count: args.scores.length });
-    }
+    await this.#run('BATCH_CREATE_SCORES', () => scoresOps.batchCreateScores(this.#client, this.#schema, args), {
+      count: args.scores.length,
+    });
   }
 
   override async createFeedback(args: CreateFeedbackArgs): Promise<void> {
-    try {
-      await feedbackOps.createFeedback(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('CREATE_FEEDBACK', error);
-    }
+    await this.#run('CREATE_FEEDBACK', () => feedbackOps.createFeedback(this.#client, this.#schema, args));
   }
 
   override async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
-    try {
-      await feedbackOps.batchCreateFeedback(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('BATCH_CREATE_FEEDBACK', error, { count: args.feedbacks.length });
-    }
+    await this.#run('BATCH_CREATE_FEEDBACK', () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args), {
+      count: args.feedbacks.length,
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -376,43 +349,25 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async listLogs(args: ListLogsArgs): Promise<ListLogsResponse> {
-    try {
-      return await logsOps.listLogs(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('LIST_LOGS', error);
-    }
+    return this.#run('LIST_LOGS', () => logsOps.listLogs(this.#client, this.#schema, args));
   }
 
   override async listMetrics(args: ListMetricsArgs): Promise<ListMetricsResponse> {
-    try {
-      return await metricsOps.listMetrics(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('LIST_METRICS', error);
-    }
+    return this.#run('LIST_METRICS', () => metricsOps.listMetrics(this.#client, this.#schema, args));
   }
 
   override async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
-    try {
-      return await scoresOps.listScores(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('LIST_SCORES', error);
-    }
+    return this.#run('LIST_SCORES', () => scoresOps.listScores(this.#client, this.#schema, args));
   }
 
   override async getScoreById(scoreId: string) {
-    try {
-      return await scoresOps.getScoreById(this.#client, this.#schema, scoreId);
-    } catch (error) {
-      wrapError('GET_SCORE_BY_ID', error, { scoreId });
-    }
+    return this.#run('GET_SCORE_BY_ID', () => scoresOps.getScoreById(this.#client, this.#schema, scoreId), {
+      scoreId,
+    });
   }
 
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
-    try {
-      return await feedbackOps.listFeedback(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('LIST_FEEDBACK', error);
-    }
+    return this.#run('LIST_FEEDBACK', () => feedbackOps.listFeedback(this.#client, this.#schema, args));
   }
 
   // -------------------------------------------------------------------------
@@ -420,35 +375,19 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async getMetricAggregate(args: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
-    try {
-      return await metricsOps.getMetricAggregate(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_METRIC_AGGREGATE', error);
-    }
+    return this.#run('GET_METRIC_AGGREGATE', () => metricsOps.getMetricAggregate(this.#client, this.#schema, args));
   }
 
   override async getMetricBreakdown(args: GetMetricBreakdownArgs): Promise<GetMetricBreakdownResponse> {
-    try {
-      return await metricsOps.getMetricBreakdown(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_METRIC_BREAKDOWN', error);
-    }
+    return this.#run('GET_METRIC_BREAKDOWN', () => metricsOps.getMetricBreakdown(this.#client, this.#schema, args));
   }
 
   override async getMetricTimeSeries(args: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
-    try {
-      return await metricsOps.getMetricTimeSeries(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_METRIC_TIME_SERIES', error);
-    }
+    return this.#run('GET_METRIC_TIME_SERIES', () => metricsOps.getMetricTimeSeries(this.#client, this.#schema, args));
   }
 
   override async getMetricPercentiles(args: GetMetricPercentilesArgs): Promise<GetMetricPercentilesResponse> {
-    try {
-      return await metricsOps.getMetricPercentiles(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_METRIC_PERCENTILES', error);
-    }
+    return this.#run('GET_METRIC_PERCENTILES', () => metricsOps.getMetricPercentiles(this.#client, this.#schema, args));
   }
 
   // -------------------------------------------------------------------------
@@ -456,35 +395,19 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
-    try {
-      return await scoresOps.getScoreAggregate(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_SCORE_AGGREGATE', error);
-    }
+    return this.#run('GET_SCORE_AGGREGATE', () => scoresOps.getScoreAggregate(this.#client, this.#schema, args));
   }
 
   override async getScoreBreakdown(args: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
-    try {
-      return await scoresOps.getScoreBreakdown(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_SCORE_BREAKDOWN', error);
-    }
+    return this.#run('GET_SCORE_BREAKDOWN', () => scoresOps.getScoreBreakdown(this.#client, this.#schema, args));
   }
 
   override async getScoreTimeSeries(args: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
-    try {
-      return await scoresOps.getScoreTimeSeries(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_SCORE_TIME_SERIES', error);
-    }
+    return this.#run('GET_SCORE_TIME_SERIES', () => scoresOps.getScoreTimeSeries(this.#client, this.#schema, args));
   }
 
   override async getScorePercentiles(args: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
-    try {
-      return await scoresOps.getScorePercentiles(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_SCORE_PERCENTILES', error);
-    }
+    return this.#run('GET_SCORE_PERCENTILES', () => scoresOps.getScorePercentiles(this.#client, this.#schema, args));
   }
 
   // -------------------------------------------------------------------------
@@ -492,35 +415,27 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
-    try {
-      return await feedbackOps.getFeedbackAggregate(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_FEEDBACK_AGGREGATE', error);
-    }
+    return this.#run('GET_FEEDBACK_AGGREGATE', () =>
+      feedbackOps.getFeedbackAggregate(this.#client, this.#schema, args),
+    );
   }
 
   override async getFeedbackBreakdown(args: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
-    try {
-      return await feedbackOps.getFeedbackBreakdown(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_FEEDBACK_BREAKDOWN', error);
-    }
+    return this.#run('GET_FEEDBACK_BREAKDOWN', () =>
+      feedbackOps.getFeedbackBreakdown(this.#client, this.#schema, args),
+    );
   }
 
   override async getFeedbackTimeSeries(args: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
-    try {
-      return await feedbackOps.getFeedbackTimeSeries(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_FEEDBACK_TIME_SERIES', error);
-    }
+    return this.#run('GET_FEEDBACK_TIME_SERIES', () =>
+      feedbackOps.getFeedbackTimeSeries(this.#client, this.#schema, args),
+    );
   }
 
   override async getFeedbackPercentiles(args: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
-    try {
-      return await feedbackOps.getFeedbackPercentiles(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('GET_FEEDBACK_PERCENTILES', error);
-    }
+    return this.#run('GET_FEEDBACK_PERCENTILES', () =>
+      feedbackOps.getFeedbackPercentiles(this.#client, this.#schema, args),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -528,67 +443,49 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async getEntityTypes(args: GetEntityTypesArgs): Promise<GetEntityTypesResponse> {
-    try {
-      return await discoveryOps.getEntityTypes(this.#client, this.#schema, args, this.#discovery);
-    } catch (error) {
-      wrapError('GET_ENTITY_TYPES', error);
-    }
+    return this.#run('GET_ENTITY_TYPES', () =>
+      discoveryOps.getEntityTypes(this.#client, this.#schema, args, this.#discovery),
+    );
   }
 
   override async getEntityNames(args: GetEntityNamesArgs): Promise<GetEntityNamesResponse> {
-    try {
-      return await discoveryOps.getEntityNames(this.#client, this.#schema, args, this.#discovery);
-    } catch (error) {
-      wrapError('GET_ENTITY_NAMES', error);
-    }
+    return this.#run('GET_ENTITY_NAMES', () =>
+      discoveryOps.getEntityNames(this.#client, this.#schema, args, this.#discovery),
+    );
   }
 
   override async getServiceNames(args: GetServiceNamesArgs): Promise<GetServiceNamesResponse> {
-    try {
-      return await discoveryOps.getServiceNames(this.#client, this.#schema, args, this.#discovery);
-    } catch (error) {
-      wrapError('GET_SERVICE_NAMES', error);
-    }
+    return this.#run('GET_SERVICE_NAMES', () =>
+      discoveryOps.getServiceNames(this.#client, this.#schema, args, this.#discovery),
+    );
   }
 
   override async getEnvironments(args: GetEnvironmentsArgs): Promise<GetEnvironmentsResponse> {
-    try {
-      return await discoveryOps.getEnvironments(this.#client, this.#schema, args, this.#discovery);
-    } catch (error) {
-      wrapError('GET_ENVIRONMENTS', error);
-    }
+    return this.#run('GET_ENVIRONMENTS', () =>
+      discoveryOps.getEnvironments(this.#client, this.#schema, args, this.#discovery),
+    );
   }
 
   override async getTags(args: GetTagsArgs): Promise<GetTagsResponse> {
-    try {
-      return await discoveryOps.getTags(this.#client, this.#schema, args, this.#discovery);
-    } catch (error) {
-      wrapError('GET_TAGS', error);
-    }
+    return this.#run('GET_TAGS', () => discoveryOps.getTags(this.#client, this.#schema, args, this.#discovery));
   }
 
   override async getMetricNames(args: GetMetricNamesArgs): Promise<GetMetricNamesResponse> {
-    try {
-      return await discoveryOps.getMetricNames(this.#client, this.#schema, args, this.#discovery);
-    } catch (error) {
-      wrapError('GET_METRIC_NAMES', error);
-    }
+    return this.#run('GET_METRIC_NAMES', () =>
+      discoveryOps.getMetricNames(this.#client, this.#schema, args, this.#discovery),
+    );
   }
 
   override async getMetricLabelKeys(args: GetMetricLabelKeysArgs): Promise<GetMetricLabelKeysResponse> {
-    try {
-      return await discoveryOps.getMetricLabelKeys(this.#client, this.#schema, args, this.#discovery);
-    } catch (error) {
-      wrapError('GET_METRIC_LABEL_KEYS', error);
-    }
+    return this.#run('GET_METRIC_LABEL_KEYS', () =>
+      discoveryOps.getMetricLabelKeys(this.#client, this.#schema, args, this.#discovery),
+    );
   }
 
   override async getMetricLabelValues(args: GetMetricLabelValuesArgs): Promise<GetMetricLabelValuesResponse> {
-    try {
-      return await discoveryOps.getMetricLabelValues(this.#client, this.#schema, args, this.#discovery);
-    } catch (error) {
-      wrapError('GET_METRIC_LABEL_VALUES', error);
-    }
+    return this.#run('GET_METRIC_LABEL_VALUES', () =>
+      discoveryOps.getMetricLabelValues(this.#client, this.#schema, args, this.#discovery),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -596,11 +493,9 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
-    try {
-      await tracingOps.batchDeleteTraces(this.#client, this.#schema, args);
-    } catch (error) {
-      wrapError('BATCH_DELETE_TRACES', error, { count: args.traceIds.length });
-    }
+    await this.#run('BATCH_DELETE_TRACES', () => tracingOps.batchDeleteTraces(this.#client, this.#schema, args), {
+      count: args.traceIds.length,
+    });
   }
 
   override async dangerouslyClearAll(): Promise<void> {

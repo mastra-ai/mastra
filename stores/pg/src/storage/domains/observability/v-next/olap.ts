@@ -210,6 +210,62 @@ export function changePercent(current: number | null, previous: number | null): 
   return ((current - previous) / Math.abs(previous)) * 100;
 }
 
+export function bucketDate(value: unknown): Date {
+  return value instanceof Date ? value : new Date(String(value));
+}
+
+export function validatePercentiles(percentiles: readonly number[]): void {
+  if (!percentiles.length) {
+    throw new Error('Percentiles must include at least one value between 0 and 1.');
+  }
+  for (const percentile of percentiles) {
+    if (!Number.isFinite(percentile) || percentile < 0 || percentile > 1) {
+      throw new Error(`Percentile value must be a finite number between 0 and 1, got ${percentile}`);
+    }
+  }
+}
+
+export function percentileSelectSql(percentiles: readonly number[], measureSql: string): string {
+  return percentiles
+    .map((percentile, index) => `percentile_cont(${percentile}) WITHIN GROUP (ORDER BY ${measureSql}) AS p${index}`)
+    .join(', ');
+}
+
+export function percentileSeriesFromRows(
+  rows: Record<string, unknown>[],
+  percentiles: readonly number[],
+): { percentile: number; points: { timestamp: Date; value: number }[] }[] {
+  return percentiles.map((percentile, index) => ({
+    percentile,
+    points: rows.map(row => ({
+      timestamp: bucketDate(row.bucket),
+      value: Number(row[`p${index}`] ?? 0),
+    })),
+  }));
+}
+
+export function collectSeriesByDimensions<Row extends Record<string, unknown>, Entry>(
+  rows: Row[],
+  resolved: ResolvedGroupBy[],
+  createEntry: (dimensionValues: unknown[]) => Entry,
+  appendRow: (entry: Entry, row: Row, dimensionValues: unknown[]) => void,
+): Entry[] {
+  const seriesMap = new Map<string, Entry>();
+
+  for (const row of rows) {
+    const dimensionValues = resolved.map(entry => row[entry.alias]);
+    const seriesKey = JSON.stringify(dimensionValues);
+    let entry = seriesMap.get(seriesKey);
+    if (!entry) {
+      entry = createEntry(dimensionValues);
+      seriesMap.set(seriesKey, entry);
+    }
+    appendRow(entry, row, dimensionValues);
+  }
+
+  return Array.from(seriesMap.values());
+}
+
 // ---------------------------------------------------------------------------
 // Cost summary aggregates (used in metric OLAP responses)
 // ---------------------------------------------------------------------------
