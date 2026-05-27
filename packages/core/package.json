@@ -862,6 +862,7 @@
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
+    "@internal/auth": "workspace:*",
     "@internal/core": "workspace:*",
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
