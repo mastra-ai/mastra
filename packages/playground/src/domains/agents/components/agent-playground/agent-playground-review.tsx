@@ -517,7 +517,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: toolbar + EntityList + Detail Panel */}
+      {/* Main layout: toolbar + List + Detail Panel */}
       <Columns className={cn('p-4', featuredItem ? 'grid-cols-[1fr_1fr]' : '')}>
         <Column>
           <Column.Toolbar>

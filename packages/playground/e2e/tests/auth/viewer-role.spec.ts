@@ -132,7 +132,7 @@ test.describe('Viewer Role', () => {
       await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.locator('.entity-list-row').filter({ hasText: /workflow/i });
+      const workflowRow = page.locator('.data-list-row').filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -142,7 +142,7 @@ test.describe('Viewer Role', () => {
 
       // Click on a workflow
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
