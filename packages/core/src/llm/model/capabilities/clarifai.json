@@ -1,0 +1,9 @@
+{
+  "attachment": [
+    "clarifai/main/models/mm-poly-8b",
+    "deepseek-ai/deepseek-ocr/models/DeepSeek-OCR",
+    "mistralai/completion/models/Ministral-3-14B-Reasoning-2512",
+    "mistralai/completion/models/Ministral-3-3B-Reasoning-2512",
+    "moonshotai/chat-completion/models/Kimi-K2_6"
+  ]
+}

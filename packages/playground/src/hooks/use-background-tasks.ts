@@ -16,6 +16,7 @@ export interface BackgroundTaskEvent {
   error?: { message: string; stack?: string };
   status: BackgroundTaskStatus;
   args: Record<string, unknown>;
+  suspendPayload?: unknown;
 }
 
 export interface UseBackgroundTaskStreamOptions extends StreamBackgroundTasksParams {
@@ -67,7 +68,9 @@ type EventType = Extract<
       | 'background-task-completed'
       | 'background-task-failed'
       | 'background-task-cancelled'
-      | 'background-task-output';
+      | 'background-task-output'
+      | 'background-task-suspended'
+      | 'background-task-resumed';
   }
 >;
 
@@ -77,6 +80,8 @@ const EVENT_STATUS_MAP: Record<EventType['type'], BackgroundTaskStatus> = {
   'background-task-completed': 'completed',
   'background-task-failed': 'failed',
   'background-task-cancelled': 'cancelled',
+  'background-task-suspended': 'suspended',
+  'background-task-resumed': 'running',
 };
 
 export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions = {}): UseBackgroundTaskStreamReturn {

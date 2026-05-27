@@ -1,9 +1,25 @@
 import { readFileSync } from 'node:fs';
 
 import type { MastraPackage } from '../schemas/system';
-import { systemPackagesResponseSchema } from '../schemas/system';
+import { apiSchemaManifestResponseSchema, systemPackagesResponseSchema } from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+
+export const GET_API_SCHEMA_ROUTE = createRoute({
+  method: 'GET',
+  path: '/system/api-schema',
+  responseType: 'json',
+  responseSchema: apiSchemaManifestResponseSchema,
+  summary: 'Get API schema manifest',
+  description: 'Returns the route-contract-derived API schema manifest for the machine-readable CLI',
+  tags: ['System'],
+  requiresAuth: true,
+  handler: async () => {
+    // Dynamic import to avoid circular dependency issues
+    const { buildApiSchemaManifest } = await import('../server-adapter/api-schema-manifest');
+    return buildApiSchemaManifest();
+  },
+});
 
 export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   method: 'GET',

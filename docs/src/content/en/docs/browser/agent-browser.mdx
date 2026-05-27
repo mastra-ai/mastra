@@ -39,7 +39,7 @@ const browser = new AgentBrowser({
 export const browserAgent = new Agent({
   id: 'browser-agent',
   name: 'Browser Agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   browser,
   instructions: `You are a web automation assistant.
 
@@ -55,6 +55,21 @@ When interacting with pages:
 For local launches (the default), AgentBrowser requires a Chromium binary installed via Playwright. This is normally downloaded automatically when you install `@mastra/agent-browser`. If launching the browser fails with `"browser executable is missing"`, run `npx playwright install chromium`. If you connect to a remote browser using the [`cdpUrl`](/reference/browser/agent-browser) option, no local Chromium is needed.
 
 :::
+
+## Screenshots
+
+When the agent uses the `browser_screenshot` tool, it captures a PNG image of the current page and returns it as image content that vision-capable models can interpret directly.
+
+Use screenshots when you need to visually inspect the page — for example, evaluating images, layout, or colors. For text or structured data, use `browser_snapshot` instead.
+
+To disable the screenshot tool for models that do not support vision, use `excludeTools`:
+
+```typescript
+const browser = new AgentBrowser({
+  headless: false,
+  excludeTools: ['browser_screenshot'],
+})
+```
 
 ## Element refs
 

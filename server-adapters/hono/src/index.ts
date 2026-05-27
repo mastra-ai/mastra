@@ -136,6 +136,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => c.req.header(name),
+      });
 
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);
@@ -164,6 +168,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return stream(
       res,
       async stream => {
+        if (streamFormat === 'sse') {
+          await stream.write(': connected\n\n');
+        }
+
         const readableStream = result instanceof ReadableStream ? result : result.fullStream;
         const reader = readableStream.getReader();
 
@@ -177,6 +185,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             if (done) break;
 
             if (value) {
+              if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+                await stream.write(value);
+                continue;
+              }
+
               // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
               const shouldRedact = this.streamOptions?.redact ?? true;
               const outputValue = shouldRedact ? redactStreamChunk(value) : value;
@@ -514,7 +527,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         if (authConfig) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const userPermissions = c.get('requestContext').get('mastra__userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
             if (permissionError) {
@@ -631,7 +644,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         if (authConfig) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const userPermissions = c.get('requestContext').get('mastra__userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
             if (permissionError) {
               return c.json(
@@ -683,6 +696,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           reqHeaders,
           c.req.raw.body,
           c.get('requestContext'),
+          c.req.raw.signal,
         );
         if (!response) {
           return c.json({ error: 'Not Found' }, 404);

@@ -25,7 +25,6 @@ export * from './utils/csv-export';
 export * from './utils/json-export';
 
 // Components
-export { DatasetsTable } from './components/datasets-table/datasets-table';
 export { DatasetsList, type DatasetsListProps } from './components/datasets-list/datasets-list';
 export {
   DATASET_TARGET_OPTIONS,

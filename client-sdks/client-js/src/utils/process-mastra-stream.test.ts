@@ -206,6 +206,26 @@ describe('processMastraStream', () => {
     expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
   });
 
+  it('should ignore SSE heartbeat comments', async () => {
+    const testChunk: ChunkType = {
+      type: 'message',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { text: 'valid message' },
+    };
+
+    const sseData = `: keep-alive\n\ndata: ${JSON.stringify(testChunk)}\n\n: keep-alive\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+    });
+
+    expect(mockOnChunk).toHaveBeenCalledTimes(1);
+    expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
+  });
+
   it('should properly clean up stream reader resources', async () => {
     const testChunk: ChunkType = {
       type: 'message',
@@ -246,7 +266,7 @@ describe('processMastraStream', () => {
     const onChunkError = new Error('onChunk error');
     mockOnChunk.mockRejectedValueOnce(onChunkError);
 
-    // Should propagate the error from onChunk
+    // Should propagate the original error verbatim
     await expect(
       processMastraStream({
         stream,
@@ -273,6 +293,29 @@ describe('processMastraStream', () => {
       }),
     ).rejects.toThrow(errorMessage);
 
+    expect(mockOnChunk).not.toHaveBeenCalled();
+  });
+
+  it('should stop reading when the abort signal is aborted', async () => {
+    const abortController = new AbortController();
+    const cancel = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({
+      pull() {
+        return new Promise(() => {});
+      },
+      cancel,
+    });
+
+    const processing = processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+      signal: abortController.signal,
+    });
+
+    abortController.abort();
+
+    await processing;
+    expect(cancel).toHaveBeenCalled();
     expect(mockOnChunk).not.toHaveBeenCalled();
   });
 

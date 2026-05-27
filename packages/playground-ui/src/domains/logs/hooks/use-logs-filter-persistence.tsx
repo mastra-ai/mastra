@@ -12,7 +12,7 @@ const DEFAULT_SAVED_MESSAGE = 'Filters setting for Logs saved';
 const DEFAULT_CLEARED_MESSAGE = 'Filters setting for Logs cleared up';
 
 export interface LogsFilterPersistenceOptions {
-  /** Override the localStorage key. Default: 'mastra:logs:saved-filters'. */
+  /** Override the localStorage key. Default: logs filters storage. */
   storageKey?: string;
   /** Toast text overrides; pass `false` to suppress the toast entirely. */
   messages?: {

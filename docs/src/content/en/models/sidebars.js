@@ -143,6 +143,21 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ambient',
+          label: 'Ambient',
+        },
+        {
+          type: 'doc',
+          id: 'providers/atomic-chat',
+          label: 'Atomic Chat',
+        },
+        {
+          type: 'doc',
+          id: 'providers/auriko',
+          label: 'Auriko',
+        },
+        {
+          type: 'doc',
           id: 'providers/azure',
           label: 'Azure',
         },
@@ -178,6 +193,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/claudinio',
+          label: 'Claudinio',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudferro-sherlock',
           label: 'CloudFerro Sherlock',
         },
@@ -203,8 +223,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/crof',
+          label: 'CrofAI',
+        },
+        {
+          type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/databricks',
+          label: 'Databricks',
         },
         {
           type: 'doc',
@@ -233,6 +263,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/firepass',
+          label: 'Fireworks (Firepass)',
+        },
+        {
+          type: 'doc',
           id: 'providers/fireworks-ai',
           label: 'Fireworks AI',
         },
@@ -250,6 +285,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/github-models',
           label: 'GitHub Models',
+        },
+        {
+          type: 'doc',
+          id: 'providers/gmicloud',
+          label: 'GMI Cloud',
         },
         {
           type: 'doc',
@@ -283,6 +323,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/inceptron',
+          label: 'Inceptron',
+        },
+        {
+          type: 'doc',
           id: 'providers/inference',
           label: 'Inference',
         },
@@ -310,6 +355,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/kuae-cloud-coding-plan',
           label: 'KUAE Cloud Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/lilac',
+          label: 'Lilac',
         },
         {
           type: 'doc',
@@ -349,12 +399,12 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/minimax-coding-plan',
-          label: 'MiniMax Coding Plan (minimax.io)',
+          label: 'MiniMax Token Plan (minimax.io)',
         },
         {
           type: 'doc',
           id: 'providers/minimax-cn-coding-plan',
-          label: 'MiniMax Coding Plan (minimaxi.com)',
+          label: 'MiniMax Token Plan (minimaxi.com)',
         },
         {
           type: 'doc',
@@ -390,6 +440,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nano-gpt',
           label: 'NanoGPT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/nearai',
+          label: 'NEAR AI Cloud',
         },
         {
           type: 'doc',
@@ -438,6 +493,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/orcarouter',
+          label: 'OrcaRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
         },
@@ -483,6 +543,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/routing-run',
+          label: 'routing.run',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sarvam',
+          label: 'Sarvam AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/scaleway',
           label: 'Scaleway',
         },
@@ -504,6 +574,11 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/stepfun',
+          label: 'StepFun',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun-ai',
           label: 'StepFun',
         },
         {
@@ -535,6 +610,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/umans-ai-coding-plan',
+          label: 'Umans AI Coding Plan',
         },
         {
           type: 'doc',
@@ -580,6 +660,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/xiaomi-token-plan-sgp',
           label: 'Xiaomi Token Plan (Singapore)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xpersona',
+          label: 'Xpersona',
         },
         {
           type: 'doc',

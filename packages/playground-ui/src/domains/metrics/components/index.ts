@@ -1,9 +1,11 @@
 export { DateRangeSelector } from './date-range-selector';
 export { formatCompact, formatCost, CHART_COLORS } from './metrics-utils';
 export { BarListContent, StackedRunsBars } from './bar-list';
+export { OpenErrorsInLogsButton, OpenInTracesButton } from './card-action-buttons';
 export { KpiCardView, type KpiCardViewProps } from './kpi-card-view';
-export { LatencyCardView, type LatencyCardViewProps } from './latency-card-view';
+export { LatencyCardView, type LatencyCardViewProps, type LatencyTab } from './latency-card-view';
+export { MemoryCardView, type MemoryCardViewProps, type MemoryTab } from './memory-card-view';
 export { ModelUsageCostCardView, type ModelUsageCostCardViewProps } from './model-usage-cost-card-view';
 export { ScoresCardView, type ScoresCardViewProps } from './scores-card-view';
 export { TokenUsageByAgentCardView, type TokenUsageByAgentCardViewProps } from './token-usage-by-agent-card-view';
-export { TracesVolumeCardView, type TracesVolumeCardViewProps } from './traces-volume-card-view';
+export { TracesVolumeCardView, type TracesVolumeCardViewProps, type VolumeTab } from './traces-volume-card-view';

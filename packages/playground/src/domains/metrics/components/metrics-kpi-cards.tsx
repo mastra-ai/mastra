@@ -2,6 +2,8 @@ import {
   KpiCardView,
   formatCompact,
   formatCost,
+  useActiveResourcesKpiMetrics,
+  useActiveThreadsKpiMetrics,
   useAgentRunsKpiMetrics,
   useModelCostKpiMetrics,
   useTotalTokensKpiMetrics,
@@ -40,6 +42,34 @@ export function TotalTokensKpiCard() {
   return (
     <KpiCardView
       label="Total Tokens"
+      value={data?.value != null ? formatCompact(data.value) : null}
+      prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
+      changePct={data?.changePercent ?? null}
+      isLoading={isLoading}
+      isError={isError}
+    />
+  );
+}
+
+export function ActiveThreadsKpiCard() {
+  const { data, isLoading, isError } = useActiveThreadsKpiMetrics();
+  return (
+    <KpiCardView
+      label="Total Threads"
+      value={data?.value != null ? formatCompact(data.value) : null}
+      prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
+      changePct={data?.changePercent ?? null}
+      isLoading={isLoading}
+      isError={isError}
+    />
+  );
+}
+
+export function ActiveResourcesKpiCard() {
+  const { data, isLoading, isError } = useActiveResourcesKpiMetrics();
+  return (
+    <KpiCardView
+      label="Total Resources"
       value={data?.value != null ? formatCompact(data.value) : null}
       prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}

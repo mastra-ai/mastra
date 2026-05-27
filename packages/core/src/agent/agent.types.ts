@@ -9,6 +9,7 @@ import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
@@ -142,6 +143,14 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /** Aggregate token usage from the sub-agent's execution */
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      reasoningTokens?: number;
+      cachedInputTokens?: number;
+    };
   };
   /** Duration of the delegation in milliseconds */
   duration: number;
@@ -301,7 +310,6 @@ export interface DelegationConfig {
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
 }
-
 /**
  * Configuration for the routing agent's behavior.
  */
@@ -571,6 +579,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
+
+  /** Per-invocation transform policy for tool payloads in display and transcript serializers. */
+  transform?: ToolPayloadTransformPolicy;
 
   /**
    * Callback fired after each iteration (LLM call) completes.

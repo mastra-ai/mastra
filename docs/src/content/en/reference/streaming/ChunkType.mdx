@@ -1502,6 +1502,126 @@ Emitted when the task throws or times out. Triggers a continuation turn when con
 ]}
 />
 
+### background-task-suspended
+
+Emitted when a tool calls `suspend()` from inside its background execution. Pauses the task's workflow run with its snapshot persisted; resume with `mastra.backgroundTaskManager.resume(taskId, resumeData)`.
+
+When consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle), this chunk drops the task from the loop's wait set without queuing a continuation — the agent's response ends, and the resumed task's eventual completion injects into the message list for the next user turn.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"background-task-suspended"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'BackgroundTaskSuspendedPayload',
+    description: 'Suspension details for the task',
+    properties: [
+      {
+        type: 'BackgroundTaskSuspendedPayload',
+        parameters: [
+          {
+            name: 'taskId',
+            type: 'string',
+            description: 'Unique identifier for the background task',
+          },
+          {
+            name: 'toolName',
+            type: 'string',
+            description: 'Name of the tool that was executed',
+          },
+          {
+            name: 'toolCallId',
+            type: 'string',
+            description: 'Tool-call ID from the originating LLM tool call',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Run ID of the agent that dispatched the task',
+          },
+          {
+            name: 'agentId',
+            type: 'string',
+            description: 'ID of the agent that dispatched the task',
+          },
+          {
+            name: 'suspendData',
+            type: 'unknown',
+            isOptional: true,
+            description: 'Whatever the tool passed to `suspend(data)`',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### background-task-resumed
+
+Emitted when a suspended task is resumed via `mastra.backgroundTaskManager.resume(taskId, resumeData)`. The task transitions back to `running` and the tool's `execute` is restarted with `resumeData` populated.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"background-task-resumed"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'BackgroundTaskResumedPayload',
+    description: 'Resume details for the task',
+    properties: [
+      {
+        type: 'BackgroundTaskResumedPayload',
+        parameters: [
+          {
+            name: 'taskId',
+            type: 'string',
+            description: 'Unique identifier for the background task',
+          },
+          {
+            name: 'toolName',
+            type: 'string',
+            description: 'Name of the tool that was executed',
+          },
+          {
+            name: 'toolCallId',
+            type: 'string',
+            description: 'Tool-call ID from the originating LLM tool call',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Run ID of the agent that dispatched the task',
+          },
+          {
+            name: 'agentId',
+            type: 'string',
+            description: 'ID of the agent that dispatched the task',
+          },
+          {
+            name: 'startedAt',
+            type: 'Date',
+            description: 'Timestamp at which the task resumed',
+          },
+          {
+            name: 'args',
+            type: 'Record<string, unknown>',
+            description: 'Original tool arguments',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
 ### background-task-cancelled
 
 Emitted when the task is cancelled before completing. Triggers a continuation turn when consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle).

@@ -99,7 +99,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
         warn: vi.fn(),
         debug: vi.fn(),
       })),
-      startEventEngine: vi.fn(),
+      startWorkers: vi.fn(),
       listAgents: vi.fn(() => []),
       setMastraServer: vi.fn(),
     } as unknown as Mastra;

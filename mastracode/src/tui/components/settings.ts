@@ -24,6 +24,7 @@ export interface SettingsConfig {
   currentModelId: string;
   escapeAsCancel: boolean;
   quietMode: boolean;
+  quietModeMaxToolPreviewLines: number;
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
@@ -35,6 +36,7 @@ export interface SettingsCallbacks {
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
   onQuietModeChange: (enabled: boolean) => void;
+  onQuietModeMaxToolPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onApiKeys?: () => void;
   onClose: () => void;
@@ -176,6 +178,10 @@ class StorageBackendSubmenu extends Container {
 // Helpers
 // =============================================================================
 
+function quietPreviewLinesLabel(lines: number): string {
+  return lines === 0 ? 'None' : `${lines} line${lines === 1 ? '' : 's'}`;
+}
+
 function storageLabel(config: SettingsConfig): string {
   if (config.storageBackend === 'pg') return 'PostgreSQL';
   if (config.libsqlUrl) return `LibSQL (${config.libsqlUrl})`;
@@ -198,7 +204,7 @@ export class SettingsComponent extends Box implements Focusable {
   }
 
   constructor(config: SettingsConfig, callbacks: SettingsCallbacks) {
-    super(2, 1, (text: string) => theme.bg('overlayBg', text));
+    super(4, 2, (text: string) => theme.bg('overlayBg', text));
 
     // Title
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Settings')), 0, 0));
@@ -328,7 +334,7 @@ export class SettingsComponent extends Box implements Focusable {
       {
         id: 'quietMode',
         label: 'Quiet mode',
-        description: 'Collapse subagent output to a single line after completion.',
+        description: 'Render tool calls compactly and collapse subagent output after completion.',
         currentValue: config.quietMode ? 'On' : 'Off',
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
@@ -336,12 +342,12 @@ export class SettingsComponent extends Box implements Focusable {
               {
                 value: 'on',
                 label: '  On',
-                description: 'Auto-collapse subagent output when done',
+                description: 'Compact older tool calls and completed subagents',
               },
               {
                 value: 'off',
                 label: '  Off',
-                description: 'Keep subagent output visible when done',
+                description: 'Keep normal tool and subagent rendering',
               },
             ],
             config.quietMode ? 'on' : 'off',
@@ -353,6 +359,34 @@ export class SettingsComponent extends Box implements Focusable {
             () => done(),
           ),
       },
+      ...(config.quietMode
+        ? [
+            {
+              id: 'quietModeMaxToolPreviewLines',
+              label: 'Quiet mode tool preview lines',
+              description: 'Maximum compact tool detail preview lines. Set to None to hide previews.',
+              currentValue: quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines),
+              submenu: (_currentValue: string, done: (value?: string) => void) =>
+                new SelectSubmenu(
+                  [0, 1, 2, 4, 8].map(lines => ({
+                    value: String(lines),
+                    label: `  ${quietPreviewLinesLabel(lines)}`,
+                    description:
+                      lines === 0
+                        ? 'Hide compact tool detail previews'
+                        : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
+                  })),
+                  String(config.quietModeMaxToolPreviewLines),
+                  value => {
+                    config.quietModeMaxToolPreviewLines = Number(value);
+                    callbacks.onQuietModeMaxToolPreviewLinesChange(config.quietModeMaxToolPreviewLines);
+                    done(quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines));
+                  },
+                  () => done(),
+                ),
+            },
+          ]
+        : []),
       {
         id: 'storageBackend',
         label: 'Storage backend',

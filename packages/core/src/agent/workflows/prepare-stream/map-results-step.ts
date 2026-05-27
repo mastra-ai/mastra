@@ -8,7 +8,7 @@ import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
-import type { Step } from '../../../workflows';
+import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
@@ -196,6 +196,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
 
+    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
+      ? typeof capabilities.llmRequestInputProcessors === 'function'
+        ? await capabilities.llmRequestInputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.inputProcessors,
+          })
+        : options.inputProcessors || capabilities.llmRequestInputProcessors
+      : effectiveInputProcessors;
+
     // Resolve error processors
     const effectiveErrorProcessors = capabilities.errorProcessors
       ? typeof capabilities.errorProcessors === 'function'
@@ -275,6 +284,18 @@ export function createMapResultsStep<OUTPUT = undefined>({
             return;
           }
 
+          if (payload.finishReason === 'suspended') {
+            agentSpan?.end({
+              output: {
+                status: 'suspended',
+                reason: payload.suspendReason,
+                toolName: payload.toolName,
+                toolCallId: payload.toolCallId,
+              },
+            });
+            return;
+          }
+
           // Skip memory persistence when the abort signal has fired.
           // The LLM response may have continued after the caller disconnected,
           // and we should not persist a partial or full response for an aborted request.
@@ -282,10 +303,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (!aborted) {
             try {
-              const outputText = messageList.get.all
-                .core()
-                .map(m => m.content)
-                .join('\n');
+              const outputText =
+                options.structuredOutput?.schema && payload.object != null
+                  ? JSON.stringify(payload.object)
+                  : (payload.text ?? '');
 
               await capabilities.executeOnFinish({
                 result: payload,
@@ -345,12 +366,14 @@ export function createMapResultsStep<OUTPUT = undefined>({
       activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
+      llmRequestInputProcessors: effectiveLLMRequestInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       errorProcessors: effectiveErrorProcessors,
       modelSettings: {
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
+      initialSignalEchoes: memoryData.initialSignalEchoes,
       maxProcessorRetries: options.maxProcessorRetries,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,

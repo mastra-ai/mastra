@@ -19,7 +19,7 @@ import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
-import type { ObservabilityContext } from '../observability';
+import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
@@ -61,6 +61,24 @@ export type StreamTransport = {
   close: () => void;
   closeOnFinish: boolean;
 };
+
+export const MASTRA_MODEL_STREAM_TRANSPORT = Symbol.for('@mastra/core.modelStreamTransport');
+
+export type StreamTransportCarrier = {
+  [key: symbol]: StreamTransport | undefined;
+};
+
+export function attachModelStreamTransport(target: object, transport?: StreamTransport): void {
+  if (!transport) return;
+  Object.defineProperty(target, MASTRA_MODEL_STREAM_TRANSPORT, {
+    configurable: true,
+    value: transport,
+  });
+}
+
+export function readModelStreamTransport(target: unknown): StreamTransport | undefined {
+  return (target as StreamTransportCarrier | undefined)?.[MASTRA_MODEL_STREAM_TRANSPORT];
+}
 
 export type StreamTransportRef = {
   current?: StreamTransport;
@@ -168,6 +186,16 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   providerMetadata?: ProviderMetadata;
   output?: TOutput;
   dynamic?: boolean;
+  /**
+   * W3C trace context carrier for client-side tool execution.
+   *
+   * Populated by the server when emitting a tool call that will be
+   * executed in the client (`providerExecuted: false` and the tool has
+   * no server-side execute function). The client SDK extracts the
+   * carrier, parents any child spans/logs underneath it, and echoes it
+   * back in the next request body for cross-request trace correlation.
+   */
+  observability?: ClientObservabilityCarrier;
 }
 
 export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
@@ -190,6 +218,7 @@ interface ToolCallInputStreamingStartPayload {
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
+  observability?: ClientObservabilityCarrier;
 }
 
 interface ToolCallDeltaPayload {
@@ -437,6 +466,29 @@ export interface BackgroundTaskOutputPayload {
   runId: string;
   agentId: string;
   payload: Extract<AgentChunkType, { type: 'tool-output' }>;
+}
+
+export interface BackgroundTaskSuspendedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  args: Record<string, unknown>;
+  /** Whatever the tool passed to `suspend(data)`. */
+  suspendPayload?: unknown;
+  /** When the task suspended. */
+  suspendedAt?: Date;
+}
+
+export interface BackgroundTaskResumedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
 }
 
 // Network-specific payload interfaces
@@ -776,6 +828,14 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & {
       type: 'background-task-output';
       payload: BackgroundTaskOutputPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-suspended';
+      payload: BackgroundTaskSuspendedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-resumed';
+      payload: BackgroundTaskResumedPayload;
     });
 
 export type WorkflowStreamEvent =
@@ -888,6 +948,7 @@ export type TypedChunkType<OUTPUT = undefined> =
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
+export type StreamChunkType<OUTPUT = undefined> = ChunkType<OUTPUT> | DataChunkType;
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;
@@ -905,6 +966,16 @@ export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
+
+export type PendingToolCall = {
+  toolCallId: string;
+  toolName: string;
+  argsText: string;
+  state: 'input-streaming' | 'input-available';
+  providerExecuted?: boolean;
+  providerMetadata?: ProviderMetadata;
+  dynamic?: boolean;
+};
 
 export type ExecuteStreamModelManager<T> = (
   callback: (modelConfig: ModelManagerModelConfig, isLastModel: boolean) => Promise<T>,
@@ -1000,6 +1071,7 @@ export type MastraStepResult<Tools extends ToolSet = ToolSet> = StepResult<Tools
 export type LLMStepResult<OUTPUT = undefined> = {
   stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
+  pendingToolCalls?: PendingToolCall[];
   toolResults: ToolResultChunk[];
   dynamicToolCalls: ToolCallChunk[];
   dynamicToolResults: ToolResultChunk[];
