@@ -95,21 +95,7 @@ When a user mentions the agent mid-conversation in a channel thread, the agent m
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-DM threads.
 
-### Disabling the channel system message
-
-Mastra adds a short system message telling the agent which channel and platform a request came from (DM vs public channel, platform name, bot display name). Set `threadContext.addSystemMessage: false` to skip it entirely:
-
-```typescript
-new Agent({
-  name: 'support-agent',
-  channels: {
-    adapters: { slack: createSlackAdapter() },
-    threadContext: {
-      addSystemMessage: false,
-    },
-  },
-})
-```
+Mastra also adds a short system message telling the agent which channel and platform the request came from (DM vs public channel, platform name, bot display name). Set `threadContext: { addSystemMessage: false }` to skip it.
 
 ## Tool approval
 
