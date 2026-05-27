@@ -348,30 +348,31 @@ function withAbortSignal<T>(
         abortCleanup = () => signal.removeEventListener('abort', onAbort);
       }
       try {
-        let result: ReadableStreamReadResult<T>;
-        if (idleTimeoutMs > 0) {
-          let timerId: ReturnType<typeof setTimeout> | undefined;
-          const timeout = new Promise<never>((_, reject) => {
-            timerId = setTimeout(
-              () => reject(new Error(`Model stream idle timeout: no data received for ${idleTimeoutMs / 1000}s`)),
-              idleTimeoutMs,
-            );
-            if (typeof timerId === 'object' && 'unref' in timerId) timerId.unref();
-          });
-          try {
-            result = await Promise.race([reader.read(), timeout]);
-          } finally {
-            clearTimeout(timerId);
+        const readWithTimeout = async (): Promise<{ done: boolean; value?: T }> => {
+          if (idleTimeoutMs > 0) {
+            let timerId: ReturnType<typeof setTimeout> | undefined;
+            const timeout = new Promise<never>((_, reject) => {
+              timerId = setTimeout(
+                () => reject(new Error(`Model stream idle timeout: no data received for ${idleTimeoutMs / 1000}s`)),
+                idleTimeoutMs,
+              );
+              if (typeof timerId === 'object' && 'unref' in timerId) timerId.unref();
+            });
+            try {
+              return await Promise.race([reader.read(), timeout]);
+            } finally {
+              clearTimeout(timerId);
+            }
           }
-        } else {
-          result = await reader.read();
-        }
+          return reader.read();
+        };
+        const { done, value } = await readWithTimeout();
         abortCleanup?.();
         abortCleanup = undefined;
-        if (result.done) {
+        if (done) {
           controller.close();
         } else {
-          controller.enqueue(result.value);
+          controller.enqueue(value!);
         }
       } catch (err) {
         abortCleanup?.();
