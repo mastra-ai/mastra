@@ -76,22 +76,32 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
         <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
           {state === 'collapsed' ? (
             <div className="flex flex-col gap-3 items-center">
-              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+              <Link href="/agents" aria-label="Back to Mastra Studio" className="ml-3">
+                <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+              </Link>
               {isUserAuthenticated && <AuthStatus />}
             </div>
           ) : isUserAuthenticated ? (
             <span className="flex items-center justify-between pl-3 pr-2">
-              <span className="flex items-center gap-2">
+              <Link
+                href="/agents"
+                aria-label="Back to Mastra Studio"
+                className="flex items-center gap-2 rounded-sm hover:opacity-80"
+              >
                 <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
                 <span className="font-serif text-sm">Mastra Studio</span>
-              </span>
+              </Link>
               <AuthStatus />
             </span>
           ) : (
-            <span className="flex items-center gap-2 pl-3">
+            <Link
+              href="/agents"
+              aria-label="Back to Mastra Studio"
+              className="flex items-center gap-2 pl-3 rounded-sm hover:opacity-80"
+            >
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
               <span className="font-serif text-sm">Mastra Studio</span>
-            </span>
+            </Link>
           )}
         </div>
       )}
