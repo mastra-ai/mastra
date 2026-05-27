@@ -7722,6 +7722,9 @@ importers:
       '@internal/voice':
         specifier: workspace:*
         version: link:../../packages/_internals/voice
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -37046,7 +37049,7 @@ snapshots:
       detect-libc: 2.1.2
       is-glob: 4.0.3
       node-addon-api: 7.1.1
-      picomatch: 4.0.3
+      picomatch: 4.0.4
     optionalDependencies:
       '@parcel/watcher-android-arm64': 2.5.6
       '@parcel/watcher-darwin-arm64': 2.5.6
@@ -38113,7 +38116,7 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.9
       estree-walker: 2.0.2
-      picomatch: 4.0.3
+      picomatch: 4.0.4
     optionalDependencies:
       rollup: 4.62.0
 
