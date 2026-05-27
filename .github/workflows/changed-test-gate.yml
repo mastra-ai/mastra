@@ -37,20 +37,9 @@ jobs:
           set -euo pipefail
 
           git fetch "${HEAD_REPO}" "${HEAD_SHA}" --depth=1
-
-          # Detect changed files relevant to the gate: tests plus vitest config/setup
-          # files (config changes can decide whether the workspace even discovers the
-          # changed tests, so they must be restored alongside the tests they enable).
-          test_pattern='(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$'
-          config_pattern='(^|/)vitest\.(config|workspace|setup)\.[a-z]+$'
-          combined_pattern="${test_pattern}|${config_pattern}"
-
           git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" FETCH_HEAD \
-            | grep -E "${combined_pattern}" \
-            | sort > /tmp/changed-files || true
-
-          # Subset used as the vitest filter — only real test files.
-          grep -E "${test_pattern}" /tmp/changed-files > /tmp/changed-test-files || true
+            | grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
+            | sort > /tmp/changed-test-files || true
 
           if [ ! -s /tmp/changed-test-files ]; then
             echo "has_tests=false" >> "$GITHUB_OUTPUT"
@@ -58,10 +47,9 @@ jobs:
             exit 0
           fi
 
-          # Restore everything relevant (tests + their enabling configs) onto base.
           while IFS= read -r file; do
             git checkout FETCH_HEAD -- "$file"
-          done < /tmp/changed-files
+          done < /tmp/changed-test-files
 
           echo "has_tests=true" >> "$GITHUB_OUTPUT"
           echo "Changed test files:"
