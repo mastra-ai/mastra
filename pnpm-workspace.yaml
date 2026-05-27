@@ -29,8 +29,8 @@ catalog:
   '@vitest/coverage-v8': 4.1.5
   '@vitest/ui': 4.1.5
   date-fns: 4.1.0
-  react: ^19.2.6
-  react-dom: ^19.2.6
+  react: ^19.2.5
+  react-dom: ^19.2.5
   typescript: ^6.0.3
   vitest: 4.1.5
   zod: ^4.4.3
