@@ -97,7 +97,7 @@ Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only appl
 
 ### Disabling the default channel processor
 
-On every step, Mastra adds a short system message telling the agent which channel and platform a request came from (DM vs public channel, platform name, bot display name) via the built-in `ChatChannelProcessor`. Set `addProcessor: false` to skip it entirely:
+Mastra adds a short system message telling the agent which channel and platform a request came from (DM vs public channel, platform name, bot display name) via the built-in `ChatChannelProcessor`. Set `addProcessor: false` to skip it entirely:
 
 ```typescript
 new Agent({

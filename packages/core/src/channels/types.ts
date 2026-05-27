@@ -440,9 +440,9 @@ export interface ChannelConfig {
    * Whether to automatically add the built-in `ChatChannelProcessor` input
    * processor. Defaults to `true`.
    *
-   * The default processor adds a small system message on every step telling
-   * the agent which channel/platform a request came from (DM vs public, bot
-   * identity, etc.) — see `ChatChannelProcessor`.
+   * The default processor adds a small system message telling the agent
+   * which channel/platform a request came from (DM vs public, bot identity,
+   * etc.) — see `ChatChannelProcessor`.
    *
    * Set to `false` to skip it entirely. For most customization needs, you
    * can instead register your own input processor with
