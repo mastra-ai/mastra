@@ -107,9 +107,9 @@ type DrawerViewportProps = Omit<DrawerPrimitive.Viewport.Props, 'className'> & {
 };
 
 // A plain full-screen flex container, exactly like the Base UI examples. It must NOT
-// set `pointer-events: none` for modal drawers — that breaks the swipe gesture. The
-// non-modal opt-out (`pointer-events-none` here + `pointer-events-auto` on the popup)
-// is applied by `DrawerShell` only when there is no backdrop.
+// set `pointer-events: none` for modal drawers — that breaks the swipe gesture. For a
+// non-modal drawer (no backdrop), consumers opt out by passing `pointer-events-none`
+// here and `pointer-events-auto` on the popup.
 const DrawerViewport = React.forwardRef<HTMLDivElement, DrawerViewportProps>(({ className, ...props }, ref) => {
   const side = useDrawerSide();
   return (

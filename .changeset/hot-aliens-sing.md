@@ -4,16 +4,27 @@
 
 Pointer drags inside the `SideDialog` body now select text reliably instead of fighting with the close-swipe gesture. The popup chrome (header, edges) still closes the drawer on drag.
 
-The previous `DrawerContent` composition helper (Portal + Backdrop + Viewport + Popup) is renamed to **`DrawerShell`** so that **`DrawerContent`** can re-export Base UI's text-selectable `Drawer.Content` primitive. Naming now matches Base UI 1:1.
+`DrawerContent` now re-exports Base UI's text-selectable `Drawer.Content` primitive, matching Base UI naming 1:1. The previous `DrawerContent` composition helper (Portal + Backdrop + Viewport + Popup) is removed — components should compose the primitives directly, the way `SideDialog` does.
 
 **Migration**
 
 ```tsx
 // Before
 import { DrawerContent } from '@mastra/playground-ui';
-<DrawerContent>…</DrawerContent>;
+
+<Drawer>
+  <DrawerContent>…</DrawerContent>
+</Drawer>;
 
 // After
-import { DrawerShell } from '@mastra/playground-ui';
-<DrawerShell>…</DrawerShell>;
+import { DrawerPortal, DrawerBackdrop, DrawerViewport, DrawerPopup } from '@mastra/playground-ui';
+
+<Drawer>
+  <DrawerPortal>
+    <DrawerBackdrop />
+    <DrawerViewport>
+      <DrawerPopup>…</DrawerPopup>
+    </DrawerViewport>
+  </DrawerPortal>
+</Drawer>;
 ```
