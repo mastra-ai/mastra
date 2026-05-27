@@ -439,8 +439,11 @@ export interface ChannelConfig {
    * ```ts
    * threadContext: {
    *   maxMessages: 20,
+   *   // userName is thread-stable inside a DM (one human per DM), so it's
+   *   // cache-safe to include. In public channels it varies per sender —
+   *   // leave it out of the system message there.
    *   systemMessage: ctx => ctx.isDM
-   *     ? `Having a private DM conversation on ${ctx.platform}.`
+   *     ? `Having a private DM on ${ctx.platform} with ${ctx.userName ?? 'a user'}.`
    *     : `Chatting in a public ${ctx.platform} channel.`,
    * }
    * ```
