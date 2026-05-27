@@ -1,5 +1,15 @@
 # @internal/playground
 
+## 1.10.1-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`d72dc4b`](https://github.com/mastra-ai/mastra/commit/d72dc4b12d832546c05c20255fa96fe4eb515900)]:
+  - @mastra/core@1.37.0-alpha.9
+  - @mastra/client-js@1.21.0-alpha.10
+  - @mastra/react@0.4.1-alpha.10
+  - @mastra/playground-ui@30.0.0-alpha.10
+
 ## 1.10.1-alpha.9
 
 ### Patch Changes
