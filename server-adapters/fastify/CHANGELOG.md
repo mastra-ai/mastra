@@ -1,5 +1,25 @@
 # @mastra/fastify
 
+## 1.3.26-alpha.1
+
+### Patch Changes
+
+- Added sseFlushOnConnect route option to scope the SSE connected comment to subscribe endpoints only ([#17158](https://github.com/mastra-ai/mastra/pull/17158))
+
+- Scoped the SSE connected comment to subscribe routes only and added SSE comment passthrough for Fastify and NestJS adapters ([#17158](https://github.com/mastra-ai/mastra/pull/17158))
+
+- Updated dependencies [[`9d87d68`](https://github.com/mastra-ai/mastra/commit/9d87d688371f5d1252ebb18d96890b51ade7de7c), [`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c), [`9d87d68`](https://github.com/mastra-ai/mastra/commit/9d87d688371f5d1252ebb18d96890b51ade7de7c)]:
+  - @mastra/server@1.37.2-alpha.1
+  - @mastra/core@1.37.2-alpha.1
+
+## 1.3.26-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`07c3de7`](https://github.com/mastra-ai/mastra/commit/07c3de7f7bc418beccaea3b5e6b7f7cdda79d492)]:
+  - @mastra/core@1.37.2-alpha.0
+  - @mastra/server@1.37.2-alpha.0
+
 ## 1.3.25
 
 ### Patch Changes
