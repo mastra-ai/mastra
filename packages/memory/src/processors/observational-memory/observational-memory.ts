@@ -5,7 +5,7 @@ import { resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
@@ -485,6 +485,7 @@ export class ObservationalMemory {
             config.observation?.bufferTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferTokens,
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
+      bufferOnIdle: config.observation?.bufferOnIdle ?? false,
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
@@ -2889,8 +2890,12 @@ ${formattedMessages}
      *  before lastBufferedBoundary is set. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
+    sendSignal?: ProcessorContext['sendSignal'];
     requestContext?: RequestContext;
+    currentModel?: ObservationModelContext;
     observabilityContext?: ObservabilityContext;
+    /** Allow idle-triggered buffering to observe any non-empty candidate set. */
+    skipMinimumTokenCheck?: boolean;
     /** Called with the final candidate messages after cursor filtering, before the observer runs.
      *  Use this to seal messages in a live MessageList and persist them to storage. */
     beforeBuffer?: (candidates: MastraDBMessage[]) => Promise<void>;
@@ -2995,7 +3000,7 @@ ${formattedMessages}
       const minNewTokens = bufferTokens / 2;
       const newTokens = await this.tokenCounter.countMessagesAsync(candidateMessages);
 
-      if (newTokens < minNewTokens || candidateMessages.length === 0) {
+      if (candidateMessages.length === 0 || (!opts.skipMinimumTokenCheck && newTokens < minNewTokens)) {
         return { buffered: false, record };
       }
 
@@ -3039,7 +3044,9 @@ ${formattedMessages}
         cycleId,
         startedAt,
         writer,
+        sendSignal: opts.sendSignal,
         requestContext,
+        currentModel: opts.currentModel,
         observabilityContext,
       }).run();
 
