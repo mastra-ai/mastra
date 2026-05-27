@@ -140,8 +140,16 @@ export const useChat = ({
 
   useEffect(() => {
     const formattedMessages = resolveInitialMessages(initialMessages || []);
-    setMessages(formattedMessages);
-    _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+    // Guard against a race condition on new threads: the finish event can fire before
+    // the backend has persisted messages, so the first fetch may return an empty list.
+    // Thread switches are handled by key-based remounting which resets state to [],
+    // so prev.length > 0 here only means we have streamed messages worth keeping.
+    if (formattedMessages.length === 0) {
+      setMessages(prev => (prev.length > 0 ? prev : formattedMessages));
+    } else {
+      setMessages(formattedMessages);
+      _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+    }
   }, [initialMessages]);
 
   useEffect(() => {
