@@ -58,13 +58,7 @@ describe('ChatChannelProcessor', () => {
       systemMessages: messageList.getAllSystemMessages(),
     });
 
-    const result = processor.processInputStep(args);
-
-    // Apply the result the same way ProcessorRunner does for ProcessInputStepResult:
-    // if `systemMessages` is returned, it calls replaceAllSystemMessages.
-    if (result && 'systemMessages' in result && result.systemMessages) {
-      args.messageList.replaceAllSystemMessages(result.systemMessages);
-    }
+    processor.processInputStep(args);
 
     // The tagged messages must still be retrievable by tag after processing.
     const omAfter = args.messageList.getSystemMessages('om');
@@ -75,10 +69,11 @@ describe('ChatChannelProcessor', () => {
     expect(instructionsAfter).toHaveLength(1);
     expect(instructionsAfter[0]!.content).toBe('agent base instructions');
 
-    // And the channel system message should be present somewhere in the full set.
-    const all = args.messageList.getAllSystemMessages();
-    const hasChannel = all.some(m => typeof m.content === 'string' && m.content.includes('communicating via slack'));
-    expect(hasChannel).toBe(true);
+    // And the channel system message must be present under its own tag — not
+    // merged into the flat untagged array. This is the core of the fix.
+    const channelAfter = args.messageList.getSystemMessages('chat-channel-context');
+    expect(channelAfter).toHaveLength(1);
+    expect(channelAfter[0]!.content).toContain('communicating via slack');
   });
 
   it('does not re-add a duplicate channel system message across steps', () => {
@@ -88,21 +83,14 @@ describe('ChatChannelProcessor', () => {
 
     // Step 1
     const args1 = createArgs({ channel, messageList, systemMessages: messageList.getAllSystemMessages() });
-    const result1 = processor.processInputStep(args1);
-    if (result1 && 'systemMessages' in result1 && result1.systemMessages) {
-      args1.messageList.replaceAllSystemMessages(result1.systemMessages);
-    }
+    processor.processInputStep(args1);
 
     // Step 2 — same channel context, system messages list is re-derived
     const args2 = createArgs({ channel, messageList, systemMessages: messageList.getAllSystemMessages() });
-    const result2 = processor.processInputStep(args2);
-    if (result2 && 'systemMessages' in result2 && result2.systemMessages) {
-      args2.messageList.replaceAllSystemMessages(result2.systemMessages);
-    }
+    processor.processInputStep(args2);
 
-    const channelMessages = messageList
-      .getAllSystemMessages()
-      .filter(m => typeof m.content === 'string' && m.content.includes('communicating via slack'));
+    const channelMessages = messageList.getSystemMessages('chat-channel-context');
     expect(channelMessages).toHaveLength(1);
+    expect(channelMessages[0]!.content).toContain('communicating via slack');
   });
 });
