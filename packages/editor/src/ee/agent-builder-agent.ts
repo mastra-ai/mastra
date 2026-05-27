@@ -1,5 +1,21 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const workspacePath = path.join(__dirname, 'workspace');
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: workspacePath,
+  }),
+  skills: ['skills'],
+});
 
 /**
  * Agent Builder Agent
@@ -154,6 +170,7 @@ The system prompt written into \`set-agent-instructions\` MUST include all of th
 - The final message should make clear that the agent starts with initial parameters and can be adjusted later.`,
     model: 'openai/gpt-5.5',
     memory,
+    workspace,
     ...(args || {}),
     id: 'builder-agent',
     name: 'Agent Builder Agent',
