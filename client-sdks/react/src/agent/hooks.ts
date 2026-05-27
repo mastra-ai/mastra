@@ -17,6 +17,22 @@ import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
 
 type ToolsInput = any;
+type SignalContinuationOptions = {
+  maxSteps?: number;
+  modelSettings?: {
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    maxRetries?: number;
+    maxOutputTokens?: number;
+    temperature?: number;
+    topK?: number;
+    topP?: number;
+  };
+  instructions?: ModelSettings['instructions'];
+  providerOptions?: ModelSettings['providerOptions'];
+  requireToolApproval?: boolean;
+  tracingOptions?: TracingOptions;
+};
 
 export interface MastraChatProps {
   agentId: string;
@@ -25,6 +41,12 @@ export interface MastraChatProps {
   initialMessages?: MastraUIMessage[];
   /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
   requestContext?: RequestContext;
+  /**
+   * Client-side tool definitions. Forwarded once to `subscribeToThread` so
+   * the client-js subscription drives the full client-tool execution loop
+   * (execute, emit tool-result, continuation) without any logic in React.
+   */
+  clientTools?: Record<string, unknown>;
   onSignalSent?: (signalId: string, preview: string) => void;
   onSignalEcho?: (signalId: string) => void;
   onThreadSignalsUnsupported?: () => void;
@@ -83,6 +105,7 @@ export const useChat = ({
   threadId,
   initialMessages,
   requestContext: propsRequestContext,
+  clientTools: hookClientTools,
   onSignalSent,
   onSignalEcho,
   onThreadSignalsUnsupported,
@@ -304,6 +327,8 @@ export const useChat = ({
     });
   }, [agentId, closeThreadSubscription, ensureThreadSubscription, resourceId, threadId, threadSignalsDisabled]);
 
+  // Patch local UI messages so each tool-invocation part becomes a result.
+  // Used as the onToolResult sink for the client-js client-tool handler.
   const generate = async ({
     coreUserMessages,
     requestContext,
@@ -328,6 +353,7 @@ export const useChat = ({
       requireToolApproval,
     } = modelSettings || {};
     const resolvedRequestContext = requestContext ?? propsRequestContext;
+    const resolvedClientTools = clientTools ?? hookClientTools;
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
@@ -361,7 +387,7 @@ export const useChat = ({
       providerOptions: providerOptions as any,
       tracingOptions,
       requireToolApproval,
-      clientTools,
+      clientTools: resolvedClientTools,
     });
 
     // Check if suspended for tool approval
@@ -434,6 +460,23 @@ export const useChat = ({
     } = modelSettings || {};
 
     const resolvedRequestContext = requestContext ?? propsRequestContext;
+    const resolvedClientTools = clientTools ?? hookClientTools;
+    const signalContinuationOptions: SignalContinuationOptions = {
+      maxSteps,
+      modelSettings: {
+        frequencyPenalty,
+        presencePenalty,
+        maxRetries,
+        maxOutputTokens: maxTokens,
+        temperature,
+        topK,
+        topP,
+      },
+      instructions,
+      providerOptions: providerOptions as any,
+      requireToolApproval,
+      tracingOptions,
+    };
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
@@ -473,7 +516,7 @@ export const useChat = ({
         providerOptions: providerOptions as any,
         requireToolApproval,
         tracingOptions,
-        clientTools,
+        clientTools: resolvedClientTools,
       });
 
       _onChunk.current = onChunk;
@@ -517,21 +560,9 @@ export const useChat = ({
         threadId,
         ifIdle: {
           streamOptions: {
-            maxSteps,
-            modelSettings: {
-              frequencyPenalty,
-              presencePenalty,
-              maxRetries,
-              maxOutputTokens: maxTokens,
-              temperature,
-              topK,
-              topP,
-            },
-            instructions,
+            ...signalContinuationOptions,
             requestContext: resolvedRequestContext,
-            providerOptions: providerOptions as any,
-            requireToolApproval,
-            tracingOptions,
+            clientTools: resolvedClientTools as any,
           },
         },
       });

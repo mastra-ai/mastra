@@ -17,7 +17,7 @@ test('has overall information', async ({ page }) => {
 test('clicking on the processor row redirects to detail page', async ({ page }) => {
   await page.goto('/processors');
 
-  const el = page.locator('.entity-list-row:has-text("Logging Processor")');
+  const el = page.locator('.data-list-row:has-text("Logging Processor")');
   await el.click();
 
   await expect(page).toHaveURL(/\/processors\/logging-processor$/);

@@ -7,10 +7,9 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import type { LSPConfig } from '@mastra/core/workspace';
-import type { z } from 'zod';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
-import type { stateSchema } from '../schema';
+import type { MastraCodeState } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 
 // =============================================================================
@@ -127,8 +126,6 @@ function detectPackageRunner(projectPath: string): string | undefined {
   if (existsSync(join(projectPath, 'package-lock.json'))) return 'npx --yes';
   return 'npx --yes';
 }
-
-type MastraCodeState = z.infer<typeof stateSchema>;
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;

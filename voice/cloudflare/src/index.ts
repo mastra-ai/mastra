@@ -4,7 +4,7 @@ import type {
   Ai_Cf_Openai_Whisper_Output,
   Ai_Cf_Openai_Whisper_Tiny_En_Output,
 } from '@cloudflare/workers-types';
-import { MastraVoice } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
 import Cloudflare from 'cloudflare';
 
 interface CloudflareListenOptions {
