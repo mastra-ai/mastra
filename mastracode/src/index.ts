@@ -2,8 +2,8 @@ import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
 import type { PubSub } from '@mastra/core/events';
-import { Harness } from '@mastra/core/harness';
 import type {
+  Harness,
   CustomAvailableModel,
   HeartbeatHandler,
   HarnessConfig,
@@ -44,6 +44,7 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
+import { HarnessCompat } from './HarnessCompat';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
@@ -549,7 +550,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     }
   }
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const harness = new Harness<MastraCodeState>({
+  const harness = new HarnessCompat<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
