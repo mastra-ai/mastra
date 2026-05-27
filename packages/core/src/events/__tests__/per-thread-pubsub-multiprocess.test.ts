@@ -1,7 +1,7 @@
 /**
  * Multi-process integration tests for per-thread socket isolation.
  *
- * Spawns real child processes to verify the mastracode signal routing boundary:
+ * Spawns real child processes and worker threads to verify the mastracode signal routing boundary:
  * - Socket paths mirror /tmp/mc/<resourceId>/<threadId>.sock
  * - Topics use the real format: agent.thread-stream.<encoded(resourceId\0threadId)>
  * - Solo process has zero serialization overhead (broker with 0 clients)
@@ -16,6 +16,7 @@ import type { ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Worker } from 'node:worker_threads';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -34,8 +35,10 @@ function threadSocketPath(baseDir: string, resourceId: string, threadId: string)
   return join(baseDir, resourceId, `${threadId}.sock`);
 }
 
+type MessagePeer = Pick<ChildProcess, 'on' | 'off'> | Pick<Worker, 'on' | 'off'>;
+
 function waitForMessage(
-  child: ChildProcess,
+  peer: MessagePeer,
   type: string,
   timeoutMs = 5000,
   predicate: (msg: WorkerMessage) => boolean = () => true,
@@ -44,22 +47,24 @@ function waitForMessage(
     const handler = (msg: WorkerMessage) => {
       if (msg.type === type && predicate(msg)) {
         clearTimeout(timer);
-        child.off('message', handler);
+        peer.off('message', handler);
         resolve(msg);
       }
     };
     const timer = setTimeout(() => {
-      child.off('message', handler);
-      reject(new Error(`Timeout waiting for "${type}" from child`));
+      peer.off('message', handler);
+      reject(new Error(`Timeout waiting for "${type}" from worker`));
     }, timeoutMs);
-    child.on('message', handler);
+    peer.on('message', handler);
   });
 }
 
 describe('UnixSocketPubSub - multi-process per-thread isolation', () => {
   let tempDir: string;
   let workerScript: string;
+  let threadWorkerScript: string;
   const children: ChildProcess[] = [];
+  const threadWorkers: Worker[] = [];
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'mastra-mp-test-'));
@@ -122,9 +127,56 @@ process.on('message', async (msg) => {
 process.send({ type: 'ready', data: { started: true } });
 `,
     );
+
+    threadWorkerScript = join(tempDir, 'thread-worker.mjs');
+    await writeFile(
+      threadWorkerScript,
+      `
+import { parentPort, workerData } from 'node:worker_threads';
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { UnixSocketPubSub } from '${distEventsPath}';
+
+const { socketPath, topic } = workerData;
+await mkdir(dirname(socketPath), { recursive: true });
+const pubsub = new UnixSocketPubSub(socketPath);
+const received = [];
+
+await pubsub.subscribe(topic, event => {
+  received.push(event.type);
+  parentPort.postMessage({ type: 'event-received', data: { eventType: event.type, receivedCount: received.length } });
+});
+
+parentPort.on('message', async msg => {
+  try {
+    if (msg.type === 'publish') {
+      await pubsub.publish(topic, { type: msg.eventType, data: {}, runId: 'run-1' });
+      parentPort.postMessage({ type: 'ready', data: { published: true } });
+    } else if (msg.type === 'get-status') {
+      parentPort.postMessage({
+        type: 'status',
+        data: {
+          isBroker: pubsub.isBroker,
+          remoteClientCount: pubsub.remoteClientCount,
+          received,
+        },
+      });
+    } else if (msg.type === 'close') {
+      await pubsub.close();
+      parentPort.postMessage({ type: 'ready', data: { closed: true } });
+    }
+  } catch (err) {
+    parentPort.postMessage({ type: 'error', data: { message: err.message } });
+  }
+});
+
+parentPort.postMessage({ type: 'ready', data: { started: true } });
+`,
+    );
   });
 
   afterEach(async () => {
+    await Promise.allSettled(threadWorkers.splice(0).map(worker => worker.terminate()));
     for (const child of children.splice(0)) {
       child.kill('SIGKILL');
     }
@@ -139,15 +191,36 @@ process.send({ type: 'ready', data: { started: true } });
     return child;
   }
 
+  function spawnThreadWorker(socketPath: string, topic: string): Worker {
+    const worker = new Worker(threadWorkerScript, { workerData: { socketPath, topic } });
+    threadWorkers.push(worker);
+    return worker;
+  }
+
   async function waitForElectedBroker(workers: ChildProcess[]) {
+    const getStatus = (worker: ChildProcess) => {
+      worker.send({ type: 'get-status' });
+      return waitForMessage(worker, 'status', 1000);
+    };
+    await waitForElectedBrokerStatus(workers, getStatus);
+  }
+
+  async function waitForElectedThreadBroker(workers: Worker[]) {
+    const getStatus = (worker: Worker) => {
+      worker.postMessage({ type: 'get-status' });
+      return waitForMessage(worker, 'status', 1000);
+    };
+    await waitForElectedBrokerStatus(workers, getStatus);
+  }
+
+  async function waitForElectedBrokerStatus<TWorker>(
+    workers: TWorker[],
+    getStatus: (worker: TWorker) => Promise<WorkerMessage>,
+  ) {
     const start = Date.now();
     let lastStatuses: WorkerMessage[] = [];
     while (Date.now() - start < 5000) {
-      const statusPromises = workers.map(worker => {
-        worker.send({ type: 'get-status' });
-        return waitForMessage(worker, 'status', 1000);
-      });
-      lastStatuses = await Promise.all(statusPromises);
+      lastStatuses = await Promise.all(workers.map(worker => getStatus(worker)));
       const brokers = lastStatuses.filter(status => status.data.isBroker);
       const clients = lastStatuses.filter(status => !status.data.isBroker);
       if (brokers.length === 1 && brokers[0]?.data.remoteClientCount === clients.length) {
@@ -340,5 +413,49 @@ process.send({ type: 'ready', data: { started: true } });
 
     worker2.send({ type: 'close' });
     worker3.send({ type: 'close' });
+  });
+
+  it('worker threads do not split-brain when many clients recover concurrently after broker death', async () => {
+    const sockPath = threadSocketPath(tempDir, resourceId, threadA);
+    const topic = threadTopic(resourceId, threadA);
+    const clientCount = 4;
+
+    const broker = spawnThreadWorker(sockPath, topic);
+    await waitForMessage(broker, 'ready');
+
+    const clients: Worker[] = [];
+    for (let i = 0; i < clientCount; i++) {
+      const worker = spawnThreadWorker(sockPath, topic);
+      await waitForMessage(worker, 'ready');
+      clients.push(worker);
+    }
+
+    broker.postMessage({ type: 'get-status' });
+    const brokerStatus = await waitForMessage(broker, 'status');
+    expect(brokerStatus.data.isBroker).toBe(true);
+    expect(brokerStatus.data.remoteClientCount).toBe(clientCount);
+
+    await broker.terminate();
+    threadWorkers.splice(threadWorkers.indexOf(broker), 1);
+
+    await waitForElectedThreadBroker(clients);
+
+    const eventPromises = clients.map(worker =>
+      waitForMessage(worker, 'event-received', 5000, msg => msg.data?.eventType === 'split-brain-check'),
+    );
+
+    const publisher = clients[clients.length - 1]!;
+    publisher.postMessage({ type: 'publish', eventType: 'split-brain-check' });
+    await waitForMessage(publisher, 'ready');
+
+    const results = await Promise.all(eventPromises);
+    for (const result of results) {
+      expect(result.data.eventType).toBe('split-brain-check');
+    }
+
+    for (const worker of clients) {
+      worker.postMessage({ type: 'close' });
+      await waitForMessage(worker, 'ready');
+    }
   });
 });
