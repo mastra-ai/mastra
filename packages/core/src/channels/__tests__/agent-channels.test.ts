@@ -95,6 +95,38 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('getInputProcessors', () => {
+    it('adds ChatChannelProcessor by default', () => {
+      const processors = agentChannels.getInputProcessors();
+      expect(processors).toHaveLength(1);
+      expect(processors[0]!.id).toBe('chat-channel-context');
+    });
+
+    it('skips ChatChannelProcessor entirely when threadContext.systemMessage is false', () => {
+      const disabled = new AgentChannels({
+        adapters: { test: createMockAdapter('test') },
+        threadContext: { systemMessage: false },
+      });
+      expect(disabled.getInputProcessors()).toEqual([]);
+    });
+
+    it('skips when the user already provided a ChatChannelProcessor', () => {
+      const userProcessor = { id: 'chat-channel-context', processInputStep: () => undefined } as any;
+      expect(agentChannels.getInputProcessors([userProcessor])).toEqual([]);
+    });
+
+    it('passes threadContext.systemMessage through to the processor', () => {
+      const custom = new AgentChannels({
+        adapters: { test: createMockAdapter('test') },
+        threadContext: { systemMessage: 'custom system message' },
+      });
+      const [processor] = custom.getInputProcessors();
+      expect(processor).toBeDefined();
+      // Access via Reflect since the field is private — verifying the wire-up only.
+      expect((processor as any).systemMessage).toBe('custom system message');
+    });
+  });
+
   describe('channelConfig', () => {
     it('exposes the original ChannelConfig (round-trippable)', () => {
       const discord = createMockAdapter('discord');

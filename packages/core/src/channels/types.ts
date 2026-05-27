@@ -325,6 +325,33 @@ export interface ChannelHandlers {
   onSubscribedMessage?: ChannelHandlerConfig;
 }
 
+/**
+ * Customize (or disable) the system message added by `ChatChannelProcessor`,
+ * which tells the agent what channel/platform a request is coming from.
+ *
+ * - `undefined` (default) — built-in template runs.
+ * - `false` — `ChatChannelProcessor` is not added to the processor pipeline.
+ * - `string` — used verbatim as the system message content.
+ * - `(ctx) => string` — dynamic content per request. Return `undefined` to
+ *   fall back to the built-in template, or `''` to skip adding any message
+ *   for this request.
+ *
+ * @example
+ * ```ts
+ * // Disable entirely
+ * systemMessage: false
+ *
+ * // Static replacement
+ * systemMessage: 'You are talking to a user via Slack.'
+ *
+ * // Dynamic — override only for DMs, default otherwise
+ * systemMessage: (ctx) => ctx.isDM
+ *   ? `You are in a DM on ${ctx.platform} with ${ctx.userName ?? 'a user'}.`
+ *   : undefined
+ * ```
+ */
+export type ChannelSystemMessageOption = false | string | ((ctx: ChannelContext) => string | undefined);
+
 /** Configuration for agent chat channels. */
 export interface ChannelConfig {
   /** Platform adapters keyed by name (e.g. 'slack', 'discord'). */
@@ -417,14 +444,16 @@ export interface ChannelConfig {
   userName?: string;
 
   /**
-   * Fetch recent thread messages from the platform to provide context when the agent
-   * is mentioned mid-conversation. Only fetches on the first mention in a thread —
-   * once subscribed, the agent has full history via Mastra's memory system.
+   * Configure how the agent is contextualized for a thread on the channel —
+   * both the history it sees on first mention and the per-request system
+   * message that tells it what channel/platform the request came from.
    *
    * @example
    * ```ts
-   * threadContext: { maxMessages: 15 } // Fetch more context
-   * threadContext: { maxMessages: 0 }  // Disable (opt-out)
+   * threadContext: {
+   *   maxMessages: 20,
+   *   systemMessage: ctx => `Talking to ${ctx.userName} on ${ctx.platform}.`,
+   * }
    * ```
    */
   threadContext?: {
@@ -434,6 +463,18 @@ export interface ChannelConfig {
      * Set to 0 to disable.
      */
     maxMessages?: number;
+
+    /**
+     * Customize the system message that tells the agent what channel a request
+     * is coming from. See {@link ChannelSystemMessageOption} for the full shape.
+     *
+     * - Omit (default): use the built-in template.
+     * - `false`: don't add any channel system message (skips the processor).
+     * - `string`: use this verbatim as the system message.
+     * - `(ctx) => string | undefined`: build dynamically per request. Returning
+     *   `undefined` falls back to the built-in template.
+     */
+    systemMessage?: ChannelSystemMessageOption;
   };
 
   /**

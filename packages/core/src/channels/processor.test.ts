@@ -93,4 +93,59 @@ describe('ChatChannelProcessor', () => {
     expect(channelMessages).toHaveLength(1);
     expect(channelMessages[0]!.content).toContain('communicating via slack');
   });
+
+  describe('systemMessage option', () => {
+    const channel: ChannelContext = {
+      platform: 'slack',
+      isDM: true,
+      userName: 'caleb',
+      userId: 'U1',
+    } as ChannelContext;
+
+    function runOnce(processor: ChatChannelProcessor, channelCtx: ChannelContext | undefined = channel) {
+      const messageList = new MessageList({});
+      processor.processInputStep(
+        createArgs({ channel: channelCtx, messageList, systemMessages: messageList.getAllSystemMessages() }),
+      );
+      return messageList
+        .getSystemMessages('chat-channel-context')
+        .map(m => (typeof m.content === 'string' ? m.content : ''));
+    }
+
+    it('uses the built-in template when systemMessage is omitted', () => {
+      const contents = runOnce(new ChatChannelProcessor());
+      expect(contents).toHaveLength(1);
+      expect(contents[0]).toContain('You are communicating via slack');
+    });
+
+    it('replaces the message when systemMessage is a string', () => {
+      const contents = runOnce(new ChatChannelProcessor({ systemMessage: 'custom instructions' }));
+      expect(contents).toEqual(['custom instructions']);
+    });
+
+    it('uses the function result when systemMessage returns a string', () => {
+      const contents = runOnce(
+        new ChatChannelProcessor({
+          systemMessage: ctx => `you are on ${ctx.platform} talking to ${ctx.userName}`,
+        }),
+      );
+      expect(contents).toEqual(['you are on slack talking to caleb']);
+    });
+
+    it('falls back to the built-in template when systemMessage returns undefined', () => {
+      const contents = runOnce(new ChatChannelProcessor({ systemMessage: () => undefined }));
+      expect(contents).toHaveLength(1);
+      expect(contents[0]).toContain('You are communicating via slack');
+    });
+
+    it('skips adding a system message when systemMessage returns an empty string', () => {
+      const contents = runOnce(new ChatChannelProcessor({ systemMessage: () => '' }));
+      expect(contents).toEqual([]);
+    });
+
+    it('treats systemMessage: false defensively as skip (in practice filtered upstream)', () => {
+      const contents = runOnce(new ChatChannelProcessor({ systemMessage: false }));
+      expect(contents).toEqual([]);
+    });
+  });
 });
