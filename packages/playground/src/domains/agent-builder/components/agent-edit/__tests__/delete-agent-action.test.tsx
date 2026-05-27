@@ -34,12 +34,20 @@ const { toast } = await import('@mastra/playground-ui');
 
 const BASE_URL = 'http://localhost:4111';
 
-type DependentsStub = { dependents: Array<{ id: string; name: string }>; hiddenCount?: number };
+type DependentsStub = {
+  dependents: Array<{ id: string; name: string }>;
+  privateCount?: number;
+  hiddenCount?: number;
+};
 
 const stubAgentDependents = (agentId: string, payload: DependentsStub = { dependents: [] }) => {
   server.use(
     http.get(`${BASE_URL}/api/stored/agents/${agentId}/dependents`, () =>
-      HttpResponse.json({ dependents: payload.dependents, hiddenCount: payload.hiddenCount ?? 0 }),
+      HttpResponse.json({
+        dependents: payload.dependents,
+        privateCount: payload.privateCount ?? 0,
+        hiddenCount: payload.hiddenCount ?? 0,
+      }),
     ),
   );
 };
@@ -308,5 +316,37 @@ describe('DeleteAgentDialog impact warnings', () => {
 
     const hidden = await screen.findByTestId('agent-impact-hidden-warning');
     expect(hidden.textContent).toContain('1 private agent ');
+  });
+
+  it('surfaces privateCount without leaking private dependent names', async () => {
+    stubAgentDependents('agent-123', { dependents: [], privateCount: 2 });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const privateLine = await screen.findByTestId('agent-impact-private-warning');
+    expect(privateLine.textContent).toContain('2 of your private agents');
+    expect(screen.queryByTestId('agent-impact-dependent')).toBeNull();
+  });
+
+  it('singularizes the privateCount line for exactly one private dependent', async () => {
+    stubAgentDependents('agent-123', { dependents: [], privateCount: 1 });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const privateLine = await screen.findByTestId('agent-impact-private-warning');
+    expect(privateLine.textContent).toContain('1 of your private agent ');
+    expect(privateLine.textContent).toContain('references');
   });
 });

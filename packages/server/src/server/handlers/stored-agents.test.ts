@@ -937,6 +937,7 @@ describe('Stored Agents Handlers', () => {
         id: 'parent',
         name: 'Parent Agent',
         model: { name: 'gpt-4', provider: 'openai' },
+        visibility: 'public',
         agents: { target: { id: 'target' } },
       });
       mockAgentsData.set('unrelated', {
@@ -951,6 +952,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result.dependents).toEqual([{ id: 'parent', name: 'Parent Agent' }]);
+      expect(result.privateCount).toBe(0);
       expect(result.hiddenCount).toBe(0);
     });
 
@@ -964,6 +966,7 @@ describe('Stored Agents Handlers', () => {
         id: 'parent',
         name: 'Conditional Parent',
         model: { name: 'gpt-4', provider: 'openai' },
+        visibility: 'public',
         agents: [{ value: { target: { id: 'target' } }, rules: [] }],
       });
 
@@ -993,6 +996,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result.dependents).toEqual([]);
+      expect(result.privateCount).toBe(0);
       expect(result.hiddenCount).toBe(0);
     });
 
@@ -1041,9 +1045,17 @@ describe('Stored Agents Handlers', () => {
         visibility: 'private',
         agents: { target: { id: 'target' } },
       });
-      mockAgentsData.set('my-parent', {
-        id: 'my-parent',
-        name: 'My Parent',
+      mockAgentsData.set('my-public-parent', {
+        id: 'my-public-parent',
+        name: 'My Public Parent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'caller',
+        visibility: 'public',
+        agents: { target: { id: 'target' } },
+      });
+      mockAgentsData.set('my-private-parent', {
+        id: 'my-private-parent',
+        name: 'My Private Parent',
         model: { name: 'gpt-4', provider: 'openai' },
         authorId: 'caller',
         visibility: 'private',
@@ -1055,8 +1067,44 @@ describe('Stored Agents Handlers', () => {
         storedAgentId: 'target',
       });
 
-      expect(result.dependents).toEqual([{ id: 'my-parent', name: 'My Parent' }]);
+      expect(result.dependents).toEqual([{ id: 'my-public-parent', name: 'My Public Parent' }]);
+      expect(result.privateCount).toBe(1);
       expect(result.hiddenCount).toBe(1);
+    });
+
+    it('counts caller-readable private dependents in privateCount without leaking names', async () => {
+      mockAgentsData.set('target', {
+        id: 'target',
+        name: 'Public Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'caller',
+        visibility: 'public',
+      });
+      mockAgentsData.set('my-private-a', {
+        id: 'my-private-a',
+        name: 'Secret Weather Helper',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'caller',
+        visibility: 'private',
+        agents: { target: { id: 'target' } },
+      });
+      mockAgentsData.set('my-private-b', {
+        id: 'my-private-b',
+        name: 'Secret Planner',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'caller',
+        visibility: 'private',
+        agents: { target: { id: 'target' } },
+      });
+
+      const result = await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'caller'),
+        storedAgentId: 'target',
+      });
+
+      expect(result.dependents).toEqual([]);
+      expect(result.privateCount).toBe(2);
+      expect(result.hiddenCount).toBe(0);
     });
 
     it('does not surface hiddenCount for a private target', async () => {
@@ -1082,6 +1130,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result.dependents).toEqual([]);
+      expect(result.privateCount).toBe(0);
       expect(result.hiddenCount).toBe(0);
     });
 

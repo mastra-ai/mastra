@@ -749,7 +749,10 @@ export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
 
       const targetIsPublic = (target as { visibility?: string }).visibility === 'public';
 
+      // Only public dependents are surfaced by name. Private dependents are
+      // counted (not named) so we don't leak the identity of private agents.
       const dependents: Array<{ id: string; name: string }> = [];
+      let privateCount = 0;
       let hiddenCount = 0;
 
       for (const record of all.agents) {
@@ -757,10 +760,15 @@ export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
         if (!referencesTarget((record as { agents?: unknown }).agents, storedAgentId)) continue;
 
         if (matchesAuthorFilter(record, filter)) {
-          dependents.push({
-            id: record.id,
-            name: (record as { name?: string }).name ?? record.id,
-          });
+          const recordIsPublic = (record as { visibility?: string }).visibility === 'public';
+          if (recordIsPublic) {
+            dependents.push({
+              id: record.id,
+              name: (record as { name?: string }).name ?? record.id,
+            });
+          } else {
+            privateCount += 1;
+          }
         } else if (targetIsPublic) {
           hiddenCount += 1;
         }
@@ -768,7 +776,7 @@ export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
         // and surfacing the count would leak cross-workspace structure.
       }
 
-      return { dependents, hiddenCount };
+      return { dependents, privateCount, hiddenCount };
     } catch (error) {
       return handleError(error, 'Error listing stored agent dependents');
     }

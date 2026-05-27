@@ -1357,7 +1357,8 @@ export interface DeleteStoredAgentResponse {
 }
 
 /**
- * A single agent that references another agent as a sub-agent
+ * A single PUBLIC agent that references another agent as a sub-agent.
+ * Private dependents are aggregated into `privateCount` to avoid leaking names.
  */
 export interface StoredAgentDependent {
   id: string;
@@ -1366,11 +1367,14 @@ export interface StoredAgentDependent {
 
 /**
  * Response for listing dependents of a stored agent.
+ * `dependents` lists only PUBLIC caller-readable references (with names).
+ * `privateCount` aggregates caller-readable PRIVATE references (no names).
  * `hiddenCount` aggregates dependents the caller cannot read; it is only
  * non-zero when the target agent is public.
  */
 export interface StoredAgentDependentsResponse {
   dependents: StoredAgentDependent[];
+  privateCount: number;
   hiddenCount: number;
 }
 

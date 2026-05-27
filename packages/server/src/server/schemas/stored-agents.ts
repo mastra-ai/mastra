@@ -492,11 +492,14 @@ export const deleteStoredAgentResponseSchema = z.object({
 /**
  * Response for GET /stored/agents/:storedAgentId/dependents
  *
- * `dependents` lists caller-visible stored agents whose resolved `agents` map
- * references the target. `hiddenCount` aggregates references from agents the
- * caller cannot read (cross-workspace private agents). `hiddenCount` is only
- * populated when the target agent is public, to avoid leaking cross-workspace
- * structure for private targets.
+ * `dependents` lists caller-visible PUBLIC stored agents whose resolved `agents`
+ * map references the target — only public names are exposed.
+ * `privateCount` aggregates caller-readable PRIVATE dependents (names hidden to
+ * avoid leaking private agent identity).
+ * `hiddenCount` aggregates references from agents the caller cannot read
+ * (cross-workspace private agents). `hiddenCount` is only populated when the
+ * target agent is public, to avoid leaking cross-workspace structure for
+ * private targets.
  */
 export const getStoredAgentDependentsResponseSchema = z.object({
   dependents: z.array(
@@ -505,6 +508,7 @@ export const getStoredAgentDependentsResponseSchema = z.object({
       name: z.string(),
     }),
   ),
+  privateCount: z.number().int().nonnegative(),
   hiddenCount: z.number().int().nonnegative(),
 });
 

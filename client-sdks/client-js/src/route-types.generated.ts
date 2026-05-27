@@ -24469,6 +24469,7 @@ export type GetStoredAgentsStoredAgentIdDependents_Response = {
     id: string;
     name: string;
   }[];
+  privateCount: number;
   hiddenCount: number;
 };
 

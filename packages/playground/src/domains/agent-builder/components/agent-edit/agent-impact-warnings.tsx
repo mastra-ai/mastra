@@ -4,13 +4,23 @@ const MAX_DEPENDENTS_SHOWN = 5;
 
 type Variant = 'delete' | 'make-private';
 
-const COPY: Record<Variant, { dependents: string; hidden: (n: number) => string }> = {
+const COPY: Record<
+  Variant,
+  {
+    dependents: string;
+    private: (n: number) => string;
+    hidden: (n: number) => string;
+  }
+> = {
   delete: {
     dependents: 'This agent is used as a sub-agent by:',
+    private: n => `${n} of your private agent${n === 1 ? '' : 's'} also reference${n === 1 ? 's' : ''} this agent.`,
     hidden: n => `${n} private agent${n === 1 ? '' : 's'} in other workspaces also reference this agent.`,
   },
   'make-private': {
     dependents: 'Making this agent private may break the following agents that use it as a sub-agent:',
+    private: n =>
+      `${n} of your private agent${n === 1 ? '' : 's'} also reference${n === 1 ? 's' : ''} this agent and may stop working.`,
     hidden: n =>
       `${n} private agent${n === 1 ? '' : 's'} in other workspaces also reference this agent and may stop working.`,
   },
@@ -28,9 +38,10 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
   if (!enabled || isLoading || isError) return null;
 
   const dependents = data?.dependents ?? [];
+  const privateCount = data?.privateCount ?? 0;
   const hiddenCount = data?.hiddenCount ?? 0;
 
-  if (dependents.length === 0 && hiddenCount === 0) return null;
+  if (dependents.length === 0 && privateCount === 0 && hiddenCount === 0) return null;
 
   const copy = COPY[variant];
   const visible = dependents.slice(0, MAX_DEPENDENTS_SHOWN);
@@ -58,8 +69,16 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
           )}
         </div>
       )}
+      {privateCount > 0 && (
+        <p data-testid="agent-impact-private-warning" className={dependents.length > 0 ? 'mt-2' : ''}>
+          {copy.private(privateCount)}
+        </p>
+      )}
       {hiddenCount > 0 && (
-        <p data-testid="agent-impact-hidden-warning" className={dependents.length > 0 ? 'mt-2' : ''}>
+        <p
+          data-testid="agent-impact-hidden-warning"
+          className={dependents.length > 0 || privateCount > 0 ? 'mt-2' : ''}
+        >
           {copy.hidden(hiddenCount)}
         </p>
       )}

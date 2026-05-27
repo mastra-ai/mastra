@@ -44,12 +44,20 @@ const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessPro
   );
 };
 
-type DependentsStub = { dependents: Array<{ id: string; name: string }>; hiddenCount?: number };
+type DependentsStub = {
+  dependents: Array<{ id: string; name: string }>;
+  privateCount?: number;
+  hiddenCount?: number;
+};
 
 const stubAgentDependents = (agentId: string, payload: DependentsStub = { dependents: [] }) => {
   server.use(
     http.get(`${BASE_URL}/api/stored/agents/${agentId}/dependents`, () =>
-      HttpResponse.json({ dependents: payload.dependents, hiddenCount: payload.hiddenCount ?? 0 }),
+      HttpResponse.json({
+        dependents: payload.dependents,
+        privateCount: payload.privateCount ?? 0,
+        hiddenCount: payload.hiddenCount ?? 0,
+      }),
     ),
   );
 };
