@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.10.1-alpha.7",
+  "version": "1.10.2",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -27,7 +27,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "MASTRA_AUTO_DETECT_URL=true vite",
     "build": "vite build",
     "build:lib": "vite build",
     "build:watch": "vite build --watch",
@@ -63,6 +63,7 @@
     "@mastra/schema-compat": "workspace:*",
     "@mcp-ui/client": "^7.1.0",
     "@posthog/react": "^1.9.0",
+    "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-hover-card": "^1.1.15",
     "@radix-ui/react-tooltip": "^1.2.8",
