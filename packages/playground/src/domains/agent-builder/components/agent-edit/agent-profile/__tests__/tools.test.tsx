@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-// Tests that interact with @base-ui/react Checkbox click handlers are skipped:
-// jsdom does not implement PointerEvent, which Base UI requires for click dispatch.
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -86,7 +84,7 @@ describe('Tools', () => {
     expect(getByTestId('tool-card-tool-unchecked-tool')).toBeTruthy();
   });
 
-  it.skip('checking the filter hides unselected tools and keeps selected ones', () => {
+  it('checking the filter hides unselected tools and keeps selected ones', () => {
     const { getByTestId, queryByTestId } = render(
       <FormHarness>
         <Tools availableAgentTools={availableTools} />
@@ -99,7 +97,7 @@ describe('Tools', () => {
     expect(queryByTestId('tool-card-tool-unchecked-tool')).toBeNull();
   });
 
-  it.skip('unchecking the filter restores hidden tools', () => {
+  it('unchecking the filter restores hidden tools', () => {
     const { getByTestId, queryByTestId } = render(
       <FormHarness>
         <Tools availableAgentTools={availableTools} />
@@ -115,7 +113,7 @@ describe('Tools', () => {
     expect(queryByTestId('tool-card-tool-unchecked-tool')).toBeTruthy();
   });
 
-  it.skip('shows the empty-state copy when the filter is on and nothing is selected', () => {
+  it('shows the empty-state copy when the filter is on and nothing is selected', () => {
     const noneSelected = [
       { id: 'a', name: 'a', isChecked: false, type: 'tool' as const },
       { id: 'b', name: 'b', isChecked: false, type: 'tool' as const },
@@ -131,7 +129,7 @@ describe('Tools', () => {
     expect(getByText('No tools selected yet')).toBeTruthy();
   });
 
-  it.skip('combines the filter with search to show the dedicated empty-state copy', async () => {
+  it('combines the filter with search to show the dedicated empty-state copy', async () => {
     const { getByTestId, findByText } = render(
       <FormHarness>
         <Tools availableAgentTools={availableTools} />
@@ -160,7 +158,7 @@ describe('Tools', () => {
     expect(checkbox.className).toContain('[&_svg]:h-2.5');
   });
 
-  it.skip('paints the filter checkbox with the agent color only when the filter is checked', () => {
+  it('paints the filter checkbox with the agent color only when the filter is checked', () => {
     const { getByTestId } = render(
       <FormHarness>
         <Tools availableAgentTools={availableTools} />

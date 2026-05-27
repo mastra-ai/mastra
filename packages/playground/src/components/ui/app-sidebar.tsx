@@ -2,8 +2,10 @@ import { LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playgr
 import type { NavLink } from '@mastra/playground-ui';
 import { useLocation } from 'react-router';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
@@ -56,8 +58,10 @@ export function AppSidebar() {
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
     if (rbacEnabled && isPermissionsAuthenticated && isPermissionsLoading) return true;
-    if (item.requiredPermission && !hasPermission(item.requiredPermission)) return false;
-    if (item.requiredAnyPermission && !hasAnyPermission(item.requiredAnyPermission)) return false;
+    const requiredPermission = getPermissionForRoute(item.url);
+    if (!hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission)) {
+      return false;
+    }
     return true;
   };
 
@@ -100,6 +104,8 @@ export function AppSidebar() {
           </span>
         )}
       </div>
+
+      <ImpersonationBanner />
 
       <MainSidebar.Nav>
         {mainNav.map(section => {

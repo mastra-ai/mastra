@@ -52,8 +52,7 @@ describe('Browser', () => {
     expect(getByText('Disabled')).toBeTruthy();
   });
 
-  // Skipped: jsdom lacks PointerEvent which @base-ui/react Switch requires for click handling
-  it.skip('flips the switch and status when toggled', () => {
+  it('flips the switch and status when toggled', () => {
     const { getByTestId, getByText } = render(
       <Wrapper>
         <Browser />
