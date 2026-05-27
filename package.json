@@ -36,7 +36,7 @@
     "build:combined-stores": "pnpm turbo build --filter \"./stores/*\"",
     "build:deployers": "pnpm turbo build --filter \"./deployers/*\"",
     "build:speech": "pnpm turbo build --filter \"./speech/*\"",
-    "build:cli": "node scripts/source-mode-build.mjs ./packages/cli",
+    "build:cli": "pnpm turbo build --filter ./packages/cli",
     "build:deployer": "pnpm turbo build --filter ./packages/deployer",
     "build:server": "pnpm turbo build --filter ./packages/server",
     "build:core": "pnpm turbo build --filter ./packages/core",

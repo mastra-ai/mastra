@@ -38,7 +38,10 @@ describe('mastra bin source-mode guard', () => {
   it('runs the TypeScript entry when source mode is requested and the CLI is linked to a repo checkout', async () => {
     await writeFixtureFile(join(testDir, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n');
     await writeFixtureFile(join(testDir, 'packages', 'core', 'src', 'index.ts'), 'export {};\n');
-    await writeFixtureFile(join(testDir, 'packages', 'cli', 'src', 'index.ts'), "console.log(process.env.MASTRA_SOURCE_MODE);\n");
+    await writeFixtureFile(
+      join(testDir, 'packages', 'cli', 'src', 'index.ts'),
+      'console.log(process.env.MASTRA_SOURCE_MODE);\n',
+    );
 
     const result = spawnSync(process.execPath, [fixtureBin], {
       cwd: testDir,

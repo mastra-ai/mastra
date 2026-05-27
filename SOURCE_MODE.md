@@ -37,7 +37,7 @@ The CLI only honors `MASTRA_REPO_RUN_FROM_SOURCE=true` for `mastra dev` when the
 
 When full Studio assets are unavailable because `packages/playground/dist` has not been built, source-mode `mastra dev` still starts the API server and writes a minimal fallback Studio page. Build playground first if you need the full Studio UI during a no-build linked-project run; the fallback contract only proves the API/dev server path.
 
-Source-mode build support is currently CLI-only. `MASTRA_REPO_RUN_FROM_SOURCE=true pnpm build:cli` skips JS bundling and declaration emit, validates source exports, and runs a package-bounded CLI typecheck. The bounded typecheck shims workspace package imports so it checks the CLI source shape and local type usage without recursively typechecking transitive workspace sources. It does not replace full declaration generation, package artifact validation, or transitive workspace type validation. Other package build scripts still use the normal artifact build path unless they are explicitly wired later with package-specific source checks. Without the env var, `pnpm build:cli` keeps the normal Turbo artifact build.
+Build scripts stay artifact-focused in source mode. `pnpm build:*` commands continue to run the normal Turbo build path and produce package artifacts; source mode does not redefine build scripts as no-build checks. If you want a no-build correctness check while working from source, run the relevant package or root `typecheck` script explicitly.
 
 Run the source-safe local project groups explicitly from source without a prebuild:
 
