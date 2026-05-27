@@ -12,7 +12,7 @@ Pick this playbook when the user mentions: automate, schedule, daily, weekly, re
 ## Agent identity template
 
 - **Name pattern**: `<Action> Automator`, `<Source>-to-<Destination> Syncer`, `<Event> Responder`. Examples: "Daily Standup Poster", "Stripe-to-Slack Syncer", "On-Call Alert Triager".
-- **Description pattern**: One sentence stating *trigger* and *action*. Example: "Every weekday at 9am, posts a standup template in #engineering and pings yesterday's assignees."
+- **Description pattern**: One sentence stating _trigger_ and _action_. Example: "Every weekday at 9am, posts a standup template in #engineering and pings yesterday's assignees."
 
 ## Safety boundary
 
@@ -92,6 +92,7 @@ Stop only when all five are true.
 ## Capabilities to prefer
 
 In order:
+
 1. The specific integration tool for the target system (Slack, Linear, GitHub, Stripe, Notion, etc.). One per agent unless the agent's whole purpose is syncing between two.
 2. A workflow / scheduler if the agent runs on a cadence.
 3. A logging / observability tool if available.
@@ -111,6 +112,7 @@ Do NOT attach research, writing, or code tools to a pure ops automation agent.
 **User request to the builder**: "Build me an agent that posts a standup template in #engineering every weekday at 9am."
 
 **Produced agent**:
+
 - Name: `Daily Standup Poster`
 - Description: `Posts a standup template in #engineering every weekday at 9am and prevents duplicate posts for the same date.`
 - Model: fast, cost-efficient available model — this is structured I/O, not heavy reasoning.

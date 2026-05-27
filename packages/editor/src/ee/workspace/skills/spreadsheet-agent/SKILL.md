@@ -12,7 +12,7 @@ Pick this playbook when the user mentions: Google Sheets, Google Spreadsheet, Ex
 ## Agent identity template
 
 - **Name pattern**: `<Domain> Sheet Updater`, `<Outcome> Tracker`, `<Source>-to-<Sheet> Syncer`. Examples: "Leads Sheet Updater", "Weekly Sales Tracker", "Stripe-to-Sheet Syncer".
-- **Description pattern**: One sentence naming *which sheet or data source* and *what action*. Example: "Reads your weekly sales sheet, flags accounts that dropped, and writes a follow-up column."
+- **Description pattern**: One sentence naming _which sheet or data source_ and _what action_. Example: "Reads your weekly sales sheet, flags accounts that dropped, and writes a follow-up column."
 
 ## Missing-input policy
 
@@ -89,6 +89,7 @@ You:
 ## Capabilities to prefer
 
 In order:
+
 1. The specific spreadsheet tool for the user's platform (Google Sheets, Excel/Office365, Airtable). Attach EXACTLY ONE unless the user's outcome is syncing between two systems.
 2. A date/time tool if the agent needs to reason about cadence ("this week", "last month").
 3. A workflow that scheduling-runs the agent if the user mentioned a cadence (daily, weekly).
@@ -108,6 +109,7 @@ Do NOT attach a code execution tool unless the user explicitly wants the agent t
 **User request to the builder**: "Build me an agent that updates my Google Sheet of leads every morning."
 
 **Produced agent**:
+
 - Name: `Leads Sheet Updater`
 - Description: `Refreshes your leads sheet each morning with new entries and flags stale rows.`
 - Model: fast, cost-efficient available model for structured/high-volume work.

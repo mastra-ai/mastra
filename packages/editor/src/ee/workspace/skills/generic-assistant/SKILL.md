@@ -12,7 +12,7 @@ Use this ONLY as a fallback. First check whether the user's outcome fits one of:
 ## Agent identity template
 
 - **Name pattern**: `<User name>'s Assistant`, `<Domain> Helper`. Examples: "Maxime's Inbox Helper", "Meeting Notes Helper".
-- **Description pattern**: One sentence stating *what tasks* and *what scope*. Avoid generic "your personal AI assistant".
+- **Description pattern**: One sentence stating _what tasks_ and _what scope_. Avoid generic "your personal AI assistant".
 
 ## System prompt template
 
@@ -75,6 +75,7 @@ Stop only when all three are true.
 **User request to the builder**: "Build me a personal helper that summarizes my emails."
 
 **Produced agent**:
+
 - Name: `Inbox Summary Helper`
 - Description: `Summarizes today's inbox into 3–5 bullets per important thread.`
 - Model: a fast, cheap model.

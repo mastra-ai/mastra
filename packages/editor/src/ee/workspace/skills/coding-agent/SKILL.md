@@ -12,7 +12,7 @@ Pick this playbook when the user's outcome is producing or modifying source code
 ## Agent identity template
 
 - **Name pattern**: `<Language or Domain> Coder`, `<Outcome> Engineer`, e.g. "Python Data Scripter", "Bug Fix Engineer", "PR Reviewer". Never use "Code Assistant" or "Coding Agent" — too generic.
-- **Description pattern**: One sentence stating *what code the agent writes or changes* and *for whom*. Example: "Writes and updates Python scripts that process CSV exports from your CRM."
+- **Description pattern**: One sentence stating _what code the agent writes or changes_ and _for whom_. Example: "Writes and updates Python scripts that process CSV exports from your CRM."
 
 ## Mode selection
 
@@ -107,6 +107,7 @@ You:
 ## Capabilities to prefer
 
 When attaching tools to a coding agent, prefer (in this order):
+
 1. A code editor / file-write tool if the agent should modify a repo.
 2. A code search tool (grep / ripgrep / repository search).
 3. A test runner or shell-execution tool.
@@ -127,6 +128,7 @@ Do NOT attach generic web-browsing tools to a coding agent unless the user expli
 **User request to the builder**: "Build me an agent that fixes bugs in my TypeScript repo."
 
 **Produced agent**:
+
 - Name: `TypeScript Bug Fixer`
 - Description: `Finds, fixes, and verifies TypeScript bugs in your connected repository.`
 - Model: strongest available coding/reasoning model from the form snapshot.
