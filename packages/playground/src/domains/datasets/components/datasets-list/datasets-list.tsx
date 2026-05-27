@@ -95,7 +95,7 @@ export function DatasetsList({
         const tags = Array.isArray(ds.tags) ? (ds.tags as string[]) : [];
 
         return (
-          <EntityList.Row key={ds.id}>
+          <EntityList.RowWrapper key={ds.id}>
             <EntityList.RowLink flushRight colEnd={-3} to={paths.datasetLink(ds.id)} LinkComponent={Link}>
               <EntityList.NameCell>{ds.name}</EntityList.NameCell>
               <EntityList.DescriptionCell>{ds.description || ''}</EntityList.DescriptionCell>
@@ -153,7 +153,7 @@ export function DatasetsList({
             ) : (
               <span />
             )}
-          </EntityList.Row>
+          </EntityList.RowWrapper>
         );
       })}
 
