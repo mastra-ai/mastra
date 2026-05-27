@@ -549,6 +549,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       'Transfer-Encoding': 'chunked',
     });
 
+    if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+      ctx.res.write(': connected\n\n');
+    }
+
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
 

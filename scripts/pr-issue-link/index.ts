@@ -10,7 +10,12 @@ const STALE_DAYS = Number(process.env.STALE_DAYS ?? '14');
 
 const NEEDS_ISSUE_LABEL = 'needs-issue';
 const NEEDS_ISSUE_LABEL_COLOR = 'e4e669';
-const ISSUE_LINK_EXCLUDED_LOGINS = new Set(['dane-ai-mastra', 'devin-ai-integration']);
+const ISSUE_LINK_EXCLUDED_LOGINS = new Set([
+  'dane-ai-mastra',
+  'dane-ai-mastra[bot]',
+  'devin-ai-integration',
+  'devin-ai-integration[bot]',
+]);
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 const coreContributorCache = new Map<string, Promise<boolean>>();
