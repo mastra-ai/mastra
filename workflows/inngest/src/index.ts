@@ -27,6 +27,7 @@ export * from './execution-engine';
 export * from './pubsub';
 export * from './run';
 export * from './serve';
+export * from './connect';
 export * from './types';
 export * from './durable-agent';
 

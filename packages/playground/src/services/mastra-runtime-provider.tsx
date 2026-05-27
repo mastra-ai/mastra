@@ -33,6 +33,21 @@ const handleFinishReason = (finishReason: string) => {
   }
 };
 
+const getAppendMessageText = (message: AppendMessage) => {
+  const text = (message.content[0] as { text?: unknown } | undefined)?.text;
+
+  if (typeof text === 'string') return text;
+
+  if (text && typeof text === 'object' && 'content' in text && Array.isArray(text.content)) {
+    return text.content
+      .map(part => (part?.type === 'text' && typeof part.text === 'string' ? part.text : ''))
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  throw new Error('Only text messages are supported');
+};
+
 const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
   const promises = (attachments ?? [])
     .filter(attachment => attachment.type === 'image' || attachment.type === 'document')
@@ -754,7 +769,7 @@ export function MastraRuntimeProvider({
 
     const attachments = await convertToAIAttachments(message.attachments);
 
-    const input = message.content[0].text;
+    const input = getAppendMessageText(message);
     if (!isSupportedModel) {
       setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     }

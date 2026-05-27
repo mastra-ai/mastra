@@ -705,9 +705,9 @@ export class GatewayRegistry {
       this.lastRefreshTime = new Date();
       saveLastRefreshTimeToDisk(this.lastRefreshTime);
       // console.debug(`[GatewayRegistry] ✅ Gateway sync completed at ${this.lastRefreshTime.toISOString()}`);
-    } catch (error) {
-      console.error('[GatewayRegistry] ❌ Gateway sync failed:', error);
-      throw error;
+    } catch {
+      // Silently ignore — the bundled registry already contains all
+      // model data so a failed sync is non-critical.
     } finally {
       this.isRefreshing = false;
     }
@@ -750,15 +750,7 @@ export class GatewayRegistry {
     const shouldRefresh = !modelRouterCacheFailed && (!lastRefresh || now - lastRefresh.getTime() > intervalMs);
 
     if (shouldRefresh) {
-      // console.debug(
-      //   `[GatewayRegistry] Running immediate sync (last refresh: ${lastRefresh ? lastRefresh.toISOString() : 'never'})`,
-      // );
-      this.syncGateways().catch(err => {
-        console.error('[GatewayRegistry] Initial auto-refresh failed:', err);
-      });
-    } else {
-      // console.debug( `[GatewayRegistry] Skipping immediate sync (last refresh: ${lastRefresh.toISOString()}, next in ${Math.round((intervalMs - (now - lastRefresh.getTime())) / 1000)}s)`,
-      // );
+      this.syncGateways().catch(() => {});
     }
 
     this.refreshInterval = setInterval(() => {
@@ -767,9 +759,7 @@ export class GatewayRegistry {
         this.refreshInterval = null;
         return;
       }
-      this.syncGateways().catch(err => {
-        console.error('[GatewayRegistry] Auto-refresh failed:', err);
-      });
+      this.syncGateways().catch(() => {});
     }, intervalMs);
 
     // Prevent the interval from keeping the process alive

@@ -1,6 +1,6 @@
 import type { MessageList } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorAgent, ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorAgent, ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
@@ -61,6 +61,11 @@ export class ObservationTurn {
   /** Optional observability context for nested OM spans. */
   observabilityContext?: ObservabilityContext;
 
+  /** Optional signal sender for processor-originated notifications. */
+  sendSignal?: (
+    signal: Parameters<NonNullable<ProcessorContext['sendSignal']>>[0],
+  ) => ReturnType<NonNullable<ProcessorContext['sendSignal']>>;
+
   /** Current actor model for this step. Updated by the processor before prepare(). */
   actorModelContext?: ObservationModelContext;
 
@@ -73,6 +78,7 @@ export class ObservationTurn {
     resourceId?: string;
     messageList: MessageList;
     agent: ProcessorAgent;
+    sendSignal?: ProcessorContext['sendSignal'];
     requestContext: RequestContext;
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
@@ -82,6 +88,7 @@ export class ObservationTurn {
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
     this.agent = opts.agent;
+    this.sendSignal = opts.sendSignal;
     this.requestContext = opts.requestContext;
     this.observabilityContext = opts.observabilityContext;
     this.hooks = opts.hooks ?? {};
@@ -191,7 +198,9 @@ export class ObservationTurn {
     // When the agent goes idle, start buffering any unobserved messages in the background.
     // This ensures messages accumulated during the turn are observed proactively
     // rather than waiting for the next turn's step.prepare() to trigger buffering.
-    if (this.om.buffering.isAsyncObservationEnabled()) {
+    const asyncObservationEnabled = this.om.buffering.isAsyncObservationEnabled();
+    const bufferOnIdle = this.om.getObservationConfig().bufferOnIdle;
+    if (asyncObservationEnabled && bufferOnIdle) {
       const allMessages = this.messageList.get.all.db();
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
@@ -203,8 +212,11 @@ export class ObservationTurn {
             messages: unobservedMessages,
             record,
             writer: this.writer,
+            sendSignal: this.sendSignal,
             requestContext: this.requestContext,
+            currentModel: this.actorModelContext,
             observabilityContext: this.observabilityContext,
+            skipMinimumTokenCheck: true,
           })
           .catch((err: Error) => {
             omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);

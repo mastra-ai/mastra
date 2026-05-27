@@ -236,6 +236,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           resourceId,
           messageList,
           agent,
+          sendSignal: args.sendSignal,
           requestContext,
           observabilityContext: getOmObservabilityContext(args),
           hooks: {
