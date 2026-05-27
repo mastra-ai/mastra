@@ -147,6 +147,10 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
-    "green-birds-knock"
+    "cuddly-foxes-laugh",
+    "green-birds-knock",
+    "otel-exporter-protobufjs-advisory",
+    "otel-providers-protobufjs-advisory",
+    "violet-steaks-cover"
   ]
 }
