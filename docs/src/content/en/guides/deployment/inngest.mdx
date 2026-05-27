@@ -491,8 +491,11 @@ When migrating an existing production app from `serve()` to `connect()`, test th
 - `functions`: Optional array of additional Inngest functions to register alongside Mastra workflows.
 - `instanceId`: Stable identifier for the worker, shown in the Inngest dashboard. Defaults to the machine hostname.
 - `maxWorkerConcurrency`: Maximum number of steps the worker runs at a time. Defaults to unlimited.
+- `registerOptions`: Forwarded to Inngest during app registration (for example `signingKey`). When a field is set both here and at the top level, `registerOptions` wins — this matches the behavior of `serve()`.
 
 `connect()` returns Inngest's `WorkerConnection`. The Inngest SDK handles `SIGINT` and `SIGTERM` by default. Store the returned connection and call `.close()` only when your worker needs custom shutdown control.
+
+If the Mastra instance has no `InngestWorkflow` and no additional `functions` are provided, `connect()` logs a warning because the worker would otherwise stay connected with nothing to execute. Register at least one workflow on Mastra or pass `functions: [...]`.
 
 ## Using a custom `apiPrefix`
 

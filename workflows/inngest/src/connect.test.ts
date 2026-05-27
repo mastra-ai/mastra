@@ -145,4 +145,41 @@ describe('connect()', () => {
     expect(connection.connectionId).toBe('conn-test');
     expect(typeof connection.close).toBe('function');
   });
+
+  it('lets registerOptions override overlapping top-level Connect options', async () => {
+    await connect({
+      mastra,
+      inngest,
+      signingKey: 'top-level-signing-key',
+      registerOptions: { signingKey: 'register-options-signing-key' },
+    });
+
+    const callArgs = inngestConnect.mock.calls[0][0];
+    expect(callArgs.signingKey).toBe('register-options-signing-key');
+  });
+
+  it('warns when called with no Inngest workflows and no additional functions', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const emptyMastra = new Mastra({ storage: new MockStore() });
+
+    await connect({ mastra: emptyMastra, inngest });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain('no Inngest workflows');
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn when at least one user function is provided', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const emptyMastra = new Mastra({ storage: new MockStore() });
+    const userFunction = inngest.createFunction(
+      { id: 'user-function', triggers: { event: 'test/event' } },
+      async () => 'done',
+    );
+
+    await connect({ mastra: emptyMastra, inngest, functions: [userFunction] });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });
