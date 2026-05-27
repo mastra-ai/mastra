@@ -645,6 +645,94 @@ describe('Koa Server Adapter', () => {
       expect(text).not.toContain('data: ": heartbeat');
     });
 
+    it('should write SSE connected comment when sseFlushOnConnect is true', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-flush',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        sseFlushOnConnect: true,
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-flush`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).toContain(': connected\n\n');
+    });
+
+    it('should not write SSE connected comment when sseFlushOnConnect is not set', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-no-flush',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-no-flush`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).not.toContain(': connected');
+      expect(text).toContain('data: ');
+    });
+
     it('should NOT redact sensitive data when streamOptions.redact is false', async () => {
       const app = new Koa();
       app.use(bodyParser());
