@@ -2053,6 +2053,12 @@ export class GeminiLiveVoice extends MastraVoice<
     }
   }
 
+  /**
+   * Recursively sanitize JSON Schema into the OpenAPI 3.0 Schema Object subset
+   * that Gemini Live's wire validator accepts. Gemini rejects several standard
+   * JSON Schema keywords with `1007 Unknown name "..."`.
+   * See https://github.com/mastra-ai/mastra/issues/17020
+   */
   private sanitizeToolParameters(schema: unknown): unknown {
     if (Array.isArray(schema)) {
       return schema.map(item => this.sanitizeToolParameters(item));
@@ -2062,14 +2068,47 @@ export class GeminiLiveVoice extends MastraVoice<
       return schema;
     }
 
+    const obj = schema as Record<string, unknown>;
     const sanitized: Record<string, unknown> = {};
 
-    for (const [key, value] of Object.entries(schema)) {
+    for (const [key, value] of Object.entries(obj)) {
+      // Strip keys Gemini rejects outright
       if (key === '$schema' || key === 'additionalProperties') {
         continue;
       }
 
+      // Rewrite `oneOf` → `anyOf` (Gemini accepts anyOf but rejects oneOf)
+      if (key === 'oneOf') {
+        sanitized['anyOf'] = this.sanitizeToolParameters(value);
+        continue;
+      }
+
+      // Rewrite `const: value` → `enum: [value]`
+      if (key === 'const') {
+        sanitized['enum'] = [value];
+        continue;
+      }
+
       sanitized[key] = this.sanitizeToolParameters(value);
+    }
+
+    // Rewrite nullable anyOf patterns: `{ anyOf: [{ type: T }, { type: 'null' }] }` → `{ type: T, nullable: true }`
+    if (Array.isArray(sanitized['anyOf'])) {
+      const variants = sanitized['anyOf'] as Record<string, unknown>[];
+      const nonNull = variants.filter(v => v && typeof v === 'object' && v['type'] !== 'null');
+      const hasNull = variants.some(v => v && typeof v === 'object' && v['type'] === 'null');
+
+      if (hasNull && nonNull.length === 1) {
+        // Collapse to the single non-null variant with nullable: true
+        const base = nonNull[0]!;
+        delete sanitized['anyOf'];
+        Object.assign(sanitized, base);
+        sanitized['nullable'] = true;
+      } else if (hasNull && nonNull.length > 1) {
+        // Multiple non-null variants — keep anyOf but drop the null variant
+        sanitized['anyOf'] = nonNull;
+        sanitized['nullable'] = true;
+      }
     }
 
     return sanitized;

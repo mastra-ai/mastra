@@ -1,5 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
@@ -1088,6 +1089,116 @@ describe('GeminiLiveVoice', () => {
       expect(toolResult.toolResponse.functionResponses[0].id).toBe('id-1');
       expect(toolResult.toolResponse.functionResponses[0].name).toBe('testTool');
       expect(toolResult.toolResponse.functionResponses[0].response).toEqual({ result: 'ok' });
+    });
+
+    /**
+     * Gemini Live's `parameters` field is OpenAPI 3.0 Schema Object, not JSON Schema 2020-12.
+     * Several JSON Schema constructs are rejected by the Gemini Live wire validator with
+     * `1007 Unknown name "..."`. See https://github.com/mastra-ai/mastra/issues/17020.
+     *
+     * The sanitizeToolParameters method currently strips `$schema` and `additionalProperties`,
+     * but the following constructs still pass through unsanitized and are rejected by Gemini:
+     *   - `oneOf` (discriminated unions) — should be rewritten to `anyOf`
+     *   - `const` (literals) — should be rewritten to `enum: [value]`
+     *   - `type: ['T', 'null']` or `type: 'null'` (nullable) — should be rewritten
+     */
+
+    it('should rewrite oneOf to anyOf in tool parameter schemas for Gemini Live OpenAPI 3.0 compat', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      v.addTools({
+        notify: {
+          id: 'notify',
+          description: 'Send a notification',
+          inputSchema: z.object({
+            channel: z.discriminatedUnion('type', [
+              z.object({ type: z.literal('email'), address: z.string() }),
+              z.object({ type: z.literal('sms'), phone: z.string() }),
+            ]),
+          }),
+          execute: vi.fn() as any,
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      const params = setupMsg.setup.tools[0].function_declarations[0].parameters;
+
+      // Gemini Live rejects `oneOf` — discriminated unions must use `anyOf`
+      const json = JSON.stringify(params);
+      expect(json).not.toContain('"oneOf"');
+      expect(json).toContain('"anyOf"');
+    });
+
+    it('should rewrite const to enum in tool parameter schemas for Gemini Live OpenAPI 3.0 compat', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      v.addTools({
+        setStatus: {
+          id: 'setStatus',
+          description: 'Set status',
+          inputSchema: z.object({
+            status: z.literal('active'),
+          }),
+          execute: vi.fn() as any,
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      const params = setupMsg.setup.tools[0].function_declarations[0].parameters;
+
+      // Gemini Live rejects `const` — literals must use `enum: [value]`
+      const json = JSON.stringify(params);
+      expect(json).not.toContain('"const"');
+      expect(params.properties.status.enum).toEqual(['active']);
+    });
+
+    it('should rewrite nullable type arrays for Gemini Live OpenAPI 3.0 compat', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      v.addTools({
+        update: {
+          id: 'update',
+          description: 'Update a record',
+          inputSchema: z.object({
+            name: z.string().nullable(),
+          }),
+          execute: vi.fn() as any,
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      const params = setupMsg.setup.tools[0].function_declarations[0].parameters;
+
+      // Gemini Live rejects `type: 'null'` and `type: ['string', 'null']`.
+      // Nullable fields should be rewritten to the base type (e.g. `type: 'string'`)
+      // with optional `nullable: true` (OpenAPI 3.0 convention).
+      const json = JSON.stringify(params);
+      expect(json).not.toContain('"null"');
+
+      // The name property should have a concrete type, not an anyOf with null
+      const nameProp = params.properties.name;
+      expect(nameProp.type).toBe('string');
     });
 
     it('should emit usage event from usageMetadata', async () => {
