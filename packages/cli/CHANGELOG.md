@@ -1,5 +1,15 @@
 # mastra
 
+## 1.10.3-alpha.1
+
+### Patch Changes
+
+- Improved generated AGENTS.md guidance to prefer package scripts over global Mastra commands. ([#17095](https://github.com/mastra-ai/mastra/pull/17095))
+
+- Updated dependencies [[`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c)]:
+  - @mastra/core@1.37.2-alpha.1
+  - @mastra/deployer@1.37.2-alpha.1
+
 ## 1.10.3-alpha.0
 
 ### Patch Changes
