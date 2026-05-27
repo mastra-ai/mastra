@@ -6,9 +6,13 @@ Customize (or disable) the channel system message via `channels.threadContext.sy
 
 - `false` — skip `ChatChannelProcessor` entirely (no channel system message added).
 - `string` — used verbatim as the system message content.
-- `(ctx: ChannelContext) => string | undefined` — built dynamically per request. Returning `undefined` falls back to the built-in template; `''` skips the message for that request only.
+- `(ctx: ChannelContext) => string | undefined` — built dynamically per request. Return `undefined` (or `''`) to skip the message for that request. To compose with the default for some cases, import `defaultChannelSystemMessage` from `@mastra/core/channels`.
+
+Keep the resolved content stable per thread (branch only on thread-stable inputs like `platform`, `isDM`, `userName`) so it stays prompt-cacheable. For mid-conversation state, send a signal into the thread instead of varying this message on every turn.
 
 ```ts
+import { defaultChannelSystemMessage } from '@mastra/core/channels';
+
 new Agent({
   channels: {
     adapters: { slack: createSlackAdapter() },
@@ -16,7 +20,7 @@ new Agent({
       maxMessages: 20,
       systemMessage: ctx => ctx.isDM
         ? `You are in a DM on ${ctx.platform} with ${ctx.userName ?? 'a user'}.`
-        : undefined, // fall back to default for non-DM
+        : defaultChannelSystemMessage(ctx),
     },
   },
 });

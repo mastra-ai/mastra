@@ -1,5 +1,5 @@
 export { AgentChannels } from './agent-channels';
-export { ChatChannelProcessor } from './processor';
+export { ChatChannelProcessor, defaultChannelSystemMessage } from './processor';
 export type { ChatChannelProcessorOptions } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';

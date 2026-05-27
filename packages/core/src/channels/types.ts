@@ -332,12 +332,28 @@ export interface ChannelHandlers {
  * - `undefined` (default) — built-in template runs.
  * - `false` — `ChatChannelProcessor` is not added to the processor pipeline.
  * - `string` — used verbatim as the system message content.
- * - `(ctx) => string` — dynamic content per request. Return `undefined` to
- *   fall back to the built-in template, or `''` to skip adding any message
- *   for this request.
+ * - `(ctx) => string | undefined` — dynamic content per request. Return
+ *   `undefined` (or `''`) to skip the channel system message entirely for
+ *   this request. To compose with the default for some cases, import
+ *   `defaultChannelSystemMessage` from `@mastra/core/channels`.
+ *
+ * @remarks
+ * **Keep the resolved content stable per thread.** This system message is
+ * placed near the front of the prompt and is a prime candidate for provider
+ * prompt caching. If your function returns different content on every turn
+ * (e.g. current timestamp, last user message, fast-changing state), you'll
+ * invalidate the cache for every request and pay full input-token cost.
+ *
+ * Branch only on inputs that are stable for the life of the thread —
+ * `platform`, `isDM`, `userName`, channel/user IDs, bot name. For anything
+ * that changes mid-conversation (live status, recent events, user-visible
+ * counters), prefer sending a signal into the thread rather than mutating
+ * the system message.
  *
  * @example
  * ```ts
+ * import { defaultChannelSystemMessage } from '@mastra/core/channels';
+ *
  * // Disable entirely
  * systemMessage: false
  *
@@ -345,9 +361,10 @@ export interface ChannelHandlers {
  * systemMessage: 'You are talking to a user via Slack.'
  *
  * // Dynamic — override only for DMs, default otherwise
+ * // (isDM is thread-stable, so this is cache-safe)
  * systemMessage: (ctx) => ctx.isDM
  *   ? `You are in a DM on ${ctx.platform} with ${ctx.userName ?? 'a user'}.`
- *   : undefined
+ *   : defaultChannelSystemMessage(ctx)
  * ```
  */
 export type ChannelSystemMessageOption = false | string | ((ctx: ChannelContext) => string | undefined);
@@ -472,7 +489,12 @@ export interface ChannelConfig {
      * - `false`: don't add any channel system message (skips the processor).
      * - `string`: use this verbatim as the system message.
      * - `(ctx) => string | undefined`: build dynamically per request. Returning
-     *   `undefined` falls back to the built-in template.
+     *   `undefined` (or `''`) skips the message for that request. Import
+     *   `defaultChannelSystemMessage` to compose with the default.
+     *
+     * Keep the resolved content stable per thread so it stays prompt-cacheable.
+     * For mid-conversation state, send a signal into the thread instead of
+     * varying this message.
      */
     systemMessage?: ChannelSystemMessageOption;
   };

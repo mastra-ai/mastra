@@ -42,7 +42,8 @@ export class ChatChannelProcessor {
     if (!ctx) return undefined;
 
     const content = this.resolveContent(ctx);
-    if (content === undefined || content === '') return { messageList };
+    // Treat empty string the same as undefined — no message worth adding.
+    if (!content) return undefined;
 
     const systemMessage: CoreMessageV4 = { role: 'system', content };
     messageList.addSystem(systemMessage, this.id);
@@ -58,21 +59,29 @@ export class ChatChannelProcessor {
 
     if (typeof opt === 'string') return opt;
 
-    if (typeof opt === 'function') {
-      const result = opt(ctx);
-      // Function returning undefined falls back to the default template.
-      if (result !== undefined) return result;
-    }
+    if (typeof opt === 'function') return opt(ctx);
 
-    return defaultSystemMessage(ctx);
+    return defaultChannelSystemMessage(ctx);
   }
 }
 
 /**
- * Default built-in channel system message. Stable per platform/bot, so it's
- * prompt-cacheable across turns.
+ * Built-in channel system message. Exported so users with a custom
+ * `systemMessage` function can compose with the default for cases they don't
+ * want to override:
+ *
+ * @example
+ * ```ts
+ * import { defaultChannelSystemMessage } from '@mastra/core/channels';
+ *
+ * systemMessage: (ctx) => ctx.isDM
+ *   ? `You are in a DM with ${ctx.userName ?? 'a user'}.`
+ *   : defaultChannelSystemMessage(ctx)
+ * ```
+ *
+ * Stable per platform/bot, so it's prompt-cacheable across turns.
  */
-function defaultSystemMessage(ctx: ChannelContext): string {
+export function defaultChannelSystemMessage(ctx: ChannelContext): string {
   const lines = [`You are communicating via ${ctx.platform}.`];
 
   // Tell the LLM its own identity so it can recognise self-mentions in raw message text

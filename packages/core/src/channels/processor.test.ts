@@ -132,15 +132,33 @@ describe('ChatChannelProcessor', () => {
       expect(contents).toEqual(['you are on slack talking to caleb']);
     });
 
-    it('falls back to the built-in template when systemMessage returns undefined', () => {
+    it('skips the message when systemMessage returns undefined', () => {
       const contents = runOnce(new ChatChannelProcessor({ systemMessage: () => undefined }));
-      expect(contents).toHaveLength(1);
-      expect(contents[0]).toContain('You are communicating via slack');
+      expect(contents).toEqual([]);
     });
 
-    it('skips adding a system message when systemMessage returns an empty string', () => {
+    it('skips the message when systemMessage returns an empty string', () => {
       const contents = runOnce(new ChatChannelProcessor({ systemMessage: () => '' }));
       expect(contents).toEqual([]);
+    });
+
+    it('lets users compose with defaultChannelSystemMessage', async () => {
+      const { defaultChannelSystemMessage } = await import('./processor');
+      const contents = runOnce(
+        new ChatChannelProcessor({
+          systemMessage: ctx => (ctx.isDM ? `DM with ${ctx.userName}` : defaultChannelSystemMessage(ctx)),
+        }),
+      );
+      expect(contents).toEqual(['DM with caleb']);
+
+      const groupContents = runOnce(
+        new ChatChannelProcessor({
+          systemMessage: ctx => (ctx.isDM ? `DM with ${ctx.userName}` : defaultChannelSystemMessage(ctx)),
+        }),
+        { ...channel, isDM: false } as ChannelContext,
+      );
+      expect(groupContents).toHaveLength(1);
+      expect(groupContents[0]).toContain('You are communicating via slack');
     });
 
     it('treats systemMessage: false defensively as skip (in practice filtered upstream)', () => {
