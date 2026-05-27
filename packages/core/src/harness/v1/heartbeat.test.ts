@@ -247,6 +247,12 @@ describe('Harness v1 — heartbeat handlers', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it('rejects heartbeat intervals above the Node timer limit', () => {
+    expect(() => makeHarness([{ id: 'too-large', intervalMs: 2_147_483_648, handler: vi.fn() }])).toThrow(
+      HarnessConfigError,
+    );
+  });
+
   it('uses the constructor-validated configured handler snapshot during init', async () => {
     const handler = vi.fn();
     const configured = { id: 'snapshot', intervalMs: 1_000, handler };

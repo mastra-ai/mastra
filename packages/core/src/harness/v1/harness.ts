@@ -152,6 +152,7 @@ const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_MAX_QUEUE_DEPTH = 100;
 const DEFAULT_CLOSE_TIMEOUT_MS = 30_000;
 const MAX_CLOSE_TIMEOUT_MS = 2_147_483_647;
+const MAX_TIMER_INTERVAL_MS = 2_147_483_647;
 const DEFAULT_SUBAGENT_MAX_DEPTH = 1;
 const DEFAULT_GOAL_MAX_TURNS = 50;
 const DEFAULT_PERMISSION_POLICY: PermissionPolicy = 'ask';
@@ -1239,8 +1240,11 @@ export class Harness {
     if (typeof handler.id !== 'string' || handler.id.length === 0) {
       throw new HarnessConfigError(`${path}.id`, 'must be a non-empty string');
     }
-    if (!Number.isFinite(handler.intervalMs) || handler.intervalMs <= 0) {
-      throw new HarnessConfigError(`${path}["${handler.id}"].intervalMs`, 'must be a positive number');
+    if (!Number.isFinite(handler.intervalMs) || handler.intervalMs <= 0 || handler.intervalMs > MAX_TIMER_INTERVAL_MS) {
+      throw new HarnessConfigError(
+        `${path}["${handler.id}"].intervalMs`,
+        `must be a positive number no greater than ${MAX_TIMER_INTERVAL_MS}`,
+      );
     }
     if (typeof handler.handler !== 'function') {
       throw new HarnessConfigError(`${path}["${handler.id}"].handler`, 'must be a function');
