@@ -59,6 +59,16 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     expect(trigger.getAttribute('href')).toBe('/agents');
   });
 
+  it('throws when asChild receives a non-element child', () => {
+    expect(() =>
+      render(
+        <ul>
+          <MainSidebarNavLink asChild>Agents</MainSidebarNavLink>
+        </ul>,
+      ),
+    ).toThrow(/asChild.*SlottedNavChildProps.*itemClassName/);
+  });
+
   it('does not apply CSS margin utilities on TooltipContent that would dislocate the arrow', async () => {
     render(
       <TooltipProvider delay={0}>
