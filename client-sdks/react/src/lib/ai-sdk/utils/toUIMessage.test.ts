@@ -429,6 +429,64 @@ describe('toUIMessage', () => {
 
       expect(result).toBe(prev);
     });
+
+    it('should return prev for custom data-* chunks (writer.custom) with no payload', () => {
+      const prev: WorkflowStreamResult<any, any, any, any> = {
+        status: 'running',
+        input: {},
+        steps: {},
+      };
+
+      const chunk = {
+        type: 'data-log',
+        data: { msg: 'hi' },
+        runId: 'run-123',
+        from: ChunkFrom.WORKFLOW as const,
+      };
+
+      const result = mapWorkflowStreamChunkToWatchResult(prev, chunk as any);
+
+      expect(result).toBe(prev);
+    });
+
+    it('should return prev for agent chunks that carry id at the top level (text-delta, etc.)', () => {
+      const prev: WorkflowStreamResult<any, any, any, any> = {
+        status: 'running',
+        input: {},
+        steps: {},
+      };
+
+      const chunk = {
+        type: 'text-delta',
+        id: 'text-1',
+        delta: 'hello',
+        runId: 'run-123',
+        from: ChunkFrom.AGENT as const,
+      };
+
+      const result = mapWorkflowStreamChunkToWatchResult(prev, chunk as any);
+
+      expect(result).toBe(prev);
+    });
+
+    it('should return prev for workflow-step chunks missing payload.id', () => {
+      const prev: WorkflowStreamResult<any, any, any, any> = {
+        status: 'running',
+        input: {},
+        steps: {},
+      };
+
+      const chunk = {
+        type: 'workflow-step-start',
+        payload: {},
+        runId: 'run-123',
+        from: ChunkFrom.WORKFLOW as const,
+      };
+
+      const result = mapWorkflowStreamChunkToWatchResult(prev, chunk as any);
+
+      expect(result).toBe(prev);
+    });
   });
 
   describe('toUIMessage - tripwire chunk', () => {

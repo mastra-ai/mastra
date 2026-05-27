@@ -86,12 +86,27 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
-  const { stepCallId, stepName, ...newPayload } = chunk.payload ?? {};
+  if (
+    chunk.type !== 'workflow-step-start' &&
+    chunk.type !== 'workflow-step-suspended' &&
+    chunk.type !== 'workflow-step-waiting' &&
+    chunk.type !== 'workflow-step-progress' &&
+    chunk.type !== 'workflow-step-result'
+  ) {
+    return prev;
+  }
+
+  const stepId = chunk.payload?.id;
+  if (!stepId) {
+    return prev;
+  }
+
+  const { stepCallId, stepName, ...newPayload } = chunk.payload;
 
   const newSteps = {
     ...prev?.steps,
-    [chunk.payload.id]: {
-      ...prev?.steps?.[chunk.payload.id],
+    [stepId]: {
+      ...prev?.steps?.[stepId],
       ...newPayload,
     },
   };
@@ -105,10 +120,10 @@ export const mapWorkflowStreamChunkToWatchResult = (
 
   if (chunk.type === 'workflow-step-suspended') {
     const suspendedStepIds = Object.entries(newSteps as Record<string, StepResult<any, any, any, any>>).flatMap(
-      ([stepId, stepResult]) => {
+      ([sid, stepResult]) => {
         if (stepResult?.status === 'suspended') {
           const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
-          return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
+          return nestedPath ? [[sid, ...nestedPath]] : [[sid]];
         }
 
         return [];
@@ -134,8 +149,8 @@ export const mapWorkflowStreamChunkToWatchResult = (
   if (chunk.type === 'workflow-step-progress') {
     const progressSteps = {
       ...prev?.steps,
-      [chunk.payload.id]: {
-        ...prev?.steps?.[chunk.payload.id],
+      [stepId]: {
+        ...prev?.steps?.[stepId],
         foreachProgress: {
           completedCount: chunk.payload.completedCount,
           totalCount: chunk.payload.totalCount,
@@ -151,14 +166,10 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
-  if (chunk.type === 'workflow-step-result') {
-    return {
-      ...prev,
-      steps: newSteps,
-    };
-  }
-
-  return prev;
+  return {
+    ...prev,
+    steps: newSteps,
+  };
 };
 
 function signalContentsToUserMessages(contents: unknown, metadata: MastraUIMessageMetadata): MastraUIMessage[] {
