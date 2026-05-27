@@ -1,6 +1,6 @@
 ---
 '@mastra/mcp': minor
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
 Added MCP server instructions forwarding into agent system prompts.

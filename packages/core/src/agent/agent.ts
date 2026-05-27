@@ -247,7 +247,7 @@ function appendMcpServerGuidance(instructions: AgentInstructions, guidance?: str
   }
 
   if (Array.isArray(instructions)) {
-    if (instructions.some(msg => (typeof msg === 'string' ? msg : msg.content) === guidance)) {
+    if (instructions.some(msg => (typeof msg === 'string' ? msg : msg.content)?.includes(guidance))) {
       return instructions;
     }
 
