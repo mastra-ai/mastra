@@ -108,21 +108,20 @@ import { useAutosaveSkill } from '../use-autosave-skill';
 import { useAvailableAgentTools } from '../use-available-agent-tools';
 import { useBuilderAgentAccess } from '../use-builder-agent-access';
 import { useBuilderAgentFeatures } from '../use-builder-agent-features';
-import {
-  useBuilderModelPolicy,
-  useBuilderPickerVisibility,
-  useBuilderSettings,
-  useIsBuilderEnabled,
-} from '../use-builder-settings';
 import { useCanCreateAgent } from '../use-can-create-agent';
 import { useChannelConnectToast } from '../use-channel-connect-toast';
 import { useChatDraft } from '../use-chat-draft';
-import { useConnectChannelTool } from '../use-connect-channel-tool';
 import { useCreateSkillTool } from '../use-create-skill-tool';
 import { useSaveAgent } from '../use-save-agent';
 import { useStarterUserMessage } from '../use-starter-user-message';
 import { useVisibilityChange as useAgentVisibilityChange } from '../use-visibility-change-agent';
 import { useVisibilityChange as useSkillVisibilityChange } from '../use-visibility-change-skill';
+import {
+  useBuilderModelPolicy,
+  useBuilderPickerVisibility,
+  useBuilderSettings,
+  useIsBuilderEnabled,
+} from '@/domains/agent-builder/hooks/use-builder-settings';
 
 const builderSettings = {
   enabled: true,
@@ -275,7 +274,7 @@ describe('useAgentBuilderAllowedModels', () => {
 
 describe('isModelNotAllowedError', () => {
   it('returns the error message when the code matches', async () => {
-    const { isModelNotAllowedError } = await import('@/domains/builder');
+    const { isModelNotAllowedError } = await import('@/domains/agent-builder/utils/is-model-not-allowed');
     const err = Object.assign(new Error('Choose another model'), { code: 'MODEL_NOT_ALLOWED' });
     expect(isModelNotAllowedError(err)).toEqual({ message: 'Choose another model' });
     expect(isModelNotAllowedError({ code: 'MODEL_NOT_ALLOWED' })).toEqual({ message: 'Model is not allowed' });
@@ -598,7 +597,7 @@ describe('useBuilderAgentAccess and useCanCreateAgent', () => {
 });
 
 describe('form-backed tools', () => {
-  it('updates agent form fields from the agent-builder tool input', async () => {
+  it('exposes the full set of atomic agent-builder tools when every feature is on', async () => {
     const wrapper = createFormWrapper({ skills: { existing: true } });
     const features = {
       tools: true,
@@ -628,21 +627,18 @@ describe('form-backed tools', () => {
       { wrapper },
     );
 
-    const output = await (result.current as any).execute({
-      name: 'Agent',
-      description: 'Description',
-      instructions: 'Instructions',
-      tools: [{ id: 'tool-a' }, { id: 'agent-a' }, { id: 'workflow-a' }],
-      skills: [{ id: 'skill-a' }, { id: 'missing' }],
-      model: { provider: 'openai:chat', name: 'gpt-4o' },
-      browserEnabled: true,
-      workspaceId: 'workspace-a',
-    });
-
-    expect(output).toEqual({ success: true });
+    const record = result.current as Record<string, any>;
+    expect(record['set-agent-name']).toBeDefined();
+    expect(record['set-agent-description']).toBeDefined();
+    expect(record['set-agent-instructions']).toBeDefined();
+    expect(record['set-agent-tools']).toBeDefined();
+    expect(record['set-agent-skills']).toBeDefined();
+    expect(record['set-agent-model']).toBeDefined();
+    expect(record['set-agent-browser-enabled']).toBeDefined();
+    expect(record['set-agent-workspace-id']).toBeDefined();
   });
 
-  it('ignores gated and invalid agent-builder tool fields', async () => {
+  it('omits gated agent-builder tools and keeps the always-on ones', async () => {
     const wrapper = createFormWrapper();
     const features = {
       tools: false,
@@ -665,18 +661,16 @@ describe('form-backed tools', () => {
       { wrapper },
     );
 
-    await expect(
-      (result.current as any).execute({
-        name: 1,
-        description: null,
-        instructions: false,
-        tools: [{ id: 'tool-a' }],
-        skills: [{ id: 'skill-a' }],
-        model: { provider: '', name: '' },
-        browserEnabled: true,
-        workspaceId: '',
-      }),
-    ).resolves.toEqual({ success: true });
+    const record = result.current as Record<string, any>;
+    expect(record['set-agent-tools']).toBeUndefined();
+    expect(record['set-agent-skills']).toBeUndefined();
+    expect(record['set-agent-model']).toBeUndefined();
+    expect(record['set-agent-browser-enabled']).toBeUndefined();
+
+    expect(record['set-agent-name']).toBeDefined();
+    expect(record['set-agent-description']).toBeDefined();
+    expect(record['set-agent-instructions']).toBeDefined();
+    expect(record['set-agent-workspace-id']).toBeDefined();
   });
 
   it('creates and attaches a skill, defaulting the only workspace and visibility', async () => {
@@ -772,12 +766,6 @@ describe('form-backed tools', () => {
     await expect(
       (result.current as any).execute({ name: 'Skill', description: 'Desc', instructions: 'Body', workspaceId: 'w' }),
     ).resolves.toEqual({ success: false, error: 'Failed to create skill' });
-  });
-
-  it('returns a connect-channel tool that succeeds', async () => {
-    const { result } = renderHook(() => useConnectChannelTool());
-    expect((result.current as any).id).toBe('connectChannel');
-    await expect((result.current as any).execute({ platform: 'slack' })).resolves.toEqual({ success: true });
   });
 });
 

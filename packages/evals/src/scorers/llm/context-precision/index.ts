@@ -1,7 +1,8 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import {
   roundToTwoDecimals,
   getAssistantMessageFromRunOutput,
@@ -22,15 +23,17 @@ export interface ContextPrecisionMetricOptions {
   contextExtractor?: (input: ScorerRunInputForAgent, output: ScorerRunOutputForAgent) => string[];
 }
 
-const contextRelevanceOutputSchema = z.object({
-  verdicts: z.array(
-    z.object({
-      context_index: z.number(),
-      verdict: z.string(),
-      reason: z.string(),
-    }),
-  ),
-});
+const contextRelevanceOutputSchema = compileSchema(
+  z.object({
+    verdicts: z.array(
+      z.object({
+        context_index: z.number(),
+        verdict: z.string(),
+        reason: z.string(),
+      }),
+    ),
+  }),
+);
 
 const getContext = ({
   input,
