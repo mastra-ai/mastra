@@ -144,7 +144,11 @@
     "@mastra/google-drive": "0.1.0",
     "@mastra/modal": "0.2.0",
     "@mastra/s3": "0.5.1",
-    "@mastra/vercel": "0.1.0"
+    "@mastra/vercel": "0.1.0",
+    "@internal/voice": "0.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "fine-countess-voice-utils",
+    "green-birds-knock"
+  ]
 }
