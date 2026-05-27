@@ -222,7 +222,7 @@ jobs:
       - name: Check for memory integration test manifest changes
         id: integration-test-manifest
         run: |
-          if git diff --name-only origin/main...HEAD | grep -qx 'packages/memory/integration-tests/package.json'; then
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -qx 'packages/memory/integration-tests/package.json'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
