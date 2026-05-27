@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.37.2-alpha.1
+
+### Patch Changes
+
+- Fixed sub-agent version resolution in supervisor mode. Sub-agents now inherit the parent's draft/published version semantics — when chatting in the editor (draft mode), sub-agents resolve to their latest draft version; in the main agent chat (published mode), sub-agents resolve to their published version. Previously, sub-agents without explicit per-agent version overrides always fell back to the code-defined default, ignoring the parent's version context. ([#17165](https://github.com/mastra-ai/mastra/pull/17165))
+
 ## 1.37.2-alpha.0
 
 ### Patch Changes

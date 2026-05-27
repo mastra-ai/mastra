@@ -1,24 +1,11 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { SERVER_ROUTES } from '@mastra/server/server-adapter';
-import type { ServerRoute, ServerContext } from '@mastra/server/server-adapter';
+import { isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
-import { ZodError } from 'zod';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
-
-function isZodErrorLike(error: unknown): error is ZodError {
-  return (
-    error instanceof ZodError ||
-    (typeof error === 'object' &&
-      error !== null &&
-      'name' in error &&
-      (error as { name?: unknown }).name === 'ZodError' &&
-      'issues' in error &&
-      Array.isArray((error as { issues?: unknown }).issues))
-  );
-}
 
 export interface RouteMatch {
   route: ServerRoute;
@@ -181,7 +168,7 @@ export class RouteHandlerService {
       try {
         validatedPathParams = (await route.pathParamSchema.parseAsync(params.pathParams)) as Record<string, string>;
       } catch (error) {
-        if (isZodErrorLike(error)) {
+        if (isZodError(error)) {
           throw new ValidationError('Invalid path parameters', error);
         }
         throw error;
@@ -193,7 +180,7 @@ export class RouteHandlerService {
       try {
         validatedQueryParams = (await route.queryParamSchema.parseAsync(params.queryParams)) as Record<string, unknown>;
       } catch (error) {
-        if (isZodErrorLike(error)) {
+        if (isZodError(error)) {
           throw new ValidationError('Invalid query parameters', error);
         }
         throw error;
@@ -205,7 +192,7 @@ export class RouteHandlerService {
       try {
         validatedBody = await route.bodySchema.parseAsync(params.body);
       } catch (error) {
-        if (isZodErrorLike(error)) {
+        if (isZodError(error)) {
           throw new ValidationError('Invalid request body', error);
         }
         throw error;
@@ -262,11 +249,17 @@ export class RouteHandlerService {
 
 /**
  * Error class for validation failures with Zod error details.
+ *
+ * `zodError` is typed as `ZodErrorLike` (a structural subset of `ZodError`
+ * exposing `issues[]`) so that consumers pinning a different `zod` major than
+ * the one bundled with this adapter still type-check. The runtime value is
+ * the actual `ZodError` thrown by the route schema and supports all of its
+ * methods at runtime — cast to your installed `ZodError` if you need them.
  */
 export class ValidationError extends Error {
   constructor(
     message: string,
-    public readonly zodError: ZodError,
+    public readonly zodError: ZodErrorLike,
   ) {
     super(message);
     this.name = 'ValidationError';
