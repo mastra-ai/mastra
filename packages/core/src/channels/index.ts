@@ -1,6 +1,5 @@
 export { AgentChannels } from './agent-channels';
-export { ChatChannelProcessor, defaultChannelSystemMessage } from './processor';
-export type { ChatChannelProcessorOptions } from './processor';
+export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';
 export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
@@ -22,7 +21,6 @@ export type {
   ChannelInstallationInfo,
   ChannelPlatformInfo,
   ChannelProvider,
-  ChannelSystemMessageOption,
   InlineLinkEntry,
   PostableMessage,
   StaticToolDisplay,

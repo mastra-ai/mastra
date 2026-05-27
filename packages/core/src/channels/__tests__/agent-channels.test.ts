@@ -102,10 +102,10 @@ describe('AgentChannels', () => {
       expect(processors[0]!.id).toBe('chat-channel-context');
     });
 
-    it('skips ChatChannelProcessor entirely when threadContext.systemMessage is false', () => {
+    it('skips ChatChannelProcessor entirely when addProcessor is false', () => {
       const disabled = new AgentChannels({
         adapters: { test: createMockAdapter('test') },
-        threadContext: { systemMessage: false },
+        addProcessor: false,
       });
       expect(disabled.getInputProcessors()).toEqual([]);
     });
@@ -113,17 +113,6 @@ describe('AgentChannels', () => {
     it('skips when the user already provided a ChatChannelProcessor', () => {
       const userProcessor = { id: 'chat-channel-context', processInputStep: () => undefined } as any;
       expect(agentChannels.getInputProcessors([userProcessor])).toEqual([]);
-    });
-
-    it('passes threadContext.systemMessage through to the processor', () => {
-      const custom = new AgentChannels({
-        adapters: { test: createMockAdapter('test') },
-        threadContext: { systemMessage: 'custom system message' },
-      });
-      const [processor] = custom.getInputProcessors();
-      expect(processor).toBeDefined();
-      // Access via Reflect since the field is private — verifying the wire-up only.
-      expect((processor as any).systemMessage).toBe('custom system message');
     });
   });
 

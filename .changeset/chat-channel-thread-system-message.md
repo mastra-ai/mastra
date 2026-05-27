@@ -2,26 +2,15 @@
 '@mastra/core': minor
 ---
 
-Customize (or disable) the channel system message via `channels.threadContext.systemMessage`. This is the system message `ChatChannelProcessor` adds on every step to tell the agent which channel/platform a request is coming from.
-
-- `false` — skip `ChatChannelProcessor` entirely (no channel system message added).
-- `string` — used verbatim as the system message content.
-- `(ctx: ChannelContext) => string | undefined` — built dynamically per request. Return `undefined` (or `''`) to skip the message for that request.
-
-Keep the resolved content stable per thread (branch only on thread-stable inputs like `platform`, `isDM`) so it stays prompt-cacheable. For mid-conversation state, send a signal into the thread instead of varying this message on every turn.
+Added `channels.addProcessor` to opt out of the built-in `ChatChannelProcessor`. By default, `AgentChannels` adds a `ChatChannelProcessor` that injects a short system message telling the agent which channel/platform a request came from. Pass `addProcessor: false` to skip it entirely:
 
 ```ts
 new Agent({
   channels: {
     adapters: { slack: createSlackAdapter() },
-    threadContext: {
-      maxMessages: 20,
-      systemMessage: ctx => ctx.isDM
-        ? `You are in a DM on ${ctx.platform} with ${ctx.userName ?? 'a user'}.`
-        : `You are in a public ${ctx.platform} channel.`,
-    },
+    addProcessor: false,
   },
 });
 ```
 
-`defaultChannelSystemMessage` is also exported from `@mastra/core/channels` if you want to compose the built-in template with your own overrides.
+For finer-grained control, register your own input processor with `id: 'chat-channel-context'` — it shadows the built-in one, so you don't need to disable it separately.

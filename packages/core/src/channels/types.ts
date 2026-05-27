@@ -325,20 +325,6 @@ export interface ChannelHandlers {
   onSubscribedMessage?: ChannelHandlerConfig;
 }
 
-/**
- * Customize (or disable) the system message added by `ChatChannelProcessor`.
- *
- * - `false` — processor is not added at all.
- * - `string` — used verbatim.
- * - function — built per request; return `undefined` or `''` to skip. Call
- *   `defaultChannelSystemMessage(ctx)` to compose with the built-in default.
- *
- * Keep the resolved content stable per thread so it stays prompt-cacheable:
- * branch only on thread-stable inputs (`platform`, `isDM`, `userName`, IDs).
- * For mid-conversation state, send a signal into the thread instead.
- */
-export type ChannelSystemMessageOption = false | string | ((ctx: ChannelContext) => string | undefined);
-
 /** Configuration for agent chat channels. */
 export interface ChannelConfig {
   /** Platform adapters keyed by name (e.g. 'slack', 'discord'). */
@@ -431,21 +417,14 @@ export interface ChannelConfig {
   userName?: string;
 
   /**
-   * Configure how the agent is contextualized for a thread on the channel —
-   * both the history it sees on first mention and the per-request system
-   * message that tells it what channel/platform the request came from.
+   * Fetch recent thread messages from the platform to provide context when the agent
+   * is mentioned mid-conversation. Only fetches on the first mention in a thread —
+   * once subscribed, the agent has full history via Mastra's memory system.
    *
    * @example
    * ```ts
-   * threadContext: {
-   *   maxMessages: 20,
-   *   // userName is thread-stable inside a DM (one human per DM), so it's
-   *   // cache-safe to include. In public channels it varies per sender —
-   *   // leave it out of the system message there.
-   *   systemMessage: ctx => ctx.isDM
-   *     ? `Having a private DM on ${ctx.platform} with ${ctx.userName ?? 'a user'}.`
-   *     : `Chatting in a public ${ctx.platform} channel.`,
-   * }
+   * threadContext: { maxMessages: 15 } // Fetch more context
+   * threadContext: { maxMessages: 0 }  // Disable (opt-out)
    * ```
    */
   threadContext?: {
@@ -455,24 +434,24 @@ export interface ChannelConfig {
      * Set to 0 to disable.
      */
     maxMessages?: number;
-
-    /**
-     * Customize the system message that tells the agent what channel a request
-     * is coming from. See {@link ChannelSystemMessageOption} for the full shape.
-     *
-     * - Omit (default): use the built-in template.
-     * - `false`: don't add any channel system message (skips the processor).
-     * - `string`: use this verbatim as the system message.
-     * - `(ctx) => string | undefined`: build dynamically per request. Returning
-     *   `undefined` (or `''`) skips the message for that request. Import
-     *   `defaultChannelSystemMessage` to compose with the default.
-     *
-     * Keep the resolved content stable per thread so it stays prompt-cacheable.
-     * For mid-conversation state, send a signal into the thread instead of
-     * varying this message.
-     */
-    systemMessage?: ChannelSystemMessageOption;
   };
+
+  /**
+   * Whether to automatically add the built-in `ChatChannelProcessor` input
+   * processor. Defaults to `true`.
+   *
+   * The default processor adds a small system message on every step telling
+   * the agent which channel/platform a request came from (DM vs public, bot
+   * identity, etc.) — see `ChatChannelProcessor`.
+   *
+   * Set to `false` to skip it entirely. For most customization needs, you
+   * can instead register your own input processor with
+   * `id: 'chat-channel-context'`, which shadows the built-in one without
+   * needing to disable it here.
+   *
+   * @default true
+   */
+  addProcessor?: boolean;
 
   /**
    * Whether to include channel tools (add_reaction, remove_reaction).

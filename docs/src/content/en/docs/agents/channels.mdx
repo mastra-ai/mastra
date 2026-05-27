@@ -95,31 +95,21 @@ When a user mentions the agent mid-conversation in a channel thread, the agent m
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-DM threads.
 
-### Channel system message
+### Disabling the default channel processor
 
-On every step, Mastra adds a short system message telling the agent which channel and platform a request came from (DM vs public channel, platform name, bot display name). Customize or disable this via `threadContext.systemMessage`:
+On every step, Mastra adds a short system message telling the agent which channel and platform a request came from (DM vs public channel, platform name, bot display name) via the built-in `ChatChannelProcessor`. Set `addProcessor: false` to skip it entirely:
 
 ```typescript
 new Agent({
   name: 'support-agent',
   channels: {
     adapters: { slack: createSlackAdapter() },
-    threadContext: {
-      maxMessages: 20,
-      systemMessage: ctx =>
-        ctx.isDM
-          ? `You are in a DM on ${ctx.platform} with ${ctx.userName ?? 'a user'}.`
-          : `You are in a public ${ctx.platform} channel.`,
-    },
+    addProcessor: false,
   },
 })
 ```
 
-- `false` skips the channel system message entirely.
-- A `string` is used verbatim.
-- A function `(ctx) => string | undefined` builds it dynamically. Return `undefined` or `''` to skip for that request.
-
-Branch only on thread-stable inputs (`platform`, `isDM`) so the resolved content stays the same across turns and prompt caching can hit. For mid-conversation state, send a signal into the thread instead. `defaultChannelSystemMessage` is exported from `@mastra/core/channels` if you want to compose with the built-in template.
+For most customization, register your own input processor with `id: 'chat-channel-context'` instead — it shadows the built-in one, so you don't need to disable it separately.
 
 ## Tool approval
 
