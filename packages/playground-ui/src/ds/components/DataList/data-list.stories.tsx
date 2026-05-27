@@ -174,7 +174,7 @@ export const WithSelection: Story = {
           </DataList.TopCells>
         </DataList.Top>
         {SAMPLE_RUNS.map(run => (
-          <DataList.Row key={run.id}>
+          <DataList.RowWrapper key={run.id}>
             <DataList.SelectCell
               checked={selected.has(run.id)}
               onToggle={() => toggle(run.id)}
@@ -187,7 +187,7 @@ export const WithSelection: Story = {
               <DataList.DateCell timestamp={run.createdAt} />
               <DataList.TimeCell timestamp={run.createdAt} />
             </DataList.RowButton>
-          </DataList.Row>
+          </DataList.RowWrapper>
         ))}
       </DataList>
     );
@@ -209,7 +209,7 @@ export const WithTrailingCell: Story = {
         { name: 'file-system', path: '/skills/file-system', description: 'Read and write files in the workspace.' },
         { name: 'database', path: '/skills/database', description: 'Query the connected SQL database.' },
       ].map(item => (
-        <DataList.Row key={item.path}>
+        <DataList.RowWrapper key={item.path}>
           <DataList.RowButton flushLeft flushRight colEnd={-2} onClick={() => {}}>
             <DataList.Cell className="text-neutral6 font-medium">{item.name}</DataList.Cell>
             <DataList.MonoCell height="default">{item.path}</DataList.MonoCell>
@@ -237,7 +237,7 @@ export const WithTrailingCell: Story = {
               </button>
             </div>
           </DataList.Cell>
-        </DataList.Row>
+        </DataList.RowWrapper>
       ))}
     </DataList>
   ),
