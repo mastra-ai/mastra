@@ -3,6 +3,18 @@ import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useInView } from '@/hooks/use-in-view';
+import type { LogRecord } from '../types';
+
+interface UseLogsReturn {
+  data: LogRecord[] | undefined;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => void;
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  setEndOfListElement: (node: HTMLDivElement | null) => void;
+}
 
 const LOGS_PER_PAGE = 20;
 
@@ -36,11 +48,11 @@ function selectLogs(data: { pages: ListLogsResponse[] }) {
   return result;
 }
 
-export const useLogs = ({ filters }: LogsFilters = {}) => {
+export const useLogs: (props?: LogsFilters) => UseLogsReturn = ({ filters }: LogsFilters = {}) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
-  const query = useInfiniteQuery({
+  const query = useInfiniteQuery<ListLogsResponse, Error, ReturnType<typeof selectLogs>, readonly unknown[], number>({
     queryKey: ['logs', filters],
     queryFn: ({ pageParam }) =>
       client.listLogsVNext({
@@ -55,7 +67,7 @@ export const useLogs = ({ filters }: LogsFilters = {}) => {
     refetchInterval: 10000,
   });
 
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+  const { hasNextPage, isFetchingNextPage, fetchNextPage, data, isLoading, isError, error } = query;
 
   useEffect(() => {
     if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
@@ -63,5 +75,5 @@ export const useLogs = ({ filters }: LogsFilters = {}) => {
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  return { ...query, data: query.data, setEndOfListElement };
+  return { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading, isError, error, setEndOfListElement };
 };
