@@ -10,6 +10,7 @@ import {
   DrawerBackdrop,
   DrawerBody,
   DrawerClose,
+  DrawerContent,
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
@@ -38,25 +39,20 @@ export const Default: Story = {
       <DrawerTrigger asChild>
         <Button>Open bottom drawer</Button>
       </DrawerTrigger>
-      <DrawerPortal>
-        <DrawerBackdrop />
-        <DrawerViewport>
-          <DrawerPopup>
-            <DrawerHeader>
-              <DrawerTitle>Notifications</DrawerTitle>
-              <DrawerDescription>You are all caught up. Good job!</DrawerDescription>
-            </DrawerHeader>
-            <DrawerBody>
-              <p className="text-ui-sm text-neutral4">Swipe down or press the close button to dismiss this sheet.</p>
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
-              </DrawerClose>
-            </DrawerFooter>
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Notifications</DrawerTitle>
+          <DrawerDescription>You are all caught up. Good job!</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
+          <p className="text-ui-sm text-neutral4">Swipe down or press the close button to dismiss this sheet.</p>
+        </DrawerBody>
+        <DrawerFooter>
+          <DrawerClose asChild>
+            <Button variant="outline">Close</Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
     </Drawer>
   ),
 };
@@ -67,25 +63,20 @@ export const Right: Story = {
       <DrawerTrigger asChild>
         <Button>Open right drawer</Button>
       </DrawerTrigger>
-      <DrawerPortal>
-        <DrawerBackdrop />
-        <DrawerViewport>
-          <DrawerPopup>
-            <DrawerHeader>
-              <DrawerTitle>Library</DrawerTitle>
-              <DrawerDescription>A panel that slides in from the right edge.</DrawerDescription>
-            </DrawerHeader>
-            <DrawerBody>
-              <p className="text-ui-sm text-neutral4">Swipe right to dismiss, or use the close button.</p>
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
-              </DrawerClose>
-            </DrawerFooter>
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Library</DrawerTitle>
+          <DrawerDescription>A panel that slides in from the right edge.</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
+          <p className="text-ui-sm text-neutral4">Swipe right to dismiss, or use the close button.</p>
+        </DrawerBody>
+        <DrawerFooter>
+          <DrawerClose asChild>
+            <Button variant="outline">Close</Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
     </Drawer>
   ),
 };
@@ -96,25 +87,20 @@ export const Left: Story = {
       <DrawerTrigger asChild>
         <Button>Open left drawer</Button>
       </DrawerTrigger>
-      <DrawerPortal>
-        <DrawerBackdrop />
-        <DrawerViewport>
-          <DrawerPopup>
-            <DrawerHeader>
-              <DrawerTitle>Navigation</DrawerTitle>
-              <DrawerDescription>A panel that slides in from the left edge.</DrawerDescription>
-            </DrawerHeader>
-            <DrawerBody>
-              <p className="text-ui-sm text-neutral4">Swipe left to dismiss, or use the close button.</p>
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
-              </DrawerClose>
-            </DrawerFooter>
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Navigation</DrawerTitle>
+          <DrawerDescription>A panel that slides in from the left edge.</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
+          <p className="text-ui-sm text-neutral4">Swipe left to dismiss, or use the close button.</p>
+        </DrawerBody>
+        <DrawerFooter>
+          <DrawerClose asChild>
+            <Button variant="outline">Close</Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
     </Drawer>
   ),
 };
@@ -125,25 +111,20 @@ export const Top: Story = {
       <DrawerTrigger asChild>
         <Button>Open top drawer</Button>
       </DrawerTrigger>
-      <DrawerPortal>
-        <DrawerBackdrop />
-        <DrawerViewport>
-          <DrawerPopup>
-            <DrawerHeader>
-              <DrawerTitle>Announcement</DrawerTitle>
-              <DrawerDescription>A panel that slides in from the top edge.</DrawerDescription>
-            </DrawerHeader>
-            <DrawerBody>
-              <p className="text-ui-sm text-neutral4">Swipe up to dismiss, or use the close button.</p>
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
-              </DrawerClose>
-            </DrawerFooter>
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Announcement</DrawerTitle>
+          <DrawerDescription>A panel that slides in from the top edge.</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
+          <p className="text-ui-sm text-neutral4">Swipe up to dismiss, or use the close button.</p>
+        </DrawerBody>
+        <DrawerFooter>
+          <DrawerClose asChild>
+            <Button variant="outline">Close</Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
     </Drawer>
   ),
 };
@@ -158,22 +139,17 @@ function ControlledExample() {
       </p>
       <Button onClick={() => setOpen(true)}>Open from outside</Button>
       <Drawer side="right" open={open} onOpenChange={setOpen}>
-        <DrawerPortal>
-          <DrawerBackdrop />
-          <DrawerViewport>
-            <DrawerPopup>
-              <DrawerHeader>
-                <DrawerTitle>Controlled drawer</DrawerTitle>
-                <DrawerDescription>Open state is owned by the parent component.</DrawerDescription>
-              </DrawerHeader>
-              <DrawerFooter>
-                <Button variant="outline" onClick={() => setOpen(false)}>
-                  Close from outside
-                </Button>
-              </DrawerFooter>
-            </DrawerPopup>
-          </DrawerViewport>
-        </DrawerPortal>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Controlled drawer</DrawerTitle>
+            <DrawerDescription>Open state is owned by the parent component.</DrawerDescription>
+          </DrawerHeader>
+          <DrawerFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Close from outside
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
       </Drawer>
     </div>
   );
@@ -189,35 +165,30 @@ export const WithForm: Story = {
       <DrawerTrigger asChild>
         <Button>Edit profile</Button>
       </DrawerTrigger>
-      <DrawerPortal>
-        <DrawerBackdrop />
-        <DrawerViewport>
-          <DrawerPopup>
-            <DrawerHeader>
-              <DrawerTitle>Edit profile</DrawerTitle>
-              <DrawerDescription>Make changes to your profile. Save when you are done.</DrawerDescription>
-            </DrawerHeader>
-            <DrawerBody className="grid gap-4">
-              <div className="grid gap-1.5">
-                <Label htmlFor="drawer-name">Name</Label>
-                <Input id="drawer-name" defaultValue="John Doe" />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="drawer-username">Username</Label>
-                <Input id="drawer-username" defaultValue="@johndoe" />
-              </div>
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerClose asChild>
-                <Button variant="outline">Cancel</Button>
-              </DrawerClose>
-              <DrawerClose asChild>
-                <Button>Save changes</Button>
-              </DrawerClose>
-            </DrawerFooter>
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Edit profile</DrawerTitle>
+          <DrawerDescription>Make changes to your profile. Save when you are done.</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="drawer-name">Name</Label>
+            <Input id="drawer-name" defaultValue="John Doe" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="drawer-username">Username</Label>
+            <Input id="drawer-username" defaultValue="@johndoe" />
+          </div>
+        </DrawerBody>
+        <DrawerFooter>
+          <DrawerClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DrawerClose>
+          <DrawerClose asChild>
+            <Button>Save changes</Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
     </Drawer>
   ),
 };
@@ -228,79 +199,64 @@ export const Nested: Story = {
       <DrawerTrigger asChild>
         <Button>Open drawer stack</Button>
       </DrawerTrigger>
-      <DrawerPortal>
-        <DrawerBackdrop />
-        <DrawerViewport>
-          <DrawerPopup>
-            <DrawerHeader>
-              <DrawerTitle>Account</DrawerTitle>
-              <DrawerDescription>Nested drawers stack on top of each other, each focus-managed.</DrawerDescription>
-            </DrawerHeader>
-            <DrawerBody>
-              <Drawer>
-                <DrawerTrigger asChild>
-                  <Button variant="outline">Security settings</Button>
-                </DrawerTrigger>
-                <DrawerPortal>
-                  <DrawerBackdrop />
-                  <DrawerViewport>
-                    <DrawerPopup>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Account</DrawerTitle>
+          <DrawerDescription>Nested drawers stack on top of each other, each focus-managed.</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
+          <Drawer>
+            <DrawerTrigger asChild>
+              <Button variant="outline">Security settings</Button>
+            </DrawerTrigger>
+            <DrawerContent>
+              <DrawerHeader>
+                <DrawerTitle>Security</DrawerTitle>
+                <DrawerDescription>Review sign-in activity and update your preferences.</DrawerDescription>
+              </DrawerHeader>
+              <DrawerBody>
+                <ul className="list-disc pl-5 text-ui-sm text-neutral4">
+                  <li>Passkeys enabled</li>
+                  <li>2FA via authenticator app</li>
+                  <li>3 signed-in devices</li>
+                </ul>
+                <div className="mt-4">
+                  <Drawer>
+                    <DrawerTrigger asChild>
+                      <Button variant="outline">Advanced options</Button>
+                    </DrawerTrigger>
+                    <DrawerContent>
                       <DrawerHeader>
-                        <DrawerTitle>Security</DrawerTitle>
-                        <DrawerDescription>Review sign-in activity and update your preferences.</DrawerDescription>
+                        <DrawerTitle>Advanced</DrawerTitle>
+                        <DrawerDescription>A third level to demonstrate deep nesting.</DrawerDescription>
                       </DrawerHeader>
-                      <DrawerBody>
-                        <ul className="list-disc pl-5 text-ui-sm text-neutral4">
-                          <li>Passkeys enabled</li>
-                          <li>2FA via authenticator app</li>
-                          <li>3 signed-in devices</li>
-                        </ul>
-                        <div className="mt-4">
-                          <Drawer>
-                            <DrawerTrigger asChild>
-                              <Button variant="outline">Advanced options</Button>
-                            </DrawerTrigger>
-                            <DrawerPortal>
-                              <DrawerBackdrop />
-                              <DrawerViewport>
-                                <DrawerPopup>
-                                  <DrawerHeader>
-                                    <DrawerTitle>Advanced</DrawerTitle>
-                                    <DrawerDescription>A third level to demonstrate deep nesting.</DrawerDescription>
-                                  </DrawerHeader>
-                                  <DrawerBody className="grid gap-1.5">
-                                    <Label htmlFor="drawer-device">Device name</Label>
-                                    <Input id="drawer-device" defaultValue="Personal laptop" />
-                                  </DrawerBody>
-                                  <DrawerFooter>
-                                    <DrawerClose asChild>
-                                      <Button>Done</Button>
-                                    </DrawerClose>
-                                  </DrawerFooter>
-                                </DrawerPopup>
-                              </DrawerViewport>
-                            </DrawerPortal>
-                          </Drawer>
-                        </div>
+                      <DrawerBody className="grid gap-1.5">
+                        <Label htmlFor="drawer-device">Device name</Label>
+                        <Input id="drawer-device" defaultValue="Personal laptop" />
                       </DrawerBody>
                       <DrawerFooter>
                         <DrawerClose asChild>
-                          <Button variant="outline">Close</Button>
+                          <Button>Done</Button>
                         </DrawerClose>
                       </DrawerFooter>
-                    </DrawerPopup>
-                  </DrawerViewport>
-                </DrawerPortal>
-              </Drawer>
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
-              </DrawerClose>
-            </DrawerFooter>
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+                    </DrawerContent>
+                  </Drawer>
+                </div>
+              </DrawerBody>
+              <DrawerFooter>
+                <DrawerClose asChild>
+                  <Button variant="outline">Close</Button>
+                </DrawerClose>
+              </DrawerFooter>
+            </DrawerContent>
+          </Drawer>
+        </DrawerBody>
+        <DrawerFooter>
+          <DrawerClose asChild>
+            <Button variant="outline">Close</Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
     </Drawer>
   ),
 };
@@ -313,33 +269,27 @@ export const SnapPoints: Story = {
       <DrawerTrigger asChild>
         <Button>Open snap drawer</Button>
       </DrawerTrigger>
-      <DrawerPortal>
-        <DrawerBackdrop />
-        <DrawerViewport>
-          <DrawerPopup className="max-h-[calc(100dvh-3rem)]">
-            <DrawerHeader>
-              <DrawerTitle>Snap points</DrawerTitle>
-              <DrawerDescription>Drag the sheet to snap between a compact peek and full height.</DrawerDescription>
-            </DrawerHeader>
-            <DrawerBody className="grid gap-3">
-              {Array.from({ length: 16 }, (_, index) => (
-                <div key={index} className="h-12 shrink-0 rounded-md bg-surface4" />
-              ))}
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
-              </DrawerClose>
-            </DrawerFooter>
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+      <DrawerContent className="max-h-[calc(100dvh-3rem)]">
+        <DrawerHeader>
+          <DrawerTitle>Snap points</DrawerTitle>
+          <DrawerDescription>Drag the sheet to snap between a compact peek and full height.</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody className="grid gap-3">
+          {Array.from({ length: 16 }, (_, index) => (
+            <div key={index} className="h-12 shrink-0 rounded-md bg-surface4" />
+          ))}
+        </DrawerBody>
+        <DrawerFooter>
+          <DrawerClose asChild>
+            <Button variant="outline">Close</Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
     </Drawer>
   ),
 };
 
-// Non-modal drawers leave the page interactive: the viewport must opt out of pointer
-// events so clicks pass through, and the popup must opt back in so it remains usable.
+// Escape hatch: no backdrop + viewport opts out of pointer events.
 export const NonModal: Story = {
   render: () => (
     <Drawer side="right" modal={false} disablePointerDismissal>
@@ -367,6 +317,7 @@ export const NonModal: Story = {
   ),
 };
 
+// Escape hatch: portal scoped to a parent box instead of `document.body`.
 function SwipeToOpenExample() {
   const [container, setContainer] = React.useState<HTMLDivElement | null>(null);
 
@@ -412,38 +363,33 @@ function ActionSheetExample() {
       <DrawerTrigger asChild>
         <Button>Open action sheet</Button>
       </DrawerTrigger>
-      <DrawerPortal>
-        <DrawerBackdrop />
-        <DrawerViewport>
-          <DrawerPopup>
-            <DrawerHeader className="sr-only">
-              <DrawerTitle>Profile actions</DrawerTitle>
-              <DrawerDescription>Choose an action for this user.</DrawerDescription>
-            </DrawerHeader>
-            <div className="flex flex-col py-1">
-              {actionSheetActions.map(action => (
-                <Button
-                  key={action}
-                  variant="ghost"
-                  className="w-full justify-center rounded-none"
-                  onClick={() => setOpen(false)}
-                >
-                  {action}
-                </Button>
-              ))}
-            </div>
-            <DrawerFooter className="border-t border-border1">
-              <Button
-                variant="ghost"
-                className="w-full justify-center rounded-none text-negative1"
-                onClick={() => setOpen(false)}
-              >
-                Block user
-              </Button>
-            </DrawerFooter>
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+      <DrawerContent>
+        <DrawerHeader className="sr-only">
+          <DrawerTitle>Profile actions</DrawerTitle>
+          <DrawerDescription>Choose an action for this user.</DrawerDescription>
+        </DrawerHeader>
+        <div className="flex flex-col py-1">
+          {actionSheetActions.map(action => (
+            <Button
+              key={action}
+              variant="ghost"
+              className="w-full justify-center rounded-none"
+              onClick={() => setOpen(false)}
+            >
+              {action}
+            </Button>
+          ))}
+        </div>
+        <DrawerFooter className="border-t border-border1">
+          <Button
+            variant="ghost"
+            className="w-full justify-center rounded-none text-negative1"
+            onClick={() => setOpen(false)}
+          >
+            Block user
+          </Button>
+        </DrawerFooter>
+      </DrawerContent>
     </Drawer>
   );
 }
@@ -489,28 +435,23 @@ export const MobileNavigation: Story = {
       <DrawerTrigger asChild>
         <Button>Open mobile menu</Button>
       </DrawerTrigger>
-      <DrawerPortal>
-        <DrawerBackdrop />
-        <DrawerViewport>
-          <DrawerPopup className="mb-0 h-full max-h-full rounded-none pb-0">
-            <DrawerHeader>
-              <DrawerTitle>Menu</DrawerTitle>
-              <DrawerDescription>Scroll the long list. Swipe down to dismiss.</DrawerDescription>
-            </DrawerHeader>
-            <DrawerBody>
-              <ul className="grid gap-1">
-                {navLinks.map(label => (
-                  <li key={label}>
-                    <Button variant="ghost" className="w-full justify-start">
-                      {label}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </DrawerBody>
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+      <DrawerContent className="mb-0 h-full max-h-full rounded-none pb-0">
+        <DrawerHeader>
+          <DrawerTitle>Menu</DrawerTitle>
+          <DrawerDescription>Scroll the long list. Swipe down to dismiss.</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
+          <ul className="grid gap-1">
+            {navLinks.map(label => (
+              <li key={label}>
+                <Button variant="ghost" className="w-full justify-start">
+                  {label}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </DrawerBody>
+      </DrawerContent>
     </Drawer>
   ),
 };
@@ -541,22 +482,17 @@ function DetachedTriggersExample() {
       </div>
       <Drawer side="right" handle={profileDrawer}>
         {({ payload }) => (
-          <DrawerPortal>
-            <DrawerBackdrop />
-            <DrawerViewport>
-              <DrawerPopup>
-                <DrawerHeader>
-                  <DrawerTitle>{payload?.title ?? 'Drawer'}</DrawerTitle>
-                  <DrawerDescription>{payload?.description}</DrawerDescription>
-                </DrawerHeader>
-                <DrawerFooter>
-                  <DrawerClose asChild>
-                    <Button variant="outline">Close</Button>
-                  </DrawerClose>
-                </DrawerFooter>
-              </DrawerPopup>
-            </DrawerViewport>
-          </DrawerPortal>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>{payload?.title ?? 'Drawer'}</DrawerTitle>
+              <DrawerDescription>{payload?.description}</DrawerDescription>
+            </DrawerHeader>
+            <DrawerFooter>
+              <DrawerClose asChild>
+                <Button variant="outline">Close</Button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerContent>
         )}
       </Drawer>
     </div>
