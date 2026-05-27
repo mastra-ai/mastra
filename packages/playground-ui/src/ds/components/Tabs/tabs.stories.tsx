@@ -124,6 +124,46 @@ export const PillGhostVariant: Story = {
   ),
 };
 
+export const CustomIndicatorColor: Story = {
+  render: () => (
+    <div className="flex flex-col gap-8">
+      <Tabs defaultTab="tab1" className="w-[400px]">
+        <TabList style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}>
+          <Tab value="tab1">Overview</Tab>
+          <Tab value="tab2">Details</Tab>
+          <Tab value="tab3">Settings</Tab>
+        </TabList>
+        <TabContent value="tab1">
+          <div className="p-4 text-neutral5">Line variant with accent indicator</div>
+        </TabContent>
+        <TabContent value="tab2">
+          <div className="p-4 text-neutral5">Details content</div>
+        </TabContent>
+        <TabContent value="tab3">
+          <div className="p-4 text-neutral5">Settings content</div>
+        </TabContent>
+      </Tabs>
+
+      <Tabs defaultTab="overview" className="w-[400px]">
+        <TabList variant="pill" style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}>
+          <Tab value="overview">Overview</Tab>
+          <Tab value="projects">Projects</Tab>
+          <Tab value="account">Account</Tab>
+        </TabList>
+        <TabContent value="overview">
+          <div className="p-4 text-neutral5">Pill variant with accent indicator</div>
+        </TabContent>
+        <TabContent value="projects">
+          <div className="p-4 text-neutral5">Projects content</div>
+        </TabContent>
+        <TabContent value="account">
+          <div className="p-4 text-neutral5">Account content</div>
+        </TabContent>
+      </Tabs>
+    </div>
+  ),
+};
+
 export const WithClosableTabs: Story = {
   render: () => (
     <Tabs defaultTab="file1" className="w-[400px]">

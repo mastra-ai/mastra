@@ -295,6 +295,9 @@ export class HarnessLegacy<TState = {}> {
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
   private stateUpdateQueue: Promise<void> = Promise.resolve();
+  private switchModeVersion: number = 0;
+  private availableModelsCache: AvailableModel[] | null = null;
+  private availableModelsCacheTime: number = 0;
   #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
@@ -581,26 +584,31 @@ export class HarnessLegacy<TState = {}> {
 
     this.abort();
 
-    // Save current model to the outgoing mode before switching
     const currentModelId = this.getCurrentModelId();
-    if (currentModelId) {
-      await this.setThreadSetting({ key: `modeModelId_${this.currentModeId}`, value: currentModelId });
-    }
-
     const previousModeId = this.currentModeId;
+    const version = ++this.switchModeVersion;
+
+    // Update local state and emit events immediately so UIs can update
+    // without waiting for storage round-trips.
     this.currentModeId = modeId;
+    this.emit({ type: 'mode_changed', modeId, previousModeId });
+
+    // Save current model to the outgoing mode before switching
+    if (currentModelId) {
+      await this.setThreadSetting({ key: `modeModelId_${previousModeId}`, value: currentModelId });
+    }
+    if (this.switchModeVersion !== version) return;
 
     await this.setThreadSetting({ key: 'currentModeId', value: modeId });
+    if (this.switchModeVersion !== version) return;
 
     // Load the incoming mode's model
     const modeModelId = await this.loadModeModelId(modeId);
+    if (this.switchModeVersion !== version) return;
     if (modeModelId) {
       void this.setState({ currentModelId: modeModelId } as unknown as Partial<TState>);
       this.emit({ type: 'model_changed', modelId: modeModelId } as HarnessEvent);
     }
-
-    this.emit({ type: 'mode_changed', modeId, previousModeId });
-    await this.ensureCurrentAgentThreadSubscription();
   }
 
   /**
@@ -770,6 +778,11 @@ export class HarnessLegacy<TState = {}> {
    * `customModelCatalogProvider` hooks.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
+    const now = Date.now();
+    if (this.availableModelsCache && now - this.availableModelsCacheTime < 10_000) {
+      return this.availableModelsCache;
+    }
+
     try {
       const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
 
@@ -833,11 +846,19 @@ export class HarnessLegacy<TState = {}> {
         }
       }
 
-      return [...modelsById.values()];
+      const result = [...modelsById.values()];
+      this.availableModelsCache = result;
+      this.availableModelsCacheTime = Date.now();
+      return result;
     } catch (error) {
       console.warn('Failed to load available models:', error);
       return [];
     }
+  }
+
+  invalidateAvailableModelsCache(): void {
+    this.availableModelsCache = null;
+    this.availableModelsCacheTime = 0;
   }
 
   private async getProviderApiKeyEnvVar(provider: string): Promise<string | undefined> {

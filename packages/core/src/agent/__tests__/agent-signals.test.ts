@@ -481,6 +481,100 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('fans out sequential idle signal runs to many same-thread subscribers', async () => {
+    const resourceId = 'share-resource';
+    const threadId = 'share-thread';
+    const subscriberCount = 100;
+    const runCount = 5;
+    let streamCount = 0;
+    const agent = new Agent({
+      id: 'share-signal-agent',
+      name: 'Share Signal Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          const text = `signal response ${streamCount}`;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                const parts = [
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'response-metadata',
+                    id: `id-${streamCount}`,
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: text },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  },
+                ] as any[];
+                for (const part of parts) {
+                  await nextTick();
+                  controller.enqueue(part);
+                }
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+
+    const subscriptions = await Promise.all(
+      Array.from({ length: subscriberCount }, () => agent.subscribeToThread({ threadId, resourceId })),
+    );
+    const iterators = subscriptions.map(subscription => subscription.stream[Symbol.asyncIterator]());
+
+    try {
+      for (let runIndex = 1; runIndex <= runCount; runIndex += 1) {
+        const nextRuns = iterators.map(iterator => readNextRunWithParts(iterator));
+        const contents = `Hello from signal ${runIndex}`;
+
+        const signalResult = await agent.sendSignal(
+          { type: 'user-message', contents },
+          { resourceId, threadId, ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } } },
+        );
+
+        const runs = await withTimeout(
+          Promise.all(nextRuns),
+          `Timed out waiting for ${subscriberCount} subscribers to receive idle signal run ${runIndex}`,
+        );
+        const [firstRun] = runs;
+
+        expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: firstRun.value.runId }));
+        expect(firstRun.value.text).toBe(`signal response ${runIndex}`);
+
+        for (const run of runs) {
+          expect(run.value.runId).toBe(firstRun.value.runId);
+          expect(run.value.text).toBe(`signal response ${runIndex}`);
+          const signalPart = run.value.parts.find((part: any) => part.type === 'data-user-message');
+          expect(signalPart?.data).toMatchObject({
+            id: signalResult.signal.id,
+            contents,
+            acceptedAt: signalResult.signal.acceptedAt?.toISOString(),
+          });
+          expect(signalPart?.data.createdAt).toBeDefined();
+          expect(signalPart?.transient).toBe(true);
+        }
+      }
+
+      expect(streamCount).toBe(runCount);
+    } finally {
+      for (const subscription of subscriptions) {
+        subscription.unsubscribe();
+      }
+    }
+  });
+
   it('starts an idle thread run by default when a thread-targeted signal is sent', async () => {
     const agent = new Agent({
       id: 'idle-signal-without-options-agent',
@@ -495,6 +589,34 @@ describe('Agent signals', () => {
     );
 
     expect(result).toEqual(expect.objectContaining({ accepted: true }));
+  });
+
+  it('reports the reserved runId as active before registerRun populates the stream record', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const threadId = 'reservation-gap-thread';
+    const resourceId = 'reservation-gap-user';
+
+    // agent.stream is awaited inside the idle-wake path before registerRun fires. Returning
+    // a never-resolving promise pins the runtime in the gap where sendSignal has reserved
+    // activeThreadRunIds + threadKeysByRunId but threadRunsById is still empty.
+    const agent = {
+      id: 'reservation-gap-agent',
+      stream: () => new Promise(() => {}),
+    } as unknown as Agent<any, any, any, any>;
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    expect(subscription.activeRunId()).toBeNull();
+
+    const result = runtime.sendSignal(agent, createSignal({ type: 'user-message', contents: 'hello' }), {
+      resourceId,
+      threadId,
+      ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } as any },
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(subscription.activeRunId()).toBe(result.runId);
+
+    subscription.unsubscribe();
   });
 
   it('persists an idle signal without waking the agent when idle behavior is persist', async () => {

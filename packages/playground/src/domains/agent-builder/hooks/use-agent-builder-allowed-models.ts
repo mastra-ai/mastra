@@ -1,8 +1,8 @@
 import type { Provider } from '@mastra/client-js';
 import { useMemo } from 'react';
 import { toProviders } from '../services/to-providers';
+import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
-import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
 import { useAllModels, useLLMProviders } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
