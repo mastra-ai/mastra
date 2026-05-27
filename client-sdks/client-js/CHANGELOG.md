@@ -1,5 +1,77 @@
 # @mastra/client-js
 
+## 1.21.0
+
+### Minor Changes
+
+- Client-side tool tracing is now built in. When server-side observability is configured, the SDK automatically measures execution duration and ships it back to the server. To add child spans and structured logs from inside your tool's `execute(input, context)` function, use the `observe` helper on the execution context: ([#16425](https://github.com/mastra-ai/mastra/pull/16425))
+
+  ```ts
+  execute: async ({ userId }, { observe }) => {
+    observe.log('info', 'fetching user', { userId });
+    return observe.span('fetch user', () => fetch(`/api/users/${userId}`));
+  };
+  ```
+
+  The `createTool()` helper now calls `execute(input, context)` so client tools receive the same execution context shape as core tools.
+
+### Patch Changes
+
+- Fixed client-side tools getting stuck in `input-available` state in React's `useChat` messages. After a client tool finished executing, the React UI never observed a terminal `tool-result` (or `tool-error`) chunk for it, so the matching `dynamic-tool` part stayed at `state: 'input-available'` indefinitely. The client now emits a synthetic Mastra-shaped terminal chunk into the streamed response right after the client tool resolves or rejects, so the React reducer correctly flips the part to `output-available` (or `output-error`) and renders the tool result. ([#16916](https://github.com/mastra-ai/mastra/pull/16916))
+
+  Also fixed the client stream parser so final `tool-call` chunks are not treated as partial streaming tool calls while preparing client-tool continuation messages.
+
+- Port the `yj/magnificent-marquess` frontend stack onto `rain-purpose`. ([#17105](https://github.com/mastra-ai/mastra/pull/17105))
+  - `@mastra/client-js`: new `ToolProvider` resource and a `getModelPolicy` accessor on the root client. Route types regenerated for the new endpoints.
+  - `@internal/playground`: Agent Builder routes (agents, skills, infrastructure, favorite, library) wired into the router, `RoutePermissionGuard` and `RoleImpersonationProvider` applied to the app shell, new login layout, role-impersonation banner, `useRestoreFocus` hook, `StudioIndexRedirect` home, and supporting tweaks across agents, browser view, LLM, and CMS surfaces.
+
+  Existing client-tools-on-signals work and the unrouted Agent Builder view/edit pages are preserved.
+
+- Made optional memory response fields optional in server schemas and generated client types. ([#17070](https://github.com/mastra-ai/mastra/pull/17070))
+
+- Add `StoredSkill.favorite()` and `StoredSkill.unfavorite()` methods, mirroring the existing `StoredAgent` favorite API. Both are idempotent and call `PUT`/`DELETE /api/stored/skills/:id/favorite`. ([#17101](https://github.com/mastra-ai/mastra/pull/17101))
+
+- Agent Builder action routes (`/agent-builder/*`) are now registered automatically through the standard server route pipeline. Any adapter built on `@mastra/server` (Hono, Express, Fastify, Koa, etc.) serves the 15 `/agent-builder/*` endpoints without consumers wiring them manually. ([#17085](https://github.com/mastra-ai/mastra/pull/17085))
+
+  **Example**
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+
+  // `/agent-builder/*` routes are now reachable out-of-the-box
+  const actions = await client.getAgentBuilderActions();
+
+  const action = client.getAgentBuilderAction('generate-agent');
+  const { runId } = await action.createRun();
+  const result = await action.startAsync({ inputData: { prompt: 'Build me an agent' } }, runId);
+  ```
+
+  **Why**
+
+  Previously, `AGENT_BUILDER_ROUTES` was a type-only entry in the route registry to keep `@mastra/agent-builder` out of Cloudflare worker bundles. Consumers had to register the routes themselves to expose Agent Builder functionality. Lazy-loading of `@mastra/agent-builder` is preserved — handlers still resolve the workflow module on first request via dynamic `import()`, so Cloudflare bundles are unaffected.
+
+  **New EE permissions**
+
+  The following permissions are added to the EE registry. RBAC consumers with strict allowlists must grant these to retain access to builder action routes:
+  - `agent-builder:read`
+  - `agent-builder:write`
+  - `agent-builder:execute`
+
+  Two legacy stream routes (`STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE`, `OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE`) are now registered through the standard pipeline as well.
+
+- Improved agent thread subscription resilience by keeping server streams active during idle periods and allowing the JavaScript client to reconnect when subscription streams close or resubscribe requests fail. ([#17045](https://github.com/mastra-ai/mastra/pull/17045))
+
+  Enable automatic reconnection with `subscription.processDataStream({ onChunk: chunk => console.log(chunk), reconnect: true })`.
+
+- Fixed `clientTools` being silently dropped — and never executed — on thread-backed chats. When a chat had a `threadId`, the React `useChat` hook routed messages through the new agent signals path but did not pass the `clientTools` map into the signal startup flow, so client-side tools were unavailable when the model requested them. ([#16540](https://github.com/mastra-ai/mastra/pull/16540))
+
+  The signals path now carries `clientTools` and other per-send stream options on `sendSignal`. When the subscribed stream finishes with `tool-calls`, the client executes matching local tools with observability support, emits tool result chunks, and posts a continuation with the assistant tool-call messages plus tool-result messages so the run resumes on the same thread with the same per-send options.
+
+- Updated dependencies [[`cfa2e3a`](https://github.com/mastra-ai/mastra/commit/cfa2e3a5292322f48bb28b4d257d631da7f9d3cc), [`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`ac442a4`](https://github.com/mastra-ai/mastra/commit/ac442a42fda0354ac2bcea772bf6691cb3e9dbb3), [`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`d72dc4b`](https://github.com/mastra-ai/mastra/commit/d72dc4b12d832546c05c20255fa96fe4eb515900), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`1e5c067`](https://github.com/mastra-ai/mastra/commit/1e5c067d2e20a781af670578180d1ee249806d41), [`168fa09`](https://github.com/mastra-ai/mastra/commit/168fa09d6b39114cb8c13bd06f1dccb9bc81c6cd), [`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`8116436`](https://github.com/mastra-ai/mastra/commit/81164363eb225d774e41ff27da6a5ea611406688), [`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`c27c4b9`](https://github.com/mastra-ai/mastra/commit/c27c4b9f137df5414fca4e45896aceccff6b0ed5), [`08b3b59`](https://github.com/mastra-ai/mastra/commit/08b3b590dd960dee6c9a6e39272f8927d803db6e), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5), [`4084113`](https://github.com/mastra-ai/mastra/commit/408411370fc48a822e8b616b3b63f9409774e0e9), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0
+
 ## 1.21.0-alpha.10
 
 ### Patch Changes
