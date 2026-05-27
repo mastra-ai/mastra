@@ -789,11 +789,11 @@ function referencesTarget(subAgents: unknown, targetId: string): boolean {
   if (Array.isArray(subAgents)) {
     return subAgents.some(variant => {
       const value = (variant as { value?: unknown })?.value;
-      return Boolean(value && typeof value === 'object' && targetId in (value as Record<string, unknown>));
+      return Boolean(value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, targetId));
     });
   }
   if (typeof subAgents === 'object') {
-    return targetId in (subAgents as Record<string, unknown>);
+    return Object.prototype.hasOwnProperty.call(subAgents, targetId);
   }
   return false;
 }
