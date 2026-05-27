@@ -10,12 +10,10 @@ packages:
 # Agent Builder overview
 
 :::note
-The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
-The Agent Builder is a UI for building, configuring, and operating Mastra agents without writing code. It runs inside your Mastra server, persists everything to `Mastra.storage`, and turns Mastra into a multi-tenant agent platform that non-developers can use.
-
-The Agent Builder ships as a set of pages mounted at `/agent-builder` and a `builderAgent` that powers the chat-based editing experience. Builder-created agents (called **stored agents**) live alongside code-defined agents and load through the same `Mastra.getAgent(id)` lookup.
+The Agent Builder lets you build, configure, and operate Mastra agents all within the UI. It runs inside your Mastra server, persists everything to `Mastra.storage`, and supports multi-tenant agent workflows with RBAC and channel integrations.
 
 - [**Configuration**](/docs/agent-builder/configuration): Toggle UI sections and pin admin-controlled defaults for every new agent.
 - [**Model policy**](/docs/agent-builder/model-policy): Restrict which providers and models the Builder exposes, and pin a default.
@@ -24,16 +22,6 @@ The Agent Builder ships as a set of pages mounted at `/agent-builder` and a `bui
 - [**Channels**](/docs/agent-builder/channels): Connect Builder-created agents to Slack and other channels.
 - [**Skill registries**](/docs/agent-builder/skill-registries): Browse and install community skills from opt-in registries.
 - [**Deploying**](/docs/agent-builder/deploying): Swap local primitives for cloud-backed storage, filesystems, and sandboxes.
-
-## When to use the Agent Builder
-
-Use the Agent Builder when you want to:
-
-- **Let non-developers ship agents**: Give product, support, or ops teams a browser-based way to create and edit agents.
-- **Operate a multi-tenant agent platform**: Persist many agents to storage with versioning, drafts, and RBAC gating.
-- **Pin organization-wide defaults**: Lock the model, memory shape, tool list, and workspace for every agent created through the Builder.
-- **Install community skills**: Browse skill registries and install skills into stored agents.
-- **Connect agents to channels**: Wire Builder-created agents to Slack and similar surfaces without touching code.
 
 For building agents entirely in code, see the [Agents overview](/docs/agents/overview). For editing code-defined agents through Studio, see the [Editor overview](/docs/editor/overview).
 
@@ -50,12 +38,12 @@ Wire the Agent Builder onto a `Mastra` instance:
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { MastraEditor } from '@mastra/editor'
-import { builderAgent } from '@mastra/editor/ee'
+import { createBuilderAgent } from '@mastra/editor/ee'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({ url: 'file:./mastra.db' }),
-  agents: { builderAgent },
+  agents: { builderAgent: createBuilderAgent() },
   editor: new MastraEditor({
     builder: {
       enabled: true,
@@ -77,36 +65,12 @@ npx mastra dev
 
 The Agent Builder is mounted at `http://localhost:4111/agent-builder`.
 
-To verify the setup:
-
-1. Open `http://localhost:4111/agent-builder`.
-1. Select **Create agent**.
-1. Give the agent a name and instructions, then save.
-1. Open the agent's chat panel and send a message.
-1. Refresh the page. The agent and the conversation both persist.
-
 ## Prerequisites
 
 The Agent Builder requires:
 
-- **Storage**: An `@mastra/core` storage adapter on the `Mastra` instance. Stored agents, memory, and workspace state all persist through `Mastra.storage`.
-- **The `builderAgent`**: Register the `builderAgent` export from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it through the same `Mastra.getAgent(id)` lookup as any other agent.
-
-Register the `builderAgent` on the `agents` map:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { builderAgent } from '@mastra/editor/ee'
-
-export const mastra = new Mastra({
-  agents: {
-    builderAgent,
-    // ...your other agents
-  },
-})
-```
-
-Without this registration, the Builder UI loads, but the chat-based editor returns 404 when you try to talk to it.
+- **Storage**: An `@mastra/core` storage adapter on the `Mastra` instance. Agents, memory, and workspace state all persist through `Mastra.storage`.
+- **The Builder agent**: Register a Builder agent created with the `createBuilderAgent()` factory from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it through the same `Mastra.getAgent(id)` lookup as any other agent. Without this registration, the chat-based editor returns 404.
 
 ## Disabling the Builder
 
@@ -120,11 +84,4 @@ new MastraEditor({
 })
 ```
 
-Omitting the `builder` field has the same effect. In both cases, `MastraEditor.resolveBuilder()` returns `undefined` and Builder routes return 404.
-
-## Next steps
-
-- [Configure the Agent Builder](/docs/agent-builder/configuration) for your team.
-- [Restrict model access](/docs/agent-builder/model-policy) with a model policy.
-- [Set up access control](/docs/agent-builder/access-control) before exposing the Builder beyond a single tenant.
-- [Deploy to production](/docs/agent-builder/deploying) when you are ready to ship.
+Omitting the `builder` field has the same effect.

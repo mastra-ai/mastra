@@ -9,34 +9,35 @@ packages:
 # Workspace
 
 :::note
-The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
-A [workspace](/docs/workspace/overview) gives agents filesystem access, command execution, and skill loading. The Agent Builder pins a default workspace onto every new stored agent through `builder.configuration.agent.workspace`. End users can still override the workspace per agent through the Builder UI.
+A [workspace](/docs/workspace/overview) gives agents filesystem access, command execution, and skill loading. The Agent Builder pins a default workspace onto every new agent through `builder.configuration.agent.workspace`. End users can still override the workspace per agent through the Builder UI.
 
 ## Quickstart
 
-Register a workspace on the `Mastra` instance, then pin it as the Builder default by ID:
+Pin an inline workspace snapshot as the Builder default:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 import { MastraEditor } from '@mastra/editor'
 
-const projectWorkspace = new Workspace({
-  id: 'project-workspace',
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-})
-
 export const mastra = new Mastra({
-  workspace: projectWorkspace,
   editor: new MastraEditor({
     builder: {
       enabled: true,
       configuration: {
         agent: {
-          workspace: { type: 'id', workspaceId: 'project-workspace' },
+          workspace: {
+            type: 'inline',
+            config: {
+              name: 'project-workspace',
+              filesystem: {
+                provider: 'local',
+                config: { basePath: './workspace' },
+              },
+            },
+          },
         },
       },
     },
@@ -44,14 +45,16 @@ export const mastra = new Mastra({
 })
 ```
 
+The Builder derives a deterministic id from the inline config and persists the snapshot, so identical inline configs are deduplicated across agents.
+
 ## Workspace references
 
 `configuration.agent.workspace` accepts a `StorageWorkspaceRef`:
 
-- **`{ type: 'id', workspaceId }`** — references a workspace already registered on the `Mastra` instance. Recommended for shared, named workspaces.
 - **`{ type: 'inline', config }`** — embeds a serialized workspace snapshot directly on the agent. Useful for per-agent, ad-hoc configurations.
+- **`{ type: 'id', workspaceId }`** — references a workspace already registered on the `Mastra` instance via `new Mastra({ workspace })` or `mastra.addWorkspace(...)`. Use this for shared, named workspaces.
 
-For `type: 'id'`, the workspace must exist on the Mastra instance either via the `workspace` constructor option or `mastra.addWorkspace(...)`.
+See the [StorageWorkspaceRef reference](/reference/editor/storage-workspace-ref) for both variants.
 
 ## Filesystem and sandbox
 

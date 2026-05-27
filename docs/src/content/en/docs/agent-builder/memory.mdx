@@ -9,10 +9,10 @@ packages:
 # Memory
 
 :::note
-The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
-The Agent Builder pins a default memory shape onto every new stored agent through `builder.configuration.agent.memory`. The default applies when an end user creates a new agent and doesn't override it.
+The Agent Builder pins a default memory shape onto every new agent through `builder.configuration.agent.memory`. The default applies when an end user creates a new agent and doesn't override it.
 
 ## Quickstart
 
@@ -33,14 +33,30 @@ new MastraEditor({
 
 Observational memory lets the agent learn long-lived facts from past conversations. Storage on the `Mastra` instance is required — see the [Memory overview](/docs/memory/overview) for the prerequisites.
 
-## Configuring memory
+## Observational memory model
 
-`configuration.agent.memory` accepts a `SerializedMemoryConfig`. Every field is optional, and end users can still override the memory shape per agent through the Builder UI.
+Observational memory runs an Observer and Reflector model on top of every conversation. The default model is `google/gemini-2.5-flash`, which requires a `GOOGLE_GENERATIVE_AI_API_KEY` environment variable in any environment where the Builder agent will run.
 
-For the full list of fields, defaults, and worked examples (semantic recall, working memory, message history), see:
+To use a different model, set `observationalMemory.model` to any model ID supported by the Mastra model router (and provide the matching provider credentials):
 
-- [Memory overview](/docs/memory/overview) — the underlying memory model.
-- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — every field on `configuration.agent.memory`.
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        memory: {
+          observationalMemory: {
+            model: 'openai/gpt-5.4',
+          },
+        },
+      },
+    },
+  },
+})
+```
+
+The `model` field applies to both the Observer and Reflector. You can also override each one independently via `observation.model` and `reflection.model`. See the [SerializedMemoryConfig reference](/reference/memory/serialized-memory-config) for the full shape.
 
 ## Storage and vector requirements
 

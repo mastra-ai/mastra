@@ -10,10 +10,10 @@ packages:
 # Channels
 
 :::note
-The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
-Channels let Builder-created agents reach users outside the Mastra server. Register a channel provider on `Mastra.channels` and the Builder exposes the channel as an integration option for every stored agent.
+Channels let Builder-created agents reach users outside the Mastra server. Register a channel provider on `Mastra.channels` and the Builder exposes the channel as an integration option for every agent.
 
 Slack is currently the only supported channel.
 
@@ -30,7 +30,7 @@ Register `SlackProvider` on `Mastra.channels`:
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { MastraEditor } from '@mastra/editor'
-import { builderAgent } from '@mastra/editor/ee'
+import { createBuilderAgent } from '@mastra/editor/ee'
 import { SlackProvider } from '@mastra/slack'
 
 export const mastra = new Mastra({
@@ -38,9 +38,10 @@ export const mastra = new Mastra({
   channels: {
     slack: new SlackProvider({
       refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+      baseUrl: process.env.SLACK_BASE_URL,
     }),
   },
-  agents: { builderAgent },
+  agents: { builderAgent: createBuilderAgent() },
   editor: new MastraEditor({
     builder: { enabled: true },
   }),

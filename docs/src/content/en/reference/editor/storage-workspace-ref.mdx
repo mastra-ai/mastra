@@ -38,7 +38,10 @@ new MastraEditor({
           type: 'inline',
           config: {
             name: 'inline-builder-workspace',
-            filesystem: { provider: 'local', config: { rootDir: './agent-files' } },
+            filesystem: {
+              provider: 'local',
+              config: { basePath: './agent-files' },
+            },
           },
         },
       },

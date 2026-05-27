@@ -87,7 +87,7 @@ export const mastra = new Mastra({
     name: 'browsers',
     type: 'Record<string, BrowserProvider>',
     description:
-      'Browser providers for agent browser access (for example, Stagehand). No built-ins — required when `builder.features.agent.browser` is enabled. See [BrowserProvider](/reference/editor/browser-provider) for the provider interface.',
+      'Browser providers for agent browser access (for example, Stagehand). No built-ins — required when `builder.features.agent.browser` is enabled. See the BrowserProvider reference for the provider interface.',
     isOptional: true,
     defaultValue: '{}',
   },
@@ -95,11 +95,21 @@ export const mastra = new Mastra({
     name: 'builder',
     type: 'AgentBuilderOptions',
     description:
-      'Agent Builder configuration. See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options). Omit or set `enabled: false` to disable the Builder.',
+      'Agent Builder configuration. See the AgentBuilderOptions reference. Omit or set `enabled: false` to disable the Builder.',
     isOptional: true,
   },
 ]}
 />
+
+### Provider interfaces
+
+Each provider field above takes a record keyed by provider id. See the per-provider reference pages for the implementation shape:
+
+- [ProcessorProvider](/reference/editor/processor-provider)
+- [FilesystemProvider](/reference/editor/filesystem-provider)
+- [SandboxProvider](/reference/editor/sandbox-provider)
+- [BlobStoreProvider](/reference/editor/blob-store-provider)
+- [BrowserProvider](/reference/editor/browser-provider)
 
 ## Agent Builder
 
@@ -109,20 +119,18 @@ The `builder` field enables the [Agent Builder](/docs/agent-builder/overview), a
 - [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options) — full options schema.
 - [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — admin-pinned defaults for new agents.
 - [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) — model allowlist and default model.
-- [BuilderModelPolicy](/reference/editor/agent-builder/builder-model-policy) — resolved policy served to the admin UI.
-- [IAgentBuilder](/reference/editor/agent-builder/iagent-builder) — runtime interface returned by `resolveBuilder()`.
 
 ### Registering the Builder agent
 
-The Builder UI runs against an agent named `builderAgent` exported from `@mastra/editor/ee`. Import it and register it under `agents` on your Mastra instance:
+The Builder UI runs against an agent created by the `createBuilderAgent()` factory from `@mastra/editor/ee`. Import the factory, invoke it, and register the returned agent under `agents` on your Mastra instance:
 
 ```typescript filename="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
-import { builderAgent } from '@mastra/editor/ee'
+import { createBuilderAgent } from '@mastra/editor/ee'
 
 export const mastra = new Mastra({
-  agents: { builderAgent },
+  agents: { builderAgent: createBuilderAgent() },
   editor: new MastraEditor({
     builder: { enabled: true },
   }),

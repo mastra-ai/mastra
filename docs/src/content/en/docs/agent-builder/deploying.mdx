@@ -1,6 +1,6 @@
 ---
 title: "Deploying | Agent Builder"
-description: Swap local Agent Builder primitives for cloud-backed storage, filesystems, sandboxes, and an EE license for production.
+description: Swap local Agent Builder primitives for cloud-backed storage, filesystems, sandboxes, an EE license, auth, and a public channel URL for production.
 packages:
   - "@mastra/core"
   - "@mastra/editor"
@@ -12,21 +12,23 @@ packages:
 # Deploying
 
 :::note
-The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
 Production deployments swap the local primitives in the Quickstart for cloud-backed equivalents. The shape of the `Mastra` and `MastraEditor` config doesn't change — only the providers behind it.
 
-## Quickstart
+## What a production deployment needs
 
-A production deployment needs four things:
+1. **EE license** — a valid `MASTRA_EE_LICENSE` so the server will start with the Builder enabled.
+1. **Hosted storage** — a shared store for agents, skills, runs, and memory.
+1. **Shared workspace filesystem** — survives across instances; `local` is single-node only.
+1. **Cloud sandbox** — runs agent commands safely; `local` is unsafe in shared environments.
+1. **Auth and RBAC** — gates the Builder UI and `/agent-builder/*` routes.
+1. **Public base URL for channels** — Slack and other channel providers need a reachable URL.
 
-1. A hosted storage backend.
-1. A filesystem that survives multi-instance deployments.
-1. A sandbox that can run untrusted commands safely.
-1. A valid `MASTRA_EE_LICENSE`.
+## EE license
 
-The sections below cover each.
+Set `MASTRA_EE_LICENSE` in the deployment environment. The server refuses to start when `builder.enabled` is truthy without a valid license. Treat the license key as a secret.
 
 ## Storage
 
@@ -46,34 +48,47 @@ new Mastra({
 
 ## Workspace filesystem and sandbox
 
-`LocalFilesystem` works only on the node that owns the directory. For multi-instance deployments, swap to a cloud filesystem and attach a cloud sandbox.
+`local` filesystem works only on the node that owns the directory. For multi-instance deployments, register cloud filesystem and sandbox providers on `MastraEditor` and reference them by id in the inline workspace config.
 
 ```bash npm2yarn
 npm install @mastra/s3 @mastra/e2b
 ```
 
 ```typescript title="src/mastra/index.ts"
-import { Workspace } from '@mastra/core/workspace'
+import { Mastra } from '@mastra/core/mastra'
 import { MastraEditor } from '@mastra/editor'
-import { S3Filesystem, s3FilesystemProvider } from '@mastra/s3'
-import { E2BSandbox, e2bSandboxProvider } from '@mastra/e2b'
+import { s3FilesystemProvider } from '@mastra/s3'
+import { e2bSandboxProvider } from '@mastra/e2b'
 
-const builderWorkspace = new Workspace({
-  id: 'builder-workspace',
-  name: 'Builder Workspace',
-  filesystem: new S3Filesystem({
-    bucket: process.env.S3_BUCKET!,
-    region: process.env.S3_REGION!,
+new Mastra({
+  editor: new MastraEditor({
+    filesystems: { [s3FilesystemProvider.id]: s3FilesystemProvider },
+    sandboxes: { [e2bSandboxProvider.id]: e2bSandboxProvider },
+    builder: {
+      enabled: true,
+      configuration: {
+        agent: {
+          workspace: {
+            type: 'inline',
+            config: {
+              name: 'builder-workspace',
+              filesystem: {
+                provider: s3FilesystemProvider.id,
+                config: {
+                  bucket: process.env.S3_BUCKET!,
+                  region: process.env.S3_REGION!,
+                },
+              },
+              sandbox: {
+                provider: e2bSandboxProvider.id,
+                config: { apiKey: process.env.E2B_API_KEY! },
+              },
+            },
+          },
+        },
+      },
+    },
   }),
-  sandbox: new E2BSandbox({ apiKey: process.env.E2B_API_KEY! }),
-})
-
-new MastraEditor({
-  filesystems: { [s3FilesystemProvider.id]: s3FilesystemProvider },
-  sandboxes: { [e2bSandboxProvider.id]: e2bSandboxProvider },
-  builder: {
-    /* ... */
-  },
 })
 ```
 
@@ -83,17 +98,19 @@ new MastraEditor({
 
 :::warning
 
-A local sandbox can't run commands safely in a shared environment. Always attach a cloud sandbox to the workspace before deploying.
+A local sandbox can't run commands safely in a shared environment. Always register a cloud sandbox provider and reference it in the workspace config before deploying.
 
 :::
 
-## License, channels, and auth
+## Auth and RBAC
 
-A production deployment needs three more environment-level pieces in place:
+A production deployment without authentication exposes the Builder to the public internet. Register a `Mastra.server.auth` provider (for example, WorkOS or your own provider) and a `Mastra.server.rbac` provider to gate access.
 
-- **EE license**: Set `MASTRA_EE_LICENSE` in the deployment environment. Without it, the server refuses to start when `builder.enabled` is truthy. Treat the license key as a secret.
-- **Public URL for channels**: Slack needs to reach your server through a public URL. Pass `baseUrl` to `SlackProvider` with the deployed URL (no trailing slash). See [Channels](/docs/agent-builder/channels).
-- **Auth and RBAC**: A production deployment without authentication exposes the Builder to the public internet. Register a `Mastra.server.auth` provider (for example, WorkOS or your own provider) and a `Mastra.server.rbac` provider to gate access. See [Access control](/docs/agent-builder/access-control).
+See [Access control](/docs/agent-builder/access-control) for the required role permissions and a WorkOS quickstart.
+
+## Public URL for channels
+
+Slack needs to reach your server through a public URL. Pass `baseUrl` to `SlackProvider` with the deployed URL (no trailing slash). See [Channels](/docs/agent-builder/channels) for the full setup.
 
 ## Related
 

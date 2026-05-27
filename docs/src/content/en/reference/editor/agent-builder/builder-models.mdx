@@ -10,8 +10,6 @@ packages:
 
 `builder.configuration.agent.models` is the admin-facing model policy input on `AgentBuilderOptions`. It controls which providers and models the Agent Builder exposes, and which model is pre-selected on new-agent create.
 
-The resolved, read-only `ModelPolicy` derived from this input (with `active` and `pickerVisible` flags) is documented on the [BuilderModelPolicy](/reference/editor/agent-builder/builder-model-policy) page.
-
 See [Model policy](/docs/agent-builder/model-policy) for concepts and worked examples.
 
 ## Usage example
@@ -25,8 +23,11 @@ new MastraEditor({
     configuration: {
       agent: {
         models: {
-          allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
-          default: { provider: 'openai', modelId: 'gpt-5.4' },
+          allowed: [
+            { provider: 'openai', modelId: 'gpt-5.4-mini' },
+            { provider: 'openai', modelId: 'gpt-5.4' },
+            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+          ],
         },
       },
     },
@@ -120,7 +121,7 @@ new MastraEditor({
 
 ## Validation rules
 
-Mastra validates the admin policy at server boot. Violations surface as warnings through [`IAgentBuilder.getModelPolicyWarnings()`](/reference/editor/agent-builder/iagent-builder).
+Mastra validates the admin policy at server boot. Violations surface as warnings on `GET /editor/builder/settings.modelPolicyWarnings`.
 
 - `allowed` empty or omitted: no restriction. Every registered model is available.
 - When `allowed` is non-empty and a `default` is set: `default` must satisfy `isModelAllowed(allowed, default)`. A `default` that fails this check is dropped and surfaced as a warning.
@@ -128,7 +129,6 @@ Mastra validates the admin policy at server boot. Violations surface as warnings
 
 ## Related
 
-- [BuilderModelPolicy](/reference/editor/agent-builder/builder-model-policy) — the read-only resolved policy served to the admin UI.
 - [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — parent object containing `models`.
 - [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options) — the top-level Builder options.
 - [Model policy](/docs/agent-builder/model-policy) — concept and worked examples.

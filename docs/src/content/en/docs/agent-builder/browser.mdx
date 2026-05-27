@@ -9,7 +9,7 @@ packages:
 # Browser
 
 :::note
-The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
 The Agent Builder can give end-user agents a browser tool driven by a registered provider. Unlike filesystems and sandboxes, **there are no built-in browser providers** — you must register one through `MastraEditor.browsers`.
@@ -20,11 +20,21 @@ Register a browser provider on `MastraEditor`, then pin it as the Builder defaul
 
 ```typescript title="src/mastra/index.ts"
 import { MastraEditor } from '@mastra/editor'
-import { StagehandBrowserProvider } from '@mastra/stagehand'
+import { StagehandBrowser } from '@mastra/stagehand'
 
 new MastraEditor({
   browsers: {
-    stagehand: new StagehandBrowserProvider(),
+    stagehand: {
+      id: 'stagehand',
+      name: 'Stagehand Browser',
+      createBrowser: config =>
+        new StagehandBrowser({
+          ...config,
+          apiKey: process.env.BROWSERBASE_API_KEY ?? '',
+          env: 'BROWSERBASE',
+          projectId: process.env.BROWSERBASE_PROJECT_ID ?? '',
+        }),
+    },
   },
   builder: {
     enabled: true,
@@ -46,42 +56,13 @@ new MastraEditor({
 
 - `id` — provider identifier, matched against `StorageBrowserConfig.provider` (e.g., `'stagehand'`).
 - `name` — display name shown in the Builder UI.
-- `createBrowser(config)` — hydrates a stored browser config into a runtime `MastraBrowser`.
+- `createBrowser(config)` — hydrates a stored browser config into a runtime `MastraBrowser`. This is where you inject runtime-only credentials (API keys, project IDs) that are not stored in the agent snapshot.
 
-Providers ship as separate packages (e.g., `@mastra/stagehand`, `@mastra/agent-browser`). Register every provider you want the Builder to expose to end users.
-
-## Pinning a default
-
-`configuration.agent.browser` accepts a `StorageBrowserRef`:
-
-- **`{ type: 'inline', config }`** — embeds a `StorageBrowserConfig` directly on the agent. `config.provider` must match an `id` from `MastraEditor.browsers`.
-
-`StorageBrowserConfig` fields include:
-
-- `provider` — provider id.
-- `headless` — boolean, defaults to `true`.
-- `viewport` — `{ width, height }`.
-- `timeout` — milliseconds, defaults to `10000`.
-- `screencast` — optional `{ format, quality, maxWidth, maxHeight }` for recording.
+Browser classes ship as separate packages (e.g., `@mastra/stagehand`, `@mastra/agent-browser`). The provider entry is a plain object wrapping the class — register one entry per browser you want the Builder to expose to end users. See the [StorageBrowserRef reference](/reference/editor/storage-browser-ref) for the full `browser` field schema, including all `StorageBrowserConfig` options.
 
 ## Feature toggle
 
 The `features.agent.browser` toggle controls whether end users can enable browser access per agent in the Builder UI. It defaults to `true` only when a valid `configuration.agent.browser` (with a `config.provider`) is provided. Without a registered provider matching the pinned config, the toggle is forced off.
-
-```typescript
-new MastraEditor({
-  browsers: { stagehand: new StagehandBrowserProvider() },
-  builder: {
-    enabled: true,
-    features: { agent: { browser: true } },
-    configuration: {
-      agent: {
-        browser: { type: 'inline', config: { provider: 'stagehand' } },
-      },
-    },
-  },
-})
-```
 
 ## Related
 

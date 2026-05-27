@@ -27,8 +27,11 @@ new MastraEditor({
       agent: {
         memory: { observationalMemory: true },
         models: {
-          allowed: [{ provider: 'openai' }],
-          default: { provider: 'openai', modelId: 'gpt-5.4' },
+          allowed: [
+            { provider: 'openai', modelId: 'gpt-5.4-mini' },
+            { provider: 'openai', modelId: 'gpt-5.4' },
+            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+          ],
         },
       },
     },
@@ -177,6 +180,4 @@ new MastraEditor({
 - [Configuration](/docs/agent-builder/configuration) — concept and worked examples.
 - [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — full schema for `configuration.agent`.
 - [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) — model allowlist and default model.
-- [BuilderModelPolicy](/reference/editor/agent-builder/builder-model-policy) — resolved policy served to the admin UI.
-- [IAgentBuilder](/reference/editor/agent-builder/iagent-builder) — runtime interface returned by `resolveBuilder()`.
 - [MastraEditor class](/reference/editor/mastra-editor) — the parent surface that hosts `builder`.

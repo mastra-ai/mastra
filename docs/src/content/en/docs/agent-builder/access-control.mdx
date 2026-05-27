@@ -10,7 +10,7 @@ packages:
 # Access control
 
 :::note
-The Agent Builder is a Mastra Enterprise feature. It runs without a license in local development, but production deployments require a valid `MASTRA_EE_LICENSE`. The Mastra server refuses to start with a Builder config and no valid license.
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
 The Agent Builder ships with two supported roles: `admin` and `member`. Wire them through `Mastra.server.rbac`. Without an RBAC provider, every authenticated user has full Builder access; without authentication, the Builder is open to anyone who can reach the server.
@@ -19,18 +19,27 @@ The Agent Builder ships with two supported roles: `admin` and `member`. Wire the
 
 | Role | Permissions | What they can do |
 | - | - | - |
-| `admin` | `*` | Full access. Create, edit, publish, and delete stored agents and skills. Manage every Builder surface. |
-| `member` | `*:read`, `*:execute` | Open the Builder, browse stored agents and skills, and chat with them. Cannot create, edit, publish, or delete. |
+| `admin` | `*` | Full access. Create, edit, publish, and delete agents and skills. Manage every Builder surface. |
+| `member` | scoped list (below) | Open the Builder, browse agents and skills, populate pickers, and chat with the Builder agent. |
 
 ## Minimum permissions
 
-The minimum to open and use the Builder is `agent-builder:*` (covers both `:read` and `:execute`). The Builder UI also reads from other resources, so a usable role needs:
+The Builder UI calls several resources on load, so a usable `member` role needs explicit grants on each. The Builder action layer (`/agent-builder/*`) is one resource; the data it reads and writes lives under separate resources.
 
-- `agent-builder:*` — load the Builder UI and run Builder actions.
-- `stored-agents:read`, `stored-skills:read` — list and open stored agents and skills.
-- `tools:read`, `workflows:read`, `memory:read` — populate the tool, workflow, and memory pickers.
+| Permission | Used for |
+| - | - |
+| `agent-builder:*` | Load Builder actions, runs, and stream Builder workflows |
+| `agents:read`, `agents:execute` | List registered agents and chat with the Builder agent |
+| `stored-agents:*` | List, view, create, and edit agents |
+| `stored-skills:*` | List, view, create, and edit stored skills |
+| `stored-workspaces:*` | Pick a workspace when editing an agent |
+| `tools:read`, `tools:execute` | Populate the tool picker and run tools through agents |
+| `workflows:read`, `workflows:execute` | Populate the workflow picker and run workflows through agents |
+| `memory:read` | Preview memory configuration in the picker |
+| `channels:read` | Show Slack/channel chips on agent pages |
+| `infrastructure:read` | Builder diagnostics banner on the shell |
 
-Grant `:write`, `:delete`, `:publish`, and `:share` on `stored-agents` and `stored-skills` for users who should create or modify agents. `admin` covers everything through the `*` wildcard.
+Grant `:write`, `:delete`, and `:publish` on `stored-agents` and `stored-skills` for users who should create or modify agents. The `:*` wildcards in the table above cover those actions. `admin` covers everything through the `*` wildcard.
 
 ## Quickstart with WorkOS
 
@@ -46,7 +55,21 @@ export const mastraAuth = new MastraAuthWorkos({
 export const rbacProvider = new MastraRBACWorkos({
   roleMapping: {
     admin: ['*'],
-    member: ['*:read', '*:execute'],
+    member: [
+      'agent-builder:*',
+      'agents:read',
+      'agents:execute',
+      'stored-agents:*',
+      'stored-skills:*',
+      'stored-workspaces:*',
+      'tools:read',
+      'tools:execute',
+      'workflows:read',
+      'workflows:execute',
+      'memory:read',
+      'channels:read',
+      'infrastructure:read',
+    ],
     _default: [],
   },
 })
@@ -78,12 +101,6 @@ Permission patterns follow `resource:action`. Wildcards are supported on either 
 - `*:read` — `read` across every resource.
 
 Patterns resolve through `matchesPermission()`. The first matching role permission grants the action.
-
-:::warning
-
-A production deployment without authentication exposes the Builder to the public internet. Register a `Mastra.server.auth` provider before enabling the Builder in production.
-
-:::
 
 ## Related
 
