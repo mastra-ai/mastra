@@ -54,10 +54,32 @@ export function useSetAgentToolsTool({ availableAgentTools }: UseSetAgentToolsTo
       outputSchema: z.object({ success: z.boolean() }),
       execute: async (inputData: any) => {
         if (Array.isArray(inputData?.tools)) {
-          const { tools, agents, workflows } = routeToolInputToFormKeys(availableAgentTools, inputData.tools);
+          const { tools, agents, workflows, toolProvidersFragment } = routeToolInputToFormKeys(
+            availableAgentTools,
+            inputData.tools,
+          );
           formMethods.setValue('tools', tools, { shouldDirty: true });
           formMethods.setValue('agents', agents, { shouldDirty: true });
           formMethods.setValue('workflows', workflows, { shouldDirty: true });
+
+          // Shallow-merge per-provider integration tools into the form's
+          // `toolProviders` state, preserving any existing `connections` map.
+          const fragmentProviderIds = Object.keys(toolProvidersFragment);
+          if (fragmentProviderIds.length > 0) {
+            const currentProviders = (formMethods.getValues('toolProviders') ?? {}) as Record<
+              string,
+              { tools?: Record<string, { toolkit: string; description?: string }>; connections?: unknown }
+            >;
+            const nextProviders = { ...currentProviders };
+            for (const providerId of fragmentProviderIds) {
+              const existing = currentProviders[providerId] ?? { tools: {}, connections: {} };
+              nextProviders[providerId] = {
+                ...existing,
+                tools: { ...(existing.tools ?? {}), ...toolProvidersFragment[providerId] },
+              };
+            }
+            formMethods.setValue('toolProviders', nextProviders as never, { shouldDirty: true });
+          }
         }
         return { success: true };
       },
