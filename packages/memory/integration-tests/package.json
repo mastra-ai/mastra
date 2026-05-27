@@ -7,7 +7,7 @@
     "test:source-mode": "MASTRA_SOURCE_MODE=1 NODE_OPTIONS=\"--conditions=mastra-source\" vitest run",
     "compile:worker": "npx tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck",
     "dev": "mastra dev",
-    "dev:source-mode": "MASTRA_REPO_RUN_FROM_SOURCE=true mastra dev"
+    "dev:source-mode": "MASTRA_SOURCE_MODE=true mastra dev"
   },
   "dependencies": {
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@^2.0.77",

@@ -44,9 +44,7 @@ const SOURCE_MODE_WORKSPACE_DIRS = [
 ];
 
 function isRepoSourceModeRequested() {
-  return (
-    process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')
-  );
+  return ['1', 'true'].includes(process.env.MASTRA_SOURCE_MODE ?? '');
 }
 
 function withSourceModeCondition(nodeOptions?: string) {
@@ -97,11 +95,9 @@ function applySourceModeEnv(env?: Map<string, string>) {
 
   const nodeOptions = withSourceModeCondition(env?.get('NODE_OPTIONS') ?? process.env.NODE_OPTIONS);
 
-  process.env.MASTRA_REPO_RUN_FROM_SOURCE = process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? 'true';
   process.env.MASTRA_SOURCE_MODE = '1';
   process.env.MASTRA_SOURCE_MODE_WORKSPACE_ROOT = workspaceRoot;
   process.env.NODE_OPTIONS = nodeOptions;
-  env?.set('MASTRA_REPO_RUN_FROM_SOURCE', process.env.MASTRA_REPO_RUN_FROM_SOURCE);
   env?.set('MASTRA_SOURCE_MODE', '1');
   env?.set('MASTRA_SOURCE_MODE_WORKSPACE_ROOT', workspaceRoot);
   env?.set('NODE_OPTIONS', nodeOptions);
@@ -722,7 +718,7 @@ export async function dev({
 
   await bundler.prepare(dotMastraPath);
 
-  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
+  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools, mastraPackages);
 
   await startServer(
     join(dotMastraPath, 'output'),

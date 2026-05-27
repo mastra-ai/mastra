@@ -9,8 +9,7 @@ const binDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = dirname(binDir);
 const sourceEntry = join(packageRoot, 'src', 'index.ts');
 const distEntry = join(packageRoot, 'dist', 'index.js');
-const repoSourceModeRequested =
-  process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '');
+const repoSourceModeRequested = ['1', 'true'].includes(process.env.MASTRA_SOURCE_MODE ?? '');
 const workspaceRoot = dirname(dirname(packageRoot));
 const sourceMode =
   repoSourceModeRequested &&
@@ -53,7 +52,6 @@ if (sourceMode && existsSync(sourceEntry)) {
 
   run(command, [sourceEntry, ...args], {
     ...process.env,
-    MASTRA_REPO_RUN_FROM_SOURCE: process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? 'true',
     MASTRA_SOURCE_MODE: '1',
     MASTRA_SOURCE_MODE_WORKSPACE_ROOT: workspaceRoot,
     NODE_OPTIONS: withSourceModeCondition(process.env.NODE_OPTIONS),

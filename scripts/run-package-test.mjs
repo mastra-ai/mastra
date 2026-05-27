@@ -8,8 +8,7 @@ if (!target) {
 }
 
 const args = rest.filter(arg => arg !== '--');
-const sourceMode =
-  process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '');
+const sourceMode = ['1', 'true'].includes(process.env.MASTRA_SOURCE_MODE ?? '');
 const env = {
   ...process.env,
   ...(sourceMode

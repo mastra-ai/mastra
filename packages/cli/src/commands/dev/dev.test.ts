@@ -432,10 +432,8 @@ describe('dev command - inspect flag behavior', () => {
   describe('source mode', () => {
     it('should enable mastra-source conditions for the dev server process', async () => {
       const originalSourceMode = process.env.MASTRA_SOURCE_MODE;
-      const originalRepoSourceMode = process.env.MASTRA_REPO_RUN_FROM_SOURCE;
       const originalNodeOptions = process.env.NODE_OPTIONS;
-      delete process.env.MASTRA_SOURCE_MODE;
-      process.env.MASTRA_REPO_RUN_FROM_SOURCE = 'true';
+      process.env.MASTRA_SOURCE_MODE = 'true';
       process.env.NODE_OPTIONS = '--max-old-space-size=4096';
 
       try {
@@ -459,7 +457,6 @@ describe('dev command - inspect flag behavior', () => {
         expect(execaMock.mock.calls[0][1]).toContain('--import');
         expect(execaMock.mock.calls[0][1]).toContainEqual(expect.stringContaining('tsx/dist/loader.mjs'));
         expect(execaMock.mock.calls[0][2].env).toMatchObject({
-          MASTRA_REPO_RUN_FROM_SOURCE: 'true',
           MASTRA_SOURCE_MODE: '1',
           NODE_OPTIONS: '--max-old-space-size=4096 --conditions=mastra-source',
         });
@@ -468,12 +465,6 @@ describe('dev command - inspect flag behavior', () => {
           delete process.env.MASTRA_SOURCE_MODE;
         } else {
           process.env.MASTRA_SOURCE_MODE = originalSourceMode;
-        }
-
-        if (originalRepoSourceMode === undefined) {
-          delete process.env.MASTRA_REPO_RUN_FROM_SOURCE;
-        } else {
-          process.env.MASTRA_REPO_RUN_FROM_SOURCE = originalRepoSourceMode;
         }
 
         if (originalNodeOptions === undefined) {
@@ -486,12 +477,10 @@ describe('dev command - inspect flag behavior', () => {
 
     it('should ignore repo source mode when the installed CLI is not linked to a source checkout', async () => {
       const originalSourceMode = process.env.MASTRA_SOURCE_MODE;
-      const originalRepoSourceMode = process.env.MASTRA_REPO_RUN_FROM_SOURCE;
       const originalNodeOptions = process.env.NODE_OPTIONS;
       const { existsSync } = await import('node:fs');
       vi.mocked(existsSync).mockReturnValue(false);
-      delete process.env.MASTRA_SOURCE_MODE;
-      process.env.MASTRA_REPO_RUN_FROM_SOURCE = 'true';
+      process.env.MASTRA_SOURCE_MODE = 'true';
       process.env.NODE_OPTIONS = '--max-old-space-size=4096';
 
       try {
@@ -509,7 +498,7 @@ describe('dev command - inspect flag behavior', () => {
           debug: false,
         });
 
-        expect(process.env.MASTRA_SOURCE_MODE).toBeUndefined();
+        expect(process.env.MASTRA_SOURCE_MODE).toBe('true');
         expect(process.env.NODE_OPTIONS).toBe('--max-old-space-size=4096');
         expect(execaMock).toHaveBeenCalled();
         expect(execaMock.mock.calls[0][1]).not.toContain('--import');
@@ -528,12 +517,6 @@ describe('dev command - inspect flag behavior', () => {
           delete process.env.MASTRA_SOURCE_MODE;
         } else {
           process.env.MASTRA_SOURCE_MODE = originalSourceMode;
-        }
-
-        if (originalRepoSourceMode === undefined) {
-          delete process.env.MASTRA_REPO_RUN_FROM_SOURCE;
-        } else {
-          process.env.MASTRA_REPO_RUN_FROM_SOURCE = originalRepoSourceMode;
         }
 
         if (originalNodeOptions === undefined) {

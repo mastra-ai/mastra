@@ -4,9 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { UserWorkspaceConfig } from 'vitest/config';
 
 export function isRepoSourceModeEnabled() {
-  return (
-    process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '')
-  );
+  return ['1', 'true'].includes(process.env.MASTRA_SOURCE_MODE ?? '');
 }
 
 export const SOURCE_MODE = isRepoSourceModeEnabled();

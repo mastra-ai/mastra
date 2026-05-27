@@ -2,8 +2,7 @@
 import { spawnSync } from 'node:child_process';
 
 const args = process.argv.slice(2).filter(arg => arg !== '--');
-const sourceMode =
-  process.env.MASTRA_SOURCE_MODE === '1' || ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '');
+const sourceMode = ['1', 'true'].includes(process.env.MASTRA_SOURCE_MODE ?? '');
 
 function pnpmCommand(commandArgs) {
   const npmExecPath = process.env.npm_execpath;

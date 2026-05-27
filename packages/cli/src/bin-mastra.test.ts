@@ -45,7 +45,7 @@ describe('mastra bin source-mode guard', () => {
 
     const result = spawnSync(process.execPath, [fixtureBin], {
       cwd: testDir,
-      env: { ...process.env, MASTRA_REPO_RUN_FROM_SOURCE: 'true' },
+      env: { ...process.env, MASTRA_SOURCE_MODE: 'true' },
       encoding: 'utf8',
     });
 
@@ -56,7 +56,7 @@ describe('mastra bin source-mode guard', () => {
   it('falls back to the dist entry when source mode is requested without repo source files', () => {
     const result = spawnSync(process.execPath, [fixtureBin], {
       cwd: testDir,
-      env: { ...process.env, MASTRA_REPO_RUN_FROM_SOURCE: 'true' },
+      env: { ...process.env, MASTRA_SOURCE_MODE: 'true' },
       encoding: 'utf8',
     });
 
@@ -70,7 +70,6 @@ describe('mastra bin source-mode guard', () => {
     await writeFixtureFile(join(testDir, 'packages', 'cli', 'src', 'index.ts'), "console.log('source-entry');\n");
 
     const env = { ...process.env };
-    delete env.MASTRA_REPO_RUN_FROM_SOURCE;
     delete env.MASTRA_SOURCE_MODE;
 
     const result = spawnSync(process.execPath, [fixtureBin], {
