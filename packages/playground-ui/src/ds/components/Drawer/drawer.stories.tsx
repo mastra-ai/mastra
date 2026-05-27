@@ -10,7 +10,6 @@ import {
   DrawerBackdrop,
   DrawerBody,
   DrawerClose,
-  DrawerShell,
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
@@ -21,6 +20,7 @@ import {
   DrawerTrigger,
   DrawerViewport,
 } from './drawer';
+import { DrawerShell } from './drawer-shell';
 
 const meta: Meta<typeof Drawer> = {
   title: 'Feedback/Drawer',

@@ -6,13 +6,13 @@ import {
   Drawer,
   DrawerBody,
   DrawerClose,
-  DrawerShell,
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
   DrawerTrigger,
 } from './drawer';
+import { DrawerShell } from './drawer-shell';
 import { Button } from '@/ds/components/Button';
 
 afterEach(() => {

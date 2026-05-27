@@ -1,8 +1,6 @@
 import { Drawer as DrawerPrimitive } from '@base-ui/react/drawer';
-import { X } from 'lucide-react';
 import * as React from 'react';
 
-import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
 // Swipe/stack transforms live in CSS (see drawer.css) — too unreadable as escaped
@@ -23,7 +21,7 @@ const sideToSwipeDirection: Record<DrawerSide, 'up' | 'down' | 'left' | 'right'>
 
 const DrawerSideContext = React.createContext<DrawerSide>('bottom');
 
-const useDrawerSide = () => React.useContext(DrawerSideContext);
+export const useDrawerSide = () => React.useContext(DrawerSideContext);
 
 export type DrawerProps<Payload = unknown> = Omit<DrawerPrimitive.Root.Props<Payload>, 'swipeDirection'> & {
   /** Edge the drawer is anchored to. Defaults to `bottom`. */
@@ -163,76 +161,6 @@ const DrawerPopup = React.forwardRef<HTMLDivElement, DrawerPopupProps>(({ classN
 });
 DrawerPopup.displayName = 'DrawerPopup';
 
-type DrawerShellProps = Omit<DrawerPrimitive.Popup.Props, 'className'> & {
-  className?: string;
-  /** Portal target. Defaults to `document.body`. */
-  container?: HTMLElement | null;
-  /** Hide the dimmed backdrop layer (use for non-modal drawers). */
-  hideBackdrop?: boolean;
-  /** Hide the built-in close button. */
-  hideCloseButton?: boolean;
-  /** Hide the drag handle shown on top/bottom sheets. */
-  hideHandle?: boolean;
-};
-
-// Faded out while a nested drawer is open so the collapsed parent reads as a backdrop.
-const nestedFadeClass = cn(
-  'transition-opacity duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:duration-0',
-  'group-data-[nested-drawer-open]/popup:opacity-0',
-);
-
-const HandleBar = () => (
-  <div className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-surface5', nestedFadeClass)} />
-);
-
-/**
- * Convenience composition of Portal + Backdrop + Viewport + Popup.
- *
- * Children sit in a plain `<div>`, not Base UI's `Drawer.Content`. `Drawer.Content`
- * marks its subtree as mouse-text-selectable, so a *pointer* drag inside it selects
- * text instead of swiping (touch still swipes). A plain `<div>` keeps the entire
- * panel drag-to-dismiss for pointer and touch alike. Pair this with not putting
- * `pointer-events: none` on a modal viewport — that also blocks the swipe.
- *
- * `hideBackdrop` marks the drawer as non-modal: it drops the backdrop and switches the
- * viewport to `pointer-events: none` (popup re-enables its own) so the page behind
- * stays interactive — the only case where that opt-out is correct.
- *
- * For layouts that need their own structure, compose the styled parts
- * (`DrawerPortal`, `DrawerBackdrop`, `DrawerViewport`, `DrawerPopup`) directly instead.
- */
-const DrawerShell = React.forwardRef<HTMLDivElement, DrawerShellProps>(
-  ({ className, children, container, hideBackdrop, hideCloseButton, hideHandle, ...props }, ref) => {
-    const side = useDrawerSide();
-    const showHandle = !hideHandle && (side === 'top' || side === 'bottom');
-
-    return (
-      <DrawerPortal container={container ?? undefined}>
-        {!hideBackdrop && <DrawerBackdrop />}
-        <DrawerViewport className={hideBackdrop ? 'pointer-events-none' : undefined}>
-          <DrawerPopup ref={ref} className={cn(hideBackdrop && 'pointer-events-auto', className)} {...props}>
-            {showHandle && side === 'bottom' && <HandleBar />}
-            <div data-slot="drawer-content" className={cn('relative flex min-h-0 flex-1 flex-col', nestedFadeClass)}>
-              {children}
-              {!hideCloseButton && (
-                <DrawerPrimitive.Close
-                  render={
-                    <Button variant="ghost" size="sm" className="absolute top-3 right-3" aria-label="Close">
-                      <X />
-                    </Button>
-                  }
-                />
-              )}
-            </div>
-            {showHandle && side === 'top' && <HandleBar />}
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
-    );
-  },
-);
-DrawerShell.displayName = 'DrawerShell';
-
 const DrawerHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div data-slot="drawer-header" className={cn('flex flex-col gap-0.5 px-4 py-3 text-left', className)} {...props} />
 );
@@ -280,7 +208,6 @@ export {
   DrawerBackdrop,
   DrawerViewport,
   DrawerPopup,
-  DrawerShell,
   DrawerHeader,
   DrawerFooter,
   DrawerBody,
@@ -300,7 +227,6 @@ export type {
   DrawerBackdropProps,
   DrawerViewportProps,
   DrawerPopupProps,
-  DrawerShellProps,
   DrawerTitleProps,
   DrawerDescriptionProps,
 };
