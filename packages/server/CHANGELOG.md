@@ -1,5 +1,16 @@
 # @mastra/server
 
+## 1.37.2-alpha.0
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
+- Updated dependencies [[`07c3de7`](https://github.com/mastra-ai/mastra/commit/07c3de7f7bc418beccaea3b5e6b7f7cdda79d492)]:
+  - @mastra/core@1.37.2-alpha.0
+
 ## 1.37.1
 
 ### Patch Changes

@@ -145,7 +145,7 @@ describe('Hono Server Adapter', () => {
       context = await createDefaultTestContext();
     });
 
-    it('writes an initial SSE comment before waiting for stream chunks', async () => {
+    it('writes an initial SSE comment when sseFlushOnConnect is true', async () => {
       const app = new Hono();
       const adapter = new MastraServer({
         app,
@@ -157,6 +157,7 @@ describe('Hono Server Adapter', () => {
         path: '/test/waiting-stream',
         responseType: 'stream',
         streamFormat: 'sse',
+        sseFlushOnConnect: true,
         handler: async () => new ReadableStream(),
       };
 
@@ -175,6 +176,49 @@ describe('Hono Server Adapter', () => {
         ]);
 
         expect(new TextDecoder().decode(firstChunk.value)).toBe(': connected\n\n');
+      } finally {
+        await reader.cancel();
+      }
+    });
+
+    it('does not write an initial SSE comment when sseFlushOnConnect is not set', async () => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/waiting-stream-no-flush',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'text-delta', textDelta: 'hello' });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(new Request('http://localhost/test/waiting-stream-no-flush'));
+      const reader = response.body!.getReader();
+
+      try {
+        const firstChunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timed out waiting for first chunk')), 100),
+          ),
+        ]);
+
+        const text = new TextDecoder().decode(firstChunk.value);
+        expect(text).not.toContain(': connected');
+        expect(text).toContain('data: ');
       } finally {
         await reader.cancel();
       }
