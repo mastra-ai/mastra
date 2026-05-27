@@ -79,6 +79,8 @@ const DrawerIndent = DrawerPrimitive.Indent;
 const DrawerIndentBackground = DrawerPrimitive.IndentBackground;
 const DrawerSwipeArea = DrawerPrimitive.SwipeArea;
 const createDrawerHandle = DrawerPrimitive.createHandle;
+// Pointer drags inside select text instead of swiping the drawer closed.
+const DrawerContent = DrawerPrimitive.Content;
 
 type DrawerBackdropProps = Omit<DrawerPrimitive.Backdrop.Props, 'className'> & {
   className?: string;
@@ -109,7 +111,7 @@ type DrawerViewportProps = Omit<DrawerPrimitive.Viewport.Props, 'className'> & {
 // A plain full-screen flex container, exactly like the Base UI examples. It must NOT
 // set `pointer-events: none` for modal drawers — that breaks the swipe gesture. The
 // non-modal opt-out (`pointer-events-none` here + `pointer-events-auto` on the popup)
-// is applied by `DrawerContent` only when there is no backdrop.
+// is applied by `DrawerShell` only when there is no backdrop.
 const DrawerViewport = React.forwardRef<HTMLDivElement, DrawerViewportProps>(({ className, ...props }, ref) => {
   const side = useDrawerSide();
   return (
@@ -161,7 +163,7 @@ const DrawerPopup = React.forwardRef<HTMLDivElement, DrawerPopupProps>(({ classN
 });
 DrawerPopup.displayName = 'DrawerPopup';
 
-type DrawerContentProps = Omit<DrawerPrimitive.Popup.Props, 'className'> & {
+type DrawerShellProps = Omit<DrawerPrimitive.Popup.Props, 'className'> & {
   className?: string;
   /** Portal target. Defaults to `document.body`. */
   container?: HTMLElement | null;
@@ -199,7 +201,7 @@ const HandleBar = () => (
  * For layouts that need their own structure, compose the styled parts
  * (`DrawerPortal`, `DrawerBackdrop`, `DrawerViewport`, `DrawerPopup`) directly instead.
  */
-const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
+const DrawerShell = React.forwardRef<HTMLDivElement, DrawerShellProps>(
   ({ className, children, container, hideBackdrop, hideCloseButton, hideHandle, ...props }, ref) => {
     const side = useDrawerSide();
     const showHandle = !hideHandle && (side === 'top' || side === 'bottom');
@@ -229,7 +231,7 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
     );
   },
 );
-DrawerContent.displayName = 'DrawerContent';
+DrawerShell.displayName = 'DrawerShell';
 
 const DrawerHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div data-slot="drawer-header" className={cn('flex flex-col gap-0.5 px-4 py-3 text-left', className)} {...props} />
@@ -278,7 +280,7 @@ export {
   DrawerBackdrop,
   DrawerViewport,
   DrawerPopup,
-  DrawerContent,
+  DrawerShell,
   DrawerHeader,
   DrawerFooter,
   DrawerBody,
@@ -288,6 +290,7 @@ export {
   DrawerIndent,
   DrawerIndentBackground,
   DrawerSwipeArea,
+  DrawerContent,
   createDrawerHandle,
 };
 
@@ -297,7 +300,7 @@ export type {
   DrawerBackdropProps,
   DrawerViewportProps,
   DrawerPopupProps,
-  DrawerContentProps,
+  DrawerShellProps,
   DrawerTitleProps,
   DrawerDescriptionProps,
 };

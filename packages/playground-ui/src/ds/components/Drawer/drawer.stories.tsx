@@ -10,7 +10,7 @@ import {
   DrawerBackdrop,
   DrawerBody,
   DrawerClose,
-  DrawerContent,
+  DrawerShell,
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
@@ -39,7 +39,7 @@ export const Default: Story = {
       <DrawerTrigger asChild>
         <Button>Open bottom drawer</Button>
       </DrawerTrigger>
-      <DrawerContent>
+      <DrawerShell>
         <DrawerHeader>
           <DrawerTitle>Notifications</DrawerTitle>
           <DrawerDescription>You are all caught up. Good job!</DrawerDescription>
@@ -52,7 +52,7 @@ export const Default: Story = {
             <Button variant="outline">Close</Button>
           </DrawerClose>
         </DrawerFooter>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   ),
 };
@@ -63,7 +63,7 @@ export const Right: Story = {
       <DrawerTrigger asChild>
         <Button>Open right drawer</Button>
       </DrawerTrigger>
-      <DrawerContent>
+      <DrawerShell>
         <DrawerHeader>
           <DrawerTitle>Library</DrawerTitle>
           <DrawerDescription>A panel that slides in from the right edge.</DrawerDescription>
@@ -76,7 +76,7 @@ export const Right: Story = {
             <Button variant="outline">Close</Button>
           </DrawerClose>
         </DrawerFooter>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   ),
 };
@@ -87,7 +87,7 @@ export const Left: Story = {
       <DrawerTrigger asChild>
         <Button>Open left drawer</Button>
       </DrawerTrigger>
-      <DrawerContent>
+      <DrawerShell>
         <DrawerHeader>
           <DrawerTitle>Navigation</DrawerTitle>
           <DrawerDescription>A panel that slides in from the left edge.</DrawerDescription>
@@ -100,7 +100,7 @@ export const Left: Story = {
             <Button variant="outline">Close</Button>
           </DrawerClose>
         </DrawerFooter>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   ),
 };
@@ -111,7 +111,7 @@ export const Top: Story = {
       <DrawerTrigger asChild>
         <Button>Open top drawer</Button>
       </DrawerTrigger>
-      <DrawerContent>
+      <DrawerShell>
         <DrawerHeader>
           <DrawerTitle>Announcement</DrawerTitle>
           <DrawerDescription>A panel that slides in from the top edge.</DrawerDescription>
@@ -124,7 +124,7 @@ export const Top: Story = {
             <Button variant="outline">Close</Button>
           </DrawerClose>
         </DrawerFooter>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   ),
 };
@@ -139,7 +139,7 @@ function ControlledExample() {
       </p>
       <Button onClick={() => setOpen(true)}>Open from outside</Button>
       <Drawer side="right" open={open} onOpenChange={setOpen}>
-        <DrawerContent>
+        <DrawerShell>
           <DrawerHeader>
             <DrawerTitle>Controlled drawer</DrawerTitle>
             <DrawerDescription>Open state is owned by the parent component.</DrawerDescription>
@@ -149,7 +149,7 @@ function ControlledExample() {
               Close from outside
             </Button>
           </DrawerFooter>
-        </DrawerContent>
+        </DrawerShell>
       </Drawer>
     </div>
   );
@@ -165,7 +165,7 @@ export const WithForm: Story = {
       <DrawerTrigger asChild>
         <Button>Edit profile</Button>
       </DrawerTrigger>
-      <DrawerContent>
+      <DrawerShell>
         <DrawerHeader>
           <DrawerTitle>Edit profile</DrawerTitle>
           <DrawerDescription>Make changes to your profile. Save when you are done.</DrawerDescription>
@@ -188,7 +188,7 @@ export const WithForm: Story = {
             <Button>Save changes</Button>
           </DrawerClose>
         </DrawerFooter>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   ),
 };
@@ -199,7 +199,7 @@ export const Nested: Story = {
       <DrawerTrigger asChild>
         <Button>Open drawer stack</Button>
       </DrawerTrigger>
-      <DrawerContent>
+      <DrawerShell>
         <DrawerHeader>
           <DrawerTitle>Account</DrawerTitle>
           <DrawerDescription>Nested drawers stack on top of each other, each focus-managed.</DrawerDescription>
@@ -209,7 +209,7 @@ export const Nested: Story = {
             <DrawerTrigger asChild>
               <Button variant="outline">Security settings</Button>
             </DrawerTrigger>
-            <DrawerContent>
+            <DrawerShell>
               <DrawerHeader>
                 <DrawerTitle>Security</DrawerTitle>
                 <DrawerDescription>Review sign-in activity and update your preferences.</DrawerDescription>
@@ -225,7 +225,7 @@ export const Nested: Story = {
                     <DrawerTrigger asChild>
                       <Button variant="outline">Advanced options</Button>
                     </DrawerTrigger>
-                    <DrawerContent>
+                    <DrawerShell>
                       <DrawerHeader>
                         <DrawerTitle>Advanced</DrawerTitle>
                         <DrawerDescription>A third level to demonstrate deep nesting.</DrawerDescription>
@@ -239,7 +239,7 @@ export const Nested: Story = {
                           <Button>Done</Button>
                         </DrawerClose>
                       </DrawerFooter>
-                    </DrawerContent>
+                    </DrawerShell>
                   </Drawer>
                 </div>
               </DrawerBody>
@@ -248,7 +248,7 @@ export const Nested: Story = {
                   <Button variant="outline">Close</Button>
                 </DrawerClose>
               </DrawerFooter>
-            </DrawerContent>
+            </DrawerShell>
           </Drawer>
         </DrawerBody>
         <DrawerFooter>
@@ -256,7 +256,7 @@ export const Nested: Story = {
             <Button variant="outline">Close</Button>
           </DrawerClose>
         </DrawerFooter>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   ),
 };
@@ -269,7 +269,7 @@ export const SnapPoints: Story = {
       <DrawerTrigger asChild>
         <Button>Open snap drawer</Button>
       </DrawerTrigger>
-      <DrawerContent className="max-h-[calc(100dvh-3rem)]">
+      <DrawerShell className="max-h-[calc(100dvh-3rem)]">
         <DrawerHeader>
           <DrawerTitle>Snap points</DrawerTitle>
           <DrawerDescription>Drag the sheet to snap between a compact peek and full height.</DrawerDescription>
@@ -284,7 +284,7 @@ export const SnapPoints: Story = {
             <Button variant="outline">Close</Button>
           </DrawerClose>
         </DrawerFooter>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   ),
 };
@@ -295,7 +295,7 @@ export const NonModal: Story = {
       <DrawerTrigger asChild>
         <Button>Open non-modal drawer</Button>
       </DrawerTrigger>
-      <DrawerContent hideBackdrop>
+      <DrawerShell hideBackdrop>
         <DrawerHeader>
           <DrawerTitle>Non-modal drawer</DrawerTitle>
           <DrawerDescription>
@@ -307,7 +307,7 @@ export const NonModal: Story = {
             <Button variant="outline">Close</Button>
           </DrawerClose>
         </DrawerFooter>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   ),
 };
@@ -357,7 +357,7 @@ function ActionSheetExample() {
       <DrawerTrigger asChild>
         <Button>Open action sheet</Button>
       </DrawerTrigger>
-      <DrawerContent hideCloseButton hideHandle>
+      <DrawerShell hideCloseButton hideHandle>
         <DrawerHeader className="sr-only">
           <DrawerTitle>Profile actions</DrawerTitle>
           <DrawerDescription>Choose an action for this user.</DrawerDescription>
@@ -383,7 +383,7 @@ function ActionSheetExample() {
             Block user
           </Button>
         </DrawerFooter>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   );
 }
@@ -429,7 +429,7 @@ export const MobileNavigation: Story = {
       <DrawerTrigger asChild>
         <Button>Open mobile menu</Button>
       </DrawerTrigger>
-      <DrawerContent className="mb-0 h-full max-h-full rounded-none pb-0">
+      <DrawerShell className="mb-0 h-full max-h-full rounded-none pb-0">
         <DrawerHeader>
           <DrawerTitle>Menu</DrawerTitle>
           <DrawerDescription>Scroll the long list. Swipe down to dismiss.</DrawerDescription>
@@ -445,7 +445,7 @@ export const MobileNavigation: Story = {
             ))}
           </ul>
         </DrawerBody>
-      </DrawerContent>
+      </DrawerShell>
     </Drawer>
   ),
 };
@@ -476,7 +476,7 @@ function DetachedTriggersExample() {
       </div>
       <Drawer side="right" handle={profileDrawer}>
         {({ payload }) => (
-          <DrawerContent>
+          <DrawerShell>
             <DrawerHeader>
               <DrawerTitle>{payload?.title ?? 'Drawer'}</DrawerTitle>
               <DrawerDescription>{payload?.description}</DrawerDescription>
@@ -486,7 +486,7 @@ function DetachedTriggersExample() {
                 <Button variant="outline">Close</Button>
               </DrawerClose>
             </DrawerFooter>
-          </DrawerContent>
+          </DrawerShell>
         )}
       </Drawer>
     </div>
