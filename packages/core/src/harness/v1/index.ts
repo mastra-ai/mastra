@@ -214,6 +214,7 @@ export type {
   HarnessSkillActionMetadata,
   HarnessSkillActionPermissionHints,
   HarnessSkillActionShortcut,
+  HeartbeatHandler,
   InboxResponseOptions,
   InboxResponseResult,
   PrimitiveAttachmentUploadOptions,

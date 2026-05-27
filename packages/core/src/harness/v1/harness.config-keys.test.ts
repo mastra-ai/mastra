@@ -70,6 +70,7 @@ describe('Harness constructor — unknown HarnessConfig keys', () => {
       modes: [{ id: 'default', agentId: 'default' }],
       defaultModeId: 'default',
       defaultPermissionPolicy: 'ask',
+      heartbeatHandlers: undefined,
       sessions: { storage: new InMemoryHarness({ db: new InMemoryDB() }) },
       files: undefined,
       subagents: undefined,

@@ -5,7 +5,9 @@ const gatewayRegistryGetProviders = vi.fn(() => ({}));
 const gatewayRegistryGetInstance = vi.fn(() => ({
   syncGateways: gatewayRegistrySyncGateways,
   getProviders: gatewayRegistryGetProviders,
+  getLastRefreshTime: vi.fn(() => undefined),
 }));
+const syncGatewaysMock = vi.fn();
 
 vi.mock('@mastra/core/llm', () => ({
   GatewayRegistry: {
@@ -256,8 +258,8 @@ vi.mock('./tui/theme.js', () => ({
   mastra: {},
 }));
 
-vi.mock('./utils/gateway-sync.js', () => ({
-  syncGateways: vi.fn(),
+vi.mock('../utils/gateway-sync.js', () => ({
+  syncGateways: syncGatewaysMock,
 }));
 
 vi.mock('./utils/project.js', () => ({
@@ -314,9 +316,11 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
     harnessConstructorMock.mockReset();
+    syncGatewaysMock.mockReset();
     gatewayRegistryGetInstance.mockImplementation(() => ({
       syncGateways: gatewayRegistrySyncGateways,
       getProviders: gatewayRegistryGetProviders,
+      getLastRefreshTime: vi.fn(() => undefined),
     }));
   });
 
@@ -349,6 +353,47 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(getDynamicMemoryMock).toHaveBeenCalled();
+  });
+
+  it('passes the default gateway sync heartbeat handler into the MastraCode runtime', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { heartbeatHandlers?: Array<{ id?: string; intervalMs?: number; handler?: unknown }> }
+      | undefined;
+    expect(harnessConfig?.heartbeatHandlers).toHaveLength(1);
+    expect(harnessConfig?.heartbeatHandlers?.[0]).toMatchObject({
+      id: 'gateway-sync',
+      intervalMs: 5 * 60 * 1000,
+    });
+    expect(typeof harnessConfig?.heartbeatHandlers?.[0]?.handler).toBe('function');
+  });
+
+  it('wires the default gateway sync heartbeat to syncGateways', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { heartbeatHandlers?: Array<{ handler?: () => unknown }> }
+      | undefined;
+    await harnessConfig?.heartbeatHandlers?.[0]?.handler?.();
+
+    expect(syncGatewaysMock).toHaveBeenCalledOnce();
+  });
+
+  it('passes configured heartbeat handlers into the MastraCode runtime', async () => {
+    const customHeartbeat = { id: 'custom-heartbeat', intervalMs: 1_000, handler: vi.fn() };
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ heartbeatHandlers: [customHeartbeat] });
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { heartbeatHandlers?: Array<typeof customHeartbeat> }
+      | undefined;
+    expect(harnessConfig?.heartbeatHandlers).toEqual([customHeartbeat]);
   });
 
   it('does not attach the local storage observability exporter when local tracing is disabled', async () => {

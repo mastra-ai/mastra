@@ -46,9 +46,12 @@ import type {
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { Workspace } from '../../workspace';
 import type { ProcessHandle } from '../../workspace/sandbox/process-manager';
+import type { HeartbeatHandler } from '../types';
 import type { HarnessPermissionProfileName } from './permission-profiles';
 import type { WorkspacePolicy } from './workspace/policy';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace/provider';
+
+export type { HeartbeatHandler } from '../types';
 
 // ---------------------------------------------------------------------------
 // HarnessMode (§4.2).
@@ -931,6 +934,13 @@ export interface HarnessConfigCommon {
    * `modes` array can never silently change runtime behavior.
    */
   defaultModeId?: string;
+
+  /**
+   * Periodic background handlers owned by the Harness lifecycle. Configured
+   * handlers start during `init()`, must have unique ids, call `unref?.()`
+   * on their timers, and are stopped during `shutdown()`.
+   */
+  heartbeatHandlers?: HeartbeatHandler[];
 
   /**
    * Session-runtime config (§9 + §5). Currently only carries the storage
@@ -1847,6 +1857,12 @@ export interface SessionSignalOptions {
   ifIdle?: {
     attributes?: AgentSignalAttributes;
   };
+
+  /**
+   * Optional per-turn tool preparation hook forwarded to the backing agent
+   * when the signal wakes an idle run. Ignored on active delivery.
+   */
+  prepareStep?: AgentExecutionOptionsBase<unknown>['prepareStep'];
 
   /**
    * Forwarded to the underlying agent run when the signal wakes a fresh

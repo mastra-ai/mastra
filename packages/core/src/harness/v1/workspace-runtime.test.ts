@@ -37,6 +37,7 @@ import type { Workspace } from '../../workspace';
 import { setupHarness } from './__test-utils__/setup';
 import { createSpawnSubagentTool } from './builtin-tools/spawn-subagent';
 import { HarnessConfigError, HarnessWorkspaceProvisioningError } from './errors';
+import type { HarnessStorageError } from './errors';
 import { Harness } from './harness';
 import type { HarnessRequestContext } from './types';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace/provider';
@@ -524,6 +525,26 @@ describe('Workspace lifecycle on harness.shutdown()', () => {
     await s.getWorkspace();
     await harness.shutdown();
     expect(created[0]!.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('shutdown() destroys workspaces before surfacing session flush failures', async () => {
+    const ws = makeWorkspace('shared') as unknown as StubWorkspace;
+    const { harness } = setupHarness({
+      workspace: { kind: 'shared', workspace: ws as unknown as Workspace },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    await session.getWorkspace();
+
+    const failure = new Error('flush failed');
+    vi.spyOn(session, '_internalAwaitFlushChain').mockRejectedValueOnce(failure);
+
+    await expect(harness.shutdown()).rejects.toMatchObject({
+      name: 'HarnessStorageError',
+      sessionId: session.id,
+      operation: 'flush',
+      cause: failure,
+    } satisfies Partial<HarnessStorageError>);
+    expect(ws.destroy).toHaveBeenCalledTimes(1);
   });
 });
 

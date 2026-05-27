@@ -24,6 +24,7 @@ function createRuntime(
     disabledTools?: string[];
     workspace?: ConstructorParameters<typeof MastraCodeHarnessRuntime>[0]['workspace'];
     memory?: any;
+    heartbeatHandlers?: ConstructorParameters<typeof MastraCodeHarnessRuntime>[0]['heartbeatHandlers'];
   } = {},
 ) {
   const agent = new Agent({
@@ -65,6 +66,7 @@ function createRuntime(
     memory: options.memory,
     browser: options.browser as never,
     disabledTools: options.disabledTools,
+    heartbeatHandlers: options.heartbeatHandlers,
     workspace: options.workspace,
   });
 }
@@ -80,6 +82,88 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(runtime.getMastra().getHarness(MASTRACODE_HARNESS_NAME)).toBe(runtime.core);
   });
 
+  it('passes heartbeat handlers into Harness v1 instead of starting runtime-owned timers', async () => {
+    vi.useFakeTimers();
+    const handler = vi.fn();
+    const shutdown = vi.fn();
+    const runtime = createRuntime({
+      heartbeatHandlers: [{ id: 'custom-sync', intervalMs: 1_000, handler, shutdown }],
+    });
+
+    try {
+      expect(handler).not.toHaveBeenCalled();
+
+      await runtime.initCore();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(handler).toHaveBeenCalledTimes(2);
+
+      await runtime.stopHeartbeats();
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(shutdown).toHaveBeenCalledTimes(1);
+    } finally {
+      await runtime.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops heartbeat handlers when destroyed without an explicit stopHeartbeats call', async () => {
+    vi.useFakeTimers();
+    const handler = vi.fn();
+    const shutdown = vi.fn();
+    const runtime = createRuntime({
+      heartbeatHandlers: [{ id: 'custom-sync', intervalMs: 1_000, handler, shutdown }],
+    });
+
+    try {
+      await runtime.initCore();
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      await runtime.destroy();
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(shutdown).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('delegates direct heartbeat registration and removal to Harness v1', async () => {
+    vi.useFakeTimers();
+    const handler = vi.fn();
+    const shutdown = vi.fn();
+    const runtime = createRuntime();
+
+    try {
+      await runtime.initCore();
+      runtime.registerHeartbeat({ id: 'direct-sync', intervalMs: 1_000, handler, shutdown });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      await runtime.removeHeartbeat({ id: 'direct-sync' });
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(shutdown).toHaveBeenCalledTimes(1);
+    } finally {
+      await runtime.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets Harness v1 own workspace teardown during destroy', async () => {
+    const runtime = createRuntime();
+    const destroyWorkspace = vi.spyOn(runtime, 'destroyWorkspace');
+
+    await runtime.destroy();
+
+    expect(destroyWorkspace).not.toHaveBeenCalled();
+  });
+
   it('provides initial runtime state when Harness v1 initializes the shared workspace', async () => {
     const projectPath = mkdtempSync(join(tmpdir(), 'mastracode-workspace-context-'));
     let observedProjectPath: string | undefined;
@@ -93,11 +177,49 @@ describe('MastraCodeHarnessRuntime', () => {
         return getDynamicWorkspace({ requestContext, mastra });
       },
     });
+    const listener = vi.fn();
+    runtime.subscribe(listener);
 
     try {
       await runtime.init();
       expect(observedProjectPath).toBe(projectPath);
       expect(runtime.getWorkspace()).toBeTruthy();
+      await runtime.destroy();
+
+      expect(runtime.getWorkspace()).toBeUndefined();
+      expect(listener).toHaveBeenCalledWith({ type: 'workspace_status_changed', status: 'destroying' });
+      expect(listener).toHaveBeenCalledWith({ type: 'workspace_status_changed', status: 'destroyed' });
+    } finally {
+      await runtime.destroy();
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it('emits workspace destroyed when destroy surfaces a shutdown error after teardown', async () => {
+    const projectPath = mkdtempSync(join(tmpdir(), 'mastracode-workspace-destroy-error-'));
+    const runtime = createRuntime({
+      projectPath,
+      workspace: ({ requestContext, mastra }) => getDynamicWorkspace({ requestContext, mastra }),
+    });
+    const listener = vi.fn();
+    runtime.subscribe(listener);
+
+    try {
+      await runtime.init();
+      expect(runtime.getWorkspace()).toBeTruthy();
+
+      const failure = new Error('flush failed');
+      const session = (runtime as any).session as
+        | { id: string; _internalAwaitFlushChain: () => Promise<void> }
+        | undefined;
+      expect(session).toBeDefined();
+      vi.spyOn(session!, '_internalAwaitFlushChain').mockRejectedValueOnce(failure);
+
+      await expect(runtime.destroy()).rejects.toBe(failure);
+
+      expect(runtime.getWorkspace()).toBeUndefined();
+      expect(listener).toHaveBeenCalledWith({ type: 'workspace_status_changed', status: 'destroying' });
+      expect(listener).toHaveBeenCalledWith({ type: 'workspace_status_changed', status: 'destroyed' });
     } finally {
       await runtime.destroy();
       rmSync(projectPath, { recursive: true, force: true });
@@ -282,10 +404,15 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(signal).toHaveBeenCalledWith({
       content: 'hello',
       signalId: expect.stringMatching(/^signal-/),
+      prepareStep: expect.any(Function),
       ifActive: { attributes: { delivery: 'while-active' } },
       ifIdle: { attributes: { delivery: 'message' } },
     });
-    expect(signal).toHaveBeenCalledWith({ content: imageParts, signalId: expect.stringMatching(/^signal-/) });
+    expect(signal).toHaveBeenCalledWith({
+      content: imageParts,
+      signalId: expect.stringMatching(/^signal-/),
+      prepareStep: expect.any(Function),
+    });
     expect(injectSystemReminder).toHaveBeenCalledWith('continue', {
       attributes: { type: 'goal' },
       metadata: undefined,
@@ -575,7 +702,10 @@ describe('MastraCodeHarnessRuntime', () => {
     expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_complete', policy: 'allow' });
     expect(setPolicy).toHaveBeenCalledWith({ toolName: 'task_check', policy: 'allow' });
     expect(setPolicy).toHaveBeenCalledWith({ toolName: 'execute_command', policy: 'ask' });
-    expect((runtime as any).filterActiveTools(['task_write', 'execute_command'])).toEqual(['task_write', 'execute_command']);
+    expect((runtime as any).filterActiveTools(['task_write', 'execute_command'])).toEqual([
+      'task_write',
+      'execute_command',
+    ]);
 
     await runtime.destroy();
   });
@@ -1186,9 +1316,7 @@ describe('MastraCodeHarnessRuntime — stale session lease recovery (MASTRA-4344
 
   it('propagates non-locked errors from session() without retrying', async () => {
     const runtime = createRuntime();
-    const sessionSpy = vi
-      .spyOn(runtime.core, 'session')
-      .mockRejectedValueOnce(new Error('storage offline'));
+    const sessionSpy = vi.spyOn(runtime.core, 'session').mockRejectedValueOnce(new Error('storage offline'));
 
     await expect(runtime.init()).rejects.toThrow('storage offline');
     expect(sessionSpy).toHaveBeenCalledTimes(1);
@@ -1242,9 +1370,7 @@ describe('MastraCodeHarnessRuntime — stale session lease recovery (MASTRA-4344
         ttlMs: 120_000,
       });
 
-      const reboundPromise = secondRuntime
-        .selectOrCreateThread({ leaseRecoveryMode: 'midsession' })
-        .catch(err => err);
+      const reboundPromise = secondRuntime.selectOrCreateThread({ leaseRecoveryMode: 'midsession' }).catch(err => err);
       await vi.advanceTimersByTimeAsync(3_000);
       const err = await reboundPromise;
 

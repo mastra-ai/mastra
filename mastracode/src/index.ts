@@ -163,6 +163,8 @@ export type MastraCodeHarnessPublic = Harness<Record<string, unknown>> & {
   mcp: MastraCodeHarnessRuntime<Record<string, unknown>>['mcp'];
   getResolvedMemory: MastraCodeHarnessRuntime<Record<string, unknown>>['getResolvedMemory'];
   saveSystemReminderMessage: MastraCodeHarnessRuntime<Record<string, unknown>>['saveSystemReminderMessage'];
+  registerHeartbeat: MastraCodeHarnessRuntime<Record<string, unknown>>['registerHeartbeat'];
+  removeHeartbeat: MastraCodeHarnessRuntime<Record<string, unknown>>['removeHeartbeat'];
   stopHeartbeats: MastraCodeHarnessRuntime<Record<string, unknown>>['stopHeartbeats'];
   destroy: MastraCodeHarnessRuntime<Record<string, unknown>>['destroy'];
 };

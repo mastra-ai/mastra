@@ -18,6 +18,7 @@
  * acceptance evidence live in follow-up Harness v1 lanes.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { Agent } from '../../agent';
@@ -114,6 +115,7 @@ import type {
   HarnessChannelConfig,
   HarnessConfig,
   HarnessFileConfig,
+  HeartbeatHandler,
   HarnessMode,
   HarnessQueueBackpressurePolicy,
   HarnessSkill,
@@ -176,6 +178,7 @@ const HARNESS_CONFIG_KNOWN_KEYS: ReadonlySet<string> = new Set([
   'defaultPermissionPolicy',
   'files',
   'goals',
+  'heartbeatHandlers',
   'modelAuthStatusResolver',
   'models',
   'modes',
@@ -198,6 +201,17 @@ type CloseTreeNode = {
   depth: number;
   live?: Session;
   leaseAcquired: boolean;
+};
+
+type HeartbeatEntry = {
+  timer: ReturnType<typeof setInterval>;
+  shutdown?: () => void | Promise<void>;
+};
+
+type TrackedHeartbeatWork = {
+  promise: Promise<void>;
+  enteredStop: Promise<void>;
+  markEnteredStop: () => void;
 };
 
 function cloneHarnessSkill(skill: HarnessSkill): HarnessSkill {
@@ -759,6 +773,12 @@ export class Harness {
   readonly _workspaceKind?: 'shared' | 'per-resource' | 'per-session';
   private readonly _workspaceEager: boolean;
   private readonly _workspacePolicy?: WorkspacePolicy;
+  private readonly _configuredHeartbeatHandlers: readonly HeartbeatHandler[];
+  private readonly _heartbeatEntries = new Map<string, HeartbeatEntry>();
+  private readonly _heartbeatRuns = new Map<symbol, TrackedHeartbeatWork>();
+  private readonly _heartbeatRunContext = new AsyncLocalStorage<symbol>();
+  private readonly _heartbeatShutdowns = new Map<symbol, TrackedHeartbeatWork>();
+  private readonly _heartbeatShutdownContext = new AsyncLocalStorage<symbol>();
 
   private _initialized = false;
   private _initPromise?: Promise<void>;
@@ -781,6 +801,16 @@ export class Harness {
       throw new HarnessConfigError('runtimeCompatibilityGeneration', 'must be a non-empty string when provided');
     }
     this._runtimeCompatibilityGeneration = runtimeCompatibilityGeneration?.trim();
+    const configuredHeartbeatHandlers = (config.heartbeatHandlers ?? []).map(handler => Object.freeze({ ...handler }));
+    const heartbeatHandlerIds = new Set<string>();
+    for (const handler of configuredHeartbeatHandlers) {
+      this.assertHeartbeatHandler(handler);
+      if (heartbeatHandlerIds.has(handler.id)) {
+        throw new HarnessConfigError(`heartbeatHandlers["${handler.id}"]`, 'duplicate heartbeat handler id');
+      }
+      heartbeatHandlerIds.add(handler.id);
+    }
+    this._configuredHeartbeatHandlers = Object.freeze(configuredHeartbeatHandlers);
     this._leaseTtlMs = DEFAULT_LEASE_TTL_MS;
     this._storageOverride = config.sessions?.storage;
     this._maxQueueDepth = config.sessions?.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH;
@@ -1130,7 +1160,186 @@ export class Harness {
       throw new HarnessConfigError('shutdown', 'harness cannot be initialized after shutdown');
     }
 
+    this.startConfiguredHeartbeats();
     this._initialized = true;
+  }
+
+  private startConfiguredHeartbeats(): void {
+    const startedIds: string[] = [];
+    try {
+      for (const handler of this._configuredHeartbeatHandlers) {
+        this.registerHeartbeatEntry(handler, 'heartbeatHandlers');
+        startedIds.push(handler.id);
+      }
+    } catch (error) {
+      for (const id of startedIds) {
+        const entry = this.clearHeartbeatEntry(id);
+        if (entry) {
+          void this.startHeartbeatShutdown(id, entry);
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Register and start a heartbeat immediately. Re-registering the same id
+   * clears the old timer and starts the new one while the previous shutdown
+   * callback is queued in the background. Configured handlers that have not
+   * started yet are still controlled by `heartbeatHandlers` config. Replacement
+   * does not wait for the previous shutdown before starting the new timer, and
+   * ticks are not serialized; handlers should be safe to run concurrently if a
+   * previous tick is still pending. When `init()` starts configured handlers,
+   * configured ids take precedence over direct pre-init registrations.
+   */
+  registerHeartbeat(handler: HeartbeatHandler): void {
+    this.registerHeartbeatEntry(handler, 'registerHeartbeat');
+  }
+
+  private registerHeartbeatEntry(
+    handler: HeartbeatHandler,
+    validationPath: 'registerHeartbeat' | 'heartbeatHandlers',
+  ): void {
+    if (this._shutdown) {
+      throw new HarnessConfigError('shutdown', 'harness cannot register heartbeat handlers after shutdown');
+    }
+    this.assertHeartbeatHandler(handler, validationPath);
+
+    const previous = this.clearHeartbeatEntry(handler.id);
+    if (previous) {
+      void this.startHeartbeatShutdown(handler.id, previous);
+    }
+
+    const run = () => {
+      const runId = Symbol(`heartbeat:${handler.id}`);
+      const runPromise = this._heartbeatRunContext.run(runId, async () => {
+        try {
+          await handler.handler();
+        } catch (error) {
+          console.error(`[Heartbeat:${handler.id}] failed:`, error);
+        }
+      });
+      void this.trackHeartbeatRun(runId, runPromise);
+      return runPromise;
+    };
+
+    const timer = setInterval(run, handler.intervalMs);
+    timer.unref?.();
+    this._heartbeatEntries.set(handler.id, { timer, shutdown: handler.shutdown });
+
+    if (handler.immediate !== false) {
+      void run();
+    }
+  }
+
+  private assertHeartbeatHandler(handler: HeartbeatHandler, path = 'heartbeatHandlers'): void {
+    if (!handler || typeof handler !== 'object') {
+      throw new HarnessConfigError(path, 'every entry must be an object');
+    }
+    if (typeof handler.id !== 'string' || handler.id.length === 0) {
+      throw new HarnessConfigError(`${path}.id`, 'must be a non-empty string');
+    }
+    if (!Number.isFinite(handler.intervalMs) || handler.intervalMs <= 0) {
+      throw new HarnessConfigError(`${path}["${handler.id}"].intervalMs`, 'must be a positive number');
+    }
+    if (typeof handler.handler !== 'function') {
+      throw new HarnessConfigError(`${path}["${handler.id}"].handler`, 'must be a function');
+    }
+    if (handler.shutdown !== undefined && typeof handler.shutdown !== 'function') {
+      throw new HarnessConfigError(`${path}["${handler.id}"].shutdown`, 'must be a function when provided');
+    }
+  }
+
+  /**
+   * Remove a running heartbeat by id. This does not remove a configured
+   * handler that has not started yet during `init()`.
+   */
+  async removeHeartbeat({ id }: { id: string }): Promise<void> {
+    const entry = this.clearHeartbeatEntry(id);
+    if (!entry) return;
+    await this.startHeartbeatShutdown(id, entry);
+  }
+
+  /**
+   * Stop the currently running heartbeat snapshot. Later registrations can
+   * still start new heartbeats unless the harness is shutting down. Calling
+   * this before `init()` does not disable configured handlers; neither does
+   * calling it while `init()` is still pending and configured handlers have not
+   * started yet. After successful init has completed, this permanently stops
+   * configured handlers for this harness instance, and a later `init()` call
+   * does not restart them. This does not lock out concurrent direct
+   * `registerHeartbeat()` calls outside `shutdown()`.
+   */
+  async stopHeartbeats(): Promise<void> {
+    const entries = [...this._heartbeatEntries.entries()];
+    this._heartbeatEntries.clear();
+
+    const entryShutdowns = entries.map(([id, entry]) => {
+      clearInterval(entry.timer);
+      return this.startHeartbeatShutdown(id, entry);
+    });
+    const currentRunId = this._heartbeatRunContext.getStore();
+    const currentShutdownId = this._heartbeatShutdownContext.getStore();
+    const currentRun = currentRunId === undefined ? undefined : this._heartbeatRuns.get(currentRunId);
+    currentRun?.markEnteredStop();
+    const currentShutdown =
+      currentShutdownId === undefined ? undefined : this._heartbeatShutdowns.get(currentShutdownId);
+    currentShutdown?.markEnteredStop();
+    const inFlightRuns = this.snapshotHeartbeatWork(this._heartbeatRuns, currentRunId);
+    const pendingShutdowns = this.snapshotHeartbeatWork(this._heartbeatShutdowns, currentShutdownId);
+    await Promise.all([...entryShutdowns, ...pendingShutdowns, ...inFlightRuns]);
+  }
+
+  private snapshotHeartbeatWork(entries: Map<symbol, TrackedHeartbeatWork>, currentId?: symbol): Promise<void>[] {
+    return [...entries.entries()]
+      .filter(([id]) => id !== currentId)
+      .map(([, entry]) => (currentId === undefined ? entry.promise : Promise.race([entry.promise, entry.enteredStop])));
+  }
+
+  private clearHeartbeatEntry(id: string): HeartbeatEntry | undefined {
+    const entry = this._heartbeatEntries.get(id);
+    if (!entry) return undefined;
+    clearInterval(entry.timer);
+    this._heartbeatEntries.delete(id);
+    return entry;
+  }
+
+  private async runHeartbeatShutdown(id: string, entry: HeartbeatEntry): Promise<void> {
+    try {
+      await entry.shutdown?.();
+    } catch (error) {
+      console.error(`[Heartbeat:${id}] shutdown failed:`, error);
+    }
+  }
+
+  private startHeartbeatShutdown(id: string, entry: HeartbeatEntry): Promise<void> {
+    const shutdownId = Symbol(`heartbeat-shutdown:${id}`);
+    const shutdown = this._heartbeatShutdownContext.run(shutdownId, () => this.runHeartbeatShutdown(id, entry));
+    const tracked = this.trackHeartbeatWork(shutdown);
+    this._heartbeatShutdowns.set(shutdownId, tracked);
+    return shutdown.finally(() => {
+      if (this._heartbeatShutdowns.get(shutdownId) === tracked) {
+        this._heartbeatShutdowns.delete(shutdownId);
+      }
+    });
+  }
+
+  private trackHeartbeatRun(runId: symbol, run: Promise<void>): Promise<void> {
+    const tracked = this.trackHeartbeatWork(run);
+    this._heartbeatRuns.set(runId, tracked);
+    return run.finally(() => {
+      if (this._heartbeatRuns.get(runId) === tracked) {
+        this._heartbeatRuns.delete(runId);
+      }
+    });
+  }
+
+  private trackHeartbeatWork(promise: Promise<void>): TrackedHeartbeatWork {
+    let markEnteredStop!: () => void;
+    const enteredStop = new Promise<void>(resolve => {
+      markEnteredStop = resolve;
+    });
+    return { promise, enteredStop, markEnteredStop };
   }
 
   /**
@@ -3301,10 +3510,24 @@ export class Harness {
     if (this._shutdown) return;
     this._shutdown = true;
 
+    await this.stopHeartbeats();
+
     const pendingInit = this._initPromise;
     if (pendingInit) {
       await Promise.allSettled([pendingInit]);
     }
+
+    let workspacesShutdown = false;
+    const shutdownWorkspaces = async () => {
+      if (workspacesShutdown) return;
+      workspacesShutdown = true;
+      try {
+        await this._workspaceRegistry.shutdown();
+      } catch {
+        // Best-effort: errors surface through the workspace_error event.
+      }
+      this._untrackBoundStorage();
+    };
 
     let storage: HarnessStorage;
     try {
@@ -3312,72 +3535,67 @@ export class Harness {
     } catch {
       // No storage bound — nothing to release. Idempotent.
       this._liveSessions.clear();
-      try {
-        await this._workspaceRegistry.shutdown();
-      } catch {
-        // Best-effort: errors surface through the workspace_error event.
-      }
-      this._untrackBoundStorage();
+      await shutdownWorkspaces();
       return;
     }
 
-    const pendingCloses = new Set(this._closePromises.values());
-    if (pendingCloses.size > 0) {
-      await Promise.allSettled(pendingCloses);
-    }
-
-    this._stopLeaseRenewalLoop();
-
-    // Release every held lease. We keep the records active in storage —
-    // shutdown is not a close.
-    const sessions = Array.from(this._liveSessions.values());
-    let eventPersistenceError: { sessionId: string; error: unknown } | undefined;
-    for (const session of sessions) {
-      // Surface eviction to harness-level subscribers BEFORE we tear down
-      // the bridge so the event still propagates, and persist it before lease
-      // handoff so a fast new owner resumes from the correct event sequence.
-      session._emit({ type: 'session_evicted', reason: 'shutdown' });
-      try {
-        await session._flushEventPersistence();
-      } catch (err) {
-        eventPersistenceError ??= { sessionId: session.id, error: err };
-      }
-
-      // Drain any in-flight record writes (e.g. the trailing token-usage
-      // persist scheduled by `_recordTurnCompletion`) so a fresh harness
-      // resumes from the latest CAS-acknowledged state. Best-effort: lifecycle
-      // races are absorbed inside `_internalAwaitFlushChain`.
-      await session._internalAwaitFlushChain();
-
-      try {
-        await storage.releaseSessionLease({
-          harnessName: session.getRecord().harnessName,
-          sessionId: session.id,
-          ownerId: this.ownerId,
-        });
-      } catch {
-        // Best-effort: leases TTL out anyway.
-      }
-
-      session._markEvicted(session.getRecord() as SessionRecord);
-
-      const bridge = this._sessionEventBridges.get(session.id);
-      if (bridge) {
-        bridge();
-        this._sessionEventBridges.delete(session.id);
-      }
-    }
-    this._liveSessions.clear();
-
-    // Tear down every provisioned workspace (shared + per-resource + per-session).
     try {
-      await this._workspaceRegistry.shutdown();
-    } catch {
-      // Best-effort: errors surface through the workspace_error event.
-    }
-    this._untrackBoundStorage();
-    if (eventPersistenceError !== undefined) {
-      throw new HarnessStorageError(eventPersistenceError.sessionId, 'flush', eventPersistenceError.error);
+      const pendingCloses = new Set(this._closePromises.values());
+      if (pendingCloses.size > 0) {
+        await Promise.allSettled(pendingCloses);
+      }
+
+      this._stopLeaseRenewalLoop();
+
+      // Release every held lease. We keep the records active in storage —
+      // shutdown is not a close.
+      const sessions = Array.from(this._liveSessions.values());
+      let flushError: { sessionId: string; error: unknown } | undefined;
+      for (const session of sessions) {
+        // Surface eviction to harness-level subscribers BEFORE we tear down
+        // the bridge so the event still propagates, and persist it before lease
+        // handoff so a fast new owner resumes from the correct event sequence.
+        session._emit({ type: 'session_evicted', reason: 'shutdown' });
+        try {
+          await session._flushEventPersistence();
+        } catch (err) {
+          flushError ??= { sessionId: session.id, error: err };
+        }
+
+        // Drain any in-flight record writes (e.g. the trailing token-usage
+        // persist scheduled by `_recordTurnCompletion`) so a fresh harness
+        // resumes from the latest CAS-acknowledged state. Defer storage errors
+        // until after teardown so shutdown cannot leak workspaces or leases.
+        try {
+          await session._internalAwaitFlushChain();
+        } catch (err) {
+          flushError ??= { sessionId: session.id, error: err };
+        }
+
+        try {
+          await storage.releaseSessionLease({
+            harnessName: session.getRecord().harnessName,
+            sessionId: session.id,
+            ownerId: this.ownerId,
+          });
+        } catch {
+          // Best-effort: leases TTL out anyway.
+        }
+
+        session._markEvicted(session.getRecord() as SessionRecord);
+
+        const bridge = this._sessionEventBridges.get(session.id);
+        if (bridge) {
+          bridge();
+          this._sessionEventBridges.delete(session.id);
+        }
+      }
+      if (flushError !== undefined) {
+        throw new HarnessStorageError(flushError.sessionId, 'flush', flushError.error);
+      }
+    } finally {
+      this._liveSessions.clear();
+      await shutdownWorkspaces();
     }
   }
 

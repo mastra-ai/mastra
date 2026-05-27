@@ -77,6 +77,17 @@ describe('Session.signal()', () => {
     expect(messages.attributes).toEqual({ delivery: 'message' });
   });
 
+  it('forwards prepareStep when idle dispatch wakes a fresh run', async () => {
+    const { harness, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const prepareStep = () => ({ activeTools: [] });
+
+    const handle = await session.signal({ content: 'hi', prepareStep });
+    await handle.result;
+
+    expect(agent.streamCalls[0]!.options.prepareStep).toBe(prepareStep);
+  });
+
   it('active-delivery dispatch returns willInterleave: true and reuses the in-flight runId', async () => {
     const { harness, agent } = setupHarness();
     let releaseFirst!: () => void;
@@ -94,10 +105,13 @@ describe('Session.signal()', () => {
       content: 'second',
       ifActive: { attributes: { delivery: 'while-active' } },
       ifIdle: { attributes: { delivery: 'message' } },
+      prepareStep: () => ({ activeTools: [] }),
     });
 
     expect(second.willInterleave).toBe(true);
     expect(second.signal.attributes).toEqual({ delivery: 'while-active' });
+    expect(agent.streamCalls).toHaveLength(1);
+    expect(agent.streamCalls[0]!.options.prepareStep).toBeUndefined();
 
     releaseFirst();
     const firstResult = await firstPromise;

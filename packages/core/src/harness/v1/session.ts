@@ -5213,6 +5213,7 @@ export class Session {
           abortSignal: turnAbortSignal,
           requestContext,
           ...(toolsets ? { toolsets } : {}),
+          ...(opts.prepareStep ? { prepareStep: opts.prepareStep } : {}),
           ...(mode.instructions ? { instructions: mode.instructions } : {}),
         };
         assertOwnedSignalTurnNotDeleted();

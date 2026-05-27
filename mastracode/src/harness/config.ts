@@ -58,6 +58,7 @@ export interface MastraCodeRuntimeConfig<TState extends Record<string, unknown>>
   initialState: TState;
   workspace?: (ctx: { requestContext: RequestContext; mastra?: Mastra }) => Workspace | Promise<Workspace>;
   toolCategoryResolver?: (toolName: string) => any;
+  /** Configured handlers are started by Harness v1 during init, not runtime construction. */
   heartbeatHandlers?: HeartbeatHandler[];
   modelAuthChecker?: ModelAuthChecker;
   modelUseCountProvider?: ModelUseCountProvider;
