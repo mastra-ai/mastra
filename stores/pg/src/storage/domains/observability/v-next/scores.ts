@@ -103,6 +103,18 @@ export async function listScores(client: DbClient, schema: string, args: ListSco
   return listScoresPage(client, table, filters, pagination.page, pagination.perPage, orderBy.field, orderBy.direction);
 }
 
+export async function getScoreById(client: DbClient, schema: string, scoreId: string): Promise<ScoreRecord | null> {
+  const row = await client.oneOrNone<Record<string, any>>(
+    `SELECT ${SCORE_SELECT_COLUMNS}
+     FROM ${qualifiedTable(schema, TABLE_SCORE_EVENTS)}
+     WHERE "scoreId" = $1
+     ORDER BY "timestamp" DESC
+     LIMIT 1`,
+    [scoreId],
+  );
+  return row ? rowToScoreRecord(row) : null;
+}
+
 async function listScoresPage(
   client: DbClient,
   table: string,

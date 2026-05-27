@@ -103,7 +103,7 @@ async function createHarness(options: {
   wrapClient?: (client: PoolAdapter) => DbClient;
 }): Promise<DomainHarness> {
   const connection = options.connection ?? defaultConnection;
-  const pool = new Pool({ connectionString: connection.connectionString });
+  const pool = new Pool({ connectionString: connection.connectionString, max: 2 });
   const baseClient = new PoolAdapter(pool);
   const schema = schemaName(options.schemaPrefix);
 
@@ -247,6 +247,13 @@ async function ensureTimescale(client: DbClient): Promise<void> {
 async function ensurePartman(client: DbClient): Promise<void> {
   await client.none('CREATE SCHEMA IF NOT EXISTS partman');
   await client.none('CREATE EXTENSION IF NOT EXISTS pg_partman WITH SCHEMA partman');
+}
+
+async function readPartmanVersion(client: DbClient): Promise<string | null> {
+  const row = await client.oneOrNone<{ extversion: string }>(
+    `SELECT extversion FROM pg_extension WHERE extname = 'pg_partman'`,
+  );
+  return row?.extversion ?? null;
 }
 
 async function countRows(client: DbClient, schema: string, table: string): Promise<number> {
@@ -447,6 +454,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       });
 
       try {
+        expect(await readPartmanVersion(harness.baseClient)).toMatch(/^5\./);
         expect(harness.domain.partitionMode).toBe('partman');
       } finally {
         await harness.close();
@@ -890,7 +898,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
 
     it('warns when observability shares the primary pool instance', async () => {
       const warnSpy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
-      const pool = new Pool({ connectionString });
+      const pool = new Pool({ connectionString, max: 2 });
       const store = new PostgresStoreVNext({
         id: 'collision-pool',
         pool,
@@ -1144,7 +1152,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
   describe.skipIf(!integrationEnabled)('pg_partman — concurrent init', () => {
     it('two concurrent init() calls both resolve without throwing and keep one config row per signal', async () => {
       const connection = parseConnectionString(PARTMAN_URL);
-      const pool = new Pool({ connectionString: connection.connectionString });
+      const pool = new Pool({ connectionString: connection.connectionString, max: 2 });
       const client = new PoolAdapter(pool);
       const schema = schemaName('obs_vnext_partman_concurrent');
 

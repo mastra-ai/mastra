@@ -9,8 +9,6 @@
  *
  *  2. pg_partman present   → register each signal table as a daily-partitioned
  *                            parent and let partman maintain future partitions.
- *                            We still pre-create today's partition so writes
- *                            on a fresh schema work before partman runs.
  *
  *  3. Neither extension    → pre-create a rolling window of daily partitions
  *                            (yesterday + today + N future days). Future
@@ -61,6 +59,19 @@ export async function detectPartman(client: DbClient): Promise<boolean> {
     `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_partman') AS "exists"`,
   );
   return Boolean(row?.exists);
+}
+
+export async function getPartmanVersion(client: DbClient): Promise<string | null> {
+  const row = await client.oneOrNone<{ extversion: string }>(
+    `SELECT extversion FROM pg_extension WHERE extname = 'pg_partman'`,
+  );
+  return row?.extversion ?? null;
+}
+
+function getPartmanMajor(version: string | null): number | null {
+  if (!version) return null;
+  const match = /^(\d+)/.exec(version);
+  return match ? Number(match[1]) : null;
 }
 
 export async function resolveMode(client: DbClient, options: PartitioningOptions = {}): Promise<PartitionMode> {
@@ -189,17 +200,16 @@ export async function ensureTimescaleHypertables(client: DbClient, schema: strin
  * Retention is intentionally NOT configured here — it stays opt-in via the
  * future Mastra CLI surface.
  *
- * Tested against pg_partman 4.x. The 5.x line changed several `create_parent`
- * defaults (e.g. `p_type` no longer accepts `'native'`); if you're on 5.x and
- * this throws, pin pg_partman to 4.x or override `partitioning.mode` to
- * `'native'` and let this adapter manage partitions itself.
+ * Prefers the pg_partman 5.x+ declarative API (`p_type := 'range'`) and keeps
+ * a 4.x fallback (`p_type := 'native'`) for older installs. That lets the
+ * adapter run against current arm64-friendly images without breaking existing
+ * 4.x deployments.
  */
 export async function ensurePartmanHypertables(client: DbClient, schema: string): Promise<void> {
+  const partmanMajor = getPartmanMajor(await getPartmanVersion(client));
+
   for (const table of ALL_SIGNAL_TABLES) {
-    // pg_partman stores `parent_table` in canonical `format('%I.%I', ...)`
-    // form — quoted only when the identifier requires it. Use the same
-    // expression server-side so the EXISTS check matches the row that
-    // `create_parent` will insert, regardless of schema case.
+    const partmanRow = formatPartmanParentTable(schema, table);
     const exists = await client.oneOrNone<{ exists: boolean }>(
       `SELECT EXISTS (
          SELECT 1 FROM partman.part_config
@@ -211,29 +221,63 @@ export async function ensurePartmanHypertables(client: DbClient, schema: string)
 
     // Race: between the EXISTS check above and the `create_parent` call
     // below, a concurrent init in another process can register the parent
-    // first. pg_partman doesn't have an `IF NOT EXISTS`-style guard, so
-    // catch the resulting duplicate error and treat it as success. Any
-    // other failure rethrows.
-    try {
-      await client.none(
-        `SELECT partman.create_parent(
-           p_parent_table := format('%I.%I', $1::text, $2::text),
-           p_control := $3,
-           p_type := 'native',
-           p_interval := '1 day'
-         )`,
-        [schema, table, SIGNAL_TIME_COLUMN[table]],
-      );
-    } catch (error) {
-      const message = (error as { message?: string } | undefined)?.message ?? '';
-      // pg_partman 4.x error text on duplicate registration includes the
-      // phrase "already managed by pg_partman"; the unique constraint
-      // violation surfaces as Postgres SQLSTATE 23505.
-      const code = (error as { code?: string } | undefined)?.code;
-      const isDuplicate = code === '23505' || /already managed by pg_partman/i.test(message);
-      if (!isDuplicate) throw error;
+    // first. pg_partman doesn't have an `IF NOT EXISTS`-style guard, and on
+    // 5.x it can also deadlock one of the callers while racing on its
+    // template table. Retry once or accept success if another caller already
+    // installed the parent row.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (partmanMajor != null && partmanMajor >= 5) {
+          await client.none(
+            `SELECT partman.create_parent(
+               p_parent_table := format('%I.%I', $1::text, $2::text),
+               p_control := $3,
+               p_interval := '1 day',
+               p_type := 'range'
+             )`,
+            [schema, table, SIGNAL_TIME_COLUMN[table]],
+          );
+        } else {
+          await client.none(
+            `SELECT partman.create_parent(
+               p_parent_table := format('%I.%I', $1::text, $2::text),
+               p_control := $3,
+               p_type := 'native',
+               p_interval := '1 day'
+             )`,
+            [schema, table, SIGNAL_TIME_COLUMN[table]],
+          );
+        }
+        break;
+      } catch (error) {
+        const message = (error as { message?: string } | undefined)?.message ?? '';
+        const code = (error as { code?: string } | undefined)?.code;
+        const isDuplicate =
+          code === '23505' ||
+          /already managed by pg_partman/i.test(message) ||
+          /relation .* already exists/i.test(message);
+        if (isDuplicate) break;
+
+        const isDeadlock = /deadlock detected/i.test(message);
+        if (!isDeadlock) throw error;
+
+        const registered = await client.oneOrNone<{ exists: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM partman.part_config
+             WHERE parent_table = $1
+           ) AS "exists"`,
+          [partmanRow],
+        );
+        if (registered?.exists) break;
+        if (attempt === 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
     }
   }
+}
+
+function formatPartmanParentTable(schema: string, table: string): string {
+  return `${schema}.${table}`;
 }
 
 // ---------------------------------------------------------------------------

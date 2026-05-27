@@ -26,9 +26,9 @@ extra Postgres images. Set the env var locally to flip the blocks on.
          POSTGRES_DB: mastra
 
      partman:
-       # pg_partman ships in a few community images. Pin to 4.x — see the
-       # pg_partman 5.x compatibility note in `partitioning.ts`.
-       image: ghcr.io/dbsystel/postgres-partman:14-4.7.4
+       # Use a current arm64-capable image. The adapter prefers pg_partman
+       # 5.x semantics and keeps a 4.x compatibility fallback.
+       image: huntress/postgres-partman:18.3
        container_name: 'pg-vnext-partman'
        ports:
          - '5436:5432'
@@ -51,7 +51,7 @@ extra Postgres images. Set the env var locally to flip the blocks on.
 | Block                                  | Why it matters                                                                                                                                                  | Notes                                                                                                                                                                                 |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `init() — Timescale path`              | The code path that calls `create_hypertable()` is currently untested. B1's earlier bug (passing the time column as `$N::name`) would have shipped without this. | Image with `timescaledb` extension installed. The block detects the extension and asserts `partitionMode === 'timescale'`.                                                            |
-| `init() — pg_partman path`             | Same gap as Timescale. The collision detection between EXISTS lookup and `create_parent` (B-fix used `format('%I.%I', …)`) is only exercised here.              | Image with `pg_partman` 4.x. Tests should pin the version since 5.x changed `create_parent` defaults.                                                                                 |
+| `init() — pg_partman path`             | Same gap as Timescale. The collision detection between EXISTS lookup and `create_parent` (B-fix used `format('%I.%I', …)`) is only exercised here.              | Prefer an image with `pg_partman` 5.x so CI exercises the current `create_parent` contract; keeping one fallback test env on 4.x is optional.                                         |
 | `init() — idempotency`                 | We rely on every DDL being `IF NOT EXISTS`. Catching regressions before they hit prod.                                                                          | Run on the default `pg-test-db` — no extensions needed. Call `init()` twice; second call must not throw and must leave the schema unchanged.                                          |
 | `dangerouslyClearAll() post-condition` | B7 was a real foot-gun (hard-coded table list). A regression test guards against it.                                                                            | After clear, `SELECT count(*) FROM <every signal table>` should be 0; ditto the discovery cache.                                                                                      |
 | Discovery — cold-start dedupe          | The cold-start stampede was a real bug. Without this test, the dedupe regresses silently.                                                                       | Fire N concurrent `getServiceNames` against an empty cache and assert exactly one underlying DB scan ran (instrument the DbClient or count rows in `mastra_observability_discovery`). |

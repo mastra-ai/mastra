@@ -65,6 +65,8 @@ import type {
   GetMetricTimeSeriesResponse,
   GetRootSpanArgs,
   GetRootSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -139,8 +141,13 @@ function wrapError(op: string, error: unknown, details?: Record<string, unknown>
 
 function isDuplicateRelationError(error: unknown): boolean {
   const code = (error as { code?: string } | undefined)?.code;
+  const constraint = (error as { constraint?: string } | undefined)?.constraint;
   const message = (error as { message?: string } | undefined)?.message ?? '';
-  return code === '42P07' || /already exists/i.test(message);
+  return (
+    code === '42P07' ||
+    (code === '23505' && (constraint === 'pg_type_typname_nsp_index' || constraint === 'pg_class_relname_nsp_index')) ||
+    /already exists/i.test(message)
+  );
 }
 
 export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
@@ -264,6 +271,14 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     }
   }
 
+  override async getSpans(args: GetSpansArgs): Promise<GetSpansResponse> {
+    try {
+      return await tracingOps.getSpans(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_SPANS', error, { traceId: args.traceId, count: args.spanIds.length });
+    }
+  }
+
   override async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
     try {
       return await tracesOps.getRootSpan(this.#client, this.#schema, args);
@@ -381,6 +396,14 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       return await scoresOps.listScores(this.#client, this.#schema, args);
     } catch (error) {
       wrapError('LIST_SCORES', error);
+    }
+  }
+
+  override async getScoreById(scoreId: string) {
+    try {
+      return await scoresOps.getScoreById(this.#client, this.#schema, scoreId);
+    } catch (error) {
+      wrapError('GET_SCORE_BY_ID', error, { scoreId });
     }
   }
 

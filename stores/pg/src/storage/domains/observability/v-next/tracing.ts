@@ -10,6 +10,8 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   CreateSpanArgs,
+  GetSpansArgs,
+  GetSpansResponse,
   GetSpanArgs,
   GetSpanResponse,
   GetTraceArgs,
@@ -42,6 +44,24 @@ export async function batchCreateSpans(client: DbClient, schema: string, args: B
 // ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
+
+export async function getSpans(client: DbClient, schema: string, args: GetSpansArgs): Promise<GetSpansResponse> {
+  if (args.spanIds.length === 0) {
+    return { traceId: args.traceId, spans: [] };
+  }
+
+  const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
+  const rows = await client.manyOrNone<Record<string, any>>(
+    `SELECT ${SPAN_SELECT_COLUMNS}
+     FROM ${table}
+     WHERE "traceId" = $1
+       AND "spanId" = ANY($2::text[])
+     ORDER BY "startedAt" ASC`,
+    [args.traceId, args.spanIds],
+  );
+
+  return { traceId: args.traceId, spans: rows.map(rowToSpanRecord) };
+}
 
 export async function getSpan(client: DbClient, schema: string, args: GetSpanArgs): Promise<GetSpanResponse | null> {
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);

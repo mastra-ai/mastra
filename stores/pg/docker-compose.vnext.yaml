@@ -12,7 +12,7 @@ services:
       - pgdata-timescale:/var/lib/postgresql/data
 
   partman:
-    image: huntress/postgres-partman:14
+    image: huntress/postgres-partman:18.3
     container_name: 'pg-vnext-partman'
     ports:
       - '5436:5432'
@@ -21,7 +21,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-mastra}
     volumes:
-      - pgdata-partman:/var/lib/postgresql/data
+      - pgdata-partman:/var/lib/postgresql
 
 volumes:
   pgdata-timescale:
