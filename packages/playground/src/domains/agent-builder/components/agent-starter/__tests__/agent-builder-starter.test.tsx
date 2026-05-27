@@ -8,6 +8,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } from '../../../constants/default-request-context-schema';
 import { AgentBuilderStarter } from '../agent-builder-starter';
 import { server } from '@/test/msw-server';
 
@@ -112,6 +113,10 @@ describe('AgentBuilderStarter', () => {
     expect(capturedBody.instructions).toBe('');
     expect(capturedBody.model).toEqual({ provider: 'google', name: 'gemini-2.5-flash' });
     expect(capturedBody.visibility).toBe('private');
+    // Every builder agent is born with a `user` request-context variable matching
+    // the authenticated user shape. The constant is asserted by reference so any
+    // shape drift in the source-of-truth constant is caught by its own test, not here.
+    expect(capturedBody.requestContextSchema).toEqual(DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA);
 
     await waitFor(() => expect(navigateMock).toHaveBeenCalledTimes(1));
     const [path, opts] = navigateMock.mock.calls[0];

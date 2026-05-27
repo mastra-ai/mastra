@@ -12,7 +12,7 @@ import {
 } from '@mastra/playground-ui';
 import { CopyIcon, Link2, Check, Pencil } from 'lucide-react';
 import { useAgent } from '../hooks/use-agent';
-import { useCanCreateAgent } from '../hooks/use-can-create-agent';
+import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentEntityHeaderProps {

@@ -45,6 +45,8 @@ export interface RouteHandlerResult {
   responseType: 'json' | 'stream' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
   /** Stream format (only for 'stream' responseType) */
   streamFormat?: 'sse' | 'stream';
+  /** Whether to flush an SSE comment on connect before stream data arrives */
+  sseFlushOnConnect?: boolean;
 }
 
 /**
@@ -232,6 +234,7 @@ export class RouteHandlerService {
       data,
       responseType: route.responseType,
       streamFormat: route.streamFormat,
+      sseFlushOnConnect: route.sseFlushOnConnect,
     };
   }
 

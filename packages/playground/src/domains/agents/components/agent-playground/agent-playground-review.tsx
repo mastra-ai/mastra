@@ -517,7 +517,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: toolbar + EntityList + Detail Panel */}
+      {/* Main layout: toolbar + List + Detail Panel */}
       <Columns className={cn('p-4', featuredItem ? 'grid-cols-[1fr_1fr]' : '')}>
         <Column>
           <Column.Toolbar>
@@ -839,7 +839,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                 );
 
                 return (
-                  <DataList.Row key={item.id}>
+                  <DataList.RowWrapper key={item.id}>
                     {!showCompleted ? (
                       <DataList.SelectCell
                         checked={selectedItemIds.has(item.id)}
@@ -864,7 +864,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     >
                       {rowCells}
                     </DataList.RowButton>
-                  </DataList.Row>
+                  </DataList.RowWrapper>
                 );
               })}
             </DataList>

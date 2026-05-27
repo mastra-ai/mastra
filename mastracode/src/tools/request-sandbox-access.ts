@@ -9,7 +9,7 @@ import type { HarnessQuestionAnswer, HarnessRequestContext } from '@mastra/core/
 import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
-import type { stateSchema } from '../schema.js';
+import type { MastraCodeState } from '../schema.js';
 import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
 function expandTilde(p: string): string {
@@ -18,18 +18,23 @@ function expandTilde(p: string): string {
   return p;
 }
 
-type MastraCodeState = z.infer<typeof stateSchema>;
-
 let requestCounter = 0;
+
+type RequestSandboxAccessInput = {
+  path: string;
+  reason: string;
+};
+
+const requestSandboxAccessInputSchema = z.object({
+  path: z.string().min(1).describe('The absolute path to the directory you need access to.'),
+  reason: z.string().min(1).describe('Brief explanation of why you need access to this directory.'),
+});
 
 export const requestSandboxAccessTool = createTool({
   id: 'request_access',
   description: `Request permission to access a directory outside the current project. Use this when you need to read or write files in a directory that is not within the project root. The user will be prompted to approve or deny the request.`,
-  inputSchema: z.object({
-    path: z.string().min(1).describe('The absolute path to the directory you need access to.'),
-    reason: z.string().min(1).describe('Brief explanation of why you need access to this directory.'),
-  }),
-  execute: async ({ path: requestedPath, reason }, context) => {
+  inputSchema: requestSandboxAccessInputSchema,
+  execute: async ({ path: requestedPath, reason }: RequestSandboxAccessInput, context: any) => {
     try {
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
 
@@ -111,4 +116,4 @@ export const requestSandboxAccessTool = createTool({
       };
     }
   },
-});
+} as any);
