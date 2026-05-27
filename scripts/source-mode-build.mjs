@@ -15,6 +15,8 @@ if (!target) {
 
 const repoSourceMode = ['1', 'true'].includes(process.env.MASTRA_REPO_RUN_FROM_SOURCE ?? '');
 const turboArgs = passthroughArgs[0] === '--' ? passthroughArgs.slice(1) : passthroughArgs;
+const normalizedTarget = target.replace(/^\.\//, '');
+const SOURCE_MODE_BUILD_TARGET = 'packages/cli';
 
 function pnpmArgs(args) {
   const npmExecPath = process.env.npm_execpath;
@@ -228,6 +230,14 @@ if (!repoSourceMode) {
   const { command, args } = pnpmArgs(['turbo', 'build', '--filter', target, ...turboArgs]);
   await runOrExit(command, args);
   process.exit(0);
+}
+
+if (normalizedTarget !== SOURCE_MODE_BUILD_TARGET) {
+  console.error(
+    `MASTRA_REPO_RUN_FROM_SOURCE=true source-mode builds currently support only ./packages/cli; received ${target}.`,
+  );
+  console.error('Run the normal artifact build without MASTRA_REPO_RUN_FROM_SOURCE for other packages.');
+  process.exit(1);
 }
 
 console.log(`MASTRA_REPO_RUN_FROM_SOURCE=true: running source typecheck for ${target}`);

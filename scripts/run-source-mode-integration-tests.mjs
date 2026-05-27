@@ -6,27 +6,32 @@ const env = {
   NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --conditions=mastra-source`.trim(),
 };
 
+function pnpmCommand(commandArgs) {
+  const npmExecPath = process.env.npm_execpath;
+  return npmExecPath
+    ? { command: process.execPath, args: [npmExecPath, ...commandArgs] }
+    : { command: 'pnpm', args: commandArgs };
+}
+
 const runs = [
   {
     cwd: 'packages/agent-builder/integration-tests',
-    command: 'pnpm',
     args: ['test:source-mode', '--reporter=dot', '--bail', '1'],
   },
   {
     cwd: 'packages/mcp/integration-tests',
-    command: 'pnpm',
     args: ['test:mcp:source-mode', '--reporter=dot', '--bail', '1'],
   },
   {
     cwd: 'packages/memory/integration-tests',
-    command: 'pnpm',
     args: ['test:source-mode', 'src/with-libsql-storage.test.ts', '--reporter=dot', '--bail', '1'],
   },
 ];
 
 for (const run of runs) {
-  console.info(`\n> (${run.cwd}) ${run.command} ${run.args.join(' ')}`);
-  const result = spawnSync(run.command, run.args, {
+  const { command, args } = pnpmCommand(run.args);
+  console.info(`\n> (${run.cwd}) ${command} ${args.join(' ')}`);
+  const result = spawnSync(command, args, {
     cwd: run.cwd,
     env,
     stdio: 'inherit',
