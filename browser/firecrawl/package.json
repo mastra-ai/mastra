@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@mendable/firecrawl-js": "^4.18.4"
+    "firecrawl": "^4.18.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

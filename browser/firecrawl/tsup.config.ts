@@ -12,6 +12,6 @@ export default defineConfig({
     '@mastra/core',
     '@mastra/core/browser',
     'agent-browser',
-    '@mendable/firecrawl-js',
+    'firecrawl',
   ],
 });

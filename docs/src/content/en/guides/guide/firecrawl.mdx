@@ -22,7 +22,7 @@ Firecrawl is a web data API that turns websites into clean markdown or structure
 Install the Firecrawl SDK:
 
 ```bash npm2yarn
-npm install @mendable/firecrawl-js
+npm install firecrawl
 ```
 
 ## Configure environment variables
@@ -43,7 +43,7 @@ Create a tool file that exposes Firecrawl search and scrape to Mastra.
     Create `src/mastra/tools/firecrawl.ts` and set up Firecrawl:
 
     ```ts title="src/mastra/tools/firecrawl.ts"
-    import Firecrawl from '@mendable/firecrawl-js'
+    import { Firecrawl } from 'firecrawl'
     import { createTool } from '@mastra/core/tools'
     import { z } from 'zod'
 

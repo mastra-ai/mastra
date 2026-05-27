@@ -1,6 +1,6 @@
 import type { AgentBrowserConfig } from '@mastra/agent-browser';
 import { AgentBrowser } from '@mastra/agent-browser';
-import { Firecrawl } from '@mendable/firecrawl-js';
+import { Firecrawl } from 'firecrawl';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import { BrowserManager } from 'agent-browser';
 import { FirecrawlAgentBrowserThreadManager } from './firecrawl-thread-manager';
