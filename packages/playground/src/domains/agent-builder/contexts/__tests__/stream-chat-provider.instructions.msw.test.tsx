@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useStreamSend } from '../stream-chat-context';
@@ -27,6 +29,15 @@ const Composer = ({ message, onSent }: { message: string; onSent: () => void }) 
   return null;
 };
 
+const Providers = ({ children }: { children: ReactNode }) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </MastraReactProvider>
+  );
+};
+
 describe('StreamChatProvider — modelSettings.instructions on the wire', () => {
   beforeEach(() => {
     server.resetHandlers();
@@ -40,6 +51,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     const captured: CapturedRequest = { body: null };
 
     server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
       http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
         captured.body = await request.json();
         // Minimal "no events" response body — useChat closes out cleanly.
@@ -60,7 +72,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
 
     await act(async () => {
       render(
-        <MastraReactProvider baseUrl={BASE_URL}>
+        <Providers>
           <StreamChatProvider
             agentId="builder-agent"
             threadId="thread-test"
@@ -69,7 +81,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
           >
             <Composer message="Hello agent" onSent={() => {}} />
           </StreamChatProvider>
-        </MastraReactProvider>,
+        </Providers>,
       );
     });
 
@@ -96,6 +108,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     const captured: CapturedRequest = { body: null };
 
     server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
       http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
         captured.body = await request.json();
         const stream = new ReadableStream<Uint8Array>({
@@ -112,11 +125,11 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
 
     await act(async () => {
       render(
-        <MastraReactProvider baseUrl={BASE_URL}>
+        <Providers>
           <StreamChatProvider agentId="builder-agent" threadId="thread-test" initialMessages={[]}>
             <Composer message="Hello agent" onSent={() => {}} />
           </StreamChatProvider>
-        </MastraReactProvider>,
+        </Providers>,
       );
     });
 

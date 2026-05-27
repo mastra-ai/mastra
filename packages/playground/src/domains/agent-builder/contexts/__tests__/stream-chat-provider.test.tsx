@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,6 +42,19 @@ vi.mock('@mastra/react', () => {
 import { useStreamMessages, useStreamRunning, useStreamSend } from '../stream-chat-context';
 import { StreamChatProvider } from '../stream-chat-provider';
 
+const createQueryClient = () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // Seed useCurrentUser so the provider doesn't trigger a real fetch in unit tests.
+  queryClient.setQueryData(['auth', 'me'], { id: 'user-1' });
+  return queryClient;
+};
+
+const Wrapper = ({ children }: { children: ReactNode }) => (
+  <QueryClientProvider client={createQueryClient()}>{children}</QueryClientProvider>
+);
+
+const renderWithProviders = (ui: ReactElement) => render(ui, { wrapper: Wrapper });
+
 interface RenderTrackerProps {
   hook: () => unknown;
   onRender: () => void;
@@ -77,7 +92,7 @@ describe('StreamChatProvider', () => {
   it('only re-renders running subscribers when isRunning changes (not when messages change)', () => {
     const runningRender = vi.fn();
 
-    render(
+    renderWithProviders(
       <StreamChatProvider agentId="a" threadId="t" initialMessages={[]} debounceTime={100}>
         <RenderTracker hook={useStreamRunning} onRender={runningRender} />
       </StreamChatProvider>,
@@ -112,7 +127,7 @@ describe('StreamChatProvider', () => {
   it('only re-renders messages subscribers when messages change (not when isRunning changes)', () => {
     const messagesRender = vi.fn();
 
-    render(
+    renderWithProviders(
       <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
         <RenderTracker hook={useStreamMessages} onRender={messagesRender} />
       </StreamChatProvider>,
@@ -145,7 +160,7 @@ describe('StreamChatProvider', () => {
 
     const tools = { myTool: { id: 'myTool' } };
 
-    render(
+    renderWithProviders(
       <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} clientTools={tools}>
         <SendCapture />
       </StreamChatProvider>,
@@ -180,7 +195,7 @@ describe('StreamChatProvider', () => {
 
     let send: ((message: string) => void) | null = null;
 
-    render(
+    renderWithProviders(
       <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="snapshot-text">
         <SendCapture onReady={fn => (send = fn)} />
       </StreamChatProvider>,
@@ -211,7 +226,7 @@ describe('StreamChatProvider', () => {
 
     let send: ((message: string) => void) | null = null;
 
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]}>
         <SendCapture onReady={fn => (send = fn)} />
       </StreamChatProvider>,
@@ -247,7 +262,7 @@ describe('StreamChatProvider', () => {
 
     let send: ((message: string) => void) | null = null;
 
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="v1">
         <SendCapture onReady={fn => (send = fn)} />
       </StreamChatProvider>,
@@ -288,7 +303,7 @@ describe('StreamChatProvider', () => {
     let send: ((message: string) => void) | null = null;
     const captured: unknown[][] = [];
 
-    render(
+    renderWithProviders(
       <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="snapshot-text">
         <SendCapture onReady={fn => (send = fn)} />
         <MessagesCapture onMessages={m => captured.push(m)} />
