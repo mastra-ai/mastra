@@ -5,17 +5,13 @@ import type { ProcessInputStepArgs } from '../processors/index';
 import type { ChannelContext } from './types';
 
 /**
- * Input processor that injects channel context into agent prompts.
+ * Input processor that injects channel context (platform, bot identity, DM vs.
+ * public-channel guidance) into the agent's system prompt on every step.
  *
- * Uses `processInputStep` to add a tagged system message on every step of the agentic loop.
- * The message is added directly to `args.messageList` under the `chat-channel-context` tag
- * (rather than returning `systemMessages`) so it composes with other processors' tagged
- * system messages (e.g. observational memory) instead of clobbering their tags via the
- * runner's `replaceAllSystemMessages` path. `addSystem` deduplicates by content within a
- * tag, so repeated calls across steps are safe.
- *
- * All output rendering (tool cards, text messages, approval prompts) is handled by
- * `AgentChannels.consumeAgentStream` which iterates the outer `fullStream`.
+ * Added automatically by `AgentChannels` unless you provide your own input
+ * processor with `id === 'chat-channel-context'`. Output rendering (tool cards,
+ * text messages, approval prompts) is handled separately by
+ * `AgentChannels.consumeAgentStream`.
  */
 export class ChatChannelProcessor {
   readonly id = 'chat-channel-context';
