@@ -35,7 +35,7 @@ function inlineRefsAndDropDefinitions(root: Record<string, any>): Record<string,
 
   const refToKey = (ref: string): string | null => {
     const match = /^#\/definitions\/(.+)$/.exec(ref);
-    return match ? match[1] : null;
+    return match?.[1] ?? null;
   };
 
   const inline = (node: any, seen: Set<string>): any => {

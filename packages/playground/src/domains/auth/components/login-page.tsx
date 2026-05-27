@@ -1,4 +1,4 @@
-import { Button, Input, LogoWithoutText } from '@mastra/playground-ui';
+import { Button, Input } from '@mastra/playground-ui';
 import { Lock } from 'lucide-react';
 import { useState } from 'react';
 import { useSSOLogin } from '../hooks/use-auth-actions';
@@ -6,6 +6,7 @@ import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { useCredentialsLogin } from '../hooks/use-credentials-login';
 import { useCredentialsSignUp } from '../hooks/use-credentials-signup';
 import type { SSOConfig } from '../types';
+import { LoginLayout } from './login-layout';
 
 export type LoginPageProps = {
   /** URL to redirect to after successful login */
@@ -112,119 +113,110 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
     // Clear any errors when switching modes
   };
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-surface1">
-      <div className="w-full max-w-sm space-y-6 rounded-lg border border-border1 bg-surface2 p-8">
-        <div className="flex flex-col items-center space-y-2">
-          <LogoWithoutText className="h-10 w-10" />
-          <h1 className="text-xl font-semibold text-neutral6">
-            {isSignIn ? 'Sign in to Mastra Studio' : 'Create your account'}
-          </h1>
-        </div>
-
-        {login.description && (
-          <div className="flex items-start gap-2.5 rounded-md border border-border1 bg-surface1 p-3">
-            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral4" />
-            <p className="text-sm text-neutral3">{login.description}</p>
-          </div>
-        )}
-
-        {errorMessage && <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{errorMessage}</div>}
-
-        {hasCredentials && (
-          <form onSubmit={handleCredentialsSubmit} className="space-y-4">
-            {!isSignIn && (
-              <div className="space-y-2">
-                <label htmlFor="name" className="block text-sm text-neutral4">
-                  Name
-                </label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="Your name"
-                  variant="default"
-                  size="lg"
-                />
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <label htmlFor="email" className="block text-sm text-neutral4">
-                Email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                variant="default"
-                size="lg"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="password" className="block text-sm text-neutral4">
-                Password
-              </label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder={isSignIn ? 'Enter your password' : 'Create a password'}
-                required
-                variant="default"
-                size="lg"
-              />
-            </div>
-
-            {error && <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{error.message}</div>}
-
-            <Button type="submit" disabled={isPending} className="w-full" size="lg">
-              {isPending
-                ? isSignIn
-                  ? 'Signing in...'
-                  : 'Creating account...'
-                : isSignIn
-                  ? 'Sign in'
-                  : 'Create account'}
-            </Button>
-
-            {signUpEnabled && (
-              <div className="text-center text-sm">
-                <span className="text-neutral3">
-                  {isSignIn ? "Don't have an account? " : 'Already have an account? '}
-                </span>
-                <button type="button" onClick={toggleMode} className="text-neutral6 hover:underline">
-                  {isSignIn ? 'Sign up' : 'Sign in'}
-                </button>
-              </div>
-            )}
-          </form>
-        )}
-
-        {hasSSO && hasCredentials && (
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border1" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-surface2 px-2 text-neutral3">or continue with</span>
-            </div>
-          </div>
-        )}
-
-        {hasSSO && sso && (
-          <Button onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg" variant="outline">
-            {sso.icon && <span className="mr-2">{sso.icon}</span>}
-            {isSSOPending ? 'Redirecting...' : sso.text || 'Sign in'}
-          </Button>
-        )}
-      </div>
+  const description = login.description ? (
+    <div className="flex items-start gap-2.5 rounded-md border border-border1 bg-surface1 p-3">
+      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral4" />
+      <p className="text-sm text-neutral3">{login.description}</p>
     </div>
+  ) : null;
+
+  const errorBanner = errorMessage ? (
+    <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{errorMessage}</div>
+  ) : null;
+
+  return (
+    <LoginLayout
+      title={isSignIn ? 'Sign in to Mastra Studio' : 'Create your account'}
+      description={description}
+      errorBanner={errorBanner}
+    >
+      {hasCredentials && (
+        <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+          {!isSignIn && (
+            <div className="space-y-2">
+              <label htmlFor="name" className="block text-sm text-neutral4">
+                Name
+              </label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Your name"
+                variant="default"
+                size="lg"
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label htmlFor="email" className="block text-sm text-neutral4">
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              variant="default"
+              size="lg"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="password" className="block text-sm text-neutral4">
+              Password
+            </label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder={isSignIn ? 'Enter your password' : 'Create a password'}
+              required
+              variant="default"
+              size="lg"
+            />
+          </div>
+
+          {error && <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{error.message}</div>}
+
+          <Button type="submit" disabled={isPending} className="w-full" size="lg">
+            {isPending ? (isSignIn ? 'Signing in...' : 'Creating account...') : isSignIn ? 'Sign in' : 'Create account'}
+          </Button>
+
+          {signUpEnabled && (
+            <div className="text-center text-sm">
+              <span className="text-neutral3">
+                {isSignIn ? "Don't have an account? " : 'Already have an account? '}
+              </span>
+              <button type="button" onClick={toggleMode} className="text-neutral6 hover:underline">
+                {isSignIn ? 'Sign up' : 'Sign in'}
+              </button>
+            </div>
+          )}
+        </form>
+      )}
+
+      {hasSSO && hasCredentials && (
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-border1" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="bg-surface1 px-2 text-neutral3">or continue with</span>
+          </div>
+        </div>
+      )}
+
+      {hasSSO && sso && (
+        <Button onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg" variant="outline">
+          {sso.icon && <span className="mr-2">{sso.icon}</span>}
+          {isSSOPending ? 'Redirecting...' : sso.text || 'Sign in'}
+        </Button>
+      )}
+    </LoginLayout>
   );
 }

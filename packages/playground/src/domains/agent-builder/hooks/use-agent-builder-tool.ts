@@ -1,19 +1,20 @@
-import type { StoredSkillResponse } from '@mastra/client-js';
-import { createTool } from '@mastra/client-js';
+import type { createTool, StoredSkillResponse } from '@mastra/client-js';
 import { useMemo } from 'react';
-import { useFormContext } from 'react-hook-form';
-import { z } from 'zod-v4';
 
 import type { useBuilderAgentFeatures } from './use-builder-agent-features';
-import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
-import { buildAgentBuilderToolDescription } from '@/domains/agent-builder/services/build-tool-description';
-import { buildAgentBuilderToolSchema } from '@/domains/agent-builder/services/build-tool-schema';
-import { routeToolInputToFormKeys } from '@/domains/agent-builder/services/route-tool-input';
+import {
+  SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
+  useSetAgentBrowserEnabledTool,
+} from './use-set-agent-browser-enabled-tool';
+import { SET_AGENT_DESCRIPTION_TOOL_NAME, useSetAgentDescriptionTool } from './use-set-agent-description-tool';
+import { SET_AGENT_INSTRUCTIONS_TOOL_NAME, useSetAgentInstructionsTool } from './use-set-agent-instructions-tool';
+import { SET_AGENT_MODEL_TOOL_NAME, useSetAgentModelTool } from './use-set-agent-model-tool';
+import { SET_AGENT_NAME_TOOL_NAME, useSetAgentNameTool } from './use-set-agent-name-tool';
+import { SET_AGENT_SKILLS_TOOL_NAME, useSetAgentSkillsTool } from './use-set-agent-skills-tool';
+import { SET_AGENT_TOOLS_TOOL_NAME, useSetAgentToolsTool } from './use-set-agent-tools-tool';
+import { SET_AGENT_WORKSPACE_ID_TOOL_NAME, useSetAgentWorkspaceIdTool } from './use-set-agent-workspace-id-tool';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
-import { cleanProviderId } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm';
-
-export const AGENT_BUILDER_TOOL_NAME = 'agentBuilderTool';
 
 export interface AvailableWorkspace {
   id: string;
@@ -28,93 +29,67 @@ interface UseAgentBuilderToolArgs {
   availableModels?: ModelInfo[];
 }
 
+type ClientTool = ReturnType<typeof createTool>;
+
 export function useAgentBuilderTool({
   features,
   availableAgentTools,
   availableWorkspaces = [],
   availableSkills = [],
   availableModels = [],
-}: UseAgentBuilderToolArgs) {
-  const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { tools: toolsEnabled, skills: skillsEnabled, browser: browserEnabled } = features;
+}: UseAgentBuilderToolArgs): Record<string, ClientTool> {
+  // Always call every atomic hook unconditionally to satisfy the rules of hooks.
+  // Feature/availability gating is applied to the assembled record below.
+  const nameTool = useSetAgentNameTool();
+  const descriptionTool = useSetAgentDescriptionTool();
+  const instructionsTool = useSetAgentInstructionsTool();
+  const toolsTool = useSetAgentToolsTool({ availableAgentTools });
+  const skillsTool = useSetAgentSkillsTool({ availableSkills });
+  const modelTool = useSetAgentModelTool({ availableModels });
+  const browserTool = useSetAgentBrowserEnabledTool();
+  const workspaceTool = useSetAgentWorkspaceIdTool({ availableWorkspaces });
 
-  return useMemo(
-    () =>
-      createTool({
-        id: AGENT_BUILDER_TOOL_NAME,
-        description: buildAgentBuilderToolDescription(
-          features,
-          availableAgentTools,
-          availableWorkspaces,
-          availableSkills,
-          availableModels,
-        ),
-        inputSchema: buildAgentBuilderToolSchema(
-          features,
-          availableAgentTools,
-          availableWorkspaces,
-          availableSkills,
-          availableModels,
-        ),
-        outputSchema: z.object({ success: z.boolean() }),
-        execute: async (inputData: any) => {
-          if (typeof inputData?.name === 'string') {
-            formMethods.setValue('name', inputData.name);
-          }
-          if (typeof inputData?.description === 'string') {
-            formMethods.setValue('description', inputData.description);
-          }
-          if (typeof inputData?.instructions === 'string') {
-            formMethods.setValue('instructions', inputData.instructions);
-          }
-          if (toolsEnabled && Array.isArray(inputData?.tools)) {
-            const { tools, agents, workflows } = routeToolInputToFormKeys(availableAgentTools, inputData.tools);
-            formMethods.setValue('tools', tools);
-            formMethods.setValue('agents', agents);
-            formMethods.setValue('workflows', workflows);
-          }
-          if (skillsEnabled && Array.isArray(inputData?.skills)) {
-            const validSkillIds = new Set(availableSkills.map(s => s.id));
-            const skills: Record<string, true> = {};
-            for (const entry of inputData.skills) {
-              if (entry && typeof entry.id === 'string' && validSkillIds.has(entry.id)) {
-                skills[entry.id] = true;
-              }
-            }
-            formMethods.setValue('skills', skills, { shouldDirty: true });
-          }
-          if (
-            typeof inputData?.model?.provider === 'string' &&
-            inputData.model.provider.length > 0 &&
-            typeof inputData.model.name === 'string' &&
-            inputData.model.name.length > 0
-          ) {
-            formMethods.setValue(
-              'model',
-              { provider: cleanProviderId(inputData.model.provider), name: inputData.model.name },
-              { shouldDirty: true },
-            );
-          }
-          if (browserEnabled && typeof inputData?.browserEnabled === 'boolean') {
-            formMethods.setValue('browserEnabled', inputData.browserEnabled, { shouldDirty: true });
-          }
-          if (typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0) {
-            formMethods.setValue('workspaceId', inputData.workspaceId);
-          }
+  const { tools: toolsEnabled, skills: skillsEnabled, model: modelEnabled, browser: browserEnabled } = features;
+  const skillsCount = availableSkills.length;
+  const modelsCount = availableModels.length;
 
-          return { success: true };
-        },
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools/skills/browser affects feature-gated schema/description fields
-    [
-      formMethods,
-      toolsEnabled,
-      skillsEnabled,
-      browserEnabled,
-      availableAgentTools,
-      availableWorkspaces,
-      availableSkills,
-      availableModels,
-    ],
-  );
+  return useMemo(() => {
+    const record: Record<string, ClientTool> = {
+      // Always on.
+      [SET_AGENT_NAME_TOOL_NAME]: nameTool,
+      [SET_AGENT_DESCRIPTION_TOOL_NAME]: descriptionTool,
+      [SET_AGENT_INSTRUCTIONS_TOOL_NAME]: instructionsTool,
+      [SET_AGENT_WORKSPACE_ID_TOOL_NAME]: workspaceTool,
+    };
+
+    if (toolsEnabled) {
+      record[SET_AGENT_TOOLS_TOOL_NAME] = toolsTool;
+    }
+    if (skillsEnabled && skillsCount > 0) {
+      record[SET_AGENT_SKILLS_TOOL_NAME] = skillsTool;
+    }
+    if (modelEnabled && modelsCount > 0) {
+      record[SET_AGENT_MODEL_TOOL_NAME] = modelTool;
+    }
+    if (browserEnabled) {
+      record[SET_AGENT_BROWSER_ENABLED_TOOL_NAME] = browserTool;
+    }
+
+    return record;
+  }, [
+    nameTool,
+    descriptionTool,
+    instructionsTool,
+    workspaceTool,
+    toolsTool,
+    skillsTool,
+    modelTool,
+    browserTool,
+    toolsEnabled,
+    skillsEnabled,
+    modelEnabled,
+    browserEnabled,
+    skillsCount,
+    modelsCount,
+  ]);
 }

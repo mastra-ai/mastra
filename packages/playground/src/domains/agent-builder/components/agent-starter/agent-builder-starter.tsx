@@ -3,6 +3,7 @@ import { ArrowUpIcon } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } from '../../constants/default-request-context-schema';
 import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allowed-models';
 import { ExampleList } from './example-list';
 import { resolveStarterModel, truncateName } from './utils';
@@ -37,6 +38,7 @@ export const AgentBuilderStarter = () => {
         skills: {},
         visibility: defaultVisibility,
         model: resolveStarterModel(allowedModels),
+        requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA,
       });
 
       void navigate(`/agent-builder/agents/${id}/edit`, {

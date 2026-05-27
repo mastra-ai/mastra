@@ -1,0 +1,188 @@
+---
+title: "Reference: StorageWorkspaceRef | Editor"
+description: "Reference for StorageWorkspaceRef, the discriminated union that points a stored agent at a workspace."
+packages:
+  - "@mastra/core"
+---
+
+# StorageWorkspaceRef
+
+`StorageWorkspaceRef` is the discriminated union used to attach a workspace to a stored agent. It either points at a workspace registered on the Mastra runtime by ID, or embeds a workspace snapshot inline.
+
+It is the type used by [`BuilderAgentDefaults.workspace`](/reference/editor/agent-builder/builder-agent-defaults) and by stored agent records.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+// Variant 1 — reference a runtime workspace by id
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        workspace: { type: 'id', workspaceId: 'builder-workspace' },
+      },
+    },
+  },
+})
+
+// Variant 2 — inline a workspace snapshot
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        workspace: {
+          type: 'inline',
+          config: {
+            name: 'inline-builder-workspace',
+            filesystem: {
+              provider: 'local',
+              config: { basePath: './agent-files' },
+            },
+          },
+        },
+      },
+    },
+  },
+})
+```
+
+## Variants
+
+<PropertiesTable
+  content={[
+  {
+    name: "{ type: 'id'; workspaceId: string }",
+    type: 'IdRef',
+    description:
+      'Reference a workspace registered on the Mastra runtime via `new Mastra({ workspace })` or `mastra.addWorkspace()`. The id is the join key between admin config, stored agent record, and hydration.',
+    properties: [
+      {
+        type: "{ type: 'id'; workspaceId: string }",
+        parameters: [
+          {
+            name: 'type',
+            type: "'id'",
+            description: 'Discriminant. Must be the literal `"id"`.',
+          },
+          {
+            name: 'workspaceId',
+            type: 'string',
+            description:
+              'Id of a workspace registered on the Mastra runtime. Used by the Builder to snapshot, persist, and later hydrate the workspace.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: "{ type: 'inline'; config: StorageWorkspaceSnapshotType }",
+    type: 'InlineRef',
+    description:
+      'Embed a workspace snapshot directly. The Builder derives a deterministic id of the form `inline-<sha256(config)[:12]>` and persists the snapshot, so identical inline configs are deduplicated across agents.',
+    properties: [
+      {
+        type: "{ type: 'inline'; config: StorageWorkspaceSnapshotType }",
+        parameters: [
+          {
+            name: 'type',
+            type: "'inline'",
+            description: 'Discriminant. Must be the literal `"inline"`.',
+          },
+          {
+            name: 'config',
+            type: 'StorageWorkspaceSnapshotType',
+            description:
+              'Serialized workspace configuration (filesystem, sandbox, mounts, search, skills, tools). See the `StorageWorkspaceSnapshotType` section below for the field list.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## `StorageWorkspaceSnapshotType`
+
+The shape embedded under `{ type: 'inline', config }`. Defined in `@mastra/core/storage`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Display name of the workspace.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Purpose description shown in the workspace listing.',
+    isOptional: true,
+  },
+  {
+    name: 'filesystem',
+    type: 'StorageFilesystemConfig',
+    description:
+      'Primary filesystem configuration. `provider` must match an id registered on `MastraEditor.filesystems` (built-in: `local`).',
+    isOptional: true,
+  },
+  {
+    name: 'sandbox',
+    type: 'StorageSandboxConfig',
+    description:
+      'Sandbox configuration. `provider` must match an id registered on `MastraEditor.sandboxes` (built-in: `local`).',
+    isOptional: true,
+  },
+  {
+    name: 'mounts',
+    type: 'Record<string, StorageFilesystemConfig>',
+    description: 'Additional filesystems mounted on the workspace, keyed by mount path.',
+    isOptional: true,
+  },
+  {
+    name: 'search',
+    type: 'StorageSearchConfig',
+    description: 'Search configuration (vector provider, embedder, BM25 settings).',
+    isOptional: true,
+  },
+  {
+    name: 'skills',
+    type: 'string[]',
+    description: 'Skill entity IDs assigned to this workspace.',
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'StorageWorkspaceToolsConfig',
+    description: 'Workspace tool configuration (allowlists, defaults).',
+    isOptional: true,
+  },
+  {
+    name: 'autoSync',
+    type: 'boolean',
+    description: 'Auto-sync between filesystem and sandbox.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'operationTimeout',
+    type: 'number',
+    description: 'Timeout for individual operations in milliseconds.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Hydration
+
+`StorageWorkspaceRef` is resolved lazily on `mastra.editor.agent.getById()`, not on `list()`. The editor looks up filesystem and sandbox providers on `MastraEditor.filesystems` / `MastraEditor.sandboxes` and materializes a runtime `Workspace`. Missing providers surface as a warning and the workspace is omitted.
+
+## Related
+
+- [Workspace](/docs/agent-builder/workspace) — concept and worked examples.
+- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — where this type is pinned as the Builder default.
+- [MastraEditor class](/reference/editor/mastra-editor) — registers filesystem and sandbox providers.
+- [StorageBrowserRef](/reference/editor/storage-browser-ref) — sibling reference type for browser configuration.
