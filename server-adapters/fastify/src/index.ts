@@ -8,11 +8,11 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  isZodError,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
-import { ZodError } from 'zod';
 export { createAuthMiddleware } from './auth-middleware';
 export type { FastifyAuthMiddlewareOptions } from './auth-middleware';
 
@@ -570,7 +570,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           this.mastra.getLogger()?.error('Error parsing query params', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          if (error instanceof ZodError) {
+          if (isZodError(error)) {
             const { status, body } = this.resolveValidationError(route, error, 'query');
             return reply.status(status).send(body);
           }
@@ -588,7 +588,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           this.mastra.getLogger()?.error('Error parsing body', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          if (error instanceof ZodError) {
+          if (isZodError(error)) {
             const { status, body } = this.resolveValidationError(route, error, 'body');
             return reply.status(status).send(body);
           }
@@ -607,7 +607,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           this.mastra.getLogger()?.error('Error parsing path params', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          if (error instanceof ZodError) {
+          if (isZodError(error)) {
             const { status, body } = this.resolveValidationError(route, error, 'path');
             return reply.status(status).send(body);
           }
