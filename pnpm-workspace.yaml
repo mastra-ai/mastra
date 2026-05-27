@@ -2,6 +2,7 @@ packages:
   - mastracode
   - docs
   - packages/_vendored/*
+  - packages/_internals/*
   - packages/*
   - deployers/*
   - stores/*
@@ -55,5 +56,9 @@ trustPolicyExclude:
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
   # but it is the official fix published on the @clerk/shared latest-v5 tag.
   - '@clerk/shared@3.47.4'
+  # Renovate cannot refresh lockfiles while pnpm rejects these official package
+  # versions as trust downgrades.
+  - 'effect@4.0.0-beta.59'
+  - 'tinyexec@1.2.2'
   # 0.7.4 is published with provenance attestation rather than trusted publisher.
   - 'prettier-plugin-tailwindcss@0.7.4'
