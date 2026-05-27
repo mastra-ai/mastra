@@ -4,9 +4,6 @@ import { cn } from '@/lib/utils';
 export type SideDialogContentProps = {
   children?: React.ReactNode;
   className?: string;
-  isCentered?: boolean;
-  isFullHeight?: boolean;
-  variant?: 'default' | 'confirmation';
 };
 
 export function SideDialogContent({ children, className }: SideDialogContentProps) {
