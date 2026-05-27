@@ -2,6 +2,7 @@ packages:
   - mastracode
   - docs
   - packages/_vendored/*
+  - packages/_internals/*
   - packages/*
   - deployers/*
   - stores/*
