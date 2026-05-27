@@ -168,7 +168,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return stream(
       res,
       async stream => {
-        if (streamFormat === 'sse') {
+        if (streamFormat === 'sse' && route.sseFlushOnConnect) {
           await stream.write(': connected\n\n');
         }
 
