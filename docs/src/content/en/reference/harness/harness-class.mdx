@@ -49,6 +49,56 @@ await harness.selectOrCreateThread()
 await harness.sendMessage({ content: 'Hello!' })
 ```
 
+## State persistence
+
+Pass a shared [storage backend](/reference/storage/libsql) to the `storage` constructor parameter when a Harness needs to survive process restarts, serverless invocations, or multiple application instances. The Harness uses that storage backend for its thread records, messages, and thread-scoped runtime state, including the active mode, per-mode model selections, token usage, and suspended tool runs.
+
+Thread state is scoped by `resourceId`. Because `resourceId` defaults to `id`, construct each Harness that should see the same threads with the same `id`, the same `resourceId`, and the same storage backend. If a new process knows the thread ID, call `switchThread({ threadId })` after `init()`. If it only needs the latest thread for the resource, call `selectOrCreateThread()`.
+
+The following example demonstrates two application instances sharing the same Harness state through a remote `LibSQLStore`:
+
+```typescript
+import { Harness } from '@mastra/core/harness'
+import { LibSQLStore } from '@mastra/libsql'
+import { z } from 'zod'
+
+const storage = new LibSQLStore({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+
+function createHarness() {
+  return new Harness({
+    id: 'support-harness',
+    resourceId: 'workspace_123',
+    storage,
+    stateSchema: z.object({
+      currentModelId: z.string().optional(),
+    }),
+    modes: [{ id: 'support', name: 'Support', default: true, agent: supportAgent }],
+  })
+}
+
+// Instance A starts the conversation and may suspend while waiting for input.
+const harnessA = createHarness()
+await harnessA.init()
+const thread = await harnessA.selectOrCreateThread()
+await harnessA.sendMessage({ content: 'Draft the deployment plan and ask before applying it.' })
+
+// Store `thread.id` with the pending user action in your application.
+await savePendingAction({ threadId: thread.id })
+
+// Instance B handles the later webhook or user response.
+const harnessB = createHarness()
+await harnessB.init()
+await harnessB.switchThread({ threadId: webhook.threadId })
+await harnessB.respondToToolSuspension({ resumeData: webhook.answer })
+```
+
+For serverless deployments, use a remotely hosted storage backend. A local file URL such as `file:./data.db` only persists for as long as the same filesystem is available to the process.
+
+Do not rely on Mastra Code internal helpers for core Harness persistence. Helpers such as `attachOMThreadStatePersistence` or `attachCavemanThreadStatePersistence`-style thread-state persistence for Mastra Code's Observational Memory toggles are host-application details, are not exported from `@mastra/core`, and are separate from the Harness `storage` parameter.
+
 ## Constructor parameters
 
 <PropertiesTable
