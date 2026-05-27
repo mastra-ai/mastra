@@ -10,17 +10,24 @@
  * - Set GOOGLE_CLOUD_PROJECT for Vertex AI
  */
 
-import { createTool } from '@mastra/core/tools';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { createTool } from '@internal/voice';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { GeminiLiveVoice } from './index';
 
-// Skip tests if no API key is configured
+const mock = createGatewayMock();
+setupDummyApiKeys(mock.mode, ['google']);
+
+// Skip tests if no real API key is configured. createGatewayMock is HTTP/MSW-based,
+// while Gemini Live uses WebSockets, so replay mode cannot satisfy this test yet.
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-const hasApiKey = !!GOOGLE_API_KEY;
+const hasApiKey = mock.mode === 'live' || !!GOOGLE_API_KEY;
 const testMode = hasApiKey ? describe : describe.skip;
 
 testMode('GeminiLiveVoice Tool Arguments - Real API Integration', () => {
+  beforeAll(() => mock.start());
+  afterAll(() => mock.saveAndStop());
   let voice: GeminiLiveVoice;
   const receivedToolCalls: Array<{ name: string; args: any }> = [];
 
@@ -30,7 +37,7 @@ testMode('GeminiLiveVoice Tool Arguments - Real API Integration', () => {
     // Create voice instance with real credentials
     const config = {
       apiKey: GOOGLE_API_KEY,
-      model: 'gemini-2.0-flash-exp' as const,
+      model: 'gemini-2.5-flash-native-audio-preview-12-2025' as const,
       debug: true,
     };
 
@@ -119,7 +126,7 @@ testMode('GeminiLiveVoice Tool Arguments - Real API Integration', () => {
     console.log('🔌 Connecting to Gemini Live API...');
     await voice.connect();
     console.log('✅ Connected successfully!');
-  });
+  }, 65000);
 
   afterEach(async () => {
     if (voice) {
@@ -127,7 +134,7 @@ testMode('GeminiLiveVoice Tool Arguments - Real API Integration', () => {
       await voice.disconnect();
       console.log('✅ Disconnected');
     }
-  });
+  }, 65000);
 
   it('should handle tool call with location argument when asking about weather', async () => {
     console.log('\n📝 Test: Asking about weather in Tokyo...');

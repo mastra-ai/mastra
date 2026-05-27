@@ -36,11 +36,11 @@ async function buildChangedTestSummary() {
   const labels = await listIssueLabels();
 
   if (labels.includes('tests: green ✅')) {
-    return '## Changed test gate\n\nChanged tests passed.\n\nLabel: `tests: green ✅`';
+    return '## Changed test gate\n\nChanged tests failed against the base branch as expected.\n\nLabel: `tests: green ✅`';
   }
 
   if (labels.includes('tests: failing ❌')) {
-    return '## Changed test gate\n\nChanged tests failed.\n\nLabel: `tests: failing ❌`';
+    return '## Changed test gate\n\nChanged tests passed against the base branch; they should fail before the PR code is applied.\n\nLabel: `tests: failing ❌`';
   }
 
   if (labels.includes('tests: no tests added')) {

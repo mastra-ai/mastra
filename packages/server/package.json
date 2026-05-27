@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.37.0-alpha.6",
+  "version": "1.37.2-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -122,6 +122,7 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/voice": "workspace:*",
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",

@@ -61,7 +61,7 @@ jobs:
 
       - name: Setup pnpm
         if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         with:
           run_install: false
           cache: true
@@ -83,7 +83,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
-      - name: Run changed tests
+      - name: Run changed tests against base
         if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
         shell: bash
         env:
@@ -91,4 +91,15 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t test_files < /tmp/changed-test-files
+
+          set +e
           pnpm vitest run --passWithNoTests "${test_files[@]}"
+          test_status=$?
+          set -e
+
+          if [ "$test_status" -eq 0 ]; then
+            echo "::error::Changed tests passed against the base branch. They should fail before the PR code is applied."
+            exit 1
+          fi
+
+          echo "Changed tests failed against the base branch as expected."
