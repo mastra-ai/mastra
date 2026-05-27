@@ -686,7 +686,11 @@ describe('Koa Server Adapter', () => {
 
       expect(response.status).toBe(200);
       const text = await response.text();
-      expect(text).toContain(': connected\n\n');
+      const connectedIndex = text.indexOf(': connected\n\n');
+      const dataIndex = text.indexOf('data: ');
+      expect(connectedIndex).toBeGreaterThanOrEqual(0);
+      expect(dataIndex).toBeGreaterThanOrEqual(0);
+      expect(connectedIndex).toBeLessThan(dataIndex);
     });
 
     it('should not write SSE connected comment when sseFlushOnConnect is not set', async () => {

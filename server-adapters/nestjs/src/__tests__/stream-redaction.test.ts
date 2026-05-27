@@ -252,7 +252,11 @@ describe('NestJS Adapter - Stream Data Redaction', () => {
         text += decoder.decode(value, { stream: true });
       }
 
-      expect(text).toContain(': connected\n\n');
+      const connectedIndex = text.indexOf(': connected\n\n');
+      const dataIndex = text.indexOf('data: ');
+      expect(connectedIndex).toBeGreaterThanOrEqual(0);
+      expect(dataIndex).toBeGreaterThanOrEqual(0);
+      expect(connectedIndex).toBeLessThan(dataIndex);
     } finally {
       unregisterRoute(flushRoute);
     }
