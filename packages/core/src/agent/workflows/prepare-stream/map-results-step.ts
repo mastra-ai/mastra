@@ -346,7 +346,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
               agentSpan?.error({ error: spanError, endSpan: true });
             }
           } else {
-            agentSpan?.end();
+            agentSpan?.end({
+              output: {
+                status: 'aborted',
+                reason: 'abort',
+              },
+            });
           }
 
           await options?.onFinish?.({
