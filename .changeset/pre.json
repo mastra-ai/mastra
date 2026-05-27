@@ -183,6 +183,7 @@
     "five-regions-kick",
     "fix-cli-pipe-alignment",
     "fix-posthog-negative-cost",
+    "fix-rbac-this-binding",
     "forty-chefs-care",
     "forty-singers-taste",
     "frank-lines-wish",

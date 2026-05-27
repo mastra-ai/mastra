@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.37.0-alpha.9
+
+### Patch Changes
+
+- Preserve `this` when resolving permissions for the "View as role" picker in `buildCapabilities`. Class-based RBAC providers (e.g. `@mastra/auth-workos`) read state from `this` inside `getPermissionsForRole`, but the method was being detached to a bare variable before invocation. This caused a `TypeError: Cannot read properties of undefined (reading 'options')` to be logged on every authenticated request and silently emptied the available roles list. The error was swallowed by a surrounding try/catch so admins saw an empty picker instead of a crash. ([#17112](https://github.com/mastra-ai/mastra/pull/17112))
+
 ## 1.37.0-alpha.8
 
 ### Patch Changes

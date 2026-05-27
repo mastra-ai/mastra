@@ -1,5 +1,13 @@
 # @mastra/hono
 
+## 1.4.19-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`d72dc4b`](https://github.com/mastra-ai/mastra/commit/d72dc4b12d832546c05c20255fa96fe4eb515900)]:
+  - @mastra/core@1.37.0-alpha.9
+  - @mastra/server@1.37.0-alpha.9
+
 ## 1.4.19-alpha.8
 
 ### Patch Changes
