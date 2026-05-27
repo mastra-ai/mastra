@@ -40,6 +40,19 @@ export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 
 
 export type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
 
+export const useStoredAgentDependents = (agentId?: string, options?: { enabled?: boolean }) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+  const enabled = (options?.enabled ?? true) && Boolean(agentId);
+
+  return useQuery({
+    queryKey: ['stored-agent-dependents', agentId, requestContext],
+    queryFn: () => client.getStoredAgent(agentId!).dependents(requestContext),
+    enabled,
+    retry: false,
+  });
+};
+
 export const useStoredAgentMutations = (agentId?: string) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();

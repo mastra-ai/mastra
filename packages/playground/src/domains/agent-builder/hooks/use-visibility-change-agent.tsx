@@ -1,5 +1,6 @@
 import { useFormContext } from 'react-hook-form';
 
+import { AgentImpactWarnings } from '../components/agent-edit/agent-impact-warnings';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { useVisibilityChangeDialog } from './use-visibility-change-dialog';
 import type { UseVisibilityChangeDialogResult, VisibilityCopy } from './use-visibility-change-dialog';
@@ -40,5 +41,7 @@ export function useVisibilityChange(agentId: string): UseVisibilityChange {
       cancel: 'agent-builder-visibility-confirm-cancel',
       confirm: 'agent-builder-visibility-confirm-yes',
     },
+    renderExtraContent: pending =>
+      pending === 'private' ? <AgentImpactWarnings agentId={agentId} variant="make-private" /> : null,
   });
 }
