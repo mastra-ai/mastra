@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ToolsInput } from '@mastra/core/agent';
 import { MastraVoice } from '@mastra/core/voice';
 import type { VoiceEventType, VoiceConfig } from '@mastra/core/voice';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type { WebSocket as WSType } from 'ws';
 import { WebSocket } from 'ws';
 import { AudioStreamManager, ConnectionManager, ContextManager, AuthManager, EventManager } from './managers';
@@ -2032,103 +2033,12 @@ export class GeminiLiveVoice extends MastraVoice<
     }
   }
 
-  /**
-   * Convert Zod schema to JSON Schema for tool parameters
-   * @private
-   */
   private convertZodSchemaToJsonSchema(schema: any): unknown {
     try {
-      // Try to use the schema's toJSON method if available
-      if (typeof schema.toJSON === 'function') {
-        return schema.toJSON();
-      }
-
-      // Try to use the schema's _def property if available (Zod internal)
-      if (schema._def) {
-        return this.convertZodDefToJsonSchema(schema._def);
-      }
-
-      // If it's already a plain object, return as is
-      if (typeof schema === 'object' && !schema.safeParse) {
-        return schema;
-      }
-
-      // Default fallback
-      return {
-        type: 'object',
-        properties: {},
-        description: schema.description || '',
-      };
+      return zodToJsonSchema(schema);
     } catch (error) {
       this.log('Failed to convert Zod schema to JSON schema', { error, schema });
-      return {
-        type: 'object',
-        properties: {},
-        description: 'Schema conversion failed',
-      };
-    }
-  }
-
-  /**
-   * Convert Zod definition to JSON Schema
-   * @private
-   */
-  private convertZodDefToJsonSchema(def: any): unknown {
-    switch (def.typeName) {
-      case 'ZodString':
-        return {
-          type: 'string',
-          description: def.description || '',
-        };
-      case 'ZodNumber':
-        return {
-          type: 'number',
-          description: def.description || '',
-        };
-      case 'ZodBoolean':
-        return {
-          type: 'boolean',
-          description: def.description || '',
-        };
-      case 'ZodArray':
-        return {
-          type: 'array',
-          items: this.convertZodDefToJsonSchema(def.type._def),
-          description: def.description || '',
-        };
-      case 'ZodObject':
-        const properties: Record<string, unknown> = {};
-        const required: string[] = [];
-
-        for (const [key, value] of Object.entries(def.shape())) {
-          properties[key] = this.convertZodDefToJsonSchema((value as any)._def);
-          if ((value as any)._def.typeName === 'ZodOptional') {
-            // Optional field, don't add to required
-          } else {
-            required.push(key);
-          }
-        }
-
-        return {
-          type: 'object',
-          properties,
-          required: required.length > 0 ? required : undefined,
-          description: def.description || '',
-        };
-      case 'ZodOptional':
-        return this.convertZodDefToJsonSchema(def.innerType._def);
-      case 'ZodEnum':
-        return {
-          type: 'string',
-          enum: def.values,
-          description: def.description || '',
-        };
-      default:
-        return {
-          type: 'object',
-          properties: {},
-          description: def.description || '',
-        };
+      return { type: 'object', properties: {} };
     }
   }
 
