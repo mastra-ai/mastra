@@ -1,4 +1,10 @@
-import type { LightSpanRecord, ListBranchesArgs, ListBranchesResponse, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type {
+  LightSpanRecord,
+  ListBranchesArgs,
+  ListBranchesResponse,
+  ListTracesArgs,
+  ListTracesResponse,
+} from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -128,7 +134,10 @@ function getPageSpans(page: TracesPageResponse) {
 
 /** Deduplicates trace/branch rows by traceId + spanId across all loaded pages.
  *  Also surfaces page 0's deltaCursor so the live-tail query can read it reactively. */
-export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): { spans: LightSpanRecord[]; deltaCursor: string | undefined } {
+export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
+  spans: LightSpanRecord[];
+  deltaCursor: string | undefined;
+} {
   const seen = new Set<string>();
   const spans = data.pages
     .flatMap(page => getPageSpans(page))
@@ -264,7 +273,11 @@ interface UseTracesReturn {
   refetch: () => void;
 }
 
-export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({ filters, listMode = 'traces', polling = {} }: UseTracesArgs) => {
+export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
+  filters,
+  listMode = 'traces',
+  polling = {},
+}: UseTracesArgs) => {
   const {
     deltaPollIntervalMs = DEFAULT_POLLING_CONFIG.deltaPollIntervalMs,
     deltaChaseIntervalMs = DEFAULT_POLLING_CONFIG.deltaChaseIntervalMs,

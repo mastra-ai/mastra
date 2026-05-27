@@ -3,7 +3,9 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 
-export function useTraceSpans(traceId: string | null | undefined): UseQueryResult<{ traceId: string; spans: LightSpanRecord[] } | null> {
+export function useTraceSpans(
+  traceId: string | null | undefined,
+): UseQueryResult<{ traceId: string; spans: LightSpanRecord[] } | null> {
   const client = useMastraClient();
 
   return useQuery({

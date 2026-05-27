@@ -11,7 +11,11 @@ export interface UseBranchArgs {
   depth?: number;
 }
 
-export function useBranch({ traceId, spanId, depth }: UseBranchArgs): UseQueryResult<{ traceId: string; spans: LightSpanRecord[] } | null> {
+export function useBranch({
+  traceId,
+  spanId,
+  depth,
+}: UseBranchArgs): UseQueryResult<{ traceId: string; spans: LightSpanRecord[] } | null> {
   const client = useMastraClient();
 
   return useQuery({
