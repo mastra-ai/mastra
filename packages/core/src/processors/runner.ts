@@ -17,6 +17,7 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage } from '../stream/types';
+import { geminiEnsureFirstUserMessage } from './provider-history-compat';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -1288,6 +1289,16 @@ export class ProcessorRunner {
 
     let currentPrompt = args.prompt;
     let cachedResponse: CachedLLMStepResponse | undefined;
+
+    // Auto-apply Gemini first-user-message compat rule before user-configured
+    // processors.  The rule is a no-op for non-Google models.
+    const geminiResult = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt: currentPrompt,
+      model: args.model,
+    });
+    if (geminiResult) {
+      currentPrompt = geminiResult;
+    }
 
     for (const processorOrWorkflow of this.inputProcessors) {
       // Workflows do not currently participate in processLLMRequest.
