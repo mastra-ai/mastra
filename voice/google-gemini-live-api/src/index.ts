@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { ToolsInput } from '@mastra/core/agent';
-import { MastraVoice } from '@mastra/core/voice';
-import type { VoiceEventType, VoiceConfig } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
+import type { ToolsInput, VoiceEventType, VoiceConfig } from '@internal/voice';
+import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { WebSocket as WSType } from 'ws';
 import { WebSocket } from 'ws';
 import { AudioStreamManager, ConnectionManager, ContextManager, AuthManager, EventManager } from './managers';
@@ -26,8 +26,17 @@ type GeminiEventName = Extract<keyof GeminiLiveEventMap, string>;
 /**
  * Default configuration values
  */
-const DEFAULT_MODEL: GeminiVoiceModel = 'gemini-2.0-flash-exp';
+const DEFAULT_MODEL: GeminiVoiceModel = 'gemini-3.1-flash-live-preview';
 const DEFAULT_VOICE: GeminiVoiceName = 'Puck';
+
+// Treats only plain objects (own prototype chain ends at `Object.prototype` or `null`) as
+// proto-struct compatible — `Date`, `Map`, `Set`, `Error`, `RegExp`, and class instances all
+// JSON-serialize to `{}` if forwarded bare and need wrapping for Gemini Live's `response` field.
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
 
 /**
  * Helper class for consistent error handling
@@ -162,8 +171,25 @@ export class GeminiLiveVoice extends MastraVoice<
     const normalizedConfig = GeminiLiveVoice.normalizeConfig(config);
     super(normalizedConfig);
 
-    // Extract options from realtimeConfig
-    this.options = normalizedConfig.realtimeConfig?.options || {};
+    // Seed `this.options` from `realtimeConfig`. Fields on the `realtimeConfig` root
+    // (`model`, `apiKey`, `vertexAI`, `project`, etc.) and on the inner `options` object both
+    // belong in the flat `GeminiLiveVoiceConfig` shape this class reads from; merge with the
+    // explicit inner `options` last so caller intent on the inner object wins on collisions.
+    const realtimeConfig = normalizedConfig.realtimeConfig;
+    if (realtimeConfig) {
+      const { options: innerOptions, ...realtimeConfigRoot } = realtimeConfig;
+      this.options = { ...(realtimeConfigRoot as Partial<GeminiLiveVoiceConfig>), ...(innerOptions || {}) };
+    } else {
+      this.options = {};
+    }
+
+    // `speaker` lives at the `VoiceConfig` root, sibling to `realtimeConfig` — not inside it.
+    // Propagate explicitly so `new GeminiLiveVoice({ speaker: 'Puck', realtimeConfig: { ... } })`
+    // honors the caller's voice. Reading from `normalizedConfig.speaker` would pin `DEFAULT_VOICE`
+    // whenever the flat-config branch normalized without an explicit speaker, so use the raw `config`.
+    if ('realtimeConfig' in config && config.speaker && !this.options.speaker) {
+      this.options.speaker = config.speaker as GeminiVoiceName;
+    }
 
     // Validate API key
     const apiKey = this.options.apiKey;
@@ -866,76 +892,23 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Updating instructions');
       }
 
-      // Update tools if provided
-      if (config.tools !== undefined) {
+      // Mirror `sendInitialConfig`: flatten both tool sources — the explicit `config.tools` arg
+      // and the `addTools()` registry — into a single `function_declarations` container so the
+      // model receives every available tool. The multi-container shape previously emitted here
+      // was accepted by Gemini at setup but suppressed tool_call frames mid-session, reintroducing #17018.
+      const hasRegisteredTools = !!this.tools && Object.keys(this.tools).length > 0;
+      // `config.tools: []` is the explicit-clear signal; honor it even when the `addTools()`
+      // registry is non-empty, otherwise the caller has no way to remove all tools mid-session.
+      const isExplicitClear = Array.isArray(config.tools) && config.tools.length === 0;
+      if (config.tools !== undefined || hasRegisteredTools) {
         hasUpdates = true;
-        if (config.tools.length > 0) {
-          updateMessage.session.tools = config.tools.map((tool: GeminiToolConfig) => ({
-            function_declarations: [
-              {
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
-              },
-            ],
-          }));
+        const declarations = isExplicitClear ? [] : this.buildToolDeclarations(config.tools, this.tools);
+        if (declarations.length > 0) {
+          updateMessage.session.tools = [{ function_declarations: declarations }];
         } else {
-          // Clear tools if empty array provided
           updateMessage.session.tools = [];
         }
-
-        this.log('Updating tools:', config.tools.length, 'tools');
-      }
-
-      // Also check for tools from addTools method
-      if (this.tools && Object.keys(this.tools).length > 0) {
-        hasUpdates = true;
-        const allTools: Array<{
-          function_declarations: Array<{
-            name: string;
-            description?: string;
-            parameters?: unknown;
-          }>;
-        }> = [];
-
-        for (const [toolName, tool] of Object.entries(this.tools)) {
-          try {
-            let parameters: unknown;
-
-            // Handle different tool formats
-            if ('inputSchema' in tool && tool.inputSchema) {
-              // Convert Zod schema to JSON schema if needed
-              if (typeof tool.inputSchema === 'object' && 'safeParse' in tool.inputSchema) {
-                // This is a Zod schema - we need to convert it
-                parameters = this.convertZodSchemaToJsonSchema(tool.inputSchema);
-              } else {
-                parameters = tool.inputSchema;
-              }
-            } else if ('parameters' in tool && tool.parameters) {
-              parameters = tool.parameters;
-            } else {
-              // Default empty object if no schema found
-              parameters = { type: 'object', properties: {} };
-            }
-
-            allTools.push({
-              function_declarations: [
-                {
-                  name: toolName,
-                  description: tool.description || `Tool: ${toolName}`,
-                  parameters,
-                },
-              ],
-            });
-          } catch (error) {
-            this.log('Failed to process tool for session update', { toolName, error });
-          }
-        }
-
-        if (allTools.length > 0) {
-          updateMessage.session.tools = allTools;
-          this.log('Updating tools from addTools method:', allTools.length, 'tools');
-        }
+        this.log('Updating tools:', declarations.length, 'tools');
       }
 
       // Update session configuration if provided
@@ -1594,13 +1567,21 @@ export class GeminiLiveVoice extends MastraVoice<
         result = { error: 'Tool has no execute function' };
       }
 
+      // Gemini Live's `response` proto field is a struct, not repeating. Tools returning arrays
+      // or primitives close the session with `1007 Unknown name "response": Proto field is not
+      // repeating`. Wrap everything except plain objects in `{ result }` so the field is always a
+      // struct — `Date`, `Map`, `Set`, `Error`, and class instances all serialize as `{}` if sent
+      // bare (their own enumerable properties are empty), losing the tool's data silently.
+      const responsePayload = isPlainObject(result) ? result : { result };
+
       // Send tool result back to Gemini Live API
       const toolResultMessage = {
         toolResponse: {
           functionResponses: [
             {
               id: toolId,
-              response: result,
+              name: toolName,
+              response: responsePayload,
             },
           ],
         },
@@ -1618,6 +1599,7 @@ export class GeminiLiveVoice extends MastraVoice<
           functionResponses: [
             {
               id: toolId,
+              name: toolName,
               response: { error: errorMessage },
             },
           ],
@@ -1733,32 +1715,35 @@ export class GeminiLiveVoice extends MastraVoice<
       throw new Error('WebSocket not connected');
     }
 
-    // Live API format - based on the official documentation
+    // Live API setup message. Keys must be snake_case to match Gemini Live's wire format —
+    // camelCase keys cause native-audio models to reject the setup with
+    // `1007 Cannot extract voices from a non-audio request`. Matches the `UpdateMessage` shape
+    // already used by this package's `session.update` path.
     interface LiveGenerateContentSetup {
       model?: string;
-      generationConfig?: {
+      generation_config?: {
         temperature?: number;
-        topK?: number;
-        topP?: number;
-        maxOutputTokens?: number;
-        stopSequences?: string[];
-        candidateCount?: number;
-        responseModalities?: string[];
-        speechConfig?: {
-          voiceConfig?: {
-            prebuiltVoiceConfig?: {
-              voiceName?: string;
+        top_k?: number;
+        top_p?: number;
+        max_output_tokens?: number;
+        stop_sequences?: string[];
+        candidate_count?: number;
+        response_modalities?: ('AUDIO' | 'TEXT')[];
+        speech_config?: {
+          voice_config?: {
+            prebuilt_voice_config?: {
+              voice_name?: string;
             };
           };
         };
       };
-      systemInstruction?: {
+      system_instruction?: {
         parts: Array<{
           text: string;
         }>;
       };
       tools?: Array<{
-        functionDeclarations: Array<{
+        function_declarations: Array<{
           name: string;
           description?: string;
           parameters?: unknown;
@@ -1766,85 +1751,49 @@ export class GeminiLiveVoice extends MastraVoice<
       }>;
     }
 
+    // Native-audio models require `response_modalities: ["AUDIO"]` at setup time. This is a voice
+    // library, so AUDIO is the only sensible session-level default; callers needing a TEXT-only
+    // turn can override per-turn via `GeminiLiveVoiceOptions.responseModalities` on `speak()`.
+    const generationConfig: NonNullable<LiveGenerateContentSetup['generation_config']> = {
+      response_modalities: ['AUDIO'],
+    };
+
+    // Only attach `voice_config` when the caller supplied a `speaker`. Omitting the field lets
+    // Gemini Live pick its server-side default and avoids pinning a Mastra-side preference.
+    if (this.options.speaker) {
+      generationConfig.speech_config = {
+        voice_config: {
+          prebuilt_voice_config: {
+            voice_name: this.options.speaker,
+          },
+        },
+      };
+    }
+
     // Build the Live API setup message
     const setupMessage: { setup: LiveGenerateContentSetup } = {
       setup: {
         model: this.resolveModelIdentifier(),
+        generation_config: generationConfig,
       },
     };
 
     // Add system instructions if provided
     if (this.options.instructions) {
-      setupMessage.setup.systemInstruction = {
+      setupMessage.setup.system_instruction = {
         parts: [{ text: this.options.instructions }],
       };
     }
 
-    // Collect tools from both options and addTools method
-    const allTools: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }> = [];
+    // Gemini Live expects a single `tools` entry whose `function_declarations` array holds every
+    // tool. The previous shape (one entry per tool, camelCase `functionDeclarations`) was accepted
+    // at setup but the model never emitted tool_call frames back to the client.
+    const functionDeclarations = this.buildToolDeclarations(this.options.tools, this.tools);
 
-    // Add tools from options (GeminiToolConfig[])
-    if (this.options.tools && this.options.tools.length > 0) {
-      for (const tool of this.options.tools) {
-        allTools.push({
-          functionDeclarations: [
-            {
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.parameters,
-            },
-          ],
-        });
-      }
-    }
-
-    // Add tools from addTools method (ToolsInput)
-    if (this.tools && Object.keys(this.tools).length > 0) {
-      for (const [toolName, tool] of Object.entries(this.tools)) {
-        try {
-          let parameters: unknown;
-
-          // Handle different tool formats
-          if ('inputSchema' in tool && tool.inputSchema) {
-            // Convert Zod schema to JSON schema if needed
-            if (typeof tool.inputSchema === 'object' && 'safeParse' in tool.inputSchema) {
-              // This is a Zod schema - we need to convert it
-              parameters = this.convertZodSchemaToJsonSchema(tool.inputSchema);
-            } else {
-              parameters = tool.inputSchema;
-            }
-          } else if ('parameters' in tool && tool.parameters) {
-            parameters = tool.parameters;
-          } else {
-            // Default empty object if no schema found
-            parameters = { type: 'object', properties: {} };
-          }
-
-          allTools.push({
-            functionDeclarations: [
-              {
-                name: toolName,
-                description: tool.description || `Tool: ${toolName}`,
-                parameters,
-              },
-            ],
-          });
-        } catch (error) {
-          this.log('Failed to process tool', { toolName, error });
-        }
-      }
-    }
-
-    // Add tools to setup message if any exist
-    if (allTools.length > 0) {
-      setupMessage.setup.tools = allTools;
-      this.log('Including tools in setup message', { toolCount: allTools.length });
+    // Emit tools as a single container with all declarations
+    if (functionDeclarations.length > 0) {
+      setupMessage.setup.tools = [{ function_declarations: functionDeclarations }];
+      this.log('Including tools in setup message', { toolCount: functionDeclarations.length });
     }
 
     this.log('Sending Live API setup message:', setupMessage);
@@ -2033,32 +1982,67 @@ export class GeminiLiveVoice extends MastraVoice<
   }
 
   /**
+   * Flatten both tool sources (constructor `tools` option and runtime `addTools()` registry) into
+   * the single declaration array Gemini Live expects inside `tools[0].function_declarations`.
+   * Used by both `sendInitialConfig()` and `updateSessionConfig()` so mid-session tool updates
+   * stay on the same shape as setup-time tools.
+   * @private
+   */
+  private buildToolDeclarations(
+    configTools: GeminiToolConfig[] | undefined,
+    registeredTools: ToolsInput | undefined,
+  ): Array<{ name: string; description?: string; parameters?: unknown }> {
+    const declarations: Array<{ name: string; description?: string; parameters?: unknown }> = [];
+
+    if (configTools && configTools.length > 0) {
+      for (const tool of configTools) {
+        declarations.push({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        });
+      }
+    }
+
+    if (registeredTools && Object.keys(registeredTools).length > 0) {
+      for (const [toolName, tool] of Object.entries(registeredTools)) {
+        try {
+          let parameters: unknown;
+          if ('inputSchema' in tool && tool.inputSchema) {
+            if (typeof tool.inputSchema === 'object' && 'safeParse' in tool.inputSchema) {
+              parameters = this.convertZodSchemaToJsonSchema(tool.inputSchema);
+            } else {
+              parameters = tool.inputSchema;
+            }
+          } else if ('parameters' in tool && tool.parameters) {
+            parameters = tool.parameters;
+          } else {
+            parameters = { type: 'object', properties: {} };
+          }
+
+          declarations.push({
+            name: toolName,
+            description: tool.description || `Tool: ${toolName}`,
+            parameters,
+          });
+        } catch (error) {
+          this.log('Failed to process tool', { toolName, error });
+        }
+      }
+    }
+
+    return declarations;
+  }
+
+  /**
    * Convert Zod schema to JSON Schema for tool parameters
    * @private
    */
-  private convertZodSchemaToJsonSchema(schema: any): unknown {
+  private convertZodSchemaToJsonSchema(schema: unknown): unknown {
     try {
-      // Try to use the schema's toJSON method if available
-      if (typeof schema.toJSON === 'function') {
-        return schema.toJSON();
-      }
-
-      // Try to use the schema's _def property if available (Zod internal)
-      if (schema._def) {
-        return this.convertZodDefToJsonSchema(schema._def);
-      }
-
-      // If it's already a plain object, return as is
-      if (typeof schema === 'object' && !schema.safeParse) {
-        return schema;
-      }
-
-      // Default fallback
-      return {
-        type: 'object',
-        properties: {},
-        description: schema.description || '',
-      };
+      return this.sanitizeToolParameters(
+        standardSchemaToJSONSchema(toStandardSchema(schema as never), { io: 'input' }),
+      );
     } catch (error) {
       this.log('Failed to convert Zod schema to JSON schema', { error, schema });
       return {
@@ -2069,67 +2053,26 @@ export class GeminiLiveVoice extends MastraVoice<
     }
   }
 
-  /**
-   * Convert Zod definition to JSON Schema
-   * @private
-   */
-  private convertZodDefToJsonSchema(def: any): unknown {
-    switch (def.typeName) {
-      case 'ZodString':
-        return {
-          type: 'string',
-          description: def.description || '',
-        };
-      case 'ZodNumber':
-        return {
-          type: 'number',
-          description: def.description || '',
-        };
-      case 'ZodBoolean':
-        return {
-          type: 'boolean',
-          description: def.description || '',
-        };
-      case 'ZodArray':
-        return {
-          type: 'array',
-          items: this.convertZodDefToJsonSchema(def.type._def),
-          description: def.description || '',
-        };
-      case 'ZodObject':
-        const properties: Record<string, unknown> = {};
-        const required: string[] = [];
-
-        for (const [key, value] of Object.entries(def.shape())) {
-          properties[key] = this.convertZodDefToJsonSchema((value as any)._def);
-          if ((value as any)._def.typeName === 'ZodOptional') {
-            // Optional field, don't add to required
-          } else {
-            required.push(key);
-          }
-        }
-
-        return {
-          type: 'object',
-          properties,
-          required: required.length > 0 ? required : undefined,
-          description: def.description || '',
-        };
-      case 'ZodOptional':
-        return this.convertZodDefToJsonSchema(def.innerType._def);
-      case 'ZodEnum':
-        return {
-          type: 'string',
-          enum: def.values,
-          description: def.description || '',
-        };
-      default:
-        return {
-          type: 'object',
-          properties: {},
-          description: def.description || '',
-        };
+  private sanitizeToolParameters(schema: unknown): unknown {
+    if (Array.isArray(schema)) {
+      return schema.map(item => this.sanitizeToolParameters(item));
     }
+
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+
+    const sanitized: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(schema)) {
+      if (key === '$schema' || key === 'additionalProperties') {
+        continue;
+      }
+
+      sanitized[key] = this.sanitizeToolParameters(value);
+    }
+
+    return sanitized;
   }
 
   /**

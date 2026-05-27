@@ -2,6 +2,7 @@ packages:
   - mastracode
   - docs
   - packages/_vendored/*
+  - packages/_internals/*
   - packages/*
   - deployers/*
   - stores/*
@@ -33,7 +34,7 @@ catalog:
   react-dom: ^19.2.5
   typescript: ^6.0.3
   vitest: 4.1.5
-  zod: ^4.3.6
+  zod: ^4.4.3
 
 patchedDependencies:
   '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
@@ -55,5 +56,9 @@ trustPolicyExclude:
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
   # but it is the official fix published on the @clerk/shared latest-v5 tag.
   - '@clerk/shared@3.47.4'
+  # Renovate cannot refresh lockfiles while pnpm rejects these official package
+  # versions as trust downgrades.
+  - 'effect@4.0.0-beta.59'
+  - 'tinyexec@1.2.2'
   # 0.7.4 is published with provenance attestation rather than trusted publisher.
   - 'prettier-plugin-tailwindcss@0.7.4'

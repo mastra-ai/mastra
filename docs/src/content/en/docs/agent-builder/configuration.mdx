@@ -1,0 +1,157 @@
+---
+title: "Configuration | Agent Builder"
+description: Configure the Agent Builder by toggling UI sections, pinning admin defaults, and constraining tool, agent, and workflow pickers.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Configuration
+
+:::note
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+:::
+
+The Agent Builder is configured through `MastraEditor.builder`. Two top-level keys control its behavior: `features` toggles UI visibility and `configuration` pins admin-controlled defaults onto every new agent.
+
+## Quickstart
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    features: {
+      agent: { browser: false },
+    },
+    configuration: {
+      agent: {
+        memory: { observationalMemory: true },
+      },
+    },
+  },
+})
+```
+
+This hides the browser tab in the Builder UI and pins observational memory as the default for every Builder-created agent.
+
+## Feature toggles
+
+`builder.features.agent` controls which sections appear in the Agent Builder UI. Set a key to `false` to hide the corresponding surface.
+
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: true,
+    features: {
+      agent: {
+        tools: true,
+        agents: true,
+        workflows: true,
+        skills: true,
+        memory: true,
+        model: true,
+        browser: true,
+        avatarUpload: true,
+        favorites: true,
+      },
+    },
+  },
+})
+```
+
+The shipping UI consumes these `AgentFeatures` keys: `tools`, `agents`, `workflows`, `skills`, `memory`, `model`, `browser`, `avatarUpload`, and `favorites`. See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) for the full schema.
+
+## Admin defaults
+
+`builder.configuration.agent` pins admin-controlled defaults onto every agent the Builder produces.
+
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        models: {
+          allowed: [
+            { provider: 'openai', modelId: 'gpt-5.4-mini' },
+            { provider: 'openai', modelId: 'gpt-5.4' },
+            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+          ],
+        },
+      },
+    },
+  },
+})
+```
+
+`configuration.agent` accepts `models`, `memory`, `workspace`, `browser`, `tools`, `agents`, and `workflows`. See the [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) for the full shape.
+
+## Making tools, agents, and workflows available
+
+The Builder picks from whatever you register on the `Mastra` instance. Tools registered through `Mastra({ tools })`, agents registered through `Mastra({ agents })`, and workflows registered through `Mastra({ workflows })` are all candidates for Builder-created agents.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MastraEditor } from '@mastra/editor'
+import { createBuilderAgent } from '@mastra/editor/ee'
+import { weatherInfo } from './tools/weather-info'
+import { webSearch } from './tools/web-search'
+
+export const mastra = new Mastra({
+  tools: {
+    weatherInfo,
+    webSearch,
+    // add MCP tools or additional tools here
+  },
+  agents: {
+    builderAgent: createBuilderAgent(),
+    // add additional agents here
+  },
+  workflows: {
+    // add workflows here
+  },
+  editor: new MastraEditor({
+    builder: { enabled: true },
+  }),
+})
+```
+
+With no `configuration.agent.tools.allowed` set, both `weather-info` and `web-search` appear in the Builder's tool picker. End users can attach either tool to any agent they create.
+
+Entries match on `tool.id`, `Agent.id`, or `workflow.id` — the string the entity reports at runtime, not the export name.
+
+MCP tools work the same way: load them via `MCPClient.getTools()` and spread the result into the `tools` map.
+
+## Tool, agent, and workflow allowlists
+
+`configuration.agent.tools`, `configuration.agent.agents`, and `configuration.agent.workflows` constrain which registered entries appear in the Builder's pickers. Allowlist semantics are the same for all three:
+
+- **Omitted**: unrestricted. The picker shows every registered entry.
+- **`allowed: []`**: explicit lockdown. The picker is empty.
+- **`allowed: [...ids]`**: the picker shows only the listed IDs.
+
+Unknown IDs are dropped and surfaced as warnings through `getModelPolicyWarnings()` and the server logs.
+
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        tools: { allowed: ['weather-info', 'web-search'] },
+        agents: { allowed: ['weather-agent'] },
+        workflows: { allowed: ['greet-workflow'] },
+      },
+    },
+  },
+})
+```
+
+## Related
+
+- [Model policy](/docs/agent-builder/model-policy) — pin the allowed models and default model.
+- [Memory](/docs/agent-builder/memory) — set the default memory shape for new agents.
+- [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) — full property list.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — every field on `configuration.agent`.

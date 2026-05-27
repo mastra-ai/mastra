@@ -1,7 +1,8 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { Tool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import {
   extractToolCalls,
   getAssistantMessageFromRunOutput,
@@ -15,16 +16,18 @@ export interface ToolCallAccuracyOptions {
   availableTools: Tool[];
 }
 
-const analyzeOutputSchema = z.object({
-  evaluations: z.array(
-    z.object({
-      toolCalled: z.string(),
-      wasAppropriate: z.boolean(),
-      reasoning: z.string(),
-    }),
-  ),
-  missingTools: z.array(z.string()).optional(),
-});
+const analyzeOutputSchema = compileSchema(
+  z.object({
+    evaluations: z.array(
+      z.object({
+        toolCalled: z.string(),
+        wasAppropriate: z.boolean(),
+        reasoning: z.string(),
+      }),
+    ),
+    missingTools: z.array(z.string()).optional(),
+  }),
+);
 
 export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolCallAccuracyOptions) {
   const toolDefinitions = availableTools.map(tool => `${tool.id}: ${tool.description}`).join('\n');
