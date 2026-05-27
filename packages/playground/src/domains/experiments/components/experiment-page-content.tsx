@@ -219,12 +219,12 @@ export function ExperimentPageContent({
 
   const resultsListColumns = useMemo(
     () => [
-      { name: 'itemId', label: 'Item ID', size: '5rem' },
-      { name: 'status', label: 'Status', size: '3rem' },
-      { name: 'input', label: 'Input', size: '1fr' },
-      ...(!featuredResultId ? scorerIds.map(id => ({ name: id, label: id, size: '1fr' })) : []),
+      { name: 'itemId', label: 'Item ID', size: '7rem' },
+      { name: 'status', label: 'Status', size: '5rem' },
+      { name: 'input', label: 'Input', size: 'minmax(15rem,1fr)' },
+      ...scorerIds.map(id => ({ name: id, label: id, size: '12rem' })),
     ],
-    [featuredResultId, scorerIds],
+    [scorerIds],
   );
 
   return (
@@ -273,7 +273,7 @@ export function ExperimentPageContent({
               onResultClick={handleResultClick}
               columns={resultsListColumns}
               scoresByItemId={scoresByExperimentId}
-              scorerIds={!featuredResultId ? scorerIds : undefined}
+              scorerIds={scorerIds}
               setEndOfListElement={setEndOfListElement}
               isFetchingNextPage={isFetchingNextPage}
               hasNextPage={hasNextPage}

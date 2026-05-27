@@ -1339,7 +1339,7 @@ describe('Agent Routes Authorization', () => {
 
       (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-id' };
+        return { accepted: true, runId: 'signal-run-with-context' };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
@@ -1351,6 +1351,7 @@ describe('Agent Routes Authorization', () => {
         threadId: 'signal-thread-with-context',
         ifIdle: {
           streamOptions: {
+            instructions: 'Use the fixture.',
             requestContext: {
               fixture: 'text-stream',
               [MASTRA_RESOURCE_ID_KEY]: 'user-b',
@@ -1359,7 +1360,9 @@ describe('Agent Routes Authorization', () => {
         },
       } as any);
 
-      expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
+      expect(result).toMatchObject({ accepted: true, runId: 'signal-run-with-context' });
+      expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
     });
@@ -1434,6 +1437,90 @@ describe('Agent Routes Authorization', () => {
       await reader.cancel();
       expect(abort).toHaveBeenCalledTimes(1);
       expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('should emit heartbeat comments while a subscription stream is idle', async () => {
+      vi.useFakeTimers();
+      try {
+        await mockMemory.createThread({
+          threadId: 'subscribe-thread-heartbeat',
+          resourceId: 'user-a',
+          title: 'Subscribe Heartbeat',
+        });
+        const abort = vi.fn(() => true);
+        const unsubscribe = vi.fn();
+
+        (mockAgent as any).subscribeToThread = vi.fn(async () => ({
+          activeRunId: () => null,
+          abort,
+          unsubscribe,
+          stream: (async function* () {
+            await new Promise(() => {});
+          })(),
+        }));
+
+        const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-a',
+          threadId: 'subscribe-thread-heartbeat',
+        } as any)) as ReadableStream;
+
+        const reader = stream.getReader();
+        const read = reader.read();
+        await vi.advanceTimersByTimeAsync(25_000);
+
+        await expect(read).resolves.toEqual({ value: ': heartbeat\n\n', done: false });
+        await reader.cancel();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should clear heartbeat timers when an idle subscription stream is aborted', async () => {
+      vi.useFakeTimers();
+      try {
+        await mockMemory.createThread({
+          threadId: 'subscribe-thread-abort-heartbeat',
+          resourceId: 'user-a',
+          title: 'Subscribe Abort Heartbeat',
+        });
+        const abortController = new AbortController();
+        const abort = vi.fn(() => true);
+        const unsubscribe = vi.fn();
+
+        (mockAgent as any).subscribeToThread = vi.fn(async () => ({
+          activeRunId: () => null,
+          abort,
+          unsubscribe,
+          stream: (async function* () {
+            await new Promise(() => {});
+          })(),
+        }));
+
+        const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: abortController.signal,
+          resourceId: 'user-a',
+          threadId: 'subscribe-thread-abort-heartbeat',
+        } as any)) as ReadableStream;
+
+        const reader = stream.getReader();
+        abortController.abort();
+        await Promise.resolve();
+
+        expect(abort).toHaveBeenCalledTimes(1);
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
+        await vi.advanceTimersByTimeAsync(25_000);
+        await expect(reader.read()).resolves.toEqual({ value: undefined, done: true });
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should reject subscribing to a thread owned by a different resource', async () => {

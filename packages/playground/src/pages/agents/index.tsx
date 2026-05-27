@@ -1,7 +1,10 @@
 import {
+  AgentIcon,
+  Button,
   ErrorState,
   ListSearch,
   NoDataPageLayout,
+  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
@@ -9,14 +12,19 @@ import {
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { useState } from 'react';
+import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
 import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useLinkComponent } from '@/lib/framework';
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
   const [search, setSearch] = useState('');
+  const { canCreateAgent, createRoute } = useCanCreateAgent();
+  const { navigate } = useLinkComponent();
+  const showCreateCta = canCreateAgent && Boolean(createRoute);
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -54,6 +62,21 @@ function Agents() {
     <PageLayout>
       <AgentHeaderCreateAction />
       <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title isLoading={isLoading}>
+                <AgentIcon /> Agents
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
+            {showCreateCta && <Button onClick={() => navigate(createRoute)}>Create an agent</Button>}
+            <Button onClick={() => window.open('https://mastra.ai/en/docs/agents/overview', '_blank')}>
+              Go to Agents documentation
+            </Button>
+          </PageLayout.Column>
+        </PageLayout.Row>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
         </div>

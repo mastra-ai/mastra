@@ -13,6 +13,7 @@
  */
 export const RESOURCES = [
   'a2a',
+  'agent-builder',
   'agents',
   'auth',
   'background-tasks',
@@ -89,6 +90,8 @@ export const PERMISSION_PATTERNS = {
   '*:write': '*:write',
   /** Full access to agent-to-agent communication */
   'a2a:*': 'a2a:*',
+  /** Full access to agent builder */
+  'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
   /** Full access to auth */
@@ -153,6 +156,12 @@ export const PERMISSION_PATTERNS = {
   'a2a:read': 'a2a:read',
   /** Create and modify agent-to-agent communication */
   'a2a:write': 'a2a:write',
+  /** Execute agent builder */
+  'agent-builder:execute': 'agent-builder:execute',
+  /** View agent builder */
+  'agent-builder:read': 'agent-builder:read',
+  /** Create and modify agent builder */
+  'agent-builder:write': 'agent-builder:write',
   /** Create agents */
   'agents:create': 'agents:create',
   /** Delete agents */
@@ -337,6 +346,9 @@ export type PermissionPattern = keyof typeof PERMISSION_PATTERNS;
 export const PERMISSIONS = [
   'a2a:read',
   'a2a:write',
+  'agent-builder:execute',
+  'agent-builder:read',
+  'agent-builder:write',
   'agents:create',
   'agents:delete',
   'agents:execute',
@@ -432,6 +444,12 @@ export const MastraFGAPermissions = {
   A2A_READ: 'a2a:read',
   /** Create and modify agent-to-agent communication */
   A2A_WRITE: 'a2a:write',
+  /** Execute agent builder */
+  AGENT_BUILDER_EXECUTE: 'agent-builder:execute',
+  /** View agent builder */
+  AGENT_BUILDER_READ: 'agent-builder:read',
+  /** Create and modify agent builder */
+  AGENT_BUILDER_WRITE: 'agent-builder:write',
   /** Create agents */
   AGENTS_CREATE: 'agents:create',
   /** Delete agents */

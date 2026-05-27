@@ -16,6 +16,7 @@ import { DataListRoot } from './data-list-root';
 import { DataListRow } from './data-list-row';
 import { DataListRowButton } from './data-list-row-button';
 import { DataListRowLink } from './data-list-row-link';
+import { DataListRowStatic } from './data-list-row-static';
 import { DataListSpacer } from './data-list-spacer';
 import { DataListSubheader } from './data-list-subheader';
 import { DataListSubHeading } from './data-list-subheading';
@@ -37,6 +38,7 @@ export const DataList = Object.assign(DataListRoot, {
   Row: DataListRow,
   RowButton: DataListRowButton,
   RowLink: DataListRowLink,
+  RowStatic: DataListRowStatic,
   Cell: DataListCell,
   TextCell: DataListTextCell,
   NameCell: DataListNameCell,

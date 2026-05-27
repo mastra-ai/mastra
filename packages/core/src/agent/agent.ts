@@ -12,7 +12,7 @@ import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
-import type { ChannelConfig } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -82,6 +82,7 @@ import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult } from '../workflows/types';
+import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
@@ -811,6 +812,9 @@ export class Agent<
     }
     this.#agentChannels = agentChannels;
     agentChannels.__setAgent(this);
+    if (this.logger) {
+      agentChannels.__setLogger(this.logger);
+    }
   }
 
   /**
@@ -2606,6 +2610,7 @@ export class Agent<
   __registerPrimitives(p: MastraPrimitives) {
     if (p.logger) {
       this.__setLogger(p.logger);
+      this.#agentChannels?.__setLogger(p.logger);
     }
 
     // Store primitives for later use when creating LLM instances
@@ -4457,7 +4462,13 @@ export class Agent<
                   });
                 }
 
-                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
+                result = {
+                  text: generateResult.text,
+                  subAgentThreadId,
+                  subAgentResourceId,
+                  subAgentToolResults,
+                  usage: generateResult.usage,
+                };
               } else if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 resolvedModelVersion === 'v1'
@@ -4470,7 +4481,10 @@ export class Agent<
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
                 });
-                result = { text: generateResult.text };
+                result = {
+                  text: generateResult.text,
+                  ...(generateResult.usage ? { usage: generateResult.usage } : {}),
+                };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
@@ -4618,11 +4632,13 @@ export class Agent<
                 // Use streamResult.text (a delayed promise) which resolves to the
                 // output-processor-modified text, rather than the raw accumulated text-deltas.
                 const processedText = await streamResult.text;
+                const subAgentUsage = await streamResult.usage;
                 result = {
                   text: processedText,
                   subAgentThreadId,
                   subAgentResourceId,
                   subAgentToolResults,
+                  usage: subAgentUsage,
                 };
               } else {
                 if (typeof resolvedAgent.streamLegacy !== 'function') {
@@ -4652,6 +4668,10 @@ export class Agent<
 
                 result = { text: fullText };
               }
+
+              // Note: `usage` is included in `result` for successful generate, generateLegacy,
+              // and stream code paths. The `streamLegacy` path accumulates text only and won't
+              // have `usage`. Error/rejected delegation callbacks may also omit it.
 
               // Call onDelegationComplete hook if provided
               if (delegation?.onDelegationComplete) {
@@ -5635,13 +5655,13 @@ export class Agent<
       workflowRun = await workflowsStore.getWorkflowRunById({ workflowName, runId });
     }
     const workflowRunSnapshot =
-      workflowRun?.snapshot && typeof workflowRun.snapshot === 'object' ? workflowRun.snapshot : undefined;
+      workflowRun?.snapshot && typeof workflowRun.snapshot === 'object'
+        ? (workflowRun.snapshot as { status?: unknown })
+        : undefined;
     const existingSnapshot =
-      workflowRunSnapshot ??
-      (await workflowsStore?.loadWorkflowSnapshot({
-        workflowName,
-        runId,
-      }));
+      workflowRunSnapshot?.status === 'suspended'
+        ? workflowRunSnapshot
+        : await waitForSuspendedSnapshot(workflowsStore, workflowName, runId);
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;

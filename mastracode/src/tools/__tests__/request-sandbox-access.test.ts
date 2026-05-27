@@ -214,7 +214,7 @@ describe('request_access', () => {
 
     expect(registerSandboxAccess).toHaveBeenCalledWith(
       expect.objectContaining({
-        requestId: expect.stringMatching(/^sandbox_/),
+        requestId: 'tool-1',
         semanticType: 'file',
         reason: 'need to read config',
         payload: { path: '/outside/project/dir' },
