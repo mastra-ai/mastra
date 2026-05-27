@@ -218,8 +218,29 @@ await subscription.processDataStream({
   onChunk: chunk => {
     console.log(chunk)
   },
+  reconnect: true,
 })
 ```
+
+Use `reconnect: true` for long-lived subscriptions. The client resubscribes when the stream closes or a reconnect request fails, such as after a proxy idle timeout or a dropped network connection.
+
+## Keep custom SSE subscriptions alive
+
+If you expose your own Server-Sent Events (SSE) endpoint for thread subscriptions, send periodic heartbeat frames while the stream is idle. This keeps browsers, proxies, and load balancers from closing the connection before the next signal or model chunk arrives.
+
+The following example sends an SSE comment every 25 seconds:
+
+```typescript title="src/api/subscribe.ts"
+const heartbeat = setInterval(() => {
+  controller.enqueue(encoder.encode(': keep-alive\n\n'))
+}, 25_000)
+
+request.signal.addEventListener('abort', () => {
+  clearInterval(heartbeat)
+})
+```
+
+Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle disconnects, while reconnects recover when the network or runtime still closes the stream.
 
 ## Related
 

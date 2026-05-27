@@ -2,13 +2,10 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { z } from 'zod';
 import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
-import type { stateSchema } from '../schema';
+import type { MastraCodeState } from '../schema';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
-
-type MastraCodeState = z.infer<typeof stateSchema>;
 
 /** Minimal shape for tools passed to createDynamicTools. */
 type ToolLike = {
