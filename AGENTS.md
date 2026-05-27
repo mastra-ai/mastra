@@ -5,7 +5,6 @@ For work in packages read package local packages/<name>/AGENTS.md first
 turborepo pnpm workspace
 packages use strict TypeScript
 vitest tests are colocated with source
-When running examples locally, use `pnpm mastra dev` instead of `mastra dev` so the linked workspace version is used instead of any global install.
 When you need to add a model name or ID to examples, changesets, tests, or comments, use one of the placeholder tokens from docs/src/plugins/remark-model-tokens/models.ts
 
 Prefer narrowest build test lint typecheck for packages
