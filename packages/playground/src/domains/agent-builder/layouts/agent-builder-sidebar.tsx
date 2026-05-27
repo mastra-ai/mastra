@@ -1,4 +1,4 @@
-import { AgentIcon, LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
+import { AgentIcon, LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -48,7 +48,7 @@ type AgentBuilderSidebarProps = {
 
 export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSidebarProps = {}) {
   const { Link } = useLinkComponent();
-  const { state: contextState } = useMainSidebar();
+  const { state: contextState, isMobile } = useMainSidebar();
   const { pathname } = useLocation();
   const features = useBuilderAgentFeatures();
   const { canManageSkills, canUseFavorites } = useBuilderAgentAccess();
@@ -73,35 +73,52 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
   return (
     <MainSidebar className="h-full">
       {!forceExpanded && (
-        <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
+        <div className="pt-3 mb-4">
           {state === 'collapsed' ? (
             <div className="flex flex-col gap-3 items-center">
-              <Link href="/agents" aria-label="Back to Mastra Studio" className="ml-3">
-                <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              </Link>
+              <div className="relative grid place-items-center size-9">
+                <Link
+                  href="/agents"
+                  aria-label="Back to Mastra Studio"
+                  className={cn('transition-opacity duration-150', !isMobile && 'group-hover/sidebar:opacity-0')}
+                >
+                  <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+                </Link>
+                {!isMobile && (
+                  <div className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+                    <MainSidebar.Trigger />
+                  </div>
+                )}
+              </div>
               {isUserAuthenticated && <AuthStatus />}
             </div>
           ) : isUserAuthenticated ? (
             <span className="flex items-center justify-between pl-3 pr-2">
-              <Link
-                href="/agents"
-                aria-label="Back to Mastra Studio"
-                className="flex items-center gap-2 rounded-sm hover:opacity-80"
-              >
-                <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                <span className="font-serif text-sm">Mastra Studio</span>
-              </Link>
+              <span className="flex items-center gap-2 flex-1 min-w-0">
+                <Link
+                  href="/agents"
+                  aria-label="Back to Mastra Studio"
+                  className="flex items-center gap-2 rounded-sm hover:opacity-80 min-w-0"
+                >
+                  <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+                  <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+                </Link>
+                {!isMobile && <MainSidebar.Trigger />}
+              </span>
               <AuthStatus />
             </span>
           ) : (
-            <Link
-              href="/agents"
-              aria-label="Back to Mastra Studio"
-              className="flex items-center gap-2 pl-3 rounded-sm hover:opacity-80"
-            >
-              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-serif text-sm">Mastra Studio</span>
-            </Link>
+            <span className="flex items-center gap-2 pl-3 pr-2">
+              <Link
+                href="/agents"
+                aria-label="Back to Mastra Studio"
+                className="flex items-center gap-2 rounded-sm hover:opacity-80 min-w-0"
+              >
+                <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+                <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+              </Link>
+              {!isMobile && <MainSidebar.Trigger />}
+            </span>
           )}
         </div>
       )}
@@ -145,10 +162,6 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
               </MainSidebar.NavSection>
             </>
           )}
-          <MainSidebar.NavSeparator />
-          <div className="flex justify-end pb-3">
-            <MainSidebar.Trigger />
-          </div>
         </MainSidebar.Bottom>
       )}
     </MainSidebar>
