@@ -24,7 +24,7 @@ export const agent = new Agent({
   name: 'Test Agent',
   // highlight-next-line
   instructions: 'You are a helpful assistant that provides concise answers.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 // System message object
@@ -37,7 +37,7 @@ export const agent2 = new Agent({
     content: 'You are an expert programmer',
   },
   // highlight-end
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 // Array of system messages
@@ -50,7 +50,7 @@ export const agent3 = new Agent({
     { role: 'system', content: 'You have expertise in TypeScript' },
   ],
   // highlight-end
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -75,7 +75,7 @@ export const agent = new Agent({
     },
     // highlight-end
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -104,7 +104,7 @@ export const agent = new Agent({
       },
     },
   ],
-  model: 'anthropic/claude-sonnet-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
 })
 ```
 
@@ -140,18 +140,26 @@ agent.sendSignal(
 )
 ```
 
-Use a custom signal type for contextual messages that should reach the model as XML-wrapped context instead of normal user input:
+Use `attributes` to identify different users in a shared thread. The signal type and attributes are rendered as XML so the model can distinguish who said what:
 
 ```typescript
 agent.sendSignal(
   {
-    type: 'system-reminder',
-    contents: 'Continue from the previous tool result.',
-    attributes: { reminderType: 'tool-result' },
+    type: 'user',
+    contents: 'Can we simplify the API surface?',
+    attributes: { name: 'Devin', from: 'slack' },
   },
   { resourceId: 'user-123', threadId: 'thread-abc' },
 )
 ```
+
+The model receives this as:
+
+```xml
+<user name="Devin" from="slack">Can we simplify the API surface?</user>
+```
+
+The UI sees just the message contents but can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
 
 ### `sendSignal(signal, options)`
 
@@ -161,9 +169,9 @@ Sends a signal to an active run or memory thread.
   content={[
   {
     name: 'signal',
-    type: "{ type: 'user-message'; contents: MessageListInput } | { type: string; contents: string }",
+    type: "{ type: 'user-message' | 'system-reminder' | string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
     description:
-      '`user-message` signals are treated as user input. Other signal types are converted to XML context before the next model call.',
+      '`user-message` signals without attributes are treated as plain user input. All other signals — including `user-message` with `attributes`, `system-reminder`, and custom types — are wrapped in an XML element named after the signal type with `attributes` rendered as XML attributes (e.g. `<user name="Devin" from="slack">message</user>`). The model sees the XML; the UI sees the raw contents and can read `attributes` for custom rendering. `providerOptions` is attached to the resulting prompt turn and persisted on the stored signal message.',
   },
   {
     name: 'options.runId',

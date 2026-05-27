@@ -137,10 +137,10 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/signals',
-          label: 'Signals',
+          id: 'agents/acp',
+          label: 'ACP',
           customProps: {
-            tags: ['alpha'],
+            tags: ['new'],
           },
         },
         {
@@ -150,10 +150,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['alpha'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/response-caching',
           label: 'Response Caching',
           customProps: {
-            tags: ['experimental'],
+            tags: ['alpha'],
           },
         },
         {
@@ -205,6 +213,11 @@ const sidebars = {
           type: 'doc',
           id: 'memory/memory-processors',
           label: 'Memory Processors',
+        },
+        {
+          type: 'doc',
+          id: 'memory/multi-user-threads',
+          label: 'Multi-user Threads',
         },
       ],
     },
@@ -282,6 +295,25 @@ const sidebars = {
           type: 'doc',
           id: 'editor/prompts',
           label: 'Prompts',
+        },
+        {
+          type: 'category',
+          label: 'Agent Builder',
+          customProps: {
+            tags: ['new'],
+          },
+          items: [
+            { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
+            { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
+            { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
+            { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
+            { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
+            { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
+            { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
+            { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+            { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
+            { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
+          ],
         },
       ],
     },
@@ -708,6 +740,11 @@ const sidebars = {
           type: 'doc',
           id: 'evals/running-in-ci',
           label: 'Running in CI',
+        },
+        {
+          type: 'doc',
+          id: 'evals/evals-with-memory',
+          label: 'Evals with Memory',
         },
         {
           type: 'category',

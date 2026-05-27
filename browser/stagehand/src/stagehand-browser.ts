@@ -116,6 +116,8 @@ export class StagehandBrowser extends MastraBrowser {
     domSettleTimeoutMs?: number;
     verbose?: 0 | 1 | 2;
     systemPrompt?: string;
+    logger?: StagehandBrowserConfig['logger'];
+    disablePino?: boolean;
     apiKey?: string;
     projectId?: string;
     localBrowserLaunchOptions?: {
@@ -136,6 +138,8 @@ export class StagehandBrowser extends MastraBrowser {
       domSettleTimeoutMs?: number;
       verbose?: 0 | 1 | 2;
       systemPrompt?: string;
+      logger?: StagehandBrowserConfig['logger'];
+      disablePino?: boolean;
       apiKey?: string;
       projectId?: string;
       localBrowserLaunchOptions?: {
@@ -152,8 +156,10 @@ export class StagehandBrowser extends MastraBrowser {
       model: typeof config.model === 'string' ? config.model : config.model?.modelName,
       selfHeal: config.selfHeal ?? true,
       domSettleTimeoutMs: config.domSettleTimeout,
-      verbose: (config.verbose ?? 1) as 0 | 1 | 2,
+      verbose: (config.verbose ?? 0) as 0 | 1 | 2,
       systemPrompt: config.systemPrompt,
+      logger: config.logger ?? (() => {}),
+      disablePino: config.disablePino ?? true,
     };
 
     // Handle Browserbase configuration

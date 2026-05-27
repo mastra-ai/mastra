@@ -3,7 +3,7 @@ import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema'
 import type { PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
 import { createTool } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
-import { z } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
 
 /**
  * Deep merges two objects, with special handling for null values (delete) and arrays (replace).
@@ -90,18 +90,24 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
   const schema = memoryConfig?.workingMemory?.schema;
 
   // Default input schema for markdown-based working memory
-  let inputSchema: PublicSchema<{ memory: any }> = z.object({
-    memory: z
-      .string()
-      .describe(`The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.`),
-  });
+  let inputSchema: PublicSchema<{ memory: any }> = {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    type: 'object',
+    properties: {
+      memory: {
+        type: 'string',
+        description: `The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.`,
+      },
+    },
+    required: ['memory'],
+  } satisfies JSONSchema7;
 
   if (schema) {
     // Convert the schema to StandardSchemaWithJSON first
     const standardSchema: StandardSchemaWithJSON = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
 
-    // Get JSON schema using .output() since this describes the structure the LLM should produce,
-    // then convert to Zod for runtime validation of the tool's inputSchema
+    // Get JSON schema using .input() since this describes the structure the tool should receive,
+    // then wrap it for runtime validation of the tool's inputSchema
     const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
     delete jsonSchema.$schema;
 
@@ -172,7 +178,8 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
     id: 'update-working-memory',
     description,
     inputSchema,
-    execute: async (inputData: { memory: any }, context) => {
+    execute: async (inputData, context) => {
+      const workingMemoryInput = inputData as { memory: any };
       const threadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;
 
@@ -229,7 +236,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
         }
 
         // Handle case where LLM passes empty object or no memory field
-        const memoryInput = inputData.memory;
+        const memoryInput = workingMemoryInput.memory;
         if (memoryInput === undefined || memoryInput === null) {
           // No data to update - return existing data unchanged
           return { success: true, message: 'No memory data provided, existing memory unchanged.' };
@@ -254,7 +261,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
         workingMemory = JSON.stringify(mergedData);
       } else {
         // Template-based (Markdown): use existing replace semantics
-        const memoryInput = inputData.memory;
+        const memoryInput = workingMemoryInput.memory;
         workingMemory = typeof memoryInput === 'string' ? memoryInput : JSON.stringify(memoryInput);
 
         // Validate that we're not replacing good data with an empty template
@@ -302,34 +309,33 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
   return createTool({
     id: 'update-working-memory',
     description: 'Update the working memory with new information.',
-    inputSchema: z.object({
-      newMemory: z
-        .string()
-        .optional()
-        .describe(
-          `The ${config.workingMemory?.schema ? 'JSON' : 'Markdown'} formatted working memory content to store`,
-        ),
-      searchString: z
-        .string()
-        .optional()
-        .describe(
-          "The working memory string to find. Will be replaced with the newMemory string. If this is omitted or doesn't exist, the newMemory string will be appended to the end of your working memory. Replacing single lines at a time is encouraged for greater accuracy. If updateReason is not 'append-new-memory', this search string must be provided or the tool call will be rejected.",
-        ),
-      updateReason: z
-        .enum(['append-new-memory', 'clarify-existing-memory', 'replace-irrelevant-memory'])
-        .optional()
-        .describe(
-          "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
-        ),
-    }),
-    execute: async (
-      inputData: {
+    inputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        newMemory: {
+          type: 'string',
+          description: `The ${config.workingMemory?.schema ? 'JSON' : 'Markdown'} formatted working memory content to store`,
+        },
+        searchString: {
+          type: 'string',
+          description:
+            "The working memory string to find. Will be replaced with the newMemory string. If this is omitted or doesn't exist, the newMemory string will be appended to the end of your working memory. Replacing single lines at a time is encouraged for greater accuracy. If updateReason is not 'append-new-memory', this search string must be provided or the tool call will be rejected.",
+        },
+        updateReason: {
+          type: 'string',
+          enum: ['append-new-memory', 'clarify-existing-memory', 'replace-irrelevant-memory'],
+          description:
+            "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
+        },
+      },
+    } satisfies JSONSchema7,
+    execute: async (inputData, context) => {
+      const workingMemoryInput = inputData as {
         newMemory?: string;
         searchString?: string;
         updateReason?: 'append-new-memory' | 'clarify-existing-memory' | 'replace-irrelevant-memory';
-      },
-      context,
-    ) => {
+      };
       const threadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;
 
@@ -365,30 +371,30 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         }
       }
 
-      const workingMemory = inputData.newMemory || '';
-      if (!inputData.updateReason) inputData.updateReason = `append-new-memory`;
+      const workingMemory = workingMemoryInput.newMemory || '';
+      if (!workingMemoryInput.updateReason) workingMemoryInput.updateReason = `append-new-memory`;
 
       if (
-        inputData.searchString &&
+        workingMemoryInput.searchString &&
         config.workingMemory?.scope === `resource` &&
-        inputData.updateReason === `replace-irrelevant-memory`
+        workingMemoryInput.updateReason === `replace-irrelevant-memory`
       ) {
         // don't allow replacements due to something not being relevant to the current conversation
         // if there's no searchString, then we will append.
-        inputData.searchString = undefined;
+        workingMemoryInput.searchString = undefined;
       }
 
-      if (inputData.updateReason === `append-new-memory` && inputData.searchString) {
+      if (workingMemoryInput.updateReason === `append-new-memory` && workingMemoryInput.searchString) {
         // do not find/replace when append-new-memory is selected
         // some models get confused and pass a search string even when they don't want to replace it.
         // TODO: maybe they're trying to add new info after the search string?
-        inputData.searchString = undefined;
+        workingMemoryInput.searchString = undefined;
       }
 
-      if (inputData.updateReason !== `append-new-memory` && !inputData.searchString) {
+      if (workingMemoryInput.updateReason !== `append-new-memory` && !workingMemoryInput.searchString) {
         return {
           success: false,
-          reason: `updateReason was ${inputData.updateReason} but no searchString was provided. Unable to replace undefined with "${inputData.newMemory}"`,
+          reason: `updateReason was ${workingMemoryInput.updateReason} but no searchString was provided. Unable to replace undefined with "${workingMemoryInput.newMemory}"`,
         };
       }
 
@@ -397,7 +403,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         threadId,
         resourceId,
         workingMemory: workingMemory,
-        searchString: inputData.searchString,
+        searchString: workingMemoryInput.searchString,
         memoryConfig: config,
       });
 

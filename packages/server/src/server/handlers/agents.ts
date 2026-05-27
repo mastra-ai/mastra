@@ -91,6 +91,25 @@ function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides |
   }
 }
 
+/**
+ * Ensure `defaultStatus` is set on the version overrides in the RequestContext
+ * so sub-agents inherit the same draft/published semantics as the parent.
+ *
+ * When the parent agent is resolved via a specific versionId (editor context),
+ * sub-agents should default to `draft`. When resolved with published (main
+ * chat), sub-agents default to `published`. An explicit `defaultStatus` from
+ * the request body takes precedence.
+ */
+function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: { versionId: string } | undefined): void {
+  const existingRaw = ctx.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+  // Don't overwrite an explicit defaultStatus from the body
+  if (existingRaw?.defaultStatus) return;
+
+  const inferredStatus: 'draft' | 'published' = versionOptions ? 'draft' : 'published';
+  const updated: VersionOverrides = { ...existingRaw, defaultStatus: inferredStatus };
+  ctx.set(MASTRA_VERSIONS_KEY, updated);
+}
+
 function getIsStudioFromContext(requestContext: RequestContext): boolean {
   return requestContext.get(MASTRA_IS_STUDIO_KEY) === true;
 }
@@ -1096,7 +1115,6 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_READ },
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
@@ -1186,13 +1204,15 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       validateBody({ messages });
 
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
+        versionOptions,
         requestContext: serverRequestContext,
       });
 
@@ -1202,6 +1222,9 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
       stashVersionOverrides(serverRequestContext, versions);
+
+      // Propagate draft/published default to sub-agents
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1420,6 +1443,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   description: 'Returns a list of all configured AI model providers',
   tags: ['Agents'],
   requiresAuth: true,
+  requiresPermission: ['agents:read'],
   handler: async ({ mastra }) => {
     try {
       const allProviders: Record<string, ProviderConfig> = {};
@@ -1507,13 +1531,15 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
 
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
+        versionOptions,
         requestContext: serverRequestContext,
       });
 
@@ -1523,6 +1549,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
       stashVersionOverrides(serverRequestContext, versions);
+
+      // Propagate draft/published default to sub-agents
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1619,9 +1648,15 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
     ifIdle,
   }) => {
     try {
-      mergeBodyRequestContext(serverRequestContext, ifIdle?.streamOptions?.requestContext);
+      const bodyRequestContext = ifIdle?.streamOptions?.requestContext;
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
-      const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext, bodyRequestContext as Record<string, unknown>),
+        requestContext: serverRequestContext,
+      });
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
@@ -1677,6 +1712,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   path: '/agents/:agentId/threads/subscribe',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
+  sseFlushOnConnect: true,
   pathParamSchema: agentIdPathParams,
   bodySchema: subscribeAgentThreadBodySchema,
   responseSchema: streamResponseSchema,
@@ -1715,9 +1751,17 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       });
 
       let cleanedUp = false;
+      let heartbeat: ReturnType<typeof setTimeout> | undefined;
+      const clearHeartbeat = () => {
+        if (heartbeat) {
+          clearTimeout(heartbeat);
+          heartbeat = undefined;
+        }
+      };
       const cleanup = (closeController?: ReadableStreamDefaultController) => {
         if (cleanedUp) return;
         cleanedUp = true;
+        clearHeartbeat();
         subscription.abort();
         subscription.unsubscribe();
         if (closeController) {
@@ -1729,18 +1773,36 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
 
       return new ReadableStream({
         async start(controller) {
+          const scheduleHeartbeat = () => {
+            if (cleanedUp) return;
+            clearHeartbeat();
+            heartbeat = setTimeout(() => {
+              heartbeat = undefined;
+              if (cleanedUp) return;
+              try {
+                controller.enqueue(': heartbeat\n\n');
+              } catch {
+                cleanup();
+                return;
+              }
+              scheduleHeartbeat();
+            }, 25_000);
+          };
           const abortCleanup = () => cleanup(controller);
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
+          scheduleHeartbeat();
 
           try {
             for await (const part of subscription.stream) {
               controller.enqueue(part);
+              scheduleHeartbeat();
             }
             cleanup(controller);
           } catch (error) {
             cleanup();
             controller.error(error);
           } finally {
+            clearHeartbeat();
             abortSignal?.removeEventListener('abort', abortCleanup);
           }
         },
@@ -2086,18 +2148,21 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ...rest
       } = params;
 
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
+        versionOptions,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       stashVersionOverrides(serverRequestContext, versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
@@ -2190,13 +2255,15 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       // Honor body-scoped `requestContext.agentVersionId` so callers
       // resuming a suspended draft / versioned agent get the right one.
       // Mirrors RESUME_STREAM_ROUTE.
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
+        versionOptions,
       });
 
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
@@ -2208,6 +2275,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       }
 
       stashVersionOverrides(serverRequestContext, versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;

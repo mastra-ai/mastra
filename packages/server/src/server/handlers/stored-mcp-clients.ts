@@ -12,7 +12,7 @@ import {
   deleteStoredMCPClientResponseSchema,
 } from '../schemas/stored-mcp-clients';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
 import { handleError } from './error';
 import { handleAutoVersioning, MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS } from './version-helpers';
@@ -35,7 +35,7 @@ export const LIST_STORED_MCP_CLIENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all MCP client configurations stored in the database',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -48,13 +48,14 @@ export const LIST_STORED_MCP_CLIENTS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
       }
 
+      const scope = await getStoredResourceScope(mastra, requestContext);
       const result = await mcpClientStore.listResolved({
         page,
         perPage,
         orderBy,
         status,
         authorId,
-        metadata,
+        metadata: scopeStoredResourceMetadata(metadata, scope),
       });
 
       return result;
@@ -79,7 +80,7 @@ export const GET_STORED_MCP_CLIENT_ROUTE = createRoute({
     'Returns a specific MCP client from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
-  handler: async ({ mastra, storedMCPClientId, status }) => {
+  handler: async ({ mastra, storedMCPClientId, status, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -97,6 +98,7 @@ export const GET_STORED_MCP_CLIENT_ROUTE = createRoute({
       if (!mcpClient) {
         throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
       }
+      assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       return mcpClient;
     } catch (error) {
@@ -118,7 +120,7 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
   description: 'Creates a new MCP client configuration in storage with the provided servers',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
-  handler: async ({ mastra, id: providedId, authorId, metadata, name, description, servers }) => {
+  handler: async ({ mastra, id: providedId, authorId, metadata, name, description, servers, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -150,7 +152,7 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
         mcpClient: {
           id,
           authorId,
-          metadata,
+          metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
           name,
           description,
           servers,
@@ -191,6 +193,7 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
     // Metadata-level fields
     authorId,
     metadata,
+    requestContext,
     // Config fields (snapshot-level)
     name,
     description,
@@ -213,12 +216,18 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
       }
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      assertStoredResourceScope(existing, scope);
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
 
       // Update the MCP client with both metadata-level and config-level fields
       const updatedMCPClient = await mcpClientStore.update({
         id: storedMCPClientId,
         authorId,
-        metadata,
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         name,
         description,
         servers,
@@ -269,7 +278,7 @@ export const DELETE_STORED_MCP_CLIENT_ROUTE = createRoute({
   description: 'Deletes an MCP client from storage by its unique identifier',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
-  handler: async ({ mastra, storedMCPClientId }) => {
+  handler: async ({ mastra, storedMCPClientId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -287,6 +296,7 @@ export const DELETE_STORED_MCP_CLIENT_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
       }
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       await mcpClientStore.delete(storedMCPClientId);
 

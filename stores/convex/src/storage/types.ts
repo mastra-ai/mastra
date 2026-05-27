@@ -21,6 +21,12 @@ export type StorageRequest =
       records: Record<string, any>[];
     }
   | {
+      op: 'patch';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      record: Record<string, any>;
+    }
+  | {
       op: 'load';
       tableName: TABLE_NAMES | string;
       keys: Record<string, any>;
@@ -56,6 +62,50 @@ export type StorageRequest =
       workflowName: string;
       runId: string;
       opts: string;
+    }
+  | {
+      op: 'createSchedule';
+      tableName: TABLE_NAMES | string;
+      record: Record<string, any>;
+    }
+  | {
+      op: 'recordScheduleTrigger';
+      tableName: TABLE_NAMES | string;
+      record: Record<string, any>;
+    }
+  | {
+      op: 'listDueSchedules';
+      tableName: TABLE_NAMES | string;
+      now: number;
+      limit?: number;
+    }
+  | {
+      op: 'updateScheduleNextFire';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      expectedNextFireAt: number;
+      newNextFireAt: number;
+      lastFireAt: number;
+      lastRunId: string;
+    }
+  | {
+      op: 'updateSchedule';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      patch: Record<string, any>;
+    }
+  | {
+      op: 'listScheduleTriggers';
+      tableName: TABLE_NAMES | string;
+      scheduleId: string;
+      fromActualFireAt?: number;
+      toActualFireAt?: number;
+      limit?: number;
+    }
+  | {
+      op: 'deleteScheduleTriggers';
+      tableName: TABLE_NAMES | string;
+      scheduleId: string;
     };
 
 export type StorageResponse =

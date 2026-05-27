@@ -12,6 +12,7 @@ const TypeToEmoji = {
   info: <GithubNoteIcon />,
   warning: <GithubWarningIcon />,
   tip: <GithubImportantIcon />,
+  experimental: <GithubWarningIcon />,
 }
 
 type CalloutType = keyof typeof TypeToEmoji
@@ -34,6 +35,11 @@ const classes: Record<CalloutType, string> = {
     'border-yellow-200 dark:border-yellow-600',
   ),
   tip: cn(
+    'bg-yellow-50 dark:bg-yellow-600/30',
+    'text-yellow-700 dark:text-yellow-500',
+    'border-yellow-200 dark:border-yellow-600',
+  ),
+  experimental: cn(
     'bg-purple-100 dark:bg-purple-900/30',
     'text-purple-600 dark:text-purple-400',
     'border-purple-200 dark:border-purple-600',

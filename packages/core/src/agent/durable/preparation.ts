@@ -325,6 +325,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     options: {
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
+      activeTools: execOptions?.activeTools,
       temperature: execOptions?.modelSettings?.temperature,
       requireToolApproval: execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
@@ -333,6 +334,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: (execOptions as any)?.returnScorerData,
       hasErrorProcessors: errorProcessors.length > 0,
+      providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
     },
