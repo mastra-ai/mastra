@@ -115,6 +115,44 @@ describe('ExtractionRunner', () => {
     expect(result.extractedValues).toEqual({ 'active-topic': { topic: 'billing' } });
   });
 
+  it('treats undefined structured extraction output as no extracted values', async () => {
+    const runner = new ExtractionRunner({
+      observationConfig: { model: 'test-model' } as any,
+      resolveModel: () => ({
+        model: new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('structured extraction should use stream');
+          },
+          doStream: async () => ({
+            stream: textStream('undefined'),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+        }) as any,
+      }),
+      tokenCounter: { countMessages: vi.fn(() => 1) } as any,
+    });
+
+    const result = await runner.call(
+      {
+        cycleId: 'cycle-1',
+        threadId: 'thread-1',
+        observedMessages,
+        activeObservations: 'Date: yesterday\n* Prior billing discussion',
+        newObservations: 'Date: today\n* User asked another billing question',
+      },
+      [
+        new Extractor({
+          name: 'active-topic',
+          instructions: 'Extract the active topic.',
+          schema: z.object({ topic: z.string() }),
+        }),
+      ],
+    );
+
+    expect(result.extractedValues).toBeUndefined();
+  });
+
   it('runs extraction as a follow-up turn on the observer session when provided', async () => {
     const prompts: unknown[] = [];
     let callCount = 0;

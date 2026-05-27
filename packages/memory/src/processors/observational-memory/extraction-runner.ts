@@ -52,7 +52,7 @@ function buildExtractionSchema(extractors: ReadonlyArray<Extractor<any>>) {
   for (const extractor of extractors) {
     shape[extractor.slug] = (extractor.schema as z.ZodTypeAny).optional();
   }
-  return z.object({ values: z.object(shape).partial().default({}) });
+  return z.object({ values: z.object(shape).partial().default({}) }).default({ values: {} });
 }
 
 function buildExtractionPrompt(snapshot: ExtractionSnapshot, extractors: ReadonlyArray<Extractor<any>>): string {

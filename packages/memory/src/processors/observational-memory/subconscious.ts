@@ -16,6 +16,10 @@ import type { BuiltInPsycheName } from './subconscious-builtins';
 
 type AgentModel = AgentConfig['model'];
 
+const MAX_ACTIVITY_LOG_TEXT_SECTION_CHARS = 4_000;
+const MAX_ACTIVITY_LOG_TOOL_LINES_PER_PSYCHE = 80;
+const MAX_ACTIVITY_LOG_USER_INPUT_CHARS = 2_000;
+
 export type PsycheName = BuiltInPsycheName | (string & {});
 export type PsycheSelection = PsycheName[] | PsycheExtractionOptions;
 export type SubconsciousWorkspace = Workspace | WorkspaceConfig<any, any, any> | undefined;
@@ -37,7 +41,9 @@ export interface SubconsciousActivity {
   toolName: string;
   operation: SubconsciousActivityOperation;
   path?: string;
+  lineRange?: string;
   command?: string;
+  detail?: string;
   includedInSummary: boolean;
 }
 
@@ -258,8 +264,27 @@ function getToolInput(part: Record<string, unknown>): unknown {
       part.arguments ??
       part.toolInput ??
       part.inputText ??
+      getNestedValue(part, ['payload', 'input']) ??
+      getNestedValue(part, ['payload', 'args']) ??
+      getNestedValue(part, ['payload', 'arguments']) ??
+      getNestedValue(part, ['payload', 'toolInput']) ??
       getNestedValue(part, ['data', 'input']) ??
-      getNestedValue(part, ['data', 'args']),
+      getNestedValue(part, ['data', 'args']) ??
+      getNestedValue(part, ['toolCall', 'input']) ??
+      getNestedValue(part, ['toolCall', 'args']),
+  );
+}
+
+function getToolCallId(part: unknown): string | undefined {
+  if (!isRecord(part)) return undefined;
+  return firstString(
+    part.toolCallId,
+    part.id,
+    getNestedValue(part, ['payload', 'toolCallId']),
+    getNestedValue(part, ['payload', 'id']),
+    getNestedValue(part, ['data', 'toolCallId']),
+    getNestedValue(part, ['toolCall', 'toolCallId']),
+    getNestedValue(part, ['toolCall', 'id']),
   );
 }
 
@@ -268,6 +293,8 @@ function getToolName(part: unknown): string | undefined {
   return firstString(
     part.toolName,
     part.name,
+    getNestedValue(part, ['payload', 'toolName']),
+    getNestedValue(part, ['payload', 'name']),
     getNestedValue(part, ['data', 'toolName']),
     getNestedValue(part, ['toolCall', 'toolName']),
   );
@@ -278,6 +305,8 @@ function getPathFromInput(input: unknown): string | undefined {
   return firstString(
     input.path,
     input.filePath,
+    input.file,
+    input.filename,
     input.targetPath,
     input.destinationPath,
     input.dirPath,
@@ -291,6 +320,9 @@ function getToolResultText(part: Record<string, unknown>): string | undefined {
     part.result ??
     part.output ??
     part.text ??
+    getNestedValue(part, ['payload', 'result']) ??
+    getNestedValue(part, ['payload', 'output']) ??
+    getNestedValue(part, ['payload', 'text']) ??
     getNestedValue(part, ['data', 'result']) ??
     getNestedValue(part, ['data', 'output']);
   if (typeof result === 'string') return result;
@@ -312,9 +344,11 @@ function getPathFromResult(operation: SubconsciousActivityOperation, resultText?
       ? [/Created directory\s+(.+)$/m]
       : operation === 'write_file'
         ? [/Wrote\s+\d+\s+bytes\s+to\s+(.+)$/m]
-        : operation === 'delete'
-          ? [/Deleted\s+(.+)$/m]
-          : [];
+        : operation === 'edit_file'
+          ? [/Replaced\s+\d+\s+occurrences?\s+in\s+(.+?)(?:\s+\(lines?\s+[^)]*\))?$/m]
+          : operation === 'delete'
+            ? [/Deleted\s+(.+)$/m]
+            : [];
   for (const pattern of patterns) {
     const match = resultText.match(pattern);
     if (match?.[1]) return match[1].trim();
@@ -322,9 +356,86 @@ function getPathFromResult(operation: SubconsciousActivityOperation, resultText?
   return undefined;
 }
 
+function getLineRangeFromResult(resultText?: string): string | undefined {
+  const match = resultText?.match(/\(lines?\s+([^)]+)\)/);
+  return match?.[1]?.trim();
+}
+
+function getLineRangeFromInput(operation: SubconsciousActivityOperation, input: unknown): string | undefined {
+  if (!isRecord(input)) return undefined;
+  const start = typeof input.startLine === 'number' ? input.startLine : undefined;
+  const end = typeof input.endLine === 'number' ? input.endLine : undefined;
+  if (start && end) return start === end ? String(start) : `${start}-${end}`;
+  if (start) return String(start);
+  if (operation !== 'write_file') return undefined;
+  const content = typeof input.content === 'string' ? input.content : undefined;
+  if (!content) return undefined;
+  const lineCount = content.split('\n').length;
+  return lineCount <= 1 ? '1' : `1-${lineCount}`;
+}
+
+function formatLineRange(lineRange?: string): string {
+  return lineRange ? ` (lines ${lineRange})` : '';
+}
+
 function getCommandFromInput(input: unknown): string | undefined {
   if (!isRecord(input)) return undefined;
   return firstString(input.command, input.cmd);
+}
+
+class ToolInputTracker {
+  private readonly calls = new Map<string, { toolName?: string; input?: unknown }>();
+
+  update(part: unknown): void {
+    if (!isRecord(part) || part.type !== 'tool-call') return;
+    const toolCallId = getToolCallId(part);
+    if (!toolCallId) return;
+
+    const input = getToolInput(part);
+    const toolName = getToolName(part);
+    this.calls.set(toolCallId, {
+      ...(toolName ? { toolName } : {}),
+      ...(input !== undefined ? { input } : {}),
+    });
+  }
+
+  inputFor(part: unknown): unknown {
+    if (!isRecord(part)) return undefined;
+    const direct = getToolInput(part);
+    if (direct !== undefined) return direct;
+
+    const toolCallId = getToolCallId(part);
+    if (!toolCallId) return undefined;
+    return this.calls.get(toolCallId)?.input;
+  }
+
+  toolNameFor(part: unknown): string | undefined {
+    const direct = getToolName(part);
+    if (direct) return direct;
+    const toolCallId = getToolCallId(part);
+    if (!toolCallId) return undefined;
+    return this.calls.get(toolCallId)?.toolName;
+  }
+}
+
+function getSearchDetailFromInput(input: unknown): string | undefined {
+  if (!isRecord(input)) return undefined;
+  const query = firstString(input.query, input.pattern, input.search, input.glob, input.path);
+  if (!query) return undefined;
+  return query.length > 180 ? `${query.slice(0, 180)}…` : query;
+}
+
+function usefulToolDetail(
+  operation: SubconsciousActivityOperation,
+  input: unknown,
+  path?: string,
+  command?: string,
+  lineRange?: string,
+): string | undefined {
+  if (operation === 'execute_command') return command;
+  if (operation === 'search') return getSearchDetailFromInput(input) ?? path;
+  if (path) return `${path}${formatLineRange(lineRange)}`;
+  return undefined;
 }
 
 function normalizePath(path: string): string {
@@ -360,37 +471,73 @@ function agentRunActivity(
   };
 }
 
-function streamPartLog(psyche: PsycheName, index: number, part: unknown): SubconsciousStreamPartLog {
-  const type = isRecord(part) ? firstString(part.type) : undefined;
-  const toolName = isRecord(part) ? getToolName(part) : undefined;
-  const content = formatExtractedPayload(part);
-  return {
-    psyche,
-    index,
-    type,
-    toolName,
-    content: content.length > 4_000 ? `${content.slice(0, 4_000)}\n... <truncated>` : content,
-  };
+function getStreamTextDelta(part: Record<string, unknown>): string | undefined {
+  return firstString(part.delta, part.textDelta, part.text, getNestedValue(part, ['data', 'delta']));
 }
 
-function activityFromStreamPart(psyche: PsycheName, part: unknown): SubconsciousActivity | undefined {
+function streamPartLog(
+  psyche: PsycheName,
+  index: number,
+  part: unknown,
+  toolTracker?: ToolInputTracker,
+): SubconsciousStreamPartLog {
+  const type = isRecord(part) ? firstString(part.type) : undefined;
+  const toolName = isRecord(part) ? (toolTracker?.toolNameFor(part) ?? getToolName(part)) : undefined;
+  let content = '';
+  if (isRecord(part)) {
+    if (type === 'text-delta' || type === 'reasoning-delta') {
+      content = getStreamTextDelta(part) ?? '';
+    } else if (toolName) {
+      const input = toolTracker?.inputFor(part) ?? getToolInput(part);
+      const operation = classifyWorkspaceOperation(toolName);
+      const resultText = getToolResultText(part);
+      const path = getPathFromInput(input) ?? getPathFromResult(operation, resultText);
+      const lineRange = getLineRangeFromResult(resultText) ?? getLineRangeFromInput(operation, input);
+      const command = getCommandFromInput(input);
+      const detail = usefulToolDetail(operation, input, path ? normalizePath(path) : undefined, command, lineRange);
+      content = detail ? `${toolName} — ${detail}` : toolName;
+    } else {
+      content = type ?? 'unknown';
+    }
+  } else {
+    content = String(part);
+  }
+  return { psyche, index, type, toolName, content };
+}
+
+function activityFromStreamPart(
+  psyche: PsycheName,
+  part: unknown,
+  toolTracker?: ToolInputTracker,
+): SubconsciousActivity | undefined {
   if (!isRecord(part)) return undefined;
-  const toolName = getToolName(part);
+  const toolName = toolTracker?.toolNameFor(part) ?? getToolName(part);
   if (!toolName?.startsWith(WORKSPACE_TOOLS_PREFIX)) return undefined;
 
-  const input = getToolInput(part);
+  const input = toolTracker?.inputFor(part) ?? getToolInput(part);
   const operation = classifyWorkspaceOperation(toolName);
   const resultText = getToolResultText(part);
   const path = getPathFromInput(input) ?? getPathFromResult(operation, resultText);
+  const normalized = path ? normalizePath(path) : undefined;
+  const lineRange = getLineRangeFromResult(resultText) ?? getLineRangeFromInput(operation, input);
   const command = getCommandFromInput(input);
+  const detail = usefulToolDetail(operation, input, normalized, command, lineRange);
+
+  const partType = firstString(part.type);
 
   return {
     psyche,
     toolName,
     operation,
-    path: path ? normalizePath(path) : undefined,
+    path: normalized,
+    lineRange,
     command,
-    includedInSummary: shouldSummarizeOperation(operation),
+    detail,
+    includedInSummary:
+      shouldSummarizeOperation(operation) &&
+      (operation === 'execute_command' || Boolean(normalized)) &&
+      partType !== 'tool-call' &&
+      partType !== 'data-workspace-metadata',
   };
 }
 
@@ -423,7 +570,14 @@ function uniqueActivities(activities: SubconsciousActivity[]): SubconsciousActiv
   const seen = new Set<string>();
   const unique: SubconsciousActivity[] = [];
   for (const activity of activities) {
-    const key = [activity.psyche, activity.operation, activity.path, activity.command].join('\0');
+    const key = [
+      activity.psyche,
+      activity.operation,
+      activity.path,
+      activity.lineRange,
+      activity.command,
+      activity.detail,
+    ].join('\0');
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(activity);
@@ -442,7 +596,7 @@ function pathKind(path?: string): string {
 }
 
 function activityVerb(activity: SubconsciousActivity): string {
-  if (activity.operation === 'write_file') return 'created/updated';
+  if (activity.operation === 'write_file') return 'created';
   if (activity.operation === 'edit_file') return 'updated';
   if (activity.operation === 'mkdir') return 'created directory';
   if (activity.operation === 'delete') return 'deleted';
@@ -450,24 +604,95 @@ function activityVerb(activity: SubconsciousActivity): string {
   return 'used';
 }
 
-function formatActivity(activity: SubconsciousActivity): string {
+function formatActivityDetail(activity: SubconsciousActivity): string {
   if (activity.operation === 'execute_command') {
-    return `${activity.psyche} ran workspace command ${activity.command ? `\`${activity.command}\`` : `via \`${activity.toolName}\``}`;
+    return `ran workspace command ${activity.command ? `\`${activity.command}\`` : `via \`${activity.toolName}\``}`;
   }
-  if (activity.operation === 'agent_run') {
-    return `${activity.psyche} ran psyche agent${activity.command ? ` (${activity.command})` : ''}`;
+  if (activity.operation === 'agent_run') return activity.command ?? 'psyche agent ran';
+  if (activity.operation === 'read_file') {
+    return `read ${activity.path ? `${pathKind(activity.path)} \`${activity.path}\`` : `via \`${activity.toolName}\``}`;
+  }
+  if (activity.operation === 'search') {
+    return `searched ${activity.detail ? `\`${activity.detail}\`` : `via \`${activity.toolName}\``}`;
+  }
+  if (activity.operation === 'other') {
+    return `used \`${activity.toolName}\`${activity.detail ? ` (${activity.detail})` : ''}`;
   }
 
-  const target = activity.path ? `\`${activity.path}\`` : `via \`${activity.toolName}\``;
+  const target = activity.path ? `\`${activity.path}\`${formatLineRange(activity.lineRange)}` : `workspace item`;
   const kind = activity.operation === 'mkdir' ? '' : ` ${pathKind(activity.path)}`;
-  return `${activity.psyche} ${activityVerb(activity)}${kind} ${target}`;
+  return `${activityVerb(activity)}${kind} ${target}`;
+}
+
+function formatActivity(activity: SubconsciousActivity): string {
+  if (activity.operation === 'agent_run') return `${activity.psyche}: ${formatActivityDetail(activity)}`;
+  return `${activity.psyche} ${formatActivityDetail(activity)}`;
+}
+
+function formatSummaryPath(path: string, lineRange?: string): string {
+  return `${path}${lineRange ? `:${lineRange}` : ''}`;
+}
+
+function pathGroup(path: string): { prefix: string; name: string } {
+  const index = path.indexOf('/');
+  if (index === -1) return { prefix: '', name: path };
+  return { prefix: path.slice(0, index), name: path.slice(index + 1) };
+}
+
+function formatPathGroup(paths: Array<{ path: string; lineRange?: string }>): string {
+  if (paths.length === 1) {
+    return `\`${formatSummaryPath(paths[0]!.path, paths[0]!.lineRange)}\``;
+  }
+
+  const groups = new Map<string, Array<{ name: string; lineRange?: string }>>();
+  for (const path of paths) {
+    const group = pathGroup(path.path);
+    groups.set(group.prefix, [...(groups.get(group.prefix) ?? []), { name: group.name, lineRange: path.lineRange }]);
+  }
+
+  return Array.from(groups.entries())
+    .map(([prefix, items]) => {
+      if (items.length === 1) {
+        const item = items[0]!;
+        const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
+        return `\`${formatSummaryPath(fullPath, item.lineRange)}\``;
+      }
+      const body = items.map(item => formatSummaryPath(item.name, item.lineRange)).join(',');
+      return `\`${prefix}/{${body}}\``;
+    })
+    .join(', ');
+}
+
+function groupedActivityLines(activities: SubconsciousActivity[]): string[] {
+  const byPsyche = new Map<string, SubconsciousActivity[]>();
+  for (const activity of activities) {
+    const key = String(activity.psyche);
+    byPsyche.set(key, [...(byPsyche.get(key) ?? []), activity]);
+  }
+
+  return Array.from(byPsyche.entries()).flatMap(([psyche, psycheActivities]) => {
+    const byVerb = new Map<string, Array<{ path: string; lineRange?: string }>>();
+    const other: string[] = [];
+    for (const activity of psycheActivities) {
+      if (activity.path && ['write_file', 'edit_file', 'mkdir', 'delete'].includes(activity.operation)) {
+        const verb = activityVerb(activity);
+        byVerb.set(verb, [...(byVerb.get(verb) ?? []), { path: activity.path, lineRange: activity.lineRange }]);
+      } else if (activity.operation === 'execute_command') {
+        other.push(formatActivityDetail(activity));
+      }
+    }
+
+    const lines = Array.from(byVerb.entries()).map(([verb, paths]) => `- ${psyche} ${verb} ${formatPathGroup(paths)}`);
+    lines.push(...other.map(line => `- ${psyche} ${line}`));
+    return lines;
+  });
 }
 
 function formatReport(activities: SubconsciousActivity[]): Pick<SubconsciousActivityReport, 'summary' | 'observation'> {
   const summarized = uniqueActivities(activities.filter(activity => activity.includedInSummary));
   if (summarized.length === 0) return { summary: '', observation: undefined };
 
-  const summary = summarized.map(activity => `- ${formatActivity(activity)}`).join('\n');
+  const summary = groupedActivityLines(summarized).join('\n');
   return {
     summary,
     observation: `<subconscious>\n${summary}\n</subconscious>`,
@@ -478,7 +703,7 @@ function textFromNotificationInput(input: SubconsciousNotificationInput): string
   if (typeof input === 'string') return [input];
   if (Array.isArray(input)) return input;
   if (input.observation) return [input.observation];
-  if (input.summary) return [`<subconscious>\n${input.summary}\n</subconscious>`];
+  if (input.summary) return [input.summary];
   return [];
 }
 
@@ -493,6 +718,93 @@ function formatExtractedPayload(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function truncateLogText(value: string, maxChars: number): string {
+  return value.length > maxChars ? `${value.slice(0, maxChars)}\n... <truncated>` : value;
+}
+
+function messageText(message: unknown): string {
+  if (!isRecord(message)) return '';
+  const content = message.content;
+  if (typeof content === 'string') return content;
+  if (!isRecord(content)) return '';
+  if (typeof content.content === 'string') return content.content;
+  const parts = Array.isArray(content.parts) ? content.parts : [];
+  return parts
+    .map(part =>
+      isRecord(part) ? firstString(part.text, part.content, getNestedValue(part, ['data', 'text'])) : undefined,
+    )
+    .filter(Boolean)
+    .join('\n');
+}
+
+function userInputLines(context: SubconsciousRunContext): string[] {
+  if (context.source !== 'observer' || !('observedMessages' in context.observations)) {
+    return ['- unavailable for reflection phase'];
+  }
+  const userMessages = context.observations.observedMessages.filter(
+    message => isRecord(message) && message.role === 'user',
+  );
+  if (userMessages.length === 0) return ['- none'];
+  return userMessages.flatMap((message, index) => {
+    const text = truncateLogText(messageText(message), MAX_ACTIVITY_LOG_USER_INPUT_CHARS);
+    return [`#### User message ${index + 1}`, text || '_empty_'];
+  });
+}
+
+function streamDigestLines(streamParts: SubconsciousStreamPartLog[]): string[] {
+  if (streamParts.length === 0) return ['- none'];
+
+  const byPsyche = new Map<string, SubconsciousStreamPartLog[]>();
+  for (const part of streamParts) {
+    const key = String(part.psyche);
+    byPsyche.set(key, [...(byPsyche.get(key) ?? []), part]);
+  }
+
+  const lines: string[] = [];
+  for (const [psyche, parts] of byPsyche) {
+    const reasoning = parts
+      .filter(part => part.type === 'reasoning-delta')
+      .map(part => part.content)
+      .join('');
+    const text = parts
+      .filter(part => part.type === 'text-delta')
+      .map(part => part.content)
+      .join('');
+    const toolParts = parts.filter(part => part.toolName);
+    const otherCounts = new Map<string, number>();
+    for (const part of parts) {
+      if (part.type === 'reasoning-delta' || part.type === 'text-delta' || part.toolName) continue;
+      const type = part.type ?? 'unknown';
+      otherCounts.set(type, (otherCounts.get(type) ?? 0) + 1);
+    }
+
+    lines.push(`#### ${psyche}`);
+    if (reasoning.trim()) {
+      lines.push('**Reasoning**', '', truncateLogText(reasoning.trim(), MAX_ACTIVITY_LOG_TEXT_SECTION_CHARS), '');
+    }
+    if (text.trim()) {
+      lines.push('**Text**', '', truncateLogText(text.trim(), MAX_ACTIVITY_LOG_TEXT_SECTION_CHARS), '');
+    }
+    if (toolParts.length > 0) {
+      lines.push('**Tools**');
+      const uniqueToolLines = Array.from(new Set(toolParts.map(part => `- ${part.type ?? 'tool'}: ${part.content}`)));
+      lines.push(...uniqueToolLines.slice(0, MAX_ACTIVITY_LOG_TOOL_LINES_PER_PSYCHE));
+      if (uniqueToolLines.length > MAX_ACTIVITY_LOG_TOOL_LINES_PER_PSYCHE) {
+        lines.push(`- ... ${uniqueToolLines.length - MAX_ACTIVITY_LOG_TOOL_LINES_PER_PSYCHE} more tool events`);
+      }
+      lines.push('');
+    }
+    if (otherCounts.size > 0) {
+      lines.push('**Other part types**');
+      lines.push(
+        ...Array.from(otherCounts.entries()).map(([type, count]) => `- ${type}${count > 1 ? ` ×${count}` : ''}`),
+        '',
+      );
+    }
+  }
+  return lines;
 }
 
 function formatActivityLogEntry({
@@ -512,29 +824,14 @@ function formatActivityLogEntry({
   const phase = context.phase ?? 'unknown';
   const summarized = uniqueActivities(report.activities.filter(activity => activity.includedInSummary));
   const activityLines =
-    summarized.length > 0
-      ? summarized.map(activity => `- ${formatActivity(activity)}`)
-      : ['- No durable workspace changes detected.'];
+    summarized.length > 0 ? groupedActivityLines(summarized) : ['- No durable workspace changes detected.'];
+  const allToolActivity = uniqueActivities(report.activities.filter(activity => activity.operation !== 'agent_run'));
+  const toolActivityLines =
+    allToolActivity.length > 0 ? allToolActivity.map(activity => `- ${formatActivity(activity)}`) : ['- none'];
   const psycheRunLines = report.activities
     .filter(activity => activity.operation === 'agent_run')
     .map(activity => `- ${formatActivity(activity)}`);
-  const rawActivityLines =
-    report.activities.length > 0
-      ? uniqueActivities(report.activities).map(activity => {
-          const target = activity.path ? ` path=\`${activity.path}\`` : '';
-          const command = activity.command ? ` command=\`${activity.command}\`` : '';
-          return `- ${activity.psyche}: ${activity.operation}${target}${command}`;
-        })
-      : ['- none'];
-  const streamPartLines =
-    report.streamParts.length > 0
-      ? report.streamParts.flatMap(part => [
-          `#### ${part.psyche} part ${part.index}${part.type ? ` — ${part.type}` : ''}${part.toolName ? ` — ${part.toolName}` : ''}`,
-          '```json',
-          part.content,
-          '```',
-        ])
-      : ['- none'];
+  const streamPartLines = streamDigestLines(report.streamParts);
   const notificationLine =
     notification.status === 'failed'
       ? `failed: ${notification.error ?? 'unknown error'}`
@@ -554,6 +851,9 @@ function formatActivityLogEntry({
     `Resource: \`${context.resourceId ?? context.mainAgent?.id ?? 'global'}\``,
     `Notification: \`${notificationLine}\``,
     '',
+    '### User input',
+    ...userInputLines(context),
+    '',
     '### Extractions',
     ...(extractionLines.length > 0 ? extractionLines : ['- none']),
     '',
@@ -563,11 +863,11 @@ function formatActivityLogEntry({
     '### Stream parts',
     ...streamPartLines,
     '',
-    '### Workspace activity',
+    '### Workspace changes',
     ...activityLines,
     '',
-    '### Raw operations',
-    ...rawActivityLines,
+    '### Tool activity',
+    ...toolActivityLines,
     '',
   ].join('\n');
 }
@@ -677,9 +977,15 @@ export class Subconscious {
         }
 
         const resourceId = context.resourceId ?? context.mainAgent?.id ?? 'global';
-        const result = context.mainAgent.sendSignal(
+
+        const sendSignal = context.mainAgent?.sendSignal?.bind(context.mainAgent);
+        if (!sendSignal) {
+          return { status: 'failed', error: 'mainAgent.sendSignal unavailable' };
+        }
+
+        const result = sendSignal(
           {
-            type: 'om.subconscious.notification',
+            type: 'system-reminder' as const,
             contents: [
               'Your subconscious bubbled up an internal thought notification:',
               '',
@@ -688,10 +994,8 @@ export class Subconscious {
               'Continue with the knowledge your subconscious surfaced, but do not respond directly to this notification or stop what you were doing.',
             ].join('\n'),
             attributes: primitiveAttributes({
-              source: 'observational-memory',
+              type: 'subconscious',
               phase: context.phase,
-              threadId: context.threadId,
-              resourceId,
               active: active.join(','),
             }),
           },
@@ -746,12 +1050,14 @@ export class Subconscious {
 
         const handle = this.get(psyche);
         const stream = await this.streamPsyche(handle, payload, context);
+        const toolTracker = new ToolInputTracker();
         let streamPartCount = 0;
         let workspaceActivityCount = 0;
         await consumeStreamParts(stream, part => {
           streamPartCount += 1;
-          streamParts.push(streamPartLog(psyche, streamPartCount, part));
-          const activity = activityFromStreamPart(psyche, part);
+          toolTracker.update(part);
+          const activity = activityFromStreamPart(psyche, part, toolTracker);
+          streamParts.push(streamPartLog(psyche, streamPartCount, part, toolTracker));
           if (activity) {
             workspaceActivityCount += 1;
             activities.push(activity);
@@ -780,7 +1086,9 @@ export class Subconscious {
 
     try {
       const filesystem = await workspace.resolveFilesystem({ requestContext: context.requestContext });
-      if (!filesystem) return;
+      if (!filesystem) {
+        return;
+      }
       await filesystem.mkdir(ACTIVITY_LOG_DIR, { recursive: true });
       await appendActivityLogFile(
         filesystem,
