@@ -439,7 +439,9 @@ export interface ChannelConfig {
    * ```ts
    * threadContext: {
    *   maxMessages: 20,
-   *   systemMessage: ctx => `Talking to ${ctx.userName} on ${ctx.platform}.`,
+   *   systemMessage: ctx => ctx.isDM
+   *     ? `Having a private DM conversation on ${ctx.platform}.`
+   *     : `Chatting in a public ${ctx.platform} channel.`,
    * }
    * ```
    */
