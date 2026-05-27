@@ -21,7 +21,7 @@
   "major": {
     "dependencyDashboardApproval": true
   },
-  "schedule": ["before 6am on monday"],
+  "schedule": ["before 6am every weekday"],
   "vulnerabilityAlerts": {
     "groupName": "security updates",
     "labels": ["automation", "security"],
@@ -40,6 +40,7 @@
     "templates/**",
     "**/examples/**",
     "**/_examples/**",
+    ".claude/skills/**/assets/**/package.json",
     "e2e-tests/**/template/package.json"
   ],
   "packageRules": [
@@ -64,6 +65,81 @@
       "matchPackageNames": ["@types/node"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
+    },
+    {
+      "groupName": "GitHub Actions",
+      "commitMessageTopic": "GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["major", "minor", "patch", "digest"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Docker images",
+      "commitMessageTopic": "Docker images",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "AI provider SDKs",
+      "commitMessageTopic": "AI provider SDKs",
+      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
+      "matchPackageNames": [
+        "@arcadeai/arcadejs",
+        "@deepgram/sdk",
+        "@google/genai",
+        "@mendable/firecrawl-js",
+        "@openrouter/ai-sdk-provider",
+        "@openrouter/ai-sdk-provider-v5",
+        "@tavily/core",
+        "elevenlabs"
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "Observability providers",
+      "commitMessageTopic": "Observability providers",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": [
+        "@arizeai/*",
+        "@langfuse/*",
+        "@sentry/node",
+        "braintrust",
+        "dd-trace",
+        "langsmith",
+        "posthog-node"
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "Database clients",
+      "commitMessageTopic": "Database clients",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": [
+        "@clickhouse/client",
+        "@datastax/astra-db-ts",
+        "@duckdb/node-api",
+        "@elastic/elasticsearch",
+        "@libsql/client",
+        "@opensearch-project/opensearch",
+        "@pinecone-database/pinecone",
+        "@supabase/supabase-js",
+        "@turbopuffer/turbopuffer",
+        "couchbase",
+        "ioredis",
+        "mongodb",
+        "mssql",
+        "pg",
+        "redis"
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
     },
     {
       "groupName": "Hono",

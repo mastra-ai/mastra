@@ -1,6 +1,6 @@
 {
   "name": "@mastra/arthur",
-  "version": "0.2.12-alpha.1",
+  "version": "0.3.0-alpha.0",
   "description": "Arthur AI observability provider for Mastra - exports traces using OpenInference semantic conventions",
   "type": "module",
   "main": "dist/index.js",
@@ -35,7 +35,7 @@
     "@arizeai/openinference-semantic-conventions": "^2.1.7",
     "@mastra/otel-exporter": "workspace:*",
     "@opentelemetry/core": "^2.7.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.215.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
     "@opentelemetry/sdk-trace-base": "^2.7.0",
     "@opentelemetry/semantic-conventions": "^1.40.0"
   },

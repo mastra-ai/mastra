@@ -1,4 +1,5 @@
 import { generateTypes } from '@internal/types-builder';
+import esbuildCompileZod from '@internal/types-builder/compile-zod';
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
@@ -11,6 +12,7 @@ export default defineConfig({
     preset: 'smallest',
   },
   sourcemap: true,
+  esbuildPlugins: [esbuildCompileZod()],
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },

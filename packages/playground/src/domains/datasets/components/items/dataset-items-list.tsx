@@ -162,7 +162,7 @@ export function DatasetItemsList({
             }
 
             return (
-              <DataList.Row key={item.id}>
+              <DataList.RowWrapper key={item.id}>
                 <DataList.SelectCell
                   checked={selectedIds.has(item.id)}
                   onToggle={shiftKey => handleToggleSelection(item.id, shiftKey, allIds)}
@@ -171,7 +171,7 @@ export function DatasetItemsList({
                 <DataList.RowButton flushLeft colStart={2} featured={isFeatured} onClick={() => onItemClick?.(item.id)}>
                   {rowCells}
                 </DataList.RowButton>
-              </DataList.Row>
+              </DataList.RowWrapper>
             );
           })}
           <DataList.NextPageLoading

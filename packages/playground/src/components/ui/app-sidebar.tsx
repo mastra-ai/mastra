@@ -1,9 +1,13 @@
 import { LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
+import { Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
@@ -51,13 +55,17 @@ export function AppSidebar() {
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
+  const { isVisible: isAgentBuilderVisible } = useAgentBuilderSidebarVisibility();
+  const isAgentBuilderActive = pathname === '/agent-builder' || pathname.startsWith('/agent-builder/');
 
   const filterItem = (item: NavItem) => {
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
     if (rbacEnabled && isPermissionsAuthenticated && isPermissionsLoading) return true;
-    if (item.requiredPermission && !hasPermission(item.requiredPermission)) return false;
-    if (item.requiredAnyPermission && !hasAnyPermission(item.requiredAnyPermission)) return false;
+    const requiredPermission = getPermissionForRoute(item.url);
+    if (!hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission)) {
+      return false;
+    }
     return true;
   };
 
@@ -100,6 +108,25 @@ export function AppSidebar() {
           </span>
         )}
       </div>
+
+      {isAgentBuilderVisible && (
+        <div className="mb-2">
+          <MainSidebar.NavList>
+            <MainSidebar.NavLink
+              LinkComponent={Link}
+              state={state}
+              link={{
+                name: 'Agent Builder',
+                url: '/agent-builder',
+                icon: <Wrench />,
+              }}
+              isActive={isAgentBuilderActive}
+            />
+          </MainSidebar.NavList>
+        </div>
+      )}
+
+      <ImpersonationBanner />
 
       <MainSidebar.Nav>
         {mainNav.map(section => {
