@@ -373,13 +373,14 @@ export async function buildCapabilities(
     if (hasAdminBypassPermissions(access.permissions)) {
       try {
         const allRoles = await rbacProvider.getAvailableRoles();
-        const getPermissionsForRole = rbacProvider.getPermissionsForRole;
-        if (getPermissionsForRole) {
+        if (rbacProvider.getPermissionsForRole) {
           // Use allSettled so one failing role lookup doesn't drop the whole picker.
+          // Call via the instance to preserve `this` binding for provider implementations
+          // that rely on instance state (e.g. MastraRBACWorkos reads `this.options.roleMapping`).
           const rolePermissions = await Promise.allSettled(
             allRoles.map(async role => ({
               role,
-              perms: await getPermissionsForRole(role.id),
+              perms: await rbacProvider.getPermissionsForRole!(role.id),
             })),
           );
           availableRoles = rolePermissions.flatMap(result => {
