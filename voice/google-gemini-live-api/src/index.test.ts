@@ -803,7 +803,251 @@ describe('GeminiLiveVoice', () => {
       const setupMsg = payloads.find((p: any) => p.setup);
       expect(setupMsg).toBeDefined();
       expect(setupMsg.setup.model).toBe('models/gemini-2.0-flash-exp');
-      expect(setupMsg.setup.systemInstruction.parts[0].text).toBe('You are test');
+      expect(setupMsg.setup.system_instruction.parts[0].text).toBe('You are test');
+    });
+
+    it('connect() should default model to gemini-3.1-flash-live-preview when none is supplied', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.model).toBe('models/gemini-3.1-flash-live-preview');
+    });
+
+    it('connect() should always emit generation_config.response_modalities: ["AUDIO"]', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config).toBeDefined();
+      expect(setupMsg.setup.generation_config.response_modalities).toEqual(['AUDIO']);
+    });
+
+    it('connect() should include speech_config.voice_config.prebuilt_voice_config.voice_name when speaker is set', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', speaker: 'Puck' });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name).toBe('Puck');
+    });
+
+    it('connect() should pick up apiKey and model placed on realtimeConfig root (not inside options)', async () => {
+      const v = new GeminiLiveVoice({
+        realtimeConfig: {
+          model: 'gemini-3.1-flash-live-preview',
+          apiKey: 'root-key',
+          // intentionally no `options.apiKey` — caller relies on the root field
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.model).toBe('models/gemini-3.1-flash-live-preview');
+      expect((v as any).options.apiKey).toBe('root-key');
+    });
+
+    it('connect() should honor a VoiceConfig-root speaker passed alongside realtimeConfig', async () => {
+      const v = new GeminiLiveVoice({
+        speaker: 'Charon',
+        realtimeConfig: {
+          model: 'gemini-3.1-flash-live-preview',
+          apiKey: 'k',
+          options: { apiKey: 'k' },
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name).toBe(
+        'Charon',
+      );
+    });
+
+    it('connect() should emit tools as a single function_declarations container holding every tool', async () => {
+      const v = new GeminiLiveVoice({
+        apiKey: 'k',
+        tools: [
+          { name: 'first', description: 'a', parameters: { type: 'object', properties: {} } },
+          { name: 'second', description: 'b', parameters: { type: 'object', properties: {} } },
+        ],
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.tools).toHaveLength(1);
+      expect(setupMsg.setup.tools[0].function_declarations).toHaveLength(2);
+      expect(setupMsg.setup.tools[0].function_declarations.map((d: any) => d.name)).toEqual(['first', 'second']);
+    });
+
+    it('updateSessionConfig({ tools }) should merge config.tools with addTools() registrations into one container', async () => {
+      // Mirror sendInitialConfig: both tool sources contribute. Previously updateSessionConfig
+      // dropped config.tools entirely whenever any `addTools()` registrations existed.
+      voice.addTools({
+        registered: {
+          id: 'registered',
+          description: 'r',
+          parameters: { type: 'object', properties: {} },
+          execute: vi.fn() as any,
+        },
+      });
+
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({
+        tools: [{ name: 'fromConfig', description: 'c', parameters: { type: 'object', properties: {} } }],
+      });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateMsg = calls.find((p: any) => p.session?.tools !== undefined);
+      expect(updateMsg.session.tools).toHaveLength(1);
+      const names = updateMsg.session.tools[0].function_declarations.map((d: any) => d.name);
+      expect(names).toContain('fromConfig');
+      expect(names).toContain('registered');
+    });
+
+    it('updateSessionConfig({ tools }) should emit the same single-container function_declarations shape as setup', async () => {
+      // Mid-session updateSessionConfig must not regress to the one-container-per-tool shape; Gemini
+      // accepts that shape at the wire but suppresses tool_call frames, silently breaking tool routing.
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({
+        tools: [
+          { name: 'alpha', description: 'a', parameters: { type: 'object', properties: {} } },
+          { name: 'beta', description: 'b', parameters: { type: 'object', properties: {} } },
+        ],
+      });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateMsg = calls.find((p: any) => p.session?.tools !== undefined);
+      expect(updateMsg).toBeDefined();
+      expect(updateMsg.session.tools).toHaveLength(1);
+      expect(updateMsg.session.tools[0].function_declarations).toHaveLength(2);
+      expect(updateMsg.session.tools[0].function_declarations.map((d: any) => d.name)).toEqual(['alpha', 'beta']);
+    });
+
+    it('should wrap array tool results in { result } so the Gemini Live `response` proto field stays a struct', async () => {
+      const mockExecute = vi.fn().mockResolvedValue(['hit-1', 'hit-2']);
+      voice.addTools({
+        searchTool: { id: 'searchTool', description: 'd', inputSchema: {}, execute: mockExecute as any },
+      });
+
+      await (voice as any).handleGeminiMessage({
+        toolCall: { name: 'searchTool', args: {}, id: 'id-array' },
+      });
+
+      const payloads = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const toolResult = payloads.find((p: any) => p.toolResponse);
+      expect(toolResult.toolResponse.functionResponses[0].name).toBe('searchTool');
+      expect(toolResult.toolResponse.functionResponses[0].response).toEqual({ result: ['hit-1', 'hit-2'] });
+    });
+
+    it('should wrap non-plain-object tool results (Date, Map, Set, Error, class instances) in { result }', async () => {
+      // Bare Map/Set/Date/Error/class instances JSON.stringify to `{}` or non-struct shapes; the
+      // proto `response` field is a struct, so we must wrap to keep tool data on the wire.
+      class Custom {
+        constructor(public value: number) {}
+      }
+      const cases: Array<{ id: string; toolName: string; result: unknown }> = [
+        { id: 'id-map', toolName: 'mapTool', result: new Map([['k', 'v']]) },
+        { id: 'id-set', toolName: 'setTool', result: new Set([1, 2]) },
+        { id: 'id-date', toolName: 'dateTool', result: new Date('2026-01-01T00:00:00Z') },
+        { id: 'id-class', toolName: 'classTool', result: new Custom(42) },
+      ];
+
+      for (const c of cases) {
+        voice.addTools({
+          [c.toolName]: {
+            id: c.toolName,
+            description: 'd',
+            inputSchema: {},
+            execute: vi.fn().mockResolvedValue(c.result) as any,
+          },
+        });
+        await (voice as any).handleGeminiMessage({ toolCall: { name: c.toolName, args: {}, id: c.id } });
+      }
+
+      const payloads = mockWs.send.mock.calls.map((call: any[]) => JSON.parse(call[0]));
+      for (const c of cases) {
+        const toolResult = payloads.find((p: any) => p.toolResponse?.functionResponses?.[0]?.id === c.id);
+        expect(toolResult, `payload for ${c.toolName}`).toBeDefined();
+        const response = toolResult.toolResponse.functionResponses[0].response;
+        // Every non-plain-object result must be wrapped — the wire field is always an object with `result` key.
+        expect(response).toHaveProperty('result');
+      }
+    });
+
+    it('should pass plain-object tool results through unwrapped', async () => {
+      const mockExecute = vi.fn().mockResolvedValue({ temperature: 72, conditions: 'sunny' });
+      voice.addTools({
+        weatherTool: { id: 'weatherTool', description: 'd', inputSchema: {}, execute: mockExecute as any },
+      });
+
+      await (voice as any).handleGeminiMessage({
+        toolCall: { name: 'weatherTool', args: {}, id: 'id-plain' },
+      });
+
+      const payloads = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const toolResult = payloads.find((p: any) => p.toolResponse);
+      expect(toolResult.toolResponse.functionResponses[0].response).toEqual({ temperature: 72, conditions: 'sunny' });
+    });
+
+    it('updateSessionConfig({ tools: [] }) should clear tools even when addTools() registry is non-empty', async () => {
+      // Explicit-clear intent: caller passes an empty `config.tools` array to remove all tools
+      // mid-session. Without this honor, addTools() registrations would silently survive.
+      voice.addTools({
+        sticky: { id: 'sticky', description: 'd', inputSchema: {}, execute: vi.fn() as any },
+      });
+
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({ tools: [] });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateMsg = calls.find((p: any) => p.session?.tools !== undefined);
+      expect(updateMsg).toBeDefined();
+      expect(updateMsg.session.tools).toEqual([]);
     });
 
     it('speak() should send per-turn session.update before content (language, modalities, voice)', async () => {
@@ -842,6 +1086,7 @@ describe('GeminiLiveVoice', () => {
       expect(toolResult).toBeDefined();
       expect(toolResult.toolResponse.functionResponses).toBeDefined();
       expect(toolResult.toolResponse.functionResponses[0].id).toBe('id-1');
+      expect(toolResult.toolResponse.functionResponses[0].name).toBe('testTool');
       expect(toolResult.toolResponse.functionResponses[0].response).toEqual({ result: 'ok' });
     });
 

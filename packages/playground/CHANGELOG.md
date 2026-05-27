@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.10.3-alpha.1
+
+### Patch Changes
+
+- Fixed missing slide-in animation on the Save as Dataset Item drawer opened from the Observability page. The drawer was being conditionally mounted only while open, which prevented Base UI's open transition from firing. ([#16959](https://github.com/mastra-ai/mastra/pull/16959))
+
+- Updated dependencies [[`a3b46a6`](https://github.com/mastra-ai/mastra/commit/a3b46a6c7b02445cacd229c59b2eff6fa699bf7d), [`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c), [`a3b46a6`](https://github.com/mastra-ai/mastra/commit/a3b46a6c7b02445cacd229c59b2eff6fa699bf7d)]:
+  - @mastra/playground-ui@30.0.2-alpha.1
+  - @mastra/client-js@1.21.2-alpha.1
+  - @mastra/core@1.37.2-alpha.1
+  - @mastra/react@0.4.3-alpha.1
+
 ## 1.10.3-alpha.0
 
 ### Patch Changes

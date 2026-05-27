@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 1.37.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`9d87d68`](https://github.com/mastra-ai/mastra/commit/9d87d688371f5d1252ebb18d96890b51ade7de7c), [`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c), [`9d87d68`](https://github.com/mastra-ai/mastra/commit/9d87d688371f5d1252ebb18d96890b51ade7de7c)]:
+  - @mastra/server@1.37.2-alpha.1
+  - @mastra/core@1.37.2-alpha.1
+
 ## 1.37.2-alpha.0
 
 ### Patch Changes

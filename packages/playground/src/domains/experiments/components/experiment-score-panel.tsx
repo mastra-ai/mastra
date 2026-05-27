@@ -2,7 +2,7 @@
 
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { Button, Column, MainHeader, PrevNextNav, SideDialog, Sections } from '@mastra/playground-ui';
-import { GaugeIcon, FileCodeIcon, FileOutputIcon, ReceiptText, XIcon } from 'lucide-react';
+import { GaugeIcon, ReceiptText, XIcon } from 'lucide-react';
 
 export type ExperimentScorePanelProps = {
   score: ClientScoreRowData;
@@ -51,18 +51,6 @@ export function ExperimentScorePanel({ score, onNext, onPrevious, onClose }: Exp
             icon={<GaugeIcon />}
             codeStr={score.reason || naText}
             simplified
-          />
-
-          <SideDialog.CodeSection
-            title="Input"
-            icon={<FileCodeIcon />}
-            codeStr={JSON.stringify(score.input ?? null, null, 2)}
-          />
-
-          <SideDialog.CodeSection
-            title="Output"
-            icon={<FileOutputIcon />}
-            codeStr={JSON.stringify(score.output ?? null, null, 2)}
           />
 
           {!isCodeBased && (
