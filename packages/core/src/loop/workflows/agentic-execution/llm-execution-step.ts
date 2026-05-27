@@ -312,17 +312,30 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
 }
 
 /**
- * Wraps a ReadableStream so that an AbortSignal cancels any pending read.
+ * Default idle timeout for model stream reads (5 minutes).
+ * Long enough for extended thinking but prevents indefinite hangs.
+ */
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * Wraps a ReadableStream so that:
+ * 1. An AbortSignal cancels any pending read immediately.
+ * 2. An idle timeout errors the stream if no chunk arrives within the limit.
+ *
  * Without this, `for await (… of stream)` blocks indefinitely when the
  * underlying source stalls and no more chunks arrive.
  */
-function withAbortSignal<T>(stream: ReadableStream<T>, signal?: AbortSignal): ReadableStream<T> {
-  if (!signal) return stream;
+function withAbortSignal<T>(
+  stream: ReadableStream<T>,
+  signal?: AbortSignal,
+  idleTimeoutMs: number = DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+): ReadableStream<T> {
+  if (!signal && !idleTimeoutMs) return stream;
   const reader = stream.getReader();
   let abortCleanup: (() => void) | undefined;
   return new ReadableStream<T>({
     async pull(controller) {
-      if (signal.aborted) {
+      if (signal?.aborted) {
         controller.close();
         await reader.cancel().catch(() => {});
         return;
@@ -330,20 +343,42 @@ function withAbortSignal<T>(stream: ReadableStream<T>, signal?: AbortSignal): Re
       const onAbort = () => {
         reader.cancel().catch(() => {});
       };
-      signal.addEventListener('abort', onAbort, { once: true });
-      abortCleanup = () => signal.removeEventListener('abort', onAbort);
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+        abortCleanup = () => signal.removeEventListener('abort', onAbort);
+      }
       try {
-        const { done, value } = await reader.read();
-        abortCleanup();
+        let result: ReadableStreamReadResult<T>;
+        if (idleTimeoutMs > 0) {
+          let timerId: ReturnType<typeof setTimeout> | undefined;
+          const timeout = new Promise<never>((_, reject) => {
+            timerId = setTimeout(
+              () => reject(new Error(`Model stream idle timeout: no data received for ${idleTimeoutMs / 1000}s`)),
+              idleTimeoutMs,
+            );
+            if (typeof timerId === 'object' && 'unref' in timerId) timerId.unref();
+          });
+          try {
+            result = await Promise.race([reader.read(), timeout]);
+          } finally {
+            clearTimeout(timerId);
+          }
+        } else {
+          result = await reader.read();
+        }
+        abortCleanup?.();
         abortCleanup = undefined;
-        if (done) {
+        if (result.done) {
           controller.close();
         } else {
-          controller.enqueue(value);
+          controller.enqueue(result.value);
         }
       } catch (err) {
         abortCleanup?.();
         abortCleanup = undefined;
+        // On timeout or abort, cancel the underlying reader so the
+        // HTTP connection is torn down instead of leaking.
+        await reader.cancel().catch(() => {});
         controller.error(err);
       }
     },
