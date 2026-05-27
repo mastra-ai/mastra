@@ -7,7 +7,7 @@ import { initWorkOS } from './auth';
 import { StagehandBrowser } from '@mastra/stagehand';
 import { ComposioToolProvider } from '@mastra/editor/composio';
 import { weatherInfo, diceRoll, coinFlip, randomQuote } from './tools';
-import { weatherAgent } from './agents';
+import { weatherAgent, browserAgent } from './agents';
 import { greetWorkflow } from './workflows';
 import { SlackProvider } from '@mastra/slack';
 import { workspace } from './workspace';
@@ -32,6 +32,7 @@ export const mastra = new Mastra({
   agents: {
     builderAgent: createBuilderAgent(),
     weatherAgent,
+    browserAgent,
   },
   tools: {
     weatherInfo,
@@ -109,7 +110,7 @@ export const mastra = new Mastra({
           memory: {
             observationalMemory: true,
           },
-          agents: { allowed: ['weather-agent'] },
+          agents: { allowed: ['weather-agent', 'browser-agent'] },
           workflows: { allowed: ['greet-workflow'] },
           browser: {
             type: 'inline',
@@ -117,7 +118,16 @@ export const mastra = new Mastra({
               provider: 'stagehand',
             },
           },
-          workspace: { type: 'id', workspaceId: workspace.id },
+          workspace: {
+            type: 'inline',
+            config: {
+              name: 'project-workspace',
+              filesystem: {
+                provider: 'local',
+                config: { basePath: './workspace' },
+              },
+            },
+          },
         },
       },
     },
