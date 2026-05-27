@@ -90,11 +90,11 @@ export const supportAgent = new Agent({
   },
   {
     name: 'threadContext',
-    type: '{ maxMessages?: number }',
+    type: '{ maxMessages?: number; systemMessage?: false | string | ((ctx: ChannelContext) => string | undefined) }',
     isOptional: true,
     defaultValue: '{ maxMessages: 10 }',
     description:
-      'Fetch recent messages from the platform when the agent is first mentioned in a thread. Set `maxMessages: 0` to disable. Only applies to non-DM threads.',
+      "Configure how the agent is contextualized for a channel thread. `maxMessages` controls history fetched on first mention (set to `0` to disable, non-DM only). `systemMessage` customizes the per-request system message that tells the agent which channel a request came from: `false` skips it entirely, a `string` is used verbatim, or a function `(ctx) => string | undefined` builds it dynamically (return `undefined` or `''` to skip for that request). Keep the resolved value stable per thread so it stays prompt-cacheable.",
   },
   {
     name: 'chatOptions',

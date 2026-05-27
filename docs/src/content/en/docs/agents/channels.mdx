@@ -95,6 +95,32 @@ When a user mentions the agent mid-conversation in a channel thread, the agent m
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-DM threads.
 
+### Channel system message
+
+On every step, Mastra adds a short system message telling the agent which channel and platform a request came from (DM vs public channel, platform name, bot display name). Customize or disable this via `threadContext.systemMessage`:
+
+```typescript
+new Agent({
+  name: 'support-agent',
+  channels: {
+    adapters: { slack: createSlackAdapter() },
+    threadContext: {
+      maxMessages: 20,
+      systemMessage: ctx =>
+        ctx.isDM
+          ? `You are in a DM on ${ctx.platform} with ${ctx.userName ?? 'a user'}.`
+          : `You are in a public ${ctx.platform} channel.`,
+    },
+  },
+})
+```
+
+- `false` skips the channel system message entirely.
+- A `string` is used verbatim.
+- A function `(ctx) => string | undefined` builds it dynamically. Return `undefined` or `''` to skip for that request.
+
+Branch only on thread-stable inputs (`platform`, `isDM`) so the resolved content stays the same across turns and prompt caching can hit. For mid-conversation state, send a signal into the thread instead. `defaultChannelSystemMessage` is exported from `@mastra/core/channels` if you want to compose with the built-in template.
+
 ## Tool approval
 
 Tools with `requireApproval: true` render as interactive cards with Approve and Deny buttons:
