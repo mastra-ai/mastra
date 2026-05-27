@@ -38,6 +38,9 @@ import type {
 import type { MastraBrowser } from '@mastra/core/browser';
 
 import { RequestContext } from '@mastra/core/request-context';
+import { resolveStoredToolProviders } from '@mastra/core/tool-provider';
+import type { ToolProviders } from '@mastra/core/tool-provider';
+
 
 import { evaluateRuleGroup } from '../rule-evaluator';
 import { resolveInstructionBlocks } from '../instruction-builder';
@@ -534,6 +537,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       storedAgent.mcpClients != null && this.isConditionalVariants(storedAgent.mcpClients);
     const hasConditionalIntegrationTools =
       storedAgent.integrationTools != null && this.isConditionalVariants(storedAgent.integrationTools);
+    const hasToolProviders =
+      storedAgent.toolProviders != null && Object.keys(storedAgent.toolProviders as object).length > 0;
+    const hasConditionalToolProviders =
+      storedAgent.toolProviders != null && this.isConditionalVariants(storedAgent.toolProviders);
     const hasConditionalWorkflows = storedAgent.workflows != null && this.isConditionalVariants(storedAgent.workflows);
     const hasConditionalAgents = storedAgent.agents != null && this.isConditionalVariants(storedAgent.agents);
     const hasConditionalMemory = storedAgent.memory != null && this.isConditionalVariants(storedAgent.memory);
@@ -554,7 +561,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // If any is conditional, the combined result must be a dynamic function.
     const hasIntegrationTools = storedAgent.integrationTools != null;
     const isDynamicTools =
-      hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasIntegrationTools;
+      hasConditionalTools ||
+      hasConditionalMCPClients ||
+      hasConditionalIntegrationTools ||
+      hasIntegrationTools ||
+      hasConditionalToolProviders ||
+      hasToolProviders;
 
     let tools:
       | Record<string, ToolAction<any, any, any, any, any, any>>
@@ -599,7 +611,24 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           requestContext,
         );
 
-        return { ...registryTools, ...mcpTools, ...integrationTools };
+        // Resolve tool providers (v1 toolProviders)
+        const resolvedToolProvidersConfig = hasConditionalToolProviders
+          ? this.accumulateObjectVariants(
+              storedAgent.toolProviders as StorageConditionalVariant<ToolProviders>[],
+              ctx,
+            )
+          : (storedAgent.toolProviders as ToolProviders | undefined);
+        const providerTools = await resolveStoredToolProviders(
+          resolvedToolProvidersConfig,
+          (providerId: string) => this.editor.getToolProviderOrThrow(providerId),
+          {
+            requestContext: ctx,
+            authorId: storedAgent.authorId,
+            logger: this.logger,
+          },
+        );
+
+        return { ...registryTools, ...mcpTools, ...integrationTools, ...providerTools };
       };
     } else {
       // All are static — resolve once at agent creation time (no requestContext available)
@@ -610,7 +639,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const integrationTools = await this.resolveStoredIntegrationTools(
         storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
       );
-      tools = { ...registryTools, ...mcpTools, ...integrationTools };
+      const providerTools = hasToolProviders
+        ? await resolveStoredToolProviders(
+            storedAgent.toolProviders as ToolProviders | undefined,
+            (providerId: string) => this.editor.getToolProviderOrThrow(providerId),
+            { authorId: storedAgent.authorId, logger: this.logger },
+          )
+        : {};
+      tools = { ...registryTools, ...mcpTools, ...integrationTools, ...providerTools };
     }
 
     // Workflows: variant values may be string[] or Record<string, StorageToolConfig>

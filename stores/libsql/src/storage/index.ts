@@ -19,6 +19,7 @@ import { SchedulesLibSQL } from './domains/schedules';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
+import { ToolProviderConnectionsLibSQL } from './domains/tool-provider-connections';
 import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
 
@@ -40,6 +41,7 @@ export {
   ScoresLibSQL,
   SkillsLibSQL,
   FavoritesLibSQL,
+  ToolProviderConnectionsLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
@@ -200,6 +202,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const blobs = new BlobsLibSQL(domainConfig);
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
     const schedules = new SchedulesLibSQL(domainConfig);
+    const toolProviderConnections = new ToolProviderConnectionsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -220,6 +223,7 @@ export class LibSQLStore extends MastraCompositeStore {
       blobs,
       backgroundTasks,
       schedules,
+      toolProviderConnections,
     };
   }
 
