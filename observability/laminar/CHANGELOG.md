@@ -1,5 +1,11 @@
 # @mastra/laminar
 
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- Bumped OpenTelemetry dependencies to `^0.218.0` to avoid a vulnerable `protobufjs` release. See [#16965](https://github.com/mastra-ai/mastra/issues/16965). ([#17121](https://github.com/mastra-ai/mastra/pull/17121))
+
 ## 1.1.2
 
 ### Patch Changes
