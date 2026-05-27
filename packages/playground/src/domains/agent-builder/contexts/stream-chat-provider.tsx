@@ -1,11 +1,12 @@
+import { RequestContext } from '@mastra/core/di';
 import { useChat } from '@mastra/react';
 import type { MastraUIMessage, SendMessageArgs } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useDebounce } from 'use-debounce';
-
 import { StreamMessagesContext, StreamRunningContext, StreamSendContext } from './stream-chat-context';
 import type { MessagesContextValue, RunningContextValue, SendContextValue } from './stream-chat-context';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export interface StreamChatProviderProps {
   agentId: string;
@@ -43,6 +44,7 @@ export const StreamChatProvider = ({
   children,
 }: StreamChatProviderProps) => {
   const { messages, isRunning, sendMessage } = useChat({ agentId, initialMessages });
+  const { data: currentUser } = useCurrentUser();
 
   // temping the fact that client tools open and closes multiple streams making the UI flicker with isStreaming: true, then false for a few MS
   const [debouncedIsRunning] = useDebounce(isRunning, debounceTime);
@@ -58,6 +60,8 @@ export const StreamChatProvider = ({
     (message: string) => {
       const tools = clientToolsRef.current;
       const instructions = instructionsRef.current;
+      const requestContext = new RequestContext();
+      requestContext.set('user', currentUser);
 
       const payload: SendMessageArgs = {
         message,
@@ -68,6 +72,7 @@ export const StreamChatProvider = ({
           maxTokens: 1000,
           temperature: 1,
         },
+        requestContext,
       };
 
       if (tools !== undefined) {
@@ -79,7 +84,7 @@ export const StreamChatProvider = ({
 
       void sendMessage(payload);
     },
-    [sendMessage],
+    [sendMessage, currentUser],
   );
 
   const hasDispatchedStarterRef = useRef(false);
