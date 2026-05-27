@@ -1,5 +1,15 @@
 # @mastra/client-js
 
+## 1.21.0-alpha.9
+
+### Patch Changes
+
+- Port the `yj/magnificent-marquess` frontend stack onto `rain-purpose`. ([#17105](https://github.com/mastra-ai/mastra/pull/17105))
+  - `@mastra/client-js`: new `ToolProvider` resource and a `getModelPolicy` accessor on the root client. Route types regenerated for the new endpoints.
+  - `@internal/playground`: Agent Builder routes (agents, skills, infrastructure, favorite, library) wired into the router, `RoutePermissionGuard` and `RoleImpersonationProvider` applied to the app shell, new login layout, role-impersonation banner, `useRestoreFocus` hook, `StudioIndexRedirect` home, and supporting tweaks across agents, browser view, LLM, and CMS surfaces.
+
+  Existing client-tools-on-signals work and the unrouted Agent Builder view/edit pages are preserved.
+
 ## 1.21.0-alpha.8
 
 ### Patch Changes
