@@ -179,6 +179,20 @@ export type BaseServerOptions = {
   /** Whether to enable progress tracking (default: false) */
   enableProgressTracking?: boolean;
   /**
+   * Whether instructions returned by this MCP server during initialization should
+   * be forwarded to agents that use the server's tools.
+   *
+   * @default true
+   */
+  forwardInstructions?: boolean;
+  /**
+   * Maximum number of characters of this server's instructions to forward into
+   * an agent system prompt.
+   *
+   * @default 512
+   */
+  instructionsMaxLength?: number;
+  /**
    * Whether tools from this server require explicit user approval before execution.
    *
    * - `true`: All tools require approval before running.

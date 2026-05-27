@@ -168,12 +168,104 @@ type ProcessorWorkflowChildrenContainer = {
   }>;
 };
 
+type ToolWithMcpInstructions = {
+  mcpMetadata?: {
+    serverName?: string;
+    serverInstructions?: string;
+    forwardInstructions?: boolean;
+    instructionsMaxLength?: number;
+  };
+};
+
 function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
   if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
     return Promise.resolve(value).then(cb);
   }
 
   return cb(value as T);
+}
+
+function truncateMcpInstructions(instructions: string, maxLength?: number): string {
+  const resolvedMaxLength = maxLength ?? 512;
+  if (resolvedMaxLength < 1) {
+    return '';
+  }
+
+  return instructions.length > resolvedMaxLength ? instructions.slice(0, resolvedMaxLength) : instructions;
+}
+
+function buildMcpServerGuidance(tools: Array<ToolWithMcpInstructions | undefined>): string | undefined {
+  const instructionsByServer = new Map<
+    string,
+    {
+      instructions: string;
+      maxLength?: number;
+    }
+  >();
+
+  for (const tool of tools) {
+    const metadata = tool?.mcpMetadata;
+    if (!metadata?.serverName || metadata.forwardInstructions === false) {
+      continue;
+    }
+
+    const instructions = metadata.serverInstructions?.trim();
+    if (!instructions || instructionsByServer.has(metadata.serverName)) {
+      continue;
+    }
+
+    instructionsByServer.set(metadata.serverName, {
+      instructions,
+      maxLength: metadata.instructionsMaxLength,
+    });
+  }
+
+  const guidance = [...instructionsByServer.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([serverName, { instructions, maxLength }]) => {
+      const truncatedInstructions = truncateMcpInstructions(instructions, maxLength).trim();
+      if (!truncatedInstructions) {
+        return undefined;
+      }
+
+      return `## Guidance from MCP server "${serverName}"\n\n${truncatedInstructions}`;
+    })
+    .filter((entry): entry is string => Boolean(entry));
+
+  return guidance.length > 0 ? guidance.join('\n\n') : undefined;
+}
+
+function appendMcpServerGuidance(instructions: AgentInstructions, guidance?: string): AgentInstructions {
+  if (!guidance) {
+    return instructions;
+  }
+
+  const appendToText = (content: string) => (content.includes(guidance) ? content : `${content}\n\n${guidance}`);
+
+  if (typeof instructions === 'string') {
+    return appendToText(instructions);
+  }
+
+  if (Array.isArray(instructions)) {
+    if (instructions.some(msg => (typeof msg === 'string' ? msg : msg.content) === guidance)) {
+      return instructions;
+    }
+
+    if (instructions.every(msg => typeof msg === 'string')) {
+      return [...instructions, guidance] as AgentInstructions;
+    }
+
+    return [...instructions, { role: 'system', content: guidance }] as AgentInstructions;
+  }
+
+  if (typeof instructions.content === 'string') {
+    return {
+      ...instructions,
+      content: appendToText(instructions.content),
+    } as AgentInstructions;
+  }
+
+  return instructions;
 }
 
 function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {
@@ -1703,6 +1795,33 @@ export class Agent<
     }
 
     return this.#instructions;
+  }
+
+  private async getMcpServerGuidance({
+    requestContext,
+    toolsets,
+    clientTools,
+  }: {
+    requestContext: RequestContext;
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+  }): Promise<string | undefined> {
+    const tools: Array<ToolWithMcpInstructions | undefined> = [];
+
+    const assignedTools = await this.listTools({ requestContext });
+    tools.push(...(Object.values(assignedTools || {}) as ToolWithMcpInstructions[]));
+
+    for (const toolset of Object.values(toolsets || {})) {
+      tools.push(...(Object.values(toolset || {}) as ToolWithMcpInstructions[]));
+    }
+
+    tools.push(...(Object.values(clientTools || {}) as ToolWithMcpInstructions[]));
+
+    if (tools.length === 0) {
+      return undefined;
+    }
+
+    return buildMcpServerGuidance(tools);
   }
 
   /**
@@ -5680,7 +5799,13 @@ export class Agent<
         resourceId,
       }) ||
       randomUUID();
-    const instructions = options.instructions || (await this.getInstructions({ requestContext }));
+    const baseInstructions = options.instructions || (await this.getInstructions({ requestContext }));
+    const mcpServerGuidance = await this.getMcpServerGuidance({
+      requestContext,
+      toolsets: options.toolsets,
+      clientTools: options.clientTools,
+    });
+    const instructions = appendMcpServerGuidance(baseInstructions, mcpServerGuidance);
 
     // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
