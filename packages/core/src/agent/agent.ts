@@ -118,11 +118,16 @@ import type {
   AgentCreateOptions,
   AgentExecuteOnFinishOptions,
   AgentInstructions,
+  AgentMessageInput,
   AgentMethodType,
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
   PublicStructuredOutputOptions,
+  QueueAgentMessageOptions,
+  QueueAgentMessageResult,
+  SendAgentMessageOptions,
+  SendAgentMessageResult,
   SendAgentSignalOptions,
   SendAgentSignalResult,
   StructuredOutputOptions,
@@ -6366,6 +6371,26 @@ export class Agent<
 
   abortRunStream(runId: string): boolean {
     return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  sendMessage<OUTPUT = TOutput>(
+    message: AgentMessageInput,
+    target: SendAgentMessageOptions<OUTPUT>,
+  ): SendAgentMessageResult {
+    return agentThreadStreamRuntime.sendMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  queueMessage<OUTPUT = TOutput>(
+    message: AgentMessageInput,
+    target: QueueAgentMessageOptions<OUTPUT>,
+  ): QueueAgentMessageResult {
+    return agentThreadStreamRuntime.queueMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
   }
 
   /**

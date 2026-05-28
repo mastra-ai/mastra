@@ -1049,7 +1049,8 @@ export class AgentChannels {
 
     this.agent.sendSignal(
       {
-        type: 'user-message',
+        type: 'user',
+        tagName: 'user',
         contents: signalContents,
         attributes,
         providerOptions,

@@ -6,7 +6,14 @@ import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export type AgentSignalType = 'user-message' | 'system-reminder' | string;
+export type AgentSignalCategory = 'user' | 'state' | 'reactive' | 'notification';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalType = AgentSignalCategory | 'user-message' | 'system-reminder' | string;
+
+export type AgentSignalTagName = string;
 
 export type SignalPart = TextPart | SignalFilePart;
 type SignalFilePart = {
@@ -23,11 +30,21 @@ type SignalFilePart = {
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
 export type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 
+export type AgentMessageInput =
+  | AgentSignalContents
+  | {
+      contents: AgentSignalContents;
+      attributes?: AgentSignalAttributes;
+      metadata?: Record<string, unknown>;
+      providerOptions?: MastraProviderMetadata;
+    };
+
 export type AgentSignalInput = {
   id?: string;
   createdAt?: Date | string;
   acceptedAt?: Date | string;
   type: AgentSignalType;
+  tagName?: AgentSignalTagName;
   contents: AgentSignalContents;
   attributes?: AgentSignalAttributes;
   metadata?: Record<string, unknown>;
@@ -47,6 +64,7 @@ export type AgentSignalDataPart = {
   data: {
     id: string;
     type: AgentSignalType;
+    tagName?: AgentSignalTagName;
     contents: AgentSignalContents;
     createdAt: string;
     acceptedAt?: string;
@@ -73,9 +91,35 @@ export function isMastraSignalMessage(message: MastraDBMessage): message is Mast
   return message.role === 'signal';
 }
 
+function normalizeSignalType(input: Pick<AgentSignalInput, 'type' | 'tagName'>): {
+  type: AgentSignalCategory;
+  tagName: AgentSignalTagName;
+} {
+  if (input.type === 'user-message') {
+    return { type: 'user', tagName: input.tagName ?? 'user' };
+  }
+
+  if (input.type === 'system-reminder') {
+    return { type: 'reactive', tagName: input.tagName ?? 'system-reminder' };
+  }
+
+  if (input.type === 'user' || input.type === 'state' || input.type === 'notification') {
+    return { type: input.type, tagName: input.tagName ?? input.type };
+  }
+
+  if (input.type === 'reactive') {
+    return { type: 'reactive', tagName: input.tagName ?? 'reactive' };
+  }
+
+  return { type: 'reactive', tagName: input.tagName ?? input.type };
+}
+
 function normalizeSignal(signal: AgentSignalInput | CreatedAgentSignal) {
+  const { type, tagName } = normalizeSignalType(signal);
   return {
     ...signal,
+    type,
+    tagName,
     id: signal.id ?? crypto.randomUUID(),
     createdAt:
       signal.createdAt instanceof Date ? signal.createdAt : signal.createdAt ? new Date(signal.createdAt) : new Date(),
@@ -121,12 +165,13 @@ function signalAttributesToXml(attributes?: AgentSignalAttributes): string {
 }
 
 export function signalToXmlMarkup(
-  signal: Pick<AgentSignalInput, 'type' | 'attributes'> & { contents?: string },
+  signal: Pick<AgentSignalInput, 'type' | 'tagName' | 'attributes'> & { contents?: string },
 ): string {
-  assertXmlName(signal.type, 'tag name');
+  const tagName = signal.tagName ?? normalizeSignalType(signal).tagName;
+  assertXmlName(tagName, 'tag name');
   const attributesXml = signalAttributesToXml(signal.attributes);
-  if (!signal.contents) return `<${signal.type}${attributesXml} />`;
-  return `<${signal.type}${attributesXml}>${escapeXml(signal.contents)}</${signal.type}>`;
+  if (!signal.contents) return `<${tagName}${attributesXml} />`;
+  return `<${tagName}${attributesXml}>${escapeXml(signal.contents)}</${tagName}>`;
 }
 
 // Recover legacy metadata.signal.contents shapes (pre-narrowing) into the current
@@ -309,7 +354,10 @@ function hasMeaningfulAttributes(attributes?: AgentSignalAttributes): boolean {
 // Inline-wrap the first text part with the signal's XML tag. If there's no text part, prepend
 // a self-closing marker as a synthetic first part so attributes still surface alongside the
 // file/image payload on the same turn.
-function injectMarkerInline(signal: Pick<AgentSignalInput, 'type' | 'attributes'>, parts: SignalPart[]): SignalPart[] {
+function injectMarkerInline(
+  signal: Pick<AgentSignalInput, 'type' | 'tagName' | 'attributes'>,
+  parts: SignalPart[],
+): SignalPart[] {
   let wrapped = false;
   const out: SignalPart[] = [];
   for (const part of parts) {
@@ -321,7 +369,7 @@ function injectMarkerInline(signal: Pick<AgentSignalInput, 'type' | 'attributes'
     }
   }
   if (!wrapped) {
-    const markerText = signalToXmlMarkup({ type: signal.type, attributes: signal.attributes });
+    const markerText = signalToXmlMarkup({ type: signal.type, tagName: signal.tagName, attributes: signal.attributes });
     out.unshift({ type: 'text', text: markerText });
   }
   return out;
@@ -331,10 +379,10 @@ function injectMarkerInline(signal: Pick<AgentSignalInput, 'type' | 'attributes'
 // (a prompt turn the model sees, not a signal row). The XML wrapper carries the attributes
 // inline so there's no metadata.signal here.
 function signalToLLMMessage(
-  signal: Pick<AgentSignalInput, 'type' | 'attributes' | 'providerOptions'>,
+  signal: Pick<AgentSignalInput, 'type' | 'tagName' | 'attributes' | 'providerOptions'>,
   parts: SignalPart[],
 ): UserModelMessage {
-  const isUserMessage = signal.type === 'user-message';
+  const isUserMessage = signal.type === 'user';
   const hasAttrs = hasMeaningfulAttributes(signal.attributes);
 
   const anyPartProviderOptions = parts.some(part => part.providerOptions);
@@ -362,11 +410,13 @@ function signalToLLMMessage(
 }
 
 function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: SignalPart[]): AgentSignalDataPart {
+  const dataPartTagName = signal.type === 'user' && signal.tagName === 'user' ? 'user-message' : signal.tagName;
   return {
-    type: `data-${signal.type}`,
+    type: `data-${dataPartTagName}`,
     data: {
       id: signal.id,
       type: signal.type,
+      tagName: signal.tagName,
       contents: partsToSignalContents(parts),
       createdAt: signal.createdAt.toISOString(),
       ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
@@ -406,7 +456,7 @@ function signalToDBMessage(
     createdAt: signal.createdAt,
     threadId: options?.threadId,
     resourceId: options?.resourceId,
-    type: signal.type,
+    type: signal.tagName,
     content: {
       format: 2,
       parts: storageParts,
@@ -415,6 +465,7 @@ function signalToDBMessage(
         signal: {
           id: signal.id,
           type: signal.type,
+          tagName: signal.tagName,
           createdAt: signal.createdAt.toISOString(),
           ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
           ...(signal.attributes ? { attributes: signal.attributes } : {}),
@@ -486,7 +537,8 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
       ? (metadataSignal as Record<string, unknown>)
       : undefined;
 
-  const type = typeof signalMetadata?.type === 'string' ? signalMetadata.type : (message.type ?? 'user-message');
+  const rawType = typeof signalMetadata?.type === 'string' ? signalMetadata.type : (message.type ?? 'user-message');
+  const tagName = typeof signalMetadata?.tagName === 'string' ? signalMetadata.tagName : undefined;
   // Reconstruct contents from content.parts — the canonical source. Legacy rows (pre stash
   // removal) preserved the original input shape on metadata.signal.contents; recover whatever
   // we can from it (string, parts array, CoreUserMessage wrapper, CoreUserMessage[]) so files
@@ -517,7 +569,20 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
         : undefined,
   };
 
-  return createSignal({ ...base, type, contents });
+  return createSignal({ ...base, type: rawType, tagName, contents });
+}
+
+export function createMessageSignal(
+  input: AgentMessageInput,
+  options?: Pick<AgentSignalInput, 'id' | 'createdAt' | 'acceptedAt'>,
+): CreatedAgentSignal {
+  const message = typeof input === 'string' || Array.isArray(input) ? { contents: input } : input;
+  return createSignal({
+    ...message,
+    ...options,
+    type: 'user',
+    tagName: 'user',
+  });
 }
 
 export function dataPartToSignal(part: AgentSignalDataPart): CreatedAgentSignal {

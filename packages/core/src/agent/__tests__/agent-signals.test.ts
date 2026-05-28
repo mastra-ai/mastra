@@ -11,6 +11,7 @@ import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
 import {
+  createMessageSignal,
   createSignal,
   dataPartToSignal,
   mastraDBMessageToSignal,
@@ -127,13 +128,14 @@ describe('Agent signals', () => {
 
     expect(signal.toLLMMessage()).toEqual({
       role: 'user',
-      content: '<user-message priority="high">Signal contents</user-message>',
+      content: '<user priority="high">Signal contents</user>',
     });
     expect(signal.toDataPart()).toEqual({
       type: 'data-user-message',
       data: {
         id: 'signal-1',
-        type: 'user-message',
+        type: 'user',
+        tagName: 'user',
         contents: 'Signal contents',
         createdAt: '2026-01-01T00:00:00.000Z',
         acceptedAt: '2026-01-01T00:00:01.000Z',
@@ -149,7 +151,8 @@ describe('Agent signals', () => {
     expect(dbMessage.content.metadata).toEqual({
       signal: {
         id: 'signal-1',
-        type: 'user-message',
+        type: 'user',
+        tagName: 'user',
         createdAt: '2026-01-01T00:00:00.000Z',
         acceptedAt: '2026-01-01T00:00:01.000Z',
         attributes: { priority: 'high' },
@@ -239,6 +242,33 @@ describe('Agent signals', () => {
     expect(mastraDBMessageToSignal(fileSignal.toDBMessage()).contents).toEqual(fileContents);
   });
 
+  it('normalizes message signals and legacy signal types', () => {
+    const messageSignal = createMessageSignal({
+      contents: 'Hello',
+      attributes: { sentFrom: 'test' },
+    });
+    expect(messageSignal.type).toBe('user');
+    expect(messageSignal.tagName).toBe('user');
+    expect(messageSignal.toLLMMessage()).toEqual({ role: 'user', content: '<user sentFrom="test">Hello</user>' });
+
+    const legacyMessage = createSignal({ type: 'user-message', contents: 'Legacy message' });
+    expect(legacyMessage.type).toBe('user');
+    expect(legacyMessage.tagName).toBe('user');
+    expect(legacyMessage.toLLMMessage()).toEqual({ role: 'user', content: 'Legacy message' });
+
+    const legacyReminder = createSignal({ type: 'system-reminder', contents: 'Remember this' });
+    expect(legacyReminder.type).toBe('reactive');
+    expect(legacyReminder.tagName).toBe('system-reminder');
+    expect(legacyReminder.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<system-reminder>Remember this</system-reminder>',
+    });
+
+    const customLegacy = createSignal({ type: 'custom-reminder', contents: 'Legacy custom' });
+    expect(customLegacy.type).toBe('reactive');
+    expect(customLegacy.tagName).toBe('custom-reminder');
+  });
+
   it('renders user-message attributes inline-wrapped for text and multimodal contents', () => {
     const stringSignal = createSignal({
       type: 'user-message',
@@ -247,7 +277,7 @@ describe('Agent signals', () => {
     });
     expect(stringSignal.toLLMMessage()).toEqual({
       role: 'user',
-      content: '<user-message messageId="m-1" userId="u-1">Hello</user-message>',
+      content: '<user messageId="m-1" userId="u-1">Hello</user>',
     });
 
     const partsTextSignal = createSignal({
@@ -257,7 +287,7 @@ describe('Agent signals', () => {
     });
     expect(partsTextSignal.toLLMMessage()).toEqual({
       role: 'user',
-      content: '<user-message messageId="m-1b">Hello again</user-message>',
+      content: '<user messageId="m-1b">Hello again</user>',
     });
 
     const fileContents = [
@@ -280,7 +310,7 @@ describe('Agent signals', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'text',
-          text: '<user-message messageId="m-2">Look at this</user-message>',
+          text: '<user messageId="m-2">Look at this</user>',
         }),
         expect.objectContaining({
           type: 'file',
@@ -302,7 +332,7 @@ describe('Agent signals', () => {
     const fileOnlyResult = fileOnlySignal.toLLMMessage();
     expect(fileOnlyResult.role).toBe('user');
     expect(fileOnlyResult.content).toEqual([
-      expect.objectContaining({ type: 'text', text: '<user-message messageId="m-2d" />' }),
+      expect.objectContaining({ type: 'text', text: '<user messageId="m-2d" />' }),
       expect.objectContaining({ type: 'file', data: 'data:image/png;base64,aGVsbG8=' }),
     ]);
 
@@ -420,7 +450,7 @@ describe('Agent signals', () => {
     // Stash is dropped — metadata.signal carries only envelope fields (id/type/attributes/createdAt).
     const signalMeta = (userDb.content.metadata as { signal: Record<string, unknown> }).signal;
     expect(signalMeta).not.toHaveProperty('contents');
-    expect(signalMeta).toMatchObject({ type: 'user-message', attributes: { messageId: 'm-1' } });
+    expect(signalMeta).toMatchObject({ type: 'user', tagName: 'user', attributes: { messageId: 'm-1' } });
 
     const reminder = createSignal({
       type: 'system-reminder',
@@ -449,7 +479,8 @@ describe('Agent signals', () => {
       attributes: { kind: 'screenshot' },
     });
     const rehydrated = mastraDBMessageToSignal(reminder.toDBMessage());
-    expect(rehydrated.type).toBe('system-reminder');
+    expect(rehydrated.type).toBe('reactive');
+    expect(rehydrated.tagName).toBe('system-reminder');
     expect(rehydrated.contents).toEqual(screenshotContents);
     expect(rehydrated.attributes).toEqual({ kind: 'screenshot' });
 
@@ -855,6 +886,185 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('starts an idle thread run when sendMessage is called', async () => {
+    const agent = new Agent({
+      id: 'idle-message-agent',
+      name: 'Idle Message Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('message response'),
+    });
+
+    const subscription = await agent.subscribeToThread({
+      threadId: 'idle-message-thread',
+      resourceId: 'idle-message-user',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+
+    const result = await agent.sendMessage(
+      { contents: 'Hello from sendMessage', attributes: { sentFrom: 'test' } },
+      {
+        resourceId: 'idle-message-user',
+        threadId: 'idle-message-thread',
+        ifIdle: { streamOptions: { memory: { resource: 'idle-message-user', thread: 'idle-message-thread' } } },
+      },
+    );
+
+    const subscribedRun = await nextRun;
+    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    expect(result.signal).toMatchObject({ type: 'user', tagName: 'user', contents: 'Hello from sendMessage' });
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-user-message');
+    expect(signalPart?.data).toMatchObject({
+      id: result.signal.id,
+      type: 'user',
+      tagName: 'user',
+      contents: 'Hello from sendMessage',
+      attributes: { sentFrom: 'test' },
+    });
+    expect(subscribedRun.value.text).toBe('message response');
+
+    subscription.unsubscribe();
+  });
+
+  it('delivers sendMessage into an active same-agent run', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        streamCount += 1;
+        prompts.push(prompt);
+        const responseText = streamCount === 1 ? 'first response' : 'message response';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `send-message-${streamCount}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (streamCount === 1) {
+                await firstFinished;
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const agent = new Agent({ id: 'active-message-agent', name: 'Active Message Agent', instructions: 'Test', model });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'active-message-thread',
+      resourceId: 'active-message-user',
+    });
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'active-message-thread', resource: 'active-message-user' },
+    });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    const result = agent.sendMessage('Hello while active', {
+      resourceId: 'active-message-user',
+      threadId: 'active-message-thread',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    releaseFirst();
+    await expect(stream.text).resolves.toBe('first responsemessage response');
+    expect(streamCount).toBe(2);
+    expect(JSON.stringify(prompts[1])).toContain('Hello while active');
+
+    subscription.unsubscribe();
+  });
+
+  it('queues queueMessage until the active run completes', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        streamCount += 1;
+        prompts.push(prompt);
+        const responseText = streamCount === 1 ? 'first response' : 'queued response';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `queue-message-${streamCount}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (streamCount === 1) {
+                await firstFinished;
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const agent = new Agent({ id: 'queue-message-agent', name: 'Queue Message Agent', instructions: 'Test', model });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'queue-message-thread',
+      resourceId: 'queue-message-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const firstRun = readNextRunWithParts(iterator);
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'queue-message-thread', resource: 'queue-message-user' },
+    });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    const result = agent.queueMessage('Queued follow-up', {
+      resourceId: 'queue-message-user',
+      threadId: 'queue-message-thread',
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(result.runId).not.toBe(stream.runId);
+    await nextTick();
+    expect(streamCount).toBe(1);
+
+    releaseFirst();
+    await expect(stream.text).resolves.toBe('first response');
+    await firstRun;
+    const secondRun = await readNextRunWithParts(iterator);
+    expect(secondRun.value.runId).toBe(result.runId);
+    expect(secondRun.value.text).toBe('queued response');
+    expect(streamCount).toBe(2);
+    expect(JSON.stringify(prompts[1])).toContain('Queued follow-up');
+
+    subscription.unsubscribe();
+  });
+
   it('fans out sequential idle signal runs to many same-thread subscribers', async () => {
     const resourceId = 'share-resource';
     const threadId = 'share-thread';
@@ -1024,7 +1234,7 @@ describe('Agent signals', () => {
     expect(streamCount).toBe(0);
     expect(recalled.messages).toHaveLength(1);
     // Stash dropped; payload lives in content.parts now.
-    expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user-message' });
+    expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user', tagName: 'user' });
     expect(recalled.messages[0]?.content.parts).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'persist without waking' })]),
     );
@@ -1160,7 +1370,7 @@ describe('Agent signals', () => {
 
     const result = senderRuntime.sendSignal(
       sender,
-      { type: 'user-message', contents: [{ role: 'user', content: 'remote follow-up' }] },
+      { type: 'user-message', contents: 'remote follow-up' },
       { resourceId: 'remote-resource', threadId: 'remote-thread' },
       pubsub,
     );
@@ -2443,7 +2653,7 @@ describe('Agent signals', () => {
       const resolved = resolveDeliveryAttributes(signal, { delivery: 'while-active' });
       expect(resolved.toLLMMessage()).toEqual({
         role: 'user',
-        content: '<user-message delivery="while-active">fix the bug</user-message>',
+        content: '<user delivery="while-active">fix the bug</user>',
       });
     });
 
