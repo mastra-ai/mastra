@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useBuilderPickerVisibility } from '../../agent-builder';
+import { useAllConnections } from '../../tool-providers/hooks/use-all-connections';
 import { useAllProviderTools } from '../../tool-providers/hooks/use-all-provider-tools';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { buildAvailableToolRecords } from '../services/build-available-tool-records';
@@ -47,6 +48,7 @@ export function useAvailableAgentTools({
   // ToolProvider, so we intentionally bypass the builder picker allowlist
   // for integration rows (the picker has no `visibleIntegrations` field).
   const { tools: integrationTools } = useAllProviderTools();
+  const { hasConnection } = useAllConnections();
   const toolProvidersFormValue = useWatch<AgentBuilderEditFormValues>({
     name: 'toolProviders',
   }) as AgentBuilderEditFormValues['toolProviders'];
@@ -80,6 +82,7 @@ export function useAvailableAgentTools({
       type: 'integration',
       providerId: item.providerId,
       toolkit: item.toolkit,
+      hasConnection: hasConnection(item.providerId, item.toolkit),
     }));
 
     return [...native, ...integration];
@@ -94,5 +97,6 @@ export function useAvailableAgentTools({
     picker,
     integrationTools,
     toolProvidersFormValue,
+    hasConnection,
   ]);
 }

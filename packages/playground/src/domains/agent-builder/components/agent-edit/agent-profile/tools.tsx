@@ -1,7 +1,12 @@
 import { Checkbox, Txt, cn } from '@mastra/playground-ui';
+import { useQueryClient } from '@tanstack/react-query';
 import type { CSSProperties, ReactNode } from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
+import { IntegrationConnectionPicker } from '../../../../tool-providers/components/integration-connection-picker';
+import { useAuthorize } from '../../../../tool-providers/hooks/use-authorize';
+import { useToolProviders } from '../../../../tool-providers/hooks/use-tool-providers';
+import type { ToolProviderConnectionFormValue } from '../../../../tool-providers/schemas';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
@@ -19,6 +24,19 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
   const [search, setSearch] = useState('');
   const [onlySelected, setOnlySelected] = useState(false);
 
+  // Per-provider capability lookup so the picker knows whether multiple
+  // connections per toolkit are allowed for a given provider.
+  const providersQuery = useToolProviders();
+  const providerCapsById = useMemo(() => {
+    const map = new Map<string, { multipleConnectionsPerToolkit: boolean }>();
+    for (const provider of providersQuery.data?.providers ?? []) {
+      map.set(provider.id, {
+        multipleConnectionsPerToolkit: provider.capabilities?.multipleConnectionsPerToolkit ?? false,
+      });
+    }
+    return map;
+  }, [providersQuery.data?.providers]);
+
   const filterCheckboxStyle: CSSProperties | undefined = onlySelected
     ? {
         backgroundColor: agentColor.background,
@@ -28,6 +46,32 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
     : undefined;
 
   const toggle = (item: AgentTool, next: boolean) => {
+    if (item.type === 'integration' && item.providerId && item.toolkit) {
+      // Integration tools live in `toolProviders[providerId].tools`, keyed by
+      // the bare slug (the AgentTool `name` field, see use-available-agent-tools.ts).
+      const slug = item.name;
+      const current = (getValues('toolProviders') ?? {}) as Record<
+        string,
+        {
+          tools?: Record<string, { toolkit: string; description?: string }>;
+          connections?: Record<string, ToolProviderConnectionFormValue[]>;
+        }
+      >;
+      const existing = current[item.providerId] ?? { tools: {}, connections: {} };
+      const nextTools = { ...(existing.tools ?? {}) };
+      const nextConnections = { ...(existing.connections ?? {}) };
+      if (next) {
+        nextTools[slug] = { toolkit: item.toolkit, ...(item.description ? { description: item.description } : {}) };
+      } else {
+        delete nextTools[slug];
+      }
+      setValue(
+        'toolProviders',
+        { ...current, [item.providerId]: { ...existing, tools: nextTools, connections: nextConnections } } as never,
+        { shouldDirty: true },
+      );
+      return;
+    }
     const fieldName = item.type === 'agent' ? 'agents' : item.type === 'workflow' ? 'workflows' : 'tools';
     const current = getValues(fieldName) ?? {};
     setValue(fieldName, { ...current, [item.id]: next }, { shouldDirty: true });
@@ -89,19 +133,44 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
         <ToolListEmptyState details={emptyStateDetails} />
       ) : (
         <div className="grid min-h-0 grid-cols-1 content-start gap-2 lg:gap-6 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-          {visibleTools.map(item => (
-            <AgentSelectableCard
-              key={`${item.type}__${item.id}`}
-              title={item.name}
-              subtitle={item.description || 'No description provided'}
-              isSelected={item.isChecked}
-              disabled={!editable}
-              onClick={() => toggle(item, !item.isChecked)}
-              ariaLabel={item.name}
-              testId={`tool-card-${item.type}-${item.id}`}
-              checkTestId={`tool-card-check-${item.type}-${item.id}`}
-            />
-          ))}
+          {visibleTools.map(item => {
+            const isIntegration = item.type === 'integration' && !!item.providerId && !!item.toolkit;
+            const needsConnection = isIntegration && item.hasConnection === false;
+            const showPicker = isIntegration && item.isChecked;
+            const multipleAllowed = isIntegration
+              ? (providerCapsById.get(item.providerId!)?.multipleConnectionsPerToolkit ?? false)
+              : false;
+            return (
+              <div key={`${item.type}__${item.id}`} className="flex flex-col gap-2">
+                <AgentSelectableCard
+                  title={item.name}
+                  subtitle={item.description || 'No description provided'}
+                  isSelected={item.isChecked}
+                  disabled={!editable}
+                  onClick={() => toggle(item, !item.isChecked)}
+                  ariaLabel={item.name}
+                  testId={`tool-card-${item.type}-${item.id}`}
+                  checkTestId={`tool-card-check-${item.type}-${item.id}`}
+                />
+                {needsConnection && (
+                  <IntegrationConnectControl
+                    item={item}
+                    providerId={item.providerId!}
+                    toolkit={item.toolkit!}
+                    disabled={!editable}
+                  />
+                )}
+                {showPicker && (
+                  <IntegrationConnectionPicker
+                    providerId={item.providerId!}
+                    toolkit={item.toolkit!}
+                    multipleAllowed={multipleAllowed}
+                    disabled={!editable}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -131,3 +200,59 @@ function getVisibleTools(availableAgentTools: AgentTool[], search: string, onlyS
     return item.name.toLowerCase().includes(term) || (item.description?.toLowerCase().includes(term) ?? false);
   });
 }
+
+interface IntegrationConnectControlProps {
+  item: AgentTool;
+  providerId: string;
+  toolkit: string;
+  disabled: boolean;
+}
+
+/**
+ * Compact "Needs connection" hint + Connect button rendered beneath an
+ * integration tool's selectable card. The card itself stays selectable so
+ * users can pre-select tools and run OAuth after. On success we invalidate
+ * the `tool-integration-connections-all` query so the hint disappears.
+ */
+const IntegrationConnectControl = ({ item, providerId, toolkit, disabled }: IntegrationConnectControlProps) => {
+  const queryClient = useQueryClient();
+  const authorize = useAuthorize();
+
+  const handleConnect = () => {
+    authorize.mutate(
+      { providerId, toolkit, scope: 'per-author' },
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries({
+            queryKey: ['tool-integration-connections-all', providerId, toolkit],
+          });
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-2 px-2">
+      <Txt variant="ui-xs" className="text-neutral3">
+        Needs connection
+      </Txt>
+      <button
+        type="button"
+        onClick={handleConnect}
+        disabled={disabled || authorize.isPending}
+        data-testid={`tool-card-connect-${item.type}-${item.id}`}
+        className={cn(
+          'shrink-0 rounded border border-border1 bg-surface4 px-2 py-0.5 text-ui-xs text-neutral6',
+          'hover:bg-surface5 disabled:cursor-not-allowed disabled:opacity-60',
+        )}
+      >
+        {authorize.isPending ? 'Connecting…' : 'Connect'}
+      </button>
+      {authorize.error && (
+        <Txt variant="ui-xs" className="ml-1 text-red-500">
+          {String(authorize.error)}
+        </Txt>
+      )}
+    </div>
+  );
+};

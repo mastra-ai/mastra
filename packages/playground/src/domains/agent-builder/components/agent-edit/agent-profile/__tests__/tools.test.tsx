@@ -1,12 +1,42 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import type { AgentTool } from '../../../../types/agent-tool';
 import { Tools } from '../tools';
+
+const BASE_URL = 'http://localhost:4111';
+
+/**
+ * Default MSW handlers for the network the `Tools` component drives:
+ * - `useToolProviders()` → providers list
+ * - `useAllConnections()` fan-out → per-provider toolkits + per-pair connections
+ *
+ * Tests that need richer behavior override these with `server.use(...)`.
+ */
+const defaultToolNetworkHandlers = [
+  http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json({ providers: [] })),
+  // The picker subscribes to `useIsToolProviderAdmin` → `useCurrentUser`,
+  // which fetches `/api/auth/me`. Without a handler the real network is hit
+  // (bypass), causing flakes under parallel test load.
+  http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'tester', permissions: [] })),
+];
+
+const sharedServer = setupServer(...defaultToolNetworkHandlers);
+
+beforeAll(() => sharedServer.listen({ onUnhandledRequest: 'bypass' }));
+afterEach(() => {
+  cleanup();
+  sharedServer.resetHandlers(...defaultToolNetworkHandlers);
+});
+afterAll(() => sharedServer.close());
 
 const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; children: ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
@@ -16,10 +46,15 @@ const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; c
       workflows: {},
     } as AgentBuilderEditFormValues,
   });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
-    <FormProvider {...methods}>
-      <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
-    </FormProvider>
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <FormProvider {...methods}>
+          <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
+        </FormProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>
   );
 };
 
@@ -187,5 +222,249 @@ describe('Tools', () => {
     expect(searchWrapper.parentElement).toBe(filterLabel.parentElement);
     expect(filterLabel.parentElement?.className).toContain('flex');
     expect(filterLabel.parentElement?.className).toContain('justify-between');
+  });
+});
+
+describe('Tools — integration rows without a connection', () => {
+  beforeEach(() => {
+    sharedServer.use(
+      http.post(`${BASE_URL}/api/tool-providers/composio/authorize`, () =>
+        HttpResponse.json({ url: 'https://oauth.example/authorize', authId: 'auth_abc' }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/auth-status/auth_abc`, () =>
+        HttpResponse.json({ status: 'completed' }),
+      ),
+    );
+  });
+
+  const ConnectHarness = ({ children }: { children: ReactNode }) => {
+    const methods = useForm<AgentBuilderEditFormValues>({
+      defaultValues: { tools: {}, agents: {}, workflows: {}, toolProviders: {} } as AgentBuilderEditFormValues,
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return (
+      <MastraReactProvider baseUrl={BASE_URL}>
+        <QueryClientProvider client={queryClient}>
+          <FormProvider {...methods}>
+            <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
+          </FormProvider>
+        </QueryClientProvider>
+      </MastraReactProvider>
+    );
+  };
+
+  const unconnectedIntegrationTool: AgentTool = {
+    id: 'composio:GMAIL_FETCH_EMAILS',
+    name: 'GMAIL_FETCH_EMAILS',
+    description: 'Fetch emails',
+    isChecked: false,
+    type: 'integration',
+    providerId: 'composio',
+    toolkit: 'gmail',
+    hasConnection: false,
+  };
+
+  it('renders a Connect button alongside the selectable card when an integration row has no connection', () => {
+    const { getByTestId, getByText } = render(
+      <ConnectHarness>
+        <Tools availableAgentTools={[unconnectedIntegrationTool]} />
+      </ConnectHarness>,
+    );
+
+    // Connect button is present.
+    expect(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS')).toBeTruthy();
+    // Card stays selectable — checkbox span is still rendered.
+    expect(getByTestId('tool-card-check-integration-composio:GMAIL_FETCH_EMAILS')).toBeTruthy();
+    // Inline hint is shown.
+    expect(getByText('Needs connection')).toBeTruthy();
+  });
+
+  it('clicking Connect kicks off the OAuth popup and authorize call', async () => {
+    const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
+    // Stub window.open so useAuthorize's default popup opener resolves
+    // synchronously without a real browser.
+    const originalOpen = window.open;
+    window.open = openPopup as unknown as typeof window.open;
+
+    try {
+      const { getByTestId } = render(
+        <ConnectHarness>
+          <Tools availableAgentTools={[unconnectedIntegrationTool]} />
+        </ConnectHarness>,
+      );
+
+      fireEvent.click(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS'));
+
+      await waitFor(() => {
+        expect(openPopup).toHaveBeenCalledWith(
+          'https://oauth.example/authorize',
+          expect.any(String),
+          expect.any(String),
+        );
+      });
+    } finally {
+      window.open = originalOpen;
+    }
+  });
+});
+
+describe('Tools — checked integration rows render the connection picker', () => {
+  beforeEach(() => {
+    // Stamp the providers list + toolkit list shared by all picker scenarios.
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers`, () =>
+        HttpResponse.json({
+          providers: [
+            {
+              id: 'composio',
+              name: 'Composio',
+              capabilities: { multipleConnectionsPerToolkit: true },
+            },
+          ],
+        }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () =>
+        HttpResponse.json({ data: [{ slug: 'gmail', name: 'Gmail' }] }),
+      ),
+    );
+  });
+
+  const PickerHarness = ({
+    children,
+    onState,
+  }: {
+    children: ReactNode;
+    onState?: (state: AgentBuilderEditFormValues) => void;
+  }) => {
+    const methods = useForm<AgentBuilderEditFormValues>({
+      defaultValues: { tools: {}, agents: {}, workflows: {}, toolProviders: {} } as AgentBuilderEditFormValues,
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // Expose form state to assertions via a spy button.
+    return (
+      <MastraReactProvider baseUrl={BASE_URL}>
+        <QueryClientProvider client={queryClient}>
+          <FormProvider {...methods}>
+            <AgentColorProvider agentId="agent_test">
+              {children}
+              {onState && (
+                <button type="button" data-testid="spy-form-state" onClick={() => onState(methods.getValues())}>
+                  spy
+                </button>
+              )}
+            </AgentColorProvider>
+          </FormProvider>
+        </QueryClientProvider>
+      </MastraReactProvider>
+    );
+  };
+
+  const checkedIntegrationTool: AgentTool = {
+    id: 'composio:GMAIL_FETCH_EMAILS',
+    name: 'GMAIL_FETCH_EMAILS',
+    description: 'Fetch emails',
+    isChecked: true,
+    type: 'integration',
+    providerId: 'composio',
+    toolkit: 'gmail',
+    hasConnection: true,
+  };
+
+  it('renders the IntegrationConnectionPicker beneath a checked integration card', async () => {
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items: [] })),
+    );
+
+    const { findByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
+      </PickerHarness>,
+    );
+
+    expect(await findByTestId('integration-connection-picker-composio-gmail')).toBeTruthy();
+  });
+
+  it('does NOT render the picker for an unchecked integration row', async () => {
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items: [] })),
+    );
+
+    const unchecked = { ...checkedIntegrationTool, isChecked: false };
+    const { queryByTestId, findByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[unchecked]} />
+      </PickerHarness>,
+    );
+
+    // Card present, picker absent.
+    await findByTestId('tool-card-check-integration-composio:GMAIL_FETCH_EMAILS');
+    expect(queryByTestId('integration-connection-picker-composio-gmail')).toBeNull();
+  });
+
+  it('toggling a tool ON with exactly one existing connection does NOT auto-pin (picker is source of truth)', async () => {
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({ items: [{ connectionId: 'conn_only', status: 'active', label: 'only' }] }),
+      ),
+    );
+
+    const spy = vi.fn();
+    const unchecked = { ...checkedIntegrationTool, isChecked: false };
+    const { getByTestId } = render(
+      <PickerHarness onState={spy}>
+        <Tools availableAgentTools={[unchecked]} />
+      </PickerHarness>,
+    );
+
+    // Let the connections fan-out settle so we know the picker has data
+    // available; the toggle should still leave the pinned list empty.
+    await waitFor(() => {
+      expect(getByTestId('tool-card-integration-composio:GMAIL_FETCH_EMAILS')).toBeTruthy();
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    fireEvent.click(getByTestId('tool-card-integration-composio:GMAIL_FETCH_EMAILS'));
+
+    fireEvent.click(getByTestId('spy-form-state'));
+    const state = spy.mock.calls[0][0] as AgentBuilderEditFormValues;
+    const pinned = (
+      state as unknown as {
+        toolProviders: { composio?: { connections?: { gmail?: Array<unknown> } } };
+      }
+    ).toolProviders.composio?.connections?.gmail;
+    expect(pinned ?? []).toEqual([]);
+  });
+
+  it('toggling a tool ON with two existing connections does NOT auto-pin', async () => {
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({
+          items: [
+            { connectionId: 'conn_work', status: 'active', label: 'work' },
+            { connectionId: 'conn_personal', status: 'active', label: 'personal' },
+          ],
+        }),
+      ),
+    );
+
+    const spy = vi.fn();
+    const unchecked = { ...checkedIntegrationTool, isChecked: false };
+    const { getByTestId } = render(
+      <PickerHarness onState={spy}>
+        <Tools availableAgentTools={[unchecked]} />
+      </PickerHarness>,
+    );
+
+    await new Promise(r => setTimeout(r, 50));
+    fireEvent.click(getByTestId('tool-card-integration-composio:GMAIL_FETCH_EMAILS'));
+
+    fireEvent.click(getByTestId('spy-form-state'));
+    const state = spy.mock.calls[0][0] as AgentBuilderEditFormValues;
+    const pinned = (
+      state as unknown as {
+        toolProviders: { composio?: { connections?: { gmail?: Array<unknown> } } };
+      }
+    ).toolProviders.composio?.connections?.gmail;
+    expect(pinned ?? []).toEqual([]);
   });
 });

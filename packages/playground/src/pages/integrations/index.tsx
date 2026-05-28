@@ -1,10 +1,49 @@
-import { useState } from 'react';
+import type { ListToolProviderConnectionsResponse } from '@mastra/client-js';
+import { useMemo, useState } from 'react';
 
 import { useAuthorize } from '@/domains/tool-providers/hooks/use-authorize';
 import { useDisconnectConnection } from '@/domains/tool-providers/hooks/use-disconnect-connection';
 import { useExistingConnections } from '@/domains/tool-providers/hooks/use-existing-connections';
+import { useIsToolProviderAdmin } from '@/domains/tool-providers/hooks/use-is-tool-provider-admin';
 import { useToolProviders } from '@/domains/tool-providers/hooks/use-tool-providers';
 import { useToolkits } from '@/domains/tool-providers/hooks/use-toolkits';
+
+type ConnectionItem = ListToolProviderConnectionsResponse['items'][number];
+
+function ConnectionRow({
+  c,
+  isAdmin,
+  providerId: _providerId,
+  disconnectPending,
+  onDisconnect,
+}: {
+  c: ConnectionItem;
+  isAdmin: boolean;
+  providerId: string;
+  disconnectPending: boolean;
+  onDisconnect: () => void;
+}) {
+  return (
+    <li className="flex items-center justify-between border-b py-2">
+      <div>
+        <div className="font-mono text-xs">{c.connectionId}</div>
+        <div className="text-xs text-gray-500">
+          {c.label ?? '(no label)'} · {c.status}
+          {c.scope ? ` · ${c.scope}` : ''}
+          {isAdmin && c.authorId ? ` · author: ${c.authorId}` : ''}
+        </div>
+      </div>
+      <button
+        type="button"
+        className="text-red-600 underline disabled:opacity-50"
+        onClick={onDisconnect}
+        disabled={disconnectPending}
+      >
+        Disconnect
+      </button>
+    </li>
+  );
+}
 
 /**
  * Minimal MVP page to exercise the v1 ToolProvider backend end-to-end:
@@ -21,10 +60,36 @@ export default function IntegrationsPage() {
   const connectionsQuery = useExistingConnections(providerId || null, toolkit || null);
   const authorize = useAuthorize();
   const disconnect = useDisconnectConnection();
+  const isAdmin = useIsToolProviderAdmin();
 
   const providers = providersQuery.data?.providers ?? [];
   const toolkits = toolkitsQuery.data?.data ?? [];
-  const connections = connectionsQuery.data?.items ?? [];
+  const connections = useMemo(() => connectionsQuery.data?.items ?? [], [connectionsQuery.data?.items]);
+
+  // Admin-only grouping by authorId. When >1 distinct author present, we render
+  // grouped sections; otherwise we render a flat list with `author:` suffix on
+  // each row's metadata line. Non-admins see the flat list with no author info.
+  const groupedByAuthor = useMemo(() => {
+    if (!isAdmin) return null;
+    const authors = new Set<string>();
+    for (const c of connections) {
+      if (c.authorId) authors.add(c.authorId);
+    }
+    if (authors.size <= 1) return null;
+    const groups = new Map<string, typeof connections>();
+    for (const c of connections) {
+      const key = c.authorId ?? '(unknown)';
+      const existing = groups.get(key);
+      if (existing) existing.push(c);
+      else groups.set(key, [c]);
+    }
+    // Stable ordering: shared bucket last; others alphabetical.
+    return Array.from(groups.entries()).sort(([a], [b]) => {
+      if (a === 'shared') return 1;
+      if (b === 'shared') return -1;
+      return a.localeCompare(b);
+    });
+  }, [connections, isAdmin]);
 
   const handleConnect = () => {
     if (!providerId || !toolkit) return;
@@ -136,26 +201,42 @@ export default function IntegrationsPage() {
           <p className="text-red-600">{String(connectionsQuery.error)}</p>
         ) : connections.length === 0 ? (
           <p className="text-gray-500">No connections.</p>
+        ) : groupedByAuthor ? (
+          <div className="space-y-4">
+            {groupedByAuthor.map(([authorKey, rows]) => (
+              <div key={authorKey}>
+                <h3
+                  className="text-sm font-semibold text-gray-700"
+                  data-testid={`integration-author-group-${authorKey}`}
+                >
+                  {authorKey === 'shared' ? 'Shared' : `Owned by ${authorKey}`}
+                </h3>
+                <ul className="space-y-1">
+                  {rows.map(c => (
+                    <ConnectionRow
+                      key={c.connectionId}
+                      c={c}
+                      isAdmin={isAdmin}
+                      providerId={providerId}
+                      disconnectPending={disconnect.isPending}
+                      onDisconnect={() => disconnect.mutate({ providerId, connectionId: c.connectionId, force: true })}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         ) : (
           <ul className="space-y-1">
             {connections.map(c => (
-              <li key={c.connectionId} className="flex items-center justify-between border-b py-2">
-                <div>
-                  <div className="font-mono text-xs">{c.connectionId}</div>
-                  <div className="text-xs text-gray-500">
-                    {c.label ?? '(no label)'} · {c.status}
-                    {c.scope ? ` · ${c.scope}` : ''}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="text-red-600 underline disabled:opacity-50"
-                  onClick={() => disconnect.mutate({ providerId, connectionId: c.connectionId, force: true })}
-                  disabled={disconnect.isPending}
-                >
-                  Disconnect
-                </button>
-              </li>
+              <ConnectionRow
+                key={c.connectionId}
+                c={c}
+                isAdmin={isAdmin}
+                providerId={providerId}
+                disconnectPending={disconnect.isPending}
+                onDisconnect={() => disconnect.mutate({ providerId, connectionId: c.connectionId, force: true })}
+              />
             ))}
           </ul>
         )}

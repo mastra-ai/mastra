@@ -11,6 +11,10 @@ export interface AgentTool {
   // `GMAIL_FETCH_EMAILS`, so we cannot assume a `<toolkit>.<tool>` convention.
   providerId?: string;
   toolkit?: string;
+  // True when the caller has at least one existing connection for the
+  // `(providerId, toolkit)` pair. Only meaningful for `type === 'integration'`.
+  // Unconnected integration rows cannot be selected in the picker.
+  hasConnection?: boolean;
 }
 
 export interface AvailableToolsRecord {
