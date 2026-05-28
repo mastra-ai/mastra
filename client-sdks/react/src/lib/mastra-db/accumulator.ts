@@ -1,0 +1,1175 @@
+import type {
+  MastraDBMessage,
+  MastraMessagePart,
+  MastraMessageContentV2,
+  MastraToolInvocation,
+  MastraToolInvocationPart,
+} from '@mastra/core/agent/message-list';
+import type { AgentChunkType, ChunkType } from '@mastra/core/stream';
+import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import { formatStreamCompletionFeedback } from '../ai-sdk/utils/formatCompletionFeedback';
+import type {
+  BackgroundTaskEntry,
+  MastraDBMessageMetadata,
+  MastraReasoningPart,
+  MastraTextPart,
+} from './types';
+
+type StreamChunk = {
+  type: string;
+  payload: any;
+  runId: string;
+  from: 'AGENT' | 'WORKFLOW';
+};
+
+const cloneMetadata = (metadata: MastraDBMessageMetadata | undefined): MastraDBMessageMetadata =>
+  metadata ? { ...metadata } : {};
+
+const withParts = (message: MastraDBMessage, parts: MastraMessagePart[]): MastraDBMessage => ({
+  ...message,
+  content: {
+    ...message.content,
+    parts,
+  },
+});
+
+const withMetadata = (message: MastraDBMessage, metadata: MastraDBMessageMetadata): MastraDBMessage => ({
+  ...message,
+  content: {
+    ...message.content,
+    metadata,
+  },
+});
+
+const replaceLast = (conversation: MastraDBMessage[], message: MastraDBMessage): MastraDBMessage[] => [
+  ...conversation.slice(0, -1),
+  message,
+];
+
+const replaceAt = (
+  conversation: MastraDBMessage[],
+  index: number,
+  message: MastraDBMessage,
+): MastraDBMessage[] => [...conversation.slice(0, index), message, ...conversation.slice(index + 1)];
+
+const newAssistantMessage = (
+  id: string,
+  parts: MastraMessagePart[],
+  metadata: MastraDBMessageMetadata,
+): MastraDBMessage => ({
+  id,
+  role: 'assistant',
+  createdAt: new Date(),
+  content: {
+    format: 2,
+    parts,
+    metadata: cloneMetadata(metadata),
+  } satisfies MastraMessageContentV2,
+});
+
+const appendAssistantMessage = (
+  conversation: MastraDBMessage[],
+  id: string,
+  parts: MastraMessagePart[],
+  metadata: MastraDBMessageMetadata,
+): MastraDBMessage[] => [...conversation, newAssistantMessage(id, parts, metadata)];
+
+const isToolPart = (part: MastraMessagePart): part is MastraToolInvocationPart =>
+  part.type === 'tool-invocation';
+
+const partTextId = (part: MastraMessagePart): string | undefined =>
+  part.type === 'text' ? (part as MastraTextPart).textId : undefined;
+
+const partState = (part: MastraMessagePart): string | undefined =>
+  (part as { state?: string }).state;
+
+const partProviderMetadata = (part: MastraMessagePart): Record<string, unknown> | undefined =>
+  (part as { providerMetadata?: Record<string, unknown> }).providerMetadata;
+
+/**
+ * Set any streaming text/reasoning parts on the trailing assistant message to
+ * `state: 'done'`. Mirrors the previous `finishStreamingAssistantMessage` from
+ * the AI-SDK accumulator.
+ */
+export const finishStreamingAssistantMessage = (conversation: MastraDBMessage[]): MastraDBMessage[] => {
+  const lastMessage = conversation[conversation.length - 1];
+  if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+
+  const nextParts = lastMessage.content.parts.map(part => {
+    if ((part.type === 'text' || part.type === 'reasoning') && partState(part) === 'streaming') {
+      return { ...(part as MastraTextPart | MastraReasoningPart), state: 'done' as const } as unknown as MastraMessagePart;
+    }
+    return part;
+  });
+
+  return replaceLast(conversation, withParts(lastMessage, nextParts));
+};
+
+/**
+ * Locate the assistant message + tool part owning `toolCallId`. Prefers the
+ * most recent assistant message and walks back up to 10 messages, matching the
+ * historical accumulator's lookup behavior.
+ */
+const locateToolPart = (
+  messages: MastraDBMessage[],
+  toolCallId: string,
+  allowMetadataOnlyMatch: boolean,
+): { messageIndex: number; toolPartIndex: number } | null => {
+  const findIndex = (parts: MastraMessagePart[]) =>
+    parts.findIndex(part => isToolPart(part) && part.toolInvocation.toolCallId === toolCallId);
+
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage && lastMessage.role === 'assistant') {
+    const idx = findIndex(lastMessage.content.parts);
+    if (idx !== -1) return { messageIndex: messages.length - 1, toolPartIndex: idx };
+  }
+
+  let count = 0;
+  const maxMessagesBack = 10;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (count > maxMessagesBack) break;
+    const message = messages[i];
+    if (message.role !== 'assistant') continue;
+    const idx = findIndex(message.content.parts);
+    if (idx !== -1) return { messageIndex: i, toolPartIndex: idx };
+    count++;
+  }
+
+  if (!allowMetadataOnlyMatch) return null;
+
+  // Fall back to most-recent assistant message for metadata-only updates.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') return { messageIndex: i, toolPartIndex: -1 };
+  }
+  return null;
+};
+
+/**
+ * Merge per-toolCallId background-task bookkeeping onto message metadata.
+ */
+const mergeBgTaskMetadata = (
+  existing: MastraDBMessageMetadata | undefined,
+  mode: 'stream' | 'generate' | 'network' | undefined,
+  args: {
+    resetRunningCount?: boolean;
+    perTaskEntry?: {
+      toolCallId: string;
+      startedAt?: Date;
+      completedAt?: Date;
+      suspendedAt?: Date;
+      taskId: string;
+    };
+  },
+  otherMetadata?: MastraDBMessageMetadata,
+): MastraDBMessageMetadata => {
+  const base = cloneMetadata(existing);
+  const existingBgTasks = (base.backgroundTasks ?? {}) as Record<string, BackgroundTaskEntry>;
+
+  const nextBgTasks: Record<string, BackgroundTaskEntry> = { ...existingBgTasks };
+  if (args.perTaskEntry) {
+    const { toolCallId, startedAt, completedAt, taskId, suspendedAt } = args.perTaskEntry;
+    const prev = existingBgTasks[toolCallId] ?? ({ taskId } as BackgroundTaskEntry);
+    nextBgTasks[toolCallId] = {
+      ...prev,
+      taskId,
+      ...(startedAt !== undefined ? { startedAt } : {}),
+      ...(completedAt !== undefined ? { completedAt } : {}),
+      ...(suspendedAt !== undefined ? { suspendedAt } : {}),
+    };
+  }
+
+  const merged: MastraDBMessageMetadata = {
+    ...base,
+    ...(otherMetadata ?? {}),
+    mode,
+    backgroundTasks: nextBgTasks,
+  };
+  if (args.resetRunningCount) merged.runningBackgroundTasksCount = undefined;
+  return merged;
+};
+
+/**
+ * Workflow chunk accumulation. Mirrors
+ * `mapWorkflowStreamChunkToWatchResult` from the previous accumulator.
+ */
+export const mapWorkflowStreamChunkToWatchResult = (
+  prev: WorkflowStreamResult<any, any, any, any>,
+  chunk: StreamChunk,
+): WorkflowStreamResult<any, any, any, any> => {
+  if (chunk.type === 'workflow-start') {
+    return {
+      input: prev?.input,
+      status: 'running',
+      steps: prev?.steps || {},
+    };
+  }
+
+  if (chunk.type === 'workflow-canceled') {
+    return { ...prev, status: 'canceled' };
+  }
+
+  if (chunk.type === 'workflow-finish') {
+    const finalStatus = chunk.payload.workflowStatus;
+    const prevSteps = prev?.steps ?? {};
+    const lastStep = Object.values(prevSteps).pop();
+    return {
+      ...prev,
+      status: chunk.payload.workflowStatus,
+      ...(finalStatus === 'success' && lastStep?.status === 'success'
+        ? { result: lastStep?.output }
+        : finalStatus === 'failed' && lastStep?.status === 'failed'
+          ? { error: lastStep?.error }
+          : finalStatus === 'tripwire' && chunk.payload.tripwire
+            ? { tripwire: chunk.payload.tripwire }
+            : {}),
+    };
+  }
+
+  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload ?? {};
+  const newSteps = {
+    ...prev?.steps,
+    [chunk.payload.id]: {
+      ...prev?.steps?.[chunk.payload.id],
+      ...newPayload,
+    },
+  };
+
+  if (chunk.type === 'workflow-step-start') return { ...prev, steps: newSteps };
+
+  if (chunk.type === 'workflow-step-suspended') {
+    const suspendedStepIds = Object.entries(newSteps as Record<string, StepResult<any, any, any, any>>).flatMap(
+      ([stepId, stepResult]) => {
+        if (stepResult?.status === 'suspended') {
+          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+          return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
+        }
+        return [];
+      },
+    );
+    return {
+      ...prev,
+      status: 'suspended',
+      steps: newSteps,
+      suspendPayload: chunk.payload.suspendPayload,
+      suspended: suspendedStepIds as any,
+    };
+  }
+
+  if (chunk.type === 'workflow-step-waiting') return { ...prev, status: 'waiting', steps: newSteps };
+
+  if (chunk.type === 'workflow-step-progress') {
+    return {
+      ...prev,
+      steps: {
+        ...prev?.steps,
+        [chunk.payload.id]: {
+          ...prev?.steps?.[chunk.payload.id],
+          foreachProgress: {
+            completedCount: chunk.payload.completedCount,
+            totalCount: chunk.payload.totalCount,
+            currentIndex: chunk.payload.currentIndex,
+            iterationStatus: chunk.payload.iterationStatus,
+            iterationOutput: chunk.payload.iterationOutput,
+          },
+        },
+      },
+    };
+  }
+
+  if (chunk.type === 'workflow-step-result') return { ...prev, steps: newSteps };
+
+  return prev;
+};
+
+const signalContentsToUserMessages = (
+  contents: unknown,
+  metadata: MastraDBMessageMetadata,
+): MastraDBMessage[] => {
+  const makeUserMessage = (parts: MastraMessagePart[]): MastraDBMessage => ({
+    id: `signal-${Date.now()}`,
+    role: 'user',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts,
+      metadata: cloneMetadata(metadata),
+    },
+  });
+
+  if (typeof contents === 'string') {
+    return [makeUserMessage([{ type: 'text', text: contents }])];
+  }
+
+  if (Array.isArray(contents)) {
+    return contents.flatMap(content => signalContentsToUserMessages(content, metadata));
+  }
+
+  if (!contents || typeof contents !== 'object') return [];
+
+  const message = contents as { role?: unknown; content?: unknown };
+  if (message.role && message.role !== 'user') return [];
+
+  const content = message.content;
+  if (typeof content === 'string') {
+    return [makeUserMessage([{ type: 'text', text: content }])];
+  }
+
+  if (!Array.isArray(content)) return [];
+
+  const parts = content.flatMap((part): MastraMessagePart[] => {
+    if (!part || typeof part !== 'object') return [];
+    const typedPart = part as Record<string, unknown>;
+
+    if (typedPart.type === 'text' && typeof typedPart.text === 'string') {
+      return [{ type: 'text', text: typedPart.text }];
+    }
+
+    if (typedPart.type === 'image') {
+      const image = typedPart.image;
+      return [
+        {
+          type: 'file',
+          mediaType:
+            typeof typedPart.mediaType === 'string'
+              ? typedPart.mediaType
+              : typeof typedPart.mimeType === 'string'
+                ? typedPart.mimeType
+                : 'image/*',
+          url: typeof image === 'string' ? image : image instanceof URL ? image.toString() : '',
+        } as unknown as MastraMessagePart,
+      ];
+    }
+
+    if (typedPart.type === 'file') {
+      const data = typedPart.data;
+      return [
+        {
+          type: 'file',
+          mediaType:
+            typeof typedPart.mediaType === 'string'
+              ? typedPart.mediaType
+              : typeof typedPart.mimeType === 'string'
+                ? typedPart.mimeType
+                : 'application/octet-stream',
+          url: typeof data === 'string' ? data : data instanceof URL ? data.toString() : '',
+          ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
+        } as unknown as MastraMessagePart,
+      ];
+    }
+
+    return [];
+  });
+
+  return parts.length ? [makeUserMessage(parts)] : [];
+};
+
+const makeToolInvocationPart = (invocation: MastraToolInvocation): MastraToolInvocationPart => ({
+  type: 'tool-invocation',
+  toolInvocation: invocation,
+});
+
+export interface AccumulateChunkArgs {
+  chunk: ChunkType;
+  conversation: MastraDBMessage[];
+  metadata: MastraDBMessageMetadata;
+}
+
+/**
+ * Reduce a single stream chunk into the running `MastraDBMessage[]`
+ * conversation. The accumulator owns the entire chunk→DB mapping for the
+ * React SDK; consumers downstream (e.g. `toAISdkV5Messages` in the playground)
+ * translate the result into AI SDK / assistant-ui shapes as needed.
+ */
+export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
+  const result = [...conversation];
+
+  // ----- Custom `data-*` chunks (including signal-echo) -----
+  if (chunk.type.startsWith('data-')) {
+    if (chunk.type === 'data-user-message' && 'data' in chunk && (chunk as any).data?.type === 'user-message') {
+      const signalId = (chunk as any).data.id;
+      if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
+        return result;
+      }
+
+      const userMessages = signalContentsToUserMessages((chunk as any).data.contents, metadata);
+      if (!userMessages.length) return result;
+
+      const conversationWithFinishedAssistant = finishStreamingAssistantMessage(result);
+      const messageIdPrefix = typeof signalId === 'string' ? signalId : `signal-${chunk.runId}-${Date.now()}`;
+      return [
+        ...conversationWithFinishedAssistant,
+        ...userMessages.map((message, index) => ({
+          ...message,
+          id: index === 0 ? messageIdPrefix : `${messageIdPrefix}-${index}`,
+        })),
+      ];
+    }
+
+    const dataPart = {
+      type: chunk.type as `data-${string}`,
+      data: 'data' in chunk ? (chunk as any).data : undefined,
+      ...('id' in chunk && typeof (chunk as any).id === 'string' ? { id: (chunk as any).id } : {}),
+    } as unknown as MastraMessagePart;
+
+    const lastMessage = result[result.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') {
+      return appendAssistantMessage(result, `data-${chunk.runId}-${Date.now()}`, [dataPart], metadata);
+    }
+
+    return replaceLast(result, withParts(lastMessage, [...lastMessage.content.parts, dataPart]));
+  }
+
+  switch (chunk.type) {
+    case 'tripwire': {
+      const newMessage = newAssistantMessage(
+        `tripwire-${chunk.runId + Date.now()}`,
+        [{ type: 'text', text: chunk.payload.reason } as MastraMessagePart],
+        {
+          ...metadata,
+          status: 'tripwire',
+          tripwire: {
+            retry: chunk.payload.retry,
+            tripwirePayload: chunk.payload.metadata,
+            processorId: chunk.payload.processorId,
+          },
+        },
+      );
+      return [...result, newMessage];
+    }
+
+    case 'start': {
+      const messageId = typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : undefined;
+      if (messageId && result.some(message => message.id === messageId)) return result;
+      return [...result, newAssistantMessage(messageId ?? `start-${chunk.runId + Date.now()}`, [], metadata)];
+    }
+
+    case 'text-start': {
+      const lastMessage = result[result.length - 1];
+      const textId = chunk.payload.id || `text-${Date.now()}`;
+      if (
+        chunk.payload.id &&
+        lastMessage?.role === 'assistant' &&
+        lastMessage.content.parts.some(part => part.type === 'text' && partTextId(part) === textId)
+      ) {
+        return result;
+      }
+
+      const newTextPart: MastraTextPart = {
+        type: 'text',
+        text: '',
+        state: 'streaming',
+        textId,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        return appendAssistantMessage(
+          result,
+          `start-${chunk.runId}-${Date.now()}`,
+          [newTextPart as MastraMessagePart],
+          metadata,
+        );
+      }
+
+      // If the last message is a completion/isTaskComplete result message, start a new assistant message
+      if (lastMessage.content.metadata?.completionResult) {
+        return appendAssistantMessage(
+          result,
+          `start-${chunk.runId}-${Date.now()}`,
+          [newTextPart as MastraMessagePart],
+          metadata,
+        );
+      }
+
+      return replaceLast(
+        result,
+        withParts(lastMessage, [...lastMessage.content.parts, newTextPart as MastraMessagePart]),
+      );
+    }
+
+    case 'background-task-progress': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      return replaceLast(
+        result,
+        withMetadata(lastMessage, {
+          mode: metadata.mode,
+          ...(lastMessage.content.metadata as MastraDBMessageMetadata | undefined),
+          runningBackgroundTasksCount: chunk.payload.runningCount,
+        }),
+      );
+    }
+
+    case 'text-delta': {
+      const lastMessage = result[result.length - 1];
+      const textId = chunk.payload.id;
+
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        const newTextPart: MastraTextPart = {
+          type: 'text',
+          text: chunk.payload.text,
+          state: 'streaming',
+          textId,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+        return appendAssistantMessage(
+          result,
+          `text-${chunk.runId}-${Date.now()}`,
+          [newTextPart as MastraMessagePart],
+          metadata,
+        );
+      }
+
+      const parts = [...lastMessage.content.parts];
+
+      let textPartIndex = textId
+        ? parts.findLastIndex(part => part.type === 'text' && partTextId(part) === textId)
+        : -1;
+
+      if (textPartIndex === -1) {
+        textPartIndex = parts.findLastIndex(part => part.type === 'text' && partState(part) === 'streaming');
+      }
+
+      if (textPartIndex === -1) {
+        const newTextPart: MastraTextPart = {
+          type: 'text',
+          text: chunk.payload.text,
+          state: 'streaming',
+          textId,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+        parts.push(newTextPart as MastraMessagePart);
+      } else {
+        const textPart = parts[textPartIndex] as MastraTextPart;
+        parts[textPartIndex] = {
+          ...textPart,
+          text: textPart.text + chunk.payload.text,
+          state: 'streaming',
+        } as MastraMessagePart;
+      }
+
+      return replaceLast(result, withParts(lastMessage, parts));
+    }
+
+    case 'reasoning-start': {
+      const lastMessage = result[result.length - 1];
+      const newReasoningPart: MastraReasoningPart = {
+        type: 'reasoning',
+        reasoning: '',
+        state: 'streaming',
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        return appendAssistantMessage(
+          result,
+          `reasoning-${chunk.runId + Date.now()}`,
+          [newReasoningPart as unknown as MastraMessagePart],
+          metadata,
+        );
+      }
+
+      return replaceLast(
+        result,
+        withParts(lastMessage, [...lastMessage.content.parts, newReasoningPart as unknown as MastraMessagePart]),
+      );
+    }
+
+    case 'reasoning-delta': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        const newReasoningPart: MastraReasoningPart = {
+          type: 'reasoning',
+          reasoning: chunk.payload.text,
+          state: 'streaming',
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+        return appendAssistantMessage(
+          result,
+          `reasoning-${chunk.runId + Date.now()}`,
+          [newReasoningPart as unknown as MastraMessagePart],
+          metadata,
+        );
+      }
+
+      const parts = [...lastMessage.content.parts];
+      const lastIndex = parts.length - 1;
+      const lastPart = parts[lastIndex];
+
+      if (lastPart?.type === 'reasoning') {
+        const reasoningPart = lastPart as unknown as MastraReasoningPart;
+        parts[lastIndex] = {
+          ...reasoningPart,
+          reasoning: reasoningPart.reasoning + chunk.payload.text,
+          state: 'streaming',
+        } as unknown as MastraMessagePart;
+      } else {
+        const newReasoningPart: MastraReasoningPart = {
+          type: 'reasoning',
+          reasoning: chunk.payload.text,
+          state: 'streaming',
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+        parts.push(newReasoningPart as unknown as MastraMessagePart);
+      }
+
+      return replaceLast(result, withParts(lastMessage, parts));
+    }
+
+    case 'reasoning-end': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      const parts = [...lastMessage.content.parts];
+      const reasoningIndex = parts.findLastIndex(
+        part => part.type === 'reasoning' && partState(part) === 'streaming',
+      );
+      if (reasoningIndex === -1) return result;
+
+      const reasoningPart = parts[reasoningIndex] as unknown as MastraReasoningPart;
+      const existingMeta = reasoningPart.providerMetadata;
+      const endMeta = chunk.payload.providerMetadata;
+
+      parts[reasoningIndex] = {
+        ...reasoningPart,
+        state: 'done',
+        ...(existingMeta || endMeta
+          ? { providerMetadata: { ...(existingMeta ?? {}), ...(endMeta ?? {}) } }
+          : {}),
+      } as unknown as MastraMessagePart;
+
+      return replaceLast(result, withParts(lastMessage, parts));
+    }
+
+    case 'tool-call': {
+      const lastMessage = result[result.length - 1];
+      const invocation: MastraToolInvocation = {
+        state: 'call',
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        args: chunk.payload.args,
+      };
+      const newPart: MastraToolInvocationPart = {
+        ...makeToolInvocationPart(invocation),
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        return appendAssistantMessage(result, `tool-call-${chunk.runId + Date.now()}`, [newPart], metadata);
+      }
+
+      return replaceLast(result, withParts(lastMessage, [...lastMessage.content.parts, newPart]));
+    }
+
+    case 'tool-error':
+    case 'tool-result':
+    case 'background-task-completed':
+    case 'background-task-failed': {
+      const isBgTaskEvent = chunk.type === 'background-task-completed' || chunk.type === 'background-task-failed';
+      const location = locateToolPart(result, chunk.payload.toolCallId, isBgTaskEvent);
+      if (!location) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = toolPartIndex >= 0 ? parts[toolPartIndex] : undefined;
+
+      if (toolPart && isToolPart(toolPart)) {
+        const { toolName, toolCallId, args } = toolPart.toolInvocation;
+        const providerMeta = (chunk.payload as any).providerMetadata ?? toolPart.providerMetadata;
+
+        const isError =
+          chunk.type === 'tool-error' ||
+          chunk.type === 'background-task-failed' ||
+          ((chunk.type === 'tool-result' || chunk.type === 'background-task-completed') &&
+            (chunk.payload as any).isError);
+
+        if (isError) {
+          const error =
+            chunk.type === 'tool-error' || chunk.type === 'background-task-failed'
+              ? (chunk.payload as any).error
+              : (chunk.payload as any).result;
+          const errorText =
+            typeof error === 'string'
+              ? error
+              : error instanceof Error
+                ? error.message
+                : ((error as any)?.message ?? String(error));
+
+          parts[toolPartIndex] = {
+            ...toolPart,
+            providerMetadata: providerMeta,
+            toolInvocation: {
+              state: 'output-error',
+              toolCallId,
+              toolName,
+              args,
+              errorText,
+            } as MastraToolInvocation,
+          };
+        } else {
+          const isWorkflow = Boolean(((chunk.payload as any).result as any)?.result?.steps);
+          const isAgent = (chunk as any)?.from === 'AGENT';
+          let output: unknown;
+          if (isWorkflow) {
+            output = ((chunk.payload as any).result as any)?.result;
+          } else if (isAgent) {
+            const existingOutput = (toolPart.toolInvocation as any).result;
+            output = existingOutput
+              ? {
+                  ...((chunk.payload as any).result as any),
+                  childMessages: (existingOutput as any).childMessages?.length
+                    ? (existingOutput as any).childMessages
+                    : ((chunk.payload as any).result as any)?.childMessages,
+                }
+              : (chunk.payload as any).result;
+          } else {
+            output = (chunk.payload as any).result;
+          }
+
+          parts[toolPartIndex] = {
+            ...toolPart,
+            providerMetadata: providerMeta,
+            toolInvocation: {
+              state: 'result',
+              toolCallId,
+              toolName,
+              args,
+              result: output,
+            } as MastraToolInvocation,
+          };
+        }
+      }
+
+      const nextMetadata = mergeBgTaskMetadata(
+        targetMessage.content.metadata as MastraDBMessageMetadata | undefined,
+        metadata.mode,
+        {
+          resetRunningCount: isBgTaskEvent,
+          perTaskEntry: isBgTaskEvent
+            ? {
+                toolCallId: chunk.payload.toolCallId,
+                completedAt: (chunk.payload as any).completedAt,
+                taskId: (chunk.payload as any).taskId,
+              }
+            : undefined,
+        },
+      );
+
+      const nextMessage: MastraDBMessage = {
+        ...targetMessage,
+        content: {
+          ...targetMessage.content,
+          parts,
+          metadata: nextMetadata,
+        },
+      };
+
+      return replaceAt(result, messageIndex, nextMessage);
+    }
+
+    case 'background-task-running': {
+      const location = locateToolPart(result, chunk.payload.toolCallId, true);
+      if (!location) return result;
+      const { messageIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const nextMetadata = mergeBgTaskMetadata(
+        targetMessage.content.metadata as MastraDBMessageMetadata | undefined,
+        metadata.mode,
+        {
+          perTaskEntry: {
+            toolCallId: chunk.payload.toolCallId,
+            startedAt: (chunk.payload as any).startedAt,
+            taskId: (chunk.payload as any).taskId,
+          },
+        },
+      );
+
+      return replaceAt(result, messageIndex, withMetadata(targetMessage, nextMetadata));
+    }
+
+    case 'tool-output':
+    case 'background-task-output': {
+      const isBgTaskOutput = chunk.type === 'background-task-output';
+      const location = locateToolPart(result, chunk.payload.toolCallId, isBgTaskOutput);
+      if (!location || location.toolPartIndex < 0) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = parts[toolPartIndex];
+      if (!isToolPart(toolPart)) return result;
+
+      const { toolName, toolCallId, args } = toolPart.toolInvocation;
+      const payloadOutput =
+        chunk.type === 'background-task-output'
+          ? (chunk.payload as any).payload.payload.output
+          : (chunk.payload as any).output;
+
+      // Workflow stream output: accumulate into watch-result state
+      if (payloadOutput?.type?.startsWith('workflow-')) {
+        const existingWorkflowState =
+          ((toolPart.toolInvocation as any).result as WorkflowStreamResult<any, any, any, any>) ||
+          ({} as WorkflowStreamResult<any, any, any, any>);
+        const updated = mapWorkflowStreamChunkToWatchResult(existingWorkflowState, payloadOutput);
+
+        parts[toolPartIndex] = {
+          ...toolPart,
+          toolInvocation: {
+            state: 'partial-call',
+            toolCallId,
+            toolName,
+            args,
+            result: updated,
+          } as MastraToolInvocation,
+        };
+      } else if (
+        payloadOutput?.from === 'AGENT' ||
+        (payloadOutput?.from === 'USER' && payloadOutput?.payload?.output?.type?.startsWith('workflow-'))
+      ) {
+        return accumulateAgentChunk(payloadOutput, result, metadata, toolCallId, toolName);
+      } else {
+        const currentResult = (toolPart.toolInvocation as any).result;
+        const existing = Array.isArray(currentResult) ? currentResult : [];
+        parts[toolPartIndex] = {
+          ...toolPart,
+          toolInvocation: {
+            state: 'partial-call',
+            toolCallId,
+            toolName,
+            args,
+            result: [...existing, payloadOutput],
+          } as MastraToolInvocation,
+        };
+      }
+
+      return replaceAt(result, messageIndex, withParts(targetMessage, parts));
+    }
+
+    case 'is-task-complete': {
+      if (chunk.payload.suppressFeedback) return result;
+
+      const feedback = formatStreamCompletionFeedback(
+        {
+          complete: chunk.payload.passed,
+          scorers: chunk.payload.results,
+          totalDuration: chunk.payload.duration,
+          timedOut: chunk.payload.timedOut,
+          completionReason: chunk.payload.reason,
+        },
+        chunk.payload.maxIterationReached,
+      );
+
+      const newMessage = newAssistantMessage(
+        `is-task-complete-${chunk.runId + Date.now()}`,
+        [{ type: 'text', text: feedback } as MastraMessagePart],
+        {
+          ...metadata,
+          completionResult: { passed: chunk.payload.passed },
+        },
+      );
+      return [...result, newMessage];
+    }
+
+    case 'source': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      const parts = [...lastMessage.content.parts];
+      if ((chunk.payload as any).sourceType === 'url') {
+        parts.push({
+          type: 'source-url',
+          sourceId: (chunk.payload as any).id,
+          url: (chunk.payload as any).url || '',
+          title: (chunk.payload as any).title,
+          providerMetadata: (chunk.payload as any).providerMetadata,
+        } as unknown as MastraMessagePart);
+      } else if ((chunk.payload as any).sourceType === 'document') {
+        parts.push({
+          type: 'source-document',
+          sourceId: (chunk.payload as any).id,
+          mediaType: (chunk.payload as any).mimeType || 'application/octet-stream',
+          title: (chunk.payload as any).title,
+          filename: (chunk.payload as any).filename,
+          providerMetadata: (chunk.payload as any).providerMetadata,
+        } as MastraMessagePart);
+      }
+
+      return replaceLast(result, withParts(lastMessage, parts));
+    }
+
+    case 'file': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      const parts = [...lastMessage.content.parts];
+
+      let url: string;
+      if (typeof (chunk.payload as any).data === 'string') {
+        url = (chunk.payload as any).base64
+          ? `data:${(chunk.payload as any).mimeType};base64,${(chunk.payload as any).data}`
+          : `data:${(chunk.payload as any).mimeType},${encodeURIComponent((chunk.payload as any).data)}`;
+      } else {
+        const base64 = btoa(String.fromCharCode(...(chunk.payload as any).data));
+        url = `data:${(chunk.payload as any).mimeType};base64,${base64}`;
+      }
+
+      parts.push({
+        type: 'file',
+        mediaType: (chunk.payload as any).mimeType,
+        url,
+        providerMetadata: (chunk.payload as any).providerMetadata,
+      } as unknown as MastraMessagePart);
+
+      return replaceLast(result, withParts(lastMessage, parts));
+    }
+
+    case 'tool-call-approval': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      const existingMeta = (lastMessage.content.metadata as MastraDBMessageMetadata | undefined) ?? {};
+      const lastRequireApproval = existingMeta.mode === 'stream' ? (existingMeta.requireApprovalMetadata ?? {}) : {};
+
+      return replaceLast(result, {
+        ...lastMessage,
+        content: {
+          ...lastMessage.content,
+          metadata: {
+            ...existingMeta,
+            mode: 'stream',
+            requireApprovalMetadata: {
+              ...lastRequireApproval,
+              [(chunk.payload as any).toolName]: {
+                toolCallId: (chunk.payload as any).toolCallId,
+                toolName: (chunk.payload as any).toolName,
+                args: (chunk.payload as any).args,
+              },
+            },
+          },
+        },
+      });
+    }
+
+    case 'tool-call-suspended':
+    case 'background-task-suspended': {
+      const isBgTaskEvent = chunk.type === 'background-task-suspended';
+      const location = isBgTaskEvent
+        ? locateToolPart(result, (chunk.payload as any).toolCallId, true)
+        : { messageIndex: result.length - 1 };
+      if (!location) return result;
+      const { messageIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const existingMeta = (targetMessage.content.metadata as MastraDBMessageMetadata | undefined) ?? {};
+      const lastSuspendedTools = existingMeta.mode === 'stream' ? (existingMeta.suspendedTools ?? {}) : {};
+
+      const nextMetadata = mergeBgTaskMetadata(
+        existingMeta,
+        'stream',
+        {
+          resetRunningCount: isBgTaskEvent,
+          perTaskEntry: isBgTaskEvent
+            ? {
+                toolCallId: (chunk.payload as any).toolCallId,
+                suspendedAt: (chunk.payload as any).suspendedAt,
+                taskId: (chunk.payload as any).taskId,
+              }
+            : undefined,
+        },
+        {
+          suspendedTools: {
+            ...lastSuspendedTools,
+            [(chunk.payload as any).toolName]: {
+              toolCallId: (chunk.payload as any).toolCallId,
+              toolName: (chunk.payload as any).toolName,
+              args: (chunk.payload as any).args,
+              suspendPayload: (chunk.payload as any).suspendPayload,
+              runId: (chunk as any).runId,
+            },
+          },
+        },
+      );
+
+      return replaceAt(result, messageIndex, withMetadata(targetMessage, nextMetadata));
+    }
+
+    case 'finish':
+    case 'abort': {
+      return finishStreamingAssistantMessage(result);
+    }
+
+    case 'error': {
+      const newMessage = newAssistantMessage(
+        `error-${chunk.runId + Date.now()}`,
+        [
+          {
+            type: 'text',
+            text:
+              typeof (chunk.payload as any).error === 'string'
+                ? (chunk.payload as any).error
+                : JSON.stringify((chunk.payload as any).error),
+          } as MastraMessagePart,
+        ],
+        {
+          ...metadata,
+          status: 'error',
+        },
+      );
+      return [...result, newMessage];
+    }
+
+    default:
+      return result;
+  }
+};
+
+// ----- Nested agent-chunk accumulation (mirrors `toUIMessageFromAgent`) -----
+
+const accumulateAgentChunk = (
+  chunk: AgentChunkType,
+  conversation: MastraDBMessage[],
+  _metadata: MastraDBMessageMetadata,
+  parentToolCallId?: string,
+  parentToolName?: string,
+): MastraDBMessage[] => {
+  const lastMessage = conversation[conversation.length - 1];
+  if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+
+  const parts = [...lastMessage.content.parts];
+
+  const findToolPartIndex = () =>
+    parts.findIndex(
+      part =>
+        isToolPart(part) &&
+        ((parentToolCallId && part.toolInvocation.toolCallId === parentToolCallId) ||
+          (parentToolName && part.toolInvocation.toolName === parentToolName)),
+    );
+
+  if (chunk.type === 'text-delta') {
+    const agentChunk = chunk.payload as any;
+    const toolPartIndex = findToolPartIndex();
+    if (toolPartIndex === -1) return conversation;
+
+    const toolPart = parts[toolPartIndex] as MastraToolInvocationPart;
+    const existingResult = (toolPart.toolInvocation as any).result || {};
+    const childMessages = existingResult.childMessages || [];
+    const lastChildMessage = childMessages[childMessages.length - 1];
+
+    const textMessage = { type: 'text', content: (lastChildMessage?.content || '') + agentChunk.text };
+    const nextChildren =
+      lastChildMessage?.type === 'text'
+        ? [...childMessages.slice(0, -1), textMessage]
+        : [...childMessages, textMessage];
+
+    parts[toolPartIndex] = {
+      ...toolPart,
+      toolInvocation: {
+        ...toolPart.toolInvocation,
+        result: { ...existingResult, childMessages: nextChildren },
+      } as MastraToolInvocation,
+    };
+  } else if (chunk.type === 'tool-call') {
+    const agentChunk = chunk.payload as any;
+    const toolPartIndex = findToolPartIndex();
+    if (toolPartIndex === -1) return conversation;
+
+    const toolPart = parts[toolPartIndex] as MastraToolInvocationPart;
+    const existingResult = (toolPart.toolInvocation as any).result || {};
+    const childMessages = existingResult.childMessages || [];
+
+    parts[toolPartIndex] = {
+      ...toolPart,
+      toolInvocation: {
+        ...toolPart.toolInvocation,
+        result: {
+          ...existingResult,
+          childMessages: [
+            ...childMessages,
+            {
+              type: 'tool',
+              toolCallId: agentChunk.toolCallId,
+              toolName: agentChunk.toolName,
+              args: agentChunk.args,
+            },
+          ],
+        },
+      } as MastraToolInvocation,
+    };
+  } else if (chunk.type === 'tool-output') {
+    const agentChunk = chunk.payload as any;
+    const toolPartIndex = findToolPartIndex();
+    if (toolPartIndex === -1) return conversation;
+
+    const toolPart = parts[toolPartIndex] as MastraToolInvocationPart;
+    if (agentChunk?.output?.type?.startsWith('workflow-')) {
+      const existingResult = (toolPart.toolInvocation as any).result || {};
+      const childMessages = existingResult.childMessages || [];
+      const lastIndex = childMessages.length - 1;
+      const currentMessage = childMessages[lastIndex];
+      const actualExistingWorkflowState = (currentMessage as any)?.toolOutput || {};
+      const updated = mapWorkflowStreamChunkToWatchResult(actualExistingWorkflowState, agentChunk.output);
+
+      if (lastIndex >= 0 && childMessages[lastIndex]?.type === 'tool') {
+        parts[toolPartIndex] = {
+          ...toolPart,
+          toolInvocation: {
+            ...toolPart.toolInvocation,
+            result: {
+              ...existingResult,
+              childMessages: [
+                ...childMessages.slice(0, -1),
+                {
+                  ...currentMessage,
+                  toolOutput: { ...updated, runId: agentChunk.output.runId },
+                },
+              ],
+            },
+          } as MastraToolInvocation,
+        };
+      }
+    }
+  } else if (chunk.type === 'tool-result') {
+    const agentChunk = chunk.payload as any;
+    const toolPartIndex = findToolPartIndex();
+    if (toolPartIndex === -1) return conversation;
+
+    const toolPart = parts[toolPartIndex] as MastraToolInvocationPart;
+    const existingResult = (toolPart.toolInvocation as any).result || {};
+    const childMessages = existingResult.childMessages || [];
+    const lastIndex = childMessages.length - 1;
+    const isWorkflow = agentChunk?.toolName?.startsWith('workflow-');
+
+    if (lastIndex >= 0 && childMessages[lastIndex]?.type === 'tool') {
+      parts[toolPartIndex] = {
+        ...toolPart,
+        toolInvocation: {
+          ...toolPart.toolInvocation,
+          result: {
+            ...existingResult,
+            childMessages: [
+              ...childMessages.slice(0, -1),
+              {
+                ...childMessages[lastIndex],
+                toolOutput: isWorkflow
+                  ? { ...(agentChunk.result as any)?.result, runId: (agentChunk.result as any)?.runId }
+                  : agentChunk.result,
+              },
+            ],
+          },
+        } as MastraToolInvocation,
+      };
+    }
+  }
+
+  return replaceLast(conversation, withParts(lastMessage, parts));
+};
+
+// Re-export the provider-metadata helper for inspection in tests.
+export { partProviderMetadata as __partProviderMetadata };
