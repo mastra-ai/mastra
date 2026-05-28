@@ -286,16 +286,8 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 }
 
 /**
- * Restores `providerOptions` on assistant file parts after `convertToModelMessages`.
- *
- * The vendored AI SDK v5 `convertToModelMessages` drops `providerMetadata` from
- * assistant file parts (fixed in v6 but not backported). This causes providers
- * like Google Gemini to reject round-tripped responses that require metadata
- * (e.g. `thoughtSignature` on generated images).
- *
- * We collect all `providerMetadata` values from assistant `file` UI parts in
- * order, then walk the model messages and assign them to assistant `file` parts
- * in the same order. The ordering is guaranteed to be preserved.
+ * Converts MCP-style tool results (`{ content: [...] }`) to model-native
+ * multimodal tool result output without persisting a duplicate modelOutput copy.
  */
 function convertMcpContentToolResultOutput(output: unknown): unknown {
   if (!output || typeof output !== 'object') return undefined;
@@ -370,6 +362,18 @@ function applyMcpContentToolResultOutputs(
   });
 }
 
+/**
+ * Restores `providerOptions` on assistant file parts after `convertToModelMessages`.
+ *
+ * The vendored AI SDK v5 `convertToModelMessages` drops `providerMetadata` from
+ * assistant file parts (fixed in v6 but not backported). This causes providers
+ * like Google Gemini to reject round-tripped responses that require metadata
+ * (e.g. `thoughtSignature` on generated images).
+ *
+ * We collect all `providerMetadata` values from assistant `file` UI parts in
+ * order, then walk the model messages and assign them to assistant `file` parts
+ * in the same order. The ordering is guaranteed to be preserved.
+ */
 function restoreAssistantFileProviderMetadata(
   modelMessages: AIV5Type.ModelMessage[],
   uiMessages: AIV5Type.UIMessage[],
