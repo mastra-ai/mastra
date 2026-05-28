@@ -145,48 +145,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         };
       }
 
-      /**
-       * Auto-detect multimodal content in a tool result.
-       * Recognizes results with a `content` array containing image/audio parts
-       * (MCP CallToolResult shape) and converts them to AI SDK multimodal format.
-       * Returns null when no multimodal content is detected.
-       */
-      function autoDetectMultimodalContent(result: unknown): unknown {
-        if (result == null || typeof result !== 'object') return null;
-        const obj = result as Record<string, unknown>;
-        const content = obj.content;
-        if (!Array.isArray(content) || content.length === 0) return null;
-
-        // Check if any content part is multimodal (image or audio)
-        const hasMultimodal = content.some(
-          (part: unknown) =>
-            part != null &&
-            typeof part === 'object' &&
-            ((part as Record<string, unknown>).type === 'image' || (part as Record<string, unknown>).type === 'audio'),
-        );
-        if (!hasMultimodal) return null;
-
-        // Map content parts to AI SDK format
-        const value = content
-          .map((part: unknown) => {
-            if (part == null || typeof part !== 'object') return null;
-            const p = part as Record<string, unknown>;
-            switch (p.type) {
-              case 'text':
-                return { type: 'text', text: String(p.text ?? '') };
-              case 'image':
-                return { type: 'media', data: String(p.data ?? ''), mediaType: String(p.mimeType ?? 'image/png') };
-              case 'audio':
-                return { type: 'media', data: String(p.data ?? ''), mediaType: String(p.mimeType ?? 'audio/wav') };
-              default:
-                return null;
-            }
-          })
-          .filter(Boolean);
-
-        return value.length > 0 ? { type: 'content', value } : null;
-      }
-
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
         toolCallId?: string;
@@ -222,13 +180,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             mappingSpan?.error({ error: err as Error, endSpan: true });
             throw err;
           }
-        }
-
-        // Auto-detect multimodal content in tool results when toModelOutput is not
-        // defined or returned undefined. This enables regular tools and MCP tools to
-        // return images/audio without requiring explicit toModelOutput configuration.
-        if (modelOutput == null && toolCall.result != null) {
-          modelOutput = normalizeModelOutput(autoDetectMultimodalContent(toolCall.result));
         }
 
         const existingMastra = (toolCall.providerMetadata as any)?.mastra;

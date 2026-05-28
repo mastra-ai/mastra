@@ -1308,6 +1308,105 @@ export class TokenCounter {
     return resolveToolResultValue(part as { providerMetadata?: Record<string, any> }, invocationResult);
   }
 
+  private countMultimodalToolResultContent(part: CacheablePart, toolResult: unknown): number | undefined {
+    if (!toolResult || typeof toolResult !== 'object') {
+      return undefined;
+    }
+
+    const output = toolResult as Record<string, unknown>;
+    const content = output.type === 'content' && Array.isArray(output.value) ? output.value : output.content;
+    if (!Array.isArray(content)) {
+      return undefined;
+    }
+
+    let hasAttachment = false;
+    let tokens = 0;
+    const cacheParts: unknown[] = [];
+
+    for (const item of content) {
+      if (!item || typeof item !== 'object') {
+        continue;
+      }
+
+      const contentPart = item as Record<string, unknown>;
+      const partType = contentPart.type;
+
+      if (partType === 'text') {
+        const text = typeof contentPart.text === 'string' ? contentPart.text : String(contentPart.value ?? '');
+        tokens += this.countString(text);
+        cacheParts.push({ type: 'text', textHash: createHash('sha1').update(text).digest('hex') });
+        continue;
+      }
+
+      if (
+        partType === 'image' ||
+        partType === 'image-data' ||
+        (partType === 'media' && String(contentPart.mediaType ?? '').startsWith('image/'))
+      ) {
+        if (typeof contentPart.data !== 'string') continue;
+        hasAttachment = true;
+        const imagePart = {
+          type: 'image',
+          image: contentPart.data,
+          mimeType: contentPart.mediaType ?? contentPart.mimeType,
+          providerOptions: contentPart.providerOptions,
+          providerMetadata: contentPart.providerMetadata,
+        };
+        const estimate = this.estimateImageTokens(imagePart);
+        tokens += estimate.tokens;
+        cacheParts.push({ type: 'image-data', estimate: JSON.parse(estimate.cachePayload) });
+        continue;
+      }
+
+      if (partType === 'audio' || partType === 'file-data' || partType === 'media') {
+        if (typeof contentPart.data !== 'string') continue;
+        hasAttachment = true;
+        const filePart = {
+          type: 'file',
+          data: contentPart.data,
+          mimeType: contentPart.mediaType ?? contentPart.mimeType,
+          filename: contentPart.filename,
+          providerOptions: contentPart.providerOptions,
+          providerMetadata: contentPart.providerMetadata,
+        };
+
+        if (isImageLikeFilePart(filePart)) {
+          const estimate = this.estimateImageLikeFileTokens(filePart);
+          tokens += estimate.tokens;
+          cacheParts.push({ type: 'image-like-file-data', estimate: JSON.parse(estimate.cachePayload) });
+          continue;
+        }
+
+        const byteEstimate = estimateNonImageFileTokens(this.getModelContext(), filePart);
+        if (byteEstimate) {
+          tokens += byteEstimate.tokens;
+          cacheParts.push({ type: 'file-data', estimate: JSON.parse(byteEstimate.cachePayload) });
+          continue;
+        }
+
+        const descriptor = serializeNonImageFilePartForTokenCounting(filePart);
+        tokens += this.countString(descriptor);
+        cacheParts.push({ type: 'file-data-descriptor', descriptor });
+        continue;
+      }
+
+      const formatted = formatToolResultForObserver(contentPart);
+      tokens += this.countString(formatted);
+      cacheParts.push({ type: 'json', valueHash: createHash('sha1').update(formatted).digest('hex') });
+    }
+
+    if (!hasAttachment) {
+      return undefined;
+    }
+
+    return this.readOrPersistFixedPartEstimate(
+      part,
+      'tool-result-multimodal-content',
+      JSON.stringify({ type: 'content', value: cacheParts }),
+      tokens,
+    );
+  }
+
   private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {
     const modelContext = this.getModelContext();
     const provider = resolveProviderId(modelContext);
@@ -1608,12 +1707,19 @@ export class TokenCounter {
         );
 
         if (resultForCounting !== undefined) {
-          const formattedResult = formatToolResultForObserver(resultForCounting);
-          tokens += this.readOrPersistPartEstimate(
-            part,
-            usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
-            formattedResult,
-          );
+          const contentTokens = this.countMultimodalToolResultContent(part, resultForCounting);
+
+          if (contentTokens !== undefined) {
+            tokens += contentTokens;
+          } else {
+            const formattedResult = formatToolResultForObserver(resultForCounting);
+            tokens += this.readOrPersistPartEstimate(
+              part,
+              usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
+              formattedResult,
+            );
+          }
+
           if (typeof resultForCounting !== 'string') {
             overheadDelta -= 12;
           }

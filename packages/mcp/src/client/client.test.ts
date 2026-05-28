@@ -628,7 +628,7 @@ describe('MastraMCPClient - tools without outputSchema preserve envelope', () =>
   });
 });
 
-describe('MastraMCPClient - toModelOutput for multimodal content', () => {
+describe('MastraMCPClient - multimodal content', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -653,7 +653,7 @@ describe('MastraMCPClient - toModelOutput for multimodal content', () => {
     testServer?.httpServer.close();
   });
 
-  it('should have toModelOutput that converts image content to media format', async () => {
+  it('should not attach toModelOutput that duplicates MCP image content into providerMetadata', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -669,78 +669,7 @@ describe('MastraMCPClient - toModelOutput for multimodal content', () => {
     const tools = await client.tools();
     const tool = tools['screenshot'];
     expect(tool).toBeDefined();
-    expect((tool as any).toModelOutput).toBeDefined();
-
-    // Simulate MCP result with image content
-    const mcpResult = {
-      content: [
-        { type: 'text', text: 'Screenshot captured' },
-        { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
-      ],
-      isError: false,
-    };
-
-    const modelOutput = (tool as any).toModelOutput(mcpResult);
-    expect(modelOutput).toEqual({
-      type: 'content',
-      value: [
-        { type: 'text', text: 'Screenshot captured' },
-        { type: 'media', data: 'iVBORw0KGgo=', mediaType: 'image/png' },
-      ],
-    });
-  });
-
-  it('should return undefined from toModelOutput when no image/audio content', async () => {
-    const sdkClient = (client as any).client as Client;
-
-    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
-      tools: [
-        {
-          name: 'greet',
-          description: 'Greets someone',
-          inputSchema: { type: 'object' as const, properties: {} },
-        },
-      ],
-    });
-
-    const tools = await client.tools();
-    const tool = tools['greet'];
-
-    // Text-only result should return undefined (no transformation needed)
-    const mcpResult = {
-      content: [{ type: 'text', text: 'Hello!' }],
-      isError: false,
-    };
-
-    const modelOutput = (tool as any).toModelOutput(mcpResult);
-    expect(modelOutput).toBeUndefined();
-  });
-
-  it('should convert audio content to media format', async () => {
-    const sdkClient = (client as any).client as Client;
-
-    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
-      tools: [
-        {
-          name: 'tts',
-          description: 'Text to speech',
-          inputSchema: { type: 'object' as const, properties: {} },
-        },
-      ],
-    });
-
-    const tools = await client.tools();
-    const tool = tools['tts'];
-
-    const mcpResult = {
-      content: [{ type: 'audio', data: 'audiodata==', mimeType: 'audio/mp3' }],
-    };
-
-    const modelOutput = (tool as any).toModelOutput(mcpResult);
-    expect(modelOutput).toEqual({
-      type: 'content',
-      value: [{ type: 'media', data: 'audiodata==', mediaType: 'audio/mp3' }],
-    });
+    expect((tool as any).toModelOutput).toBeUndefined();
   });
 });
 

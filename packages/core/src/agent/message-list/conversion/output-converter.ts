@@ -297,6 +297,79 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
  * order, then walk the model messages and assign them to assistant `file` parts
  * in the same order. The ordering is guaranteed to be preserved.
  */
+function convertMcpContentToolResultOutput(output: unknown): unknown {
+  if (!output || typeof output !== 'object') return undefined;
+
+  const content = (output as Record<string, unknown>).content;
+  if (!Array.isArray(content)) return undefined;
+
+  const hasValidMultimodal = content.some(part => {
+    if (!part || typeof part !== 'object') return false;
+    const typedPart = part as Record<string, unknown>;
+    return (typedPart.type === 'image' || typedPart.type === 'audio') && typeof typedPart.data === 'string';
+  });
+  if (!hasValidMultimodal) return undefined;
+
+  const value = content
+    .map(part => {
+      if (!part || typeof part !== 'object') return null;
+      const typedPart = part as Record<string, unknown>;
+      switch (typedPart.type) {
+        case 'text':
+          return { type: 'text', text: String(typedPart.text ?? '') };
+        case 'image':
+          return typeof typedPart.data === 'string'
+            ? { type: 'image-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
+            : null;
+        case 'audio':
+          return typeof typedPart.data === 'string'
+            ? { type: 'file-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
+            : null;
+        default:
+          return { type: 'text', text: JSON.stringify(typedPart) };
+      }
+    })
+    .filter(Boolean);
+
+  return value.length > 0 ? { type: 'content', value } : undefined;
+}
+
+function collectRawToolResultOutputs(dbMessages: MastraDBMessage[]): Map<string, unknown> {
+  const outputs = new Map<string, unknown>();
+  for (const message of dbMessages) {
+    if (message.content?.format !== 2 || !message.content.parts) continue;
+
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+      outputs.set(part.toolInvocation.toolCallId, part.toolInvocation.result);
+    }
+  }
+  return outputs;
+}
+
+function applyMcpContentToolResultOutputs(
+  modelMessages: AIV5Type.ModelMessage[],
+  dbMessages: MastraDBMessage[],
+): AIV5Type.ModelMessage[] {
+  const rawOutputs = collectRawToolResultOutputs(dbMessages);
+  if (rawOutputs.size === 0) return modelMessages;
+
+  return modelMessages.map(message => {
+    if (message.role !== 'tool' || !Array.isArray(message.content)) return message;
+
+    let modified = false;
+    const content = message.content.map(part => {
+      if (part.type !== 'tool-result') return part;
+      const converted = convertMcpContentToolResultOutput(rawOutputs.get(part.toolCallId));
+      if (!converted) return part;
+      modified = true;
+      return { ...part, output: converted } as typeof part;
+    });
+
+    return modified ? ({ ...message, content } as AIV5Type.ModelMessage) : message;
+  });
+}
+
 function restoreAssistantFileProviderMetadata(
   modelMessages: AIV5Type.ModelMessage[],
   uiMessages: AIV5Type.UIMessage[],
@@ -380,9 +453,10 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   }
 
   const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
+  const withMcpContentOutputs = applyMcpContentToolResultOutputs(withFileMetadata, dbMessages);
 
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
-  const anthropicCompat = ensureAnthropicCompatibleMessages(withFileMetadata, dbMessages);
+  const anthropicCompat = ensureAnthropicCompatibleMessages(withMcpContentOutputs, dbMessages);
 
   return filterIncompleteToolCalls ? sanitizeOrphanedToolPairs(anthropicCompat) : anthropicCompat;
 }

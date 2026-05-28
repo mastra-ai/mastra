@@ -1014,6 +1014,72 @@ describe('TokenCounter', () => {
       expect(modelOutputTokens).toBeLessThan(rawResultTokens);
     });
 
+    it('counts stored multimodal tool modelOutput as media instead of base64 JSON text', () => {
+      const counter = new TokenCounter();
+      const modelOutput = {
+        type: 'content',
+        value: [
+          { type: 'text', text: 'Calculator screenshot' },
+          { type: 'image-data', data: 'a'.repeat(200_000), mediaType: 'image/png' },
+        ],
+      };
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'cua_screenshot',
+              result: { content: [{ type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' }] },
+            },
+            providerMetadata: {
+              mastra: { modelOutput },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeLessThan(2_000);
+      expect(estimate.key).toContain('tool-result-multimodal-content');
+      expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(modelOutput)));
+    });
+
+    it('counts raw MCP multimodal tool results as media instead of base64 JSON text', () => {
+      const counter = new TokenCounter();
+      const rawResult = {
+        content: [
+          { type: 'text', text: 'Calculator screenshot' },
+          { type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' },
+        ],
+      };
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'cua_screenshot',
+              result: rawResult,
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeLessThan(2_000);
+      expect(estimate.key).toContain('tool-result-multimodal-content');
+      expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(rawResult)));
+    });
+
     it('recomputes tool-result estimates when stored modelOutput changes', async () => {
       const counter = new TokenCounter();
       const args = { q: 'weather in sf' };
