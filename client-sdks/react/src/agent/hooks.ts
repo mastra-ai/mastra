@@ -1,16 +1,18 @@
-import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MastraUIMessage } from '../lib/ai-sdk';
-import { finishStreamingAssistantMessage, toUIMessage } from '../lib/ai-sdk';
-import { resolveInitialMessages } from '../lib/ai-sdk/memory/resolveInitialMessages';
-import { AISdkNetworkTransformer } from '../lib/ai-sdk/transformers/AISdkNetworkTransformer';
-import { fromCoreUserMessageToUIMessage } from '../lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
+import {
+  accumulateChunk,
+  finishStreamingAssistantMessage,
+  fromCoreUserMessageToMastraDBMessage,
+} from '../lib/mastra-db';
+import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import { useMastraClient } from '../mastra-client-context';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
@@ -38,7 +40,7 @@ export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
   threadId?: string;
-  initialMessages?: MastraUIMessage[];
+  initialMessages?: MastraDBMessage[];
   /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
   requestContext?: RequestContext;
   /**
@@ -75,7 +77,7 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
 );
 
 export type GenerateArgs = SharedArgs & {
-  onFinish?: (messages: UIMessage[]) => Promise<void>;
+  onFinish?: (messages: MastraDBMessage[]) => Promise<void>;
   clientTools?: ToolsInput;
 };
 
@@ -98,6 +100,27 @@ const isThreadSignalUnsupportedError = (error: unknown) => {
 
   return status === 400 && candidate?.message?.includes('No active agent run found for signal target');
 };
+
+/**
+ * Convert AI-SDK v5 UIMessages returned by the server (generate mode) into
+ * `MastraDBMessage[]`, stamping the supplied metadata onto each message's
+ * `content.metadata`. Private helper — `useChat` never exposes the AI-SDK
+ * shape to consumers.
+ */
+const dbFromServerUiMessages = (uiMessages: any[], metadata: MastraDBMessageMetadata): MastraDBMessage[] =>
+  uiMessages.map(uiMsg => {
+    const dbMsg = AIV5Adapter.fromUIMessage(uiMsg);
+    return {
+      ...dbMsg,
+      content: {
+        ...dbMsg.content,
+        metadata: {
+          ...(dbMsg.content.metadata ?? {}),
+          ...metadata,
+        },
+      },
+    };
+  });
 
 export const useChat = ({
   agentId,
@@ -127,7 +150,7 @@ export const useChat = ({
   const _threadSubscriptionKeyRef = useRef<string | undefined>(undefined);
   const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
   const _threadSignalsUnsupportedRef = useRef(false);
-  const [messages, setMessages] = useState<MastraUIMessage[]>([]);
+  const [messages, setMessages] = useState<MastraDBMessage[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
@@ -139,7 +162,7 @@ export const useChat = ({
   const [isRunning, setIsRunning] = useState(false);
 
   useEffect(() => {
-    const formattedMessages = resolveInitialMessages(initialMessages || []);
+    const formattedMessages = initialMessages ?? [];
     setMessages(formattedMessages);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
   }, [initialMessages]);
@@ -224,10 +247,10 @@ export const useChat = ({
 
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
-      setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+      setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-      if (chunk.type === 'data-user-message' && 'data' in chunk && typeof chunk.data?.id === 'string') {
-        onSignalEcho?.(chunk.data.id);
+      if (chunk.type === 'data-user-message' && 'data' in chunk && typeof (chunk as any).data?.id === 'string') {
+        onSignalEcho?.((chunk as any).data.id);
       }
 
       if (chunk.type === 'start') {
@@ -327,8 +350,6 @@ export const useChat = ({
     });
   }, [agentId, closeThreadSubscription, ensureThreadSubscription, resourceId, threadId, threadSignalsDisabled]);
 
-  // Patch local UI messages so each tool-invocation part becomes a result.
-  // Used as the onToolResult sink for the client-js client-tool handler.
   const generate = async ({
     coreUserMessages,
     requestContext,
@@ -357,8 +378,6 @@ export const useChat = ({
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
-    // Create a new client instance with the abort signal
-    // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
       abortSignal: signal,
@@ -396,21 +415,14 @@ export const useChat = ({
 
       // Add uiMessages with requireApprovalMetadata so UI shows approval buttons
       if (response.response?.uiMessages) {
-        const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
-          ...message,
-          metadata: {
-            mode: 'generate',
-            requireApprovalMetadata: {
-              [toolName]: {
-                toolCallId,
-                toolName,
-                args,
-              },
-            },
+        const dbMessages = dbFromServerUiMessages(response.response.uiMessages, {
+          mode: 'generate',
+          requireApprovalMetadata: {
+            [toolName]: { toolCallId, toolName, args },
           },
-        }));
+        });
 
-        setMessages(prev => [...prev, ...mastraUIMessages]);
+        setMessages(prev => [...prev, ...dbMessages]);
       }
 
       // Set isRunning to false so approval buttons are enabled
@@ -422,15 +434,9 @@ export const useChat = ({
     setIsRunning(false);
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      void onFinish?.(response.response.uiMessages);
-      const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map(message => ({
-        ...message,
-        metadata: {
-          mode: 'generate',
-        },
-      }));
-
-      setMessages(prev => [...prev, ...mastraUIMessages]);
+      const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
+      void onFinish?.(dbMessages);
+      setMessages(prev => [...prev, ...dbMessages]);
     }
   };
 
@@ -570,7 +576,7 @@ export const useChat = ({
       onSignalEcho?.(resolvedSignalId);
       if (isThreadSignalUnsupportedError(error)) {
         markThreadSignalsUnsupported();
-        setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToUIMessage)] as MastraUIMessage[]);
+        setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToMastraDBMessage)]);
         await streamWithLegacyRoute();
         return;
       }
@@ -598,8 +604,6 @@ export const useChat = ({
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
-    // Create a new client instance with the abort signal
-    // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
       abortSignal: signal,
@@ -629,11 +633,12 @@ export const useChat = ({
     _onNetworkChunk.current = onNetworkChunk;
     _networkRunId.current = runId;
 
-    const transformer = new AISdkNetworkTransformer();
-
+    // Network chunks are emitted to the consumer via `onNetworkChunk`.
+    // Per the new architecture, the React SDK no longer maintains a UI-message
+    // projection of network state — consumers that need a network view build
+    // it themselves from the chunk stream.
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         void onNetworkChunk?.(chunk);
       },
     });
@@ -677,10 +682,7 @@ export const useChat = ({
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
+        setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
         void (onChunk ?? _onChunk.current)?.(chunk);
       },
     });
@@ -709,10 +711,7 @@ export const useChat = ({
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
+        setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
         void (onChunk ?? _onChunk.current)?.(chunk);
       },
     });
@@ -738,14 +737,8 @@ export const useChat = ({
     });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
-        ...message,
-        metadata: {
-          mode: 'generate',
-        },
-      }));
-
-      setMessages(prev => [...prev, ...mastraUIMessages]);
+      const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
+      setMessages(prev => [...prev, ...dbMessages]);
     }
 
     setIsRunning(false);
@@ -770,14 +763,8 @@ export const useChat = ({
     });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
-        ...message,
-        metadata: {
-          mode: 'generate',
-        },
-      }));
-
-      setMessages(prev => [...prev, ...mastraUIMessages]);
+      const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
+      setMessages(prev => [...prev, ...dbMessages]);
     }
 
     setIsRunning(false);
@@ -804,11 +791,8 @@ export const useChat = ({
       requestContext: _requestContext.current,
     });
 
-    const transformer = new AISdkNetworkTransformer();
-
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         void onNetworkChunk?.(chunk);
       },
     });
@@ -837,11 +821,8 @@ export const useChat = ({
       requestContext: _requestContext.current,
     });
 
-    const transformer = new AISdkNetworkTransformer();
-
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         void onNetworkChunk?.(chunk);
       },
     });
@@ -857,13 +838,13 @@ export const useChat = ({
       coreUserMessages.push(...args.coreUserMessages);
     }
 
-    const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
+    const dbUserMessages = coreUserMessages.map(fromCoreUserMessageToMastraDBMessage);
     const signalId =
       mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
-        ? uiMessages[0]?.id
+        ? dbUserMessages[0]?.id
         : undefined;
     if (!signalId) {
-      setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
+      setMessages(s => [...s, ...dbUserMessages]);
     }
 
     if (mode === 'generate') {
