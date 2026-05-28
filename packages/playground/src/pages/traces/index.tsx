@@ -1,4 +1,3 @@
-import { EntityType } from '@mastra/core/observability';
 import {
   Button,
   DateTimeRangePicker,
@@ -35,6 +34,7 @@ import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
+import { EntityType } from '@/domains/observability/entity-type';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';

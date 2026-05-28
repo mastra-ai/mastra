@@ -1,7 +1,7 @@
-import { EntityType } from '@mastra/core/observability';
 import { LatencyCardView, OpenInTracesButton, useDrilldown, useLatencyMetrics } from '@mastra/playground-ui';
 import type { LatencyTab } from '@mastra/playground-ui';
 import { useNavigate } from 'react-router';
+import { EntityType } from '@/domains/observability/entity-type';
 import { useLinkComponent } from '@/lib/framework';
 
 const TAB_TO_ROOT_ENTITY: Record<LatencyTab, EntityType> = {

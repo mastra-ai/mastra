@@ -6,7 +6,7 @@
  * - The order of routes for redirect priority (first accessible route wins)
  * - Sidebar link permission gating
  *
- * IMPORTANT: Permission strings are imported from `@mastra/core/auth/ee` (PERMISSION_PATTERNS).
+ * IMPORTANT: Permission strings are type-checked against `@mastra/core/auth/ee`.
  * This ensures type safety and prevents typos like 'scorers:read' vs 'scores:read'.
  *
  * @see COR-829 Studio View Permissions
@@ -14,15 +14,6 @@
  */
 
 import type { PermissionPattern } from '@mastra/core/auth/ee';
-import { PERMISSION_PATTERNS } from '@mastra/core/auth/ee';
-
-// Validated permission helper - ensures we're using valid patterns from the generated file
-const P = <T extends PermissionPattern>(pattern: T): T => {
-  if (!(pattern in PERMISSION_PATTERNS)) {
-    throw new Error(`Invalid permission pattern: ${pattern}`);
-  }
-  return pattern;
-};
 
 export type RoutePermission = {
   /** The route path (used for redirects) */
@@ -34,7 +25,7 @@ export type RoutePermission = {
    *
    * Use 'public' for routes that don't require authentication.
    */
-  permission: PermissionPattern | PermissionPattern[] | 'public';
+  permission: PermissionPattern | readonly PermissionPattern[] | 'public';
   /** Human-readable name for the route (for debugging/logging) */
   name: string;
 };
@@ -44,43 +35,43 @@ export type RoutePermission = {
  * Ordered by redirect priority - when determining where to send a user,
  * we'll redirect to the first route they have permission to access.
  *
- * Permission patterns are validated using P() to ensure they match PERMISSION_PATTERNS.
+ * Permission patterns are validated at compile time against PermissionPattern.
  * Common gotchas the types will catch:
  * - 'mcp' not 'mcps' (UI route is /mcps but resource is 'mcp')
  * - 'scores' not 'scorers' (UI route is /scorers but resource is 'scores')
  * - 'stored-prompt-blocks' for prompts (uses /stored/prompt-blocks routes)
  */
-export const ROUTE_PERMISSIONS: RoutePermission[] = [
+export const ROUTE_PERMISSIONS = [
   // Primary routes (highest priority for redirects)
-  { route: '/agents', permission: P('agents:read'), name: 'Agents' },
-  { route: '/workflows', permission: P('workflows:read'), name: 'Workflows' },
+  { route: '/agents', permission: 'agents:read', name: 'Agents' },
+  { route: '/workflows', permission: 'workflows:read', name: 'Workflows' },
 
   // Observability - uses 'observability' resource for traces/metrics, 'logs' for logs
-  { route: '/metrics', permission: P('observability:read'), name: 'Metrics' },
-  { route: '/observability', permission: P('observability:read'), name: 'Traces' },
-  { route: '/traces', permission: P('observability:read'), name: 'Traces' },
-  { route: '/logs', permission: P('logs:read'), name: 'Logs' },
+  { route: '/metrics', permission: 'observability:read', name: 'Metrics' },
+  { route: '/observability', permission: 'observability:read', name: 'Traces' },
+  { route: '/traces', permission: 'observability:read', name: 'Traces' },
+  { route: '/logs', permission: 'logs:read', name: 'Logs' },
 
   // Evaluation - uses 'scores' resource (not 'scorers')
-  { route: '/scorers', permission: P('scores:read'), name: 'Scorers' },
-  { route: '/datasets', permission: [P('datasets:read')], name: 'Datasets' },
-  { route: '/experiments', permission: [P('datasets:read')], name: 'Experiments' },
+  { route: '/scorers', permission: 'scores:read', name: 'Scorers' },
+  { route: '/datasets', permission: ['datasets:read'], name: 'Datasets' },
+  { route: '/experiments', permission: ['datasets:read'], name: 'Experiments' },
 
   // Primitives - note: 'mcp' not 'mcps', 'stored' for prompts (stored/prompt-blocks routes)
-  { route: '/tools', permission: P('tools:read'), name: 'Tools' },
-  { route: '/mcps', permission: P('mcp:read'), name: 'MCP Servers' },
-  { route: '/processors', permission: P('processors:read'), name: 'Processors' },
-  { route: '/prompts', permission: P('stored-prompt-blocks:read'), name: 'Prompts' },
-  { route: '/workspaces', permission: P('workspaces:read'), name: 'Workspaces' },
+  { route: '/tools', permission: 'tools:read', name: 'Tools' },
+  { route: '/mcps', permission: 'mcp:read', name: 'MCP Servers' },
+  { route: '/processors', permission: 'processors:read', name: 'Processors' },
+  { route: '/prompts', permission: 'stored-prompt-blocks:read', name: 'Prompts' },
+  { route: '/workspaces', permission: 'workspaces:read', name: 'Workspaces' },
 
   // Admin-only pages
-  { route: '/request-context', permission: P('*'), name: 'Request Context' },
+  { route: '/request-context', permission: '*', name: 'Request Context' },
 
   // UI-only pages (no corresponding API resource) - marked as public
   // These pages don't fetch protected data, so they're accessible to all authenticated users
   { route: '/settings', permission: 'public', name: 'Settings' },
   { route: '/resources', permission: 'public', name: 'Resources' },
-];
+] as const satisfies readonly RoutePermission[];
 
 /**
  * Get all unique permissions used for sidebar gating.
@@ -95,11 +86,15 @@ export const ALL_SIDEBAR_PERMISSIONS = [
   ),
 ];
 
+const isPermissionList = (permission: string | readonly string[] | undefined): permission is readonly string[] => {
+  return Array.isArray(permission);
+};
+
 /**
  * Find the permission(s) required for a given route.
  * Returns undefined if the route is not in the registry (public or unknown route).
  */
-export function getPermissionForRoute(route: string): string | string[] | undefined {
+export function getPermissionForRoute(route: string): string | readonly string[] | undefined {
   // Exact match first
   const exact = ROUTE_PERMISSIONS.find(r => r.route === route);
   if (exact) return exact.permission;
@@ -114,15 +109,15 @@ export function getPermissionForRoute(route: string): string | string[] | undefi
  * Handles both single permissions and "any of" permission arrays.
  */
 export function hasRoutePermission(
-  permission: string | string[] | undefined,
+  permission: string | readonly string[] | undefined,
   hasPermission: (p: string) => boolean,
   hasAnyPermission: (p: string[]) => boolean,
 ): boolean {
   // No permission required or explicitly public = accessible to all authenticated users
   if (!permission || permission === 'public') return true;
 
-  if (Array.isArray(permission)) {
-    return hasAnyPermission(permission);
+  if (isPermissionList(permission)) {
+    return hasAnyPermission([...permission]);
   }
 
   return hasPermission(permission);
@@ -145,7 +140,7 @@ export function getFirstAccessibleRoute(
     // Skip public routes - we want to redirect to a gated route if possible
     if (permission === 'public') continue;
 
-    const key = Array.isArray(permission) ? permission.sort().join(',') : permission;
+    const key = isPermissionList(permission) ? [...permission].sort().join(',') : permission;
     if (seen.has(key)) continue;
     seen.add(key);
 

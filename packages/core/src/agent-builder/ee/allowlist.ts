@@ -1,32 +1,12 @@
 import { isProviderRegistered } from '../../llm/model/provider-registry.js';
 import { ModelNotAllowedError } from './errors.js';
+import { isModelAllowedByPolicy } from './model-policy.js';
+import type { ModelMatchCandidate } from './model-policy.js';
 import { toModelCandidates } from './normalize-candidate.js';
 import type { ModelCandidate, ModelCandidateInput } from './normalize-candidate.js';
 import type { ProviderModelEntry } from './types.js';
 
-/**
- * Candidate model to check against the allowlist.
- * Caller is responsible for normalizing the source shape via {@link toModelCandidates}
- * (in `./normalize-candidate.ts`) before reaching this matcher.
- */
-export interface ModelMatchCandidate {
-  provider: string;
-  modelId: string;
-}
-
-/**
- * Single-entry match: provider equality (case-sensitive). When the entry omits
- * `modelId` it matches every model under that provider (provider wildcard).
- *
- * Custom (`kind: 'custom'`) entries match by exact provider string. Known-provider
- * entries match by exact provider string too — the typed surface is purely a
- * compile-time guard.
- */
-export function matchesProvider(entry: ProviderModelEntry, candidate: ModelMatchCandidate): boolean {
-  if (entry.provider !== candidate.provider) return false;
-  if (!entry.modelId) return true; // wildcard
-  return entry.modelId === candidate.modelId;
-}
+export { matchesProvider, type ModelMatchCandidate } from './model-policy.js';
 
 /**
  * Returns `true` if the candidate is allowed under the given allowlist.
@@ -40,17 +20,7 @@ export function matchesProvider(entry: ProviderModelEntry, candidate: ModelMatch
  *   silently allows anything else; it is the documented "deny vs ignore" rule.
  */
 export function isModelAllowed(allowed: ProviderModelEntry[] | undefined, candidate: ModelMatchCandidate): boolean {
-  if (allowed === undefined) return true;
-  if (allowed.length === 0) return true;
-
-  const activeEntries = allowed.filter(entry => {
-    if ('kind' in entry && entry.kind === 'custom') return true;
-    return isProviderRegistered(entry.provider);
-  });
-
-  if (activeEntries.length === 0) return false;
-
-  return activeEntries.some(entry => matchesProvider(entry, candidate));
+  return isModelAllowedByPolicy(allowed, candidate, { isProviderRegistered });
 }
 
 /**

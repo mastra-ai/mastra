@@ -215,6 +215,11 @@ export default defineConfig(({ mode }) => {
   const commonConfig: UserConfig = {
     plugins: [stubNodeBuiltinsPlugin, tailwindcss(), react(), routesManifestPlugin()],
     base: './',
+    optimizeDeps: {
+      // This package is type-only at runtime. Vite's interop optimizer can rewrite
+      // namespace imports to a default import, which breaks because the module has no exports.
+      exclude: ['@standard-schema/spec'],
+    },
     resolve: {
       dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-resizable-panels', '@tanstack/react-query'],
       alias: {

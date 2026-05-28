@@ -1,4 +1,3 @@
-import { EntityType } from '@mastra/core/observability';
 import {
   OpenErrorsInLogsButton,
   OpenInTracesButton,
@@ -7,6 +6,7 @@ import {
   useTraceVolumeMetrics,
 } from '@mastra/playground-ui';
 import type { VolumeTab } from '@mastra/playground-ui';
+import { EntityType } from '@/domains/observability/entity-type';
 import { useLinkComponent } from '@/lib/framework';
 
 const TAB_TO_ROOT_ENTITY: Record<VolumeTab, EntityType> = {

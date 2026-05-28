@@ -1,5 +1,5 @@
-import { EntityType } from '@mastra/core/observability';
 import { useParams } from 'react-router';
+import { EntityType } from '@/domains/observability/entity-type';
 import TracesPage from '@/pages/traces';
 
 function AgentTraces() {

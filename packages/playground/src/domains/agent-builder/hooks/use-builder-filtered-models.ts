@@ -1,5 +1,5 @@
 import type { BuilderModelPolicy, Provider } from '@mastra/client-js';
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
+import { isModelAllowedByPolicy } from '@mastra/core/agent-builder/ee/model-policy';
 import { useMemo } from 'react';
 import type { ModelInfo } from '../../llm/hooks/use-filtered-models';
 
@@ -14,10 +14,20 @@ export const useBuilderFilteredProviders = (providers: Provider[], policy: Build
       return providers;
     }
 
+    const registeredProviderIds = new Set(providers.map(provider => provider.id));
+
     return providers
       .map(provider => ({
         ...provider,
-        models: provider.models.filter(modelId => isModelAllowed(policy.allowed, { provider: provider.id, modelId })),
+        models: provider.models.filter(modelId =>
+          isModelAllowedByPolicy(
+            policy.allowed,
+            { provider: provider.id, modelId },
+            {
+              isProviderRegistered: registeredProviderIds.has.bind(registeredProviderIds),
+            },
+          ),
+        ),
       }))
       .filter(provider => provider.models.length > 0);
   }, [providers, policy]);
@@ -33,6 +43,16 @@ export const useBuilderFilteredModels = (models: ModelInfo[], policy: BuilderMod
       return models;
     }
 
-    return models.filter(m => isModelAllowed(policy.allowed, { provider: m.provider, modelId: m.model }));
+    const registeredProviderIds = new Set(models.map(model => model.provider));
+
+    return models.filter(m =>
+      isModelAllowedByPolicy(
+        policy.allowed,
+        { provider: m.provider, modelId: m.model },
+        {
+          isProviderRegistered: registeredProviderIds.has.bind(registeredProviderIds),
+        },
+      ),
+    );
   }, [models, policy]);
 };

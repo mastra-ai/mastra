@@ -1,5 +1,5 @@
 import type { UpdateModelParams } from '@mastra/client-js';
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
+import { isModelAllowedByPolicy } from '@mastra/core/agent-builder/ee/model-policy';
 import { Notice, Button, Spinner } from '@mastra/playground-ui';
 import { Lock, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
@@ -163,6 +163,7 @@ export const AgentMetadataModelSwitcher = ({
   };
 
   const currentProvider = findProviderById(providers, currentModelProvider);
+  const registeredProviderIds = new Set(providers.map(provider => provider.id));
 
   // Admin locked the picker — surface a non-interactive chip instead.
   if (policy.active && policy.pickerVisible === false) {
@@ -188,7 +189,11 @@ export const AgentMetadataModelSwitcher = ({
     Boolean(currentModelProvider && selectedModel) &&
     policy.active &&
     policy.allowed !== undefined &&
-    !isModelAllowed(policy.allowed, { provider: currentModelProvider, modelId: selectedModel });
+    !isModelAllowedByPolicy(
+      policy.allowed,
+      { provider: fullProviderId, modelId: selectedModel },
+      { isProviderRegistered: registeredProviderIds.has.bind(registeredProviderIds) },
+    );
 
   return (
     <div className="@container">

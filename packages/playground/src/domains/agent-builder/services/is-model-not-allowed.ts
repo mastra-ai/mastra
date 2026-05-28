@@ -1,4 +1,4 @@
-import { MODEL_NOT_ALLOWED_CODE } from '@mastra/core/agent-builder/ee';
+import { MODEL_NOT_ALLOWED_CODE } from '@mastra/core/agent-builder/ee/model-policy';
 
 export interface ModelNotAllowedDetails {
   message: string;

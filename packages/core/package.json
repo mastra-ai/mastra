@@ -101,6 +101,16 @@
         "default": "./dist/agent-builder/ee/index.cjs"
       }
     },
+    "./agent-builder/ee/model-policy": {
+      "import": {
+        "types": "./dist/agent-builder/ee/model-policy.d.ts",
+        "default": "./dist/agent-builder/ee/model-policy.js"
+      },
+      "require": {
+        "types": "./dist/agent-builder/ee/model-policy.d.ts",
+        "default": "./dist/agent-builder/ee/model-policy.cjs"
+      }
+    },
     "./background-tasks": {
       "import": {
         "types": "./dist/background-tasks/index.d.ts",

@@ -1,7 +1,8 @@
+import { MODEL_NOT_ALLOWED_CODE } from './model-policy';
 import type { ModelCandidate } from './normalize-candidate';
 import type { ProviderModelEntry } from './types';
 
-export const MODEL_NOT_ALLOWED_CODE = 'MODEL_NOT_ALLOWED' as const;
+export { MODEL_NOT_ALLOWED_CODE };
 
 /**
  * Thrown by `enforceModelAllowlist` call sites when a write attempts to persist

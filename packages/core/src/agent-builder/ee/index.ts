@@ -14,12 +14,18 @@ export type {
 export { BUILDER_FEATURE_DEFAULTS, resolveAgentFeatures } from './types';
 
 export {
+  isModelAllowedByPolicy,
+  MODEL_NOT_ALLOWED_CODE,
+  matchesProvider,
+  type IsModelAllowedByPolicyOptions,
+  type ModelMatchCandidate,
+} from './model-policy';
+
+export {
   assertModelAllowed,
   enforceModelAllowlist,
   isModelAllowed,
-  matchesProvider,
   type EnforceModelAllowlistResult,
-  type ModelMatchCandidate,
 } from './allowlist';
 
 export {
@@ -33,4 +39,4 @@ export { builderToModelPolicy, isBuilderModelPolicyActive, type BuilderModelPoli
 
 export { resolvePickerVisibility, type ResolvePickerVisibilityInputs, type ResolvedPickerVisibility } from './picker';
 
-export { ModelNotAllowedError, MODEL_NOT_ALLOWED_CODE, isModelNotAllowedError } from './errors';
+export { ModelNotAllowedError, isModelNotAllowedError } from './errors';

@@ -1,5 +1,5 @@
 import type { UpdateModelParams } from '@mastra/client-js';
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
+import { isModelAllowedByPolicy } from '@mastra/core/agent-builder/ee/model-policy';
 import { cn } from '@mastra/playground-ui';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -137,13 +137,19 @@ export const ComposerModelWarning = ({ agentId }: ComposerModelSwitcherProps) =>
   const providers = dataProviders?.providers || [];
   const currentModelProvider = cleanProviderId(agent.provider || '');
   const currentProvider = findProviderById(providers, currentModelProvider);
+  const fullProviderId = currentProvider?.id || currentModelProvider;
   const selectedModel = agent.modelId || '';
+  const registeredProviderIds = new Set(providers.map(provider => provider.id));
 
   const stale =
     Boolean(currentModelProvider && selectedModel) &&
     policy.active &&
     policy.allowed !== undefined &&
-    !isModelAllowed(policy.allowed, { provider: currentModelProvider, modelId: selectedModel });
+    !isModelAllowedByPolicy(
+      policy.allowed,
+      { provider: fullProviderId, modelId: selectedModel },
+      { isProviderRegistered: registeredProviderIds.has.bind(registeredProviderIds) },
+    );
 
   const showProviderWarning = currentProvider && !currentProvider.connected;
 

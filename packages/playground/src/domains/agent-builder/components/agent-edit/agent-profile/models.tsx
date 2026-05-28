@@ -1,4 +1,4 @@
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
+import { isModelAllowedByPolicy } from '@mastra/core/agent-builder/ee/model-policy';
 import { Checkbox, Skeleton, Txt, cn } from '@mastra/playground-ui';
 import { LockIcon, TriangleAlertIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
@@ -131,7 +131,17 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const modelId = model?.name ?? '';
 
   const isSet = Boolean(provider && modelId);
-  const isStale = isSet && policy.active && !isModelAllowed(policy.allowed, { provider, modelId });
+  const registeredProviderIds = new Set(allProviders.map(provider => provider.id));
+  const isStale =
+    isSet &&
+    policy.active &&
+    !isModelAllowedByPolicy(
+      policy.allowed,
+      { provider, modelId },
+      {
+        isProviderRegistered: registeredProviderIds.has.bind(registeredProviderIds),
+      },
+    );
 
   const groups = groupModelsByProvider(policyAllowedModels, selectedProviders, search, provider);
   const allProvidersUnchecked = selectedProviders !== null && selectedProviders.size === 0;
