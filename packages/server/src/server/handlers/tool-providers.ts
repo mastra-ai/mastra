@@ -135,8 +135,8 @@ export const LIST_TOOL_PROVIDER_TOOLKITS_ROUTE = createRoute({
     try {
       const editor = requireEditor(mastra.getEditor());
       const provider = resolveProvider(editor, providerId);
-      if (provider.listToolkitsV2) {
-        return await provider.listToolkitsV2();
+      if (provider.listToolkitsVNext) {
+        return await provider.listToolkitsVNext();
       }
       if (provider.listToolkits) {
         return await provider.listToolkits();
@@ -171,8 +171,8 @@ export const LIST_TOOL_PROVIDER_TOOLS_ROUTE = createRoute({
       if (search !== undefined) opts.search = search;
       if (page !== undefined) opts.page = page;
       if (perPage !== undefined) opts.perPage = perPage;
-      if (provider.listToolsV2) {
-        return await provider.listToolsV2(Object.keys(opts).length > 0 ? opts : undefined);
+      if (provider.listToolsVNext) {
+        return await provider.listToolsVNext(Object.keys(opts).length > 0 ? opts : undefined);
       }
       return await provider.listTools(Object.keys(opts).length > 0 ? opts : undefined);
     } catch (error) {
@@ -375,8 +375,8 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
     toolkit,
     authorId: queryAuthorId,
     scope: queryScope,
-    cursor,
-    limit,
+    page,
+    perPage,
     requestContext,
   }) => {
     try {
@@ -446,14 +446,17 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
 
       const userIds = Array.from(userIdSet);
       if (userIds.length === 0) {
-        return { items: [] };
+        return {
+          items: [],
+          pagination: { page: page ?? 1, perPage, hasMore: false },
+        };
       }
 
       const adapterResult = await provider.listConnections({
         toolkit,
         userIds,
-        ...(typeof cursor === 'string' && cursor.length > 0 ? { cursor } : {}),
-        ...(typeof limit === 'number' ? { limit } : {}),
+        ...(typeof page === 'number' ? { page } : {}),
+        ...(typeof perPage === 'number' ? { perPage } : {}),
       });
 
       const rowByConnId = new Map(labelRows.map(r => [r.connectionId, r]));
@@ -473,7 +476,7 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
             ...(row?.scope ? { scope: row.scope } : {}),
           };
         }),
-        ...(adapterResult.nextCursor ? { nextCursor: adapterResult.nextCursor } : {}),
+        pagination: adapterResult.pagination,
       };
     } catch (error) {
       return handleError(error, 'Error listing tool provider connections');

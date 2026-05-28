@@ -83,14 +83,14 @@ describe('ComposioToolProvider — identity & capabilities', () => {
 });
 
 describe('ComposioToolProvider — catalog allowlist', () => {
-  it('listToolkitsV2 honors allowedToolkits', async () => {
+  it('listToolkitsVNext honors allowedToolkits', async () => {
     const integration = new ComposioToolProvider({
       apiKey: 'k',
       allowedToolkits: ['gmail'],
     });
 
     // Trigger client construction.
-    await integration.listToolkitsV2().catch(() => undefined);
+    await integration.listToolkitsVNext().catch(() => undefined);
     const raw = getRawInstance();
 
     raw.toolkits.get.mockResolvedValue([
@@ -98,7 +98,7 @@ describe('ComposioToolProvider — catalog allowlist', () => {
       { slug: 'slack', name: 'Slack', meta: { description: 'chat', logo: 'l' } },
     ]);
 
-    const services = await integration.listToolkitsV2();
+    const services = await integration.listToolkitsVNext();
     expect(services.data.map(s => s.slug)).toEqual(['gmail']);
   });
 
@@ -189,7 +189,7 @@ describe('ComposioToolProvider — catalog allowlist', () => {
 describe('ComposioToolProvider — resolveTools', () => {
   it('returns {} when toolSlugs is empty without calling the SDK', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
-    const result = await integration.resolveToolsV2({
+    const result = await integration.resolveToolsVNext({
       toolSlugs: [],
       toolMeta: {},
       connectionId: 'ca_x',
@@ -201,7 +201,7 @@ describe('ComposioToolProvider — resolveTools', () => {
   it('injects connectedAccountId via beforeExecute, clears outputSchema, applies description override', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
-    await integration.resolveToolsV2({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
+    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
     const mastra = getMastraInstance();
     mastra.tools.get.mockClear();
 
@@ -212,7 +212,7 @@ describe('ComposioToolProvider — resolveTools', () => {
     };
     mastra.tools.get.mockResolvedValue({ 'gmail.fetch_emails': tool });
 
-    const result = await integration.resolveToolsV2({
+    const result = await integration.resolveToolsVNext({
       toolSlugs: ['gmail.fetch_emails'],
       toolMeta: { 'gmail.fetch_emails': { description: 'overridden' } },
       connectionId: 'ca_1',
@@ -236,12 +236,12 @@ describe('ComposioToolProvider — resolveTools', () => {
   it('falls back to "default" internalUserId when MASTRA_RESOURCE_ID_KEY missing', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
-    await integration.resolveToolsV2({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
+    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
     const mastra = getMastraInstance();
     mastra.tools.get.mockClear();
     mastra.tools.get.mockResolvedValue({});
 
-    await integration.resolveToolsV2({
+    await integration.resolveToolsVNext({
       toolSlugs: ['gmail.fetch_emails'],
       toolMeta: {},
       connectionId: 'ca_1',
@@ -253,12 +253,12 @@ describe('ComposioToolProvider — resolveTools', () => {
   it('reads MASTRA_RESOURCE_ID_KEY from requestContext when present', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
-    await integration.resolveToolsV2({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
+    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
     const mastra = getMastraInstance();
     mastra.tools.get.mockClear();
     mastra.tools.get.mockResolvedValue({});
 
-    await integration.resolveToolsV2({
+    await integration.resolveToolsVNext({
       toolSlugs: ['gmail.fetch_emails'],
       toolMeta: {},
       connectionId: 'ca_1',
@@ -271,12 +271,12 @@ describe('ComposioToolProvider — resolveTools', () => {
   it('prefers opts.authorId over requestContext when supplied (author-bound pin)', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
-    await integration.resolveToolsV2({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
+    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
     const mastra = getMastraInstance();
     mastra.tools.get.mockClear();
     mastra.tools.get.mockResolvedValue({});
 
-    await integration.resolveToolsV2({
+    await integration.resolveToolsVNext({
       toolSlugs: ['gmail.fetch_emails'],
       toolMeta: {},
       connectionId: 'ca_1',
@@ -557,11 +557,14 @@ describe('ComposioToolProvider — listConnections', () => {
 
     const result = await integration.listConnections({ toolkit: 'gmail', userIds: [] });
 
-    expect(result).toEqual({ items: [] });
+    expect(result).toEqual({
+      items: [],
+      pagination: { page: 1, perPage: 50, hasMore: false },
+    });
     expect(raw.connectedAccounts.list).not.toHaveBeenCalled();
   });
 
-  it('forwards cursor + clamps limit and returns nextCursor + per-item authorId', async () => {
+  it('clamps perPage and surfaces hasMore + per-item authorId from adapter', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
     await integration.listConnections({ toolkit: 'gmail' }).catch(() => undefined);
     const raw = getRawInstance();
@@ -582,14 +585,13 @@ describe('ComposioToolProvider — listConnections', () => {
     const result = await integration.listConnections({
       toolkit: 'gmail',
       userIds: ['user_42'],
-      cursor: 'page_2',
-      limit: 9999,
+      page: 1,
+      perPage: 9999,
     });
 
     expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
       toolkitSlugs: ['gmail'],
       userIds: ['user_42'],
-      cursor: 'page_2',
       limit: 200,
     });
     expect(result).toEqual({
@@ -601,7 +603,7 @@ describe('ComposioToolProvider — listConnections', () => {
           authorId: 'user_42',
         },
       ],
-      nextCursor: 'next_page',
+      pagination: { page: 1, perPage: 200, hasMore: true },
     });
   });
 });

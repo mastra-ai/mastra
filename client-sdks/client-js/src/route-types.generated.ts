@@ -74512,10 +74512,10 @@ export type GetToolProvidersProviderIdConnections_QueryParams = {
   authorId?: string | undefined;
   /** Filter results by scope. Omit to include shared + per-author pins for the caller. */
   scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
-  /** Opaque pagination cursor returned by a previous call */
-  cursor?: string | undefined;
-  /** Max items per page (default 50, max 200) */
-  limit?: number | undefined;
+  /** Page number for pagination (1-indexed) */
+  page?: number | undefined;
+  /** Number of items per page (default 50, max 200) */
+  perPage?: number | undefined;
 };
 
 export type GetToolProvidersProviderIdConnections_Response = {
@@ -74530,8 +74530,14 @@ export type GetToolProvidersProviderIdConnections_Response = {
     /** Persisted scope from tool_provider_connections. Missing for rows that predate the scope field. */
     scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
   }[];
-  /** Opaque cursor for the next page, when more results exist */
-  nextCursor?: string | undefined;
+  pagination?:
+    | {
+        total?: number | undefined;
+        page?: number | undefined;
+        perPage?: number | undefined;
+        hasMore: boolean;
+      }
+    | undefined;
 };
 
 export type GetToolProvidersProviderIdConnections_Request = Simplify<

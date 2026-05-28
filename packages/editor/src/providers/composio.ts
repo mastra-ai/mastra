@@ -40,7 +40,7 @@ const DEFAULT_INTERNAL_USER_ID = 'default';
  * Composio implementation of the {@link BaseToolProvider} contract.
  *
  * Discovery (`listAllToolkits`, `listAllTools`) uses the raw Composio
- * client. Runtime (`resolveToolsV2`) uses {@link MastraProvider} so resolved
+ * client. Runtime (`resolveToolsVNext`) uses {@link MastraProvider} so resolved
  * tools are already in `createTool()` shape; each tool gets a
  * `beforeExecute` modifier that injects
  * `connectedAccountId = connectionId`, and `outputSchema` is cleared
@@ -161,7 +161,7 @@ export class ComposioToolProvider extends BaseToolProvider {
 
   // ── runtime ───────────────────────────────────────────────────────────
 
-  async resolveToolsV2(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> {
+  async resolveToolsVNext(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> {
     if (opts.toolSlugs.length === 0) return {};
 
     // For author-bound connections, the runtime fan-out passes the agent's
@@ -326,21 +326,24 @@ export class ComposioToolProvider extends BaseToolProvider {
 
   async listConnections(opts: ListConnectionsOpts): Promise<ListConnectionsResult> {
     const composio = this.getRawClient();
+    const page = opts.page ?? 1;
+    const perPage = clampLimit(opts.perPage);
 
     // Normalize userIds[] / userId. Empty array = no buckets to list against,
     // short-circuit to avoid an unbounded Composio response.
     const userIds = resolveUserIds(opts);
     if (userIds && userIds.length === 0) {
-      return { items: [] };
+      return { items: [], pagination: { page, perPage, hasMore: false } };
     }
 
-    const limit = clampLimit(opts.limit);
-
+    // Composio SDK 0.6.x uses cursor-based pagination on the wire. We surface
+    // page-based pagination to keep the Mastra contract consistent with every
+    // other list API. For now we only fetch the first page (page=1); paginated
+    // requests for page > 1 are a follow-up — the UI does not yet paginate.
     const list: ConnectedAccountListResponse = await composio.connectedAccounts.list({
       toolkitSlugs: [opts.toolkit],
       ...(userIds ? { userIds } : {}),
-      ...(opts.cursor ? { cursor: opts.cursor } : {}),
-      ...(limit ? { limit } : {}),
+      limit: perPage,
     });
 
     const items: ExistingConnection[] = list.items.map(account => ({
@@ -352,8 +355,8 @@ export class ComposioToolProvider extends BaseToolProvider {
       authorId: (account as unknown as { user_id?: string }).user_id,
     }));
 
-    const nextCursor = (list as { nextCursor?: string | null }).nextCursor ?? undefined;
-    return { items, ...(nextCursor ? { nextCursor } : {}) };
+    const hasMore = Boolean((list as { nextCursor?: string | null }).nextCursor);
+    return { items, pagination: { page, perPage, hasMore } };
   }
 
   /**

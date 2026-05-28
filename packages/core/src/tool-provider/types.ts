@@ -194,7 +194,7 @@ export type ToolProviders = Record<string /* providerId */, ToolProviderConfig>;
 // ── List / auth / health surface ─────────────────────────────────────────
 
 /**
- * Options for `ToolProvider.listToolsV2`. All fields are optional.
+ * Options for `ToolProvider.listToolsVNext`. All fields are optional.
  */
 export interface ListToolsOpts {
   /** Restrict results to one toolkit slug. */
@@ -208,7 +208,7 @@ export interface ListToolsOpts {
 }
 
 /**
- * Wrapped pagination envelope returned by `listToolsV2`. `hasMore` is the
+ * Wrapped pagination envelope returned by `listToolsVNext`. `hasMore` is the
  * only forward-progress signal — adapters are not required to surface a
  * total count.
  */
@@ -221,13 +221,13 @@ export interface ListToolsResult {
   };
 }
 
-/** Wrapped result returned by `listToolkitsV2`. */
+/** Wrapped result returned by `listToolkitsVNext`. */
 export interface ListToolkitsResult {
   data: ToolProviderToolkit[];
 }
 
 /**
- * Options for `ToolProvider.resolveToolsV2`.
+ * Options for `ToolProvider.resolveToolsVNext`.
  *
  * The runtime fan-out calls this **once per connection** — providers never
  * see fan-out logic or tool-name suffixes.
@@ -321,10 +321,10 @@ export interface ListConnectionsOpts {
   userIds?: string[];
   /** Single-bucket convenience. */
   userId?: string;
-  /** Opaque cursor returned by a previous call. */
-  cursor?: string;
-  /** Max items per page. Adapters clamp to a sane upper bound (default 50, max 200). */
-  limit?: number;
+  /** 1-indexed page number for paginated listings. */
+  page?: number;
+  /** Page size. Adapters clamp to a sane upper bound (default 50, max 200). */
+  perPage?: number;
 }
 
 /** One existing connection on the underlying provider. */
@@ -345,18 +345,23 @@ export interface ExistingConnection {
 
 export interface ListConnectionsResult {
   items: ExistingConnection[];
-  /** Forward-progress cursor; null/undefined when the listing is exhausted. */
-  nextCursor?: string;
+  /** Pagination envelope. Adapters are not required to surface a total count. */
+  pagination: {
+    page: number;
+    perPage?: number;
+    hasMore: boolean;
+    total?: number;
+  };
 }
 
 /**
  * Interface for tool providers (e.g., Composio) that supply tools to agents.
  *
  * Tool providers serve two purposes:
- * 1. **Discovery** — UI uses `listToolkits()` / `listToolkitsV2()` / `listTools()` / `listToolsV2()` to browse available tools
- * 2. **Runtime** — Agent hydration uses `resolveTools()` / `resolveToolsV2()` to get executable tools for selected tool slugs
+ * 1. **Discovery** — UI uses `listToolkits()` / `listToolkitsVNext()` / `listTools()` / `listToolsVNext()` to browse available tools
+ * 2. **Runtime** — Agent hydration uses `resolveTools()` / `resolveToolsVNext()` to get executable tools for selected tool slugs
  *
- * The v2 surface (`listToolkitsV2` / `listToolsV2` / `resolveToolsV2` and the
+ * The VNext surface (`listToolkitsVNext` / `listToolsVNext` / `resolveToolsVNext` and the
  * auth/health methods below) is opt-in: providers can keep using the legacy
  * `listTools()` / `resolveTools()` pair for static, code-config use cases.
  */
@@ -406,24 +411,24 @@ export interface ToolProvider {
     options?: ResolveToolProviderToolsOptions,
   ): Promise<Record<string, ToolAction<any, any, any>>>;
 
-  // ── V2 surface (opt-in, used by Agent Builder + editor UI) ────────────
+  // ── VNext surface (opt-in, used by Agent Builder + editor UI) ────────
 
   /** List allowed toolkits, wrapped in a result envelope. */
-  listToolkitsV2?(): Promise<ListToolkitsResult>;
+  listToolkitsVNext?(): Promise<ListToolkitsResult>;
 
   /**
    * List allowed tools (wrapped envelope). With no options, lists across
    * every toolkit. Pass `toolkit` to scope; pass `search` to filter; pass
    * `page` / `perPage` to paginate.
    */
-  listToolsV2?(opts?: ListToolsOpts): Promise<ListToolsResult>;
+  listToolsVNext?(opts?: ListToolsOpts): Promise<ListToolsResult>;
 
   /**
    * Materialise executable Mastra tools for one (toolSlugs × connection)
    * call. Runtime fan-out invokes this once per connection and applies
    * naming/suffix logic on top.
    */
-  resolveToolsV2?(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>>;
+  resolveToolsVNext?(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>>;
 
   /** Start an OAuth flow; returns the redirect URL and an opaque auth handle. */
   authorize?(opts: AuthorizeOpts): Promise<{ url: string; authId: string }>;

@@ -34,7 +34,7 @@ import type {
  * filters everything out for that toolkit.
  */
 export interface BaseToolProviderOptions {
-  /** When set, `listToolkitsV2()` keeps only toolkits whose slug matches. */
+  /** When set, `listToolkitsVNext()` keeps only toolkits whose slug matches. */
   allowedToolkits?: readonly string[];
   /**
    * Per-toolkit tool allowlist. Keys are toolkit slugs; values are patterns
@@ -64,16 +64,16 @@ export abstract class BaseToolProvider implements ToolProvider {
     this.allowedTools = options.allowedTools ?? {};
   }
 
-  // ── v2 catalog (filtered) ─────────────────────────────────────────────
+  // ── VNext catalog (filtered) ──────────────────────────────────────────
 
-  async listToolkitsV2(): Promise<ListToolkitsResult> {
+  async listToolkitsVNext(): Promise<ListToolkitsResult> {
     const all = await this.listAllToolkits();
     const data =
       this.allowedToolkits.length === 0 ? all : all.filter(toolkit => matchesAny(toolkit.slug, this.allowedToolkits));
     return { data };
   }
 
-  async listToolsV2(opts: ListToolsOpts = {}): Promise<ListToolsResult> {
+  async listToolsVNext(opts: ListToolsOpts = {}): Promise<ListToolsResult> {
     // Deny toolkits not in the allowlist before touching the SDK.
     if (
       opts.toolkit !== undefined &&
@@ -99,21 +99,21 @@ export abstract class BaseToolProvider implements ToolProvider {
     };
   }
 
-  // ── legacy surface (default forwards to v2) ───────────────────────────
+  // ── legacy surface (default forwards to VNext) ───────────────────────
 
   async listToolkits(): Promise<ToolProviderListResult<ToolProviderToolkit>> {
-    const result = await this.listToolkitsV2();
+    const result = await this.listToolkitsVNext();
     return { data: result.data };
   }
 
   async listTools(options: ListToolsOpts = {}): Promise<ToolProviderListResult<ToolProviderToolInfo>> {
-    const result = await this.listToolsV2(options);
+    const result = await this.listToolsVNext(options);
     return { data: result.data, pagination: result.pagination };
   }
 
   /**
-   * Legacy `resolveTools` shim — subclasses that opt into the v2 surface
-   * normally implement `resolveToolsV2` instead; the legacy signature
+   * Legacy `resolveTools` shim — subclasses that opt into the VNext surface
+   * normally implement `resolveToolsVNext` instead; the legacy signature
    * delegates so existing callers keep working.
    */
   async resolveTools(
@@ -121,7 +121,7 @@ export abstract class BaseToolProvider implements ToolProvider {
     toolConfigs?: Record<string, StorageToolConfig>,
     options?: { userId?: string; requestContext?: Record<string, unknown>; [key: string]: unknown },
   ): Promise<Record<string, ToolAction<any, any, any>>> {
-    return this.resolveToolsV2({
+    return this.resolveToolsVNext({
       toolSlugs,
       toolMeta: Object.fromEntries(
         Object.entries(toolConfigs ?? {}).map(([slug, cfg]) => [slug, { description: cfg?.description }]),
@@ -137,7 +137,7 @@ export abstract class BaseToolProvider implements ToolProvider {
   protected abstract listAllToolkits(): Promise<ToolProviderToolkit[]>;
   protected abstract listAllTools(opts: ListToolsOpts): Promise<ListToolsResult>;
 
-  abstract resolveToolsV2(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>>;
+  abstract resolveToolsVNext(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>>;
 
   abstract authorize(opts: AuthorizeOpts): Promise<{ url: string; authId: string }>;
   abstract getAuthStatus(authId: string): Promise<AuthFlowStatus>;

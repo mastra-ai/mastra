@@ -4383,8 +4383,8 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [
       "authorId",
-      "cursor",
-      "limit",
+      "page",
+      "perPage",
       "scope",
       "toolkit"
     ],
@@ -4393,7 +4393,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "items"
+      "listProperty": "items",
+      "paginationProperty": "pagination"
     }
   },
   "GET /tool-providers/:providerId/connection-fields": {

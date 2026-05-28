@@ -410,7 +410,7 @@ describe('Integration Tools (tool providers)', () => {
     it('should hydrate a stored agent with Composio toolProviders', async () => {
       const freshStorage = createTestStorage();
 
-      // Stub provider exposing resolveToolsV2 (the v1 toolProviders runtime path)
+      // Stub provider exposing resolveToolsVNext (the v1 toolProviders runtime path)
       const stubProvider: ToolProvider = {
         info: { id: 'composio', name: 'Composio', description: 'stub' },
         listToolkits: vi.fn(async () => ({ data: TOOLKITS })),
@@ -426,7 +426,7 @@ describe('Integration Tools (tool providers)', () => {
         })),
         getToolSchema: vi.fn(async () => ({ type: 'object', properties: {} })),
         resolveTools: vi.fn(async () => ({})),
-        resolveToolsV2: vi.fn(
+        resolveToolsVNext: vi.fn(
           async (opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> => {
             const result: Record<string, ToolAction<any, any, any>> = {};
             for (const slug of opts.toolSlugs) {
@@ -489,7 +489,7 @@ describe('Integration Tools (tool providers)', () => {
 
       // Confirm the runtime resolver was called with the stored connection id
       // and the agent's authorId (per-author scope).
-      expect(stubProvider.resolveToolsV2).toHaveBeenCalledWith(
+      expect(stubProvider.resolveToolsVNext).toHaveBeenCalledWith(
         expect.objectContaining({
           toolSlugs: ['GITHUB_LIST_REPOSITORY_ISSUES'],
           connectionId: 'stub-connection-id',

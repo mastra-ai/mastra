@@ -594,7 +594,10 @@ describe('LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE', () => {
   });
 
   it('admin + empty tool_provider_connections: skips adapter call and returns empty', async () => {
-    const listConnections = vi.fn().mockResolvedValue({ items: [] });
+    const listConnections = vi.fn().mockResolvedValue({
+      items: [],
+      pagination: { page: 1, hasMore: false },
+    });
     const provider = makeProvider({ listConnections });
     const editor = makeEditor(provider);
     const requestContext = new RequestContext();
@@ -609,13 +612,16 @@ describe('LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE', () => {
     } as any);
 
     expect(listConnections).not.toHaveBeenCalled();
-    expect(result).toEqual({ items: [] });
+    expect(result).toEqual({
+      items: [],
+      pagination: { page: 1, perPage: undefined, hasMore: false },
+    });
   });
 
-  it('forwards cursor + limit and returns nextCursor from adapter', async () => {
+  it('forwards page + perPage and returns pagination envelope from adapter', async () => {
     const listConnections = vi.fn().mockResolvedValue({
       items: [{ connectionId: 'ca_1', status: 'active' }],
-      nextCursor: 'page_2',
+      pagination: { page: 1, perPage: 25, hasMore: true },
     });
     const provider = makeProvider({ listConnections });
     const editor = makeEditor(provider);
@@ -626,18 +632,18 @@ describe('LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE', () => {
       mastra: makeMastraWithStorage(editor, makeToolProviderConnectionsStore()),
       providerId: 'composio',
       toolkit: 'gmail',
-      cursor: 'page_1',
-      limit: 25,
+      page: 1,
+      perPage: 25,
       requestContext,
     } as any);
 
     expect(listConnections).toHaveBeenCalledWith({
       toolkit: 'gmail',
       userIds: ['user_42'],
-      cursor: 'page_1',
-      limit: 25,
+      page: 1,
+      perPage: 25,
     });
-    expect(result.nextCursor).toBe('page_2');
+    expect(result.pagination).toEqual({ page: 1, perPage: 25, hasMore: true });
   });
 
   it('returns 404 for unknown provider id', async () => {

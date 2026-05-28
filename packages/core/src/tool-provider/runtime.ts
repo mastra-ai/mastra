@@ -10,7 +10,7 @@ import { SHARED_BUCKET_ID } from './types';
 export type ToolProviderLookup = (providerId: string) => ToolProvider;
 
 export interface ResolveStoredToolProvidersOpts {
-  /** Per-request context plumbed to each `provider.resolveToolsV2` call. */
+  /** Per-request context plumbed to each `provider.resolveToolsVNext` call. */
   requestContext?: Record<string, unknown>;
   /**
    * Agent author's user id. Used as the provider user bucket for
@@ -53,7 +53,7 @@ export function buildConnectionSuffix(label: string | undefined, usedSuffixes: S
  * Provider-agnostic runtime fan-out.
  *
  * For every stored `toolProviders[providerId].connections[toolkit]`
- * entry, calls `provider.resolveToolsV2` once per connection, then renames
+ * entry, calls `provider.resolveToolsVNext` once per connection, then renames
  * the resulting tools with a `__<LABEL>` suffix when more than one
  * connection is bound to the same toolkit. Single-connection toolkits keep
  * the natural slug.
@@ -89,8 +89,8 @@ export async function resolveStoredToolProviders(
       continue;
     }
 
-    if (!provider.resolveToolsV2) {
-      logger?.warn(`[resolveStoredToolProviders] Provider "${providerId}" does not implement resolveToolsV2`);
+    if (!provider.resolveToolsVNext) {
+      logger?.warn(`[resolveStoredToolProviders] Provider "${providerId}" does not implement resolveToolsVNext`);
       continue;
     }
 
@@ -140,7 +140,7 @@ export async function resolveStoredToolProviders(
 
         let resolved: Record<string, ToolAction<any, any, any>>;
         try {
-          resolved = await provider.resolveToolsV2({
+          resolved = await provider.resolveToolsVNext({
             toolSlugs: slugsForToolkit,
             toolMeta: cfg.tools ?? {},
             connectionId: connection.connectionId,

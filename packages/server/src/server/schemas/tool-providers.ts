@@ -109,8 +109,14 @@ export const listConnectionsQuerySchema = z.object({
   scope: connectionScopeSchema
     .optional()
     .describe('Filter results by scope. Omit to include shared + per-author pins for the caller.'),
-  cursor: z.string().optional().describe('Opaque pagination cursor returned by a previous call'),
-  limit: z.coerce.number().int().positive().max(200).optional().describe('Max items per page (default 50, max 200)'),
+  page: z.coerce.number().int().positive().optional().describe('Page number for pagination (1-indexed)'),
+  perPage: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(200)
+    .optional()
+    .describe('Number of items per page (default 50, max 200)'),
 });
 
 export const disconnectConnectionQuerySchema = z.object({
@@ -242,7 +248,7 @@ export const listConnectionsResponseSchema = z.object({
         .describe('Persisted scope from tool_provider_connections. Missing for rows that predate the scope field.'),
     }),
   ),
-  nextCursor: z.string().optional().describe('Opaque cursor for the next page, when more results exist'),
+  pagination: paginationSchema,
 });
 
 export const listConnectionFieldsResponseSchema = z.object({

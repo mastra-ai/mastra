@@ -117,8 +117,8 @@ export class ToolProvider extends BaseResource {
    * auth context. Admin callers (with `tool-providers:admin` permission) may
    * pass `authorId` to target a specific author, or omit it to receive
    * connections across all authors known to `tool_provider_connections` for
-   * this provider/toolkit. Cursor pagination is supported via `cursor` and
-   * `limit` (default 50, max 200).
+   * this provider/toolkit. Pagination is page-based via `page` (1-indexed)
+   * and `perPage` (default 50, max 200).
    */
   listConnections(params: ListToolProviderConnectionsParams): Promise<ListToolProviderConnectionsResponse> {
     const searchParams = new URLSearchParams();
@@ -126,11 +126,11 @@ export class ToolProvider extends BaseResource {
     if (params.authorId) {
       searchParams.set('authorId', params.authorId);
     }
-    if (params.cursor) {
-      searchParams.set('cursor', params.cursor);
+    if (params.page !== undefined && params.page !== null) {
+      searchParams.set('page', String(params.page));
     }
-    if (params.limit !== undefined && params.limit !== null) {
-      searchParams.set('limit', String(params.limit));
+    if (params.perPage !== undefined && params.perPage !== null) {
+      searchParams.set('perPage', String(params.perPage));
     }
     if (params.scope) {
       searchParams.set('scope', params.scope);
