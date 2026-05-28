@@ -87,7 +87,7 @@ You should be on `/agent-builder/agents/<id>/view`.
 
 - [ ] `View mode` pill badge near the header
 - [ ] Header: back arrow, agent name, `View mode` pill (no refresh button)
-- [ ] Top-right action group always contains `Switch to Edit mode`. The `Add to library` and `Show configuration` buttons currently do **not** render in the live build under either `--auth off` or `--auth on` — record their absence and move on (not a regression as of May 28, 2026). The avatar lives in the sidebar user menu, not in this header.
+- [ ] Top-right action group contains exactly `Switch to Edit mode`. There is no `Add to library`, `Show configuration`, `Make public`, or `Share` button in the view-page header under either `--auth off` or `--auth on`. The library/visibility toggle for an agent (auth-on, owner) is exposed on the **edit page** right panel as `Add to library` (when private) ↔ `Remove from library` (when public) — clicking it flips `visibility` between `private` and `public`. There is no separate `Show configuration` button anywhere in the live build (May 28, 2026). The avatar lives in the sidebar user menu, not in this header.
 - [ ] Center: agent name + description and a row of starter prompt cards (e.g. What can you do? / Show available tools / Suggest a task / Run a self-check)
 - [ ] Bottom: `Message your agent...` chat input — agents are runnable from view
 
