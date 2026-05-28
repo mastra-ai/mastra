@@ -627,7 +627,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         return { ...registryTools, ...mcpTools, ...integrationTools, ...providerTools };
       };
     } else {
-      // All are static — resolve once at agent creation time (no requestContext available)
+      // All are static — resolve once at agent creation time (no requestContext available).
+      // Note: `hasToolProviders` is part of `isDynamicTools` above, so the v1 toolProviders
+      // path is always handled in the dynamic branch (where `requestContext` is available
+      // for `caller-supplied` scope). Nothing to resolve here.
       const registryTools = this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
       const mcpTools = await this.resolveStoredMCPTools(
         storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
@@ -635,14 +638,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const integrationTools = await this.resolveStoredIntegrationTools(
         storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
       );
-      const providerTools = hasToolProviders
-        ? await resolveStoredToolProviders(
-            storedAgent.toolProviders as ToolProviders | undefined,
-            (providerId: string) => this.editor.getToolProviderOrThrow(providerId),
-            { authorId: storedAgent.authorId, logger: this.logger },
-          )
-        : {};
-      tools = { ...registryTools, ...mcpTools, ...integrationTools, ...providerTools };
+      tools = { ...registryTools, ...mcpTools, ...integrationTools };
     }
 
     // Workflows: variant values may be string[] or Record<string, StorageToolConfig>

@@ -23,6 +23,7 @@ import {
 function makeMastra(editor?: Partial<IMastraEditor> | undefined) {
   return {
     getEditor: () => editor,
+    getLogger: () => ({ warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }),
   } as any;
 }
 

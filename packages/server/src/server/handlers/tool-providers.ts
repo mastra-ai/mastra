@@ -1,4 +1,5 @@
 import type { IMastraEditor } from '@mastra/core/editor';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import { SHARED_BUCKET_ID, UnknownToolProviderError } from '@mastra/core/tool-provider';
@@ -60,12 +61,26 @@ function resolveProvider(editor: IMastraEditor, providerId: string): ToolProvide
   }
 }
 
+// Emit a single warn per process when the connection-owner fallback fires.
+// Multi-tenant deployments that forget to wire `mapUserToResourceId` (or
+// `MASTRA_USER_KEY`) silently funnel every `caller-supplied` pin into one
+// shared OAuth account — surface that misconfiguration once.
+let defaultBucketWarned = false;
+function warnDefaultBucketFallback(logger: IMastraLogger | undefined): void {
+  if (defaultBucketWarned) return;
+  defaultBucketWarned = true;
+  logger?.warn(
+    '[tool-providers] caller-supplied scope falling back to shared "default" bucket — ' +
+      'wire mapUserToResourceId or set MASTRA_USER_KEY to avoid cross-tenant OAuth sharing',
+  );
+}
+
 /**
  * Resolve the connection owner (provider `userId` bucket) from the caller's
  * `RequestContext`. Mirrors the runtime fan-out fallback to `'default'` when
  * no auth context is present so OSS deployments still work.
  */
-function resolveOwnerId(requestContext: RequestContext | undefined): string {
+function resolveOwnerId(requestContext: RequestContext | undefined, logger: IMastraLogger | undefined): string {
   const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
   if (typeof resourceId === 'string' && resourceId.length > 0) {
     return resourceId;
@@ -79,6 +94,7 @@ function resolveOwnerId(requestContext: RequestContext | undefined): string {
     }
   }
 
+  warnDefaultBucketFallback(logger);
   return 'default';
 }
 
@@ -246,7 +262,7 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
           });
         }
       }
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const ownerAuthorId =
         effectiveScope === 'shared'
           ? SHARED_BUCKET_ID
@@ -383,7 +399,7 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
       if (!provider.listConnections) {
         throw new HTTPException(400, { message: `Tool provider ${providerId} does not support listConnections` });
       }
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
 
       const requestedAuthorId =
@@ -534,7 +550,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
     try {
       const editor = requireEditor(mastra.getEditor());
       const provider = resolveProvider(editor, providerId);
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
       const isForce = force === true || force === 'true';
 
@@ -607,7 +623,7 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
     try {
       const editor = requireEditor(mastra.getEditor());
       const provider = resolveProvider(editor, providerId);
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
 
       const storage = mastra.getStorage();

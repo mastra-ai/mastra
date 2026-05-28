@@ -5,17 +5,43 @@
 '@mastra/editor': minor
 ---
 
-Adds the v1 ToolProvider runtime, server surface, client SDK methods, and editor wiring used by Agent Builder to manage OAuth-backed integrations.
+Added the v1 ToolProvider runtime, server routes, client SDK methods, and editor wiring that power OAuth-backed integrations on stored agents.
 
-- New `ToolProvider` VNext surface (`listToolkitsVNext`, `listToolsVNext`, `resolveToolsVNext`) alongside the v1 catalog surface, plus `BaseToolProvider` for shared behavior
-- Auth round-trip on the `ToolProvider` interface (`authorize`, `getAuthStatus`, `getConnectionStatus`, `listConnections`, `disconnectConnection`, `listConnectionFields`, `health`)
-- Per-author / shared / caller-supplied connection scoping via `resolveConnectionAuthorId()` and request-context plumbing
-- Server routes under `/tool-providers/*` (12 routes: authorize, auth-status, connection-status, connections list with `page`/`perPage` pagination, disconnect, usage, fields, health) and matching `@mastra/client-js` `ToolProvider` resource methods
-- Stored-agent `toolProviders` config shape (`{ connections, tools }`) and runtime merge in `editor.agent.applyStoredOverrides`
-- Composio provider rewrite implementing the new surface
+**Stored agents can now pin OAuth connections per toolkit**
 
-Builds on the `tool_provider_connections` storage domain shipped in PR 1.
+A stored agent's config accepts a new `toolProviders` shape that tells the runtime which connection to bind for each toolkit at execution time. Connections can be scoped per-author, shared across an org, or supplied by the caller.
 
-Additive — no breaking changes. Studio UI ships separately.
+```ts
+{
+  toolProviders: {
+    composio: {
+      connections: {
+        gmail: [{ kind: 'author', toolkit: 'gmail', connectionId: 'auth_abc', scope: 'per-author' }],
+      },
+      tools: {
+        GMAIL_FETCH_EMAILS: { toolkit: 'gmail' },
+      },
+    },
+  },
+}
+```
 
-PR 2 of 3 split from #17224.
+**New client SDK surface for managing connections**
+
+```ts
+import { MastraClient } from '@mastra/client-js';
+
+const client = new MastraClient({ baseUrl: '…' });
+const composio = client.toolProvider('composio');
+
+const { items } = await composio.listConnections({ toolkit: 'gmail' });
+await composio.disconnectConnection('auth_abc');
+```
+
+**New `ToolProvider` interface for custom providers**
+
+Providers implement a VNext surface (`listToolkitsVNext`, `listToolsVNext`, `resolveToolsVNext`) plus the auth round-trip (`authorize`, `getAuthStatus`, `listConnections`, `disconnectConnection`, `listConnectionFields`, `health`). The Composio provider has been rewritten on this surface; the older catalog methods remain as `@deprecated` shims for back-compat.
+
+Connections list responses use `page`/`perPage` pagination, matching the rest of the server surface.
+
+Stored agents that don't set `toolProviders` continue to work unchanged. The Studio/Builder UI ships separately.
