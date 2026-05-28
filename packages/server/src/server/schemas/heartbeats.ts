@@ -2,6 +2,15 @@ import { z } from 'zod';
 import { scheduleRunSummarySchema, scheduleTriggerKindSchema, scheduleTriggerOutcomeSchema } from './schedules';
 
 /**
+ * Broadcast policy for the chunks produced by a heartbeat-driven run.
+ *
+ * - `live` (default) — pass every chunk through to subscribers
+ * - `on-complete` — drop intermediate chunks; replay full text on finish
+ * - `never` — drop every chunk (the run still happens server-side)
+ */
+export const heartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
+
+/**
  * Public Heartbeat view model.
  *
  * Heartbeats are persisted as `Schedule` rows targeting the built-in
@@ -35,6 +44,7 @@ export const heartbeatSchema = z.object({
     })
     .optional(),
   idleThresholdMs: z.number().int().positive().optional(),
+  broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
@@ -75,6 +85,7 @@ export const createHeartbeatBodySchema = z.object({
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
   activeHours: activeHoursBodySchema.optional(),
   idleThresholdMs: z.number().int().positive().optional(),
+  broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -94,6 +105,7 @@ export const updateHeartbeatBodySchema = z.object({
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
   activeHours: activeHoursBodySchema.optional(),
   idleThresholdMs: z.number().int().positive().optional(),
+  broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 

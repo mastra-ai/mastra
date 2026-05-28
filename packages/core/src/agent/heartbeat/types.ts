@@ -1,5 +1,8 @@
 import { z } from 'zod/v4';
 import type { AgentSignalActiveBehavior, AgentSignalIdleBehavior } from '../types';
+import type { HeartbeatBroadcastMode } from './broadcast-processor';
+
+export const HeartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
 
 /**
  * Workflow id used for the built-in heartbeat workflow that fires per
@@ -56,6 +59,13 @@ export const HeartbeatInputSchema = z.object({
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
   activeHours: ActiveHoursSchema.optional(),
   idleThresholdMs: z.number().int().positive().optional(),
+  /**
+   * Broadcast mode for the chunks produced by this heartbeat-driven run.
+   * - `live` (default) — pass every chunk through
+   * - `on-complete` — drop intermediate chunks; replay full text on finish
+   * - `never` — drop every chunk (the run still happens server-side)
+   */
+  broadcast: HeartbeatBroadcastModeSchema.optional(),
 });
 
 export type HeartbeatInput = z.infer<typeof HeartbeatInputSchema>;
@@ -122,4 +132,9 @@ export interface SetHeartbeatOptions {
    * Only meaningful in threaded mode; rejected otherwise.
    */
   idleThresholdMs?: number;
+  /**
+   * Broadcast policy for the chunks produced by this heartbeat-driven run.
+   * Defaults to `'live'`.
+   */
+  broadcast?: HeartbeatBroadcastMode;
 }

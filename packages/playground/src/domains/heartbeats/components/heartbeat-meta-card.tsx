@@ -1,5 +1,15 @@
-import type { Heartbeat } from '@mastra/client-js';
-import { Button, Input, Textarea, Txt } from '@mastra/playground-ui';
+import type { Heartbeat, HeartbeatBroadcastMode } from '@mastra/client-js';
+import {
+  Button,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+  Txt,
+} from '@mastra/playground-ui';
 import { CheckIcon, PencilIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -184,6 +194,44 @@ function PromptRow({ heartbeat }: { heartbeat: Heartbeat }) {
   );
 }
 
+const BROADCAST_LABELS: Record<HeartbeatBroadcastMode, string> = {
+  live: 'Live — stream every chunk',
+  'on-complete': 'On complete — only final text',
+  never: 'Never — silent run',
+};
+
+function BroadcastRow({ heartbeat }: { heartbeat: Heartbeat }) {
+  const update = useUpdateHeartbeat(heartbeat.agentId, heartbeat.id);
+  const current: HeartbeatBroadcastMode = heartbeat.broadcast ?? 'live';
+
+  const handleChange = (next: string) => {
+    const nextMode = next as HeartbeatBroadcastMode;
+    if (nextMode === current) return;
+    update.mutate({ broadcast: nextMode });
+  };
+
+  return (
+    <MetaItem label="Broadcast">
+      <Select value={current} onValueChange={handleChange} disabled={update.isPending}>
+        <SelectTrigger size="sm" aria-label="Broadcast mode" data-testid="heartbeat-broadcast-trigger">
+          <SelectValue placeholder="Select broadcast mode" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="live" data-testid="heartbeat-broadcast-option-live">
+            {BROADCAST_LABELS.live}
+          </SelectItem>
+          <SelectItem value="on-complete" data-testid="heartbeat-broadcast-option-on-complete">
+            {BROADCAST_LABELS['on-complete']}
+          </SelectItem>
+          <SelectItem value="never" data-testid="heartbeat-broadcast-option-never">
+            {BROADCAST_LABELS.never}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </MetaItem>
+  );
+}
+
 export function HeartbeatMetaCard({ heartbeat }: { heartbeat: Heartbeat }) {
   const { paths } = useLinkComponent();
   const mode = heartbeat.threadId ? 'Threaded' : 'Threadless';
@@ -217,6 +265,8 @@ export function HeartbeatMetaCard({ heartbeat }: { heartbeat: Heartbeat }) {
       </MetaItem>
 
       <PromptRow heartbeat={heartbeat} />
+
+      <BroadcastRow heartbeat={heartbeat} />
 
       {heartbeat.threadId ? (
         <>

@@ -6577,6 +6577,7 @@ export class Agent<
       ...(opts.ifIdle ? { ifIdle: opts.ifIdle } : {}),
       ...(opts.activeHours ? { activeHours: opts.activeHours } : {}),
       ...(opts.idleThresholdMs !== undefined ? { idleThresholdMs: opts.idleThresholdMs } : {}),
+      ...(opts.broadcast ? { broadcast: opts.broadcast } : {}),
     };
 
     const target: Schedule['target'] = {

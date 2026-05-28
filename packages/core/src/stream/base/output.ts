@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import { TripWire } from '../../agent';
+import { HEARTBEAT_BROADCAST_PROCESSOR_NAME } from '../../agent/heartbeat/broadcast-processor';
 import { coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
 import { MastraBase } from '../../base';
@@ -365,6 +366,33 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const structuredOutputProcessorState = processorStates.get(STRUCTURED_OUTPUT_PROCESSOR_NAME);
                 if (structuredOutputProcessorState) {
                   structuredOutputProcessorState.customState.controller = controller;
+                }
+              }
+
+              /**
+               * Mirror the structured-output controller-injection special case for the
+               * heartbeat broadcast processor so it can enqueue burst chunks (text-start
+               * / text-delta / text-end) on `finish` when broadcast mode is `on-complete`.
+               */
+              if (!processorStates.has(HEARTBEAT_BROADCAST_PROCESSOR_NAME)) {
+                const processorIndex = processorRunner.outputProcessors.findIndex(
+                  p => p.id === HEARTBEAT_BROADCAST_PROCESSOR_NAME,
+                );
+                if (processorIndex !== -1) {
+                  const heartbeatBroadcastProcessor = processorRunner.outputProcessors[processorIndex];
+                  const heartbeatBroadcastProcessorState = new ProcessorState<OUTPUT>({
+                    processorName: heartbeatBroadcastProcessor?.name ?? HEARTBEAT_BROADCAST_PROCESSOR_NAME,
+                    tracingContext: options.tracingContext,
+                    processorIndex,
+                    createSpan: true,
+                  });
+                  heartbeatBroadcastProcessorState.customState = { controller };
+                  processorStates.set(HEARTBEAT_BROADCAST_PROCESSOR_NAME, heartbeatBroadcastProcessorState);
+                }
+              } else {
+                const heartbeatBroadcastProcessorState = processorStates.get(HEARTBEAT_BROADCAST_PROCESSOR_NAME);
+                if (heartbeatBroadcastProcessorState) {
+                  heartbeatBroadcastProcessorState.customState.controller = controller;
                 }
               }
 

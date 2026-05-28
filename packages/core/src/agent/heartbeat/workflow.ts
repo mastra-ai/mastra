@@ -1,6 +1,7 @@
 import type { z } from 'zod/v4';
 import type { Mastra } from '../../mastra';
 import { createStep, createWorkflow } from '../../workflows/evented';
+import { createHeartbeatBroadcastProcessor } from './broadcast-processor';
 import { HEARTBEAT_WORKFLOW_ID, HeartbeatInputSchema, HeartbeatOutputSchema } from './types';
 import type { HeartbeatInput, HeartbeatRunStatus } from './types';
 
@@ -51,7 +52,8 @@ async function executeHeartbeat(
   mastra: Mastra,
   inputData: HeartbeatInput,
 ): Promise<{ status: HeartbeatRunStatus; reason?: string }> {
-  const { scheduleId, agentId, prompt, threadId, resourceId, activeHours, idleThresholdMs } = inputData;
+  const { scheduleId, agentId, prompt, threadId, resourceId, activeHours, idleThresholdMs, broadcast } = inputData;
+  const broadcastProcessor = createHeartbeatBroadcastProcessor({ mode: broadcast ?? 'live', scheduleId });
 
   const agent = (() => {
     try {
@@ -97,13 +99,16 @@ async function executeHeartbeat(
         resourceId,
         threadId,
         ifActive: { behavior: inputData.ifActive ?? 'discard' },
-        ifIdle: { behavior: inputData.ifIdle ?? 'wake' },
+        ifIdle: {
+          behavior: inputData.ifIdle ?? 'wake',
+          streamOptions: { outputProcessors: [broadcastProcessor] },
+        },
       },
     );
     return { status: 'signal-accepted' };
   }
 
-  await agent.generate(prompt);
+  await agent.generate(prompt, { outputProcessors: [broadcastProcessor] });
   return { status: 'fired' };
 }
 

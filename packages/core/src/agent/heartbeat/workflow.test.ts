@@ -132,7 +132,8 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     const [signal, target] = sendSignal.mock.calls[0]!;
     expect(signal.type).toBe('system-reminder');
     expect(target.ifActive).toEqual({ behavior: 'deliver' });
-    expect(target.ifIdle).toEqual({ behavior: 'persist' });
+    expect(target.ifIdle.behavior).toBe('persist');
+    expect(target.ifIdle.streamOptions.outputProcessors[0].id).toBe('__heartbeat-broadcast__');
   });
 
   it('skips when the thread updated within idleThresholdMs', async () => {
@@ -164,7 +165,9 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     const result = await __internal.executeHeartbeat(mastra, baseInput({ prompt: 'tick' }));
 
     expect(result.status).toBe('fired');
-    expect(generate).toHaveBeenCalledWith('tick');
+    const call = generate.mock.calls[0] as any[];
+    expect(call[0]).toBe('tick');
+    expect(call[1].outputProcessors[0].id).toBe('__heartbeat-broadcast__');
     expect(sendSignal).not.toHaveBeenCalled();
   });
 

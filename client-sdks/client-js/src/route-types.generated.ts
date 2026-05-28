@@ -78025,6 +78025,7 @@ export type GetHeartbeats_Response = {
         }
       | undefined;
     idleThresholdMs?: number | undefined;
+    broadcast?: ('live' | 'on-complete' | 'never') | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -78104,6 +78105,7 @@ export type GetAgentsAgentIdHeartbeats_Response = {
         }
       | undefined;
     idleThresholdMs?: number | undefined;
+    broadcast?: ('live' | 'on-complete' | 'never') | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -78179,6 +78181,7 @@ export type GetAgentsAgentIdHeartbeatsHeartbeatId_Response = {
       }
     | undefined;
   idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -78230,6 +78233,7 @@ export type PostAgentsAgentIdHeartbeats_Body = {
       }
     | undefined;
   idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -78279,6 +78283,7 @@ export type PostAgentsAgentIdHeartbeats_Response = {
       }
     | undefined;
   idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -78330,6 +78335,7 @@ export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Body = {
       }
     | undefined;
   idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -78379,6 +78385,7 @@ export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Response = {
       }
     | undefined;
   idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -78488,6 +78495,7 @@ export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Response = {
       }
     | undefined;
   idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -78564,6 +78572,7 @@ export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Response = {
       }
     | undefined;
   idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;

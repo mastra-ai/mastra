@@ -2874,6 +2874,15 @@ export interface HeartbeatActiveHours {
   timezone?: string;
 }
 
+/**
+ * Broadcast policy for the chunks produced by a heartbeat-driven run.
+ *
+ * - `live` (default) — pass every chunk through to subscribers
+ * - `on-complete` — drop intermediate chunks; replay full text on finish
+ * - `never` — drop every chunk (the run still happens server-side)
+ */
+export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
+
 export interface Heartbeat {
   id: string;
   agentId: string;
@@ -2891,6 +2900,7 @@ export interface Heartbeat {
   ifIdle?: 'wake' | 'persist' | 'discard';
   activeHours?: HeartbeatActiveHours;
   idleThresholdMs?: number;
+  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
   lastRun?: ScheduleRunSummary;
   createdAt: number;
@@ -2927,6 +2937,7 @@ export interface SetHeartbeatOptions {
   ifIdle?: 'wake' | 'persist' | 'discard';
   activeHours?: HeartbeatActiveHours;
   idleThresholdMs?: number;
+  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
 }
 
@@ -2944,6 +2955,7 @@ export interface UpdateHeartbeatOptions {
   ifIdle?: 'wake' | 'persist' | 'discard';
   activeHours?: HeartbeatActiveHours;
   idleThresholdMs?: number;
+  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
 }
 

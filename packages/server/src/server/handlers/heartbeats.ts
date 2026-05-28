@@ -16,6 +16,8 @@ import {
 } from '../schemas/heartbeats';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { HEARTBEAT_SCHEDULE_PREFIX, HEARTBEAT_WORKFLOW_ID, HeartbeatInputSchema } from './heartbeats-core-shim';
+
+type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
 import { computeNextFireAt, validateCron } from './schedules-workflows-shim';
 
 type RunSummary = {
@@ -84,6 +86,7 @@ function scheduleToHeartbeat(schedule: Schedule): {
   ifIdle?: 'wake' | 'persist' | 'discard';
   activeHours?: { start: string; end: string; timezone?: string };
   idleThresholdMs?: number;
+  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
@@ -111,6 +114,7 @@ function scheduleToHeartbeat(schedule: Schedule): {
     ...(input.ifIdle ? { ifIdle: input.ifIdle } : {}),
     ...(input.activeHours ? { activeHours: input.activeHours } : {}),
     ...(input.idleThresholdMs !== undefined ? { idleThresholdMs: input.idleThresholdMs } : {}),
+    ...(input.broadcast ? { broadcast: input.broadcast } : {}),
     ...(schedule.metadata ? { metadata: schedule.metadata } : {}),
     createdAt: schedule.createdAt,
     updatedAt: schedule.updatedAt,
@@ -248,6 +252,7 @@ export const CREATE_HEARTBEAT_ROUTE = createRoute({
       ...(body.ifIdle ? { ifIdle: body.ifIdle } : {}),
       ...(body.activeHours ? { activeHours: body.activeHours } : {}),
       ...(body.idleThresholdMs !== undefined ? { idleThresholdMs: body.idleThresholdMs } : {}),
+      ...(body.broadcast ? { broadcast: body.broadcast } : {}),
       ...(body.metadata ? { metadata: body.metadata } : {}),
     });
     const heartbeat = scheduleToHeartbeat(schedule);
@@ -295,6 +300,7 @@ export const UPDATE_HEARTBEAT_ROUTE = createRoute({
       ...(body.ifIdle !== undefined ? { ifIdle: body.ifIdle } : {}),
       ...(body.activeHours !== undefined ? { activeHours: body.activeHours } : {}),
       ...(body.idleThresholdMs !== undefined ? { idleThresholdMs: body.idleThresholdMs } : {}),
+      ...(body.broadcast !== undefined ? { broadcast: body.broadcast } : {}),
     };
 
     const nextTarget: Schedule['target'] = {
