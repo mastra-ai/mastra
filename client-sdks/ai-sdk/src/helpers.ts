@@ -235,6 +235,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         input: hasTransformedToolPayload(displayInputTransform)
           ? displayInputTransform.transformed
           : chunk.payload.args,
+        ...(chunk.payload.observability ? { observability: chunk.payload.observability as any } : {}),
       };
     case 'tool-call-approval':
       return {
@@ -274,6 +275,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         dynamic: !!chunk.payload.dynamic,
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
+        ...(chunk.payload.observability ? { observability: chunk.payload.observability as any } : {}),
       };
     case 'tool-call-input-streaming-end':
       return {
@@ -658,6 +660,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-call': {
+      const observability = (part as { observability?: unknown }).observability;
       return {
         type: 'tool-input-available',
         toolCallId: part.toolCallId,
@@ -666,6 +669,13 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+        ...(observability != null
+          ? {
+              toolMetadata: {
+                __mastraObservability: observability,
+              },
+            }
+          : {}),
       };
     }
 
