@@ -15,27 +15,8 @@ import { getMaxThreshold } from '../thresholds';
 
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { filterExtractedValuesForStorage } from './extracted-values';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
-
-/**
- * Filter a raw `extractedValues` map (as returned by the observer) down
- * to just the slugs registered for non-built-in extractors. Mirrors the
- * helpers used by the sync/async-buffer strategies.
- */
-function filterExtractedValuesForStorage(
-  values: Record<string, unknown> | undefined,
-  additionalExtractors: ReadonlyArray<{ slug: string }>,
-): Record<string, unknown> | undefined {
-  if (!values || additionalExtractors.length === 0) return undefined;
-  const result: Record<string, unknown> = {};
-  for (const extractor of additionalExtractors) {
-    const value = values[extractor.slug];
-    if (value !== undefined && value !== '') {
-      result[extractor.slug] = value;
-    }
-  }
-  return Object.keys(result).length > 0 ? result : undefined;
-}
 
 export class ResourceScopedObservationStrategy extends ObservationStrategy {
   private readonly startedAt = new Date().toISOString();
@@ -292,7 +273,6 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.priorMetadataByThread,
           this.opts.observabilityContext,
           undefined,
-          this.deps.additionalExtractors,
           this.opts.resourceId,
         );
       }),

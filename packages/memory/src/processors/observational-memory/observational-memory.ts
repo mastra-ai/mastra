@@ -3765,7 +3765,7 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
-    agent: ProcessorAgent;
+    agent?: ProcessorAgent;
     sendSignal?: ProcessorContext['sendSignal'];
     requestContext: RequestContext;
     observabilityContext?: ObservabilityContext;

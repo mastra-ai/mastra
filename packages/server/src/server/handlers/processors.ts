@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { MessageList, createSignal } from '@mastra/core/agent';
 import type { Agent } from '@mastra/core/agent';
 import type { MessageInput } from '@mastra/core/agent/message-list';
 import { isProcessorWorkflow } from '@mastra/core/processors';
@@ -375,12 +375,11 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
         throw new Error(`TRIPWIRE:${reason || 'Processor aborted'}`);
       };
 
-      const processorExecutorAgent = { id: 'processor-executor', name: 'Processor Executor' } as unknown as Agent<
-        any,
-        any,
-        any,
-        any
-      >;
+      const processorExecutorAgent = {
+        id: 'processor-executor',
+        name: 'Processor Executor',
+        sendSignal: async (signal: Parameters<Agent<any, any, any, any>['sendSignal']>[0]) => createSignal(signal),
+      } as unknown as Agent<any, any, any, any>;
 
       // Build the context based on phase
       const baseContext = {

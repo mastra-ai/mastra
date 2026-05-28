@@ -1144,8 +1144,6 @@ export interface ObservationalMemoryRecord {
   bufferedReflectionTokens?: number;
   /** Observation tokens that were fed into the reflector (pre-compression input) */
   bufferedReflectionInputTokens?: number;
-  /** User-defined values extracted while creating a buffered reflection. */
-  bufferedReflectionExtracted?: Record<string, unknown>;
   /**
    * The number of lines in activeObservations that were reflected on
    * when the buffered reflection was created. Used at activation time
@@ -1344,8 +1342,6 @@ export interface UpdateBufferedReflectionInput {
   tokenCount: number;
   /** Observation tokens that were fed into the reflector (pre-compression input) */
   inputTokenCount: number;
-  /** User-defined values extracted while creating the buffered reflection. */
-  extractedValues?: Record<string, unknown>;
   /**
    * The number of lines in activeObservations at the time of reflection.
    * Used at activation time to know which observations were already reflected on.

@@ -60,8 +60,8 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
    * @param options - Options including retry flag and metadata
    */
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
-  /** Agent execution this processor is operating on */
-  agent: ProcessorAgent;
+  /** Agent execution this processor is operating on, when available. */
+  agent?: ProcessorAgent;
   /** Runtime context with execution metadata */
   requestContext: RequestContext;
   /**

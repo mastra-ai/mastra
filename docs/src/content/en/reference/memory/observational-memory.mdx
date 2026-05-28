@@ -143,6 +143,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: 'true',
           },
           {
+            name: 'extract',
+            type: 'Array<Extractor<any>>',
+            description:
+              'Custom extractors that run after observation. Values are schema-validated, persisted to `thread.metadata.mastra.om.extracted`, optionally carried forward into later extraction prompts, emitted as `data-om-extracted` stream parts, and passed to `onExtracted` hooks. Built-in extractors for `current-task`, `suggested-response`, and `thread-title` are included by default unless overridden.',
+            isOptional: true,
+          },
+          {
             name: 'messageTokens',
             type: 'number',
             description:
@@ -268,6 +275,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             isOptional: true,
           },
           {
+            name: 'extract',
+            type: 'Array<Extractor<any>>',
+            description:
+              'Custom extractors that run after reflection. Values are schema-validated, persisted to `thread.metadata.mastra.om.extracted`, optionally carried forward into later extraction prompts, emitted as `data-om-extracted` stream parts, and passed to `onExtracted` hooks. Extractor sections are stripped from stored reflection text.',
+            isOptional: true,
+          },
+          {
             name: 'observationTokens',
             type: 'number',
             description:
@@ -341,7 +355,109 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
 ]}
 />
 
-### Token estimate metadata cache
+## Extractor API
+
+Import `Extractor` from `@mastra/memory/processors` to define structured values for `observation.extract` or `reflection.extract`.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Extractor } from '@mastra/memory/processors'
+import { z } from 'zod'
+
+const activeTopic = new Extractor({
+  name: 'active-topic',
+  instructions: 'Extract the current support topic as JSON with topic and confidence fields.',
+  schema: z.object({
+    topic: z.string(),
+    confidence: z.number(),
+  }),
+  injectionBehaviour: 'carry-forward',
+})
+```
+
+### `new Extractor(config)`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description:
+      'Unique human-readable name for this extractor. The name is slugified to produce the XML tag and stored key, such as `"Active Topic"` becoming `active-topic`. Names must produce unique slugs in a single extractor list and cannot collide with reserved XML tags.',
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description:
+      'Instructions for what the Observer or Reflector should extract. For non-string schemas, ask the model to output valid JSON that matches the schema.',
+  },
+  {
+    name: 'schema',
+    type: 'z.ZodType<T>',
+    description:
+      'Zod schema for the extracted value. String schemas parse the raw trimmed tag text. Non-string schemas parse the tag body as JSON and then validate the parsed value.',
+    isOptional: true,
+    defaultValue: 'z.string()',
+  },
+  {
+    name: 'injectionBehaviour',
+    type: "'carry-forward' | 'none'",
+    description:
+      '`carry-forward` injects the last persisted value into later extraction prompts as prior context. `none` does not inject the previous value.',
+    isOptional: true,
+    defaultValue: "'none'",
+  },
+  {
+    name: 'onExtracted',
+    type: '(ctx: ExtractorOnExtractedContext<T>) => T | void | Promise<T | void>',
+    description:
+      'Lifecycle hook called after a value is produced by the Observer or Reflector. Return a schema-valid value to normalize what gets persisted and streamed. Return `undefined` to persist the current extracted value. Errors are caught and logged, and do not fail the observation or reflection cycle.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Built-in extractors
+
+<PropertiesTable
+  content={[
+  {
+    name: 'Extractor.threadTitle()',
+    type: 'Extractor<string>',
+    description:
+      'Built-in extractor for a short thread title. The value is mirrored to the thread title and carried forward as prior context.',
+  },
+  {
+    name: 'Extractor.currentTask()',
+    type: 'Extractor<string>',
+    description:
+      'Built-in extractor for the current task. The value is stored in thread OM metadata and injected into later main-agent context as `<current-task>`.',
+  },
+  {
+    name: 'Extractor.suggestedResponse()',
+    type: 'Extractor<string>',
+    description:
+      'Built-in extractor for the suggested next response. The value is stored in thread OM metadata and injected into later main-agent context as `<suggested-response>`.',
+  },
+]}
+/>
+
+### Extractor hook context
+
+The `onExtracted` hook receives:
+
+- `extracted.previous`: The previous persisted value for this extractor, when one exists.
+- `extracted.current`: The current schema-valid value.
+- `extractor`: The extractor instance.
+- `threadId`: The thread this value belongs to.
+- `mainAgent`: The agent whose memory is being observed.
+- `requestContext`: The request context for the agent run.
+- `resourceId`: The resource ID, when the thread belongs to one.
+- `source`: Either `'observer'` or `'reflector'`.
+- `observations`: Source-specific observation payload. Observer hooks receive observed DB messages, active observations, and new observations. Reflector hooks receive active observations and newly reflected observations.
+
+Custom extractor values are persisted to thread OM metadata immediately after extraction. Buffered reflection activation does not apply extractor values later.
+
+## Token estimate metadata cache
 
 OM persists token payload estimates so repeated counting can reuse prior token estimation work.
 

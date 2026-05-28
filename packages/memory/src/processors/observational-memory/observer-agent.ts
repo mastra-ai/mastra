@@ -3,7 +3,6 @@ import type { CoreMessage } from '@mastra/core/llm';
 
 import { stripEphemeralAnchorIds } from './anchor-ids';
 import { isTemporalGapMarker } from './date-utils';
-import type { Extractor } from './extractor';
 import { safeSlice } from './string-utils';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
@@ -347,16 +346,13 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
  * @param includeThreadTitle - Whether to include the <thread-title> section
- * @param additionalExtractors - Additional user-defined extractors to append as XML sections
  */
 export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
-  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
 ): string {
   void includeThreadTitle;
-  void additionalExtractors;
   const outputFormat = buildObserverOutputFormat();
   const multiThreadInstruction = ` Each thread's observations should be nested inside a <thread id="..."> block within <observations>.`;
 
@@ -1129,9 +1125,7 @@ export function buildMultiThreadObserverTaskPrompt(
   >,
   wasTruncated?: boolean,
   includeThreadTitle?: boolean,
-  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
 ): string {
-  void additionalExtractors;
   let prompt = '';
 
   if (existingObservations) {
@@ -1211,7 +1205,6 @@ export function buildMultiThreadObserverPrompt(
   wasTruncated?: boolean,
   options?: ObserverFormatOptions,
   includeThreadTitle?: boolean,
-  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
   return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(
@@ -1220,7 +1213,6 @@ export function buildMultiThreadObserverPrompt(
     priorMetadataByThread,
     wasTruncated,
     includeThreadTitle,
-    additionalExtractors,
   )}`;
 }
 
@@ -1240,13 +1232,8 @@ export interface MultiThreadObserverResult {
  * Parse multi-thread Observer output to extract per-thread results.
  *
  * @param output - Raw text output from the observer model
- * @param additionalExtractors - Optional list of user-defined extractors
- *   whose XML sections should be parsed out of each thread's content
  */
-export function parseMultiThreadObserverOutput(
-  output: string,
-  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
-): MultiThreadObserverResult {
+export function parseMultiThreadObserverOutput(output: string): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
 
   // Check for degenerate repetition on the whole output
@@ -1295,8 +1282,6 @@ export function parseMultiThreadObserverOutput(
       observations = observations.replace(/<thread-title>[\s\S]*?<\/thread-title>/i, '');
     }
 
-    void additionalExtractors;
-
     // Clean up observations and apply line truncation
     observations = sanitizeObservationLines(observations.trim());
 
@@ -1327,8 +1312,6 @@ export function buildObserverTaskPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
-    additionalExtractors?: ReadonlyArray<Extractor<any>>;
-    priorExtractedValues?: Readonly<Record<string, unknown>>;
   },
 ): string {
   let prompt = '';
@@ -1385,8 +1368,6 @@ export function buildObserverPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
-    additionalExtractors?: ReadonlyArray<Extractor<any>>;
-    priorExtractedValues?: Readonly<Record<string, unknown>>;
   },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
@@ -1398,13 +1379,8 @@ export function buildObserverPrompt(
  * Uses XML tag parsing for structured extraction.
  *
  * @param output - Raw text output from the observer model
- * @param additionalExtractors - Optional list of user-defined extractors
- *   whose XML sections should also be parsed out of the output
  */
-export function parseObserverOutput(
-  output: string,
-  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
-): ObserverResult {
+export function parseObserverOutput(output: string): ObserverResult {
   // Check for degenerate repetition before parsing (operates on raw output)
   if (detectDegenerateRepetition(output)) {
     return {
@@ -1416,7 +1392,6 @@ export function parseObserverOutput(
 
   const parsed = parseMemorySectionXml(output);
 
-  void additionalExtractors;
   const observations = sanitizeObservationLines(parsed.observations || '');
 
   return {

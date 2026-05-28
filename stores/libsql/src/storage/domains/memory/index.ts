@@ -94,7 +94,6 @@ export class MemoryLibSQL extends MemoryStorage {
           'bufferedReflection',
           'bufferedReflectionTokens',
           'bufferedReflectionInputTokens',
-          'bufferedReflectionExtracted',
           'reflectedObservationLineCount',
           'bufferedObservationChunks',
           'isBufferingObservation',

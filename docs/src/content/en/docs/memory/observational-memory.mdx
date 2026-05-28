@@ -298,6 +298,54 @@ With retrieval mode enabled, OM:
 
 See the [recall tool reference](/reference/memory/observational-memory#recall-tool) for the full API (detail levels, part indexing, pagination, cross-thread browsing, and token limiting).
 
+## Custom extractors
+
+Use `observation.extract` to ask OM for structured values in addition to the default observation text. Extractors are useful for small thread-level facts that need schema validation, carry-forward context, or a lifecycle hook.
+
+The following example extracts the active support topic from each observation cycle:
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { Extractor } from '@mastra/memory/processors'
+import { z } from 'zod'
+
+const activeTopic = new Extractor({
+  name: 'active-topic',
+  instructions: 'Extract the current support topic as JSON with topic and confidence fields.',
+  schema: z.object({
+    topic: z.string(),
+    confidence: z.number(),
+  }),
+  injectionBehaviour: 'carry-forward',
+  onExtracted: ({ extracted }) => extracted.current,
+})
+
+export const agent = new Agent({
+  name: 'support-agent',
+  instructions: 'You help users with support requests.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        observation: {
+          extract: [activeTopic],
+        },
+      },
+    },
+  }),
+})
+```
+
+Custom extractor values are validated with the extractor schema and persisted to thread OM metadata immediately. On later observation or reflection extraction runs, extractors with `injectionBehaviour: 'carry-forward'` receive the previous value as prior context.
+
+The `onExtracted` hook runs after a value is produced. Use it to normalize or enrich the value before it is saved. The hook receives the previous and current value, the thread ID, request context, the main agent, and whether the value came from the Observer or Reflector.
+
+OM includes built-in extractors for `thread-title`, `current-task`, and `suggested-response`. Use `Extractor.threadTitle()`, `Extractor.currentTask()`, and `Extractor.suggestedResponse()` to include or override those built-ins explicitly.
+
+See the [Observational Memory reference](/reference/memory/observational-memory#extractor-api) for all extractor fields.
+
 ## Studio
 
 To see how it works in practice, open [Studio](/docs/studio/overview) and navigate to an agent with OM enabled. The **Memory** tab displays:

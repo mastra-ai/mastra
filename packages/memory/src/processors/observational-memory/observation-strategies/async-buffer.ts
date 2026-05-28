@@ -9,27 +9,8 @@ import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { filterExtractedValuesForStorage } from './extracted-values';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
-
-/**
- * Filter the raw `extractedValues` returned from the observer down to
- * just the slugs registered for non-built-in extractors. Mirrors the helper
- * used by the sync strategy.
- */
-function filterExtractedValuesForStorage(
-  values: Record<string, unknown> | undefined,
-  additionalExtractors: ReadonlyArray<{ slug: string }>,
-): Record<string, unknown> | undefined {
-  if (!values || additionalExtractors.length === 0) return undefined;
-  const result: Record<string, unknown> = {};
-  for (const extractor of additionalExtractors) {
-    const value = values[extractor.slug];
-    if (value !== undefined && value !== '') {
-      result[extractor.slug] = value;
-    }
-  }
-  return Object.keys(result).length > 0 ? result : undefined;
-}
 
 export class AsyncBufferObservationStrategy extends ObservationStrategy {
   private readonly startedAt: string;
@@ -68,21 +49,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   }
 
   async observe(existingObservations: string, messages: MastraDBMessage[]) {
-    // Pull any prior custom-extractor values from thread metadata so the
-    // observer can carry them forward if the user opted into that behaviour.
-    let priorExtractedValues: Record<string, unknown> | undefined;
-    if (this.deps.additionalExtractors.length > 0) {
-      const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
-      priorExtractedValues = thread ? getThreadOMMetadata(thread.metadata)?.extracted : undefined;
-    }
-
     return this.deps.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
       resourceId: this.opts.resourceId,
-      additionalExtractors: this.deps.additionalExtractors,
-      priorExtractedValues,
     });
   }
 

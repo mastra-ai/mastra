@@ -726,11 +726,22 @@ export class ReflectorRunner {
       tokenCount: reflectionTokenCount,
       inputTokenCount: sliceTokenEstimate,
       reflectedObservationLineCount,
-      extractedValues: reflectResult.extractedValues,
     });
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: bufferedReflection saved with lineCount=${reflectedObservationLineCount}`,
     );
+
+    this.scheduleReflectionExtraction({
+      threadId: currentRecord.threadId ?? '',
+      resourceId: currentRecord.resourceId ?? undefined,
+      recordId: currentRecord.id,
+      cycleId,
+      activeObservations,
+      newObservations: reflectResult.observations,
+      writer,
+      agent,
+      requestContext,
+    });
 
     if (writer) {
       const endMarker = createBufferingEndMarker({
@@ -762,7 +773,6 @@ export class ReflectorRunner {
     lockKey: string,
     writer?: ProcessorStreamWriter,
     messageList?: MessageList,
-    context: { agent?: ProcessorAgent; requestContext?: RequestContext } = {},
     activationMetadata?: {
       triggeredBy: 'threshold' | 'ttl' | 'provider_change';
       lastActivityAt?: number;
@@ -867,8 +877,6 @@ export class ReflectorRunner {
       }
     }
 
-    const bufferedReflectionExtracted = freshRecord.bufferedReflectionExtracted;
-
     omDebug(
       `[OM:reflect] tryActivateBufferedReflection: activating, beforeTokens=${beforeTokens}, combinedTokenCount=${combinedTokenCount}, reflectedLineCount=${reflectedLineCount}, unreflectedLines=${unreflectedLines.length}`,
     );
@@ -887,22 +895,6 @@ export class ReflectorRunner {
 
     const originalCycleId = BufferingCoordinator.reflectionBufferCycleIds.get(bufferKey);
     const activationCycleId = originalCycleId ?? `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-
-    if (bufferedReflectionExtracted && Object.keys(bufferedReflectionExtracted).length > 0) {
-      await this.persistExtractedValues(
-        freshRecord.threadId ?? '',
-        freshRecord.resourceId ?? undefined,
-        bufferedReflectionExtracted,
-        {
-          ...context,
-          writer,
-          cycleId: activationCycleId,
-          recordId: freshRecord.id,
-          activeObservations: currentObservations,
-          newObservations: freshRecord.bufferedReflection ?? '',
-        },
-      );
-    }
 
     if (writer) {
       const activationMarker = createActivationMarker({
@@ -1059,7 +1051,6 @@ export class ReflectorRunner {
         lockKey,
         writer,
         messageList,
-        { agent, requestContext },
         activationMetadata,
       );
       if (activationResult.status === 'activated') {

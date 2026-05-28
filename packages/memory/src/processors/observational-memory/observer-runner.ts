@@ -9,7 +9,6 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
 import type { ObservationExtractionSession } from './extraction-runner';
-import type { Extractor } from './extractor';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import type { ObserverAttachmentFilter } from './observer-agent';
 import {
@@ -85,11 +84,7 @@ export class ObserverRunner {
     this.mastra = mastra;
   }
 
-  private createAgent(
-    model: ConcreteObservationModel,
-    isMultiThread = false,
-    additionalExtractors: ReadonlyArray<Extractor<any>> = [],
-  ): Agent {
+  private createAgent(model: ConcreteObservationModel, isMultiThread = false): Agent {
     const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
@@ -97,7 +92,6 @@ export class ObserverRunner {
         isMultiThread,
         this.observationConfig.instruction,
         this.observationConfig.threadTitle,
-        additionalExtractors,
       ),
       model,
       memory: new MockMemory({ options: { lastMessages: 20 } }),
@@ -191,8 +185,6 @@ export class ObserverRunner {
       priorThreadTitle?: string;
       wasTruncated?: boolean;
       model?: ConcreteObservationModel;
-      additionalExtractors?: ReadonlyArray<Extractor<any>>;
-      priorExtractedValues?: Readonly<Record<string, unknown>>;
     },
   ): Promise<{
     observations: string;
@@ -205,8 +197,7 @@ export class ObserverRunner {
   }> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
-    const additionalExtractors = options?.additionalExtractors ?? [];
-    const agent = this.createAgent(resolvedModel.model, false, additionalExtractors);
+    const agent = this.createAgent(resolvedModel.model);
     const extractionSession = this.createExtractionSession(agent, options?.resourceId);
 
     const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
@@ -217,8 +208,6 @@ export class ObserverRunner {
         content: buildObserverTaskPrompt(existingObservations, {
           ...options,
           includeThreadTitle: this.observationConfig.threadTitle,
-          additionalExtractors,
-          priorExtractedValues: options?.priorExtractedValues,
         }),
       },
       buildObserverHistoryMessage(messagesToObserve, {
@@ -264,13 +253,13 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
-    let parsed = parseObserverOutput(result.text, additionalExtractors);
+    let parsed = parseObserverOutput(result.text);
     let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
       omDebug(`[OM:callObserver] degenerate repetition detected, retrying once`);
       result = await doGenerate();
-      parsed = parseObserverOutput(result.text, additionalExtractors);
+      parsed = parseObserverOutput(result.text);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(`[OM:callObserver] degenerate repetition on retry, failing`);
@@ -282,7 +271,6 @@ export class ObserverRunner {
       false,
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
-      additionalExtractors,
     );
     this.lastExchange = {
       systemPrompt,
@@ -337,7 +325,6 @@ export class ObserverRunner {
     >,
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
-    additionalExtractors: ReadonlyArray<Extractor<any>> = [],
     resourceId?: string,
   ): Promise<{
     results: Map<
@@ -358,7 +345,7 @@ export class ObserverRunner {
       0,
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
-    const agent = this.createAgent(resolvedModel.model, true, additionalExtractors);
+    const agent = this.createAgent(resolvedModel.model, true);
     const extractionSession = this.createExtractionSession(agent, resourceId);
 
     const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
@@ -372,7 +359,6 @@ export class ObserverRunner {
           priorMetadataByThread,
           undefined,
           this.observationConfig.threadTitle,
-          additionalExtractors,
         ),
       },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
@@ -424,13 +410,13 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
-    let parsed = parseMultiThreadObserverOutput(result.text, additionalExtractors);
+    let parsed = parseMultiThreadObserverOutput(result.text);
     let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
       omDebug(`[OM:callMultiThreadObserver] degenerate repetition detected, retrying once`);
       result = await doGenerate();
-      parsed = parseMultiThreadObserverOutput(result.text, additionalExtractors);
+      parsed = parseMultiThreadObserverOutput(result.text);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, failing`);
@@ -442,7 +428,6 @@ export class ObserverRunner {
       true,
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
-      additionalExtractors,
     );
     this.lastExchange = {
       systemPrompt,

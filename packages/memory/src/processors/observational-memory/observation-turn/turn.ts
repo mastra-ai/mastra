@@ -52,8 +52,8 @@ export class ObservationTurn {
   /** Optional stream writer for emitting markers. */
   writer?: ProcessorStreamWriter;
 
-  /** Agent context for observation calls. */
-  agent: ProcessorAgent;
+  /** Agent context for observation calls, when available. */
+  agent?: ProcessorAgent;
 
   /** Request context for observation calls. */
   requestContext: RequestContext;
@@ -77,7 +77,7 @@ export class ObservationTurn {
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
-    agent: ProcessorAgent;
+    agent?: ProcessorAgent;
     sendSignal?: ProcessorContext['sendSignal'];
     requestContext: RequestContext;
     observabilityContext?: ObservabilityContext;

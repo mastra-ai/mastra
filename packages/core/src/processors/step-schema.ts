@@ -104,6 +104,7 @@ export type ProcessorStepToolsConfig = ToolSet | Record<string, unknown>;
 
 export type ProcessorInputPhaseType = {
   phase: 'input';
+  agent?: unknown;
   messages: ProcessorMessageType[];
   messageList: MessageList;
   systemMessages?: CoreMessageType[];
@@ -112,6 +113,7 @@ export type ProcessorInputPhaseType = {
 
 export type ProcessorInputStepPhaseType = {
   phase: 'inputStep';
+  agent?: unknown;
   messages: ProcessorMessageType[];
   messageList: MessageList;
   stepNumber: number;
@@ -131,6 +133,7 @@ export type ProcessorInputStepPhaseType = {
 
 export type ProcessorOutputStreamPhaseType = {
   phase: 'outputStream';
+  agent?: unknown;
   part?: unknown | null;
   streamParts: unknown[];
   state: Record<string, unknown>;
@@ -152,6 +155,7 @@ export type SerializableOutputResult = {
 
 export type ProcessorOutputResultPhaseType = {
   phase: 'outputResult';
+  agent?: unknown;
   messages: ProcessorMessageType[];
   messageList: MessageList;
   retryCount?: number;
@@ -160,6 +164,7 @@ export type ProcessorOutputResultPhaseType = {
 
 export type ProcessorOutputStepPhaseType = {
   phase: 'outputStep';
+  agent?: unknown;
   messages: ProcessorMessageType[];
   messageList: MessageList;
   stepNumber: number;
@@ -180,6 +185,7 @@ export type ProcessorStepInputType =
 
 export type ProcessorStepOutputType = {
   phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+  agent?: unknown;
   messages?: ProcessorMessageType[];
   messageList?: MessageList;
   systemMessages?: CoreMessageType[];
@@ -511,6 +517,7 @@ const retryCountSchema = z.number().optional();
  */
 export const ProcessorInputPhaseSchema = z.object({
   phase: z.literal('input'),
+  agent: z.unknown().optional(),
   messages: messagesSchema,
   messageList: messageListSchema,
   systemMessages: systemMessagesSchema.optional(),
@@ -524,6 +531,7 @@ export const ProcessorInputPhaseSchema = z.object({
  */
 export const ProcessorInputStepPhaseSchema = z.object({
   phase: z.literal('inputStep'),
+  agent: z.unknown().optional(),
   messages: messagesSchema,
   messageList: messageListSchema,
   stepNumber: z.number().describe('The current step number (0-indexed)'),
@@ -557,6 +565,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
  */
 export const ProcessorOutputStreamPhaseSchema = z.object({
   phase: z.literal('outputStream'),
+  agent: z.unknown().optional(),
   part: z.unknown().nullable().describe('The current chunk being processed. Can be null to skip.'),
   streamParts: z.array(z.unknown()).describe('All chunks seen so far'),
   state: z.record(z.string(), z.unknown()).describe('Mutable state object that persists across chunks'),
@@ -577,6 +586,7 @@ const outputResultSchema = z.object({
 
 export const ProcessorOutputResultPhaseSchema = z.object({
   phase: z.literal('outputResult'),
+  agent: z.unknown().optional(),
   messages: messagesSchema,
   messageList: messageListSchema,
   retryCount: retryCountSchema,
@@ -589,6 +599,7 @@ export const ProcessorOutputResultPhaseSchema = z.object({
  */
 export const ProcessorOutputStepPhaseSchema = z.object({
   phase: z.literal('outputStep'),
+  agent: z.unknown().optional(),
   messages: messagesSchema,
   messageList: messageListSchema,
   stepNumber: z.number().describe('The current step number (0-indexed)'),
@@ -636,6 +647,7 @@ export const ProcessorStepInputSchema: z.ZodType<ProcessorStepInputType> = z.dis
 export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.object({
   // Phase field
   phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep']),
+  agent: z.unknown().optional(),
 
   // Message-based fields (used by most phases)
   messages: messagesSchema.optional(),

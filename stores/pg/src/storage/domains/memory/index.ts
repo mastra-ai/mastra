@@ -40,7 +40,6 @@ export const OM_MIGRATION_COLUMNS: string[] = [
   'bufferedReflection',
   'bufferedReflectionTokens',
   'bufferedReflectionInputTokens',
-  'bufferedReflectionExtracted',
   'reflectedObservationLineCount',
   'bufferedObservationChunks',
   'isBufferingObservation',

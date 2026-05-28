@@ -116,6 +116,7 @@ export function createStreamStep<OUTPUT = undefined>({
           drainPendingSignals,
           initialSignalEchoes: validatedInputData.initialSignalEchoes,
         },
+        agent: capabilities.agent,
         agentId,
         agentName,
         toolCallId,

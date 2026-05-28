@@ -54,8 +54,8 @@ export interface StrategyDeps {
    */
   extractors: ReadonlyArray<Extractor<any>>;
   /**
-   * Subset of `extractors` whose slugs are not built-in. These need to be
-   * threaded into the Observer prompt/parser as additional XML sections.
+   * Subset of `extractors` whose slugs are not built-in. These run in the
+   * follow-up structured ExtractionRunner and are stored in thread metadata.
    */
   additionalExtractors: ReadonlyArray<Extractor<any>>;
   onIndexObservations?: (observation: {
