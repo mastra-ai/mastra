@@ -20,6 +20,7 @@ import type {
   SchedulesStorage,
   ChannelsStorage,
   ToolProviderConnectionsStorage,
+  NotificationsStorage,
 } from './domains';
 
 /** Map of all storage domain interfaces available in a composite store. */
@@ -28,6 +29,7 @@ export type StorageDomains = {
   scores?: ScoresStorage;
   memory?: MemoryStorage;
   channels?: ChannelsStorage;
+  notifications?: NotificationsStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
   datasets?: DatasetsStorage;
@@ -328,6 +330,7 @@ export class MastraCompositeStore extends MastraBase {
         schedules: resolve('schedules'),
         channels: resolve('channels'),
         toolProviderConnections: resolve('toolProviderConnections'),
+        notifications: resolve('notifications'),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -455,6 +458,7 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.schedules);
       maybeInit(this.stores.channels);
       maybeInit(this.stores.toolProviderConnections);
+      maybeInit(this.stores.notifications);
     }
 
     await Promise.all(initTasks);

@@ -312,6 +312,22 @@ Mastra passes `lastSnapshot` and `deltasSinceSnapshot` into `computeStateSignal(
 
 The built-in browser context processor emits state under the `browser` id with snapshot and delta modes.
 
+## Notification signals
+
+Notification signals represent external events such as GitHub activity, email, Slack mentions, CI status, incidents, recordings, or direct messages. Notifications are durable and thread-scoped: each inbox record belongs to the conversation thread where it can be delivered, summarized, re-surfaced, and managed.
+
+```xml
+<notification source="github" type="ci-status" priority="high">CI failed on main: 3 tests</notification>
+```
+
+Mastra also supports lossy summaries that point back to full inbox records:
+
+```xml
+<notification-summary pending="10">GitHub: 3, Email: 5, Slack: 2</notification-summary>
+```
+
+Use `createNotificationInboxTool()` to give agents one flexible tool for `list`, `read`, `markSeen`, `dismiss`, `archive`, and `search` actions instead of many small CRUD tools. Source, resource, and agent ids are filters or routing metadata; `threadId` remains the primary inbox scope.
+
 ## Compatibility
 
 Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `type: 'system-reminder'`. It normalizes them internally to the new category and tag shape:
