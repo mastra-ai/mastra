@@ -807,12 +807,6 @@ importers:
         specifier: ^3.5.0
         version: 3.5.0
     devDependencies:
-      '@ai-sdk/react':
-        specifier: ^2.0.187
-        version: 2.0.188(react@19.2.6)(zod@3.25.76)
-      '@assistant-ui/react':
-        specifier: ^0.14.0
-        version: 0.14.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.8)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -8296,16 +8290,6 @@ packages:
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
       zod: ^3.23.8
-    peerDependenciesMeta:
-      zod:
-        optional: true
-
-  '@ai-sdk/react@2.0.188':
-    resolution: {integrity: sha512-TDJBuC0KE90mdsdmdYOV/5CWj31P9+r1sIJYdeseC218qQRuPkcH+bTjr9PZwPBaxXDOzUQDjosVLVM2lM1TyA==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      react: ^18 || ~19.0.1 || ~19.1.2 || ^19.2.1
-      zod: ^3.25.76 || ^4.1.8
     peerDependenciesMeta:
       zod:
         optional: true
@@ -29671,16 +29655,6 @@ snapshots:
       throttleit: 2.1.0
     optionalDependencies:
       zod: 4.4.3
-
-  '@ai-sdk/react@2.0.188(react@19.2.6)(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider-utils': 3.0.25(zod@3.25.76)
-      ai: 5.0.186(zod@3.25.76)
-      react: 19.2.6
-      swr: 2.3.6(react@19.2.6)
-      throttleit: 2.1.0
-    optionalDependencies:
-      zod: 3.25.76
 
   '@ai-sdk/togetherai@1.0.34(zod@4.4.3)':
     dependencies:
