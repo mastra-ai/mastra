@@ -360,31 +360,29 @@ export const geminiEnsureFirstUserMessage: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
-// Built-in rule: Anthropic orphaned tool-pair sanitization
+// Built-in rule: orphaned tool-pair sanitization (all providers)
 // ---------------------------------------------------------------------------
 
 /**
- * Anthropic requires every tool_result to be in the message immediately after
- * its matching tool_use, and every tool_use to have a matching tool_result in
- * the next message. Recall windows can slice through a parallel tool-call
- * group and leave behind half a pair, causing Anthropic to reject the request.
+ * Many providers require every tool_result to follow its matching tool_use and
+ * every tool_use to have a matching tool_result. Recall windows can slice
+ * through a parallel tool-call group and leave behind half a pair, causing the
+ * provider to reject the request.
  *
  * This rule preemptively removes orphaned tool-call/tool-result parts from the
- * outbound prompt when the resolved model is Anthropic. Provider-executed tool
- * calls (e.g. Anthropic's deferred `web_search`) are preserved even without a
- * matching result, since the provider may resume them on the next call.
+ * outbound prompt for all providers. Provider-executed tool calls (e.g.
+ * Anthropic's deferred `web_search`) are preserved even without a matching
+ * result, since the provider may resume them on the next call.
  *
- * Previously applied unconditionally via `sanitizeOrphanedToolPairs` in the
- * output converter. Now scoped to Anthropic and runs as a prompt rewrite.
+ * Previously applied via `sanitizeOrphanedToolPairs` in the output converter.
+ * Now runs as a prompt rewrite in the processor pipeline.
  *
  * @see https://github.com/mastra-ai/mastra/issues/14148
  * @see https://github.com/mastra-ai/mastra/issues/15668
  */
-export const anthropicSanitizeOrphanedToolPairs: CompatRule = {
-  name: 'anthropic-sanitize-orphaned-tool-pairs',
-  applyToPrompt({ prompt, model }) {
-    if (!isMaybeAnthropic(model)) return undefined;
-
+export const sanitizeOrphanedToolPairs: CompatRule = {
+  name: 'sanitize-orphaned-tool-pairs',
+  applyToPrompt({ prompt }) {
     const filteredContents = prompt.map(m =>
       m.role === 'assistant' || m.role === 'tool' ? (Array.isArray(m.content) ? [...m.content] : null) : null,
     );
@@ -524,7 +522,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   cerebrasStripReasoningContent,
   anthropicStripForeignReasoningContent,
   geminiEnsureFirstUserMessage,
-  anthropicSanitizeOrphanedToolPairs,
+  sanitizeOrphanedToolPairs,
   anthropicToolResultInput,
 ];
 

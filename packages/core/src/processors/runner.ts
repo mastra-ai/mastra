@@ -18,7 +18,7 @@ import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage } from '../stream/types';
 import {
-  anthropicSanitizeOrphanedToolPairs,
+  sanitizeOrphanedToolPairs,
   anthropicToolResultInput,
   geminiEnsureFirstUserMessage,
 } from './provider-history-compat';
@@ -1296,7 +1296,7 @@ export class ProcessorRunner {
 
     // Auto-apply built-in compat rules before user-configured processors.
     // Each rule is a no-op for non-matching providers.
-    for (const rule of [geminiEnsureFirstUserMessage, anthropicSanitizeOrphanedToolPairs, anthropicToolResultInput]) {
+    for (const rule of [geminiEnsureFirstUserMessage, sanitizeOrphanedToolPairs, anthropicToolResultInput]) {
       const result = rule.applyToPrompt!({ prompt: currentPrompt, model: args.model });
       if (result) {
         currentPrompt = result;

@@ -3,7 +3,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import {
-  anthropicSanitizeOrphanedToolPairs,
+  sanitizeOrphanedToolPairs,
   anthropicStripForeignReasoningContent,
   anthropicToolResultInput,
   cerebrasStripReasoningContent,
@@ -683,6 +683,17 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
           },
         ],
       },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call_1',
+            toolName: 'search',
+            output: { type: 'text', value: 'results' },
+          },
+        ],
+      },
     ];
     const args = makeRequestArgs(prompt, { provider: 'cerebras.chat', modelId: 'zai-glm-4.7' });
     expect(await handler.processLLMRequest(args)).toBeUndefined();
@@ -774,7 +785,7 @@ describe('ProcessorRunner.runProcessLLMRequest', () => {
 });
 
 // ---------------------------------------------------------------------------
-// anthropicSanitizeOrphanedToolPairs
+// sanitizeOrphanedToolPairs
 // ---------------------------------------------------------------------------
 
 function assistantWithToolCallsV2(...callIds: string[]): LanguageModelV2Prompt[number] {
@@ -804,19 +815,19 @@ function toolMessageV2(...callIds: string[]): LanguageModelV2Prompt[number] {
 const anthropicModel = { provider: 'anthropic.messages', modelId: 'claude-haiku-4-5-20251001' };
 const openaiModel = { provider: 'openai.chat', modelId: 'gpt-4o' };
 
-describe('anthropicSanitizeOrphanedToolPairs', () => {
-  it('is a no-op for non-Anthropic models', () => {
+describe('sanitizeOrphanedToolPairs', () => {
+  it('runs for all providers including non-Anthropic models', () => {
     const prompt: LanguageModelV2Prompt = [
       assistantWithToolCallsV2('orphan'),
       { role: 'user', content: [{ type: 'text', text: 'next' }] },
     ];
-    const result = anthropicSanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, openaiModel));
-    expect(result).toBeUndefined();
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, openaiModel));
+    expect(result).toEqual([{ role: 'user', content: [{ type: 'text', text: 'next' }] }]);
   });
 
   it('returns undefined when no orphans exist', () => {
     const prompt: LanguageModelV2Prompt = [assistantWithToolCallsV2('A'), toolMessageV2('A')];
-    const result = anthropicSanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
     expect(result).toBeUndefined();
   });
 
@@ -826,7 +837,7 @@ describe('anthropicSanitizeOrphanedToolPairs', () => {
       toolMessageV2('orphan-A'),
       { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
     ];
-    const result = anthropicSanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
     expect(result).toEqual([
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
       { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
@@ -838,7 +849,7 @@ describe('anthropicSanitizeOrphanedToolPairs', () => {
       assistantWithToolCallsV2('lonely-A'),
       { role: 'user', content: [{ type: 'text', text: 'next question' }] },
     ];
-    const result = anthropicSanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
     expect(result).toEqual([{ role: 'user', content: [{ type: 'text', text: 'next question' }] }]);
   });
 
@@ -853,7 +864,7 @@ describe('anthropicSanitizeOrphanedToolPairs', () => {
       },
       { role: 'user', content: [{ type: 'text', text: 'next' }] },
     ];
-    const result = anthropicSanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
     expect(result).toEqual([
       { role: 'assistant', content: [{ type: 'text', text: 'thinking out loud' }] },
       { role: 'user', content: [{ type: 'text', text: 'next' }] },
@@ -862,13 +873,13 @@ describe('anthropicSanitizeOrphanedToolPairs', () => {
 
   it('keeps matched call and drops orphan in a parallel tool group', () => {
     const prompt: LanguageModelV2Prompt = [assistantWithToolCallsV2('A', 'B'), toolMessageV2('A')];
-    const result = anthropicSanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
     expect(result).toEqual([assistantWithToolCallsV2('A'), toolMessageV2('A')]);
   });
 
   it('drops orphan tool_results in a tool message with a mix of valid and orphan ids', () => {
     const prompt: LanguageModelV2Prompt = [assistantWithToolCallsV2('A'), toolMessageV2('A', 'B')];
-    const result = anthropicSanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
     expect(result).toEqual([assistantWithToolCallsV2('A'), toolMessageV2('A')]);
   });
 
@@ -888,7 +899,7 @@ describe('anthropicSanitizeOrphanedToolPairs', () => {
       },
       { role: 'user', content: [{ type: 'text', text: 'continue' }] },
     ];
-    const result = anthropicSanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
     expect(result).toBeUndefined();
   });
 
@@ -909,7 +920,7 @@ describe('anthropicSanitizeOrphanedToolPairs', () => {
       },
       { role: 'user', content: [{ type: 'text', text: 'next' }] },
     ];
-    const result = anthropicSanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
     expect(result).toBeUndefined();
   });
 });
@@ -1098,7 +1109,7 @@ describe('ProcessorRunner — Anthropic compat auto-injection', () => {
     expect(toolResult.input).toBeUndefined();
   });
 
-  it('auto-applies anthropicSanitizeOrphanedToolPairs for Anthropic models', async () => {
+  it('auto-applies sanitizeOrphanedToolPairs for all models (including non-Anthropic)', async () => {
     const runner = new ProcessorRunner({
       inputProcessors: [],
       outputProcessors: [],
@@ -1113,12 +1124,12 @@ describe('ProcessorRunner — Anthropic compat auto-injection', () => {
 
     const result = await runner.runProcessLLMRequest({
       prompt,
-      model: anthropicModel,
+      model: openaiModel,
       stepNumber: 0,
       steps: [],
     });
 
-    // Orphan tool call should be removed
+    // Orphan tool call should be removed even for OpenAI
     expect(result.prompt).toEqual([{ role: 'user', content: [{ type: 'text', text: 'next' }] }]);
   });
 });
