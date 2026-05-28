@@ -58,7 +58,7 @@ export class MastraEditor implements IMastraEditor {
 
   private __toolProviders: Record<string, ToolProvider>;
   private __processorProviders: Record<string, ProcessorProvider>;
-  private __mode?: 'code' | 'db';
+  private __source?: 'code' | 'db';
   private __codePath: string;
   private readonly __builderConfig?: AgentBuilderOptions;
   private __builderInstance?: IAgentBuilder;
@@ -106,7 +106,7 @@ export class MastraEditor implements IMastraEditor {
     this.__logger = config?.logger;
     this.__toolProviders = config?.toolProviders ?? {};
     this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
-    this.__mode = config?.mode;
+    this.__source = config?.source;
     this.__codePath = config?.codePath ?? './mastra/editor';
 
     // Built-in providers are always registered first, then merged with user-provided ones
@@ -161,7 +161,7 @@ export class MastraEditor implements IMastraEditor {
     // Code mode routes editor-owned domains to a FilesystemStore at `codePath`.
     // If app storage already exists, keep it as the default for non-editor domains
     // and overlay filesystem storage for editor saves.
-    if (this.__mode === 'code') {
+    if (this.__source === 'code') {
       const filesystemStore = new FilesystemStore({ dir: this.__codePath });
       const existingStorage = mastra.getStorage();
 
@@ -376,9 +376,9 @@ export class MastraEditor implements IMastraEditor {
     }
   }
 
-  /** Returns the editor's configured mode, or undefined if unset. */
-  getMode(): 'code' | 'db' | undefined {
-    return this.__mode;
+  /** Returns the editor's configured source, or undefined if unset. */
+  getSource(): 'code' | 'db' | undefined {
+    return this.__source;
   }
 
   /** Registered tool providers */
