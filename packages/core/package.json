@@ -451,6 +451,16 @@
         "default": "./dist/tools/index.cjs"
       }
     },
+    "./notifications": {
+      "import": {
+        "types": "./dist/notifications/index.d.ts",
+        "default": "./dist/notifications/index.js"
+      },
+      "require": {
+        "types": "./dist/notifications/index.d.ts",
+        "default": "./dist/notifications/index.cjs"
+      }
+    },
     "./tts": {
       "import": {
         "types": "./dist/tts/index.d.ts",
