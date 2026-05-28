@@ -57,13 +57,13 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 
 `--scope` runs a curated group of related sections. Setup is always implied.
 
-| Scope    | Includes                                                  |
-| -------- | --------------------------------------------------------- |
-| `rbac`   | permissions, auth                                         |
-| `skills` | skills, registry, defaults                                |
-| `agents` | agents, pickers, defaults, model-policy                   |
-| `infra`  | infrastructure, channels, reconciliation                  |
-| `ui`     | ui                                                        |
+| Scope    | Includes                                                      |
+| -------- | ------------------------------------------------------------- |
+| `rbac`   | permissions, auth                                             |
+| `skills` | skills, registry, defaults                                    |
+| `agents` | agents, pickers, defaults, model-policy                       |
+| `infra`  | infrastructure, channels, reconciliation                      |
+| `ui`     | ui                                                            |
 | `quick`  | workspace, skills, agents, favorites, ui (skips long-running) |
 
 `--scope` and `--test` can be combined; the union is run.
