@@ -21,7 +21,7 @@ const PACKAGE_ROOTS = [
   'workspaces',
 ];
 
-const NESTED_PACKAGE_ROOTS = ['packages/_vendored'];
+const NESTED_PACKAGE_ROOTS = ['packages/_internals', 'packages/_vendored'];
 
 const GENERATED_EXPORT_EXCEPTIONS = {
   // These package exports point at artifact entries that do not have checked-in source entrypoints.

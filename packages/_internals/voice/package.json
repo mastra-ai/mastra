@@ -12,6 +12,7 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -22,6 +23,7 @@
       }
     },
     "./voice": {
+      "mastra-source": "./src/voice/index.ts",
       "import": {
         "types": "./dist/voice/index.d.ts",
         "default": "./dist/voice/index.js"
@@ -32,6 +34,7 @@
       }
     },
     "./voice/aisdk": {
+      "mastra-source": "./src/voice/aisdk/index.ts",
       "import": {
         "types": "./dist/voice/aisdk/index.d.ts",
         "default": "./dist/voice/aisdk/index.js"
@@ -42,6 +45,7 @@
       }
     },
     "./routes": {
+      "mastra-source": "./src/routes/index.ts",
       "import": {
         "types": "./dist/routes/index.d.ts",
         "default": "./dist/routes/index.js"

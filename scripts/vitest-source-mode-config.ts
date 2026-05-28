@@ -21,6 +21,7 @@ export const SOURCE_MODE_ALIASES = {
 };
 export const SOURCE_MODE_PACKAGE_GLOBS = [
   'packages/*/package.json',
+  'packages/_internals/*/package.json',
   'packages/_vendored/*/package.json',
   'stores/*/package.json',
   'deployers/*/package.json',

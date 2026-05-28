@@ -41,7 +41,9 @@ function shouldScanProjectGroup(projectGroup: string) {
 
 // Directories to scan for vitest configs
 const PROJECT_GLOBS = [
-  ...(shouldScanProjectGroup('packages') ? ['packages/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('packages')
+    ? ['packages/*/vitest.config.ts', ...(SOURCE_MODE ? ['packages/_internals/*/vitest.config.ts'] : [])]
+    : []),
   ...(shouldScanProjectGroup('stores') ? ['stores/*/vitest.config.ts'] : []),
   ...(shouldScanProjectGroup('deployers') ? ['deployers/*/vitest.config.ts'] : []),
   ...(shouldScanProjectGroup('voice') ? ['voice/*/vitest.config.ts'] : []),

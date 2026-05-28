@@ -33,7 +33,7 @@ export MASTRA_SOURCE_MODE=true
 mastra dev
 ```
 
-The CLI only honors `MASTRA_SOURCE_MODE=true` for `mastra dev` when the installed `mastra` package has linked-repo source files available (`packages/cli/src/index.ts`, the workspace root `pnpm-workspace.yaml`, and `packages/core/src`). Published package installs do not include that shape, so the env var is a no-op for regular users. When the guard passes, the CLI forwards `MASTRA_SOURCE_MODE=1`, `MASTRA_SOURCE_MODE=true`, `MASTRA_SOURCE_MODE_WORKSPACE_ROOT`, and `NODE_OPTIONS=--conditions=mastra-source` to the dev server process so linked workspace packages resolve through `mastra-source` exports.
+The CLI only honors `MASTRA_SOURCE_MODE=true` for `mastra dev` when the installed `mastra` package has linked-repo source files available (`packages/cli/src/index.ts`, the workspace root `pnpm-workspace.yaml`, and `packages/core/src`). Published package installs do not include that shape, so the env var is a no-op for regular users. When the guard passes, the CLI normalizes and forwards `MASTRA_SOURCE_MODE=1`, `MASTRA_SOURCE_MODE_WORKSPACE_ROOT`, and `NODE_OPTIONS=--conditions=mastra-source` to the dev server process so linked workspace packages resolve through `mastra-source` exports.
 
 Source-mode `mastra dev` also adds the linked project's Mastra workspace package dependency closure to the existing dev watcher. Edits to those local package `src` files trigger the normal bundle/restart loop without watching the entire Mastra repo.
 
@@ -121,7 +121,8 @@ Root `vitest.config.ts` centralizes source-mode config. When `MASTRA_SOURCE_MODE
 - SSR external conditions matching source mode
 - workspace dependency inlining for `@mastra/*`, `@internal/*`, and `mastra`
 - repo-root-relative aliases for internal test setup files
-- a source-mode test exclusion list for artifact-only/CJS import probes and existing local-environment-sensitive tests that are still covered by the artifact lane
+
+Package-local Vitest configs can still define their own `test.exclude` entries for suites that are not source-mode safe, but there is no central source-mode exclusion list.
 
 Every Vitest config is expected to use `withSourceModeConfig()` unless it is intentionally allowlisted. Run the coverage audit after adding or moving tests:
 
