@@ -17,6 +17,26 @@ import type { StorageOrderBy } from './types';
 const GIT_VERSION_PREFIX = 'git-';
 
 /**
+ * Recursively sort object keys alphabetically so the on-disk JSON is stable
+ * across saves. Arrays preserve order; object entries are emitted in a
+ * deterministic order so git diffs only reflect real content changes.
+ */
+function stableSortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableSortKeys);
+  }
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, stableSortKeys(entry)]),
+    );
+  }
+  return value;
+}
+
+/**
  * Configuration for a filesystem-backed versioned storage domain.
  */
 export interface FilesystemVersionedConfig {
@@ -36,6 +56,17 @@ export interface FilesystemVersionedConfig {
   versionMetadataFields: string[];
   /** Maximum number of git commits to load per file (default: 50) */
   gitHistoryLimit?: number;
+  /** Directory for published entities that should be persisted as one JSON file per entity. */
+  perEntityFilesDir?: string;
+  /** Return true when an entity should persist as one JSON file instead of inside entitiesFile. */
+  shouldPersistToPerEntityFile?: (entity: VersionedEntityBase) => boolean;
+  /**
+   * Optional snapshot filter applied to per-entity files only.
+   * Lets per-entity files (e.g. code-mode JSON) exclude fields that are not
+   * user-editable from Studio (such as `model`) while keeping the shared
+   * `entitiesFile` snapshot unchanged.
+   */
+  perEntitySnapshotFilter?: (snapshot: Record<string, unknown>, entity: VersionedEntityBase) => Record<string, unknown>;
 }
 
 /**
@@ -72,6 +103,12 @@ export class FilesystemVersionedHelpers<
   readonly name: string;
   readonly versionMetadataFields: string[];
   private readonly gitHistoryLimit: number;
+  private readonly perEntityFilesDir?: string;
+  private readonly shouldPersistToPerEntityFile?: (entity: VersionedEntityBase) => boolean;
+  private readonly perEntitySnapshotFilter?: (
+    snapshot: Record<string, unknown>,
+    entity: VersionedEntityBase,
+  ) => Record<string, unknown>;
 
   /**
    * In-memory entity records (thin metadata), keyed by entity ID.
@@ -114,6 +151,21 @@ export class FilesystemVersionedHelpers<
     this.name = config.name;
     this.versionMetadataFields = config.versionMetadataFields;
     this.gitHistoryLimit = config.gitHistoryLimit ?? 50;
+    this.perEntityFilesDir = config.perEntityFilesDir;
+    this.shouldPersistToPerEntityFile = config.shouldPersistToPerEntityFile;
+    this.perEntitySnapshotFilter = config.perEntitySnapshotFilter;
+  }
+
+  private perEntityFilename(entityId: string): string {
+    if (!this.perEntityFilesDir) {
+      throw new Error(`${this.name}: per-entity files directory is not configured`);
+    }
+    return `${this.perEntityFilesDir}/${encodeURIComponent(entityId)}.json`;
+  }
+
+  private entityIdFromPerEntityFilename(filename: string): string {
+    const basename = filename.split('/').pop() ?? filename;
+    return decodeURIComponent(basename.replace(/\.json$/, ''));
   }
 
   /**
@@ -136,11 +188,7 @@ export class FilesystemVersionedHelpers<
     if (this.hydrated) return;
     this.hydrated = true;
 
-    const diskData = this.db.readDomain<Record<string, unknown>>(this.entitiesFile);
-
-    for (const [entityId, snapshotConfig] of Object.entries(diskData)) {
-      if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
-
+    const hydrateSnapshot = (entityId: string, snapshotConfig: Record<string, unknown>) => {
       const versionId = `hydrated-${entityId}-v1`;
       const now = new Date();
 
@@ -151,7 +199,7 @@ export class FilesystemVersionedHelpers<
         activeVersionId: versionId,
         createdAt: now,
         updatedAt: now,
-      } as TEntity;
+      } as unknown as TEntity;
 
       this.entities.set(entityId, entity);
 
@@ -166,6 +214,22 @@ export class FilesystemVersionedHelpers<
       } as TVersion;
 
       this.versions.set(versionId, version);
+    };
+
+    const diskData = this.db.readDomain<Record<string, unknown>>(this.entitiesFile);
+
+    for (const [entityId, snapshotConfig] of Object.entries(diskData)) {
+      if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
+      hydrateSnapshot(entityId, snapshotConfig);
+    }
+
+    if (this.perEntityFilesDir) {
+      for (const filename of this.db.listDomainFiles(this.perEntityFilesDir)) {
+        const entityId = this.entityIdFromPerEntityFilename(filename);
+        const snapshotConfig = this.db.readDomain(filename);
+        if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
+        hydrateSnapshot(entityId, snapshotConfig);
+      }
     }
 
     // Kick off async git history loading (fire and forget)
@@ -199,7 +263,6 @@ export class FilesystemVersionedHelpers<
 
     // Get commit history for this domain's file
     const commits = await git.getFileHistory(dir, this.entitiesFile, this.gitHistoryLimit);
-    if (commits.length === 0) return;
 
     // Process commits from oldest to newest so version numbers are sequential
     const orderedCommits = [...commits].reverse();
@@ -250,6 +313,60 @@ export class FilesystemVersionedHelpers<
       }
     }
 
+    // Walk git history for per-entity files (code mode). Each per-entity file
+    // is a standalone snapshot, not an entityId → snapshot map, so each commit
+    // touching the file becomes one version for that entity.
+    if (this.perEntityFilesDir) {
+      const perEntityIds = new Set<string>();
+      // Known entities currently on disk
+      for (const filename of this.db.listDomainFiles(this.perEntityFilesDir)) {
+        perEntityIds.add(this.entityIdFromPerEntityFilename(filename));
+      }
+      // Entities only present in git history (deleted on disk but still in commits)
+      // are discovered lazily by scanning entities map, which is already hydrated.
+      for (const entityId of this.entities.keys()) {
+        perEntityIds.add(entityId);
+      }
+
+      for (const entityId of perEntityIds) {
+        const filename = this.perEntityFilename(entityId);
+        const perEntityCommits = await git.getFileHistory(dir, filename, this.gitHistoryLimit);
+        if (perEntityCommits.length === 0) continue;
+
+        const orderedPerEntity = [...perEntityCommits].reverse();
+        let previousSnapshotForEntity: string | undefined;
+        let count = entityVersionCount.get(entityId) ?? 0;
+
+        for (const commit of orderedPerEntity) {
+          const snapshotConfig = await git.getFileAtCommit<Record<string, unknown>>(dir, commit.hash, filename);
+          if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
+
+          // The per-entity file IS the snapshot, so flatten one level
+          // compared to the shared-file branch above.
+          const serialized = JSON.stringify(snapshotConfig);
+          if (previousSnapshotForEntity === serialized) continue;
+          previousSnapshotForEntity = serialized;
+
+          count += 1;
+          entityVersionCount.set(entityId, count);
+
+          const versionId = `${GIT_VERSION_PREFIX}${commit.hash}-${entityId}`;
+          if (this.versions.has(versionId)) continue;
+
+          const version = {
+            id: versionId,
+            [this.parentIdField]: entityId,
+            versionNumber: count,
+            changeMessage: commit.message,
+            ...snapshotConfig,
+            createdAt: commit.date,
+          } as TVersion;
+
+          this.versions.set(versionId, version);
+        }
+      }
+    }
+
     // Save the max git version count per entity
     this.gitVersionCounts = entityVersionCount;
 
@@ -275,6 +392,7 @@ export class FilesystemVersionedHelpers<
    */
   private persistToDisk(): void {
     const diskData: Record<string, Record<string, unknown>> = {};
+    const perEntityData = new Map<string, Record<string, unknown>>();
 
     for (const [entityId, entity] of this.entities) {
       if (entity.status !== 'published' || !entity.activeVersionId) continue;
@@ -283,10 +401,39 @@ export class FilesystemVersionedHelpers<
       if (!version) continue;
 
       const snapshotConfig = this.extractSnapshotConfig(version);
-      diskData[entityId] = snapshotConfig;
+      if (this.perEntityFilesDir && this.shouldPersistToPerEntityFile?.(entity)) {
+        const filtered = this.perEntitySnapshotFilter
+          ? this.perEntitySnapshotFilter(snapshotConfig, entity)
+          : snapshotConfig;
+        perEntityData.set(entityId, stableSortKeys(filtered) as Record<string, unknown>);
+      } else {
+        diskData[entityId] = snapshotConfig;
+      }
     }
 
-    this.db.writeDomain(this.entitiesFile, diskData);
+    // When every published entity is persisted to per-entity files (code mode)
+    // and the shared file would otherwise be an empty `{}` stub, skip writing
+    // it so projects that only use code mode don't end up tracking an empty
+    // `agents.json` in git. Existing shared files keep being updated so
+    // db-mode and mixed setups behave the same as before.
+    const hasSharedEntries = Object.keys(diskData).length > 0;
+    const sharedFileExists = this.db.domainFileExists(this.entitiesFile);
+    if (hasSharedEntries || !this.perEntityFilesDir || sharedFileExists) {
+      this.db.writeDomain(this.entitiesFile, diskData);
+    }
+
+    if (this.perEntityFilesDir) {
+      for (const filename of this.db.listDomainFiles(this.perEntityFilesDir)) {
+        const entityId = this.entityIdFromPerEntityFilename(filename);
+        if (!perEntityData.has(entityId)) {
+          this.db.removeDomainFile(filename);
+        }
+      }
+
+      for (const [entityId, snapshotConfig] of perEntityData) {
+        this.db.writeDomain(this.perEntityFilename(entityId), snapshotConfig);
+      }
+    }
   }
 
   /**
