@@ -31,6 +31,8 @@ import {
   toolProviderHealthResponseSchema,
   toolProviderIdPathParams,
   toolSlugPathParams,
+  updateConnectionBodySchema,
+  updateConnectionResponseSchema,
 } from '../schemas/tool-providers';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
@@ -600,6 +602,75 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       return { ok: true as const, revoked };
     } catch (error) {
       return handleError(error, 'Error disconnecting tool provider connection');
+    }
+  },
+});
+
+/**
+ * PATCH /tool-providers/:providerId/connections/:connectionId — Update a
+ * connection's persisted display label. Idempotent. Ownership-gated the same
+ * way as DISCONNECT: only the connection owner (or an admin) may rename,
+ * unless the row is `scope: 'shared'`.
+ *
+ * Pass `label: null` (or an empty string) to clear the existing label.
+ */
+export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/tool-providers/:providerId/connections/:connectionId',
+  responseType: 'json',
+  pathParamSchema: toolProviderConnectionPathParams,
+  bodySchema: updateConnectionBodySchema,
+  responseSchema: updateConnectionResponseSchema,
+  summary: 'Update a connection label',
+  description:
+    'Updates the persisted display label on tool_provider_connections. Returns 403 when caller is neither the owner nor admin (and the row is not shared), 404 when the row does not exist.',
+  tags: ['Tool Providers'],
+  requiresAuth: true,
+  handler: async ({ mastra, providerId, connectionId, label, requestContext }) => {
+    try {
+      const editor = requireEditor(mastra.getEditor());
+      const provider = resolveProvider(editor, providerId);
+      const callerAuthorId = resolveOwnerId(requestContext);
+      const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
+
+      const storage = mastra.getStorage();
+      const store = await storage?.getStore('toolProviderConnections');
+      if (!store) {
+        throw new HTTPException(500, {
+          message: 'Tool provider connections storage is not configured',
+        });
+      }
+
+      const rows = await store.listConnectionsByAuthor({ providerId: provider.info.id });
+      const match = rows.find(r => r.connectionId === connectionId);
+      if (!match) {
+        throw new HTTPException(404, {
+          message: `Connection ${connectionId} not found for provider ${providerId}`,
+        });
+      }
+
+      const isShared = match.scope === 'shared';
+      if (!isShared && match.authorId !== callerAuthorId && !isAdmin) {
+        throw new HTTPException(403, {
+          message: 'You do not have permission to update this connection',
+        });
+      }
+
+      // Normalize: empty string and explicit null both clear the label.
+      const nextLabel: string | null = typeof label === 'string' && label.trim().length > 0 ? label.trim() : null;
+
+      await store.upsertConnection({
+        authorId: match.authorId,
+        providerId: provider.info.id,
+        toolkit: match.toolkit,
+        connectionId,
+        label: nextLabel,
+        scope: match.scope,
+      });
+
+      return { ok: true as const, label: nextLabel };
+    } catch (error) {
+      return handleError(error, 'Error updating tool provider connection');
     }
   },
 });
