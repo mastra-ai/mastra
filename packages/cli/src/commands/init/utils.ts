@@ -1122,6 +1122,7 @@ Top-level files define how your Mastra project is configured, built, and connect
 - Load the \`mastra\` skill before any Mastra-related work
 - Register new agents, tools, workflows, and scorers in \`src/mastra/index.ts\`
 - Use schemas for tool inputs and outputs
+- Use package scripts such as \`npm run dev\` instead of running \`mastra dev\` directly, so the local project dependency is used instead of any global install
 - Run \`npm run build\` to verify changes compile
 
 ### Never do

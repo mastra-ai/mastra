@@ -10,8 +10,8 @@ import {
   DialogTitle,
   DialogBody,
   DialogFooter,
+  DataList,
   DropdownMenu,
-  EntityList,
   Label,
   Spinner,
   Textarea,
@@ -348,7 +348,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   }, [featuredItemId, displayItems]);
 
   // Dynamic grid columns
-  const gridColumns = featuredItem ? '2rem 1fr 10rem 8rem' : '2rem 1fr 10rem 8rem 6rem 6rem';
+  const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
 
   return (
     <>
@@ -517,7 +517,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: toolbar + EntityList + Detail Panel */}
+      {/* Main layout: toolbar + List + Detail Panel */}
       <Columns className={cn('p-4', featuredItem ? 'grid-cols-[1fr_1fr]' : '')}>
         <Column>
           <Column.Toolbar>
@@ -741,125 +741,133 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
               </div>
             </div>
           ) : (
-            <EntityList columns={gridColumns}>
-              <EntityList.Top>
-                {!showCompleted && (
-                  <EntityList.TopCell>
-                    <Checkbox
-                      checked={isAllSelected ? true : isSomeSelected ? 'indeterminate' : false}
-                      onCheckedChange={() => toggleSelectAll()}
-                      aria-label="Select all"
-                    />
-                  </EntityList.TopCell>
+            <DataList columns={gridColumns} className="min-w-0">
+              <DataList.Top hasLeadingCell>
+                {!showCompleted ? (
+                  <DataList.TopSelectCell
+                    checked={isAllSelected ? true : isSomeSelected ? 'indeterminate' : false}
+                    onToggle={() => toggleSelectAll()}
+                    aria-label="Select all"
+                  />
+                ) : (
+                  <DataList.TopCell>&nbsp;</DataList.TopCell>
                 )}
-                {showCompleted && <EntityList.TopCell>&nbsp;</EntityList.TopCell>}
-                <EntityList.TopCell>Input</EntityList.TopCell>
-                <EntityList.TopCell>Comment</EntityList.TopCell>
-                <EntityList.TopCell>Tags</EntityList.TopCell>
-                {!featuredItem && <EntityList.TopCell>Rating</EntityList.TopCell>}
-                {!featuredItem && <EntityList.TopCell>Scores</EntityList.TopCell>}
-              </EntityList.Top>
+                <DataList.TopCells colStart={2}>
+                  <DataList.TopCell>Input</DataList.TopCell>
+                  <DataList.TopCell>Comment</DataList.TopCell>
+                  <DataList.TopCell>Tags</DataList.TopCell>
+                  <DataList.TopCell>Rating</DataList.TopCell>
+                  <DataList.TopCell>Scores</DataList.TopCell>
+                </DataList.TopCells>
+              </DataList.Top>
 
-              <EntityList.Rows>
-                {displayItems.map(item => {
-                  const scoreEntries = item.scores ? Object.entries(item.scores) : [];
-                  return (
-                    <EntityList.Row
-                      key={item.id}
+              {displayItems.map(item => {
+                const scoreEntries = item.scores ? Object.entries(item.scores) : [];
+                const isFeatured = featuredItemId === item.id;
+
+                const rowCells = (
+                  <>
+                    {/* Input preview */}
+                    <DataList.Cell height="compact" className="min-w-0 text-neutral4">
+                      <span className="block truncate">{truncateInput(item.input, 80)}</span>
+                    </DataList.Cell>
+
+                    {/* Comment preview */}
+                    <DataList.Cell height="compact" className="min-w-0">
+                      {item.comment ? (
+                        <Txt variant="ui-xs" className="text-neutral3 truncate">
+                          {item.comment}
+                        </Txt>
+                      ) : (
+                        <Txt variant="ui-xs" className="text-neutral2">
+                          —
+                        </Txt>
+                      )}
+                    </DataList.Cell>
+
+                    {/* Tags */}
+                    <DataList.Cell height="compact" className="min-w-0">
+                      {item.tags.length > 0 ? (
+                        <Txt variant="ui-xs" className="text-neutral4 truncate">
+                          {item.tags.join(', ')}
+                        </Txt>
+                      ) : (
+                        <Txt variant="ui-xs" className="text-neutral2">
+                          —
+                        </Txt>
+                      )}
+                    </DataList.Cell>
+
+                    {/* Rating */}
+                    <DataList.Cell height="compact">
+                      {item.rating === 'positive' && (
+                        <Icon size="sm" className="text-positive1">
+                          <ThumbsUp />
+                        </Icon>
+                      )}
+                      {item.rating === 'negative' && (
+                        <Icon size="sm" className="text-negative1">
+                          <ThumbsDown />
+                        </Icon>
+                      )}
+                      {!item.rating && (
+                        <Txt variant="ui-xs" className="text-neutral2">
+                          —
+                        </Txt>
+                      )}
+                    </DataList.Cell>
+
+                    {/* Scores */}
+                    <DataList.Cell height="compact">
+                      {scoreEntries.length > 0 ? (
+                        <span className="flex items-center gap-1">
+                          <Icon size="sm" className="text-neutral3">
+                            <GaugeIcon />
+                          </Icon>
+                          <Txt variant="ui-xs" className="text-neutral4 font-mono">
+                            {scoreEntries[0][1].toFixed(2)}
+                          </Txt>
+                          {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
+                        </span>
+                      ) : (
+                        <Txt variant="ui-xs" className="text-neutral2">
+                          —
+                        </Txt>
+                      )}
+                    </DataList.Cell>
+                  </>
+                );
+
+                return (
+                  <DataList.RowWrapper key={item.id}>
+                    {!showCompleted ? (
+                      <DataList.SelectCell
+                        checked={selectedItemIds.has(item.id)}
+                        onToggle={() => toggleSelect(item.id)}
+                        aria-label={`Select item ${item.id}`}
+                      />
+                    ) : (
+                      <DataList.Cell height="compact" className="justify-items-center px-4">
+                        <div
+                          role="img"
+                          aria-label={item.error ? 'Error' : 'Success'}
+                          title={item.error ? 'Error' : 'Success'}
+                          className={cn('w-2 h-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
+                        />
+                      </DataList.Cell>
+                    )}
+                    <DataList.RowButton
+                      flushLeft
+                      colStart={2}
+                      featured={isFeatured}
                       onClick={() => handleRowClick(item.id)}
-                      selected={featuredItemId === item.id}
                     >
-                      {/* Checkbox / Error indicator */}
-                      <EntityList.Cell>
-                        {!showCompleted ? (
-                          <Checkbox
-                            checked={selectedItemIds.has(item.id)}
-                            onCheckedChange={() => toggleSelect(item.id)}
-                            onClick={e => e.stopPropagation()}
-                            aria-label={`Select item ${item.id}`}
-                          />
-                        ) : item.error ? (
-                          <div className="w-2 h-2 rounded-full bg-red-700" title="Error" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-green-600" title="Success" />
-                        )}
-                      </EntityList.Cell>
-
-                      {/* Input preview */}
-                      <EntityList.NameCell>{truncateInput(item.input, 80)}</EntityList.NameCell>
-
-                      {/* Comment preview */}
-                      <EntityList.Cell>
-                        {item.comment ? (
-                          <Txt variant="ui-xs" className="text-neutral3 truncate">
-                            {item.comment}
-                          </Txt>
-                        ) : (
-                          <Txt variant="ui-xs" className="text-neutral2">
-                            —
-                          </Txt>
-                        )}
-                      </EntityList.Cell>
-
-                      {/* Tags */}
-                      <EntityList.Cell>
-                        {item.tags.length > 0 ? (
-                          <Txt variant="ui-xs" className="text-neutral4 truncate">
-                            {item.tags.join(', ')}
-                          </Txt>
-                        ) : (
-                          <Txt variant="ui-xs" className="text-neutral2">
-                            —
-                          </Txt>
-                        )}
-                      </EntityList.Cell>
-
-                      {/* Rating (hidden when detail panel open) */}
-                      {!featuredItem && (
-                        <EntityList.Cell>
-                          {item.rating === 'positive' && (
-                            <Icon size="sm" className="text-positive1">
-                              <ThumbsUp />
-                            </Icon>
-                          )}
-                          {item.rating === 'negative' && (
-                            <Icon size="sm" className="text-negative1">
-                              <ThumbsDown />
-                            </Icon>
-                          )}
-                          {!item.rating && (
-                            <Txt variant="ui-xs" className="text-neutral2">
-                              —
-                            </Txt>
-                          )}
-                        </EntityList.Cell>
-                      )}
-
-                      {/* Scores (hidden when detail panel open) */}
-                      {!featuredItem && (
-                        <EntityList.Cell>
-                          {scoreEntries.length > 0 ? (
-                            <span className="flex items-center gap-1">
-                              <Icon size="sm" className="text-neutral3">
-                                <GaugeIcon />
-                              </Icon>
-                              <Txt variant="ui-xs" className="text-neutral4">
-                                {scoreEntries[0][1].toFixed(2)}
-                              </Txt>
-                              {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
-                            </span>
-                          ) : (
-                            <Txt variant="ui-xs" className="text-neutral2">
-                              —
-                            </Txt>
-                          )}
-                        </EntityList.Cell>
-                      )}
-                    </EntityList.Row>
-                  );
-                })}
-              </EntityList.Rows>
-            </EntityList>
+                      {rowCells}
+                    </DataList.RowButton>
+                  </DataList.RowWrapper>
+                );
+              })}
+            </DataList>
           )}
         </Column>
 

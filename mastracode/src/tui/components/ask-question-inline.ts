@@ -12,18 +12,11 @@
  * 3. **Answered** — After the user responds, the box freezes with ✓/✗ icons.
  */
 
-import {
-  Container,
-  getKeybindings,
-  Input,
-  SelectList,
-  Spacer,
-  visibleWidth,
-  wrapTextWithAnsi,
-} from '@mariozechner/pi-tui';
+import { Container, getKeybindings, Input, Spacer, visibleWidth, wrapTextWithAnsi } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import { MultilineInput } from './multiline-input.js';
+import { WrappingSelectList } from './wrapping-select-list.js';
 
 export interface AskQuestionInlineOptions {
   question: string;
@@ -52,7 +45,7 @@ export interface AskQuestionInlineOptions {
  */
 class AskQuestionBorderedBox {
   questionLines: string[];
-  private selectList?: SelectList;
+  private selectList?: WrappingSelectList;
   private input?: Input | MultilineInput;
   private hintText: string;
   items: Array<{ label: string; description?: string }>;
@@ -67,7 +60,7 @@ class AskQuestionBorderedBox {
     questionLines: string[],
     hintText: string,
     items: Array<{ label: string; description?: string }>,
-    selectList?: SelectList,
+    selectList?: WrappingSelectList,
     input?: Input | MultilineInput,
     streaming?: boolean,
   ) {
@@ -83,7 +76,7 @@ class AskQuestionBorderedBox {
     this.selectList?.invalidate();
   }
 
-  setInteractive(selectList?: SelectList, input?: Input | MultilineInput, hintText?: string) {
+  setInteractive(selectList?: WrappingSelectList, input?: Input | MultilineInput, hintText?: string) {
     this.streaming = false;
     this.selectList = selectList;
     this.input = input;
@@ -150,37 +143,49 @@ class AskQuestionBorderedBox {
     // Empty separator
     addLine('', 0);
 
+    // Wrap a labelled option line so long labels don't overflow the bordered box.
+    // Mirrors the free-text answered branch below: first wrapped line keeps the
+    // styled prefix (icon/spaces), continuation lines indent 3 spaces.
+    const continuationPrefix = '   ';
+    const addWrappedOptionLine = (prefix: string, label: string, style: (s: string) => string) => {
+      const prefixVis = visibleWidth(prefix);
+      const wrapped = wrapTextWithAnsi(label, Math.max(1, innerWidth - prefixVis));
+      wrapped.forEach((line, index) => {
+        const linePrefix = index === 0 ? prefix : continuationPrefix;
+        const content = `${linePrefix}${style(line)}`;
+        addLine(content, visibleWidth(linePrefix) + visibleWidth(line));
+      });
+    };
+
     if (this.streaming) {
       // Streaming: show option labels as they arrive (dimmed, no interactivity)
+      const dim = (s: string) => theme.fg('dim', s);
       for (const item of this.items) {
-        const line = theme.fg('dim', `   ${item.label}`);
-        addLine(line, visibleWidth(line));
+        addWrappedOptionLine(continuationPrefix, item.label, dim);
       }
       // Waiting indicator
       const waiting = theme.fg('dim', '…');
       addLine(waiting, visibleWidth(waiting));
     } else if (this.answered && this.items.length > 0) {
       // Render frozen item list
+      const dim = (s: string) => theme.fg('dim', s);
       if (this.cancelled) {
         // All items dimmed, cancelled notice
         for (const item of this.items) {
-          const line = theme.fg('dim', `   ${item.label}`);
-          addLine(line, visibleWidth(line));
+          addWrappedOptionLine(continuationPrefix, item.label, dim);
         }
         const cancelLine = `${theme.fg('error', '✗')}  ${theme.fg('dim', '(cancelled)')}`;
         addLine(cancelLine, visibleWidth(cancelLine));
       } else {
         // ✓/✗ on selected, dimmed unselected
+        const text = (s: string) => theme.fg('text', s);
         for (const item of this.items) {
           const isSelected = item.label === this.selectedValue;
           if (isSelected) {
             const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
-            const label = theme.fg('text', item.label);
-            const line = `${icon}  ${label}`;
-            addLine(line, visibleWidth(line));
+            addWrappedOptionLine(`${icon}  `, item.label, text);
           } else {
-            const line = theme.fg('dim', `   ${item.label}`);
-            addLine(line, visibleWidth(line));
+            addWrappedOptionLine(continuationPrefix, item.label, dim);
           }
         }
       }
@@ -230,7 +235,7 @@ class AskQuestionBorderedBox {
 
 export class AskQuestionInlineComponent extends Container implements Focusable {
   private borderedBox: AskQuestionBorderedBox;
-  private selectList?: SelectList;
+  private selectList?: WrappingSelectList;
   private input?: Input | MultilineInput;
   private tui?: TUI;
   private onSubmit?: (answer: string) => void;
@@ -410,18 +415,18 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
     const items: SelectItem[] = opts.map(opt => ({
       value: opt.label,
-      label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
+      label: opt.description ? `${opt.label}  ${theme.fg('dim', opt.description)}` : opt.label,
     }));
 
     // Append a "Custom response..." option so the user can type a free-text answer
     if (this.allowCustomResponse) {
       items.push({
         value: AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE,
-        label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+        label: theme.fg('dim', '✎ Custom response...'),
       });
     }
 
-    this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+    this.selectList = new WrappingSelectList(items, Math.min(items.length, 8), getSelectListTheme());
 
     this.selectList.onSelect = (item: SelectItem) => {
       if (item.value === AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE) {

@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
-import type { ToolsInput } from '@mastra/core/agent';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import type { ToolsInput } from '@internal/voice';
+import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 
 export type OpenAIExecuteFunction = (args: any) => Promise<any>;
 type ToolDefinition = {
@@ -19,19 +19,9 @@ export const transformTools = (tools?: TTools) => {
     let parameters: { [key: string]: any };
 
     if ('inputSchema' in tool && tool.inputSchema) {
-      if (isZodObject(tool.inputSchema)) {
-        parameters = zodToJsonSchema(tool.inputSchema);
-        delete parameters.$schema;
-      } else {
-        parameters = tool.inputSchema;
-      }
+      parameters = toToolParameters(tool.inputSchema);
     } else if ('parameters' in tool) {
-      if (isZodObject(tool.parameters)) {
-        parameters = zodToJsonSchema(tool.parameters);
-        delete parameters.$schema;
-      } else {
-        parameters = tool.parameters;
-      }
+      parameters = toToolParameters(tool.parameters);
     } else {
       console.warn(`Tool ${name} has neither inputSchema nor parameters, skipping`);
       continue;
@@ -93,14 +83,10 @@ export const isReadableStream = (obj: unknown) => {
   );
 };
 
-function isZodObject(schema: unknown) {
-  return (
-    !!schema &&
-    typeof schema === 'object' &&
-    '_def' in schema &&
-    schema._def &&
-    typeof schema._def === 'object' &&
-    'typeName' in schema._def &&
-    schema._def.typeName === 'ZodObject'
-  );
+function toToolParameters(schema: unknown): { [key: string]: any } {
+  const parameters = standardSchemaToJSONSchema(toStandardSchema(schema as never), { io: 'input' }) as {
+    [key: string]: any;
+  };
+  delete parameters.$schema;
+  return parameters;
 }
