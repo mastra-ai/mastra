@@ -154,7 +154,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
       skeletonTestId="agent-builder-agent-chat-messages-skeleton"
       emptyState={
         <div
-          className="flex h-full flex-col items-center justify-center gap-6 text-center"
+          className="flex flex-col items-center gap-6 py-6 text-center lg:h-full lg:justify-center lg:py-0"
           data-testid="agent-builder-agent-chat-empty-state"
         >
           <div className="flex flex-col items-center gap-3">

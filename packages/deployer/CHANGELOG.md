@@ -1,5 +1,26 @@
 # @mastra/deployer
 
+## 1.38.0-alpha.2
+
+### Patch Changes
+
+- Fixed Studio playground browser telemetry not respecting `MASTRA_TELEMETRY_DISABLED`. The dev server was hardcoding an empty value into the served `index.html`, so `window.MASTRA_TELEMETRY_DISABLED` was always falsy in the browser and the playground React app initialized PostHog regardless of the user's `.env`. The dev server now propagates `process.env.MASTRA_TELEMETRY_DISABLED` to the browser, where the playground applies the same canonical opt-out parsing as the rest of the framework. ([#16990](https://github.com/mastra-ai/mastra/pull/16990))
+
+  **Before:** Setting `MASTRA_TELEMETRY_DISABLED=true` in `.env` had no effect on playground network requests to PostHog.
+
+  **After:**
+
+  ```bash
+  # .env
+  MASTRA_TELEMETRY_DISABLED=true
+  ```
+
+  Playground analytics are now disabled.
+
+- Updated dependencies [[`d779de3`](https://github.com/mastra-ai/mastra/commit/d779de3cd9d2e7ed8110547190e2f15e786a0e41), [`1750c97`](https://github.com/mastra-ai/mastra/commit/1750c975d6179fbf6db2813b15229d4f8f23fc55), [`09972fe`](https://github.com/mastra-ai/mastra/commit/09972fe6b7b92ade32d70deda7094af2e52b2676), [`0e32507`](https://github.com/mastra-ai/mastra/commit/0e32507962cdfa5569b7bda5bc6fb3dd34e40b03), [`3a081c1`](https://github.com/mastra-ai/mastra/commit/3a081c1255c5ae8c99f6dad91cc612934ef6f2bd), [`fe9eacd`](https://github.com/mastra-ai/mastra/commit/fe9eacd9545a0a9d64aad31c9fa90294a425289e), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194)]:
+  - @mastra/core@1.38.0-alpha.2
+  - @mastra/server@1.38.0-alpha.2
+
 ## 1.37.2-alpha.1
 
 ### Patch Changes
