@@ -39,8 +39,9 @@ export async function acquireDevLock(dotMastraPath: string): Promise<void> {
       );
       console.error('');
       console.error(`  ${pc.red('│')} PID ${pc.bold(String(pid))} is still active.`);
-      console.error(`  ${pc.red('│')} Only one dev server can run per project at a time because`);
-      console.error(`  ${pc.red('│')} DuckDB requires an exclusive lock on its database file.`);
+      console.error(`  ${pc.red('│')} Only one dev server can run per project at a time.`);
+      console.error(`  ${pc.red('│')} Running multiple instances causes resource conflicts`);
+      console.error(`  ${pc.red('│')} (e.g. database locks, port collisions).`);
       console.error('');
       console.error(`  ${pc.dim('To fix this:')}`);
       console.error(`  ${pc.dim('•')} Stop the other \`mastra dev\` process (PID ${pid}), or`);
