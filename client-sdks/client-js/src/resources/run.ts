@@ -333,9 +333,10 @@ export class Run extends BaseResource {
   }
 
   /**
-   * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
+   * Resumes a suspended workflow step asynchronously (fire-and-forget) and returns immediately with the runId.
+   * The workflow continues executing in the background.
    * @param params - Object containing the step, resumeData and requestContext
-   * @returns Promise containing the workflow resume results
+   * @returns Promise containing the runId of the resumed workflow run
    */
   resumeAsync(params: {
     step?: string | string[];
@@ -344,9 +345,9 @@ export class Run extends BaseResource {
     tracingOptions?: TracingOptions;
     perStep?: boolean;
     forEachIndex?: number;
-  }): Promise<WorkflowRunResult> {
+  }): Promise<{ runId: string }> {
     const requestContext = parseClientRequestContext(params.requestContext);
-    return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/resume-async?runId=${this.runId}`, {
+    return this.request<{ runId: string }>(`/workflows/${this.workflowId}/resume-async?runId=${this.runId}`, {
       method: 'POST',
       body: {
         step: params.step,
@@ -356,7 +357,7 @@ export class Run extends BaseResource {
         perStep: params.perStep,
         forEachIndex: params.forEachIndex,
       },
-    }).then(deserializeWorkflowError);
+    });
   }
 
   /**

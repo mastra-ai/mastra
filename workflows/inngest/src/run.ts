@@ -481,7 +481,15 @@ export class InngestRun<
     return p;
   }
 
-  async _resume<TResume>(params: {
+  /**
+   * Performs all resume preparation and dispatches the resume event to Inngest,
+   * but does NOT wait for the workflow result. Shared by `_resume()` (which polls
+   * for the result afterwards) and `resumeAsync()` (which returns immediately).
+   *
+   * Send-time failures (invalid resume data, event send failure) reject synchronously,
+   * and the snapshot is rolled back to its prior state on send failure.
+   */
+  async _resumeAndSendEvent<TResume>(params: {
     resumeData?: TResume;
     step?:
       | Step<string, any, any, TResume, any>
@@ -491,7 +499,7 @@ export class InngestRun<
     label?: string;
     requestContext?: RequestContext;
     perStep?: boolean;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  }): Promise<{ eventId: string }> {
     const storage = this.#mastra?.getStorage();
 
     const workflowsStore = await storage?.getStore('workflows');
@@ -586,10 +594,52 @@ export class InngestRun<
     if (!eventId) {
       throw new Error('Event ID is not set');
     }
+
+    return { eventId };
+  }
+
+  async _resume<TResume>(params: {
+    resumeData?: TResume;
+    step?:
+      | Step<string, any, any, TResume, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
+      | string
+      | string[];
+    label?: string;
+    requestContext?: RequestContext;
+    perStep?: boolean;
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const { eventId } = await this._resumeAndSendEvent(params);
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
     this.hydrateFailedResult(result);
     return result;
+  }
+
+  /**
+   * Resumes a suspended workflow without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId after sending the resume event to Inngest.
+   * The workflow continues executing independently in Inngest.
+   *
+   * Mirrors `startAsync()`: send-time failures (invalid resume data, event send
+   * failure) still reject synchronously and roll back the snapshot, but the result
+   * is never polled via `getRunOutput()`. Use this to avoid polling-based 404 races
+   * when you don't need the resolved result inline.
+   */
+  async resumeAsync<TResume>(params: {
+    resumeData?: TResume;
+    step?:
+      | Step<string, any, any, TResume, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
+      | string
+      | string[];
+    label?: string;
+    requestContext?: RequestContext;
+    perStep?: boolean;
+  }): Promise<{ runId: string }> {
+    await this._resumeAndSendEvent(params);
+    // Return immediately - NO POLLING
+    return { runId: this.runId };
   }
 
   async timeTravel<TInput>(params: {

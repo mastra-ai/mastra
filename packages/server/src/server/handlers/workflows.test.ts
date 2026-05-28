@@ -992,7 +992,7 @@ describe('vNext Workflow Handlers', () => {
       expect(capturedOptions.requestContext.get('custom-key')).toBe('start-async-value');
     });
 
-    it('RESUME_ASYNC_WORKFLOW_ROUTE should pass requestContext to run.resume()', async () => {
+    it('RESUME_ASYNC_WORKFLOW_ROUTE should pass requestContext to run.resumeAsync()', async () => {
       const requestContext = createTestServerContext({ mastra: mockMastra }).requestContext;
       requestContext.set('custom-key', 'resume-async-value');
 
@@ -1003,12 +1003,12 @@ describe('vNext Workflow Handlers', () => {
       // Wait for it to suspend
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Spy on the resume method to capture options
+      // Spy on the resumeAsync method to capture options
       let capturedOptions: any;
-      const originalResume = run.resume.bind(run);
-      vi.spyOn(run, 'resume').mockImplementation((options: any) => {
+      const originalResumeAsync = run.resumeAsync.bind(run);
+      vi.spyOn(run, 'resumeAsync').mockImplementation((options: any) => {
         capturedOptions = options;
-        return originalResume(options);
+        return originalResumeAsync(options);
       });
 
       // Spy on workflow.createRun to return our spied run
@@ -1028,7 +1028,7 @@ describe('vNext Workflow Handlers', () => {
       expect(capturedOptions.requestContext.get('custom-key')).toBe('resume-async-value');
     });
 
-    it('RESUME_ASYNC_WORKFLOW_ROUTE should pass forEachIndex to run.resume()', async () => {
+    it('RESUME_ASYNC_WORKFLOW_ROUTE should pass forEachIndex to run.resumeAsync()', async () => {
       // Create and start a run that will suspend
       const run = await reusableWorkflow.createRun({ runId: 'test-run-foreach-index' });
       await run.start({ inputData: {} });
@@ -1036,12 +1036,12 @@ describe('vNext Workflow Handlers', () => {
       // Wait for it to suspend
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Spy on the resume method to capture options
+      // Spy on the resumeAsync method to capture options
       let capturedOptions: any;
-      const originalResume = run.resume.bind(run);
-      vi.spyOn(run, 'resume').mockImplementation((options: any) => {
+      const originalResumeAsync = run.resumeAsync.bind(run);
+      vi.spyOn(run, 'resumeAsync').mockImplementation((options: any) => {
         capturedOptions = options;
-        return originalResume(options);
+        return originalResumeAsync(options);
       });
 
       vi.spyOn(reusableWorkflow, 'createRun').mockResolvedValue(run);

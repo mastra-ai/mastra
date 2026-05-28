@@ -16,7 +16,7 @@ describe('Workflow (fetch-mocked)', () => {
       if (url.includes('/start?runId=')) return Promise.resolve(createJsonResponse({ message: 'started' }));
       if (url.includes('/start-async')) return Promise.resolve(createJsonResponse({ result: 'started-async' }));
       if (url.includes('/resume?runId=')) return Promise.resolve(createJsonResponse({ message: 'resumed' }));
-      if (url.includes('/resume-async')) return Promise.resolve(createJsonResponse({ result: 'resumed-async' }));
+      if (url.includes('/resume-async')) return Promise.resolve(createJsonResponse({ runId: 'r-async' }));
       if (url.includes('/resume-stream?')) {
         const body = Workflow.createRecordStream([{ type: 'result', payload: { ok: true } }]);
         return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
@@ -66,7 +66,7 @@ describe('Workflow (fetch-mocked)', () => {
   it('resumes workflow run asynchronously', async () => {
     const run = await wf.createRun();
     const resumeAsyncRes = await run.resumeAsync({ step: 's1' });
-    expect(resumeAsyncRes).toEqual({ result: 'resumed-async' });
+    expect(resumeAsyncRes).toEqual({ runId: 'r-async' });
   });
 
   it('streams workflow execution as parsed objects', async () => {
@@ -139,7 +139,7 @@ describe('Workflow (fetch-mocked)', () => {
     const run = await wf.createRun();
     const tracingOptions = { metadata: { async: true } };
     const result = await run.resumeAsync({ step: 's1', tracingOptions });
-    expect(result).toEqual({ result: 'resumed-async' });
+    expect(result).toEqual({ runId: 'r-async' });
 
     const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume-async'));
     expect(call).toBeTruthy();
@@ -235,36 +235,6 @@ describe('Workflow error deserialization', () => {
     expect(result.error.statusCode).toBe(400);
     expect(result.error?.cause).toBeDefined();
     expect(result.error?.cause?.message).toBe('Invalid input');
-  });
-
-  it('deserializes failed workflow error in resumeAsync', async () => {
-    const serializedError = {
-      name: 'ResumeError',
-      message: 'Resume step failed',
-    };
-
-    fetchMock.mockImplementation((input: any) => {
-      const url = String(input);
-      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
-      if (url.includes('/resume-async')) {
-        return Promise.resolve(
-          createJsonResponse({
-            status: 'failed',
-            error: serializedError,
-          }),
-        );
-      }
-      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
-    });
-
-    const run = await wf.createRun();
-
-    const result = (await run.resumeAsync({ step: 's1' })) as any;
-
-    expect(result.status).toBe('failed');
-    expect(result.error).toBeInstanceOf(Error);
-    expect(result.error?.message).toBe('Resume step failed');
-    expect(result.error?.name).toBe('ResumeError');
   });
 
   it('deserializes failed workflow error in restartAsync', async () => {

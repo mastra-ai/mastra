@@ -372,9 +372,10 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
   bodySchema: resumeAgentBuilderBodySchema,
-  responseSchema: workflowExecutionResultSchema,
+  responseSchema: createWorkflowRunResponseSchema,
   summary: 'Resume action asynchronously',
-  description: 'Resumes a suspended action execution asynchronously without streaming',
+  description:
+    'Resumes a suspended action execution asynchronously (fire-and-forget) and returns immediately with the runId. The action continues executing in the background.',
   tags: ['Agent Builder'],
   requiresAuth: true,
   handler: async ctx => {

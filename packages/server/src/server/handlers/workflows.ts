@@ -630,9 +630,10 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   pathParamSchema: workflowIdPathParams,
   queryParamSchema: runIdSchema,
   bodySchema: resumeBodySchema,
-  responseSchema: workflowExecutionResultSchema,
+  responseSchema: createWorkflowRunResponseSchema,
   summary: 'Resume workflow asynchronously',
-  description: 'Resumes a suspended workflow execution asynchronously without streaming',
+  description:
+    'Resumes a suspended workflow execution asynchronously (fire-and-forget) and returns immediately with the runId. The workflow continues executing in the background.',
   tags: ['Workflows'],
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
@@ -662,7 +663,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.resume({ ...params, requestContext });
+      const result = await _run.resumeAsync({ ...params, requestContext });
 
       return result;
     } catch (error) {
