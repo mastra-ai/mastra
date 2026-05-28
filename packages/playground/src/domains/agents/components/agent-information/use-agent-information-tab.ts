@@ -9,7 +9,7 @@ export interface UseAgentInformationTabArgs {
 }
 
 // Valid tab values that can be persisted
-const VALID_TABS = new Set(['overview', 'model-settings', 'memory', 'channels', 'request-context', 'tracing-options']);
+const VALID_TABS = new Set(['overview', 'memory', 'channels', 'request-context', 'tracing-options']);
 
 export const useAgentInformationTab = ({ isMemoryLoading, hasMemory, hasChannels }: UseAgentInformationTabArgs) => {
   const [selectedTab, setSelectedTab] = useState<string>(() => {
