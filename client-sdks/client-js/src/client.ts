@@ -2174,6 +2174,8 @@ export class MastraClient extends BaseResource {
     const searchParams = new URLSearchParams();
     if (params.workflowId) searchParams.set('workflowId', params.workflowId);
     if (params.status) searchParams.set('status', params.status);
+    if (params.ownerType) searchParams.set('ownerType', params.ownerType);
+    if (params.ownerId) searchParams.set('ownerId', params.ownerId);
     const qs = searchParams.toString();
     return this.request(`/schedules${qs ? `?${qs}` : ''}`);
   }

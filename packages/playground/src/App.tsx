@@ -57,6 +57,8 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
+import HeartbeatsPage from './pages/heartbeats';
+import HeartbeatPage from './pages/heartbeats/heartbeat';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -143,6 +145,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => `/workflows/schedules`,
   scheduleLink: (scheduleId: string) => `/workflows/schedules/${encodeURIComponent(scheduleId)}`,
+  heartbeatsLink: () => `/heartbeats`,
+  heartbeatLink: (scheduleId: string) => `/heartbeats/${encodeURIComponent(scheduleId)}`,
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
@@ -227,6 +231,13 @@ const schedulesCrumb = {
   label: 'Schedules',
   icon: CalendarClockIcon,
   to: '/workflows/schedules',
+} satisfies CrumbDef;
+
+const heartbeatsCrumb = {
+  id: 'heartbeats',
+  label: 'Heartbeats',
+  icon: CalendarClockIcon,
+  to: '/heartbeats',
 } satisfies CrumbDef;
 
 const decodeRouteParam = (value: string | undefined) => {
@@ -513,6 +524,17 @@ export const routes: RouteObject[] = [
             navCrumb('/workflows'),
             schedulesCrumb,
             { id: 'schedule', label: decodeRouteParam(params.scheduleId), icon: CalendarClockIcon },
+          ],
+        } satisfies RouteHeaderHandle,
+      },
+      { path: '/heartbeats', element: <HeartbeatsPage />, handle: navHandle('/heartbeats') },
+      {
+        path: '/heartbeats/:scheduleId',
+        element: <HeartbeatPage />,
+        handle: {
+          crumbs: ({ params }) => [
+            heartbeatsCrumb,
+            { id: 'heartbeat', label: decodeRouteParam(params.scheduleId), icon: CalendarClockIcon },
           ],
         } satisfies RouteHeaderHandle,
       },

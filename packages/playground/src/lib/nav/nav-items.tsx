@@ -16,7 +16,7 @@ import {
   WorkflowIcon,
   WorkspacesIcon,
 } from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
+import { BookIcon, HeartPulseIcon } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -47,6 +47,12 @@ export const mainNav: NavSection[] = [
         url: '/agents',
         Icon: AgentIcon,
         docs: { href: 'https://mastra.ai/en/docs/agents/overview', label: 'Agents documentation' },
+        isOnMastraPlatform: true,
+      },
+      {
+        name: 'Heartbeats',
+        url: '/heartbeats',
+        Icon: HeartPulseIcon,
         isOnMastraPlatform: true,
       },
       {
