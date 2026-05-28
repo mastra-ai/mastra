@@ -158,6 +158,44 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
                     providerId={item.providerId!}
                     toolkit={item.toolkit!}
                     disabled={!editable}
+                    onConnected={connectionId => {
+                      // Pin the freshly-authorized connection only when the
+                      // tool is already toggled on. If the user clicked
+                      // Connect without selecting the tool, we leave the
+                      // form untouched and let the picker handle pinning
+                      // when they select it.
+                      if (!item.isChecked) return;
+                      const current = (getValues('toolProviders') ?? {}) as Record<
+                        string,
+                        {
+                          tools?: Record<string, { toolkit: string; description?: string }>;
+                          connections?: Record<string, ToolProviderConnectionFormValue[]>;
+                        }
+                      >;
+                      const existing = current[item.providerId!] ?? { tools: {}, connections: {} };
+                      const existingPinned = existing.connections?.[item.toolkit!] ?? [];
+                      if (existingPinned.some(c => c.connectionId === connectionId)) return;
+                      const nextConnections = {
+                        ...(existing.connections ?? {}),
+                        [item.toolkit!]: [
+                          ...existingPinned,
+                          {
+                            kind: 'author' as const,
+                            toolkit: item.toolkit!,
+                            connectionId,
+                            scope: 'per-author' as const,
+                          },
+                        ],
+                      };
+                      setValue(
+                        'toolProviders',
+                        {
+                          ...current,
+                          [item.providerId!]: { ...existing, connections: nextConnections },
+                        } as never,
+                        { shouldDirty: true },
+                      );
+                    }}
                   />
                 )}
                 {showPicker && (
@@ -206,6 +244,12 @@ interface IntegrationConnectControlProps {
   providerId: string;
   toolkit: string;
   disabled: boolean;
+  /**
+   * Fires after a successful OAuth handshake with the new connection's id.
+   * Used by the parent to auto-pin the connection into the form when the
+   * tool is already selected.
+   */
+  onConnected?: (connectionId: string) => void;
 }
 
 /**
@@ -214,7 +258,13 @@ interface IntegrationConnectControlProps {
  * users can pre-select tools and run OAuth after. On success we invalidate
  * the `tool-integration-connections-all` query so the hint disappears.
  */
-const IntegrationConnectControl = ({ item, providerId, toolkit, disabled }: IntegrationConnectControlProps) => {
+const IntegrationConnectControl = ({
+  item,
+  providerId,
+  toolkit,
+  disabled,
+  onConnected,
+}: IntegrationConnectControlProps) => {
   const queryClient = useQueryClient();
   const authorize = useAuthorize();
 
@@ -222,10 +272,13 @@ const IntegrationConnectControl = ({ item, providerId, toolkit, disabled }: Inte
     authorize.mutate(
       { providerId, toolkit, scope: 'per-author' },
       {
-        onSuccess: () => {
+        onSuccess: result => {
           void queryClient.invalidateQueries({
             queryKey: ['tool-integration-connections-all', providerId, toolkit],
           });
+          if (result.status === 'completed') {
+            onConnected?.(result.connectionId);
+          }
         },
       },
     );
