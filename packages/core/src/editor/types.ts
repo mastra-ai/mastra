@@ -410,6 +410,12 @@ export interface IMastraEditor {
 
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined;
+  /**
+   * Like {@link getToolProvider}, but throws {@link UnknownToolProviderError}
+   * when the id is unknown. Useful in HTTP handlers that want to translate
+   * a missing provider into a 404.
+   */
+  getToolProviderOrThrow(id: string): ToolProvider;
   /** List all registered tool providers */
   getToolProviders(): Record<string, ToolProvider>;
 
