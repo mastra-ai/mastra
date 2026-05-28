@@ -26,6 +26,11 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Setup Node.js 22.x
+      uses: actions/setup-node@v6
+      with:
+        node-version: 22.13.0
+
     # Let pnpm/action-setup handle store caching instead of actions/setup-node.
     # setup-node's cache: 'pnpm' runs `pnpm store path --silent` which returns
     # a bogus path on self-hosted runners where pnpm is installed into
@@ -38,11 +43,6 @@ runs:
         package_json_file: ${{ inputs.package-json-file || 'package.json' }}
         cache: ${{ inputs.package-manager-cache == 'true' }}
         cache_dependency_path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
-
-    - name: Setup Node.js 22.x
-      uses: actions/setup-node@v6
-      with:
-        node-version: 22.13.0
 
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
