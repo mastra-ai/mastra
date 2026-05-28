@@ -5821,6 +5821,10 @@ export class Agent<
       drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub),
     });
 
+    if (this.#mastra) {
+      executionWorkflow.__registerMastra(this.#mastra);
+    }
+
     const run = await executionWorkflow.createRun();
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
     const result = await run.start({ ...observabilityContext });
