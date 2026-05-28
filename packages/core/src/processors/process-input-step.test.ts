@@ -1784,6 +1784,49 @@ describe('processInputStep', () => {
         'Memory context',
       ]);
     });
+
+    it('should allow processor-returned systemMessages to prepend untagged system context', async () => {
+      const processor: Processor = {
+        id: 'system-prepender',
+        processInputStep: async ({ systemMessages }) => {
+          return {
+            systemMessages: [{ role: 'system' as const, content: 'Priority instruction' }, ...systemMessages],
+          };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User message')], 'input');
+      messageList.addSystem('Original instruction');
+      messageList.addSystem('Memory context', 'observational-memory');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(messageList.getSystemMessages('observational-memory').map(message => message.content)).toEqual([
+        'Memory context',
+      ]);
+      expect(messageList.getSystemMessages().map(message => message.content)).toEqual([
+        'Priority instruction',
+        'Original instruction',
+      ]);
+      expect(messageList.getAllSystemMessages().map(message => message.content)).toEqual([
+        'Priority instruction',
+        'Original instruction',
+        'Memory context',
+      ]);
+    });
   });
 
   describe('abort functionality', () => {

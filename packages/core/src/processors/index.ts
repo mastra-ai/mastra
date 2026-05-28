@@ -93,7 +93,8 @@ export interface ProcessorMessageContext<TTripwireMetadata = unknown> extends Pr
 }
 
 /**
- * Return type for processInput that includes modified system messages
+ * Return type for processInput that includes modified untagged system messages.
+ * Tagged system messages owned by other processors are preserved.
  */
 export interface ProcessInputResultWithSystemMessages {
   messages: MastraDBMessage[];
@@ -220,7 +221,10 @@ export type ProcessInputStepResult = {
 
   messages?: MastraDBMessage[];
   messageList?: MessageList;
-  /** Replace all system messages with these */
+  /**
+   * Replace untagged system messages with these while preserving tagged system messages
+   * owned by other processors.
+   */
   systemMessages?: CoreMessageV4[];
   providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;

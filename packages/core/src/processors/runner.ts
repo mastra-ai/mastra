@@ -58,12 +58,19 @@ function applyReturnedSystemMessages(
   previousSystemMessages: SystemMessage[],
 ): void {
   const taggedSystemMessages = getTaggedSystemMessages(messageList);
-  const previousTaggedIndexes = new Set(
-    previousSystemMessages
-      .map((message, index) => ({ message, index }))
-      .filter(({ message }) => taggedSystemMessages.some(taggedMessage => taggedMessage === message))
-      .map(({ index }) => index),
+  const containsPreviousTaggedMessage = systemMessages.some(message =>
+    taggedSystemMessages.some(taggedMessage => messagesAreEqual(taggedMessage, message)),
   );
+  const canUsePreviousIndexes =
+    !containsPreviousTaggedMessage && systemMessages.length === previousSystemMessages.length;
+  const previousTaggedIndexes = canUsePreviousIndexes
+    ? new Set(
+        previousSystemMessages
+          .map((message, index) => ({ message, index }))
+          .filter(({ message }) => taggedSystemMessages.some(taggedMessage => taggedMessage === message))
+          .map(({ index }) => index),
+      )
+    : new Set<number>();
   const untaggedSystemMessages = systemMessages.filter(
     (message, index) =>
       !previousTaggedIndexes.has(index) &&
