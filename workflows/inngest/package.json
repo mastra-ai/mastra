@@ -22,6 +22,7 @@
       }
     },
     "./connect": {
+      "mastra-source": "./src/connect.ts",
       "import": {
         "types": "./dist/connect.d.ts",
         "default": "./dist/connect.js"
