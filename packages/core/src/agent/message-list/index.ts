@@ -48,8 +48,6 @@ export type { AIV4AdapterContext, AIV5AdapterContext, AdapterContext } from './a
 
 // Provider compatibility exports
 export {
-  ensureAnthropicCompatibleMessages,
-  sanitizeOrphanedToolPairs,
   hasOpenAIReasoningItemId,
   getOpenAIReasoningItemId,
   hasResponseProviderItemId,

@@ -824,9 +824,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -857,9 +854,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -973,9 +967,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "value-result",
@@ -1124,9 +1115,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -1167,9 +1155,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -1293,9 +1278,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "value-result",
@@ -1396,9 +1378,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -1439,9 +1418,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -1565,9 +1541,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "value-result",
@@ -4298,9 +4271,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -4331,9 +4301,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -4447,9 +4414,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -4598,9 +4562,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -4641,9 +4602,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -4767,9 +4725,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -4870,9 +4825,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -4913,9 +4865,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -5039,9 +4988,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -5838,9 +5784,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "test error",
@@ -5871,9 +5814,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "test error",
@@ -5995,9 +5935,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "test error",
@@ -6154,9 +6091,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "test error",
@@ -6201,9 +6135,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "test error",
@@ -6339,9 +6270,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "test error",
@@ -6450,9 +6378,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "test error",
@@ -6497,9 +6422,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "test error",
@@ -6635,9 +6557,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "test error",
@@ -7721,9 +7640,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -7754,9 +7670,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -7876,9 +7789,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "value-result",
@@ -8039,9 +7949,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -8082,9 +7989,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -8214,9 +8118,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "value-result",
@@ -8329,9 +8230,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -8372,9 +8270,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "value-result",
@@ -8504,9 +8399,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "value-result",
@@ -11345,9 +11237,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -11378,9 +11267,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -11500,9 +11386,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -11663,9 +11546,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -11706,9 +11586,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -11838,9 +11715,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -11953,9 +11827,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -11996,9 +11867,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
-                "input": {
-                  "value": "value",
-                },
                 "output": {
                   "type": "text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
@@ -12128,9 +11996,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",

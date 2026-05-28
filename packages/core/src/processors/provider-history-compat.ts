@@ -360,6 +360,158 @@ export const geminiEnsureFirstUserMessage: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: Anthropic orphaned tool-pair sanitization
+// ---------------------------------------------------------------------------
+
+/**
+ * Anthropic requires every tool_result to be in the message immediately after
+ * its matching tool_use, and every tool_use to have a matching tool_result in
+ * the next message. Recall windows can slice through a parallel tool-call
+ * group and leave behind half a pair, causing Anthropic to reject the request.
+ *
+ * This rule preemptively removes orphaned tool-call/tool-result parts from the
+ * outbound prompt when the resolved model is Anthropic. Provider-executed tool
+ * calls (e.g. Anthropic's deferred `web_search`) are preserved even without a
+ * matching result, since the provider may resume them on the next call.
+ *
+ * Previously applied unconditionally via `sanitizeOrphanedToolPairs` in the
+ * output converter. Now scoped to Anthropic and runs as a prompt rewrite.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/14148
+ * @see https://github.com/mastra-ai/mastra/issues/15668
+ */
+export const anthropicSanitizeOrphanedToolPairs: CompatRule = {
+  name: 'anthropic-sanitize-orphaned-tool-pairs',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAnthropic(model)) return undefined;
+
+    const filteredContents = prompt.map(m =>
+      m.role === 'assistant' || m.role === 'tool' ? (Array.isArray(m.content) ? [...m.content] : null) : null,
+    );
+
+    for (let i = 0; i < prompt.length; i++) {
+      const current = prompt[i]!;
+
+      if (current.role === 'assistant' && Array.isArray(current.content)) {
+        const useIds = new Set<string>();
+        const inlineResultIds = new Set<string>();
+        for (const part of current.content) {
+          if (part.type === 'tool-call') useIds.add(part.toolCallId);
+          else if (part.type === 'tool-result') inlineResultIds.add(part.toolCallId);
+        }
+
+        const next = prompt[i + 1];
+        const nextResultIds = new Set<string>();
+        if (next && next.role === 'tool' && Array.isArray(next.content)) {
+          for (const part of next.content) {
+            if (part.type === 'tool-result') nextResultIds.add(part.toolCallId);
+          }
+        }
+
+        const validPairs = new Set([...useIds].filter(id => inlineResultIds.has(id) || nextResultIds.has(id)));
+
+        filteredContents[i] = filteredContents[i]!.filter(p => {
+          if (p.type !== 'tool-call') return true;
+          const tc = p as { toolCallId: string; providerExecuted?: boolean };
+          return tc.providerExecuted === true || validPairs.has(tc.toolCallId);
+        });
+
+        if (next && next.role === 'tool' && Array.isArray(next.content)) {
+          filteredContents[i + 1] = filteredContents[i + 1]!.filter(
+            p => p.type !== 'tool-result' || validPairs.has((p as { toolCallId: string }).toolCallId),
+          );
+        }
+      } else if (current.role === 'tool' && Array.isArray(current.content)) {
+        const prev = prompt[i - 1];
+        if (!prev || prev.role !== 'assistant' || !Array.isArray(prev.content)) {
+          filteredContents[i] = filteredContents[i]!.filter(p => p.type !== 'tool-result');
+        }
+      }
+    }
+
+    let mutated = false;
+    const result: LanguageModelV2Prompt = [];
+    for (let i = 0; i < prompt.length; i++) {
+      const original = prompt[i]!;
+      const filtered = filteredContents[i];
+      if (filtered == null) {
+        result.push(original);
+        continue;
+      }
+      if (filtered.length === 0) {
+        mutated = true;
+        continue;
+      }
+      if (Array.isArray(original.content) && filtered.length === original.content.length) {
+        result.push(original);
+        continue;
+      }
+      mutated = true;
+      result.push({ ...original, content: filtered } as LanguageModelV2Prompt[number]);
+    }
+
+    return mutated ? result : undefined;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Built-in rule: Anthropic tool-result input enrichment
+// ---------------------------------------------------------------------------
+
+/**
+ * Anthropic's API requires tool-result parts to include an `input` field that
+ * matches the original tool call arguments. Without it, Anthropic rejects
+ * requests with "tool_use.input: Field required".
+ *
+ * This rule preemptively enriches tool-result parts in the outbound prompt
+ * with the `input` field by looking up the matching tool-call's `input` from
+ * assistant messages in the same prompt. Falls back to `{}` when the matching
+ * tool-call is not found (e.g. sliced by recall window).
+ *
+ * Previously applied unconditionally via `ensureAnthropicCompatibleMessages`
+ * in the output converter, which required `dbMessages` to look up args. Now
+ * scoped to Anthropic and derives args from the prompt itself.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/11376
+ */
+export const anthropicToolResultInput: CompatRule = {
+  name: 'anthropic-tool-result-input',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAnthropic(model)) return undefined;
+
+    // Build map of toolCallId → input from tool-call parts
+    const toolCallInputMap = new Map<string, unknown>();
+    for (const msg of prompt) {
+      if (msg.role !== 'assistant' || typeof msg.content === 'string') continue;
+      for (const part of msg.content) {
+        if (part.type === 'tool-call') {
+          toolCallInputMap.set(part.toolCallId, part.input);
+        }
+      }
+    }
+
+    // Enrich tool-result parts with input field
+    let mutated = false;
+    const result: LanguageModelV2Prompt = prompt.map(msg => {
+      if ((msg.role !== 'tool' && msg.role !== 'assistant') || !Array.isArray(msg.content)) return msg;
+
+      let msgMutated = false;
+      const newContent = msg.content.map(part => {
+        if (part.type !== 'tool-result') return part;
+        const input = toolCallInputMap.get(part.toolCallId) ?? {};
+        msgMutated = true;
+        return { ...part, input };
+      });
+      if (!msgMutated) return msg;
+      mutated = true;
+      return { ...msg, content: newContent } as LanguageModelV2Prompt[number];
+    });
+
+    return mutated ? result : undefined;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
 
@@ -372,6 +524,8 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   cerebrasStripReasoningContent,
   anthropicStripForeignReasoningContent,
   geminiEnsureFirstUserMessage,
+  anthropicSanitizeOrphanedToolPairs,
+  anthropicToolResultInput,
 ];
 
 // ---------------------------------------------------------------------------
