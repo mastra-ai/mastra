@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentBuilderMobileMenu } from '../agent-builder-mobile-menu';
@@ -19,6 +19,11 @@ interface FormHarnessProps {
   children: ReactNode;
 }
 
+const LocationProbe = () => {
+  const location = useLocation();
+  return <span data-testid="current-location">{location.pathname}</span>;
+};
+
 const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessProps) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: { name: '', instructions: '', visibility: defaultVisibility },
@@ -28,11 +33,12 @@ const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessPro
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={['/start']}>
           <TooltipProvider>
             <FormProvider {...methods}>
               {children}
               <span data-testid="form-visibility">{value}</span>
+              <LocationProbe />
             </FormProvider>
           </TooltipProvider>
         </MemoryRouter>
@@ -179,5 +185,39 @@ describe('AgentBuilderMobileMenu', () => {
 
     const visibilityItem = screen.getByTestId('agent-builder-mobile-menu-visibility-add');
     expect(visibilityItem.getAttribute('data-disabled')).not.toBeNull();
+  });
+
+  it('omits the Edit agent item when showEditAgent is false', async () => {
+    render(
+      <FormHarness>
+        <AgentBuilderMobileMenu agentId="agent-1" showSetVisibility />
+      </FormHarness>,
+    );
+
+    await openDropdown();
+
+    expect(screen.queryByTestId('agent-builder-mobile-menu-edit-agent')).toBeNull();
+  });
+
+  it('renders the Edit agent item when showEditAgent is true and navigates to the edit page on click', async () => {
+    render(
+      <FormHarness>
+        <AgentBuilderMobileMenu agentId="agent-1" showEditAgent />
+      </FormHarness>,
+    );
+
+    await openDropdown();
+
+    const editItem = screen.getByTestId('agent-builder-mobile-menu-edit-agent');
+    expect(editItem).toBeTruthy();
+    expect(editItem.textContent).toContain('Edit agent');
+
+    await act(async () => {
+      fireEvent.click(editItem);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('current-location').textContent).toBe('/agent-builder/agents/agent-1/edit');
+    });
   });
 });

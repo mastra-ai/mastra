@@ -25,14 +25,5 @@
     "mastra": "*",
     "typescript": "^5.9.3",
     "vitest": "^4.1.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@mastra/core": "link:../../core",
-      "@mastra/hono": "link:../../../server-adapters/hono",
-      "@mastra/mcp": "link:../",
-      "@mastra/client-js": "link:../../../client-sdks/client-js",
-      "mastra": "link:../../cli"
-    }
   }
 }
