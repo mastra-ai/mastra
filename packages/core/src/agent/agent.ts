@@ -116,6 +116,7 @@ import type {
   ToolsInput,
   AgentModelManagerConfig,
   AgentCreateOptions,
+  AgentDeliveryPolicyConfig,
   AgentExecuteOnFinishOptions,
   AgentInstructions,
   AgentMessageInput,
@@ -347,6 +348,7 @@ export class Agent<
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
+  #deliveryPolicy?: AgentDeliveryPolicyConfig;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -443,6 +445,7 @@ export class Agent<
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
     this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
+    this.#deliveryPolicy = config.deliveryPolicy;
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config.transform ?? (config as any).toolPayloadProjection,
     );
@@ -6498,6 +6501,13 @@ export class Agent<
 
   abortRunStream(runId: string): boolean {
     return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent signal delivery policy is experimental and may change in a future release.
+   */
+  getDeliveryPolicy(): AgentDeliveryPolicyConfig | undefined {
+    return this.#deliveryPolicy;
   }
 
   /**

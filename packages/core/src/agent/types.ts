@@ -103,6 +103,56 @@ export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
 /**
+ * @experimental Agent signal delivery policy is experimental and may change in a future release.
+ */
+export type AgentDeliveryPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+/**
+ * @experimental Agent signal delivery policy is experimental and may change in a future release.
+ */
+export type AgentDeliveryPolicyOutcome =
+  | 'deliver'
+  | 'queue'
+  | 'persist'
+  | 'wake'
+  | 'summarize'
+  | 'discard'
+  | 'coalesce';
+
+/**
+ * @experimental Agent signal delivery policy is experimental and may change in a future release.
+ */
+export type AgentDeliveryThreadState = 'active' | 'idle';
+
+/**
+ * @experimental Agent signal delivery policy is experimental and may change in a future release.
+ */
+export interface AgentDeliveryPolicyInput {
+  signal: CreatedAgentSignal;
+  category: CreatedAgentSignal['type'];
+  tagName?: string;
+  priority: AgentDeliveryPriority;
+  source?: string;
+  threadState: AgentDeliveryThreadState;
+  explicitApi: 'sendSignal' | 'sendMessage' | 'queueMessage';
+  config?: AgentDeliveryPolicyConfig;
+}
+
+/**
+ * @experimental Agent signal delivery policy is experimental and may change in a future release.
+ */
+export type AgentDeliveryPolicyDecider = (input: AgentDeliveryPolicyInput) => AgentDeliveryPolicyOutcome;
+
+/**
+ * @experimental Agent signal delivery policy is experimental and may change in a future release.
+ */
+export interface AgentDeliveryPolicyConfig {
+  categories?: Partial<Record<CreatedAgentSignal['type'], AgentDeliveryPolicyOutcome>>;
+  sources?: Record<string, Partial<Record<CreatedAgentSignal['type'], AgentDeliveryPolicyOutcome>>>;
+  decide?: AgentDeliveryPolicyDecider;
+}
+
+/**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SendAgentSignalOptions<OUTPUT = unknown> =
@@ -445,6 +495,11 @@ export interface AgentConfig<
    * When omitted, the agent uses its Mastra instance pubsub or the default in-memory pubsub.
    */
   pubsub?: PubSub;
+  /**
+   * Experimental delivery policy for non-explicit signal routing decisions.
+   * Explicit `sendMessage()` and `queueMessage()` calls keep their default semantics unless the policy returns an override.
+   */
+  deliveryPolicy?: AgentDeliveryPolicyConfig;
   /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */

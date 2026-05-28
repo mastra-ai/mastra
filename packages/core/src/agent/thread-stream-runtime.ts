@@ -9,6 +9,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import { createDeliveryPolicyInput, resolveDeliveryPolicy, shouldApplyDeliveryPolicy } from './delivery-policy';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
@@ -37,6 +38,25 @@ function withThreadMemory(memory: unknown, resourceId: string, threadId: string)
     resource: (memory as { resource?: string } | undefined)?.resource ?? resourceId,
     thread: (memory as { thread?: string } | undefined)?.thread ?? threadId,
   };
+}
+
+function mapDeliveryOutcomeToBehaviors({
+  outcome,
+  activeBehavior,
+  idleBehavior,
+}: {
+  outcome: ReturnType<typeof resolveDeliveryPolicy>;
+  activeBehavior: 'deliver' | 'persist' | 'discard';
+  idleBehavior: 'wake' | 'persist' | 'discard';
+}): ResolvedSignalPolicy {
+  if (outcome === 'deliver') return { activeBehavior: 'deliver', idleBehavior: 'wake' };
+  if (outcome === 'wake') return { activeBehavior: 'deliver', idleBehavior: 'wake' };
+  if (outcome === 'queue') return { activeBehavior: 'queue', idleBehavior: 'wake' };
+  if (outcome === 'persist' || outcome === 'summarize' || outcome === 'coalesce') {
+    return { activeBehavior: 'persist', idleBehavior: 'persist' };
+  }
+  if (outcome === 'discard') return { activeBehavior: 'discard', idleBehavior: 'discard' };
+  return { activeBehavior, idleBehavior };
 }
 
 type AgentThreadRunRecord<OUTPUT = unknown> = {
@@ -75,6 +95,13 @@ type AgentThreadRuntimeState = {
 };
 
 type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
+
+type SignalExplicitApi = 'sendSignal' | 'sendMessage' | 'queueMessage';
+
+type ResolvedSignalPolicy = {
+  activeBehavior: 'deliver' | 'persist' | 'discard' | 'queue';
+  idleBehavior: 'wake' | 'persist' | 'discard';
+};
 
 type AgentThreadStreamRuntimeEvent =
   | { type: 'run-registered'; runId: string }
@@ -774,7 +801,13 @@ export class AgentThreadStreamRuntime {
     target: SendAgentMessageOptions<OUTPUT>,
     pubsub?: PubSub,
   ): SendAgentMessageResult {
-    return this.sendSignal(agent, createMessageSignal(message, { acceptedAt: new Date() }), target, pubsub);
+    return this.#sendSignal(
+      agent,
+      createMessageSignal(message, { acceptedAt: new Date() }),
+      target,
+      pubsub,
+      'sendMessage',
+    );
   }
 
   queueMessage<OUTPUT = unknown>(
@@ -901,12 +934,22 @@ export class AgentThreadStreamRuntime {
     target: SendAgentSignalOptions<OUTPUT>,
     pubsub?: PubSub,
   ): SendAgentSignalResult {
+    return this.#sendSignal(agent, signalInput, target, pubsub, 'sendSignal');
+  }
+
+  #sendSignal<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    signalInput: AgentSignal,
+    target: SendAgentSignalOptions<OUTPUT>,
+    pubsub: PubSub | undefined,
+    explicitApi: SignalExplicitApi,
+  ): SendAgentSignalResult {
     const state = this.#getState(pubsub);
     let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
-    const activeBehavior = target.ifActive?.behavior ?? 'deliver';
-    const idleBehavior = target.ifIdle?.behavior ?? 'wake';
+    let activeBehavior: 'deliver' | 'persist' | 'discard' | 'queue' = target.ifActive?.behavior ?? 'deliver';
+    let idleBehavior: 'wake' | 'persist' | 'discard' = target.ifIdle?.behavior ?? 'wake';
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
     if (target.resourceId && target.threadId) {
@@ -934,12 +977,48 @@ export class AgentThreadStreamRuntime {
     );
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
+    const deliveryPolicy = agent.getDeliveryPolicy?.();
+    if (shouldApplyDeliveryPolicy(deliveryPolicy)) {
+      const outcome = resolveDeliveryPolicy(
+        createDeliveryPolicyInput({
+          signal,
+          threadState: isActiveTarget ? 'active' : 'idle',
+          explicitApi,
+          config: deliveryPolicy,
+        }),
+      );
+      const behaviors = mapDeliveryOutcomeToBehaviors({ outcome, activeBehavior, idleBehavior });
+      activeBehavior = behaviors.activeBehavior;
+      idleBehavior = behaviors.idleBehavior;
+    }
 
     // Resolve conditional delivery attributes now that we know the delivery path.
     signal = resolveDeliveryAttributes(
       signal,
       isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
     );
+
+    if (isActiveTarget && activeBehavior === 'queue') {
+      if (!resourceId || !threadId) {
+        throw new Error('resourceId and threadId are required to queue an active signal');
+      }
+      key ??= this.#threadKey(resourceId, threadId);
+      const queuedRunId = randomUUID();
+      const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
+      idleQueue.push({
+        agent,
+        signal,
+        runId: queuedRunId,
+        resourceId,
+        threadId,
+        streamOptions: target.ifIdle?.streamOptions,
+      });
+      state.pendingIdleSignalsByThread.set(key, idleQueue);
+      if (activeRecord) {
+        this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      }
+      return { accepted: true, runId: queuedRunId, signal };
+    }
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {

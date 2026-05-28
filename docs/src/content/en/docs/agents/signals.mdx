@@ -344,6 +344,33 @@ Mastra also supports lossy summaries that point back to full inbox records:
 
 Use `createNotificationInboxTool()` to give agents one flexible tool for `list`, `read`, `markSeen`, `dismiss`, `archive`, and `search` actions instead of many small CRUD tools. Source, resource, and agent ids are filters or routing metadata; `threadId` remains the primary inbox scope.
 
+## Delivery policy
+
+Agents can define an experimental `deliveryPolicy` when default routing is too noisy. The policy works by signal category (`user`, `reactive`, `state`, `notification`) instead of by XML tag name.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+const agent = new Agent({
+  name: 'supportAgent',
+  instructions: 'Help users resolve support issues.',
+  model,
+  deliveryPolicy: {
+    categories: {
+      state: 'persist',
+      notification: 'summarize',
+    },
+    sources: {
+      pagerduty: {
+        notification: 'deliver',
+      },
+    },
+  },
+})
+```
+
+Policy outcomes are `deliver`, `queue`, `persist`, `wake`, `summarize`, `discard`, and `coalesce`. By default, user and reactive signals deliver to active runs and wake idle threads. State signals persist. Notifications summarize unless urgent; urgent notifications deliver immediately, and high-priority notifications can wake idle threads.
+
+Explicit message APIs stay predictable: `sendMessage()` still means immediate delivery by default, and `queueMessage()` still means next-turn queueing by default. Use `deliveryPolicy` only when you want to intentionally change those defaults for a category or source.
+
 ## Compatibility
 
 Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `type: 'system-reminder'`. It normalizes them internally to the new category and tag shape:

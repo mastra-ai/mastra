@@ -3,6 +3,7 @@ export { MessageList, convertMessages, aiV5ModelMessageToV2PromptMessage, TypeDe
 export type { OutputFormat } from './message-list';
 export * from './types';
 export * from './signals';
+export * from './delivery-policy';
 export * from './agent';
 export * from './utils';
 
