@@ -2,11 +2,12 @@
 '@mastra/playground-ui': patch
 ---
 
-Refined the focus state of single-line inputs in `@mastra/playground-ui`. Applies to `Input`, `InputGroup`, and `Searchbar`.
+Refined the focus state of form inputs in `@mastra/playground-ui`. Applies to `Input`, `InputGroup`, `Searchbar`, and `Textarea`.
 
 - Removed the green border and glow that appeared on focus.
 - On focus, the field now shows a subtle background and border shift that reads on any underlying surface.
-- Made single-line inputs fully rounded to match the design system. Vertical layouts (textareas, block-style addons inside `InputGroup`) keep a softer `rounded-xl` corner.
+- Made single-line inputs fully rounded to match the design system. Multi-line surfaces (`Textarea`, and `InputGroup` with a block-style addon) keep a softer `rounded-xl` corner.
+- The `unstyled` variant of `Input` and `Textarea` no longer leaks the browser default focus outline.
 
 The public API is unchanged:
 
