@@ -758,6 +758,12 @@ describe('safeStringify', () => {
     const result = safeStringify(obj);
     expect(JSON.parse(result)).toEqual({ count: '42', name: 'test' });
   });
+
+  it('should return strings for top-level values JSON.stringify omits', () => {
+    expect(safeStringify(undefined)).toBe('undefined');
+    expect(safeStringify(Symbol('tool-error'))).toBe('Symbol(tool-error)');
+    expect(safeStringify(function toolError() {})).toContain('function toolError()');
+  });
 });
 
 describe('ensureSerializable', () => {
