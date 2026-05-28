@@ -241,7 +241,7 @@ Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `
 - `type: 'user-message'`: Normalizes to `type: 'user'` and `tagName: 'user'`
 - `type: 'system-reminder'`: Normalizes to `type: 'reactive'` and `tagName: 'system-reminder'`
 
-Existing stored signal rows and older clients continue to load through the compatibility layer.
+Existing stored signal rows and older clients continue to load through the compatibility layer. New clients call the message routes when the server supports them; React's thread signal path falls back to the legacy `/signals` route when it detects an older server.
 
 :::note
 Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.

@@ -293,7 +293,7 @@ Returns `{ accepted: true, runId: string }`.
 
 ### `subscribeToThread()`
 
-Subscribe to raw stream chunks for a memory thread. Use this to render output from a thread that may be started or continued by `sendSignal()`.
+Subscribe to raw stream chunks for a memory thread. Use this to render output from a thread that may be started or continued by `sendMessage()`, `queueMessage()`, or `sendSignal()`.
 
 ```typescript
 const agent = mastraClient.getAgent('support-agent')
