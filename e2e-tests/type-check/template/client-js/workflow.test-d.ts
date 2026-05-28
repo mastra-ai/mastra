@@ -56,7 +56,7 @@ describe('Workflow resume', () => {
       resumeData: { approved: true },
     });
 
-    expectTypeOf(result).toEqualTypeOf<WorkflowRunResult>();
+    expectTypeOf(result).toEqualTypeOf<{ runId: string }>();
   });
 
   it('should accept requestContext', async () => {
@@ -70,6 +70,6 @@ describe('Workflow resume', () => {
       requestContext: { userId: 'user-123' },
     });
 
-    expectTypeOf(result).toEqualTypeOf<WorkflowRunResult>();
+    expectTypeOf(result).toEqualTypeOf<{ runId: string }>();
   });
 });
