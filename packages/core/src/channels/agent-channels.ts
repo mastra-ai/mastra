@@ -1032,12 +1032,6 @@ export class AgentChannels {
       platform,
     });
 
-    // Fire-and-forget: persist the chat-thread subscription metadata. The agent's
-    // `prepareMemoryStep` merges existing storage metadata with the passed-in thread
-    // (see packages/core/src/agent/workflows/prepare-stream/prepare-memory-step.ts),
-    // so it's safe for this write to land in parallel with — or even after — the
-    // signal dispatch below. We pass the thread by id (not snapshot) so the run
-    // reads the latest metadata itself.
     void chatThread.subscribe().catch(err => {
       this.log('debug', 'chatThread.subscribe failed', err);
     });
