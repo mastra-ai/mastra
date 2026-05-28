@@ -1085,67 +1085,89 @@ describe('finishStreamingAssistantMessage', () => {
 });
 
 // =============================================================================
-// HIDDEN INTERNAL TOOL CALLS (updateWorkingMemory)
+// WORKFLOW TOOL FINISH — REGRESSION
 // =============================================================================
+//
+// A workflow tool's accumulated `WorkflowStreamResult` (built up by
+// `tool-output` chunks via `mapWorkflowStreamChunkToWatchResult`) must survive
+// the terminal `tool-result` chunk, even when that terminal payload is a bare
+// scalar like `{ result: 'suh' }` with no `steps` field. The previous heuristic
+// detected workflows purely by `payload.result.steps`, so dynamic-workflow
+// finishes would clobber the accumulated step history and reset the UI.
 
-describe('hidden tool calls', () => {
-  // Mirrors the backend memory filter (`updateMessageToHideWorkingMemoryV2` in
-  // `packages/memory/src/index.ts`). The live UI must not show working-memory
-  // tool calls that the persisted replay will strip away.
+describe('accumulateChunk - workflow tool finish', () => {
+  const workflowOutputChunk = (toolCallId: string, type: string, payload: Record<string, unknown>): ChunkType =>
+    toolOutputChunk(toolCallId, { type, runId: RUN_ID, from: 'AGENT', payload });
 
-  it('drops `tool-call` for updateWorkingMemory and emits no tool-invocation part', () => {
+  it('preserves accumulated workflow steps when tool-result payload omits steps', () => {
     const out = reduce([
       startChunk(),
-      toolCallChunk('wm-1', 'updateWorkingMemory', { memory: 'hello' }),
+      toolCallChunk('wf-1', 'workflow-myWorkflow', { foo: 'bar' }),
+      // Build up a WorkflowStreamResult via tool-output chunks
+      workflowOutputChunk('wf-1', 'workflow-start', { runId: RUN_ID }),
+      workflowOutputChunk('wf-1', 'workflow-step-start', { id: 'step-a' }),
+      workflowOutputChunk('wf-1', 'workflow-step-result', {
+        id: 'step-a',
+        status: 'success',
+        output: { value: 1 },
+      }),
+      workflowOutputChunk('wf-1', 'workflow-finish', {
+        runId: RUN_ID,
+        workflowStatus: 'success',
+      }),
+      // Terminal tool-result: bare scalar, no `steps` field
+      toolResultChunk('wf-1', { result: 'suh', runId: RUN_ID }),
     ]);
-    const assistant = out.find(m => m.role === 'assistant');
-    const toolParts = (assistant?.content.parts ?? []).filter(p => p.type === 'tool-invocation');
-    expect(toolParts).toHaveLength(0);
+
+    const toolPart = out
+      .flatMap(m => m.content.parts)
+      .find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    expect(toolPart.toolInvocation.state).toBe('result');
+    const result = (toolPart.toolInvocation as { result: Record<string, unknown> }).result;
+    // Accumulated step history is preserved
+    expect(result.steps).toBeDefined();
+    expect(Object.keys(result.steps as Record<string, unknown>)).toContain('step-a');
+    expect(((result.steps as Record<string, { status: string }>)['step-a']).status).toBe('success');
+    // Final status from the accumulated workflow stays
+    expect(result.status).toBe('success');
+    // Terminal scalar payload is still surfaced for downstream renderers
+    expect(result.output).toEqual({ result: 'suh', runId: RUN_ID });
   });
 
-  it('drops the full streaming-input lifecycle for updateWorkingMemory', () => {
+  it('detects workflow tools by toolName prefix even with no prior tool-output', () => {
+    // No tool-output chunks at all: only the tool-call + a bare tool-result
+    // whose `result` is a scalar string. With no prior accumulated workflow
+    // state and no workflow-shaped payload, the accumulator simply passes the
+    // raw payload through (it has nothing to merge), but it must still mark
+    // the part as `result`.
     const out = reduce([
       startChunk(),
-      toolCallInputStreamingStartChunk('wm-2', 'updateWorkingMemory'),
-      toolCallDeltaChunk('wm-2', '{"memory":"'),
-      toolCallDeltaChunk('wm-2', 'state"}'),
-      toolCallInputStreamingEndChunk('wm-2'),
-      toolCallChunk('wm-2', 'updateWorkingMemory', { memory: 'state' }),
-      toolResultChunk('wm-2', { success: true }),
+      toolCallChunk('wf-1', 'workflow-myWorkflow', { foo: 'bar' }),
+      toolResultChunk('wf-1', { result: 'suh', runId: RUN_ID }),
     ]);
-    const assistant = out.find(m => m.role === 'assistant');
-    const toolParts = (assistant?.content.parts ?? []).filter(p => p.type === 'tool-invocation');
-    expect(toolParts).toHaveLength(0);
+
+    const toolPart = out
+      .flatMap(m => m.content.parts)
+      .find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    expect(toolPart.toolInvocation.state).toBe('result');
+    expect((toolPart.toolInvocation as { result: unknown }).result).toEqual({
+      result: 'suh',
+      runId: RUN_ID,
+    });
   });
 
-  it('keeps unrelated tool calls visible alongside the hidden updateWorkingMemory call', () => {
+  it('non-workflow tool-result still overwrites cleanly (no leakage)', () => {
+    // Guard against the broadened heuristic leaking into agent/plain tools.
     const out = reduce([
       startChunk(),
-      toolCallChunk('wm-3', 'updateWorkingMemory', { memory: 'x' }),
-      toolResultChunk('wm-3', { success: true }),
-      toolCallChunk('weather-1', 'getWeather', { city: 'Paris' }),
-      toolResultChunk('weather-1', { tempC: 21 }),
+      toolCallChunk('tc-1', 'search', { q: 'mastra' }),
+      toolResultChunk('tc-1', { hits: 3 }),
     ]);
-    const assistant = out.find(m => m.role === 'assistant');
-    const toolParts = (assistant?.content.parts ?? []).filter(
-      p => p.type === 'tool-invocation',
-    ) as MastraToolInvocationPart[];
-    expect(toolParts).toHaveLength(1);
-    expect(toolParts[0].toolInvocation.toolName).toBe('getWeather');
-  });
-
-  it('drops tool-result/tool-error follow-ups even when only `toolCallId` is present', () => {
-    // First call registers the toolCallId as hidden; the follow-up chunks then
-    // get filtered purely by id, matching how providers actually stream them.
-    const out = reduce([
-      startChunk(),
-      toolCallInputStreamingStartChunk('wm-4', 'updateWorkingMemory'),
-      toolErrorChunk('wm-4', 'boom'),
-    ]);
-    const assistant = out.find(m => m.role === 'assistant');
-    const toolParts = (assistant?.content.parts ?? []).filter(p => p.type === 'tool-invocation');
-    expect(toolParts).toHaveLength(0);
-    // metadata must not carry an errored tool either
-    expect(assistant?.content.metadata).not.toHaveProperty('requireApprovalMetadata');
+    const toolPart = out
+      .flatMap(m => m.content.parts)
+      .find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    expect(toolPart.toolInvocation.state).toBe('result');
+    // Plain scalar payload is preserved, no `steps`/`status`/`output` wrapper
+    expect((toolPart.toolInvocation as { result: unknown }).result).toEqual({ hits: 3 });
   });
 });

@@ -394,81 +394,6 @@ const isTemplateLiteralPassthrough = <T extends { type: string }>(
 ): chunk is T & { type: `agent-execution-event-${string}` | `workflow-execution-event-${string}` } =>
   chunk.type.startsWith('agent-execution-event-') || chunk.type.startsWith('workflow-execution-event-');
 
-// Tool names whose stream chunks must be suppressed end-to-end. Mirrors the
-// backend memory filter (`updateMessageToHideWorkingMemoryV2` in
-// `packages/memory/src/index.ts`) which strips `updateWorkingMemory`
-// tool-invocation parts before replay. Without this front-end filter, the
-// user would briefly see a working-memory tool call appear during streaming
-// and then disappear after refresh — a confusing live/persisted mismatch.
-const HIDDEN_TOOL_NAMES = new Set<string>(['updateWorkingMemory']);
-
-/**
- * Tracks `toolCallId`s that belong to hidden tools (currently
- * `updateWorkingMemory`). Registered on the first chunk that carries a
- * `toolName` for that call (`tool-call`, `tool-call-input-streaming-start`,
- * `tool-call-approval`, or `tool-call-suspended`) and consulted by every
- * subsequent chunk for that id (`tool-call-delta`, `tool-call-input-streaming-end`,
- * `tool-result`, `tool-error`, `tool-output`, background-task variants, etc.)
- * so they are dropped before they ever reach the switch.
- *
- * Entries are evicted on terminal chunks for the tool call (result/error/
- * background-task-completed/background-task-failed) to bound memory growth
- * across a session. A safety cap also evicts oldest entries if a stream
- * never terminates.
- */
-const hiddenToolCallIds = new Set<string>();
-const HIDDEN_TOOL_CALL_CAP = 256;
-
-const registerHiddenToolCall = (toolCallId: string | undefined): void => {
-  if (!toolCallId) return;
-  if (hiddenToolCallIds.size >= HIDDEN_TOOL_CALL_CAP) {
-    // FIFO eviction: drop the oldest entry so the registry can't grow without
-    // bound in clients that stream for a very long time without terminal chunks.
-    const oldest = hiddenToolCallIds.values().next().value;
-    if (oldest) hiddenToolCallIds.delete(oldest);
-  }
-  hiddenToolCallIds.add(toolCallId);
-};
-
-/**
- * Returns `true` for any chunk that targets a hidden tool (currently
- * `updateWorkingMemory`). Callers must drop the chunk so it never reaches the
- * main switch, mirroring the backend memory replay filter and keeping live
- * streaming output consistent with what users see after a refresh.
- */
-const isHiddenToolChunk = (chunk: ChunkType): boolean => {
-  const payload = (chunk as { payload?: { toolCallId?: string; toolName?: string } }).payload;
-  if (!payload) return false;
-
-  // Chunks that carry the tool name directly (e.g. `tool-call`,
-  // `tool-call-input-streaming-start`, `tool-call-approval`,
-  // `tool-call-suspended`): register the call id so later chunks that only
-  // carry `toolCallId` can be filtered too.
-  if (payload.toolName && HIDDEN_TOOL_NAMES.has(payload.toolName)) {
-    registerHiddenToolCall(payload.toolCallId);
-    return true;
-  }
-
-  // Follow-up chunks (deltas, streaming-end, results, errors, outputs,
-  // background-task lifecycle, suspensions) only carry `toolCallId`; match
-  // against the registry populated above.
-  if (payload.toolCallId && hiddenToolCallIds.has(payload.toolCallId)) {
-    // Best-effort cleanup on terminal chunks so the registry doesn't leak
-    // across long-lived sessions.
-    if (
-      chunk.type === 'tool-result' ||
-      chunk.type === 'tool-error' ||
-      chunk.type === 'background-task-completed' ||
-      chunk.type === 'background-task-failed'
-    ) {
-      hiddenToolCallIds.delete(payload.toolCallId);
-    }
-    return true;
-  }
-
-  return false;
-};
-
 /**
  * Narrow the chunk to the `data-${string}` family. Used so the trailing
  * exhaustiveness check can prove the switch covers every remaining variant.
@@ -491,17 +416,6 @@ export interface AccumulateChunkArgs {
  */
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
   const result = [...conversation];
-
-  // ----- Hidden internal tool calls (e.g. `updateWorkingMemory`) -----
-  // The backend memory layer hides `updateWorkingMemory` tool invocations on
-  // replay (see `updateMessageToHideWorkingMemoryV2` in
-  // `packages/memory/src/index.ts`). We mirror that here during streaming so
-  // the live UI doesn't flash a working-memory tool call that disappears on
-  // refresh. `isHiddenToolChunk` also registers the `toolCallId` so the rest
-  // of the call's chunks (deltas, end, result, errors) are filtered too.
-  if (isHiddenToolChunk(chunk)) {
-    return result;
-  }
 
   // ----- Template-literal passthrough chunk types from NetworkChunkType -----
   // `agent-execution-event-*` and `workflow-execution-event-*` carry nested
@@ -1054,11 +968,56 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           };
         } else {
           const resultObj = payloadResult as { result?: { steps?: unknown }; childMessages?: unknown } | undefined;
-          const isWorkflow = Boolean(resultObj?.result?.steps);
+          // A workflow tool-result is a *finalization* event, not a replacement.
+          // The accumulated `WorkflowStreamResult` (steps, status, etc.) was
+          // built up by prior `tool-output` chunks via
+          // `mapWorkflowStreamChunkToWatchResult`. The terminal `tool-result`
+          // payload for dynamic workflows is often just `{ result: <scalar>, runId }`
+          // with no `steps` field, so detecting workflows purely from the new
+          // payload would clobber that state. Also check the tool name and any
+          // previously-accumulated `WorkflowStreamResult`-shaped result.
+          const existingResult =
+            toolPart.toolInvocation.state === 'partial-call' || toolPart.toolInvocation.state === 'result'
+              ? (toolPart.toolInvocation as { result?: unknown }).result
+              : undefined;
+          const existingLooksLikeWorkflow = Boolean(
+            existingResult && typeof existingResult === 'object' && 'steps' in (existingResult as object),
+          );
+          const isWorkflow =
+            Boolean(resultObj?.result?.steps) ||
+            toolName?.startsWith('workflow-') ||
+            existingLooksLikeWorkflow;
           const isAgent = chunk.from === 'AGENT';
           let output: unknown;
           if (isWorkflow) {
-            output = resultObj?.result;
+            // Prefer merging the terminal payload into the accumulated
+            // workflow state so the UI keeps its step history.
+            const accumulated =
+              existingLooksLikeWorkflow && existingResult && typeof existingResult === 'object'
+                ? (existingResult as Record<string, unknown>)
+                : undefined;
+            const payloadWorkflow =
+              resultObj?.result && typeof resultObj.result === 'object'
+                ? (resultObj.result as Record<string, unknown>)
+                : undefined;
+            if (accumulated || payloadWorkflow) {
+              output = {
+                ...(accumulated ?? {}),
+                ...(payloadWorkflow ?? {}),
+                // Preserve `steps` from accumulated state when the terminal
+                // payload doesn't carry them.
+                steps:
+                  (payloadWorkflow?.steps as unknown) ?? (accumulated?.steps as unknown) ?? [],
+                status:
+                  (payloadWorkflow?.status as unknown) ??
+                  (accumulated?.status as unknown) ??
+                  'success',
+                // Surface the terminal scalar output without losing history.
+                output: payloadResult,
+              };
+            } else {
+              output = payloadResult;
+            }
           } else if (isAgent) {
             const existingOutput = toolPart.toolInvocation.state === 'result' ? toolPart.toolInvocation.result : undefined;
             const existingChild = (existingOutput as { childMessages?: unknown[] } | undefined)?.childMessages;
