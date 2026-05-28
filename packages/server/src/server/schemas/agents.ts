@@ -2,6 +2,15 @@ import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 
+export {
+  generateSpeechBodySchema,
+  getListenerResponseSchema,
+  speakResponseSchema,
+  transcribeSpeechBodySchema,
+  transcribeSpeechResponseSchema,
+  voiceSpeakersResponseSchema,
+} from '@internal/voice/routes';
+
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
@@ -16,113 +25,6 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 );
 const jsonRecordSchema = z.record(z.string(), jsonValueSchema);
 
-const commonMessageFieldsSchema = {
-  id: z.string().optional(),
-  name: z.string().optional(),
-  metadata: jsonRecordSchema.optional(),
-  providerMetadata: jsonRecordSchema.optional(),
-  providerOptions: jsonRecordSchema.optional(),
-  experimental_providerMetadata: jsonRecordSchema.optional(),
-};
-
-const textContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('text'),
-  text: z.string(),
-});
-
-const imageContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('image'),
-  image: z.union([z.string(), jsonRecordSchema]),
-  mediaType: z.string().optional(),
-  mimeType: z.string().optional(),
-});
-
-const fileContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('file'),
-  data: z.union([z.string(), jsonRecordSchema]).optional(),
-  file: z.union([z.string(), jsonRecordSchema]).optional(),
-  url: z.string().optional(),
-  mediaType: z.string().optional(),
-  mimeType: z.string().optional(),
-  filename: z.string().optional(),
-});
-
-const toolCallContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('tool-call'),
-  toolCallId: z.string(),
-  toolName: z.string(),
-  args: jsonValueSchema.optional(),
-  input: jsonValueSchema.optional(),
-});
-
-const toolResultContentPartSchema = z.object({
-  ...commonMessageFieldsSchema,
-  type: z.literal('tool-result'),
-  toolCallId: z.string(),
-  toolName: z.string().optional(),
-  result: jsonValueSchema.optional(),
-  output: jsonValueSchema.optional(),
-});
-
-const messageContentPartSchema = z.union([
-  textContentPartSchema,
-  imageContentPartSchema,
-  fileContentPartSchema,
-  toolCallContentPartSchema,
-  toolResultContentPartSchema,
-]);
-const messageContentSchema = z.union([z.string(), z.array(messageContentPartSchema)]);
-
-const modelMessageSchema = z.object({
-  ...commonMessageFieldsSchema,
-  role: z.enum(['system', 'user', 'assistant', 'tool']),
-  content: messageContentSchema,
-});
-
-const uiMessageSchema = z.object({
-  ...commonMessageFieldsSchema,
-  role: z.enum(['system', 'user', 'assistant', 'tool', 'data']),
-  content: messageContentSchema.optional(),
-  parts: z.array(messageContentPartSchema).optional(),
-  createdAt: z.union([z.string(), z.date()]).optional(),
-});
-
-const mastraDBMessagePartSchema = z.object({ type: z.string() }).passthrough();
-const mastraDBMessageContentSchema = z
-  .object({
-    format: z.literal(2),
-    parts: z.array(mastraDBMessagePartSchema),
-    content: messageContentSchema.optional(),
-    experimental_attachments: z.array(jsonRecordSchema).optional(),
-    toolInvocations: z.array(jsonRecordSchema).optional(),
-    reasoning: z.string().optional(),
-    annotations: z.array(jsonValueSchema).optional(),
-    metadata: jsonRecordSchema.optional(),
-    providerMetadata: jsonRecordSchema.optional(),
-  })
-  .passthrough();
-const mastraDBMessageSchema = z.object({
-  id: z.string(),
-  role: z.enum(['system', 'user', 'assistant', 'signal']),
-  createdAt: z.union([z.string(), z.date()]),
-  threadId: z.string().optional(),
-  resourceId: z.string().optional(),
-  type: z.string().optional(),
-  content: mastraDBMessageContentSchema,
-});
-
-const messageInputSchema = z.union([modelMessageSchema, uiMessageSchema, mastraDBMessageSchema]);
-const messageListInputSchema = z.union([
-  z.string(),
-  z.array(z.string()),
-  messageInputSchema,
-  z.array(messageInputSchema),
-]);
-
 const signalAttributesSchema = z.record(
   z.string(),
   z.union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()]),
@@ -135,19 +37,32 @@ const baseSignalSchema = z.object({
   attributes: signalAttributesSchema.optional(),
 });
 
-const userMessageSignalSchema = baseSignalSchema.extend({
-  type: z.literal('user-message'),
-  contents: messageListInputSchema,
+const partProviderOptionsSchema = z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional();
+
+const signalTextPartSchema = z.object({
+  type: z.literal('text'),
+  text: z.string(),
+  providerOptions: partProviderOptionsSchema,
 });
 
-const contextSignalSchema = baseSignalSchema.extend({
-  type: z.string().refine(type => type !== 'user-message', {
-    message: 'non-user-message signals must not use type "user-message"',
-  }),
-  contents: z.string(),
+const signalFilePartSchema = z.object({
+  type: z.literal('file'),
+  data: z.string(),
+  mediaType: z.string(),
+  filename: z.string().optional(),
+  providerOptions: partProviderOptionsSchema,
 });
 
-const agentSignalSchema = z.union([userMessageSignalSchema, contextSignalSchema]);
+const userMessageSignalContentsSchema = z.union([
+  z.string(),
+  z.array(z.union([signalTextPartSchema, signalFilePartSchema])),
+]);
+
+const agentSignalSchema = baseSignalSchema.extend({
+  type: z.string(),
+  contents: userMessageSignalContentsSchema,
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+});
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
@@ -264,6 +179,7 @@ const modelConfigSchema = z.object({
 export const serializedAgentSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   instructions: systemMessageSchema.optional(),
   tools: z.record(z.string(), serializedToolSchema),
   agents: z.record(z.string(), serializedAgentDefinitionSchema),
@@ -297,6 +213,10 @@ export const providerSchema = z.object({
   name: z.string(),
   label: z.string().optional(),
   description: z.string().optional(),
+  envVar: z.union([z.string(), z.array(z.string())]),
+  connected: z.boolean(),
+  docUrl: z.string().optional(),
+  models: z.array(z.string()),
 });
 
 /**
@@ -379,6 +299,7 @@ export const agentExecutionBodySchema = z
             z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
           )
           .optional(),
+        defaultStatus: z.enum(['draft', 'published']).optional(),
       })
       .optional(),
 
@@ -474,18 +395,6 @@ export const executeToolBodySchema = executeToolDataBodySchema.extend({
 export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
   requestContext: z.record(z.string(), z.any()).optional(),
 });
-
-/**
- * Response schema for voice speakers endpoint
- * Flexible to accommodate provider-specific metadata
- */
-export const voiceSpeakersResponseSchema = z.array(
-  z
-    .object({
-      voiceId: z.string(),
-    })
-    .passthrough(), // Allow provider-specific fields like name, language, etc.
-);
 
 // ============================================================================
 // Tool Approval Schemas
@@ -588,44 +497,12 @@ export const updateAgentModelInModelListBodySchema = z.object({
 export const modelManagementResponseSchema = messageResponseSchema;
 
 // ============================================================================
-// Voice Schemas
+// Response schemas for agent generation endpoints
+// These return AI SDK types which have complex structures
 // ============================================================================
 
-/**
- * Body schema for generating speech
- */
-export const generateSpeechBodySchema = z.object({
-  text: z.string(),
-  speakerId: z.string().optional(),
-});
-
-/**
- * Body schema for transcribing speech
- */
-export const transcribeSpeechBodySchema = z.object({
-  audio: z.any(), // Buffer
-  options: z.record(z.string(), z.any()).optional(),
-});
-
-/**
- * Response schema for transcribe speech
- */
-export const transcribeSpeechResponseSchema = z.object({
-  text: z.string(),
-});
-
-/**
- * Response schema for get listener
- */
-export const getListenerResponseSchema = z.any(); // Listener info structure varies
-
-/**
- * Response schema for agent generation endpoints
- * These return AI SDK types which have complex structures
- */
 export const generateResponseSchema = z.any(); // AI SDK GenerateResult type
 export const streamResponseSchema = z.any(); // AI SDK StreamResult type
-export const speakResponseSchema = z.any(); // Voice synthesis result
 export const executeToolResponseSchema = z.any(); // Tool execution result varies by tool
 
 // ============================================================================

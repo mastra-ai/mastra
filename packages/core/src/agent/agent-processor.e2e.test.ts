@@ -1,17 +1,32 @@
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { getLLMTestMode } from '@internal/llm-recorder';
+import { defaultNameGenerator, getLLMRecordingsDir, getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from './index';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
-const mock = createGatewayMock();
-beforeAll(() => mock.start());
-afterAll(() => mock.saveAndStop());
+let mockGateway: any;
+beforeEach(async c => {
+  mockGateway = createGatewayMock({
+    maxChunkDelay: 100,
+    name: `test-${Buffer.from(
+      // use stable 8-char hash from c.task.name
+      createHash('sha256').update(c.task.name).digest('hex').slice(0, 8),
+    )}`,
+    exactMatch: true,
+    recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
+  });
+  await mockGateway.start();
+});
+afterEach(async () => {
+  await mockGateway.saveAndStop();
+});
 
 describe('StructuredOutputProcessor Integration Tests', () => {
   function testStructuredOutput(model: LanguageModelV2) {

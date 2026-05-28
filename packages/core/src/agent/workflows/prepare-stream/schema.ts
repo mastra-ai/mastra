@@ -11,6 +11,7 @@ import type {
 import type { RequestContext } from '../../../request-context';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
+import type { CreatedAgentSignal } from '../../signals';
 import type { AgentExecuteOnFinishOptions } from '../../types';
 
 export type AgentCapabilities = {
@@ -91,6 +92,8 @@ export const prepareMemoryStepOutputSchema = z.object({
       processorId: z.string().optional(),
     })
     .optional(),
+  /** Signal inputs already stored in the initial message list that still need stream data-part echoes. */
+  initialSignalEchoes: z.array(z.custom<CreatedAgentSignal>()).optional(),
 });
 
 export type PrepareMemoryStepOutput = z.infer<typeof prepareMemoryStepOutputSchema>;

@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "name": "test-426c5ef4",
+    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle generation with structured output",
+    "createdAt": "2026-05-18T10:50:49.845Z",
+    "updatedAt": "2026-05-20T14:04:35.487Z"
+  },
+  "recordings": [
+    {
+      "hash": "c168448cb13506fc",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["benefits"],
+              "type": "object",
+              "properties": {
+                "benefits": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "List 3 benefits of exercise"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You provide structured responses"
+              }
+            ]
+          }
+        },
+        "timestamp": 1779285874612
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Wed, 20 May 2026 14:04:35 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=844",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n  \"benefits\": [\"Improved cardiovascular health\", \"Weight management\", \"Boosted mood and reduced stress\"]\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.037882792949676516
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 15,
+            "candidatesTokenCount": 25,
+            "totalTokenCount": 40,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 15
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 25
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "cr8Nav-NLbeBnsEPoqiQsQI"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

@@ -28,3 +28,13 @@ packages/playground/e2e/**/*.aria.yml
 packages/codemod/src/test/__fixtures__/**/*.ts
 packages/mcp-docs-server/.docs/**
 packages/cli/src/commands/api/route-metadata.generated.ts
+
+# Generated CommonJS declaration shims
+client-sdks/ai-sdk/**/*.d.ts
+packages/_internal-core/**/*.d.ts
+packages/core/**/*.d.ts
+!packages/core/src/**/*.d.ts
+packages/server/**/*.d.ts
+stores/clickhouse/docker/keeper.test.xml
+
+**/coverage/**

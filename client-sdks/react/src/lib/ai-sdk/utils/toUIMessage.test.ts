@@ -1449,6 +1449,681 @@ describe('toUIMessage', () => {
     });
   });
 
+  describe('toUIMessage - reasoning-start chunk', () => {
+    const baseMetadata: MastraUIMessageMetadata = {
+      mode: 'stream',
+    };
+
+    const makeStartChunk = (providerMetadata?: any): ChunkType => ({
+      type: 'reasoning-start',
+      payload: {
+        id: 'reasoning-1',
+        ...(providerMetadata !== undefined ? { providerMetadata } : {}),
+      },
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+    });
+
+    it('should create a new assistant message when the conversation is empty', () => {
+      const result = toUIMessage({
+        chunk: makeStartChunk({ model: { name: 'o1' } }),
+        conversation: [],
+        metadata: baseMetadata,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: '',
+            state: 'streaming',
+            providerMetadata: { model: { name: 'o1' } },
+          },
+        ],
+        metadata: baseMetadata,
+      });
+      expect(result[0].id).toMatch(/^reasoning-run-123/);
+    });
+
+    it('should create a new assistant message when the tail message is a user message', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'user-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'hi' }],
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeStartChunk({ model: { name: 'o1' } }),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toBe(conversation[0]);
+      expect(result[1]).toMatchObject({
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: '',
+            state: 'streaming',
+            providerMetadata: { model: { name: 'o1' } },
+          },
+        ],
+        metadata: baseMetadata,
+      });
+      expect(result[1].id).toMatch(/^reasoning-run-123/);
+    });
+
+    it('should append a new empty streaming reasoning part to an existing assistant message', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Hello.',
+              state: 'streaming',
+              textId: 'text-1',
+            } as MastraExtendedTextPart,
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+      const originalParts = conversation[0].parts;
+
+      const result = toUIMessage({
+        chunk: makeStartChunk({ anthropic: { cacheControl: 'ephemeral' } }),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('msg-1');
+      expect(result[0].metadata).toEqual(baseMetadata);
+      expect(result[0].parts).toHaveLength(2);
+      expect(result[0].parts[0]).toEqual(originalParts[0]);
+      expect(result[0].parts[1]).toEqual({
+        type: 'reasoning',
+        text: '',
+        state: 'streaming',
+        providerMetadata: { anthropic: { cacheControl: 'ephemeral' } },
+      });
+
+      // immutability: input conversation arrays/parts are not mutated by reference
+      expect(conversation[0].parts).toBe(originalParts);
+      expect(conversation[0].parts).toHaveLength(1);
+      expect(result[0].parts).not.toBe(conversation[0].parts);
+    });
+
+    it('should always open a new reasoning part even when the previous part is already a reasoning part', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'First thought.',
+              state: 'done',
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeStartChunk({ model: { name: 'o1' } }),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts).toHaveLength(2);
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'reasoning',
+        text: 'First thought.',
+        state: 'done',
+      });
+      expect(result[0].parts[1]).toEqual({
+        type: 'reasoning',
+        text: '',
+        state: 'streaming',
+        providerMetadata: { model: { name: 'o1' } },
+      });
+    });
+
+    it('should append a reasoning part after a dynamic-tool part preserving order', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: { query: 'weather' },
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeStartChunk(),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts.map(part => part.type)).toEqual(['dynamic-tool', 'reasoning']);
+      expect(result[0].parts[1]).toEqual({
+        type: 'reasoning',
+        text: '',
+        state: 'streaming',
+        providerMetadata: undefined,
+      });
+    });
+
+    it('should produce a reasoning part with providerMetadata: undefined when payload has none', () => {
+      const result = toUIMessage({
+        chunk: makeStartChunk(),
+        conversation: [],
+        metadata: baseMetadata,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: '',
+        state: 'streaming',
+        providerMetadata: undefined,
+      });
+    });
+  });
+
+  describe('toUIMessage - reasoning-end chunk', () => {
+    const baseMetadata: MastraUIMessageMetadata = {
+      mode: 'stream',
+    };
+
+    const makeEndChunk = (providerMetadata?: any): ChunkType => ({
+      type: 'reasoning-end',
+      payload: {
+        id: 'reasoning-1',
+        ...(providerMetadata !== undefined ? { providerMetadata } : {}),
+      },
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+    });
+
+    it('should return the conversation unchanged when the conversation is empty', () => {
+      const conversation: MastraUIMessage[] = [];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk({ model: { name: 'o1' } }),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result).toEqual(conversation);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should return the conversation unchanged when the tail message is a user message', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'user-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'hi' }],
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk({ model: { name: 'o1' } }),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result).toEqual(conversation);
+      // tail message is preserved by reference (not rewritten)
+      expect(result[0]).toBe(conversation[0]);
+    });
+
+    it('should return the conversation unchanged when the assistant message has no parts', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk(),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result).toEqual(conversation);
+      expect(result[0]).toBe(conversation[0]);
+    });
+
+    it('should return the conversation unchanged when no reasoning part exists', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Hello.',
+              state: 'streaming',
+              textId: 'text-1',
+            } as MastraExtendedTextPart,
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk(),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result).toEqual(conversation);
+      expect(result[0]).toBe(conversation[0]);
+    });
+
+    it('should return the conversation unchanged when all reasoning parts are already done', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'First thought.',
+              state: 'done',
+            },
+            {
+              type: 'reasoning',
+              text: 'Second thought.',
+              state: 'done',
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk({ model: { name: 'o1' } }),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result).toEqual(conversation);
+      expect(result[0]).toBe(conversation[0]);
+    });
+
+    it('should transition only the last streaming reasoning part to done (findLastIndex semantics)', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'First thought.',
+              state: 'streaming',
+            },
+            {
+              type: 'reasoning',
+              text: 'Second thought.',
+              state: 'streaming',
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk(),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts).toHaveLength(2);
+      expect(result[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: 'First thought.',
+        state: 'streaming',
+      });
+      expect(result[0].parts[1]).toEqual({
+        type: 'reasoning',
+        text: 'Second thought.',
+        state: 'done',
+      });
+    });
+
+    it('should close the streaming reasoning part even when later parts follow it', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Thinking...',
+              state: 'streaming',
+              providerMetadata: { anthropic: { cacheControl: 'ephemeral' } },
+            },
+            {
+              type: 'text',
+              text: 'Answer in progress.',
+              state: 'streaming',
+              textId: 'text-1',
+            } as MastraExtendedTextPart,
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: { query: 'weather' },
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk(),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts).toHaveLength(3);
+      expect(result[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: 'Thinking...',
+        state: 'done',
+        providerMetadata: { anthropic: { cacheControl: 'ephemeral' } },
+      });
+      // later parts unchanged
+      expect(result[0].parts[1]).toEqual(conversation[0].parts[1]);
+      expect(result[0].parts[2]).toEqual(conversation[0].parts[2]);
+    });
+
+    it('should write chunk providerMetadata through verbatim when the existing part has none', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Done thinking.',
+              state: 'streaming',
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk({ usage: { reasoningTokens: 42 } }),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: 'Done thinking.',
+        state: 'done',
+        providerMetadata: { usage: { reasoningTokens: 42 } },
+      });
+    });
+
+    it('should preserve existing part providerMetadata when chunk has none', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Done thinking.',
+              state: 'streaming',
+              providerMetadata: { model: { name: 'o1' } },
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk(),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: 'Done thinking.',
+        state: 'done',
+        providerMetadata: { model: { name: 'o1' } },
+      });
+    });
+
+    it('should override existing providerMetadata keys with chunk providerMetadata on collision', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Done thinking.',
+              state: 'streaming',
+              providerMetadata: { model: { name: 'o1' }, kept: { value: true } },
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk({ model: { name: 'o3' }, added: { extra: 'x' } }),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: 'Done thinking.',
+        state: 'done',
+        providerMetadata: { model: { name: 'o3' }, kept: { value: true }, added: { extra: 'x' } },
+      });
+    });
+
+    it('should omit providerMetadata entirely when neither side provides any', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Done thinking.',
+              state: 'streaming',
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk(),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: 'Done thinking.',
+        state: 'done',
+      });
+      expect(result[0].parts[0]).not.toHaveProperty('providerMetadata');
+    });
+
+    it('should preserve the accumulated text on the streaming reasoning part', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'A long chain of thought built up over multiple deltas.',
+              state: 'streaming',
+            },
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk(),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'reasoning',
+        text: 'A long chain of thought built up over multiple deltas.',
+        state: 'done',
+      });
+    });
+
+    it('should preserve the assistant message id and metadata', () => {
+      const customMetadata: MastraUIMessageMetadata = {
+        mode: 'stream',
+        status: 'warning',
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-keep-me',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Hmm.',
+              state: 'streaming',
+            },
+          ],
+          metadata: customMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: makeEndChunk(),
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].id).toBe('msg-keep-me');
+      expect(result[0].metadata).toEqual(customMetadata);
+    });
+  });
+
+  describe('toUIMessage - reasoning sequence (start -> delta -> end)', () => {
+    const baseMetadata: MastraUIMessageMetadata = {
+      mode: 'stream',
+    };
+
+    it('should produce a single coherent done reasoning part with accumulated text and merged metadata', () => {
+      let conversation: MastraUIMessage[] = [];
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'reasoning-start',
+          payload: {
+            id: 'reasoning-1',
+            providerMetadata: { model: { name: 'o1' } },
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'reasoning-delta',
+          payload: {
+            id: 'reasoning-1',
+            text: 'Let me think',
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'reasoning-delta',
+          payload: {
+            id: 'reasoning-1',
+            text: ' about this.',
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'reasoning-end',
+          payload: {
+            id: 'reasoning-1',
+            providerMetadata: { usage: { reasoningTokens: 7 } },
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(conversation).toHaveLength(1);
+      expect(conversation[0].role).toBe('assistant');
+      expect(conversation[0].parts).toHaveLength(1);
+      expect(conversation[0].parts[0]).toEqual({
+        type: 'reasoning',
+        text: 'Let me think about this.',
+        state: 'done',
+        providerMetadata: {
+          model: { name: 'o1' },
+          usage: { reasoningTokens: 7 },
+        },
+      });
+    });
+  });
+
   describe('toUIMessage - tool-call chunk', () => {
     const baseMetadata: MastraUIMessageMetadata = {
       mode: 'stream',

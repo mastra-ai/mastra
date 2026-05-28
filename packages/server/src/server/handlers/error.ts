@@ -1,3 +1,6 @@
+import { isModelNotAllowedError } from '@mastra/core/agent-builder/ee';
+import type { ZodError } from 'zod';
+
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import type { ApiError } from '../types';
@@ -6,11 +9,30 @@ import type { ApiError } from '../types';
  * Duck-typed interface for ZodError-like objects.
  * Note: Zod v4 uses PropertyKey[] (string | number | symbol) for path.
  */
-interface ZodErrorLike {
+export interface ZodErrorLike {
   issues: Array<{
     path: PropertyKey[];
     message: string;
   }>;
+}
+
+/**
+ * Structural check for ZodError instances.
+ *
+ * Avoids `instanceof ZodError` because consumers can resolve `'zod'` to a
+ * different package instance (e.g. `zod@^3`) than the one a server adapter is
+ * bundled with (`zod@^4`). In that case `instanceof` is false and validation
+ * errors fall through to a generic response that drops field-path information.
+ *
+ * See https://github.com/mastra-ai/mastra/issues/17167.
+ */
+export function isZodError(error: unknown): error is ZodError<any> {
+  return (
+    !!error &&
+    typeof error === 'object' &&
+    (error as { name?: unknown }).name === 'ZodError' &&
+    Array.isArray((error as { issues?: unknown }).issues)
+  );
 }
 
 /**
@@ -34,6 +56,27 @@ export function formatZodError(
 
 // Helper to handle errors consistently
 export function handleError(error: unknown, defaultMessage: string): never {
+  if (isModelNotAllowedError(error)) {
+    const body = {
+      error: {
+        code: error.code,
+        message: error.message,
+        allowed: error.allowed,
+        attempted: error.attempted,
+        offendingLabel: error.offendingLabel,
+      },
+    };
+    const res = new Response(JSON.stringify(body), {
+      status: 422,
+      headers: { 'content-type': 'application/json' },
+    });
+    throw new HTTPException(422, {
+      res,
+      message: error.message,
+      cause: error,
+    });
+  }
+
   const apiError = error as ApiError;
 
   const apiErrorStatus = apiError.status || apiError.details?.status || 500;

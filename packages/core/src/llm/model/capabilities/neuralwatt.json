@@ -1,0 +1,11 @@
+{
+  "attachment": [
+    "Qwen/Qwen3.6-35B-A3B",
+    "kimi-k2.5-fast",
+    "kimi-k2.6-fast",
+    "mistralai/Devstral-Small-2-24B-Instruct-2512",
+    "moonshotai/Kimi-K2.5",
+    "moonshotai/Kimi-K2.6",
+    "qwen3.6-35b-fast"
+  ]
+}
