@@ -149,9 +149,36 @@ new MastraEditor({
 })
 ```
 
+## Builder Agent model
+
+The `createBuilderAgent()` factory creates the chat agent that powers the Builder's create-via-conversation flow. It defaults to `openai/gpt-5.5`, but accepts any model supported by the Mastra model router.
+
+```typescript title="src/mastra/index.ts"
+import { createBuilderAgent } from '@mastra/editor/ee'
+
+const builderAgent = createBuilderAgent({
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+})
+```
+
+Pass a config object for custom endpoints:
+
+```typescript title="src/mastra/index.ts"
+const builderAgent = createBuilderAgent({
+  model: {
+    id: 'my-provider/my-model',
+    url: 'https://api.my-provider.com/v1',
+    apiKey: process.env.MY_PROVIDER_API_KEY,
+  },
+})
+```
+
+This model controls the Builder Agent itself. To control which models end users can select for the agents they create, use the [model policy](/docs/agent-builder/model-policy).
+
 ## Related
 
 - [Model policy](/docs/agent-builder/model-policy) — pin the allowed models and default model.
+- [Custom gateways](/models/gateways/custom-gateways) — implement a `MastraModelGateway` for private providers.
 - [Memory](/docs/agent-builder/memory) — set the default memory shape for new agents.
 - [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) — full property list.
 - [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — every field on `configuration.agent`.
