@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -11,6 +11,11 @@ const binPath = join(currentDir, '..', 'bin', 'mastra.mjs');
 async function writeFixtureFile(path: string, content: string) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content);
+}
+
+async function writeFakeTsx(path: string) {
+  await writeFixtureFile(path, '#!/usr/bin/env node\nawait import(process.argv[2]);\n');
+  await chmod(path, 0o755);
 }
 
 describe('mastra bin source-mode guard', () => {
@@ -42,6 +47,7 @@ describe('mastra bin source-mode guard', () => {
       join(testDir, 'packages', 'cli', 'src', 'index.ts'),
       'console.log(process.env.MASTRA_SOURCE_MODE);\n',
     );
+    await writeFakeTsx(join(testDir, 'packages', 'cli', 'node_modules', '.bin', 'tsx'));
 
     const result = spawnSync(process.execPath, [fixtureBin], {
       cwd: testDir,
