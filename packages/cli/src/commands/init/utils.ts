@@ -1078,17 +1078,10 @@ Load the \`mastra\` skill BEFORE any Mastra work. Never rely on cached knowledge
   }
 
   content += `
-## Commands
-
-\`\`\`bash
-npm run dev   # Mastra Studio at localhost:4111 (use a separate terminal)
-npm run build # Production build (use a separate terminal)
-\`\`\`
-
 ## Rules
 
 - Register all agents, tools, workflows, and scorers in \`src/mastra/index.ts\`
-- Always use \`npm run dev\` / \`npm run build\` instead of \`mastra dev\` / \`mastra build\` directly
+- Use the \`dev\` and \`build\` scripts from \`package.json\` instead of running \`mastra dev\` / \`mastra build\` directly
 `;
 
   // Add MCP section if MCP server was configured
