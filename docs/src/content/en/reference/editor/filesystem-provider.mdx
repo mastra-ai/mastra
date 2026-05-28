@@ -1,0 +1,93 @@
+---
+title: "Reference: FilesystemProvider | Editor"
+description: "Reference for FilesystemProvider, the interface that registers a filesystem implementation with MastraEditor."
+packages:
+  - "@mastra/core"
+---
+
+# FilesystemProvider
+
+`FilesystemProvider` is the interface a package implements to register a filesystem with [`MastraEditor`](/reference/editor/mastra-editor). The editor calls `createFilesystem(config)` at workspace hydration time, using the `provider` id from the stored [`StorageWorkspaceRef`](/reference/editor/storage-workspace-ref) filesystem config as the lookup key.
+
+The built-in `local` filesystem provider is auto-registered. External providers (for example, S3 or GCS) are supplied via `MastraEditorConfig.filesystems`.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+import { s3FilesystemProvider } from '@mastra/s3'
+
+new MastraEditor({
+  filesystems: {
+    [s3FilesystemProvider.id]: s3FilesystemProvider,
+  },
+})
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Unique provider identifier (for example, `"local"`, `"s3"`). Must match `StorageFilesystemConfig.provider` on every stored workspace that uses this provider.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable name for UI display.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Short description shown in the workspace filesystem picker.',
+    isOptional: true,
+  },
+  {
+    name: 'configSchema',
+    type: 'Record<string, unknown>',
+    description: 'JSON Schema describing provider-specific configuration. Used by the UI to render config forms.',
+    isOptional: true,
+  },
+  {
+    name: 'createFilesystem',
+    type: '(config: TConfig) => WorkspaceFilesystem | Promise<WorkspaceFilesystem>',
+    description:
+      'Create a runtime `WorkspaceFilesystem` instance from the stored config. Called at workspace hydration time.',
+  },
+]}
+/>
+
+## Implementing a provider
+
+```typescript title="src/providers/my-filesystem.ts"
+import type { FilesystemProvider, WorkspaceFilesystem } from '@mastra/core/editor'
+
+export const myFilesystemProvider: FilesystemProvider<{ bucket: string; region: string }> = {
+  id: 'my-fs',
+  name: 'My Filesystem',
+  description: 'Object-store-backed filesystem.',
+  configSchema: {
+    type: 'object',
+    required: ['bucket', 'region'],
+    properties: {
+      bucket: { type: 'string' },
+      region: { type: 'string' },
+    },
+  },
+  async createFilesystem(config): Promise<WorkspaceFilesystem> {
+    return createMyFilesystem({ bucket: config.bucket, region: config.region })
+  },
+}
+```
+
+Once registered, admins can reference the provider from an inline workspace config or a stored [`StorageWorkspaceRef`](/reference/editor/storage-workspace-ref).
+
+## Related
+
+- [Workspace](/docs/agent-builder/workspace) — concept and worked examples.
+- [StorageWorkspaceRef](/reference/editor/storage-workspace-ref) — stored configuration consumed by `createFilesystem`.
+- [SandboxProvider](/reference/editor/sandbox-provider) — sibling provider for command execution.
+- [MastraEditor class](/reference/editor/mastra-editor) — provider registry.

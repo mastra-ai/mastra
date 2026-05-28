@@ -1,0 +1,572 @@
+{
+  "meta": {
+    "name": "test-eb24a3af",
+    "testFile": "packages/core/src/agent/__tests__/stopWhen.e2e.test.ts",
+    "testName": "agent.stopWhen > should contain the correct content in the step results for both stopWhen and stream.steps",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-05-20T15:37:37.279Z"
+  },
+  "recordings": [
+    {
+      "hash": "734fa648a9596737",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What should i be doing in Toronto today?"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "weatherTool",
+              "description": "Get weather for a location",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string"
+                  }
+                },
+                "required": ["location"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "planActivities",
+              "description": "Plan activities based on the weather",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "temperature": {
+                    "type": "string"
+                  }
+                },
+                "required": ["temperature"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1779291444603
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fec6c295b8034bb-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Wed, 20 May 2026 15:37:24 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "132",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_4f4379d203134562a26a0c5d1f937a82"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_054155564d398379006a0dd534ce3081978ff756974e7fb08e\",\"object\":\"response\",\"created_at\":1779291444,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_c",
+          "alls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get weather for a location\",\"name\":\"weatherTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Plan activities based on the weather\",\"name\":\"planActivities\",\"parameters\":{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"string\"}},\"required\":[\"temperature\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_054155564d398379006a0dd534ce3081978ff756974e7fb08e\",\"object\":\"response\",\"created_at\":1779291444,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_to",
+          "ol_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get weather for a location\",\"name\":\"weatherTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Plan activities based on the weather\",\"name\":\"planActivities\",\"parameters\":{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"string\"}},\"required\":[\"temperature\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_054155564d398379006a0dd53572fc819795b817507c77b4ce\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_XtPfC2ni3lmdr3vvF86txmjU\",\"name\":\"weatherTool\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_054155564d398379006a0dd53572fc819795b817507c77b4ce\",\"obfuscation\":\"IELOEAYCRcTrEX\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"location\",\"item_id\":\"fc_054155564d398379006a0dd53572fc819795b817507c77b4ce\",\"obfuscation\":\"QUanbDDc\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_054155564d398379006a0dd53572fc819795b817507c77b4ce\",\"obfuscation\":\"9kpQ0utHE0Nrz\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Toronto\",\"item_id\":\"fc_054155564d398379006a0dd53572fc819795b817507c77b4ce\",\"obfuscation\":\"fAK4gAhy3\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_054155564d398379006a0dd53572fc819795b817507c77b4ce\",\"obfuscation\":\"2YgdJnh9tYQ9dA\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_cal",
+          "l_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"location\\\":\\\"Toronto\\\"}\",\"item_id\":\"fc_054155564d398379006a0dd53572fc819795b817507c77b4ce\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_054155564d398379006a0dd53572fc819795b817507c77b4ce\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"location\\\":\\\"Toronto\\\"}\",\"call_id\":\"call_XtPfC2ni3lmdr3vvF86txmjU\",\"name\":\"weatherTool\"},\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_054155564d398379006a0dd534ce3081978ff756974e7fb08e\",\"object\":\"response\",\"created_at\":1779291444,\"status\":\"completed\",\"background\":false,\"completed_at\":1779291445,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_054155564d398379006a0dd53572fc819795b817507c77b4ce\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"location\\\":\\\"Toronto\\\"}\",\"call_id\":\"call_XtPfC2ni3lmdr3vvF86txmjU\",\"name\":\"weatherTool\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get weather for a location\",\"name\":\"weatherTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Plan activities based on the weather\",\"name\":\"planActivities\",\"parameters\":{\"type\":\"object\",\"properties\":{",
+          "\"temperature\":{\"type\":\"string\"}},\"required\":[\"temperature\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":110,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":15,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":125},\"user\":null,\"metadata\":{}},\"sequence_number\":10}\n\n"
+        ],
+        "chunkTimings": [0, 0, 0, 526, 4, 64, 0, 17, 4, 3, 92, 0, 6, 76, 0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "35b9e3cd48071fb2",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What should i be doing in Toronto today?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_054155564d398379006a0dd53572fc819795b817507c77b4ce"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_XtPfC2ni3lmdr3vvF86txmjU",
+              "output": "{\"temperature\":70,\"feelsLike\":65,\"humidity\":50,\"windSpeed\":10,\"windGust\":15,\"conditions\":\"sunny\",\"location\":\"Toronto\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "weatherTool",
+              "description": "Get weather for a location",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string"
+                  }
+                },
+                "required": ["location"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "planActivities",
+              "description": "Plan activities based on the weather",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "temperature": {
+                    "type": "string"
+                  }
+                },
+                "required": ["temperature"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1779291446555
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fec6c356c4134bb-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Wed, 20 May 2026 15:37:26 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "156",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_b78d6d96cc8a4000b856c9ea0ceb1a77"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_054155564d398379006a0dd536b6f481978db8ca66c6fd7788\",\"object\":\"response\",\"created_at\":1779291446,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_c",
+          "alls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get weather for a location\",\"name\":\"weatherTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Plan activities based on the weather\",\"name\":\"planActivities\",\"parameters\":{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"string\"}},\"required\":[\"temperature\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_054155564d398379006a0dd536b6f481978db8ca66c6fd7788\",\"object\":\"response\",\"created_at\":1779291446,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_to",
+          "ol_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get weather for a location\",\"name\":\"weatherTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Plan activities based on the weather\",\"name\":\"planActivities\",\"parameters\":{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"string\"}},\"required\":[\"temperature\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_scyI9YSELhhVsxiitlOPS3Kj\",\"name\":\"planActivities\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8\",\"obfuscation\":\"5aXaGAgczlbJw9\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"temperature\",\"item_id\":\"fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8\",\"obfuscation\":\"hLJwg\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8\",\"obfuscation\":\"9AY6WpbUPAJJi\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"70\",\"item_id\":\"fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8\",\"obfuscation\":\"CrH7e7gZ9ePoXq\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8\",\"obfuscation\":\"TYXxB5rLDDE72U\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_cal",
+          "l_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"temperature\\\":\\\"70\\\"}\",\"item_id\":\"fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"temperature\\\":\\\"70\\\"}\",\"call_id\":\"call_scyI9YSELhhVsxiitlOPS3Kj\",\"name\":\"planActivities\"},\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.completed\nd",
+          "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_054155564d398379006a0dd536b6f481978db8ca66c6fd7788\",\"object\":\"response\",\"created_at\":1779291446,\"status\":\"completed\",\"background\":false,\"completed_at\":1779291447,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"temperature\\\":\\\"70\\\"}\",\"call_id\":\"call_scyI9YSELhhVsxiitlOPS3Kj\",\"name\":\"planActivities\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get weather for a location\",\"name\":\"weatherTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Plan activities based on the weather\",\"name\":\"planActivities\",\"parameters\":{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"str",
+          "ing\"}},\"required\":[\"temperature\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":168,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":15,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":183},\"user\":null,\"metadata\":{}},\"sequence_number\":10}\n\n"
+        ],
+        "chunkTimings": [0, 0, 0, 880, 1, 55, 2, 24, 1, 0, 117, 0, 2, 238, 0, 0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "66c2852616ab5c9c",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What should i be doing in Toronto today?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_054155564d398379006a0dd53572fc819795b817507c77b4ce"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_XtPfC2ni3lmdr3vvF86txmjU",
+              "output": "{\"temperature\":70,\"feelsLike\":65,\"humidity\":50,\"windSpeed\":10,\"windGust\":15,\"conditions\":\"sunny\",\"location\":\"Toronto\"}"
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_054155564d398379006a0dd537bbfc8197a8a8fb966161a6a8"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_scyI9YSELhhVsxiitlOPS3Kj",
+              "output": "{\"activities\":\"Plan activities based on the weather\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "weatherTool",
+              "description": "Get weather for a location",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string"
+                  }
+                },
+                "required": ["location"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "planActivities",
+              "description": "Plan activities based on the weather",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "temperature": {
+                    "type": "string"
+                  }
+                },
+                "required": ["temperature"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1779291449507
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fec6c47da6734bb-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Wed, 20 May 2026 15:37:29 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "104",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_294d4684ff7c4624a895fe18906c115c"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_054155564d398379006a0dd539a834819796fd97dbd38e929e\",\"object\":\"response\",\"created_at\":1779291449,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_c",
+          "alls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get weather for a location\",\"name\":\"weatherTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Plan activities based on the weather\",\"name\":\"planActivities\",\"parameters\":{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"string\"}},\"required\":[\"temperature\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress",
+          "\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_054155564d398379006a0dd539a834819796fd97dbd38e929e\",\"object\":\"response\",\"created_at\":1779291449,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get weather for a location\",\"name\":\"weatherTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Plan activities based on the weather\",\"name\":\"planActivities\",\"parameters\":{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"string\"}},\"required\":[\"temperature\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"The\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Zuywd8YXfwcpZ\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" weather\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"TpFkdyuK\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"yUbK2lRB4DegA\",\"output_index\":0,\"sequence_number\":6}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Toronto\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"tHWOP5Jr\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" today\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"rHXwCOJbhm\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" is\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Du6Xk29BVIFeG\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sunny\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"BaYHzOapwl\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" with\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"mLCqa2lFf4X\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"TXAa5EFTM9Wi4r\",\"output_index\":0,\"sequence_number\":12}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" temperature\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"rTfh\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"GuwFH4Q24i1ex\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.output_te",
+          "xt.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"yWPDU9HmFYoIazW\",\"output_index\":0,\"sequence_number\":15}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"70\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"R8Nwo1CPeCqV5B\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"°F\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"mhgsgCuwBbSx80\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"afiPIgEhUMyRCWW\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Here\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"uEPC7QQqpf5\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" are\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"MXANHtE7Dece\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" some\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"7HF88n6Mvjq\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" activity\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"MkS1hDh\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" suggestions\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Bfm2\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\\n\\n\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"QqYi777Gba5xs\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"1\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"2NhRpSaoVaRjCwd\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"m0rZyZNmC3pOTZg\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"r298M5bisuGXz\",\"output_index\":0,\"sequence_number\":27}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Visit\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Rom1OZxX5CD\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"kiJZZNPYVM3Ui4\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Park\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"uKaxqUA7m8R\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"k0NHDbIwbpOIws\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"vreGT32FsLtLGad\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Enjoy\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"OSQVssq0lR\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"eI0c4dvNZizcWL\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" leisurely\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"WjrhK7\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" stroll\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Nx9RwEnHI\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"qUVFfPbv29427\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" have\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"0QTJQhIWJu5\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"goV9V4xv1HVOkX\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" picnic\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"OaxkuGBKX\",\"output_index\":0,\"sequence_number\":40}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"TtzjISVwInKdP\",\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" one\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"ZZTZsi7vioR3\",\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"JC9HG5SgTAZj1\",\"output_index\":0,\"sequence_number\":43}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Toronto\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"ULCFuGc5\",\"output_index\":0,\"sequence_number\":44}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"’s\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"HPrCIL1u9EbKAJ\",\"output_index\":0,\"sequence_number\":45}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" beautiful\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"IFunN7\",\"output_index\":0,\"sequence_number\":46}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" parks\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"O2OZeTp3OW\",\"output_index\":0,\"sequence_number\":47}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"uDIlGoaBDTwEj09\",\"output_index\":0,\"sequence_number\":48}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" like\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Naafv9kVndS\",\"output_index\":0,\"sequence_number\":49}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" High\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"qcw4K5XD9AX\",\"output_index\":0,\"sequence_number\":50}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Park\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"QRrkR1rlE5A\",\"output_index\":0,\"sequence_number\":51}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"HaK8Kq66CLWmF\",\"output_index\":0,\"sequence_number\":52}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Trinity\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"PGQWPhtm\",\"output_index\":0,\"sequence_number\":53}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Bell\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"rYHxFHUKCrH\",\"output_index\":0,\"sequence_number\":54}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"woods\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"ZPNXsexlSov\",\"output_index\":0,\"sequence_number\":55}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\\n\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"ywRGKGxOGRyIs8\",\"output_index\":0,\"sequence_number\":56}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"  \\n\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"eTOcTrLKxyPus\",\"output_index\":0,\"sequence_number\":57}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"2\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"FsyfpnXeh1sH8h2\",\"output_index\":0,\"sequence_number\":58}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"qY3SDzKjOqB3qUO\",\"output_index\":0,\"sequence_number\":59}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"rzagbWPyAIzd3\",\"output_index\":0,\"sequence_number\":60}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Outdoor\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"riiyzElyZ\",\"output_index\":0,\"sequence_number\":61}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Markets\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"uK2R23AU\",\"output_index\":0,\"sequence_number\":62}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"L3ihchoefHqDNn\",\"output_index\":0,\"sequence_number\":63}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"ZTwbUuWh1RcoAUg\",\"output_index\":0,\"sequence_number\":64}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Explore\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"B1jQ0i4S\",\"output_index\":0,\"sequence_number\":65}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" local\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"FnhMptuETs\",\"output_index\":0,\"sequence_number\":66}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" markets\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"JlZDLjGv\",\"output_index\":0,\"sequence_number\":67}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" such\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"KK7D6VrxmvV\",\"output_index\":0,\"sequence_number\":68}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" as\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"wt85qPFu0Uedk\",\"output_index\":0,\"sequence_number\":69}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"m4zl4jIeQBb4\",\"output_index\":0,\"sequence_number\":70}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" St\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Gls4wqGocsSTh\",\"output_index\":0,\"sequence_number\":71}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"02FzNcShssO7KXW\",\"output_index\":0,\"sequence_number\":72}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Lawrence\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"EARjZya\",\"output_index\":0,\"sequence_number\":73}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Market\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"AA9BduNco\",\"output_index\":0,\"sequence_number\":74}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"GPS8ycNkcjji3\",\"output_index\":0,\"sequence_number\":75}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"7jgrd9PeyJIq\",\"output_index\":0,\"sequence_number\":76}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Dist\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"p5f5wlIPTHU\",\"output_index\":0,\"sequence_number\":77}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"illery\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"gyuZDUToBA\",\"output_index\":0,\"sequence_number\":78}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" District\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"LH035cu\",\"output_index\":0,\"sequence_number\":79}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"fK5TRVTpfACgtUA\",\"output_index\":0,\"sequence_number\":80}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" where\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"wwYM8mFVDI\",\"output_index\":0,\"sequence_number\":81}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"aHQdb569XPFw\",\"output_index\":0,\"sequence_number\":82}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" can\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"1r6OSSdvbPFL\",\"output_index\":0,\"sequence_number\":83}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" find\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"eU3MPt8ftsR\",\"output_index\":0,\"sequence_number\":84}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" fresh\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"rzUlgBgiaJ\",\"output_index\":0,\"sequence_number\":85}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" produce\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"kPUUdwLe\",\"output_index\":0,\"sequence_number\":86}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"6glAWQfval7wLhT\",\"output_index\":0,\"sequence_number\":87}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" artisan\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"HNgzEc7H\",\"output_index\":0,\"sequence_number\":88}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" goods\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"aOrBUY8s73\",\"output_index\":0,\"sequence_number\":89}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"F6u5TYBmwVPA0Tw\",\"output_index\":0,\"sequence_number\":90}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" and\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"zsUeJDtuTF0P\",\"output_index\":0,\"sequence_number\":91}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" inviting\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"pzebF3h\",\"output_index\":0,\"sequence_number\":92}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" cafes\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"zmnF1kmcfI\",\"output_index\":0,\"sequence_number\":93}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\\n\\n\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"WSPeJAEy3O7jY\",\"output_index\":0,\"sequence_number\":94}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"3\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"O1Lk41y2tDwVq1R\",\"output_index\":0,\"sequence_number\":95}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"nVrOlyCsmUI5TjN\",\"output_index\":0,\"sequence_number\":96}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"1tjNzzEnz6IBu\",\"output_index\":0,\"sequence_number\":97}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Bike\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"UYZN5FrJvx0D\",\"output_index\":0,\"sequence_number\":98}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Ride\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"BpYypsPwdDX\",\"output_index\":0,\"sequence_number\":99}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"fYuCxqtw8sEHtm\",\"output_index\":0,\"sequence_number\":100}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"R9Cj116iKP5msoT\",\"output_index\":0,\"sequence_number\":101}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Take\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"xo9ihNKCfYK\",\"output_index\":0,\"sequence_number\":102}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" advantage\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"aS1LPi\",\"output_index\":0,\"sequence_number\":103}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"j6SjOvjB6FuVE\",\"output_index\":0,\"sequence_number\":104}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"aleQm8liu8Yn\",\"output_index\":0,\"sequence_number\":105}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" pleasant\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"nYcTKKk\",\"output_index\":0,\"sequence_number\":106}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" weather\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"EYT7MXx2\",\"output_index\":0,\"sequence_number\":107}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" by\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"MTaER4v6N08h8\",\"output_index\":0,\"sequence_number\":108}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" cycling\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"MapXetZy\",\"output_index\":0,\"sequence_number\":109}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" along\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"lnZBywCYzH\",\"output_index\":0,\"sequence_number\":110}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"BPtt7XLee3xx\",\"output_index\":0,\"sequence_number\":111}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" waterfront\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"4NSsk\",\"output_index\":0,\"sequence_number\":112}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"rXGRyJxZjxNJX\",\"output_index\":0,\"sequence_number\":113}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" through\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"nXIXM5Fo\",\"output_index\":0,\"sequence_number\":114}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"S670Vlo3vNEn\",\"output_index\":0,\"sequence_number\":115}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" city\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"otKgcPQzK4Z\",\"output_index\":0,\"sequence_number\":116}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"’s\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"l42g1t1qaVCyPa\",\"output_index\":0,\"sequence_number\":117}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" bike\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"XmaI19DYHAI\",\"output_index\":0,\"sequence_number\":118}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" trails\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"3Kt1JWTZZ\",\"output_index\":0,\"sequence_number\":119}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\\n\\n\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"bkyDXLXYkgoLp\",\"output_index\":0,\"sequence_number\":120}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"4\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"7KyaAQpFRC0BNiq\",\"output_index\":0,\"sequence_number\":121}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"8aenlQMqSQ7TfLc\",\"output_index\":0,\"sequence_number\":122}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"7QOEO8mhkNWId\",\"output_index\":0,\"sequence_number\":123}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"C\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"BO0xQ5MMvoCoiM8\",\"output_index\":0,\"sequence_number\":124}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ultural\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"XAsWsaIdq\",\"output_index\":0,\"sequence_number\":125}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Attractions\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"3H43\",\"output_index\":0,\"sequence_number\":126}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Xi2oNYtno5PRZL\",\"output_index\":0,\"sequence_number\":127}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"JEzQJQkj527pjLp\",\"output_index\":0,\"sequence_number\":128}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Visit\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"GKZf0zB8us\",\"output_index\":0,\"sequence_number\":129}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" outdoor\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"z10QE47q\",\"output_index\":0,\"sequence_number\":130}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" cultural\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"d362Pkj\",\"output_index\":0,\"sequence_number\":131}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" venues\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"DVyIl6Cdl\",\"output_index\":0,\"sequence_number\":132}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" like\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"1xy9licWQ9m\",\"output_index\":0,\"sequence_number\":133}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"2xAn4uNKrM1V\",\"output_index\":0,\"sequence_number\":134}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Art\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"3ESSMqU6tChi\",\"output_index\":0,\"sequence_number\":135}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Gallery\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"YertgdLR\",\"output_index\":0,\"sequence_number\":136}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"d05dMP4RluGhD\",\"output_index\":0,\"sequence_number\":137}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Ontario\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"gLROzf1O\",\"output_index\":0,\"sequence_number\":138}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"FzO5HQEoomPDp\",\"output_index\":0,\"sequence_number\":139}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"FcNdoaBjCIu4\",\"output_index\":0,\"sequence_number\":140}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Royal\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"5s0PXt6ef5\",\"output_index\":0,\"sequence_number\":141}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Ontario\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"XtWGizHk\",\"output_index\":0,\"sequence_number\":142}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Museum\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"GJBpBHzi1\",\"output_index\":0,\"sequence_number\":143}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"DNFb15bjOD07DWy\",\"output_index\":0,\"sequence_number\":144}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" which\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"nbHPA2Cld6\",\"output_index\":0,\"sequence_number\":145}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" may\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"6n6Jdxx8MCJ0\",\"output_index\":0,\"sequence_number\":146}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" have\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"m4luitxVOAO\",\"output_index\":0,\"sequence_number\":147}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" outdoor\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"YzNPNW2n\",\"output_index\":0,\"sequence_number\":148}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" installations\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"t9\",\"output_index\":0,\"sequence_number\":149}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"d5tUk5Qlh8duJ\",\"output_index\":0,\"sequence_number\":150}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" gardens\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"vBZnqGge\",\"output_index\":0,\"sequence_number\":151}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"OflbGJYguLf0\",\"output_index\":0,\"sequence_number\":152}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" can\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"hkBJpbLLCeOQ\",\"output_index\":0,\"sequence_number\":153}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" enjoy\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"AMDOC03Vlh\",\"output_index\":0,\"sequence_number\":154}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\\n\\n\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"0lqXKGaEnh6BB\",\"output_index\":0,\"sequence_number\":155}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"5\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"JRCgHKrRBjd2miB\",\"output_index\":0,\"sequence_number\":156}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"6HnzhsM0hMbhEvL\",\"output_index\":0,\"sequence_number\":157}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"GzK6IAJijNz5w\",\"output_index\":0,\"sequence_number\":158}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Outdoor\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"WQvQ7Kr94\",\"output_index\":0,\"sequence_number\":159}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Dining\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"KCj8GXVah\",\"output_index\":0,\"sequence_number\":160}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"MSCUueq6f11dvA\",\"output_index\":0,\"sequence_number\":161}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"UbXJHXulmCa6hUg\",\"output_index\":0,\"sequence_number\":162}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Relax\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"9kgGgEFIKG\",\"output_index\":0,\"sequence_number\":163}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" at\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"XHooo2IyNFWf2\",\"output_index\":0,\"sequence_number\":164}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"e5gSOCc05UAV6B\",\"output_index\":0,\"sequence_number\":165}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" rooftop\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"POzOOi0B\",\"output_index\":0,\"sequence_number\":166}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"SaYl3pQDpZYqX\",\"output_index\":0,\"sequence_number\":167}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" patio\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"mdoXqkTlAc\",\"output_index\":0,\"sequence_number\":168}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" restaurant\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"9MPxd\",\"output_index\":0,\"sequence_number\":169}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" and\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"FEgzYcFvmm15\",\"output_index\":0,\"sequence_number\":170}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" enjoy\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"irQdACmzME\",\"output_index\":0,\"sequence_number\":171}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"LRyIojaOxYFyh8\",\"output_index\":0,\"sequence_number\":172}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" meal\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Hg2SJDtJHWD\",\"output_index\":0,\"sequence_number\":173}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" while\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"C11mh3stgs\",\"output_index\":0,\"sequence_number\":174}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" soaking\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"qGD7OO3u\",\"output_index\":0,\"sequence_number\":175}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" up\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"2cZK89VwBvpo6\",\"output_index\":0,\"sequence_number\":176}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"fXDFkbD8SGak\",\"output_index\":0,\"sequence_number\":177}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sun\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"11RbArfSk9yw\",\"output_index\":0,\"sequence_number\":178}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\\n\\n\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Ezo2HVHE0qI0z\",\"output_index\":0,\"sequence_number\":179}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Whatever\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"Og3dgqav\",\"output_index\":0,\"sequence_number\":180}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" activity\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"tjvupcb\",\"output_index\":0,\"sequence_number\":181}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"AgVMfQNK5YiE\",\"output_index\":0,\"sequence_number\":182}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" choose\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"20aYE9WNK\",\"output_index\":0,\"sequence_number\":183}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"JwP2BmsXivxLq5t\",\"output_index\":0,\"sequence_number\":184}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" enjoy\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"RpVMC494Ne\",\"output_index\":0,\"sequence_number\":185}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"FwAJ5zVNHoaz\",\"output_index\":0,\"sequence_number\":186}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" lovely\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"tjAE2Sn16\",\"output_index\":0,\"sequence_number\":187}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" day\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"f2D57ztLvjky\",\"output_index\":0,\"sequence_number\":188}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"QMBiQcoDIGxc0\",\"output_index\":0,\"sequence_number\":189}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Toronto\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"vhMIUR45\",\"output_index\":0,\"sequence_number\":190}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"obfuscation\":\"ODdOVib6yKxSZQG\",\"output_index\":0,\"sequence_number\":191}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":192,\"text\":\"The weather in Toronto today is sunny with a temperature of 70°F. Here are some activity suggestions:\\n\\n1. **Visit a Park**: Enjoy a leisurely stroll or have a picnic in one of Toronto’s beautiful parks, like High Park or Trinity Bellwoods.\\n  \\n2. **Outdoor Markets**: Explore local markets such as the St. Lawrence Market or the Distillery District, where you can find fresh produce, artisan goods, and inviting cafes.\\n\\n3. **Bike Ride**: Take advantage of the pleasant weather by cycling along the waterfront or through the city’s bike trails.\\n\\n4. **Cultural Attractions**: Visit outdoor cultural venues like the Art Gallery of Ontario or the Royal Ontario Museum, which may have outdoor installations or gardens you can enjoy.\\n\\n5. **Outdoor Dining**: Relax at a rooftop or patio restaurant and enjoy a meal while soaking up the sun.\\n\\nWhatever activity you choose, enjoy the lovely day in Toronto!\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The weather in Toronto today is sunny with a temperature of 70°F. Here are some activity suggestions:\\n\\n1. **Visit a Park**: Enjoy a leisurely stroll or have a picnic in one of Toronto’s beautiful parks, like High Park or Trinity Bellwoods.\\n  \\n2. **Outdoor Markets**: Explore local markets such as the St. Lawrence Market or the Distillery District, where you can find fresh produce, artisan goods, and inviting cafes.\\n\\n3. **Bike Ride**: Take advantage of the pleasant weather by cycling along the waterfront or through the city’s bike trails.\\n\\n4. **Cultural Attractions**: Visit outdoor cultural venues like the Art Gallery of Ontario or the Royal Ontario Museum, which may have outdoor installations or gardens you can enjoy.\\n\\n5. **Outdoor Dining**: Relax at a rooftop or patio restaurant and enjoy a meal while soaking up the sun.\\n\\nWhatever activity you choose, enjoy the lovely day in Toronto!\"},\"sequence_number\":193}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The weather in Toronto today is sunny with a temperature of 70°F. Here are some activity suggestions:\\n\\n1. **Visit a Park**: Enjoy a leisurely stroll or have a picnic in one of Toronto’s beautiful parks, like High Park or Trinity Bellwoods.\\n  \\n2. **Outdoor Markets**: Explore local markets such as the St. Lawrence Market or the Distillery District, where you can find fresh produce, artisan goods, and inviting cafes.\\n\\n3. **Bike Ride**: Take advantage of the pleasant weather by cycling along the waterfront or through the city’s bike trails.\\n\\n4. **Cultural Attractions**: Visit outdoor cultural venues like the Art Gallery of Ontario or the Royal Ontario Museum, which may have outdoor installations or gardens you can enjoy.\\n\\n5. **Outdoor Dining**: Relax at a rooftop or patio restaurant and enjoy a meal while soaking up the sun.\\n\\nWhatever activity you choose, enjoy the lovely day in Toronto!\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":194}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_054155564d398379006a0dd539a834819796fd97dbd38e929e\",\"object\":\"response\",\"created_at\":1779291449,\"status\":\"completed\",\"background\":false,\"completed_at\":1779291453,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_054155564d398379006a0dd53a4c208197b95de3c948d5d847\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The weather in Toronto today is sunny with a temperature of 70°F. Here are some activity suggestions:\\n\\n1. **Visit a Park**: Enjoy a leisurely stroll or have a picnic in one of Toronto’s beautiful parks, like High Park or Trinity Bellwoods.\\n  \\n2. **Outdoor Markets**: Explore local markets such as the St. Lawrence Market or the Distillery District, where you can find fresh produce, artisan goods, and inviting cafes.\\n\\n3. **Bike Ride**: Take advantage of the pleasant weather by cycling along the waterfront or through the city’s bike trails.\\n\\n4. **Cultural Attractions**: Visit outdoor cultural venues like the Art Gallery of Ontario or the Royal Ontario Museum, which may have outdoor installations or gardens you can enjoy.\\n\\n5. **Outdoor Dining**: Relax at a rooftop or patio restaurant and enjoy a meal while soaking up the sun.\\n\\nWhatever activity you choose, enjoy the lovely day in Toronto!\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get weather for a location\",\"name\":\"weatherTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false},\"strict\":false},{\"type\":\"function\",\"description\":\"Plan activities based on the weather\",\"name\":\"planActivities\",\"parameters\":{\"type\":\"object\",\"properties\":{\"temperature\":{\"type\":\"string\"}},\"required\":[\"temperature\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":201,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":190,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":391},\"user\":null,\"metadata\":{}},\"sequence_number\":195}\n\n"
+        ],
+        "chunkTimings": [
+          0, 0, 0, 568, 3, 3, 4, 0, 0, 0, 18, 0, 38, 20, 0, 0, 14, 2, 21, 1, 29, 2, 5, 1, 44, 0, 5, 28, 1, 29, 0, 2, 0,
+          49, 2, 35, 1, 40, 0, 68, 0, 2, 1, 38, 1, 0, 38, 1, 44, 3, 4, 2, 9, 1, 0, 110, 4, 5, 33, 0, 2, 37, 5, 111, 5,
+          22, 4, 3, 4, 19, 4, 30, 2, 47, 0, 25, 1, 36, 30, 3, 21, 20, 0, 70, 13, 4, 76, 0, 4, 2, 1, 3, 3, 0, 9, 0, 1, 8,
+          4, 0, 40, 2, 16, 1, 52, 0, 3, 6, 0, 35, 0, 0, 32, 5, 0, 52, 0, 69, 24, 49, 1, 80, 1, 11, 0, 4, 7, 3, 1, 4, 0,
+          0, 44, 1, 0, 24, 0, 0, 54, 0, 25, 1, 60, 0, 1, 26, 0, 0, 22, 0, 0, 51, 2, 2, 46, 0, 1, 187, 1, 0, 11, 4, 2, 3,
+          0, 16, 2, 0, 2, 5, 5, 0, 0, 31, 0, 5, 3, 0, 0, 3, 0, 5, 1, 81, 1, 0, 33, 2, 1, 12, 0, 3, 3, 0, 4, 0, 3, 3, 3,
+          5, 2, 2, 1, 14, 1, 19, 0, 41, 0, 1, 80, 1, 0, 1, 12, 3, 31, 0, 13, 4, 2, 1, 2, 3, 77, 3, 2, 123
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

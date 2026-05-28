@@ -16,6 +16,9 @@ export {
   useIndexWorkspaceContent,
 } from './use-workspace';
 
+// Stored workspace hooks
+export { useStoredWorkspaces } from './use-stored-workspaces';
+
 // Skills hooks
 export {
   useWorkspaceSkills,

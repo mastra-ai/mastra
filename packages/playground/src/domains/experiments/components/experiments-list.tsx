@@ -1,5 +1,10 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
-import { Badge, EntityList, EntityListSkeleton, StatusBadge } from '@mastra/playground-ui';
+import {
+  Chip,
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+  StatusBadge,
+} from '@mastra/playground-ui';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -12,14 +17,6 @@ export interface ExperimentsListProps {
   statusFilter?: string;
   datasetFilter?: string;
 }
-
-export const EXPERIMENT_STATUS_OPTIONS = [
-  { value: 'all', label: 'All statuses' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'running', label: 'Running' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'pending', label: 'Pending' },
-] as const;
 
 const COLUMNS = 'auto 1fr auto auto auto auto auto auto auto';
 
@@ -132,12 +129,16 @@ export function ExperimentsList({
                 const inPipeline = review.needsReview + review.complete;
                 if (inPipeline === 0) return <span className="text-neutral2">—</span>;
                 if (review.needsReview > 0) {
-                  return <Badge variant="warning">{review.needsReview} pending</Badge>;
+                  return (
+                    <Chip size="small" color="yellow">
+                      {review.needsReview} pending
+                    </Chip>
+                  );
                 }
                 return (
-                  <Badge variant="success">
+                  <Chip size="small" color="green">
                     {review.complete}/{inPipeline} reviewed
-                  </Badge>
+                  </Chip>
                 );
               })()}
             </EntityList.Cell>
@@ -147,8 +148,4 @@ export function ExperimentsList({
       })}
     </EntityList>
   );
-}
-
-export function getExperimentDatasetOptions(datasets?: DatasetRecord[]) {
-  return [{ value: 'all', label: 'All datasets' }, ...(datasets ?? []).map(ds => ({ value: ds.id, label: ds.name }))];
 }

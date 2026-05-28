@@ -1,7 +1,7 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import {
-  EntityList,
-  EntityListSkeleton,
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
   TextAndIcon,
   WorkflowIcon,
   AgentIcon,

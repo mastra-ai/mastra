@@ -1318,7 +1318,7 @@ describe('Memory Handlers', () => {
         filter: undefined,
       });
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual({ ...mockResult, uiMessages: null });
       expect(mockMemory.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
       expect(mockMemory.recall).toHaveBeenCalledWith({
         threadId: 'test-thread',

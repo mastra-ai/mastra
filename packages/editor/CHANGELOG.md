@@ -1,5 +1,210 @@
 # @mastra/editor
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`d779de3`](https://github.com/mastra-ai/mastra/commit/d779de3cd9d2e7ed8110547190e2f15e786a0e41), [`1750c97`](https://github.com/mastra-ai/mastra/commit/1750c975d6179fbf6db2813b15229d4f8f23fc55), [`0e32507`](https://github.com/mastra-ai/mastra/commit/0e32507962cdfa5569b7bda5bc6fb3dd34e40b03), [`3a081c1`](https://github.com/mastra-ai/mastra/commit/3a081c1255c5ae8c99f6dad91cc612934ef6f2bd), [`fe9eacd`](https://github.com/mastra-ai/mastra/commit/fe9eacd9545a0a9d64aad31c9fa90294a425289e), [`f79df90`](https://github.com/mastra-ai/mastra/commit/f79df90e922c7985677c07d49d8fcf3afd2080c2), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194)]:
+  - @mastra/core@1.38.0-alpha.2
+  - @mastra/memory@1.20.1-alpha.0
+
+## 0.10.1
+
+### Patch Changes
+
+- Added optional constructor argument support to `createBuilderAgent()` so callers can override agent defaults while the canonical `id`, `name`, and `description` are preserved. ([#17109](https://github.com/mastra-ai/mastra/pull/17109))
+
+  ```ts
+  // Before — could only use the built-in defaults
+  const builder = createBuilderAgent();
+
+  // After — pass overrides while keeping the canonical identity
+  const builder = createBuilderAgent({
+    model: openai('gpt-4o'),
+    instructions: 'Custom instructions for this deployment',
+  });
+  ```
+
+- Updated dependencies [[`21db1a4`](https://github.com/mastra-ai/mastra/commit/21db1a4b8ac058d5a4fbe38b516cc1b81e526915)]:
+  - @mastra/core@1.37.1
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- Added optional constructor argument support to `createBuilderAgent()` so callers can override agent defaults while the canonical `id`, `name`, and `description` are preserved. ([#17109](https://github.com/mastra-ai/mastra/pull/17109))
+
+  ```ts
+  // Before — could only use the built-in defaults
+  const builder = createBuilderAgent();
+
+  // After — pass overrides while keeping the canonical identity
+  const builder = createBuilderAgent({
+    model: openai('gpt-4o'),
+    instructions: 'Custom instructions for this deployment',
+  });
+  ```
+
+## 0.10.0
+
+### Minor Changes
+
+- Ship `EditorAgentBuilder` and Agent Builder runtime through the `@mastra/editor/ee` subpath. ([#16948](https://github.com/mastra-ai/mastra/pull/16948))
+  - Adds `EditorAgentBuilder` class and supporting types under `@mastra/editor/ee` (dormant unless `MastraEditorConfig.builder` is configured).
+  - Wires builder resolution on `MastraEditor`: `hasEnabledBuilderConfig()`, `resolveBuilder()`, `ensureBuilderWorkspaces()`, and `reconcileBuilderWorkspaces()`.
+  - Adds builder defaults plumbing in the agent namespace (`applyBuilderDefaults`, `BUILDER_BASELINE_DEFAULTS` enabling `observationalMemory: true` by default for Builder-created agents).
+  - Adds a defense-in-depth license guard inside `MastraEditor.resolveBuilder()` that mirrors the server-startup check in `MastraServer.validateAgentBuilderLicense()`. Dev environments bypass via `isEEEnabled()`; production without a valid `MASTRA_EE_LICENSE` throws `[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.`
+  - Bumps the `@mastra/core` peer dependency to `>=1.34.0-0 <2.0.0-0` to cover the `@mastra/core/agent-builder/ee` and `@mastra/core/auth/ee` subpaths consumed by the builder runtime.
+
+  Opt-in usage:
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const editor = new MastraEditor({
+    builder: {
+      enabled: true,
+      configuration: {
+        agent: {
+          models: { default: { provider: 'openai', modelId: 'gpt-4o-mini' } },
+        },
+      },
+    },
+  });
+
+  new Mastra({ storage, editor });
+
+  // Later, on demand:
+  const builder = await editor.resolveBuilder();
+  // `builder` is undefined when the builder is not configured/enabled.
+  // In production it requires a valid MASTRA_EE_LICENSE; dev environments bypass.
+  ```
+
+  This is plumbing — no UI consumer ships in this release.
+
+### Patch Changes
+
+- Removed zod as a required peer dependency. Internal schemas now use plain JSON Schema objects instead of zod runtime. ([#16726](https://github.com/mastra-ai/mastra/pull/16726))
+
+- Updated dependencies [[`cfa2e3a`](https://github.com/mastra-ai/mastra/commit/cfa2e3a5292322f48bb28b4d257d631da7f9d3cc), [`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`ac442a4`](https://github.com/mastra-ai/mastra/commit/ac442a42fda0354ac2bcea772bf6691cb3e9dbb3), [`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`9d2c663`](https://github.com/mastra-ai/mastra/commit/9d2c663b88f5b12bc3fea1c97f40b4eeb3665df1), [`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`d72dc4b`](https://github.com/mastra-ai/mastra/commit/d72dc4b12d832546c05c20255fa96fe4eb515900), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`1e5c067`](https://github.com/mastra-ai/mastra/commit/1e5c067d2e20a781af670578180d1ee249806d41), [`168fa09`](https://github.com/mastra-ai/mastra/commit/168fa09d6b39114cb8c13bd06f1dccb9bc81c6cd), [`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`8116436`](https://github.com/mastra-ai/mastra/commit/81164363eb225d774e41ff27da6a5ea611406688), [`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`c27c4b9`](https://github.com/mastra-ai/mastra/commit/c27c4b9f137df5414fca4e45896aceccff6b0ed5), [`08b3b59`](https://github.com/mastra-ai/mastra/commit/08b3b590dd960dee6c9a6e39272f8927d803db6e), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5), [`4084113`](https://github.com/mastra-ai/mastra/commit/408411370fc48a822e8b616b3b63f9409774e0e9), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0
+  - @mastra/memory@1.20.0
+  - @mastra/mcp@1.8.1
+
+## 0.10.0-alpha.3
+
+### Patch Changes
+
+- Removed zod as a required peer dependency. Internal schemas now use plain JSON Schema objects instead of zod runtime. ([#16726](https://github.com/mastra-ai/mastra/pull/16726))
+
+- Updated dependencies [[`9d2c663`](https://github.com/mastra-ai/mastra/commit/9d2c663b88f5b12bc3fea1c97f40b4eeb3665df1), [`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`4084113`](https://github.com/mastra-ai/mastra/commit/408411370fc48a822e8b616b3b63f9409774e0e9)]:
+  - @mastra/mcp@1.8.1-alpha.0
+  - @mastra/memory@1.20.0-alpha.2
+  - @mastra/core@1.37.0-alpha.8
+
+## 0.10.0-alpha.2
+
+### Minor Changes
+
+- Ship `EditorAgentBuilder` and Agent Builder runtime through the `@mastra/editor/ee` subpath. ([#16948](https://github.com/mastra-ai/mastra/pull/16948))
+  - Adds `EditorAgentBuilder` class and supporting types under `@mastra/editor/ee` (dormant unless `MastraEditorConfig.builder` is configured).
+  - Wires builder resolution on `MastraEditor`: `hasEnabledBuilderConfig()`, `resolveBuilder()`, `ensureBuilderWorkspaces()`, and `reconcileBuilderWorkspaces()`.
+  - Adds builder defaults plumbing in the agent namespace (`applyBuilderDefaults`, `BUILDER_BASELINE_DEFAULTS` enabling `observationalMemory: true` by default for Builder-created agents).
+  - Adds a defense-in-depth license guard inside `MastraEditor.resolveBuilder()` that mirrors the server-startup check in `MastraServer.validateAgentBuilderLicense()`. Dev environments bypass via `isEEEnabled()`; production without a valid `MASTRA_EE_LICENSE` throws `[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.`
+  - Bumps the `@mastra/core` peer dependency to `>=1.34.0-0 <2.0.0-0` to cover the `@mastra/core/agent-builder/ee` and `@mastra/core/auth/ee` subpaths consumed by the builder runtime.
+
+  Opt-in usage:
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const editor = new MastraEditor({
+    builder: {
+      enabled: true,
+      configuration: {
+        agent: {
+          models: { default: { provider: 'openai', modelId: 'gpt-4o-mini' } },
+        },
+      },
+    },
+  });
+
+  new Mastra({ storage, editor });
+
+  // Later, on demand:
+  const builder = await editor.resolveBuilder();
+  // `builder` is undefined when the builder is not configured/enabled.
+  // In production it requires a valid MASTRA_EE_LICENSE; dev environments bypass.
+  ```
+
+  This is plumbing — no UI consumer ships in this release.
+
+### Patch Changes
+
+- Updated dependencies [[`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5)]:
+  - @mastra/core@1.37.0-alpha.4
+
+## 0.9.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`ac442a4`](https://github.com/mastra-ai/mastra/commit/ac442a42fda0354ac2bcea772bf6691cb3e9dbb3), [`1e5c067`](https://github.com/mastra-ai/mastra/commit/1e5c067d2e20a781af670578180d1ee249806d41), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`8116436`](https://github.com/mastra-ai/mastra/commit/81164363eb225d774e41ff27da6a5ea611406688), [`c27c4b9`](https://github.com/mastra-ai/mastra/commit/c27c4b9f137df5414fca4e45896aceccff6b0ed5), [`08b3b59`](https://github.com/mastra-ai/mastra/commit/08b3b590dd960dee6c9a6e39272f8927d803db6e)]:
+  - @mastra/memory@1.20.0-alpha.1
+  - @mastra/core@1.37.0-alpha.3
+
+## 0.9.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67)]:
+  - @mastra/core@1.37.0-alpha.2
+  - @mastra/memory@1.19.1-alpha.0
+
+## 0.9.0
+
+### Minor Changes
+
+- `EditorWorkspaceNamespace` can now snapshot a live `Workspace` for persistence — the reverse of `hydrateSnapshotToWorkspace()`: ([#16673](https://github.com/mastra-ai/mastra/pull/16673))
+
+  ```ts
+  const snapshot = await editor.workspace.snapshotFromWorkspace(runtimeWorkspace);
+  await editor.workspace.create({ id: 'my-workspace', ...snapshot });
+  ```
+
+  `snapshotFromWorkspace()` is `async` and awaits `sandbox.getInfo()` and `filesystem.getInfo()` so async providers like `CompositeFilesystem` keep their mount metadata in the stored config.
+
+  Also includes two smaller behavioral fixes:
+  - `EditorSkillNamespace.publishSkillFromSource()` stores the new `files` field on the published skill version and strips `undefined` keys before calling `update()` (libsql/pg adapters reject `undefined` bind arguments).
+  - `CrudEditorNamespace.clearCache(id)` always calls `onCacheEvict(id)`, even when the entity wasn't cached, so subclasses can clean up runtime registries for version-specific lookups that bypass the editor cache.
+
+- Added an `editor.favorites` namespace so direct (non-HTTP) callers can favorite, unfavorite, and query favorited stored agents/skills through the editor instance. ([#16749](https://github.com/mastra-ai/mastra/pull/16749))
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+
+  const editor = new MastraEditor({ mastra });
+
+  // Toggle
+  await editor.favorites.favorite({ userId, entityType: 'agent', entityId });
+  await editor.favorites.unfavorite({ userId, entityType: 'agent', entityId });
+
+  // Lookups
+  const isFav = await editor.favorites.isFavorited({ userId, entityType: 'agent', entityId });
+  const favSet = await editor.favorites.isFavoritedBatch({ userId, entityType: 'agent', entityIds });
+  const ids = await editor.favorites.listFavoritedIds({ userId, entityType: 'agent' });
+  ```
+
+  The namespace performs the storage mutation only — visibility and ownership enforcement still belong to the caller (the HTTP route handlers in `@mastra/server` already do this).
+
+### Patch Changes
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`27fd1b7`](https://github.com/mastra-ai/mastra/commit/27fd1b79ac62eb7694f92587eb7d1be05b59be01), [`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`a702009`](https://github.com/mastra-ai/mastra/commit/a702009d3cfaa745120f501e21c783ed4d6a3072), [`46cbb7e`](https://github.com/mastra-ai/mastra/commit/46cbb7e84a0fadcf8c26ddfad38278732c22143e), [`9430352`](https://github.com/mastra-ai/mastra/commit/94303523460cb09dcd0d8139c11926029631d6ba), [`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`8534d79`](https://github.com/mastra-ai/mastra/commit/8534d791fa1cb70fe1c19e2604c4b63cc10dd051), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`7f6a053`](https://github.com/mastra-ai/mastra/commit/7f6a053b6a76f12b8ab0f25da1709adbd5134cd6), [`c78f8cd`](https://github.com/mastra-ai/mastra/commit/c78f8cd6222a86e6c60ae5210b6929ad5221b6fb), [`14b69c6`](https://github.com/mastra-ai/mastra/commit/14b69c6b05ce1e50c140b030a48cafb41d0746e3), [`e146aad`](https://github.com/mastra-ai/mastra/commit/e146aadbba66c410ba0e74bac4c50135495cb8dd), [`4bd4e8e`](https://github.com/mastra-ai/mastra/commit/4bd4e8e042f6687559f49a560a7914cee9b85447), [`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`1a0ec78`](https://github.com/mastra-ai/mastra/commit/1a0ec789a26cae443744e9abbd62ed6ee676af39), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`d52b6fe`](https://github.com/mastra-ai/mastra/commit/d52b6fe1c56853eb38864baae0bbfa75cc739ccb), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021), [`71a820b`](https://github.com/mastra-ai/mastra/commit/71a820b2353fa1406772c50760a3732058a8b337), [`1698f5e`](https://github.com/mastra-ai/mastra/commit/1698f5ec141d34f22a873efdb145ce3cdf848a5e)]:
+  - @mastra/core@1.36.0
+  - @mastra/memory@1.19.0
+  - @mastra/mcp@1.8.0
+
 ## 0.9.0-alpha.3
 
 ### Patch Changes
