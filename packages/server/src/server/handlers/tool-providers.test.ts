@@ -18,6 +18,7 @@ import {
   DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE,
   GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE,
   TOOL_PROVIDER_CONNECTION_STATUS_ROUTE,
+  UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE,
 } from './tool-providers';
 
 function makeMastra(editor?: Partial<IMastraEditor> | undefined) {
@@ -1278,6 +1279,206 @@ describe('DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE', () => {
     expect(result).toEqual({ ok: true, revoked: true });
     expect(revokeConnection).toHaveBeenCalledWith('ca_1');
     expect(toolConnections.rows.size).toBe(0);
+  });
+});
+
+describe('UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE', () => {
+  it('updates the label on the matching connection row', async () => {
+    const provider = makeProvider();
+    const editor = makeEditor(provider);
+    const toolConnections = makeToolProviderConnectionsStore([
+      {
+        authorId: 'user-1',
+        providerId: 'composio',
+        toolkit: 'gmail',
+        connectionId: 'ca_1',
+        label: null,
+        scope: 'per-author',
+      },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    const result = await UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, toolConnections),
+      providerId: 'composio',
+      connectionId: 'ca_1',
+      label: 'Work',
+      requestContext: ctx,
+    } as any);
+
+    expect(result).toEqual({ ok: true, label: 'Work' });
+    expect(toolConnections.upsert).toHaveBeenCalledWith({
+      authorId: 'user-1',
+      providerId: 'composio',
+      toolkit: 'gmail',
+      connectionId: 'ca_1',
+      label: 'Work',
+      scope: 'per-author',
+    });
+  });
+
+  it('clears the label when null is passed', async () => {
+    const provider = makeProvider();
+    const editor = makeEditor(provider);
+    const toolConnections = makeToolProviderConnectionsStore([
+      {
+        authorId: 'user-1',
+        providerId: 'composio',
+        toolkit: 'gmail',
+        connectionId: 'ca_1',
+        label: 'Work',
+        scope: 'per-author',
+      },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    const result = await UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, toolConnections),
+      providerId: 'composio',
+      connectionId: 'ca_1',
+      label: null,
+      requestContext: ctx,
+    } as any);
+
+    expect(result).toEqual({ ok: true, label: null });
+    expect(toolConnections.upsert).toHaveBeenCalledWith(expect.objectContaining({ label: null, scope: 'per-author' }));
+  });
+
+  it('clears the label when an empty string is passed', async () => {
+    const provider = makeProvider();
+    const editor = makeEditor(provider);
+    const toolConnections = makeToolProviderConnectionsStore([
+      {
+        authorId: 'user-1',
+        providerId: 'composio',
+        toolkit: 'gmail',
+        connectionId: 'ca_1',
+        label: 'Old',
+        scope: 'per-author',
+      },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    const result = await UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, toolConnections),
+      providerId: 'composio',
+      connectionId: 'ca_1',
+      label: '',
+      requestContext: ctx,
+    } as any);
+
+    expect(result).toEqual({ ok: true, label: null });
+  });
+
+  it('returns 404 when the connection row does not exist', async () => {
+    const provider = makeProvider();
+    const editor = makeEditor(provider);
+    const toolConnections = makeToolProviderConnectionsStore([]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    await expect(
+      UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE.handler({
+        mastra: makeMastraWithStorage(editor, toolConnections),
+        providerId: 'composio',
+        connectionId: 'ca_missing',
+        label: 'Anything',
+        requestContext: ctx,
+      } as any),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(toolConnections.upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when the caller is not the owner and the row is not shared', async () => {
+    const provider = makeProvider();
+    const editor = makeEditor(provider);
+    const toolConnections = makeToolProviderConnectionsStore([
+      {
+        authorId: 'user-owner',
+        providerId: 'composio',
+        toolkit: 'gmail',
+        connectionId: 'ca_1',
+        label: 'Owner Label',
+        scope: 'per-author',
+      },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'someone-else');
+
+    await expect(
+      UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE.handler({
+        mastra: makeMastraWithStorage(editor, toolConnections),
+        providerId: 'composio',
+        connectionId: 'ca_1',
+        label: 'Hijack',
+        requestContext: ctx,
+      } as any),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(toolConnections.upsert).not.toHaveBeenCalled();
+  });
+
+  it('lets any caller rename a shared connection', async () => {
+    const provider = makeProvider();
+    const editor = makeEditor(provider);
+    const toolConnections = makeToolProviderConnectionsStore([
+      {
+        authorId: 'shared',
+        providerId: 'composio',
+        toolkit: 'gmail',
+        connectionId: 'ca_shared',
+        label: 'Team',
+        scope: 'shared',
+      },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'random_user');
+
+    const result = await UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, toolConnections),
+      providerId: 'composio',
+      connectionId: 'ca_shared',
+      label: 'Team Renamed',
+      requestContext: ctx,
+    } as any);
+
+    expect(result).toEqual({ ok: true, label: 'Team Renamed' });
+    expect(toolConnections.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ authorId: 'shared', label: 'Team Renamed', scope: 'shared' }),
+    );
+  });
+
+  it('lets an admin rename another author’s connection', async () => {
+    const provider = makeProvider();
+    const editor = makeEditor(provider);
+    const toolConnections = makeToolProviderConnectionsStore([
+      {
+        authorId: 'user-owner',
+        providerId: 'composio',
+        toolkit: 'gmail',
+        connectionId: 'ca_1',
+        label: null,
+        scope: 'per-author',
+      },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'admin_1');
+    ctx.set(MASTRA_USER_PERMISSIONS_KEY, ['tool-providers:admin']);
+
+    const result = await UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, toolConnections),
+      providerId: 'composio',
+      connectionId: 'ca_1',
+      label: 'Renamed By Admin',
+      requestContext: ctx,
+    } as any);
+
+    expect(result).toEqual({ ok: true, label: 'Renamed By Admin' });
+    expect(toolConnections.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ authorId: 'user-owner', label: 'Renamed By Admin' }),
+    );
   });
 });
 

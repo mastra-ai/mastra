@@ -74631,6 +74631,48 @@ export interface DeleteToolProvidersProviderIdConnectionsConnectionId_RouteContr
 }
 
 // ============================================================================
+// Route: PATCH /tool-providers/:providerId/connections/:connectionId
+// ============================================================================
+export type PatchToolProvidersProviderIdConnectionsConnectionId_PathParams = {
+  /** Unique identifier for the tool provider */
+  providerId: string;
+  /** Adapter-native connection id (e.g. Composio ca_...) */
+  connectionId: string;
+};
+
+export type PatchToolProvidersProviderIdConnectionsConnectionId_Body = {
+  /** New display label for the connection. Pass null (or empty string) to clear the existing label. */
+  label: string | '' | null;
+};
+
+export type PatchToolProvidersProviderIdConnectionsConnectionId_Response = {
+  ok: true;
+  /** The persisted label after the update (null when cleared) */
+  label: string | null;
+};
+
+export type PatchToolProvidersProviderIdConnectionsConnectionId_Request = Simplify<
+  (PatchToolProvidersProviderIdConnectionsConnectionId_PathParams extends never
+    ? {}
+    : { params: PatchToolProvidersProviderIdConnectionsConnectionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchToolProvidersProviderIdConnectionsConnectionId_Body extends never
+      ? {}
+      : {} extends PatchToolProvidersProviderIdConnectionsConnectionId_Body
+        ? { body?: PatchToolProvidersProviderIdConnectionsConnectionId_Body }
+        : { body: PatchToolProvidersProviderIdConnectionsConnectionId_Body })
+>;
+
+export interface PatchToolProvidersProviderIdConnectionsConnectionId_RouteContract {
+  pathParams: PatchToolProvidersProviderIdConnectionsConnectionId_PathParams;
+  queryParams: never;
+  body: PatchToolProvidersProviderIdConnectionsConnectionId_Body;
+  request: PatchToolProvidersProviderIdConnectionsConnectionId_Request;
+  response: PatchToolProvidersProviderIdConnectionsConnectionId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /tool-providers/:providerId/connections/:connectionId/usage
 // ============================================================================
 export type GetToolProvidersProviderIdConnectionsConnectionIdUsage_PathParams = {
@@ -79589,6 +79631,7 @@ export interface RouteTypes {
   'GET /tool-providers/:providerId/connections': GetToolProvidersProviderIdConnections_RouteContract;
   'GET /tool-providers/:providerId/connection-fields': GetToolProvidersProviderIdConnectionFields_RouteContract;
   'DELETE /tool-providers/:providerId/connections/:connectionId': DeleteToolProvidersProviderIdConnectionsConnectionId_RouteContract;
+  'PATCH /tool-providers/:providerId/connections/:connectionId': PatchToolProvidersProviderIdConnectionsConnectionId_RouteContract;
   'GET /tool-providers/:providerId/connections/:connectionId/usage': GetToolProvidersProviderIdConnectionsConnectionIdUsage_RouteContract;
   'GET /tool-providers/:providerId/health': GetToolProvidersProviderIdHealth_RouteContract;
   'GET /processor-providers': GetProcessorProviders_RouteContract;
@@ -80394,6 +80437,7 @@ export interface Client {
   };
   '/tool-providers/:providerId/connections/:connectionId': {
     DELETE: DeleteToolProvidersProviderIdConnectionsConnectionId_RouteContract;
+    PATCH: PatchToolProvidersProviderIdConnectionsConnectionId_RouteContract;
   };
   '/tool-providers/:providerId/connections/:connectionId/usage': {
     GET: GetToolProvidersProviderIdConnectionsConnectionIdUsage_RouteContract;

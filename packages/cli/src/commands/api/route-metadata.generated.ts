@@ -4462,6 +4462,23 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "PATCH /tool-providers/:providerId/connections/:connectionId": {
+    "method": "PATCH",
+    "path": "/tool-providers/:providerId/connections/:connectionId",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "label"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /tool-providers/:providerId/connections/:connectionId/usage": {
     "method": "GET",
     "path": "/tool-providers/:providerId/connections/:connectionId/usage",

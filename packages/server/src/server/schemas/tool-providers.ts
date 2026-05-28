@@ -10,10 +10,11 @@ import { z } from 'zod/v4';
  * Rules:
  *  - **Additive-only.** No version field. Future fields are introduced as
  *    optional and existing fields are never removed in v1.x.
- *  - `label` is optional when there is exactly one connection for a
- *    `toolkit`. Once two or more connections share a `toolkit`, every
- *    connection must carry a non-empty, ≤ 32 char, `[A-Za-z0-9 _-]+`
- *    label that is case-insensitively unique within that toolkit.
+ *  - `label` lives on the connection row itself (set via
+ *    `PATCH /tool-providers/:providerId/connections/:connectionId`), not on
+ *    the pin. The optional `label` field below is retained only for
+ *    back-compat with older stored configs; the server does not enforce
+ *    anything on it.
  *  - `kind` accepts all three values for forward-compat; v1 only writes
  *    `'author'`.
  */
@@ -51,44 +52,13 @@ const toolMetaSchema = z.object({
 /**
  * Stored shape for one provider's configuration on one agent.
  *
- * `superRefine` enforces case-insensitive uniqueness of `label` within
- * each `connections[toolkit]` array.
+ * Labels are no longer enforced on the pin: they live on the connection row
+ * and are set via `PATCH /tool-providers/:providerId/connections/:connectionId`.
  */
-export const toolProviderConfigSchema = z
-  .object({
-    tools: z.record(z.string(), toolMetaSchema),
-    connections: z.record(z.string(), z.array(connectionSchema)),
-  })
-  .superRefine((value, ctx) => {
-    for (const [toolkit, connections] of Object.entries(value.connections)) {
-      if (connections.length < 2) continue;
-
-      const seen = new Map<string, number>();
-      for (let i = 0; i < connections.length; i++) {
-        const conn = connections[i]!;
-        const trimmed = conn.label?.trim() ?? '';
-        if (trimmed.length === 0) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['connections', toolkit, i, 'label'],
-            message: `Connection label is required on toolkit "${toolkit}" once it has two or more connections`,
-          });
-          continue;
-        }
-        const key = trimmed.toLocaleLowerCase();
-        const prevIndex = seen.get(key);
-        if (prevIndex !== undefined) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['connections', toolkit, i, 'label'],
-            message: `Duplicate connection label "${conn.label}" on toolkit "${toolkit}" (labels must be unique case-insensitively)`,
-          });
-        } else {
-          seen.set(key, i);
-        }
-      }
-    }
-  });
+export const toolProviderConfigSchema = z.object({
+  tools: z.record(z.string(), toolMetaSchema),
+  connections: z.record(z.string(), z.array(connectionSchema)),
+});
 
 /**
  * Full v1 tool providers payload: keyed by provider id.
@@ -291,6 +261,17 @@ export const listConnectionFieldsResponseSchema = z.object({
 export const disconnectConnectionResponseSchema = z.object({
   ok: z.literal(true),
   revoked: z.boolean().describe('Whether the provider-side connection was revoked'),
+});
+
+export const updateConnectionBodySchema = z.object({
+  label: z
+    .union([labelSchema, z.literal(''), z.null()])
+    .describe('New display label for the connection. Pass null (or empty string) to clear the existing label.'),
+});
+
+export const updateConnectionResponseSchema = z.object({
+  ok: z.literal(true),
+  label: z.string().nullable().describe('The persisted label after the update (null when cleared)'),
 });
 
 export const connectionUsageResponseSchema = z.object({

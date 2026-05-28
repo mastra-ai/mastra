@@ -170,6 +170,36 @@ describe('ToolProvider Resource', () => {
       );
     });
 
+    it('updateConnection PATCHes the connection row with the new label', async () => {
+      const mockResponse = { ok: true, label: 'Work' };
+      mockFetchResponse(mockResponse);
+
+      const result = await provider.updateConnection('conn-1', { label: 'Work' });
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/tool-providers/composio/connections/conn-1`,
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ label: 'Work' }),
+        }),
+      );
+    });
+
+    it('updateConnection accepts null to clear the label', async () => {
+      const mockResponse = { ok: true, label: null };
+      mockFetchResponse(mockResponse);
+
+      const result = await provider.updateConnection('conn-1', { label: null });
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/tool-providers/composio/connections/conn-1`,
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ label: null }),
+        }),
+      );
+    });
+
     it('getHealth hits the health endpoint', async () => {
       const mockResponse = { ok: true };
       mockFetchResponse(mockResponse);
