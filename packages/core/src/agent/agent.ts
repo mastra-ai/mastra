@@ -3959,7 +3959,9 @@ export class Agent<
             // use the correct model version and memory config from the resolved agent.
             let resolvedAgent = agent;
             const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-            const agentVersionSelector = versionOverrides?.agents?.[agent.id];
+            const agentVersionSelector =
+              versionOverrides?.agents?.[agent.id] ??
+              (versionOverrides?.defaultStatus ? { status: versionOverrides.defaultStatus } : undefined);
             if (agentVersionSelector && this.#mastra && agent instanceof Agent) {
               try {
                 resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);

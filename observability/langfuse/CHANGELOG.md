@@ -1,5 +1,13 @@
 # @mastra/langfuse
 
+## 1.3.3
+
+### Patch Changes
+
+- Updated dependencies [[`21db1a4`](https://github.com/mastra-ai/mastra/commit/21db1a4b8ac058d5a4fbe38b516cc1b81e526915), [`ad88ba4`](https://github.com/mastra-ai/mastra/commit/ad88ba49060001e86d7becb67590b6e44c1a2e8a)]:
+  - @mastra/core@1.37.1
+  - @mastra/otel-exporter@1.2.0
+
 ## 1.3.3-alpha.0
 
 ### Patch Changes
