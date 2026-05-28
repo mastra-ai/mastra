@@ -3368,12 +3368,16 @@ export class Agent<
           llm instanceof MastraLLMVNext
             ? mergeProviderOptions(providerOptions, llm.getProviderOptions())
             : providerOptions;
+        const memory = await this.getMemory({ requestContext });
         const result = await runner.runProcessInputStep({
           messageList,
           stepNumber,
           steps: [],
           ...observabilityContext,
           requestContext,
+          memory,
+          resourceId,
+          threadId,
           // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,

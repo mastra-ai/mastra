@@ -7,6 +7,7 @@ import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
@@ -201,6 +202,9 @@ export type RunProcessInputStepArgs = Omit<
   messageId?: string;
   rotateResponseMessageId?: () => string;
   retryCount?: number;
+  memory?: MastraMemory;
+  resourceId?: string;
+  threadId?: string;
 };
 
 /**
@@ -248,6 +252,61 @@ export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & 
  * tool-result formats, etc. can be rewritten transiently without losing data
  * in memory, UI, or future model swaps.
  */
+export type ProcessorStateSignal = Omit<AgentSignalInput, 'type'> & {
+  type?: 'state';
+};
+
+export type ProcessorActiveStateSignal = CreatedAgentSignal & {
+  type: 'state';
+  metadata?: Record<string, unknown> & {
+    state?: {
+      processorId?: string;
+      hash?: string;
+      version?: number;
+      delta?: boolean;
+    };
+  };
+};
+
+/**
+ * Arguments for computeStateSignal method.
+ *
+ * Called once per model input step after normal per-step input processing and
+ * before the LLM request is finalized. State signals require memory-backed
+ * threads so the runtime can track versions on thread metadata.
+ */
+export interface ComputeStateSignalArgs<
+  TTripwireMetadata = unknown,
+> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The current step number (0-indexed) */
+  stepNumber: number;
+  /** All completed steps so far. */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+  /** Memory resource id for the active thread. */
+  resourceId: string;
+  /** Memory thread id that scopes this processor's state signal identity. */
+  threadId: string;
+  /** Active state signal copies for this processor/thread currently known to the runtime. */
+  activeStateSignals: ProcessorActiveStateSignal[];
+  /** Last persisted tracking metadata for this processor/thread. */
+  tracking?: ProcessorStateSignalTracking;
+}
+
+/**
+ * Thread metadata stored under metadata.mastra.stateSignals[processorId].
+ */
+export type ProcessorStateSignalTracking = {
+  currentHash?: string;
+  version?: number;
+  lastSignalId?: string;
+  updatedAt?: string;
+  activeCopies?: Array<{ id: string; hash?: string; version?: number }>;
+};
+
+export type ComputeStateSignalResult = ProcessorStateSignal | CreatedAgentSignal | undefined | void;
+
 export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
   /** The LLM request prompt that will be sent to the provider on this call. Processors may return a modified copy. */
   prompt: LanguageModelV2Prompt;
@@ -531,6 +590,19 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
     | undefined;
 
   /**
+   * Compute this processor's thread-scoped state signal for the current model input step.
+   *
+   * Called after this processor's `processInputStep` hook and before the model request is finalized.
+   * The runtime persists version/hash tracking on memory thread metadata keyed by processor id.
+   * Returning `undefined` means the state has not changed for this step.
+   *
+   * @experimental Agent state signals are experimental and may change in a future release.
+   */
+  computeStateSignal?(
+    args: ComputeStateSignalArgs<TTripwireMetadata>,
+  ): Promise<ComputeStateSignalResult> | ComputeStateSignalResult;
+
+  /**
    * Process the LLM-shaped prompt after `MessageList` has been converted to
    * `LanguageModelV2Prompt` and immediately before it is forwarded to the
    * provider on this call.
@@ -656,10 +728,12 @@ export abstract class BaseProcessor<TId extends string = string, TTripwireMetada
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
 
-// InputProcessor requires processInput, processInputStep, processLLMRequest, or processLLMResponse (or any combination)
+// InputProcessor requires processInput, processInputStep, computeStateSignal, processLLMRequest, or processLLMResponse (or any combination)
 export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInput'> & Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInputStep'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'computeStateSignal'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMRequest'> &
       Processor<string, TTripwireMetadata>)
