@@ -49,8 +49,18 @@ const userMessageSignalContentsSchema = z.union([
   z.array(z.union([signalTextPartSchema, signalFilePartSchema])),
 ]);
 
+const agentMessageInputObjectSchema = z.object({
+  contents: userMessageSignalContentsSchema,
+  attributes: signalAttributesSchema.optional(),
+  metadata: jsonRecordSchema.optional(),
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+});
+
+const agentMessageInputSchema = z.union([userMessageSignalContentsSchema, agentMessageInputObjectSchema]);
+
 const agentSignalSchema = baseSignalSchema.extend({
   type: z.string(),
+  tagName: z.string().optional(),
   contents: userMessageSignalContentsSchema,
   providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
 });
@@ -575,8 +585,7 @@ export const observeAgentBodySchema = z.object({
 const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);
 const signalIdleBehaviorSchema = z.enum(['wake', 'persist', 'discard']);
 
-const sendAgentSignalBaseBodySchema = z.object({
-  signal: agentSignalSchema,
+const signalTargetBaseBodySchema = z.object({
   ifActive: z
     .object({
       behavior: signalActiveBehaviorSchema.optional(),
@@ -584,14 +593,14 @@ const sendAgentSignalBaseBodySchema = z.object({
     .optional(),
 });
 
-export const sendAgentSignalBodySchema = z.union([
-  sendAgentSignalBaseBodySchema.extend({
+const signalTargetBodySchema = z.union([
+  signalTargetBaseBodySchema.extend({
     runId: z.string(),
     resourceId: z.string().optional(),
     threadId: z.string().optional(),
     ifIdle: z.undefined().optional(),
   }),
-  sendAgentSignalBaseBodySchema.extend({
+  signalTargetBaseBodySchema.extend({
     runId: z.string().optional(),
     resourceId: z.string(),
     threadId: z.string(),
@@ -603,6 +612,18 @@ export const sendAgentSignalBodySchema = z.union([
       .optional(),
   }),
 ]);
+
+export const sendAgentSignalBodySchema = z.union([
+  signalTargetBodySchema.options[0].extend({ signal: agentSignalSchema }),
+  signalTargetBodySchema.options[1].extend({ signal: agentSignalSchema }),
+]);
+
+export const sendAgentMessageBodySchema = z.union([
+  signalTargetBodySchema.options[0].extend({ message: agentMessageInputSchema }),
+  signalTargetBodySchema.options[1].extend({ message: agentMessageInputSchema }),
+]);
+
+export const queueAgentMessageBodySchema = sendAgentMessageBodySchema;
 
 export const subscribeAgentThreadBodySchema = z.object({
   resourceId: z.string().optional(),
