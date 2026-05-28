@@ -164,7 +164,7 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
 
       // Get API key from config or environment
       let apiKey = normalizedConfig.apiKey;
-      if (!apiKey) {
+      if (!apiKey && providerConfig.apiKeyEnvVar) {
         const apiKeyEnvVar = providerConfig.apiKeyEnvVar;
         if (Array.isArray(apiKeyEnvVar)) {
           // Try each possible environment variable
@@ -178,10 +178,14 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
       }
 
       if (!apiKey) {
-        const envVarDisplay = Array.isArray(providerConfig.apiKeyEnvVar)
-          ? providerConfig.apiKeyEnvVar.join(' or ')
-          : providerConfig.apiKeyEnvVar;
-        throw new Error(`API key not found for provider ${normalizedConfig.providerId}. Set ${envVarDisplay}`);
+        if (providerConfig.apiKeyEnvVar) {
+          const envVarDisplay = Array.isArray(providerConfig.apiKeyEnvVar)
+            ? providerConfig.apiKeyEnvVar.join(' or ')
+            : providerConfig.apiKeyEnvVar;
+          throw new Error(`API key not found for provider ${normalizedConfig.providerId}. Set ${envVarDisplay}`);
+        } else {
+          apiKey = '';
+        }
       }
 
       // Initialize the provider model directly in constructor

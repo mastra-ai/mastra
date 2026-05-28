@@ -722,7 +722,7 @@ export class Harness<TState = {}> {
       const providerConfig = registry[provider];
       const envVars = providerConfig?.apiKeyEnvVar;
       const apiKeyEnvVar = Array.isArray(envVars) ? envVars[0] : envVars;
-      if (apiKeyEnvVar && process.env[apiKeyEnvVar]) {
+      if (!apiKeyEnvVar || (apiKeyEnvVar && process.env[apiKeyEnvVar])) {
         return { hasAuth: true };
       }
       return { hasAuth: false, apiKeyEnvVar: apiKeyEnvVar || undefined };
@@ -767,7 +767,7 @@ export class Harness<TState = {}> {
         const providerConfig = registry[provider];
         const envVars = providerConfig?.apiKeyEnvVar;
         const apiKeyEnvVar = Array.isArray(envVars) ? envVars[0] : envVars;
-        const hasEnvKey = apiKeyEnvVar ? !!process.env[apiKeyEnvVar] : false;
+        const hasEnvKey = apiKeyEnvVar ? !!process.env[apiKeyEnvVar] : true;
 
         let hasApiKey = hasEnvKey;
         if (!hasApiKey && this.config.modelAuthChecker) {

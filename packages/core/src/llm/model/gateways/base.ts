@@ -11,7 +11,7 @@ import type { OpenAITransport, ResponsesWebSocketOptions } from '../provider-opt
 export interface ProviderConfig {
   url?: string;
   apiKeyHeader?: string;
-  apiKeyEnvVar: string | string[];
+  apiKeyEnvVar?: string | string[];
   name: string;
   models: string[];
   docUrl?: string; // Optional documentation URL

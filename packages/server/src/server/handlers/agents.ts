@@ -175,8 +175,16 @@ export function isProviderConnected(providerId: string, customProviders?: Record
 
   if (!provider) return false;
 
+  if (!provider.apiKeyEnvVar) {
+    return true;
+  }
+
   const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
-  return envVars.every(envVar => !!process.env[envVar]);
+  const validEnvVars = envVars.filter(Boolean);
+  if (validEnvVars.length === 0) {
+    return true;
+  }
+  return validEnvVars.every(envVar => !!process.env[envVar]);
 }
 
 export interface SerializedProcessor {

@@ -490,6 +490,58 @@ describe('isProviderConnected', () => {
       // Cleanup
       delete (global as any).__MOCK_PROVIDER_REGISTRY__;
     });
+
+    it('should return true when provider does not specify apiKeyEnvVar', () => {
+      (global as any).__MOCK_PROVIDER_REGISTRY__ = {
+        'acme/acme-openai': {
+          name: 'ACME OpenAI',
+          models: ['gpt-4.1'],
+          gateway: 'acme',
+        },
+      };
+
+      expect(isProviderConnected('acme/acme-openai')).toBe(true);
+      expect(isProviderConnected('acme-openai')).toBe(true);
+
+      // Cleanup
+      delete (global as any).__MOCK_PROVIDER_REGISTRY__;
+    });
+
+    it('should correctly output connected: true and undefined envVar in GET_PROVIDERS_ROUTE.handler when provider has no apiKeyEnvVar', async () => {
+      // Mock a custom gateway that returns a provider without apiKeyEnvVar
+      const mockGateway = {
+        id: 'test-gateway-no-key',
+        name: 'Test Gateway No Key',
+        getId: () => 'test-gateway-no-key',
+        fetchProviders: vi.fn().mockResolvedValue({
+          'custom-no-key': {
+            name: 'Custom No Key LLM',
+            models: ['custom-model-x'],
+            gateway: 'test-gateway-no-key',
+          },
+        }),
+        buildUrl: vi.fn(),
+        getApiKey: vi.fn(),
+        resolveLanguageModel: vi.fn(),
+      };
+
+      const mastra = new Mastra({
+        gateways: {
+          'test-gateway-no-key': mockGateway,
+        },
+      });
+
+      const requestContext = new RequestContext();
+      const abortSignal = new AbortController().signal;
+
+      const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+      const customProvider = result.providers.find(p => p.id === 'test-gateway-no-key/custom-no-key');
+      expect(customProvider).toBeDefined();
+      expect(customProvider?.name).toBe('Custom No Key LLM');
+      expect(customProvider?.connected).toBe(true);
+      expect(customProvider?.envVar).toBeUndefined();
+    });
   });
 });
 

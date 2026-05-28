@@ -109,6 +109,52 @@ class AnotherCustomGateway extends MastraModelGateway {
   }
 }
 
+// Custom gateway without apiKeyEnvVar
+class NoEnvKeyCustomGateway extends MastraModelGateway {
+  readonly id = 'noenv';
+  readonly name = 'no-env-custom';
+
+  async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    return {
+      'noenv-provider': {
+        name: 'No Env Custom Provider',
+        models: ['model-x'],
+        gateway: 'noenv',
+        url: 'https://api.noenv-provider.com/v1',
+      },
+    };
+  }
+
+  buildUrl(_modelId: string): string {
+    return 'https://api.noenv-provider.com/v1';
+  }
+
+  async getApiKey(_modelId: string): Promise<string> {
+    return '';
+  }
+
+  async resolveLanguageModel({
+    modelId,
+    providerId,
+    apiKey,
+    headers,
+  }: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+    headers?: Record<string, string>;
+  }): Promise<LanguageModelV2> {
+    const baseURL = this.buildUrl(`${providerId}/${modelId}`);
+    return createOpenAICompatible({
+      name: providerId,
+      apiKey,
+      baseURL,
+      headers,
+      supportsStructuredOutputs: true,
+    }).chatModel(modelId);
+  }
+}
+
 describe('Custom Gateway Integration', () => {
   beforeEach(() => {
     // Set up test environment variables
@@ -376,6 +422,26 @@ describe('Custom Gateway Integration', () => {
       expect(model).toBeDefined();
       expect(model.provider).toBe('my-provider');
       expect(model.modelId).toBe('model-1');
+    });
+  });
+
+  describe('Gateway without apiKeyEnvVar', () => {
+    it('should allow fetching providers without apiKeyEnvVar', async () => {
+      const customGateway = new NoEnvKeyCustomGateway();
+      const providers = await customGateway.fetchProviders();
+
+      expect(providers).toBeDefined();
+      expect(providers['noenv-provider']).toBeDefined();
+      expect(providers['noenv-provider'].apiKeyEnvVar).toBeUndefined();
+    });
+
+    it('should work with ModelRouterLanguageModel when apiKeyEnvVar is missing', () => {
+      const customGateway = new NoEnvKeyCustomGateway();
+      const model = new ModelRouterLanguageModel('noenv/noenv-provider/model-x', [customGateway]);
+
+      expect(model).toBeDefined();
+      expect(model.provider).toBe('noenv-provider');
+      expect(model.modelId).toBe('model-x');
     });
   });
 });

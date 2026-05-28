@@ -213,7 +213,7 @@ export const providerSchema = z.object({
   name: z.string(),
   label: z.string().optional(),
   description: z.string().optional(),
-  envVar: z.union([z.string(), z.array(z.string())]),
+  envVar: z.union([z.string(), z.array(z.string())]).optional(),
   connected: z.boolean(),
   docUrl: z.string().optional(),
   models: z.array(z.string()),
