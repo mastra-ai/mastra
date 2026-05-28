@@ -21,6 +21,11 @@ const inputGroupClassName = cn(
   'has-[[aria-invalid=true]]:border-error',
   'has-[>[data-align=block-start]]:flex-col',
   'has-[>[data-align=block-end]]:flex-col',
+  // Pill (rounded-full) only fits single-line inline shapes. Fall back to rounded-xl
+  // whenever the group goes vertical (block-* addon) or wraps a textarea.
+  'has-[>[data-align=block-start]]:rounded-xl',
+  'has-[>[data-align=block-end]]:rounded-xl',
+  'has-[textarea]:rounded-xl',
   'has-[>[data-align=inline-start]]:[&>[data-slot=input-group-control]]:pl-0',
   'has-[>[data-align=inline-end]]:[&>[data-slot=input-group-control]]:pr-0',
   // In flex-col, flex-1 collapses the input to basis-0. Force flex-none so `h-form-*` applies.

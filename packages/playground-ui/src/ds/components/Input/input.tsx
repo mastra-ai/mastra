@@ -48,11 +48,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <input
         type={type}
-        className={cn(
-          inputVariants({ variant, size }),
-          error && 'border-error focus-visible:border-error',
-          className,
-        )}
+        className={cn(inputVariants({ variant, size }), error && 'border-error focus-visible:border-error', className)}
         data-testid={testId}
         ref={ref}
         aria-invalid={error}
