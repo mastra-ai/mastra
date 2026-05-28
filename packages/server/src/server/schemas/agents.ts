@@ -299,6 +299,7 @@ export const agentExecutionBodySchema = z
             z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
           )
           .optional(),
+        defaultStatus: z.enum(['draft', 'published']).optional(),
       })
       .optional(),
 

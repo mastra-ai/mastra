@@ -435,6 +435,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 await options?.onFinish?.(self.#createSuspendedOnFinishPayload(chunk));
               }
               break;
+            case 'abort':
+              self.#status = 'canceled';
+              if (!self.#finishCallbackSent) {
+                self.#finishCallbackSent = true;
+                await options?.onFinish?.(self.#createAbortedOnFinishPayload());
+              }
+              self.#closeTransportIfNeeded();
+              break;
             case 'raw':
               if (!self.#options.includeRawChunks) {
                 return;
@@ -1597,6 +1605,36 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       cachedInputTokens: this.#usageCount.cachedInputTokens,
       cacheCreationInputTokens: this.#usageCount.cacheCreationInputTokens,
       ...(this.#usageCount.raw !== undefined && { raw: this.#usageCount.raw }),
+    };
+  }
+
+  #createAbortedOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
+    // Abort flow invokes options?.onFinish so map-results-step.ts can close the AGENT_RUN span.
+    // That span path only reads finishReason. The remaining LLMStepResult fields are empty
+    // defaults to satisfy the MastraOnFinishCallback shape without reconstructing partial
+    // buffered state from a stream that was canceled mid-flight.
+    return {
+      finishReason: 'aborted',
+      text: '',
+      reasoning: [],
+      reasoningText: undefined,
+      sources: [],
+      files: [],
+      toolCalls: [],
+      toolResults: [],
+      staticToolCalls: [],
+      staticToolResults: [],
+      dynamicToolCalls: [],
+      dynamicToolResults: [],
+      content: [],
+      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      warnings: [],
+      providerMetadata: undefined,
+      request: {},
+      response: {},
+      steps: [],
+      totalUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      object: undefined as OUTPUT,
     };
   }
 
