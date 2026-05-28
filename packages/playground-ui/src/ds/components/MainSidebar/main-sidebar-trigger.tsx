@@ -48,7 +48,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
       />
 
       <TooltipContent>
-        Toggle Sidebar
+        {t('ds.sidebar.toggle')}
         <div className="flex items-center gap-1 [&>svg]:w-[1em] [&>svg]:h-[1em]">
           <KeyboardIcon /> Ctrl+B
         </div>

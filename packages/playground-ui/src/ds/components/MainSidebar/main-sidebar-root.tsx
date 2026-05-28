@@ -255,8 +255,8 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
         aria-valuenow={isCollapsed ? undefined : currentWidth}
         aria-valuemin={isCollapsed ? undefined : minWidth}
         aria-valuemax={isCollapsed ? undefined : maxWidth}
-        aria-valuetext={isCollapsed ? t('ds.sidebar.collapsed') : `${currentWidth} pixels`}
-        aria-label={t('ds.sidebar.resizeLabel', { action: isCollapsed ? t('common.next') : t('ds.sidebar.collapsed') })}
+        aria-valuetext={isCollapsed ? t('ds.sidebar.collapsed') : t('ds.sidebar.widthPixels', { count: currentWidth })}
+        aria-label={t('ds.sidebar.resizeLabel', { action: isCollapsed ? t('ds.sidebar.expand') : t('ds.sidebar.collapse') })}
         tabIndex={0}
         onPointerDown={onPointerDown}
         onClick={onClick}

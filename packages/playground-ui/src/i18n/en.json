@@ -35,9 +35,12 @@
     "sidebar": {
       "navigation": "Navigation",
       "description": "Primary site navigation drawer",
-      "toggle": "Toggle sidebar",
+      "toggle": "Toggle Sidebar",
       "resizeLabel": "Resize sidebar. Arrow keys to resize, Enter to {{action}}.",
-      "collapsed": "collapsed"
+      "collapsed": "collapsed",
+      "expand": "expand",
+      "collapse": "collapse",
+      "widthPixels": "{{count}} pixels"
     },
     "dialog": {
       "close": "Close"

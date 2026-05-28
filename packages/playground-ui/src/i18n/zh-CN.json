@@ -37,7 +37,10 @@
       "description": "主导航抽屉",
       "toggle": "切换侧边栏",
       "resizeLabel": "调整侧边栏大小。方向键调整，回车键{{action}}。",
-      "collapsed": "已折叠"
+      "collapsed": "已折叠",
+      "expand": "展开",
+      "collapse": "折叠",
+      "widthPixels": "{{count}} 像素"
     },
     "dialog": {
       "close": "关闭"
