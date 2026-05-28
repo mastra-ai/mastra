@@ -30,3 +30,35 @@ Also adds `FilesystemDB.listDomainFiles`, `domainFileExists`, and
 `removeDomainFile` helpers, and broadens `GitHistory.getFileAtCommit` to be
 generic so callers can request a per-entity snapshot type rather than the
 shared-map shape.
+
+Example — configure a domain to persist each entity to its own file:
+
+```typescript
+import { FilesystemDB, FilesystemVersionedHelpers } from '@mastra/core/storage';
+
+const db = new FilesystemDB('./mastra/editor');
+
+// Entities that should be persisted as their own files.
+const codeModeEntityIds = new Set(['support-bot']);
+
+const agents = new FilesystemVersionedHelpers({
+  db,
+  entitiesFile: 'agents.json',
+  parentIdField: 'agentId',
+  name: 'agents',
+  versionMetadataFields: ['id', 'agentId', 'versionNumber', 'createdAt'],
+  // New per-entity hooks:
+  perEntityFilesDir: 'agents',
+  // Decide per entity whether it gets its own file (vs. the shared agents.json).
+  shouldPersistToPerEntityFile: entity => codeModeEntityIds.has(entity.id),
+  // Drop fields that should not live in the per-entity file.
+  perEntitySnapshotFilter: snapshot => {
+    const { model, ...userOwned } = snapshot;
+    return userOwned;
+  },
+});
+
+// Published snapshots are now written to ./mastra/editor/agents/<id>.json,
+// and each git commit to those files shows up as a read-only version.
+const versions = await agents.listVersions({ agentId: 'support-bot' }, 'agentId');
+```

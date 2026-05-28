@@ -107,6 +107,9 @@ export class FilesystemDB {
       throw new Error(`Path traversal detected: directory "${directory}" escapes storage directory`);
     }
     if (!existsSync(baseDir)) return [];
+    if (!statSync(baseDir).isDirectory()) {
+      throw new Error(`Configured domain path "${directory}" is a file, expected a directory`);
+    }
 
     return readdirSync(baseDir)
       .filter(file => extname(file) === extension && statSync(join(baseDir, file)).isFile())
@@ -117,7 +120,12 @@ export class FilesystemDB {
    * Check whether a domain file currently exists on disk.
    */
   domainFileExists(filename: string): boolean {
-    return existsSync(join(this.dir, filename));
+    const filePath = resolve(this.dir, filename);
+    const rootDir = resolve(this.dir);
+    if (!filePath.startsWith(rootDir + sep) && filePath !== rootDir) {
+      throw new Error(`Path traversal detected: file "${filename}" escapes storage directory`);
+    }
+    return existsSync(filePath);
   }
 
   removeDomainFile(filename: string): void {

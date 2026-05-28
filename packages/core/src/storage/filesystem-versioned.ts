@@ -329,41 +329,8 @@ export class FilesystemVersionedHelpers<
       }
 
       for (const entityId of perEntityIds) {
-        const filename = this.perEntityFilename(entityId);
-        const perEntityCommits = await git.getFileHistory(dir, filename, this.gitHistoryLimit);
-        if (perEntityCommits.length === 0) continue;
-
-        const orderedPerEntity = [...perEntityCommits].reverse();
-        let previousSnapshotForEntity: string | undefined;
-        let count = entityVersionCount.get(entityId) ?? 0;
-
-        for (const commit of orderedPerEntity) {
-          const snapshotConfig = await git.getFileAtCommit<Record<string, unknown>>(dir, commit.hash, filename);
-          if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
-
-          // The per-entity file IS the snapshot, so flatten one level
-          // compared to the shared-file branch above.
-          const serialized = JSON.stringify(snapshotConfig);
-          if (previousSnapshotForEntity === serialized) continue;
-          previousSnapshotForEntity = serialized;
-
-          count += 1;
-          entityVersionCount.set(entityId, count);
-
-          const versionId = `${GIT_VERSION_PREFIX}${commit.hash}-${entityId}`;
-          if (this.versions.has(versionId)) continue;
-
-          const version = {
-            id: versionId,
-            [this.parentIdField]: entityId,
-            versionNumber: count,
-            changeMessage: commit.message,
-            ...snapshotConfig,
-            createdAt: commit.date,
-          } as TVersion;
-
-          this.versions.set(versionId, version);
-        }
+        const count = await this.loadPerEntityGitHistory(entityId, entityVersionCount.get(entityId) ?? 0);
+        entityVersionCount.set(entityId, count);
       }
     }
 
@@ -379,6 +346,54 @@ export class FilesystemVersionedHelpers<
         (version as Record<string, unknown>).versionNumber = gitCount + 1;
       }
     }
+  }
+
+  /**
+   * Load git-backed versions for a single per-entity file. Each commit that
+   * changes the file becomes one version. Returns the running version count
+   * for the entity (starting from `startCount`). Used both by the bulk
+   * git-history pass and by `listVersions` to lazily discover entities that
+   * were deleted on disk but still exist in git history.
+   */
+  private async loadPerEntityGitHistory(entityId: string, startCount: number): Promise<number> {
+    const git = FilesystemVersionedHelpers.gitHistory;
+    const dir = this.db.dir;
+    const filename = this.perEntityFilename(entityId);
+    const perEntityCommits = await git.getFileHistory(dir, filename, this.gitHistoryLimit);
+    if (perEntityCommits.length === 0) return startCount;
+
+    const orderedPerEntity = [...perEntityCommits].reverse();
+    let previousSnapshotForEntity: string | undefined;
+    let count = startCount;
+
+    for (const commit of orderedPerEntity) {
+      const snapshotConfig = await git.getFileAtCommit<Record<string, unknown>>(dir, commit.hash, filename);
+      if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
+
+      // The per-entity file IS the snapshot, so flatten one level
+      // compared to the shared-file branch.
+      const serialized = JSON.stringify(snapshotConfig);
+      if (previousSnapshotForEntity === serialized) continue;
+      previousSnapshotForEntity = serialized;
+
+      count += 1;
+
+      const versionId = `${GIT_VERSION_PREFIX}${commit.hash}-${entityId}`;
+      if (this.versions.has(versionId)) continue;
+
+      const version = {
+        id: versionId,
+        [this.parentIdField]: entityId,
+        versionNumber: count,
+        changeMessage: commit.message,
+        ...snapshotConfig,
+        createdAt: commit.date,
+      } as TVersion;
+
+      this.versions.set(versionId, version);
+    }
+
+    return count;
   }
 
   // ==========================================================================
@@ -637,6 +652,21 @@ export class FilesystemVersionedHelpers<
       v => (v as Record<string, unknown>)[this.parentIdField] === entityId,
     );
 
+    // Lazily discover per-entity files that were deleted on disk but still
+    // exist in git history. The bulk git-history pass only walks entities that
+    // are currently on disk or in memory, so a deleted-then-requested entity
+    // would otherwise surface no versions.
+    if (versions.length === 0 && this.perEntityFilesDir && entityId) {
+      const startCount = this.gitVersionCounts.get(entityId) ?? 0;
+      const newCount = await this.loadPerEntityGitHistory(entityId, startCount);
+      if (newCount > startCount) {
+        this.gitVersionCounts.set(entityId, newCount);
+        versions = Array.from(this.versions.values()).filter(
+          v => (v as Record<string, unknown>)[this.parentIdField] === entityId,
+        );
+      }
+    }
+
     // Sort
     const field = (orderBy?.field as string) ?? 'versionNumber';
     const direction = (orderBy?.direction as string) ?? 'DESC';
@@ -709,5 +739,13 @@ export class FilesystemVersionedHelpers<
     this.gitHistoryPromise = null;
     this.hydrated = false;
     this.db.clearDomain(this.entitiesFile);
+
+    // Per-entity files are real on-disk snapshots; clearing only the shared
+    // file leaves them behind and they get re-imported on the next hydrate.
+    if (this.perEntityFilesDir) {
+      for (const filename of this.db.listDomainFiles(this.perEntityFilesDir)) {
+        this.db.removeDomainFile(filename);
+      }
+    }
   }
 }
