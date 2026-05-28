@@ -48,10 +48,19 @@ function toJsValue(val: unknown): unknown {
   return val;
 }
 
+/** Default idle timeout before the DuckDB instance is closed to release its file lock. */
+const DEFAULT_IDLE_TIMEOUT_MS = 500;
+
 /** Configuration for the DuckDB database connection. */
 export interface DuckDBStorageConfig {
   /** Path to the DuckDB file. Defaults to 'mastra.duckdb'. Use ':memory:' for ephemeral. */
   path?: string;
+  /**
+   * Milliseconds of inactivity before the DuckDB instance is closed to release
+   * the file lock. Set to `0` to disable idle closing (keeps the lock for the
+   * process lifetime). Defaults to 500.
+   */
+  idleTimeoutMs?: number;
 }
 
 /**
@@ -64,13 +73,59 @@ export class DuckDBConnection extends MastraBase {
   private initialized = false;
   private initPromise: Promise<void> | null = null;
   private path: string;
+  private idleTimeoutMs: number;
+  private activeOps = 0;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: DuckDBStorageConfig = {}) {
     super({ component: 'STORAGE', name: 'DUCKDB' });
     this.path = config.path ?? 'mastra.duckdb';
+    // Idle close is destructive for in-memory databases — disable by default.
+    this.idleTimeoutMs = config.idleTimeoutMs ?? (this.path === ':memory:' ? 0 : DEFAULT_IDLE_TIMEOUT_MS);
+  }
+
+  private cancelIdleClose(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  private scheduleIdleClose(): void {
+    if (this.idleTimeoutMs <= 0 || this.activeOps > 0) return;
+    this.cancelIdleClose();
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      if (this.activeOps === 0) {
+        this.releaseInstance();
+      }
+    }, this.idleTimeoutMs);
+    // Don't let the timer prevent Node from exiting.
+    if (this.idleTimer && typeof this.idleTimer === 'object' && 'unref' in this.idleTimer) {
+      (this.idleTimer as NodeJS.Timeout).unref();
+    }
+  }
+
+  private releaseInstance(): void {
+    if (!this.instance) return;
+    try {
+      const inst = this.instance as unknown as { closeSync?: () => void; close?: () => void };
+      if (typeof inst.closeSync === 'function') {
+        inst.closeSync();
+      } else if (typeof inst.close === 'function') {
+        inst.close();
+      }
+    } catch {
+      // Ignore close failures to allow cleanup of references.
+    }
+    this.instance = null;
+    this.initialized = false;
+    this.initPromise = null;
   }
 
   private async initialize(): Promise<void> {
+    this.cancelIdleClose();
+
     if (this.initialized && this.instance) return;
 
     if (this.initPromise) {
@@ -136,6 +191,7 @@ export class DuckDBConnection extends MastraBase {
    * Execute a SQL query and return results as objects.
    */
   async query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
+    this.activeOps++;
     const connection = await this.getConnection();
     try {
       if (params.length === 0) {
@@ -169,6 +225,8 @@ export class DuckDBConnection extends MastraBase {
       });
     } finally {
       this.closeConnection(connection);
+      this.activeOps--;
+      this.scheduleIdleClose();
     }
   }
 
@@ -176,6 +234,7 @@ export class DuckDBConnection extends MastraBase {
    * Execute a SQL statement without returning results.
    */
   async execute(sql: string, params: unknown[] = []): Promise<void> {
+    this.activeOps++;
     const connection = await this.getConnection();
     try {
       if (params.length === 0) {
@@ -191,6 +250,8 @@ export class DuckDBConnection extends MastraBase {
       await stmt.run();
     } finally {
       this.closeConnection(connection);
+      this.activeOps--;
+      this.scheduleIdleClose();
     }
   }
 
@@ -207,6 +268,7 @@ export class DuckDBConnection extends MastraBase {
     const statements = sqlStatements.map(statement => statement.trim()).filter(Boolean);
     if (statements.length === 0) return;
 
+    this.activeOps++;
     const connection = await this.getConnection();
     try {
       const sql =
@@ -214,6 +276,8 @@ export class DuckDBConnection extends MastraBase {
       await connection.run(sql);
     } finally {
       this.closeConnection(connection);
+      this.activeOps--;
+      this.scheduleIdleClose();
     }
   }
 
@@ -237,20 +301,7 @@ export class DuckDBConnection extends MastraBase {
 
   /** Release the DuckDB instance, allowing garbage collection. */
   async close(): Promise<void> {
-    if (this.instance) {
-      try {
-        const instance = this.instance as unknown as { closeSync?: () => void; close?: () => void };
-        if (typeof instance.closeSync === 'function') {
-          instance.closeSync();
-        } else if (typeof instance.close === 'function') {
-          instance.close();
-        }
-      } catch {
-        // Ignore close failures to allow cleanup of references.
-      }
-      this.instance = null;
-      this.initialized = false;
-      this.initPromise = null;
-    }
+    this.cancelIdleClose();
+    this.releaseInstance();
   }
 }
