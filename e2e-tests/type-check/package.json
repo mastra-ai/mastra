@@ -14,14 +14,5 @@
   },
   "scripts": {
     "test": "tsx test.ts"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
-  "resolutions": {
-    "ssri": "^6.0.2",
-    "qs": "^6.15.1"
   }
 }
