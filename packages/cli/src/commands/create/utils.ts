@@ -268,6 +268,9 @@ export const createMastraProject = async ({
 allowBuilds:
   esbuild: true
   sharp: true
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
 `,
       );
     }
