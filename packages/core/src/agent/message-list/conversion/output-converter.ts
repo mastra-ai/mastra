@@ -312,11 +312,11 @@ function convertMcpContentToolResultOutput(output: unknown): unknown {
         case 'image':
           return typeof typedPart.data === 'string'
             ? { type: 'image-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
-            : null;
+            : { type: 'text', text: JSON.stringify(typedPart) };
         case 'audio':
           return typeof typedPart.data === 'string'
             ? { type: 'file-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
-            : null;
+            : { type: 'text', text: JSON.stringify(typedPart) };
         default:
           return { type: 'text', text: JSON.stringify(typedPart) };
       }
@@ -339,6 +339,13 @@ function collectRawToolResultOutputs(dbMessages: MastraDBMessage[]): Map<string,
   return outputs;
 }
 
+function isDefaultToolResultOutput(output: unknown, rawOutput: unknown): boolean {
+  if (!output || typeof output !== 'object') return false;
+  const typedOutput = output as Record<string, unknown>;
+  if (typedOutput.type !== 'json') return false;
+  return JSON.stringify(typedOutput.value) === JSON.stringify(rawOutput);
+}
+
 function applyMcpContentToolResultOutputs(
   modelMessages: AIV5Type.ModelMessage[],
   dbMessages: MastraDBMessage[],
@@ -351,8 +358,10 @@ function applyMcpContentToolResultOutputs(
 
     let modified = false;
     const content = message.content.map(part => {
-      if (part.type !== 'tool-result') return part;
-      const converted = convertMcpContentToolResultOutput(rawOutputs.get(part.toolCallId));
+      if (part.type !== 'tool-result' || !rawOutputs.has(part.toolCallId)) return part;
+      const rawOutput = rawOutputs.get(part.toolCallId);
+      if (!isDefaultToolResultOutput(part.output, rawOutput)) return part;
+      const converted = convertMcpContentToolResultOutput(rawOutput);
       if (!converted) return part;
       modified = true;
       return { ...part, output: converted } as typeof part;

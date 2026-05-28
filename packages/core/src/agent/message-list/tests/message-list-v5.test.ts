@@ -1866,6 +1866,7 @@ describe('MessageList V5 Support', () => {
                   content: [
                     { type: 'text', text: 'Screenshot captured' },
                     { type: 'image', data: 'base64data', mimeType: 'image/png' },
+                    { type: 'audio', mimeType: 'audio/wav' },
                     { type: 'resource', resource: { uri: 'file:///tmp/output.txt', text: 'details' } },
                   ],
                 },
@@ -1891,6 +1892,7 @@ describe('MessageList V5 Support', () => {
         value: [
           { type: 'text', text: 'Screenshot captured' },
           { type: 'image-data', data: 'base64data', mediaType: 'image/png' },
+          { type: 'text', text: JSON.stringify({ type: 'audio', mimeType: 'audio/wav' }) },
           {
             type: 'text',
             text: JSON.stringify({ type: 'resource', resource: { uri: 'file:///tmp/output.txt', text: 'details' } }),
