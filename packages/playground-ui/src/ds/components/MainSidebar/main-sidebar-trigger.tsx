@@ -2,6 +2,7 @@ import { KeyboardIcon, PanelRightIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarTriggerProps = ComponentPropsWithoutRef<'button'>;
@@ -10,6 +11,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
   // Use desktopState so the icon reflects the persisted desktop state
   // even on mobile (where `state` is forced to 'default' for the drawer).
   const { desktopState, toggleSidebar } = useMainSidebar();
+  const { t } = useI18n();
   const isCollapsed = desktopState === 'collapsed';
 
   return (
@@ -18,7 +20,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
         render={
           <button
             type="button"
-            aria-label="Toggle sidebar"
+            aria-label={t('ds.sidebar.toggle')}
             aria-expanded={!isCollapsed}
             {...props}
             onClick={event => {

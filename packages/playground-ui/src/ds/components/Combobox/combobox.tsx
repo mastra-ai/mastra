@@ -4,6 +4,7 @@ import * as React from 'react';
 import { comboboxStyles } from './combobox-styles';
 import { formElementSizes } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 export type ComboboxOption = {
@@ -43,9 +44,9 @@ export function Combobox({
   options,
   value,
   onValueChange,
-  placeholder = 'Select option...',
-  searchPlaceholder = 'Search...',
-  emptyText = 'No option found.',
+  placeholder,
+  searchPlaceholder,
+  emptyText,
   className,
   disabled = false,
   variant = 'default',
@@ -55,6 +56,10 @@ export function Combobox({
   container,
   error,
 }: ComboboxProps) {
+  const { t } = useI18n();
+  const _placeholder = placeholder ?? t('ds.combobox.placeholder');
+  const _searchPlaceholder = searchPlaceholder ?? t('ds.combobox.searchPlaceholder');
+  const _emptyText = emptyText ?? t('ds.combobox.emptyText');
   const selectedOption = options.find(option => option.value === value) ?? null;
 
   const handleSelect = (item: ComboboxOption | null) => {
@@ -86,7 +91,7 @@ export function Combobox({
           <span className="flex items-center gap-2 min-w-0 flex-1">
             {selectedOption?.start}
             <span className="truncate">
-              <BaseCombobox.Value placeholder={placeholder} />
+              <BaseCombobox.Value placeholder={_placeholder} />
             </span>
           </span>
           <ChevronsUpDown className={comboboxStyles.chevron} />
@@ -97,9 +102,9 @@ export function Combobox({
             <BaseCombobox.Popup className={comboboxStyles.popup}>
               <div className={comboboxStyles.searchContainer}>
                 <Search className={comboboxStyles.searchIcon} />
-                <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
+                <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={_searchPlaceholder} />
               </div>
-              <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
+              <BaseCombobox.Empty className={comboboxStyles.empty}>{_emptyText}</BaseCombobox.Empty>
               <BaseCombobox.List className={comboboxStyles.list}>
                 {(option: ComboboxOption) => (
                   <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.item}>

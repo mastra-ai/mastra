@@ -5,6 +5,7 @@ import type { ComboboxOption } from './combobox';
 import { comboboxStyles } from './combobox-styles';
 import { formElementSizes } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 export type { ComboboxOption };
@@ -31,9 +32,9 @@ export function MultiCombobox({
   options,
   value = [],
   onValueChange,
-  placeholder = 'Select options...',
-  searchPlaceholder = 'Search...',
-  emptyText = 'No option found.',
+  placeholder,
+  searchPlaceholder,
+  emptyText,
   className,
   disabled = false,
   size = 'md',
@@ -42,6 +43,10 @@ export function MultiCombobox({
   container,
   error,
 }: MultiComboboxProps) {
+  const { t } = useI18n();
+  const _placeholder = placeholder ?? t('ds.multiCombobox.placeholder');
+  const _searchPlaceholder = searchPlaceholder ?? t('ds.multiCombobox.searchPlaceholder');
+  const _emptyText = emptyText ?? t('ds.multiCombobox.emptyText');
   const selectedOptions = options.filter(option => value.includes(option.value));
 
   const handleSelect = (items: ComboboxOption[] | null) => {
@@ -50,7 +55,7 @@ export function MultiCombobox({
     }
   };
 
-  const triggerText = selectedOptions.length === 0 ? placeholder : `${selectedOptions.length} selected`;
+  const triggerText = selectedOptions.length === 0 ? _placeholder : t('ds.multiCombobox.selected', { count: selectedOptions.length });
 
   return (
     <div className={comboboxStyles.root}>
@@ -82,9 +87,9 @@ export function MultiCombobox({
             <BaseCombobox.Popup className={comboboxStyles.popup}>
               <div className={comboboxStyles.searchContainer}>
                 <Search className={comboboxStyles.searchIcon} />
-                <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
+                <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={_searchPlaceholder} />
               </div>
-              <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
+              <BaseCombobox.Empty className={comboboxStyles.empty}>{_emptyText}</BaseCombobox.Empty>
               <BaseCombobox.List className={comboboxStyles.list}>
                 {(option: ComboboxOption) => {
                   const isSelected = value.includes(option.value);

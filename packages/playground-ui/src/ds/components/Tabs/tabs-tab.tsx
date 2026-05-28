@@ -1,6 +1,7 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { X } from 'lucide-react';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 export type TabProps = {
@@ -13,6 +14,7 @@ export type TabProps = {
 };
 
 export const Tab = ({ children, value, onClick, onClose, disabled, className }: TabProps) => {
+  const { t } = useI18n();
   return (
     <BaseTabs.Tab
       value={value}
@@ -48,7 +50,7 @@ export const Tab = ({ children, value, onClick, onClose, disabled, className }: 
             onClose();
           }}
           className={cn('p-0.5 hover:bg-surface4 rounded', transitions.colors, 'hover:text-neutral5')}
-          aria-label="Close tab"
+          aria-label={t('ds.tabs.closeTab')}
         >
           <X className="w-3 h-3" />
         </button>

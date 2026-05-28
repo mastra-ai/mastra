@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarRootProps = {
@@ -14,6 +15,7 @@ const KEYBOARD_STEP = 10;
 const DRAG_THRESHOLD = 5;
 
 export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
+  const { t } = useI18n();
   const {
     state,
     width,
@@ -202,10 +204,10 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
             )}
           >
             <VisuallyHidden asChild>
-              <DialogPrimitive.Title>Navigation</DialogPrimitive.Title>
+              <DialogPrimitive.Title>{t('ds.sidebar.navigation')}</DialogPrimitive.Title>
             </VisuallyHidden>
             <VisuallyHidden asChild>
-              <DialogPrimitive.Description>Primary site navigation drawer</DialogPrimitive.Description>
+              <DialogPrimitive.Description>{t('ds.sidebar.description')}</DialogPrimitive.Description>
             </VisuallyHidden>
             <div onClick={closeOnAnchor} className="flex flex-col h-full min-h-0 px-4 py-2 overflow-hidden">
               {children}
@@ -253,8 +255,8 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
         aria-valuenow={isCollapsed ? undefined : currentWidth}
         aria-valuemin={isCollapsed ? undefined : minWidth}
         aria-valuemax={isCollapsed ? undefined : maxWidth}
-        aria-valuetext={isCollapsed ? 'collapsed' : `${currentWidth} pixels`}
-        aria-label={`Resize sidebar. Arrow keys to resize, Enter to ${isCollapsed ? 'expand' : 'collapse'}.`}
+        aria-valuetext={isCollapsed ? t('ds.sidebar.collapsed') : `${currentWidth} pixels`}
+        aria-label={t('ds.sidebar.resizeLabel', { action: isCollapsed ? t('common.next') : t('ds.sidebar.collapsed') })}
         tabIndex={0}
         onPointerDown={onPointerDown}
         onClick={onClick}

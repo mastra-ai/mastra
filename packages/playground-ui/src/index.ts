@@ -148,5 +148,8 @@ export * from './domains/metrics';
 export * from './domains/traces';
 export * from './domains/logs';
 
+// i18n
+export * from './i18n';
+
 // DS Types
 export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';

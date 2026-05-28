@@ -1,0 +1,85 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "search": "Search...",
+    "select": "Select...",
+    "close": "Close",
+    "previous": "Previous",
+    "next": "Next",
+    "copyToClipboard": "Copy to clipboard",
+    "unknownError": "Unknown error",
+    "total": "Total"
+  },
+  "ds": {
+    "combobox": {
+      "placeholder": "Select option...",
+      "searchPlaceholder": "Search...",
+      "emptyText": "No option found."
+    },
+    "multiCombobox": {
+      "placeholder": "Select options...",
+      "searchPlaceholder": "Search...",
+      "emptyText": "No option found.",
+      "selected": "{{count}} selected"
+    },
+    "timePicker": {
+      "placeholder": "Select..."
+    },
+    "dateTimePicker": {
+      "chooseDate": "Choose date"
+    },
+    "dateTimeRangePicker": {
+      "start": "Start",
+      "end": "End"
+    },
+    "sidebar": {
+      "navigation": "Navigation",
+      "description": "Primary site navigation drawer",
+      "toggle": "Toggle sidebar",
+      "resizeLabel": "Resize sidebar. Arrow keys to resize, Enter to {{action}}.",
+      "collapsed": "collapsed"
+    },
+    "dialog": {
+      "close": "Close"
+    },
+    "sideDialog": {
+      "close": "Close"
+    },
+    "tabs": {
+      "closeTab": "Close tab"
+    },
+    "codeEditor": {
+      "label": "Code editor"
+    },
+    "schemaForm": {
+      "selectType": "Select type",
+      "string": "String",
+      "number": "Number",
+      "boolean": "Boolean",
+      "text": "Text",
+      "object": "Object",
+      "array": "Array"
+    },
+    "itemList": {
+      "latestVersion": "Latest version",
+      "deletedVersion": "Deleted in this version"
+    },
+    "dataCodeSection": {
+      "searchCode": "Search code"
+    },
+    "dataFilter": {
+      "searchFilters": "Search filters"
+    },
+    "propertyFilter": {
+      "any": "Any",
+      "backToProperties": "Back to properties",
+      "inUse": "In use"
+    },
+    "searchField": {
+      "clearSearch": "Clear search"
+    },
+    "horizontalBars": {
+      "total": "Total"
+    }
+  }
+}
