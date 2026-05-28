@@ -1,4 +1,4 @@
-import type { MastraUIMessage } from '@mastra/react';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
@@ -25,24 +25,24 @@ const useDelayedFlag = (flag: boolean, delayMs: number) => {
 const SKELETON_DELAY_MS = 300;
 
 interface MessageListProps {
-  messages: MastraUIMessage[];
+  messages: MastraDBMessage[];
   isLoading?: boolean;
   isRunning?: boolean;
   emptyState?: ReactNode;
   skeletonTestId?: string;
 }
 
-const hasStreamingPart = (message: MastraUIMessage | undefined) => {
+const hasStreamingPart = (message: MastraDBMessage | undefined) => {
   if (!message) return false;
-  return message.parts.some(part => {
+  const parts = message.content?.parts;
+  if (!Array.isArray(parts)) return false;
+  return parts.some(part => {
     if (part.type === 'reasoning' || part.type === 'text') {
       return (part as { state?: string }).state === 'streaming';
     }
-    if (part.type === 'dynamic-tool') {
-      return true;
-    }
-    if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-      return true;
+    if (part.type === 'tool-invocation') {
+      const state = part.toolInvocation.state;
+      return state !== 'result' && state !== 'output-error' && state !== 'output-denied';
     }
     return false;
   });

@@ -161,7 +161,7 @@ describe('MastraRuntimeProvider', () => {
 
     expect(mocks.runtimeProps.messages[0]).toMatchObject({
       role: 'assistant',
-      parts: [
+      content: [
         {
           type: 'text',
           text: 'Agent stopped because it reached maxSteps (3) while tool calls were still pending. Increase maxSteps in advanced settings and try again.',

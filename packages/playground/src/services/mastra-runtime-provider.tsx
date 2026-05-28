@@ -1,10 +1,10 @@
 import type { AppendMessage } from '@assistant-ui/react';
 import { useExternalStoreRuntime, AssistantRuntimeProvider } from '@assistant-ui/react';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
-import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
+import { useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
@@ -13,6 +13,7 @@ import {
   buildStreamErrorMessage,
   isMaxStepsFinishChunk,
 } from './stream-error-message';
+import { toAssistantUIMessage } from './to-assistant-ui-message';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -136,11 +137,12 @@ const indexOmPartsByCycleId = (parts: any[], target: Map<string, OmCycleParts>) 
  * This gives each per-message converter the full picture of a cycle's state
  * (e.g., buffering-start on message A, activation on message B).
  */
-const buildGlobalOmPartsByCycleId = (messages: MastraUIMessage[]) => {
+const buildGlobalOmPartsByCycleId = (messages: MastraDBMessage[]) => {
   const map = new Map<string, OmCycleParts>();
   for (const msg of messages) {
-    if (!msg || !Array.isArray(msg.parts)) continue;
-    indexOmPartsByCycleId(msg.parts, map);
+    const parts = msg?.content?.parts;
+    if (!Array.isArray(parts)) continue;
+    indexOmPartsByCycleId(parts, map);
   }
   return map;
 };
@@ -160,10 +162,10 @@ const buildGlobalOmPartsByCycleId = (messages: MastraUIMessage[]) => {
  *   span multiple messages (e.g., buffering-start on msg A, activation on msg B).
  */
 const convertOmPartsInMastraMessage = (
-  message: MastraUIMessage,
+  message: MastraDBMessage,
   globalOmParts: Map<string, OmCycleParts>,
-): MastraUIMessage => {
-  if (!message || !Array.isArray(message.parts)) {
+): MastraDBMessage => {
+  if (!message || !Array.isArray(message.content?.parts)) {
     return message;
   }
 
@@ -174,7 +176,7 @@ const convertOmPartsInMastraMessage = (
   // This ensures badges stay in their original position even after reload.
   const convertedParts: any[] = [];
 
-  for (const part of message.parts) {
+  for (const part of message.content.parts) {
     const cycleId = (part as any).data?.cycleId;
     const partType = part.type as string;
 
@@ -281,7 +283,10 @@ const convertOmPartsInMastraMessage = (
 
   return {
     ...message,
-    parts: convertedParts,
+    content: {
+      ...message.content,
+      parts: convertedParts as MastraDBMessage['content']['parts'],
+    },
   };
 };
 
@@ -305,7 +310,7 @@ export function MastraRuntimeProvider({
   // server memory, so they get wiped from useChat's `messages` state when
   // `initialMessages` refreshes after a stream ends. Track them in a parallel
   // state that survives those resets so the chat still surfaces the failure.
-  const [streamErrors, setStreamErrors] = useState<MastraUIMessage[]>([]);
+  const [streamErrors, setStreamErrors] = useState<MastraDBMessage[]>([]);
   const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
@@ -861,10 +866,12 @@ export function MastraRuntimeProvider({
   // tracked in `streamErrors` (which survives the post-stream initialMessages
   // refresh). Without filtering here we would briefly render duplicate errors
   // during the streaming window.
-  const vnextmessages = [...messages.filter(msg => msg.metadata?.status !== 'error'), ...streamErrors].map(msg => {
-    const converted = convertOmPartsInMastraMessage(msg, globalOmParts);
-    return toAssistantUIMessage(converted);
-  });
+  const vnextmessages = [...messages.filter(msg => msg.content?.metadata?.status !== 'error'), ...streamErrors].map(
+    msg => {
+      const converted = convertOmPartsInMastraMessage(msg, globalOmParts);
+      return toAssistantUIMessage(converted);
+    },
+  );
 
   const runtime = useExternalStoreRuntime({
     isRunning: isRunningStream,

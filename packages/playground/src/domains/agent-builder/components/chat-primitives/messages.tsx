@@ -1,3 +1,4 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import {
   Card,
   Collapsible,
@@ -8,7 +9,6 @@ import {
   Skeleton,
   Txt,
 } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
 import {
   AlignLeft,
   Check,
@@ -40,134 +40,62 @@ import {
 import { ProviderLogo } from '@/domains/llm';
 
 interface MessageRowProps {
-  message: MastraUIMessage;
+  message: MastraDBMessage;
 }
 
 export const MessageRow = ({ message }: MessageRowProps) => {
+  const parts = message.content?.parts ?? [];
   return (
     <>
-      {message.parts.map((part, index) => {
+      {parts.map((part, index) => {
         const key = `${message.id}-${index}`;
-        switch (part.type) {
-          case 'text':
-            return <Txtmessage key={key} txt={part.text} role={message.role} />;
+        if (part.type === 'text') {
+          return <Txtmessage key={key} txt={part.text} role={message.role} />;
+        }
 
-          case 'reasoning': {
-            if (part.state !== 'streaming') return null;
+        if (part.type === 'reasoning') {
+          if ((part as { state?: string }).state !== 'streaming') return null;
+          return <ReasoningMessage key={key} text="Reasoning..." streaming />;
+        }
 
-            return <ReasoningMessage key={key} text="Reasoning..." streaming />;
-          }
+        if (part.type === 'tool-invocation') {
+          const inv = part.toolInvocation;
+          if (inv.state !== 'result') return null;
+          const toolName = inv.toolName;
+          const input = (inv as { args?: unknown }).args;
+          const output = (inv as { result?: unknown }).result;
 
-          case 'dynamic-tool': {
-            if (part?.state !== 'output-available') return null;
-            switch (part.toolName) {
-              case SET_AGENT_NAME_TOOL_NAME: {
-                return <MessageSetAgentName key={key} />;
-              }
-
-              case SET_AGENT_DESCRIPTION_TOOL_NAME: {
-                return <MessageSetAgentDescription key={key} />;
-              }
-
-              case SET_AGENT_INSTRUCTIONS_TOOL_NAME: {
-                return <MessageSetAgentInstructions key={key} />;
-              }
-
-              case SET_AGENT_TOOLS_TOOL_NAME: {
-                return <MessageSetAgentTools key={key} />;
-              }
-
-              case SET_AGENT_SKILLS_TOOL_NAME: {
-                return <MessageSetAgentSkills key={key} />;
-              }
-
-              case SET_AGENT_MODEL_TOOL_NAME: {
-                return <MessageSetAgentModel key={key} />;
-              }
-
-              case SET_AGENT_BROWSER_ENABLED_TOOL_NAME: {
-                return <MessageSetAgentBrowserEnabled key={key} />;
-              }
-
-              case SET_AGENT_WORKSPACE_ID_TOOL_NAME: {
-                return <MessageSetAgentWorkspaceId key={key} />;
-              }
-
-              default: {
-                if (part.toolName === 'skill') {
-                  return <SkillTool name={(part.input as { name?: string } | undefined)?.name ?? 'unknown'} />;
-                }
-
-                const extra = part as { input?: unknown; output?: unknown };
-                return <GenericTool key={key} toolName={part.toolName} input={extra.input} output={extra.output} />;
-              }
-            }
-          }
-
-          case `tool-${SET_AGENT_NAME_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentName key={key} />;
-          }
-
-          case `tool-${SET_AGENT_DESCRIPTION_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentDescription key={key} />;
-          }
-
-          case `tool-${SET_AGENT_INSTRUCTIONS_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentInstructions key={key} />;
-          }
-          case `tool-${SET_AGENT_TOOLS_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentTools key={key} />;
-          }
-          case `tool-${SET_AGENT_SKILLS_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentSkills key={key} />;
-          }
-          case `tool-${SET_AGENT_MODEL_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentModel key={key} />;
-          }
-          case `tool-${SET_AGENT_BROWSER_ENABLED_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentBrowserEnabled key={key} />;
-          }
-          case `tool-${SET_AGENT_WORKSPACE_ID_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentWorkspaceId key={key} />;
-          }
-
-          default: {
-            if (part.type === 'tool-skill' && part.state === 'output-available') {
-              const input = (part.input as { name?: string } | undefined) ?? {};
-              return <SkillTool name={input.name ?? 'unknown'} />;
-            }
-
-            if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-              const toolName = part.type.slice('tool-'.length);
-              const extra = part as { input?: unknown; output?: unknown };
-              return <GenericTool key={key} toolName={toolName} input={extra.input} output={extra.output} />;
-            }
-
-            return null;
+          switch (toolName) {
+            case SET_AGENT_NAME_TOOL_NAME:
+              return <MessageSetAgentName key={key} />;
+            case SET_AGENT_DESCRIPTION_TOOL_NAME:
+              return <MessageSetAgentDescription key={key} />;
+            case SET_AGENT_INSTRUCTIONS_TOOL_NAME:
+              return <MessageSetAgentInstructions key={key} />;
+            case SET_AGENT_TOOLS_TOOL_NAME:
+              return <MessageSetAgentTools key={key} />;
+            case SET_AGENT_SKILLS_TOOL_NAME:
+              return <MessageSetAgentSkills key={key} />;
+            case SET_AGENT_MODEL_TOOL_NAME:
+              return <MessageSetAgentModel key={key} />;
+            case SET_AGENT_BROWSER_ENABLED_TOOL_NAME:
+              return <MessageSetAgentBrowserEnabled key={key} />;
+            case SET_AGENT_WORKSPACE_ID_TOOL_NAME:
+              return <MessageSetAgentWorkspaceId key={key} />;
+            case 'skill':
+              return <SkillTool key={key} name={(input as { name?: string } | undefined)?.name ?? 'unknown'} />;
+            default:
+              return <GenericTool key={key} toolName={toolName} input={input} output={output} />;
           }
         }
+
+        return null;
       })}
     </>
   );
 };
 
-export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['role'] }) => {
+export const Txtmessage = ({ txt, role }: { txt: string; role: MastraDBMessage['role'] }) => {
   if (role === 'user') {
     return (
       <div className="flex justify-end">

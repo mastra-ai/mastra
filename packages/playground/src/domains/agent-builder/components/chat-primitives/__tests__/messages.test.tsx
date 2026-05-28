@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { MastraUIMessage } from '@mastra/react';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { cleanup, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -18,7 +18,27 @@ import {
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
 
-type ToolPart = MastraUIMessage['parts'][number];
+type ToolPart = MastraMessagePart;
+
+interface BuilderToolInput {
+  toolName: string;
+  toolCallId: string;
+  input: Record<string, unknown>;
+  output?: unknown;
+}
+
+const builderToolPart = ({ toolName, toolCallId, input, output }: BuilderToolInput): ToolPart =>
+  ({
+    type: 'tool-invocation',
+    toolInvocation: {
+      state: 'result',
+      step: 0,
+      toolCallId,
+      toolName,
+      args: input,
+      result: output ?? { success: true },
+    },
+  }) as unknown as ToolPart;
 
 interface PrimitivesMock {
   agentId: string;
@@ -68,11 +88,16 @@ const renderRow = (parts: ToolPart[], defaultValues?: Partial<AgentBuilderEditFo
     </FormWrapper>,
   );
 
-const buildMessage = (parts: MastraUIMessage['parts']): MastraUIMessage => ({
-  id: 'msg-1',
-  role: 'assistant',
-  parts,
-});
+const buildMessage = (parts: ToolPart[]): MastraDBMessage =>
+  ({
+    id: 'msg-1',
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts,
+    },
+  }) as unknown as MastraDBMessage;
 
 describe('MessageRow dynamic-tool rendering', () => {
   beforeEach(() => {
@@ -91,14 +116,12 @@ describe('MessageRow dynamic-tool rendering', () => {
 
   it('renders the generic shimmer for non-builder dynamic tools', () => {
     const { container } = renderRow([
-      {
-        type: 'dynamic-tool',
+      builderToolPart({
         toolCallId: 'call-5',
         toolName: 'some-other-tool',
-        state: 'output-available',
         input: { tools: [{ id: 'web-search', name: 'Web Search' }] },
         output: { success: true },
-      } as ToolPart,
+      }),
     ]);
 
     // Unknown dynamic tools render as a GenericTool ToolCard showing "Executing <toolName>".
@@ -110,14 +133,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentName for streaming dynamic-tool', () => {
     const { container } = renderRow(
       [
-        {
-          type: 'dynamic-tool',
+        builderToolPart({
           toolCallId: 'call-name',
           toolName: SET_AGENT_NAME_TOOL_NAME,
-          state: 'output-available',
           input: { name: 'Acme Bot' },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { name: 'Acme Bot' },
     );
@@ -128,13 +149,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentName for persisted tool part', () => {
     const { container } = renderRow(
       [
-        {
-          type: `tool-${SET_AGENT_NAME_TOOL_NAME}`,
+        builderToolPart({
           toolCallId: 'call-name-r',
-          state: 'output-available',
+          toolName: SET_AGENT_NAME_TOOL_NAME,
           input: { name: 'Acme Bot' },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { name: 'Acme Bot' },
     );
@@ -145,14 +165,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentDescription for streaming dynamic-tool', () => {
     const { container } = renderRow(
       [
-        {
-          type: 'dynamic-tool',
+        builderToolPart({
           toolCallId: 'call-desc',
           toolName: SET_AGENT_DESCRIPTION_TOOL_NAME,
-          state: 'output-available',
           input: { description: 'A helpful research assistant.' },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { description: 'A helpful research assistant.' },
     );
@@ -163,13 +181,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentDescription for persisted tool part', () => {
     const { container } = renderRow(
       [
-        {
-          type: `tool-${SET_AGENT_DESCRIPTION_TOOL_NAME}`,
+        builderToolPart({
           toolCallId: 'call-desc-r',
-          state: 'output-available',
+          toolName: SET_AGENT_DESCRIPTION_TOOL_NAME,
           input: { description: 'A helpful research assistant.' },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { description: 'A helpful research assistant.' },
     );
@@ -180,14 +197,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentInstructions for streaming dynamic-tool', () => {
     const { container } = renderRow(
       [
-        {
-          type: 'dynamic-tool',
+        builderToolPart({
           toolCallId: 'call-instr',
           toolName: SET_AGENT_INSTRUCTIONS_TOOL_NAME,
-          state: 'output-available',
           input: { instructions: 'Always answer in French.' },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { instructions: 'Always answer in French.' },
     );
@@ -198,13 +213,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentInstructions for persisted tool part', () => {
     const { container } = renderRow(
       [
-        {
-          type: `tool-${SET_AGENT_INSTRUCTIONS_TOOL_NAME}`,
+        builderToolPart({
           toolCallId: 'call-instr-r',
-          state: 'output-available',
+          toolName: SET_AGENT_INSTRUCTIONS_TOOL_NAME,
           input: { instructions: 'Always answer in French.' },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { instructions: 'Always answer in French.' },
     );
@@ -222,14 +236,12 @@ describe('MessageRow dynamic-tool rendering', () => {
 
     const { container } = renderRow(
       [
-        {
-          type: 'dynamic-tool',
+        builderToolPart({
           toolCallId: 'call-tools-mixed',
           toolName: SET_AGENT_TOOLS_TOOL_NAME,
-          state: 'output-available',
           input: { tools: [] },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       {
         tools: {},
@@ -253,14 +265,12 @@ describe('MessageRow dynamic-tool rendering', () => {
 
     const { container } = renderRow(
       [
-        {
-          type: 'dynamic-tool',
+        builderToolPart({
           toolCallId: 'call-tools-none',
           toolName: SET_AGENT_TOOLS_TOOL_NAME,
-          state: 'output-available',
           input: { tools: [] },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { tools: {}, agents: {}, workflows: {} } as Partial<AgentBuilderEditFormValues>,
     );
@@ -279,14 +289,12 @@ describe('MessageRow dynamic-tool rendering', () => {
 
     const { container } = renderRow(
       [
-        {
-          type: 'dynamic-tool',
+        builderToolPart({
           toolCallId: 'call-skills',
           toolName: SET_AGENT_SKILLS_TOOL_NAME,
-          state: 'output-available',
           input: { skills: [] },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { skills: { 'sk-1': true, 'sk-2': true } } as Partial<AgentBuilderEditFormValues>,
     );
@@ -304,13 +312,12 @@ describe('MessageRow dynamic-tool rendering', () => {
 
     const { container } = renderRow(
       [
-        {
-          type: `tool-${SET_AGENT_SKILLS_TOOL_NAME}`,
+        builderToolPart({
           toolCallId: 'call-skills-none',
-          state: 'output-available',
+          toolName: SET_AGENT_SKILLS_TOOL_NAME,
           input: { skills: [] },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { skills: {} } as Partial<AgentBuilderEditFormValues>,
     );
@@ -321,14 +328,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentModel for streaming dynamic-tool', () => {
     const { container } = renderRow(
       [
-        {
-          type: 'dynamic-tool',
+        builderToolPart({
           toolCallId: 'call-model',
           toolName: SET_AGENT_MODEL_TOOL_NAME,
-          state: 'output-available',
           input: { model: { provider: 'openai', name: 'gpt-4o' } },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { model: { provider: 'openai', name: 'gpt-4o' } },
     );
@@ -339,13 +344,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentModel for persisted tool part', () => {
     const { container } = renderRow(
       [
-        {
-          type: `tool-${SET_AGENT_MODEL_TOOL_NAME}`,
+        builderToolPart({
           toolCallId: 'call-model-r',
-          state: 'output-available',
+          toolName: SET_AGENT_MODEL_TOOL_NAME,
           input: { model: { provider: 'openai', name: 'gpt-4o' } },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { model: { provider: 'openai', name: 'gpt-4o' } },
     );
@@ -356,14 +360,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentBrowserEnabled (enabled) for streaming dynamic-tool', () => {
     const { container } = renderRow(
       [
-        {
-          type: 'dynamic-tool',
+        builderToolPart({
           toolCallId: 'call-browser',
           toolName: SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
-          state: 'output-available',
           input: { browserEnabled: true },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { browserEnabled: true },
     );
@@ -374,13 +376,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentBrowserEnabled (disabled) for persisted tool part', () => {
     const { container } = renderRow(
       [
-        {
-          type: `tool-${SET_AGENT_BROWSER_ENABLED_TOOL_NAME}`,
+        builderToolPart({
           toolCallId: 'call-browser-r',
-          state: 'output-available',
+          toolName: SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
           input: { browserEnabled: false },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { browserEnabled: false },
     );
@@ -391,14 +392,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentWorkspaceId for streaming dynamic-tool', () => {
     const { container } = renderRow(
       [
-        {
-          type: 'dynamic-tool',
+        builderToolPart({
           toolCallId: 'call-ws',
           toolName: SET_AGENT_WORKSPACE_ID_TOOL_NAME,
-          state: 'output-available',
           input: { workspaceId: 'ws-123' },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { workspaceId: 'ws-123' },
     );
@@ -408,13 +407,12 @@ describe('MessageRow dynamic-tool rendering', () => {
   it('renders MessageSetAgentWorkspaceId for persisted tool part', () => {
     const { container } = renderRow(
       [
-        {
-          type: `tool-${SET_AGENT_WORKSPACE_ID_TOOL_NAME}`,
+        builderToolPart({
           toolCallId: 'call-ws-r',
-          state: 'output-available',
+          toolName: SET_AGENT_WORKSPACE_ID_TOOL_NAME,
           input: { workspaceId: 'ws-123' },
           output: { success: true },
-        } as ToolPart,
+        }),
       ],
       { workspaceId: 'ws-123' },
     );

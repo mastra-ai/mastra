@@ -1,5 +1,4 @@
 import { CodeEditor, AgentIcon } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
 import React from 'react';
 import Markdown from 'react-markdown';
 import { ToolFallback } from '../tool-fallback';
@@ -8,6 +7,7 @@ import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 type TextMessage = {
   type: 'text';
@@ -28,7 +28,7 @@ export type AgentMessage = TextMessage | ToolMessage;
 export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   agentId: string;
   messages: AgentMessage[];
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;

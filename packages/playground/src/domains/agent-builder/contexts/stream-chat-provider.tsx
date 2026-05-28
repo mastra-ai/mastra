@@ -1,6 +1,7 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import { useChat } from '@mastra/react';
-import type { MastraUIMessage, SendMessageArgs } from '@mastra/react';
+import type { SendMessageArgs } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useDebounce } from 'use-debounce';
@@ -11,7 +12,7 @@ import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 export interface StreamChatProviderProps {
   agentId: string;
   threadId: string;
-  initialMessages: MastraUIMessage[];
+  initialMessages: MastraDBMessage[];
   /**
    * Optional starter prompt forwarded from the agent-builder starter page. When
    * present, it is dispatched once on mount, *after* `useChat`'s own

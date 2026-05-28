@@ -1,4 +1,4 @@
-import type { MastraUIMessage } from '@mastra/react';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { createContext, useContext } from 'react';
 
 export interface RunningContextValue {
@@ -6,7 +6,7 @@ export interface RunningContextValue {
 }
 
 export interface MessagesContextValue {
-  messages: MastraUIMessage[];
+  messages: MastraDBMessage[];
 }
 
 export interface SendContextValue {
@@ -18,5 +18,5 @@ export const StreamMessagesContext = createContext<MessagesContextValue>({ messa
 export const StreamSendContext = createContext<SendContextValue>({ send: () => {} });
 
 export const useStreamRunning = (): boolean => useContext(StreamRunningContext).isRunning;
-export const useStreamMessages = (): MastraUIMessage[] => useContext(StreamMessagesContext).messages;
+export const useStreamMessages = (): MastraDBMessage[] => useContext(StreamMessagesContext).messages;
 export const useStreamSend = (): ((message: string) => void) => useContext(StreamSendContext).send;
