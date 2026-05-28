@@ -12,16 +12,16 @@ Test stored skill create, read, update, delete, visibility, publish, and filesys
 
 ## Endpoints
 
-| Endpoint                     | Method | Purpose                                |
-| ---------------------------- | ------ | -------------------------------------- |
-| `/stored/skills`             | POST   | Create a stored skill                  |
-| `/stored/skills`             | GET    | List stored skills (paginated)         |
-| `/stored/skills/:id`         | GET    | Read a single stored skill             |
-| `/stored/skills/:id`         | PATCH  | Update fields on a stored skill        |
-| `/stored/skills/:id`         | DELETE | Delete a stored skill                  |
-| `/stored/skills/:id/publish` | POST   | Publish a skill from a filesystem path |
-| `/stored/skills/:id/favorite`| PUT    | Favorite (see `references/favorites.md`)|
-| `/stored/skills/:id/favorite`| DELETE | Unfavorite (see `references/favorites.md`)|
+| Endpoint                      | Method | Purpose                                    |
+| ----------------------------- | ------ | ------------------------------------------ |
+| `/stored/skills`              | POST   | Create a stored skill                      |
+| `/stored/skills`              | GET    | List stored skills (paginated)             |
+| `/stored/skills/:id`          | GET    | Read a single stored skill                 |
+| `/stored/skills/:id`          | PATCH  | Update fields on a stored skill            |
+| `/stored/skills/:id`          | DELETE | Delete a stored skill                      |
+| `/stored/skills/:id/publish`  | POST   | Publish a skill from a filesystem path     |
+| `/stored/skills/:id/favorite` | PUT    | Favorite (see `references/favorites.md`)   |
+| `/stored/skills/:id/favorite` | DELETE | Unfavorite (see `references/favorites.md`) |
 
 The full schema definitions live in `packages/server/src/server/schemas/stored-skills.ts`. Treat that file as the source of truth for request and response shapes.
 
