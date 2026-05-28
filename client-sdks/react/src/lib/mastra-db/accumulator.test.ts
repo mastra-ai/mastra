@@ -665,6 +665,48 @@ describe('accumulateChunk - tool calls', () => {
     expect(toolPart.toolInvocation).toMatchObject({ state: 'call', args: {} });
   });
 
+  it('tool-call after streaming-input chunks upserts into the existing part (no duplicate)', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallInputStreamingStartChunk('tc-1', 'weatherInfo'),
+      toolCallDeltaChunk('tc-1', '{"location":"'),
+      toolCallDeltaChunk('tc-1', 'Paris"}'),
+      toolCallInputStreamingEndChunk('tc-1'),
+      toolCallChunk('tc-1', 'weatherInfo', { location: 'Paris, France', _background: null }),
+    ]);
+
+    const toolParts = out[0].content.parts.filter(
+      p => p.type === 'tool-invocation',
+    ) as MastraToolInvocationPart[];
+    expect(toolParts).toHaveLength(1);
+    expect(toolParts[0].toolInvocation).toMatchObject({
+      state: 'call',
+      toolCallId: 'tc-1',
+      toolName: 'weatherInfo',
+      args: { location: 'Paris, France', _background: null },
+    });
+    expect((toolParts[0] as MastraToolInvocationPart & { argsText?: string }).argsText).toBeUndefined();
+  });
+
+  it('tool-call directly after streaming-start (no deltas) still produces one part', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallInputStreamingStartChunk('tc-1', 'search'),
+      toolCallChunk('tc-1', 'search', { q: 'mastra' }),
+    ]);
+
+    const toolParts = out[0].content.parts.filter(
+      p => p.type === 'tool-invocation',
+    ) as MastraToolInvocationPart[];
+    expect(toolParts).toHaveLength(1);
+    expect(toolParts[0].toolInvocation).toMatchObject({
+      state: 'call',
+      toolCallId: 'tc-1',
+      toolName: 'search',
+      args: { q: 'mastra' },
+    });
+  });
+
   it('tool-call-approval transitions metadata to approval-requested', () => {
     const out = reduce([
       startChunk(),

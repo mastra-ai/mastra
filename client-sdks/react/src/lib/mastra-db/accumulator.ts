@@ -747,7 +747,6 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     }
 
     case 'tool-call': {
-      const lastMessage = result[result.length - 1];
       const invocation: MastraToolInvocation = {
         state: 'call',
         toolCallId: chunk.payload.toolCallId,
@@ -759,6 +758,37 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         providerMetadata: chunk.payload.providerMetadata,
       };
 
+      // Upsert by toolCallId: if `tool-call-input-streaming-start` already created
+      // a placeholder part for this id, transition it in place instead of
+      // appending a duplicate. `chunk.payload.args` is the authoritative
+      // server-side parsed args and overwrites any client-side JSON.parse done
+      // during streaming.
+      const existing = locateToolPart(result, chunk.payload.toolCallId, false);
+      if (existing && existing.toolPartIndex >= 0) {
+        const { messageIndex, toolPartIndex } = existing;
+        const targetMessage = result[messageIndex];
+        if (targetMessage && targetMessage.role === 'assistant') {
+          const parts = [...targetMessage.content.parts];
+          const prev = parts[toolPartIndex] as MastraToolInvocationPart & { argsText?: string };
+          if (isToolPart(prev)) {
+            const { argsText: _argsText, ...rest } = prev;
+            parts[toolPartIndex] = {
+              ...rest,
+              toolInvocation: {
+                ...prev.toolInvocation,
+                state: 'call',
+                toolName: chunk.payload.toolName,
+                toolCallId: chunk.payload.toolCallId,
+                args: chunk.payload.args,
+              } as MastraToolInvocation,
+              providerMetadata: chunk.payload.providerMetadata ?? prev.providerMetadata,
+            } as MastraMessagePart;
+            return replaceAt(result, messageIndex, withParts(targetMessage, parts));
+          }
+        }
+      }
+
+      const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') {
         return appendAssistantMessage(result, `tool-call-${chunk.runId + Date.now()}`, [newPart], metadata);
       }
