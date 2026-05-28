@@ -3340,6 +3340,30 @@ export class Mastra<
 
   #heartbeatRegistration?: Promise<void>;
 
+  /**
+   * If any heartbeat schedule rows already exist in storage (e.g. created in a
+   * previous process and persisted), make sure the built-in heartbeat workflow
+   * is registered before workers start. Without this, scheduler ticks would
+   * fail with "workflow not found" and Studio UI lookups for the heartbeat
+   * workflow id would 404.
+   *
+   * @internal
+   */
+  async #rehydrateHeartbeatWorkflowIfNeeded(): Promise<void> {
+    if (this.#heartbeatRegistration) return;
+    if (!this.#storage) return;
+    try {
+      const schedulesStore = await this.#storage.getStore('schedules');
+      if (!schedulesStore) return;
+      const { HEARTBEAT_WORKFLOW_ID } = await import('../agent/heartbeat/types');
+      const existing = await schedulesStore.listSchedules({ workflowId: HEARTBEAT_WORKFLOW_ID });
+      if (existing.length === 0) return;
+      await this.__ensureHeartbeatWorkflowRegistered();
+    } catch (err) {
+      this.#logger?.warn?.('Failed to rehydrate heartbeat workflow on boot', err as any);
+    }
+  }
+
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
     for (const step of Object.values(workflow.steps ?? {})) {
       const scorers = step.scorers;
@@ -3982,6 +4006,14 @@ export class Mastra<
    * user-defined event listeners.
    */
   public async startWorkers(name?: string): Promise<void> {
+    // Re-hydrate the built-in heartbeat workflow if any heartbeat schedule
+    // rows exist in storage from a previous boot. Without this, the scheduler
+    // would try to fire `__mastra_heartbeat__` runs against an unregistered
+    // workflow and Studio UI lookups for that id would 404.
+    if (!name) {
+      await this.#rehydrateHeartbeatWorkflowIfNeeded();
+    }
+
     // Lazily inject the SchedulerWorker if the scheduler should be enabled
     // and no scheduler worker is registered yet. This runs after all
     // workflows have been registered (unlike the constructor's default-workers

@@ -112,6 +112,48 @@ describe('Agent heartbeats — scheduler integration', () => {
     await mastra.shutdown();
   }, 10_000);
 
+  it('rehydrates the built-in heartbeat workflow on boot when heartbeat schedule rows already exist in storage', async () => {
+    const storage = new MockStore();
+
+    // Boot 1: create a heartbeat, then shut down without clearing it. This
+    // simulates a previous process that left a heartbeat row in storage.
+    {
+      const agent = makeAgent('beat-rehydrate');
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: { 'beat-rehydrate': agent },
+        scheduler: { tickIntervalMs: 50 },
+      });
+      await agent.setHeartbeat({ cron: '* * * * * *', prompt: 'ping' });
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+      await mastra.shutdown();
+    }
+
+    // Boot 2: fresh Mastra instance reusing the same storage. The heartbeat
+    // workflow must be re-registered automatically before workers start;
+    // otherwise the scheduler would fire ticks against an unregistered
+    // workflow and the UI's getWorkflowById would 404.
+    const agent2 = makeAgent('beat-rehydrate');
+    const mastra2 = new Mastra({
+      logger: false,
+      storage,
+      agents: { 'beat-rehydrate': agent2 },
+      scheduler: { tickIntervalMs: 50 },
+    });
+
+    await mastra2.startWorkers();
+
+    // The built-in heartbeat workflow should be findable by id without
+    // anyone having to call setHeartbeat() again.
+    const wf = mastra2.getWorkflowById('__mastra_heartbeat__');
+    expect(wf).toBeDefined();
+    await waitForScheduler(mastra2);
+
+    await mastra2.shutdown();
+  }, 10_000);
+
   it('does not start the scheduler when scheduler is explicitly disabled', async () => {
     const agent = makeAgent('beat-off');
     const storage = new MockStore();
