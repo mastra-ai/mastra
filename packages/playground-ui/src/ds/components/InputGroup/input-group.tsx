@@ -4,7 +4,7 @@ import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { formElementSizes, formElementFocusWithin, formElementRadius } from '@/ds/primitives/form-element';
+import { formElementSizes } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -13,13 +13,12 @@ const InputGroupSizeContext = React.createContext<FormElementSize>('md');
 
 const inputGroupClassName = cn(
   'group/input-group relative flex w-full min-w-0 items-stretch',
-  'bg-surface2 border border-border1 text-neutral6',
-  'hover:border-border2',
-  formElementRadius,
-  formElementFocusWithin,
+  'bg-surface-overlay-soft border border-border1 text-neutral6 rounded-full',
+  'hover:bg-surface-overlay-strong hover:border-border2',
+  'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong focus-within:border-border2',
   transitions.all,
   'has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed',
-  'has-[[aria-invalid=true]]:border-error has-[[aria-invalid=true]]:focus-within:ring-error has-[[aria-invalid=true]]:focus-within:shadow-glow-accent2',
+  'has-[[aria-invalid=true]]:border-error',
   'has-[>[data-align=block-start]]:flex-col',
   'has-[>[data-align=block-end]]:flex-col',
   'has-[>[data-align=inline-start]]:[&>[data-slot=input-group-control]]:pl-0',

@@ -1,7 +1,7 @@
 import { SearchIcon } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { formElementSizes, formElementFocusWithin, formElementRadius } from '@/ds/primitives/form-element';
+import { formElementSizes } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -68,11 +68,10 @@ export const Searchbar = ({
   return (
     <div
       className={cn(
-        'border border-border1 flex w-full items-center gap-2 overflow-hidden pl-2 pr-1',
-        formElementRadius,
-        formElementFocusWithin,
+        'bg-surface-overlay-soft border border-border1 flex w-full items-center gap-2 overflow-hidden pl-2 pr-1 rounded-full',
+        'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong focus-within:border-border2',
         transitions.all,
-        'hover:border-neutral2',
+        'hover:bg-surface-overlay-strong hover:border-border2',
         searchbarSizeClasses[size],
         className,
       )}

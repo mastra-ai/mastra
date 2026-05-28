@@ -2,12 +2,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import {
-  formElementSizes,
-  sharedFormElementStyle,
-  sharedFormElementFocusStyle,
-  sharedFormElementDisabledStyle,
-} from '@/ds/primitives/form-element';
+import { formElementSizes, sharedFormElementDisabledStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
@@ -20,7 +15,12 @@ const inputVariants = cva(
   {
     variants: {
       variant: {
-        default: cn(sharedFormElementStyle, sharedFormElementFocusStyle, sharedFormElementDisabledStyle),
+        default: cn(
+          'bg-surface-overlay-soft border border-border1 text-neutral5 rounded-full',
+          'hover:text-neutral6 hover:bg-surface-overlay-strong hover:border-border2',
+          'outline-hidden focus-visible:outline-hidden focus-visible:bg-surface-overlay-strong focus-visible:border-border2',
+          sharedFormElementDisabledStyle,
+        ),
         unstyled: 'border-0 bg-transparent shadow-none focus:shadow-none focus:ring-0',
       },
       size: {
@@ -50,8 +50,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         type={type}
         className={cn(
           inputVariants({ variant, size }),
-          // Error state styling
-          error && 'border-error focus:ring-error focus:shadow-glow-accent2',
+          error && 'border-error focus-visible:border-error',
           className,
         )}
         data-testid={testId}
