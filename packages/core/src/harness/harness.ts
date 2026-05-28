@@ -721,11 +721,14 @@ export class Harness<TState = {}> {
       const registry = PROVIDER_REGISTRY as Record<string, { apiKeyEnvVar?: string | string[] }>;
       const providerConfig = registry[provider];
       const envVars = providerConfig?.apiKeyEnvVar;
-      const apiKeyEnvVar = Array.isArray(envVars) ? envVars[0] : envVars;
-      if (!apiKeyEnvVar || (apiKeyEnvVar && process.env[apiKeyEnvVar])) {
-        return { hasAuth: true };
-      }
-      return { hasAuth: false, apiKeyEnvVar: apiKeyEnvVar || undefined };
+      const normalizedEnvVars = Array.isArray(envVars) ? envVars.filter(Boolean) : envVars ? [envVars] : [];
+
+      const hasAuth = normalizedEnvVars.length === 0 || normalizedEnvVars.some(envVar => !!process.env[envVar]);
+
+      return {
+        hasAuth,
+        apiKeyEnvVar: normalizedEnvVars[0] || undefined,
+      };
     } catch {
       return { hasAuth: true };
     }
@@ -766,10 +769,13 @@ export class Harness<TState = {}> {
       for (const provider of providers) {
         const providerConfig = registry[provider];
         const envVars = providerConfig?.apiKeyEnvVar;
-        const apiKeyEnvVar = Array.isArray(envVars) ? envVars[0] : envVars;
-        const hasEnvKey = apiKeyEnvVar ? !!process.env[apiKeyEnvVar] : true;
+
+        const normalizedEnvVars = Array.isArray(envVars) ? envVars.filter(Boolean) : envVars ? [envVars] : [];
+
+        const hasEnvKey = normalizedEnvVars.length === 0 || normalizedEnvVars.some(envVar => !!process.env[envVar]);
 
         let hasApiKey = hasEnvKey;
+
         if (!hasApiKey && this.config.modelAuthChecker) {
           const customAuth = this.config.modelAuthChecker(provider);
           if (customAuth === true) hasApiKey = true;
@@ -782,7 +788,7 @@ export class Harness<TState = {}> {
               provider,
               modelName,
               hasApiKey,
-              apiKeyEnvVar: apiKeyEnvVar || undefined,
+              apiKeyEnvVar: normalizedEnvVars[0] || undefined,
             });
           }
         }

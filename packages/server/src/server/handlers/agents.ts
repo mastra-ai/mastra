@@ -184,7 +184,7 @@ export function isProviderConnected(providerId: string, customProviders?: Record
   if (validEnvVars.length === 0) {
     return true;
   }
-  return validEnvVars.every(envVar => !!process.env[envVar]);
+  return validEnvVars.some(envVar => !!process.env[envVar]);
 }
 
 export interface SerializedProcessor {
