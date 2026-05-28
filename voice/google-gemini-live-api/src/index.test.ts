@@ -1196,9 +1196,12 @@ describe('GeminiLiveVoice', () => {
       const json = JSON.stringify(params);
       expect(json).not.toContain('"null"');
 
-      // The name property should have a concrete type, not an anyOf with null
+      // The name property should have a concrete type, not an anyOf with null,
+      // and nullability should be expressed via OpenAPI 3.0's `nullable: true`.
       const nameProp = params.properties.name;
       expect(nameProp.type).toBe('string');
+      expect(nameProp.nullable).toBe(true);
+      expect(nameProp.anyOf).toBeUndefined();
     });
 
     it('should emit usage event from usageMetadata', async () => {

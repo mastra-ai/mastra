@@ -321,9 +321,11 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
         s['type'] = 'object';
         s['nullable'] = true;
       } else {
-        // Multiple non-null types — can't represent as single type, drop type
+        // Multiple non-null types — can't represent as single OpenAPI 3.0 type.
+        // Drop `type` entirely; don't emit a bare `nullable` (it's meaningless
+        // without an accompanying type and Gemini may reject it).
         delete s['type'];
-        if (hasNull) s['nullable'] = true;
+        delete s['nullable'];
       }
     }
 

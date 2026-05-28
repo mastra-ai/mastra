@@ -247,5 +247,24 @@ describe('GoogleSchemaCompatLayer', () => {
       expect((result as any).properties.value.type).toBe('string');
       expect((result as any).properties.value.nullable).toBe(true);
     });
+
+    it('drops type and nullable for multi-non-null type arrays', () => {
+      // Gemini can't represent `type: ['string', 'number', 'null']` as a single
+      // OpenAPI 3.0 type. Drop `type` and don't emit a bare `nullable: true`,
+      // which is meaningless on its own.
+      const result = applyCompatLayer({
+        schema: {
+          type: 'object',
+          properties: {
+            value: { type: ['string', 'number', 'null'] },
+          },
+        } as any,
+        compatLayers: [layer],
+        mode: 'jsonSchema',
+      });
+
+      expect((result as any).properties.value.type).toBeUndefined();
+      expect((result as any).properties.value.nullable).toBeUndefined();
+    });
   });
 });
