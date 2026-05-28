@@ -20,7 +20,7 @@ interface AgentPlaygroundViewProps {
   isPublishing: boolean;
   hasDraft: boolean;
   readOnly: boolean;
-  isCodeModeAgent?: boolean;
+  isCodeSourceAgent?: boolean;
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
   openPrTitle?: string;
@@ -42,7 +42,7 @@ function LeftPanel({
   isPublishing,
   hasDraft,
   readOnly,
-  isCodeModeAgent,
+  isCodeSourceAgent,
   showCodeModeActions,
   canOpenPr,
   openPrTitle,
@@ -62,7 +62,7 @@ function LeftPanel({
   isPublishing: boolean;
   hasDraft: boolean;
   readOnly: boolean;
-  isCodeModeAgent?: boolean;
+  isCodeSourceAgent?: boolean;
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
   openPrTitle?: string;
@@ -82,7 +82,7 @@ function LeftPanel({
     isPublishing,
     hasDraft,
     readOnly,
-    isCodeModeAgent,
+    isCodeSourceAgent,
     showCodeModeActions,
     canOpenPr,
     openPrTitle,
@@ -133,7 +133,7 @@ export function AgentPlaygroundView({
   isPublishing,
   hasDraft,
   readOnly,
-  isCodeModeAgent,
+  isCodeSourceAgent,
   showCodeModeActions,
   canOpenPr,
   openPrTitle,
@@ -172,7 +172,7 @@ export function AgentPlaygroundView({
             isPublishing={isPublishing}
             hasDraft={hasDraft}
             readOnly={readOnly}
-            isCodeModeAgent={isCodeModeAgent}
+            isCodeSourceAgent={isCodeSourceAgent}
             showCodeModeActions={showCodeModeActions}
             canOpenPr={canOpenPr}
             openPrTitle={openPrTitle}

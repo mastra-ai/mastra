@@ -36,7 +36,7 @@ interface AgentPlaygroundVersionBarProps {
   isPublishing: boolean;
   hasDraft: boolean;
   readOnly: boolean;
-  isCodeModeAgent?: boolean;
+  isCodeSourceAgent?: boolean;
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
   openPrTitle?: string;
@@ -69,7 +69,7 @@ export function AgentPlaygroundVersionBar({
   isPublishing,
   hasDraft,
   readOnly,
-  isCodeModeAgent = false,
+  isCodeSourceAgent = false,
   showCodeModeActions = false,
   canOpenPr = false,
   openPrTitle,
@@ -101,9 +101,9 @@ export function AgentPlaygroundVersionBar({
 
         return {
           value: v.id,
-          label: `${isCodeModeAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatTimestamp(v.createdAt)}`,
+          label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatTimestamp(v.createdAt)}`,
           description: v.changeMessage || undefined,
-          end: isCodeModeAgent ? (
+          end: isCodeSourceAgent ? (
             <Badge variant={isPublished ? 'success' : 'info'}>{isPublished ? 'Current' : 'Saved'}</Badge>
           ) : isPublished ? (
             <Badge variant="success">Published</Badge>
@@ -112,13 +112,13 @@ export function AgentPlaygroundVersionBar({
           ) : undefined,
         };
       }),
-    [versions, activeVersionId, activeVersionNumber, isCodeModeAgent],
+    [versions, activeVersionId, activeVersionNumber, isCodeSourceAgent],
   );
 
   const currentValue = selectedVersionId ?? latestVersion?.id ?? '';
 
   const saveDisabled = readOnly || !isDirty || isSavingDraft || isPublishing;
-  const versionInfoText = isCodeModeAgent
+  const versionInfoText = isCodeSourceAgent
     ? 'Code mode saves write override JSON to filesystem-backed editor storage. This dropdown shows saved override snapshots for this agent.'
     : "Changes are saved as draft versions. When you're ready, publish a version to make it the active configuration used in production.";
 
@@ -148,7 +148,7 @@ export function AgentPlaygroundVersionBar({
           />
         ) : (
           <Txt variant="ui-xs" className="text-neutral3">
-            {isCodeModeAgent ? 'No filesystem saves yet' : 'No versions yet'}
+            {isCodeSourceAgent ? 'No filesystem saves yet' : 'No versions yet'}
           </Txt>
         )}
 
@@ -175,7 +175,7 @@ export function AgentPlaygroundVersionBar({
 
         <div className="flex items-center gap-2 ml-auto shrink-0">
           {readOnly && <Badge variant="warning">Read-only</Badge>}
-          {!readOnly && hasDraft && !isCodeModeAgent && <Badge variant="info">Unpublished</Badge>}
+          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="info">Unpublished</Badge>}
         </div>
       </div>
     ),

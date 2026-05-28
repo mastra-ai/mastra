@@ -16,7 +16,7 @@ export interface AgentCmsFormShellProps {
   handleSaveDraft?: (changeMessage?: string) => Promise<void>;
   readOnly?: boolean;
   isCodeAgentOverride?: boolean;
-  isCodeModeAgent?: boolean;
+  isCodeSourceAgent?: boolean;
   editorConfig?: AgentEditorConfig;
   basePath: string;
   currentPath: string;
@@ -36,7 +36,7 @@ export function AgentCmsFormShell({
   handleSaveDraft,
   readOnly,
   isCodeAgentOverride,
-  isCodeModeAgent,
+  isCodeSourceAgent,
   editorConfig,
   basePath,
   currentPath,
@@ -56,7 +56,7 @@ export function AgentCmsFormShell({
       handleSaveDraft={handleSaveDraft}
       readOnly={readOnly}
       isCodeAgentOverride={isCodeAgentOverride}
-      isCodeModeAgent={isCodeModeAgent}
+      isCodeSourceAgent={isCodeSourceAgent}
       editorConfig={editorConfig}
     >
       <AgentsCmsLayout basePath={basePath} currentPath={currentPath} versionId={versionId} rightPanel={rightPanel}>

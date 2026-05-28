@@ -21,7 +21,7 @@ export const mastra = new Mastra({
   }),
   storage,
   editor: new MastraEditor({
-    mode: 'code',
+    source: 'code',
     builder: {
       enabled: true,
       features: {

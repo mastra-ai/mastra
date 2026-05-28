@@ -24,13 +24,13 @@ Studio applies stored overrides only for fields owned by the editor config. File
 
 The server and client now expose an agent override export API so Studio can download code-mode overrides as JSON for review or commit workflows.
 
-`MastraEditor` accepts a `mode` setting that picks the editing experience:
+`MastraEditor` accepts a `source` setting that picks the editing experience:
 
 ```ts
-new MastraEditor({ mode: 'code' });
+new MastraEditor({ source: 'code' });
 ```
 
-- `mode: 'code'` — Studio swaps Save/Publish for Download JSON and Open PR, and the editor auto-wires a `FilesystemStore` (defaulting to `./mastra/editor/`, overridable with `codePath`) when no editor storage is supplied.
-- `mode: 'db'` (default) — Studio keeps the existing Save/Publish flow against whatever storage the project has configured.
+- `source: 'code'` — Studio swaps Save/Publish for Download JSON and Open PR, and the editor auto-wires a `FilesystemStore` (defaulting to `./mastra/editor/`, overridable with `codePath`) when no editor storage is supplied.
+- `source: 'db'` (default) — Studio keeps the existing Save/Publish flow against whatever storage the project has configured.
 
-Per-agent `editor: false` still locks an agent in either mode.
+Per-agent `editor: false` still locks an agent regardless of source.

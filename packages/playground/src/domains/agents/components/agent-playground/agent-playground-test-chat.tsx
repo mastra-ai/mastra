@@ -24,12 +24,12 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
   const { isDirty } = useFormState({ control: ctx.form.control });
   const handleSaveDraft = ctx.handleSaveDraft;
   const isSavingDraft = ctx.isSavingDraft ?? false;
-  const isCodeMode = ctx.isCodeModeAgent ?? false;
+  const isCodeSource = ctx.isCodeSourceAgent ?? false;
 
   if (!isDirty) return null;
 
-  const saveLabel = isCodeMode ? 'Save to filesystem' : 'Save draft';
-  const message = isCodeMode
+  const saveLabel = isCodeSource ? 'Save to filesystem' : 'Save draft';
+  const message = isCodeSource
     ? 'You have unsaved changes to the agent configuration. Save to filesystem to ensure the chat uses your latest changes.'
     : 'You have unsaved changes to the agent configuration. Save your draft to ensure the chat uses your latest changes.';
 

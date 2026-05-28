@@ -11,7 +11,7 @@ import { useAgentVersion, useAgentVersions } from '@/domains/agents/hooks/use-ag
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
-import { useEditorMode } from '@/domains/configuration/hooks/use-editor-mode';
+import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { RouteHeaderActions } from '@/lib/route-header';
@@ -31,7 +31,7 @@ function EditFormContent({
   latestVersionId,
   hideVersionPanel = false,
   isCodeAgentOverride = false,
-  isCodeModeAgent = false,
+  isCodeSourceAgent = false,
   editorConfig,
 }: {
   agentId: string;
@@ -48,7 +48,7 @@ function EditFormContent({
   latestVersionId?: string;
   hideVersionPanel?: boolean;
   isCodeAgentOverride?: boolean;
-  isCodeModeAgent?: boolean;
+  isCodeSourceAgent?: boolean;
   editorConfig?: NonNullable<ReturnType<typeof useAgent>['data']>['editor'];
 }) {
   const [, setSearchParams] = useSearchParams();
@@ -98,7 +98,7 @@ function EditFormContent({
       handleSaveDraft={handleSaveDraft}
       readOnly={readOnly}
       isCodeAgentOverride={isCodeAgentOverride}
-      isCodeModeAgent={isCodeModeAgent}
+      isCodeSourceAgent={isCodeSourceAgent}
       editorConfig={editorConfig}
       basePath={`/cms/agents/${agentId}/edit`}
       currentPath={pathname}
@@ -235,8 +235,8 @@ function EditLayoutWrapper() {
   const isNotFound = !isLoading && !agent && !codeAgent;
   const isReady = !isLoading && !!agentId && (!!agent || !!codeAgent);
   const isCodeAgentEditable = !isCodeAgentOverride || codeAgent?.editor !== false;
-  const editorMode = useEditorMode();
-  const showCodeModeActions = isCodeAgentOverride && editorMode === 'code';
+  const editorSource = useEditorSource();
+  const showCodeModeActions = isCodeAgentOverride && editorSource === 'code';
   const canOpenPr = isCodeAgentEditable && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr
     ? 'Open a pull request with this agent override JSON'
@@ -351,7 +351,7 @@ function EditLayoutWrapper() {
           latestVersionId={latestVersion?.id}
           hideVersionPanel={isCodeAgentOverride && !storedAgent}
           isCodeAgentOverride={isCodeAgentOverride}
-          isCodeModeAgent={showCodeModeActions}
+          isCodeSourceAgent={showCodeModeActions}
           editorConfig={codeAgent?.editor}
         />
       )}

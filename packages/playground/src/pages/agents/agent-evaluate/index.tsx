@@ -15,7 +15,7 @@ import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
-import { useEditorMode } from '@/domains/configuration/hooks/use-editor-mode';
+import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { useLinkComponent } from '@/lib/framework';
 
 function AgentEvaluate() {
@@ -37,9 +37,9 @@ function AgentEvaluate() {
     enabled: hasVersions,
   });
 
-  const editorMode = useEditorMode();
+  const editorSource = useEditorSource();
   const isCodeAgentOverride = codeAgent?.source === 'code';
-  const isCodeModeAgent = isCodeAgentOverride && editorMode === 'code';
+  const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
   const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
 
   const dataSource = useMemo<AgentDataSource>(() => {
@@ -112,7 +112,7 @@ function AgentEvaluate() {
       handlePublish={handlePublish}
       handleSaveDraft={handleSaveDraft}
       isCodeAgentOverride={isCodeAgentOverride}
-      isCodeModeAgent={isCodeModeAgent}
+      isCodeSourceAgent={isCodeSourceAgent}
       readOnly={false}
     >
       <AgentPlaygroundEvaluate

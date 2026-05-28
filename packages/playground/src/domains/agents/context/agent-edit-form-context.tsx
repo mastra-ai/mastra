@@ -17,8 +17,8 @@ interface AgentEditFormContextValue {
   readOnly?: boolean;
   /** True when editing a code-defined agent (override mode) — limits editable sections */
   isCodeAgentOverride?: boolean;
-  /** True when the editor is running in `mode: 'code'` AND the agent is code-defined — saves persist to filesystem. */
-  isCodeModeAgent?: boolean;
+  /** True when the editor is running in `source: 'code'` AND the agent is code-defined — saves persist to filesystem. */
+  isCodeSourceAgent?: boolean;
   /** Field ownership rules from the code-defined agent config. */
   editorConfig?: AgentEditorConfig;
 }

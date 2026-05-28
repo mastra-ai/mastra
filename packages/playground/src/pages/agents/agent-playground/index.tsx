@@ -15,7 +15,7 @@ import { useAgentVersions, useAgentVersion } from '@/domains/agents/hooks/use-ag
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
-import { useEditorMode } from '@/domains/configuration/hooks/use-editor-mode';
+import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
@@ -25,7 +25,7 @@ function AgentPlayground() {
 
   const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
-  const editorMode = useEditorMode();
+  const editorSource = useEditorSource();
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
@@ -42,9 +42,9 @@ function AgentPlayground() {
   });
 
   const isCodeAgentOverride = codeAgent?.source === 'code';
-  const isCodeModeAgent = isCodeAgentOverride && editorMode === 'code';
+  const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
   const isCodeAgentEditable = !isCodeAgentOverride || codeAgent?.editor !== false;
-  const showCodeModeActions = isCodeModeAgent && isCodeAgentEditable;
+  const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;
   const canOpenPr = showCodeModeActions && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr ? 'Open a pull request for these JSON changes' : undefined;
   const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
@@ -88,7 +88,7 @@ function AgentPlayground() {
     isCodeAgentOverride,
     hasStoredOverride: isCodeAgentOverride && !!storedAgent,
     editorConfig: codeAgent?.editor,
-    saveSuccessMessage: isCodeModeAgent ? 'Saved to filesystem' : undefined,
+    saveSuccessMessage: isCodeSourceAgent ? 'Saved to filesystem' : undefined,
     onSuccess: () => {},
   });
 
@@ -155,7 +155,7 @@ function AgentPlayground() {
       handlePublish={handlePublish}
       handleSaveDraft={handleSaveDraft}
       isCodeAgentOverride={isCodeAgentOverride}
-      isCodeModeAgent={isCodeModeAgent}
+      isCodeSourceAgent={isCodeSourceAgent}
       readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
       editorConfig={codeAgent?.editor}
     >
@@ -174,7 +174,7 @@ function AgentPlayground() {
         isPublishing={isSubmitting}
         hasDraft={hasDraft}
         readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
-        isCodeModeAgent={isCodeModeAgent}
+        isCodeSourceAgent={isCodeSourceAgent}
         showCodeModeActions={showCodeModeActions}
         canOpenPr={canOpenPr}
         openPrTitle={openPrTitle}
