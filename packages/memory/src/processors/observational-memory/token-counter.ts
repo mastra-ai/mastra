@@ -1360,6 +1360,17 @@ export class TokenCounter {
           providerOptions: contentPart.providerOptions,
           providerMetadata: contentPart.providerMetadata,
         };
+        const clientEstimate = getClientPartTokenEstimate(imagePart);
+        if (clientEstimate) {
+          tokens += clientEstimate.tokens;
+          cacheParts.push({
+            type: 'image-data-client-estimate',
+            key: clientEstimate.key,
+            tokens: clientEstimate.tokens,
+          });
+          continue;
+        }
+
         const estimate = this.estimateImageTokens(imagePart);
         tokens += estimate.tokens;
         cacheParts.push({ type: 'image-data', estimate: JSON.parse(estimate.cachePayload) });
@@ -1380,6 +1391,17 @@ export class TokenCounter {
           providerOptions: contentPart.providerOptions,
           providerMetadata: contentPart.providerMetadata,
         };
+
+        const clientEstimate = getClientPartTokenEstimate(filePart);
+        if (clientEstimate) {
+          tokens += clientEstimate.tokens;
+          cacheParts.push({
+            type: 'file-data-client-estimate',
+            key: clientEstimate.key,
+            tokens: clientEstimate.tokens,
+          });
+          continue;
+        }
 
         if (isImageLikeFilePart(filePart)) {
           const estimate = this.estimateImageLikeFileTokens(filePart);

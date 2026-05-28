@@ -1088,6 +1088,69 @@ describe('TokenCounter', () => {
       expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(rawResult)));
     });
 
+    it('honors client-supplied tokenEstimate on raw MCP multimodal content parts', () => {
+      const counter = new TokenCounter();
+      const createCloudResult = (withClientEstimates: boolean) => ({
+        content: [
+          { type: 'text', text: 'Cloud-hosted multimodal result' },
+          {
+            type: 'image',
+            data: 'storage://bucket/screenshot-ref',
+            mimeType: 'image/png',
+            ...(withClientEstimates
+              ? {
+                  providerMetadata: {
+                    mastra: {
+                      tokenEstimate: { v: 0, source: 'client', key: 'client-image', tokens: 5_000 },
+                    },
+                  },
+                }
+              : {}),
+          },
+          {
+            type: 'audio',
+            data: 'storage://bucket/audio-ref',
+            mimeType: 'audio/wav',
+            ...(withClientEstimates
+              ? {
+                  providerMetadata: {
+                    mastra: {
+                      tokenEstimate: { v: 0, source: 'client', key: 'client-audio', tokens: 7_000 },
+                    },
+                  },
+                }
+              : {}),
+          },
+        ],
+      });
+      const createToolResultMessage = (result: unknown) =>
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-1',
+                toolName: 'cloud_multimodal_tool',
+                result,
+              },
+            },
+          ],
+        });
+      const withClientEstimates = createToolResultMessage(createCloudResult(true));
+      const withoutClientEstimates = createToolResultMessage(createCloudResult(false));
+
+      const estimatedTokens = counter.countMessage(withClientEstimates);
+      const fallbackTokens = counter.countMessage(withoutClientEstimates);
+      const estimate = withClientEstimates.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(estimatedTokens).toBeGreaterThanOrEqual(12_000);
+      expect(estimatedTokens).toBeGreaterThan(fallbackTokens);
+      expect(estimate.key).toContain('tool-result-multimodal-content');
+      expect(estimate.tokens).toBeGreaterThanOrEqual(12_000);
+    });
+
     it('recomputes tool-result estimates when stored modelOutput changes', async () => {
       const counter = new TokenCounter();
       const args = { q: 'weather in sf' };
