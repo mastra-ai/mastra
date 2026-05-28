@@ -4,6 +4,7 @@ import { LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { FavoriteButton } from './favorite-button';
 import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 export type AgentBuilderListProps = {
   agents: StoredAgentResponse[];
@@ -34,14 +35,14 @@ function getAuthorLabel(agent: StoredAgentResponse): string | undefined {
   return undefined;
 }
 
-function AuthorBadge({ agent }: { agent: StoredAgentResponse }) {
+function AuthorBadge({ agent, className }: { agent: StoredAgentResponse; className?: string }) {
   const label = getAuthorLabel(agent);
   if (!label) return null;
 
   const avatarUrl = agent.author?.avatarUrl;
 
   return (
-    <div className="flex items-center gap-1.5 mt-1" data-testid="agent-builder-row-author">
+    <div className={cn('flex items-center gap-1.5 min-w-0', className)} data-testid="agent-builder-row-author">
       <Avatar name={label} src={avatarUrl} size="sm" />
       <span className="text-ui-xs text-neutral3 truncate">{label}</span>
     </div>
@@ -115,7 +116,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
               </div>
-              <AuthorBadge agent={agent} />
+              <AuthorBadge agent={agent} className="mt-2 md:hidden" />
               {showFavorites && (
                 <div className="mt-2 md:hidden">
                   <FavoriteButton
@@ -127,6 +128,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
                 </div>
               )}
             </div>
+            <AuthorBadge agent={agent} className="shrink-0 hidden md:flex max-w-[12rem]" />
             {showFavorites && (
               <FavoriteButton
                 agentId={agent.id}

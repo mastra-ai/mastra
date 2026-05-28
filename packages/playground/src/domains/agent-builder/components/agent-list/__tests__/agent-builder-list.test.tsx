@@ -203,8 +203,9 @@ describe('AgentBuilderList', () => {
     ];
     renderList({ agents });
 
-    const author = screen.getByTestId('agent-builder-row-author');
-    expect(author.textContent).toContain('Alice');
+    const authors = screen.getAllByTestId('agent-builder-row-author');
+    expect(authors.length).toBeGreaterThan(0);
+    expect(authors.some(node => node.textContent?.includes('Alice'))).toBe(true);
   });
 
   it('falls back to email when the resolved author has no name', () => {
@@ -225,8 +226,9 @@ describe('AgentBuilderList', () => {
     ];
     renderList({ agents });
 
-    const author = screen.getByTestId('agent-builder-row-author');
-    expect(author.textContent).toContain('alice@example.com');
+    const authors = screen.getAllByTestId('agent-builder-row-author');
+    expect(authors.length).toBeGreaterThan(0);
+    expect(authors.some(node => node.textContent?.includes('alice@example.com'))).toBe(true);
   });
 
   it('falls back to authorId when no resolved author is present', () => {
@@ -246,8 +248,9 @@ describe('AgentBuilderList', () => {
     ];
     renderList({ agents });
 
-    const author = screen.getByTestId('agent-builder-row-author');
-    expect(author.textContent).toContain('user-99');
+    const authors = screen.getAllByTestId('agent-builder-row-author');
+    expect(authors.length).toBeGreaterThan(0);
+    expect(authors.some(node => node.textContent?.includes('user-99'))).toBe(true);
   });
 
   it('omits the author block when neither `author` nor `authorId` is present', () => {
