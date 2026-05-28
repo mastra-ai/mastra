@@ -12,6 +12,8 @@ when package splits unit integration or E2E coverage run narrowest suite first
 From root prefer specific scripts like pnpm build:core or pnpm --filter ./packages/name script
 Do not pnpm run setup pnpm build pnpm build:packages or repo wide test runs when package local is enough
 Building whole monorepo is slow and should be last resort
+Source mode / no-build local validation
+Use `MASTRA_SOURCE_MODE=true` when running package tests or linked local projects that should resolve Mastra workspace packages from source instead of requiring expensive repo builds. Prefix the normal focused command, for example `MASTRA_SOURCE_MODE=true pnpm test:cli`, `MASTRA_SOURCE_MODE=true pnpm --filter ./packages/name test`, or `MASTRA_SOURCE_MODE=true mastra dev` from a linked local project. `mastra dev` only honors this env var when the CLI is linked to a local Mastra repo checkout; normal published installs keep stable behavior.
 Before pushing commits or opening PRs run the narrowest relevant local checks; if CodeRabbit CLI is installed and configured, run a local CodeRabbit review too
 some integration tests need pnpm i --ignore-workspace
 
