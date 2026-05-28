@@ -1,7 +1,6 @@
-import type { ScheduleResponse } from '@mastra/client-js';
+import type { Heartbeat } from '@mastra/client-js';
 import { DataList, DataListSkeleton } from '@mastra/playground-ui';
 import { useMemo } from 'react';
-import { parseHeartbeatInput } from '../utils/parse-heartbeat-input';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
 import { WorkflowRunStatusInline } from '@/domains/schedules/components/workflow-run-status-inline';
 import { formatRelativeTime, formatScheduleTimestamp } from '@/domains/schedules/utils/format';
@@ -10,7 +9,7 @@ import { useLinkComponent } from '@/lib/framework';
 export type HeartbeatModeFilter = 'all' | 'threaded' | 'threadless';
 
 export interface HeartbeatsListProps {
-  schedules: ScheduleResponse[];
+  heartbeats: Heartbeat[];
   isLoading: boolean;
   search?: string;
   mode?: HeartbeatModeFilter;
@@ -18,26 +17,25 @@ export interface HeartbeatsListProps {
 
 const COLUMNS = 'minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto auto auto';
 
-export function HeartbeatsList({ schedules, isLoading, search = '', mode = 'all' }: HeartbeatsListProps) {
+export function HeartbeatsList({ heartbeats, isLoading, search = '', mode = 'all' }: HeartbeatsListProps) {
   const { paths, Link } = useLinkComponent();
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return schedules
-      .map(s => ({ schedule: s, parsed: parseHeartbeatInput(s) }))
-      .filter(({ parsed }) => {
-        if (mode === 'threaded') return parsed?.mode === 'threaded';
-        if (mode === 'threadless') return parsed?.mode === 'threadless';
+    return heartbeats
+      .filter(h => {
+        if (mode === 'threaded') return !!h.threadId;
+        if (mode === 'threadless') return !h.threadId;
         return true;
       })
-      .filter(({ schedule, parsed }) => {
+      .filter(h => {
         if (!term) return true;
-        if (schedule.id.toLowerCase().includes(term)) return true;
-        if (parsed?.agentId.toLowerCase().includes(term)) return true;
-        if (parsed?.threadId?.toLowerCase().includes(term)) return true;
+        if (h.id.toLowerCase().includes(term)) return true;
+        if (h.agentId.toLowerCase().includes(term)) return true;
+        if (h.threadId?.toLowerCase().includes(term)) return true;
         return false;
       });
-  }, [schedules, search, mode]);
+  }, [heartbeats, search, mode]);
 
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
@@ -57,17 +55,17 @@ export function HeartbeatsList({ schedules, isLoading, search = '', mode = 'all'
       {rows.length === 0 && search ? <DataList.NoMatch message="No heartbeats match your search" /> : null}
       {rows.length === 0 && !search ? <DataList.NoMatch message="No heartbeats configured" /> : null}
 
-      {rows.map(({ schedule, parsed }) => (
-        <DataList.RowLink key={schedule.id} to={paths.heartbeatLink(schedule.id)} LinkComponent={Link}>
+      {rows.map(h => (
+        <DataList.RowLink key={h.id} to={paths.heartbeatLink(h.id)} LinkComponent={Link}>
           <DataList.NameCell>
-            <span className="truncate" title={parsed?.agentId ?? schedule.ownerId ?? ''}>
-              {parsed?.agentId ?? schedule.ownerId ?? '—'}
+            <span className="truncate" title={h.agentId}>
+              {h.agentId}
             </span>
           </DataList.NameCell>
           <DataList.TextCell>
-            {parsed?.threadId ? (
-              <span className="truncate font-mono text-ui-sm" title={parsed.threadId}>
-                {parsed.threadId}
+            {h.threadId ? (
+              <span className="truncate font-mono text-ui-sm" title={h.threadId}>
+                {h.threadId}
               </span>
             ) : (
               <span className="text-neutral4">—</span>
@@ -75,29 +73,29 @@ export function HeartbeatsList({ schedules, isLoading, search = '', mode = 'all'
           </DataList.TextCell>
           <DataList.TextCell>
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
-              <code className="font-mono text-ui-sm">{schedule.cron}</code>
-              {schedule.timezone ? <span className="text-neutral4 text-ui-xs">{schedule.timezone}</span> : null}
+              <code className="font-mono text-ui-sm">{h.cron}</code>
+              {h.timezone ? <span className="text-neutral4 text-ui-xs">{h.timezone}</span> : null}
             </span>
           </DataList.TextCell>
           <DataList.TextCell>
-            <ScheduleStatusText status={schedule.status} />
+            <ScheduleStatusText status={h.status} />
           </DataList.TextCell>
           <DataList.TextCell>
-            <span className="whitespace-nowrap" title={formatScheduleTimestamp(schedule.nextFireAt)}>
-              {formatRelativeTime(schedule.nextFireAt)}
+            <span className="whitespace-nowrap" title={formatScheduleTimestamp(h.nextFireAt)}>
+              {formatRelativeTime(h.nextFireAt)}
             </span>
           </DataList.TextCell>
           <DataList.TextCell>
-            {schedule.lastRun ? (
+            {h.lastRun ? (
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                <WorkflowRunStatusInline status={schedule.lastRun.status} />
-                <span className="text-neutral4 text-ui-sm" title={formatScheduleTimestamp(schedule.lastFireAt)}>
-                  {schedule.lastFireAt ? formatRelativeTime(schedule.lastFireAt) : ''}
+                <WorkflowRunStatusInline status={h.lastRun.status} />
+                <span className="text-neutral4 text-ui-sm" title={formatScheduleTimestamp(h.lastFireAt)}>
+                  {h.lastFireAt ? formatRelativeTime(h.lastFireAt) : ''}
                 </span>
               </span>
-            ) : schedule.lastFireAt ? (
-              <span className="whitespace-nowrap" title={formatScheduleTimestamp(schedule.lastFireAt)}>
-                {formatRelativeTime(schedule.lastFireAt)}
+            ) : h.lastFireAt ? (
+              <span className="whitespace-nowrap" title={formatScheduleTimestamp(h.lastFireAt)}>
+                {formatRelativeTime(h.lastFireAt)}
               </span>
             ) : (
               <span className="text-neutral4">Never</span>

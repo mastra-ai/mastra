@@ -12,8 +12,8 @@ export function HeartbeatsPage() {
   const [agentId, setAgentId] = useState<string>(ALL_AGENTS);
   const [mode, setMode] = useState<HeartbeatModeFilter>('all');
 
-  const ownerId = agentId === ALL_AGENTS ? undefined : agentId;
-  const { data: heartbeats, isLoading, error } = useHeartbeats({ ownerId });
+  const filterAgentId = agentId === ALL_AGENTS ? undefined : agentId;
+  const { data: heartbeats, isLoading, error } = useHeartbeats({ agentId: filterAgentId });
   const { data: agents } = useAgents();
 
   const agentOptions = useMemo(() => {
@@ -47,7 +47,7 @@ export function HeartbeatsPage() {
         <ModeToggle value={mode} onChange={setMode} />
       </div>
       <div className="overflow-y-auto">
-        <HeartbeatsList schedules={heartbeats ?? []} isLoading={isLoading} search={search} mode={mode} />
+        <HeartbeatsList heartbeats={heartbeats ?? []} isLoading={isLoading} search={search} mode={mode} />
       </div>
     </div>
   );

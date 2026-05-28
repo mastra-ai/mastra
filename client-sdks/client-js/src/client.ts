@@ -195,6 +195,8 @@ import type {
   ScheduleResponse,
   ListScheduleTriggersParams,
   ListScheduleTriggersResponse,
+  Heartbeat,
+  ListHeartbeatsParams,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -2218,5 +2220,19 @@ export class MastraClient extends BaseResource {
    */
   public resumeSchedule(scheduleId: string): Promise<ScheduleResponse> {
     return this.request(`/schedules/${encodeURIComponent(scheduleId)}/resume`, { method: 'POST' });
+  }
+
+  /**
+   * Lists heartbeats across all agents. Pass `agentId` to scope the list to
+   * a single agent. Heartbeats are the user-facing view of scheduled agent
+   * self-messages; the schedule + workflow that backs them is hidden.
+   */
+  public listHeartbeats(params: ListHeartbeatsParams = {}): Promise<Heartbeat[]> {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    const qs = searchParams.toString();
+    return this.request<{ heartbeats: Heartbeat[] }>(`/heartbeats${qs ? `?${qs}` : ''}`).then(
+      response => response.heartbeats,
+    );
   }
 }

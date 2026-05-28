@@ -40,11 +40,28 @@ export interface WorkflowContext extends Context {
   requestContext?: RequestContext;
 }
 
+/**
+ * Prefix reserved for workflows that are internal to Mastra (e.g. the
+ * `__mastra_heartbeat__` workflow that backs `agent.setHeartbeat`). These
+ * are intentionally hidden from the public `/workflows` HTTP surface so the
+ * Studio doesn't surface implementation detail. Dedicated APIs (e.g.
+ * `/heartbeats`) handle the user-facing view for each internal workflow.
+ */
+const INTERNAL_WORKFLOW_PREFIX = '__mastra_';
+
+function isInternalWorkflowId(workflowId: string): boolean {
+  return workflowId.startsWith(INTERNAL_WORKFLOW_PREFIX);
+}
+
 async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
   const logger = mastra.getLogger();
 
   if (!workflowId) {
     throw new HTTPException(400, { message: 'Workflow ID is required' });
+  }
+
+  if (isInternalWorkflowId(workflowId)) {
+    throw new HTTPException(404, { message: 'Workflow not found' });
   }
 
   let workflow;
@@ -108,6 +125,9 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
       const workflows = mastra.listWorkflows({ serialized: false });
       const isPartial = partial === 'true';
       const _workflows = Object.entries(workflows).reduce<Record<string, WorkflowInfo>>((acc, [key, workflow]) => {
+        // Hide internal Mastra workflows from the public /workflows surface.
+        // Dedicated routes (e.g. /heartbeats) handle their user-facing view.
+        if (isInternalWorkflowId(key)) return acc;
         acc[key] = getWorkflowInfo(workflow as any, isPartial);
         return acc;
       }, {});

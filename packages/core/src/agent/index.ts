@@ -6,6 +6,8 @@ export * from './signals';
 export {
   HEARTBEAT_WORKFLOW_ID,
   HEARTBEAT_SCHEDULE_PREFIX,
+  HeartbeatInputSchema,
+  HeartbeatOutputSchema,
   type HeartbeatInput,
   type HeartbeatOutput,
   type HeartbeatRunStatus,
