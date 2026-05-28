@@ -4,27 +4,27 @@ Test favorite/unfavorite functionality for stored agents and skills.
 
 Favorite endpoints are documented in `packages/server/src/server/schemas/favorites.ts` (toggle response) and the agent/skill response schemas in the same directory (GET response). Refer to those for exact field names and types; assert against the schema, not against fields baked into this doc.
 
-Both favorite and unfavorite are idempotent — calling them twice returns the same body the second time. Favorites are gated by the `favorites` builder feature (404 if disabled). (This file was formerly named `stars.md`; the feature was renamed `stars` → `favorites` across the stack. See PR #16749 — STACK-3.)
+Both favorite and unfavorite are idempotent — calling them twice returns the same body the second time. Favorites are gated by the `favorites` builder feature (404 if disabled) and require auth (401 under `--auth off`). (This file was formerly named `stars.md`; the feature was renamed `stars` → `favorites` across the stack. See PR #16749 — STACK-3.)
 
 > **Field-name asymmetry.** The toggle endpoint (`PUT|DELETE /stored/{type}/:id/favorite`) returns `{ favorited, favoriteCount }`. The GET endpoint (`/stored/{type}/:id`) exposes the caller's favorite state as `isFavorited` (alongside `favoriteCount`). When asserting "is favorited" on GET, check `isFavorited`, not `favorited`.
 
 ## Auth requirement
 
-**This section requires `--auth on`.** Favorites are scoped per caller (the row in `stored_favorites` is keyed on `(entityId, authorId)`). With `--auth off`, there is no caller to attach the favorite to and the route returns `404 Not Found` (the route is registered conditionally on `requiresAuth` and is not present at all when auth is off).
+**This section requires `--auth on`.** Favorites are scoped per caller (the row in `stored_favorites` is keyed on `(entityId, authorId)`). With `--auth off`, there is no caller to attach the favorite to and the route returns either `401 Authentication required` or `404 Not Found` depending on how the route is registered for the current build — both mean "unreachable under auth-off". Treat any non-2xx as the expected outcome.
 
 ### Running with `--auth off`
 
-Favorites are **fully unreachable under `--auth off`**. The PUT/DELETE endpoints return `404` (route not registered), and the Studio + Agent Builder favorite buttons render with a "Sign in to favorite this agent/skill" tooltip. Do the 404 sanity check below, mark this section as `Skipped (requires --auth on)`, and move on. Do **not** try to create agents and favorite them — it will not work and is not expected to work.
+Favorites are **fully unreachable under `--auth off`**. The PUT/DELETE endpoints return a non-2xx (typically `401 Authentication required`, sometimes `404 Not Found` depending on build), and the Studio + Agent Builder favorite buttons render with a "Sign in to favorite this agent/skill" tooltip. Do the sanity check below, mark this section as `Skipped (requires --auth on)`, and move on. Do **not** try to create agents and favorite them — it will not work and is not expected to work.
 
 ```bash
 # Sanity: confirm favorites are gated by auth
 curl -s -o /dev/null -w "%{http_code}\n" -X PUT $BASE/stored/agents/$AGENT_ID/favorite
-# → 404 (route not registered under auth-off)
+# → 401 or 404 (unreachable under auth-off)
 curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/stored/agents/$AGENT_ID/favorite
 # → 404
 ```
 
-- [ ] Both calls return `404` (the route is conditionally registered when auth is on; `404` and `401` both mean "unreachable under auth-off")
+- [ ] Both calls return a non-2xx status, either `401` or `404` (both mean "unreachable under auth-off")
 - [ ] Skip the rest of this file; report the section as `Skipped (requires --auth on)`
 
 ## Prerequisites (auth-on)
@@ -151,7 +151,7 @@ curl -s -X DELETE $BASE/stored/skills/$SKILL_ID -H "$SESSION" -o /dev/null -w "%
 
 ## Checklist
 
-- [ ] Auth-off path: PUT/DELETE favorite return `404` (no other assertions)
+- [ ] Auth-off path: PUT/DELETE favorite return non-2xx (`401` or `404`); no other assertions
 - [ ] Auth-on: favorite agent (200 + `favorited: true`)
 - [ ] Verify agent favorited on GET
 - [ ] Unfavorite agent (200 + `favorited: false`)

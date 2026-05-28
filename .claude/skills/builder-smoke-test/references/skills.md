@@ -45,7 +45,7 @@ curl -s -X POST $BASE/stored/skills \
 - [ ] `name` and `description` match the request
 - [ ] `id` is present; record it as `SKILL_ID=<id>`
 
-> `instructions` is required by the schema. Omitting it returns 400.
+> `name`, `description`, and `instructions` are all required by the schema. Omitting any of them returns `400 Invalid input: expected string, received undefined`.
 
 ### 2. Get the skill
 
@@ -219,7 +219,7 @@ See `references/registry.md` for the install flow.
 
 ## Checklist
 
-- [ ] Create skill (`instructions` required)
+- [ ] Create skill (`name`, `description`, `instructions` all required)
 - [ ] Get skill by ID
 - [ ] List skills with `page=0`
 - [ ] Update skill metadata (full-body PATCH)
