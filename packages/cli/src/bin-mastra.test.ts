@@ -14,7 +14,18 @@ async function writeFixtureFile(path: string, content: string) {
 }
 
 async function writeFakeTsx(path: string) {
-  await writeFixtureFile(path, '#!/usr/bin/env node\nawait import(process.argv[2]);\n');
+  await writeFixtureFile(
+    path,
+    [
+      '#!/usr/bin/env node',
+      "import { readFileSync } from 'node:fs';",
+      "import { pathToFileURL } from 'node:url';",
+      "const source = readFileSync(process.argv[2], 'utf8');",
+      'const sourceUrl = pathToFileURL(process.argv[2]).href;',
+      'await import(`data:text/javascript,${encodeURIComponent(`${source}\\n//# sourceURL=${sourceUrl}`)}`);',
+      '',
+    ].join('\n'),
+  );
   await chmod(path, 0o755);
 }
 
