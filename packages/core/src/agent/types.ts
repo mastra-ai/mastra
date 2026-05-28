@@ -261,7 +261,14 @@ export type ModelWithRetries = {
   headers?: DynamicArgument<Record<string, string>>;
 };
 
-export interface AgentConfig<
+export type AgentEditorConfig =
+  | false
+  | {
+      instructions?: boolean;
+      tools?: boolean | { description?: boolean };
+    };
+
+interface AgentConfigBase<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
@@ -547,6 +554,56 @@ export interface AgentConfig<
    */
   transform?: ToolPayloadTransformPolicy;
 }
+
+type AgentEditableFieldConfig<TTools extends ToolsInput, TRequestContext extends Record<string, any> | unknown> =
+  | {
+      editor?: undefined;
+      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+      tools?: DynamicArgument<TTools, TRequestContext>;
+    }
+  | {
+      editor: false;
+      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+      tools?: DynamicArgument<TTools, TRequestContext>;
+    }
+  | {
+      editor: { instructions?: false; tools?: false | { description?: false } };
+      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+      tools?: DynamicArgument<TTools, TRequestContext>;
+    }
+  | {
+      editor: { instructions: true; tools?: false | { description?: false } };
+      instructions?: never;
+      tools?: DynamicArgument<TTools, TRequestContext>;
+    }
+  | {
+      editor: { instructions?: false; tools: true };
+      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+      tools?: never;
+    }
+  | {
+      editor: { instructions: true; tools: true };
+      instructions?: never;
+      tools?: never;
+    }
+  | {
+      editor: { instructions?: false; tools: { description: true } };
+      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+      tools?: DynamicArgument<TTools, TRequestContext>;
+    }
+  | {
+      editor: { instructions: true; tools: { description: true } };
+      instructions?: never;
+      tools?: DynamicArgument<TTools, TRequestContext>;
+    };
+
+export type AgentConfig<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TOutput = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = Omit<AgentConfigBase<TAgentId, TTools, TOutput, TRequestContext>, 'instructions' | 'tools'> &
+  AgentEditableFieldConfig<TTools, TRequestContext>;
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });

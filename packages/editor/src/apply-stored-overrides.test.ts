@@ -56,6 +56,108 @@ describe('applyStoredOverrides', () => {
     expect(instructions).toBe('You are a stored-config agent with updated instructions.');
   });
 
+  it('does not override anything when code agent disables editor overrides', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeTool = createTool({
+      id: 'code-tool',
+      description: 'Code description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const storedTool = createTool({
+      id: 'stored-tool',
+      description: 'Stored description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: 'openai/gpt-4o',
+      tools: { 'code-tool': codeTool },
+      editor: false,
+    });
+    new Mastra({
+      storage,
+      editor,
+      agents: { 'my-agent': codeAgent },
+      tools: { 'stored-tool': storedTool },
+    });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        tools: { 'stored-tool': {} },
+      },
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toBe('Code instructions');
+    const tools = await result.listTools();
+    expect(tools['code-tool']).toBeDefined();
+    expect(tools['stored-tool']).toBeUndefined();
+  });
+
+  it('only applies stored tool description overrides when code owns tool implementations', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeTool = createTool({
+      id: 'code-tool',
+      description: 'Code description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const storedTool = createTool({
+      id: 'stored-tool',
+      description: 'Stored description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: 'openai/gpt-4o',
+      tools: { 'code-tool': codeTool },
+      editor: { tools: { description: true } },
+    });
+    new Mastra({
+      storage,
+      editor,
+      agents: { 'my-agent': codeAgent },
+      tools: { 'stored-tool': storedTool },
+    });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        tools: { 'code-tool': { description: 'Stored code-tool description' }, 'stored-tool': {} },
+      },
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toBe('Code instructions');
+    const tools = await result.listTools();
+    expect(tools['code-tool']?.description).toBe('Stored code-tool description');
+    expect(tools['stored-tool']).toBeUndefined();
+  });
+
   it('does not override model from stored config (model is code-only)', async () => {
     const { editor, codeAgent } = await setup({
       name: 'Stored Agent',

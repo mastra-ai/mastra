@@ -48,6 +48,8 @@ import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
 
+type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
+
 // ============================================================================
 // Builder Defaults
 // ============================================================================
@@ -346,6 +348,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     options?: { status?: 'draft' | 'published' } | { versionId: string },
     requestContext?: RequestContext,
   ): Promise<Agent> {
+    const editorConfig = (
+      agent as Agent & { __getEditorConfig?: () => AgentEditorConfig | undefined }
+    ).__getEditorConfig?.();
+    if (editorConfig === false) {
+      return agent;
+    }
+
+    const instructionsEditable = editorConfig === undefined ? true : editorConfig.instructions === true;
+    const toolsConfig = editorConfig === undefined ? true : editorConfig.tools;
+    const toolsEditable = toolsConfig === true;
+    const toolDescriptionsEditable =
+      typeof toolsConfig === 'object' && toolsConfig !== null && toolsConfig.description === true;
+
     let storedConfig: StorageResolvedAgentType | null = null;
     try {
       this.ensureRegistered();
@@ -380,7 +395,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     this.logger?.debug(`[applyStoredOverrides] Applying stored overrides to code agent "${agent.id}"`);
 
     // --- Instructions ---
-    if (storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
+    if (instructionsEditable && storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
       const resolved = this.resolveStoredInstructions(storedConfig.instructions);
       if (resolved !== undefined) {
         fork.__updateInstructions(resolved);
@@ -394,7 +409,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hasStoredToolProviders =
       storedConfig.toolProviders != null && Object.keys(storedConfig.toolProviders as object).length > 0;
 
-    if (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools || hasStoredToolProviders) {
+    if (toolsEditable && (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools || hasStoredToolProviders)) {
       const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
       const hasConditionalMCPClients =
         storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
@@ -482,6 +497,30 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
         );
         fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
+      }
+    } else if (toolDescriptionsEditable && hasStoredTools) {
+      const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
+
+      if (hasConditionalTools) {
+        const originalTools = agent.listTools.bind(agent);
+        const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
+          const codeTools = await originalTools({ requestContext });
+          const resolvedToolsConfig = this.accumulateObjectVariants(
+            storedConfig!.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+            requestContext.toJSON(),
+          );
+
+          return this.applyStoredToolDescriptions(codeTools, resolvedToolsConfig);
+        };
+        fork.__setTools(toolsFn);
+      } else {
+        const codeTools = await fork.listTools();
+        fork.__setTools(
+          this.applyStoredToolDescriptions(
+            codeTools,
+            storedConfig.tools as Record<string, StorageToolConfig> | string[] | undefined,
+          ),
+        );
       }
     }
 
@@ -946,6 +985,27 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const context = requestContext.toJSON();
       return resolveInstructionBlocks(blocks, context, { promptBlocksStorage: promptBlocksStore });
     };
+  }
+
+  private applyStoredToolDescriptions(
+    codeTools: ToolsInput,
+    storedTools?: Record<string, StorageToolConfig> | string[],
+  ): ToolsInput {
+    if (!storedTools || Array.isArray(storedTools)) {
+      return codeTools;
+    }
+
+    let nextTools: ToolsInput | undefined;
+    for (const [toolKey, toolConfig] of Object.entries(storedTools)) {
+      if (!toolConfig.description || !(toolKey in codeTools)) {
+        continue;
+      }
+
+      nextTools ??= { ...codeTools };
+      nextTools[toolKey] = { ...codeTools[toolKey], description: toolConfig.description };
+    }
+
+    return nextTools ?? codeTools;
   }
 
   /**

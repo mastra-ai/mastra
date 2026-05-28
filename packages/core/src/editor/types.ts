@@ -178,6 +178,22 @@ export interface MastraEditorConfig {
    * When present and enabled, the editor provides agent building capabilities.
    */
   builder?: AgentBuilderOptions;
+  /**
+   * Editor mode controlling how agent overrides are persisted and surfaced in Studio.
+   *
+   * - `'code'` — overrides live as deterministic per-agent JSON files on disk
+   *   (default `./mastra/editor/`). Studio replaces Save/Publish with
+   *   filesystem/PR actions and routes editor storage domains through a local
+   *   `FilesystemStore` at `codePath`.
+   * - `'db'` — overrides live in the configured storage backend. Studio shows
+   *   the standard Save/Publish flow.
+   */
+  mode?: 'code' | 'db';
+  /**
+   * Filesystem path used by code mode for per-agent JSON files.
+   * Defaults to `./mastra/editor/`. Ignored when `mode` is not `'code'`.
+   */
+  codePath?: string;
 }
 
 export interface GetByIdOptions {
@@ -438,4 +454,11 @@ export interface IMastraEditor {
    * Optional for backwards compatibility.
    */
   resolveBuilder?(): Promise<IAgentBuilder | undefined>;
+
+  /**
+   * Returns the editor's configured mode (`'code'` | `'db'`), or `undefined`
+   * if the editor was constructed without an explicit mode. Optional for
+   * backwards compatibility.
+   */
+  getMode?(): 'code' | 'db' | undefined;
 }
