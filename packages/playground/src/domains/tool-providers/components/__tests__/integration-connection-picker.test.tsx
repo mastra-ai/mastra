@@ -59,9 +59,9 @@ const Harness = ({ initial, children }: HarnessProps) => {
 };
 
 describe('IntegrationConnectionPicker', () => {
-  // Default `auth/me` so the new `useIsToolProviderAdmin` subscription does
-  // not hit the real network under `onUnhandledRequest: 'bypass'`. Admin tests
-  // override this via `server.use(...)`.
+  // Default `auth/me` so `useExistingConnections({ scopeToSelf: true })`
+  // (which reads `useCurrentUser`) does not hit the real network under
+  // `onUnhandledRequest: 'bypass'`.
   const defaultHandlers = [
     http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'tester', permissions: [] })),
   ];
@@ -85,6 +85,33 @@ describe('IntegrationConnectionPicker', () => {
     );
 
     expect(await findByText(/No connections yet/)).toBeTruthy();
+  });
+
+  // Security: the Builder picker must scope connections to the caller's own
+  // authorId. Without this, an admin viewing/editing another user's agent
+  // would see cross-author connections in the dropdown.
+  it('passes the caller authorId on listConnections so admins do not see other authors connections', async () => {
+    let requestUrl: string | null = null;
+    server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () =>
+        HttpResponse.json({ id: 'user-b', permissions: ['tool-providers:admin'] }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/${PROVIDER}/connections`, ({ request }) => {
+        requestUrl = request.url;
+        return HttpResponse.json(noConnections);
+      }),
+    );
+
+    render(
+      <Harness>
+        <IntegrationConnectionPicker providerId={PROVIDER} toolkit={TOOLKIT} multipleAllowed={true} />
+      </Harness>,
+    );
+
+    await waitFor(() => expect(requestUrl).not.toBeNull());
+    const url = new URL(requestUrl!);
+    expect(url.searchParams.get('toolkit')).toBe(TOOLKIT);
+    expect(url.searchParams.get('authorId')).toBe('user-b');
   });
 
   it('lists only un-pinned connections in the Add menu', async () => {
@@ -294,51 +321,15 @@ describe('IntegrationConnectionPicker', () => {
     });
   });
 
-  it('shows admin authorId suffix on pinned + menu rows when current user is admin', async () => {
+  // The Builder edit view is scope-to-self by design (every row is the
+  // caller's own connection), so the picker never renders the admin
+  // authorId suffix, even for callers with `tool-providers:admin`.
+  it('never renders the authorId suffix even when current user is admin', async () => {
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'me', permissions: ['tool-providers:admin'] })),
       http.get(`${BASE_URL}/api/tool-providers/${PROVIDER}/connections`, () =>
         HttpResponse.json({
-          items: [
-            makeConnection('conn_work', { label: 'work', authorId: 'user_A' }),
-            makeConnection('conn_personal', { label: 'personal', authorId: 'user_B' }),
-          ],
-        } satisfies typeof twoGmailConnections),
-      ),
-    );
-
-    const initial: HarnessFormValues = {
-      toolProviders: {
-        [PROVIDER]: {
-          tools: {},
-          connections: {
-            [TOOLKIT]: [{ kind: 'author', toolkit: TOOLKIT, connectionId: 'conn_work', scope: 'per-author' }],
-          },
-        },
-      },
-    };
-
-    const { findByTestId, getByTestId, findByText } = render(
-      <Harness initial={initial}>
-        <IntegrationConnectionPicker providerId={PROVIDER} toolkit={TOOLKIT} multipleAllowed={true} />
-      </Harness>,
-    );
-
-    // Pinned row shows the author suffix.
-    const pinnedAuthor = await findByTestId(`integration-connection-author-${PROVIDER}-${TOOLKIT}-conn_work`);
-    expect(pinnedAuthor.textContent).toContain('user_A');
-
-    // Open the add-menu and assert the un-pinned conn shows its author suffix too.
-    fireEvent.click(getByTestId(`integration-connection-add-${PROVIDER}-${TOOLKIT}`));
-    expect(await findByText(/· user_B/)).toBeTruthy();
-  });
-
-  it('hides authorId suffix when current user is not admin', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'me', permissions: [] })),
-      http.get(`${BASE_URL}/api/tool-providers/${PROVIDER}/connections`, () =>
-        HttpResponse.json({
-          items: [makeConnection('conn_work', { label: 'work', authorId: 'user_A' })],
+          items: [makeConnection('conn_work', { label: 'work', authorId: 'me' })],
         } satisfies typeof oneGmailConnection),
       ),
     );

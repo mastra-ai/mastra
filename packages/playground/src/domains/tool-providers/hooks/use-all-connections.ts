@@ -3,6 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { useToolProviders } from './use-tool-providers';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 /**
  * Stale time long enough to avoid refetching on every picker re-render but
@@ -10,6 +11,19 @@ import { useToolProviders } from './use-tool-providers';
  * promptly (React Query also re-fetches on window focus by default).
  */
 const STALE_TIME_MS = 30_000;
+
+export interface UseAllConnectionsOptions {
+  /**
+   * When `true`, the hook forces the server-side `authorId` filter to the
+   * caller's own userId. Builder edit view passes `scopeToSelf: true` so
+   * admins see only their own connections, never other authors' rows.
+   *
+   * Non-admin callers see the same result either way — the server already
+   * scopes to the caller's bucket — but the explicit filter keeps caches
+   * consistent and prevents admin cross-author leakage.
+   */
+  scopeToSelf?: boolean;
+}
 
 /**
  * Fans out across every registered ToolProvider and every toolkit it
@@ -23,10 +37,15 @@ const STALE_TIME_MS = 30_000;
  * Distinct from `useExistingConnections` (per-pair, used by `/integrations`)
  * to keep their query caches independent.
  */
-export const useAllConnections = () => {
+export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   const client = useMastraClient();
   const providersQuery = useToolProviders();
   const providers = useMemo(() => providersQuery.data?.providers ?? [], [providersQuery.data?.providers]);
+
+  const scopeToSelf = options?.scopeToSelf ?? false;
+  const currentUserQuery = useCurrentUser();
+  const callerAuthorId = currentUserQuery.data?.id;
+  const callerReady = !scopeToSelf || Boolean(callerAuthorId);
 
   // 1. For every provider, list its toolkits.
   const toolkitsQueries = useQueries({
@@ -48,17 +67,28 @@ export const useAllConnections = () => {
     return out;
   }, [providers, toolkitsQueries]);
 
-  // 3. One listConnections call per pair.
+  // 3. One listConnections call per pair. Include `authorId` in queryKey when
+  // self-scoped so the cache is distinct from any unscoped admin reads.
   const connectionsQueries = useQueries({
     queries: pairs.map(pair => ({
-      queryKey: ['tool-integration-connections-all', pair.providerId, pair.toolkit],
-      queryFn: () => client.getToolProvider(pair.providerId).listConnections({ toolkit: pair.toolkit }),
+      queryKey: scopeToSelf
+        ? ['tool-integration-connections-all', pair.providerId, pair.toolkit, callerAuthorId]
+        : ['tool-integration-connections-all', pair.providerId, pair.toolkit],
+      queryFn: () =>
+        client.getToolProvider(pair.providerId).listConnections({
+          toolkit: pair.toolkit,
+          ...(scopeToSelf && callerAuthorId ? { authorId: callerAuthorId } : {}),
+        }),
+      enabled: callerReady,
       staleTime: STALE_TIME_MS,
     })),
   });
 
   const isLoading =
-    providersQuery.isLoading || toolkitsQueries.some(q => q.isLoading) || connectionsQueries.some(q => q.isLoading);
+    providersQuery.isLoading ||
+    (scopeToSelf && currentUserQuery.isLoading) ||
+    toolkitsQueries.some(q => q.isLoading) ||
+    connectionsQueries.some(q => q.isLoading);
 
   // Build a per-pair list of connection summaries so callers can both gate
   // ("does this row have any connection?") and auto-pin ("if exactly one

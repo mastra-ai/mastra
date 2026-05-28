@@ -23,7 +23,7 @@ const BASE_URL = 'http://localhost:4111';
  */
 const defaultToolNetworkHandlers = [
   http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json({ providers: [] })),
-  // The picker subscribes to `useIsToolProviderAdmin` → `useCurrentUser`,
+  // `useAllConnections({ scopeToSelf: true })` subscribes to `useCurrentUser`,
   // which fetches `/api/auth/me`. Without a handler the real network is hit
   // (bypass), causing flakes under parallel test load.
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'tester', permissions: [] })),

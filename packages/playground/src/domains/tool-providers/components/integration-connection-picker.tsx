@@ -5,7 +5,6 @@ import { useFormContext, useWatch } from 'react-hook-form';
 
 import { useAuthorize } from '../hooks/use-authorize';
 import { useExistingConnections } from '../hooks/use-existing-connections';
-import { useIsToolProviderAdmin } from '../hooks/use-is-tool-provider-admin';
 import { useUpdateConnection } from '../hooks/use-update-connection';
 import type { ToolProviderConnectionFormValue } from '../schemas';
 
@@ -42,7 +41,6 @@ export const IntegrationConnectionPicker = ({
   const queryClient = useQueryClient();
   const authorize = useAuthorize();
   const updateConnection = useUpdateConnection();
-  const isAdmin = useIsToolProviderAdmin();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState<{ connectionId: string; draft: string } | null>(null);
 
@@ -51,7 +49,9 @@ export const IntegrationConnectionPicker = ({
   const pinnedRaw = useWatch({ name: fieldName }) as ToolProviderConnectionFormValue[] | undefined;
   const pinned = useMemo(() => pinnedRaw ?? [], [pinnedRaw]);
 
-  const connectionsQuery = useExistingConnections(providerId, toolkit);
+  // `scopeToSelf: true` ensures admins viewing/editing another user's agent
+  // only see their own connections in the picker — never other authors' rows.
+  const connectionsQuery = useExistingConnections(providerId, toolkit, { scopeToSelf: true });
   const allConnections = useMemo(() => connectionsQuery.data?.items ?? [], [connectionsQuery.data?.items]);
 
   const pinnedIds = useMemo(() => new Set(pinned.map(c => c.connectionId)), [pinned]);
@@ -108,19 +108,6 @@ export const IntegrationConnectionPicker = ({
   const labelFor = (connectionId: string): string => {
     const summary = allConnections.find(c => c.connectionId === connectionId);
     return summary?.label?.trim() || connectionId;
-  };
-
-  /**
-   * Admin-only authorId suffix: surfaces which user owns a cross-author
-   * connection. Returns `'shared'` for shared-bucket rows, the raw authorId
-   * otherwise, or `null` when not admin / authorId missing.
-   */
-  const adminAuthorSuffix = (connectionId: string): string | null => {
-    if (!isAdmin) return null;
-    const summary = allConnections.find(c => c.connectionId === connectionId);
-    const authorId = summary?.authorId;
-    if (!authorId) return null;
-    return authorId === 'shared' ? 'shared' : authorId;
   };
 
   const startEdit = (connectionId: string) => {
@@ -195,15 +182,6 @@ export const IntegrationConnectionPicker = ({
                     <Txt variant="ui-xs" className="min-w-0 flex-1 truncate text-neutral6">
                       {labelFor(conn.connectionId)}
                     </Txt>
-                    {adminAuthorSuffix(conn.connectionId) !== null && (
-                      <Txt
-                        variant="ui-xs"
-                        className="shrink-0 text-neutral3"
-                        data-testid={`integration-connection-author-${providerId}-${toolkit}-${conn.connectionId}`}
-                      >
-                        · {adminAuthorSuffix(conn.connectionId)}
-                      </Txt>
-                    )}
                     <button
                       type="button"
                       onClick={() => startEdit(conn.connectionId)}
@@ -266,22 +244,18 @@ export const IntegrationConnectionPicker = ({
               </Txt>
             ) : (
               <ul className="flex flex-col">
-                {available.map(c => {
-                  const authorSuffix = adminAuthorSuffix(c.connectionId);
-                  return (
-                    <li key={c.connectionId}>
-                      <button
-                        type="button"
-                        onClick={() => handlePick(c.connectionId)}
-                        data-testid={`integration-connection-pick-${providerId}-${toolkit}-${c.connectionId}`}
-                        className="w-full truncate px-2 py-1 text-left text-ui-xs text-neutral6 hover:bg-surface4"
-                      >
-                        {c.label?.trim() || c.connectionId}
-                        {authorSuffix !== null && <span className="text-neutral3"> · {authorSuffix}</span>}
-                      </button>
-                    </li>
-                  );
-                })}
+                {available.map(c => (
+                  <li key={c.connectionId}>
+                    <button
+                      type="button"
+                      onClick={() => handlePick(c.connectionId)}
+                      data-testid={`integration-connection-pick-${providerId}-${toolkit}-${c.connectionId}`}
+                      className="w-full truncate px-2 py-1 text-left text-ui-xs text-neutral6 hover:bg-surface4"
+                    >
+                      {c.label?.trim() || c.connectionId}
+                    </button>
+                  </li>
+                ))}
               </ul>
             )}
             <div className="mt-1 border-t border-border1 pt-1">

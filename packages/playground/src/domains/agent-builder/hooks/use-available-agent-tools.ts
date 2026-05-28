@@ -48,7 +48,10 @@ export function useAvailableAgentTools({
   // ToolProvider, so we intentionally bypass the builder picker allowlist
   // for integration rows (the picker has no `visibleIntegrations` field).
   const { tools: integrationTools } = useAllProviderTools();
-  const { hasConnection } = useAllConnections();
+  // `scopeToSelf: true` ensures admins viewing/editing another user's agent
+  // only see their own connections in the Builder picker — never other
+  // authors' rows.
+  const { hasConnection } = useAllConnections({ scopeToSelf: true });
   const toolProvidersFormValue = useWatch<AgentBuilderEditFormValues>({
     name: 'toolProviders',
   }) as AgentBuilderEditFormValues['toolProviders'];
