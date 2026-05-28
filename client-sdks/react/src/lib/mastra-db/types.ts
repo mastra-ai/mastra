@@ -1,6 +1,6 @@
 import type { MastraMessagePart } from '@mastra/core/agent/message-list';
 
-type MastraProviderMetadata = Record<string, unknown>;
+export type MastraProviderMetadata = Record<string, Record<string, unknown>>;
 
 /**
  * Tripwire metadata included when a processor triggers a tripwire.
@@ -126,9 +126,25 @@ export type StreamingToolInvocationExtension = {
 };
 
 /**
+ * Custom `data-*` chunk part shape persisted on a `MastraDBMessage`. Mirrors
+ * AI SDK v5 `DataUIPart` structurally so it is structurally compatible with
+ * `MastraMessagePart`, while keeping the React-side accumulator independent
+ * of the v5 type machinery.
+ */
+export type StreamingDataPart = {
+  type: `data-${string}`;
+  data: unknown;
+  id?: string;
+};
+
+/**
  * Union of part types the accumulator emits. Compatible with `MastraMessagePart`
  * at runtime; the extended text/reasoning parts add optional fields that
  * downstream consumers (e.g. `AIV5Adapter.toUIMessage`) preserve via
  * providerMetadata round-tripping.
  */
-export type AccumulatorPart = MastraMessagePart | MastraTextPart | MastraReasoningPart;
+export type AccumulatorPart =
+  | MastraMessagePart
+  | MastraTextPart
+  | MastraReasoningPart
+  | StreamingDataPart;
