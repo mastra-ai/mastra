@@ -1017,6 +1017,7 @@ describe('Agent Routes Authorization', () => {
         agents: {
           'sub-agent': { versionId: 'version-1' },
         },
+        defaultStatus: 'published',
       });
     });
 
