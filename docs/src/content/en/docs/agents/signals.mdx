@@ -214,6 +214,8 @@ const browserStateProcessor = {
 
 The built-in browser context processor now emits an aggregate browser state signal with the active URL, open/closed status, tab count, and page metadata when those values are available. When a prior copy is still active, it emits a self-describing delta and keeps the delta marker in metadata instead of exposing it as an LLM-facing XML attribute.
 
+Studio keeps state signals out of the normal transcript and shows them as pinned context above the thread instead. This keeps browser state and other processor state visible without turning every state refresh into chat noise.
+
 ## Notification signals
 
 Notification signals represent external events such as GitHub activity, email, Slack mentions, CI status, incidents, recordings, or direct messages. Notifications are durable and thread-scoped: each inbox record belongs to the conversation thread where it can be delivered, summarized, re-surfaced, and managed.
@@ -229,6 +231,8 @@ Mastra also supports lossy summaries that point back to full inbox records:
 ```
 
 Use `createNotificationInboxTool()` to give agents one flexible tool for `list`, `read`, `markSeen`, `dismiss`, `archive`, and `search` actions instead of many small CRUD tools. Source, resource, and agent ids are filters or routing metadata; `threadId` remains the primary inbox scope.
+
+Studio surfaces notification signals in a lightweight inbox panel above the thread. The panel groups the signal content with source, priority, and status metadata so notifications remain recoverable without being rendered as assistant chat bubbles.
 
 ## Delivery policy
 

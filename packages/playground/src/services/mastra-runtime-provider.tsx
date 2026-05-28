@@ -10,6 +10,7 @@ import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
+import { extractThreadSignalPanels, removePinnedSignalParts } from './signal-panels';
 import {
   buildMaxStepsStreamErrorMessage,
   buildStreamErrorMessage,
@@ -1319,14 +1320,19 @@ export function MastraRuntimeProvider({
   // Build a global index of all OM cycle parts across all messages synchronously.
   // This gives each per-message converter the full picture of a cycle's state even when
   // parts are spread across messages (e.g., buffering-start on msg A, activation on msg B).
-  const globalOmParts = useMemo(() => buildGlobalOmPartsByCycleId(messages), [messages]);
+  const { stateSignals, notifications } = useMemo(() => extractThreadSignalPanels(messages), [messages]);
+  const chatMessages = useMemo(
+    () => messages.map(removePinnedSignalParts).filter((message): message is MastraUIMessage => Boolean(message)),
+    [messages],
+  );
+  const globalOmParts = useMemo(() => buildGlobalOmPartsByCycleId(chatMessages), [chatMessages]);
 
   // Convert data-om-* parts to dynamic-tool format BEFORE toAssistantUIMessage.
   // Strip transient error messages from `messages` because the same errors are
   // tracked in `streamErrors` (which survives the post-stream initialMessages
   // refresh). Without filtering here we would briefly render duplicate errors
   // during the streaming window.
-  const vnextmessages = [...messages.filter(msg => msg.metadata?.status !== 'error'), ...streamErrors].map(msg => {
+  const vnextmessages = [...chatMessages.filter(msg => msg.metadata?.status !== 'error'), ...streamErrors].map(msg => {
     const converted = convertOmPartsInMastraMessage(msg, globalOmParts);
     return toAssistantUIMessage(converted);
   });
@@ -1355,6 +1361,8 @@ export function MastraRuntimeProvider({
         cancelStream: onCancel,
         pendingSignals,
         hasPendingMessages: pendingSignals.length > 0,
+        stateSignals,
+        notifications,
       }}
     >
       <AssistantRuntimeProvider runtime={runtime}>

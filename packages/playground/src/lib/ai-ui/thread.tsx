@@ -1,7 +1,7 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
 import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
-import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
+import { ArrowUp, BellIcon, EyeIcon, Mic, PinIcon, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
@@ -11,6 +11,7 @@ import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
 import { useThreadRuntimeState } from './thread-runtime-state';
+import type { ThreadNotificationSignal, ThreadStateSignal } from './thread-runtime-state';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -33,6 +34,7 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
   const { hasSession, viewMode, isInSidebar } = useBrowserSession();
+  const { stateSignals, notifications } = useThreadRuntimeState();
 
   // Show thumbnail in chat when:
   // 1. There's an active session
@@ -59,6 +61,7 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
           className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
         >
           <BracketOverlay containerRef={messagesContainerRef} />
+          <ThreadSignalContext stateSignals={stateSignals} notifications={notifications} />
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
@@ -102,6 +105,69 @@ const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
     >
       {children}
     </ThreadPrimitive.Root>
+  );
+};
+
+const ThreadSignalContext = ({
+  stateSignals,
+  notifications,
+}: {
+  stateSignals: ThreadStateSignal[];
+  notifications: ThreadNotificationSignal[];
+}) => {
+  if (!stateSignals.length && !notifications.length) return null;
+
+  return (
+    <div className="mb-4 grid gap-2" data-testid="thread-signal-context">
+      {stateSignals.length ? (
+        <section className="rounded-lg border border-border2 bg-surface2 p-3" aria-label="Pinned state context">
+          <div className="mb-2 flex items-center gap-2 text-icon-sm font-medium text-icon6">
+            <PinIcon className="h-4 w-4" />
+            <span>Pinned state context</span>
+          </div>
+          <div className="grid gap-2">
+            {stateSignals.map(signal => (
+              <article
+                key={signal.id}
+                className="rounded-md bg-surface3 p-2 text-ui-sm"
+                data-testid="state-signal-card"
+              >
+                <div className="flex items-center justify-between gap-2 text-icon-xs text-icon3">
+                  <span>{signal.title}</span>
+                  {signal.updatedAt ? <time>{new Date(signal.updatedAt).toLocaleString()}</time> : null}
+                </div>
+                <p className="mt-1 text-icon5">{signal.preview}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {notifications.length ? (
+        <section className="rounded-lg border border-border2 bg-surface2 p-3" aria-label="Notification inbox">
+          <div className="mb-2 flex items-center gap-2 text-icon-sm font-medium text-icon6">
+            <BellIcon className="h-4 w-4" />
+            <span>Notification inbox</span>
+          </div>
+          <div className="grid gap-2">
+            {notifications.map(notification => (
+              <article
+                key={notification.id}
+                className="rounded-md bg-surface3 p-2 text-ui-sm"
+                data-testid="notification-signal-card"
+              >
+                <div className="flex items-center justify-between gap-2 text-icon-xs text-icon3">
+                  <span>{notification.source ?? notification.title}</span>
+                  {notification.priority ? <span>{notification.priority}</span> : null}
+                </div>
+                <p className="mt-1 text-icon5">{notification.preview}</p>
+                {notification.status ? <p className="mt-1 text-icon-xs text-icon3">{notification.status}</p> : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 };
 
