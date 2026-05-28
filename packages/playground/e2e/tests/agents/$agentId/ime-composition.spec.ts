@@ -40,7 +40,7 @@ test.afterEach(async () => {
 test('Enter during IME composition does not submit, Enter after composition does submit', async () => {
   await selectFixture(page, 'text-stream');
   await page.goto(`/agents/weather-agent/chat/new`);
-  await page.click('text=Model settings');
+  await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
 
   const chatInput = page.getByPlaceholder('Enter your message...');
@@ -108,7 +108,7 @@ test('Enter after IME switch (no compositionend) still submits — #16464 regres
   //    the next Enter (with isComposing=false) submits normally.
   await selectFixture(page, 'text-stream');
   await page.goto(`/agents/weather-agent/chat/new`);
-  await page.click('text=Model settings');
+  await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
 
   const chatInput = page.getByPlaceholder('Enter your message...');

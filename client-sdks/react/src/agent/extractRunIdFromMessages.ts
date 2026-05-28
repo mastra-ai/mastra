@@ -23,12 +23,7 @@ export const extractRunIdFromMessages = (messages: MastraDBMessage[]): string | 
       if (!source || typeof source !== 'object') continue;
 
       for (const entry of Object.values(source)) {
-        if (
-          entry &&
-          typeof entry === 'object' &&
-          typeof entry.runId === 'string' &&
-          entry.runId.length > 0
-        ) {
+        if (entry && typeof entry === 'object' && typeof entry.runId === 'string' && entry.runId.length > 0) {
           return entry.runId;
         }
       }

@@ -143,8 +143,4 @@ export type StreamingDataPart = {
  * downstream consumers (e.g. `AIV5Adapter.toUIMessage`) preserve via
  * providerMetadata round-tripping.
  */
-export type AccumulatorPart =
-  | MastraMessagePart
-  | MastraTextPart
-  | MastraReasoningPart
-  | StreamingDataPart;
+export type AccumulatorPart = MastraMessagePart | MastraTextPart | MastraReasoningPart | StreamingDataPart;

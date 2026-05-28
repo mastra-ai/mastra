@@ -21,11 +21,7 @@ export const fromCoreUserMessageToMastraDBMessage = (coreUserMessage: CoreUserMe
             }
             case 'image': {
               const url =
-                typeof part.image === 'string'
-                  ? part.image
-                  : part.image instanceof URL
-                    ? part.image.toString()
-                    : '';
+                typeof part.image === 'string' ? part.image : part.image instanceof URL ? part.image.toString() : '';
               return {
                 type: 'file' as const,
                 mediaType: part.mimeType ?? 'image/*',
@@ -34,11 +30,7 @@ export const fromCoreUserMessageToMastraDBMessage = (coreUserMessage: CoreUserMe
             }
             case 'file': {
               const url =
-                typeof part.data === 'string'
-                  ? part.data
-                  : part.data instanceof URL
-                    ? part.data.toString()
-                    : '';
+                typeof part.data === 'string' ? part.data : part.data instanceof URL ? part.data.toString() : '';
               return {
                 type: 'file' as const,
                 mediaType: part.mimeType,

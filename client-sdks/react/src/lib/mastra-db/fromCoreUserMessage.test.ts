@@ -37,9 +37,7 @@ describe('fromCoreUserMessageToMastraDBMessage', () => {
     };
     const out = fromCoreUserMessageToMastraDBMessage(input);
 
-    expect(out.content.parts).toEqual([
-      { type: 'file', mediaType: 'image/png', url: 'https://example.com/cat.png' },
-    ]);
+    expect(out.content.parts).toEqual([{ type: 'file', mediaType: 'image/png', url: 'https://example.com/cat.png' }]);
   });
 
   it('defaults image mediaType to image/* when mimeType is missing', () => {
@@ -49,9 +47,7 @@ describe('fromCoreUserMessageToMastraDBMessage', () => {
     };
     const out = fromCoreUserMessageToMastraDBMessage(input);
 
-    expect(out.content.parts).toEqual([
-      { type: 'file', mediaType: 'image/*', url: 'https://example.com/x' },
-    ]);
+    expect(out.content.parts).toEqual([{ type: 'file', mediaType: 'image/*', url: 'https://example.com/x' }]);
   });
 
   it('serializes URL image payloads to strings', () => {

@@ -2,12 +2,7 @@ import type { MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/age
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
-import type {
-  BackgroundTaskEntry,
-  MastraDBMessageMetadata,
-  MastraReasoningPart,
-  MastraTextPart,
-} from './types';
+import type { BackgroundTaskEntry, MastraDBMessageMetadata, MastraReasoningPart, MastraTextPart } from './types';
 
 const RUN_ID = 'run-1';
 
@@ -34,8 +29,7 @@ const stepFinishChunk = (): ChunkType =>
 const stepOutputChunk = (): ChunkType =>
   ({ type: 'step-output', runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
 
-const rawChunk = (): ChunkType =>
-  ({ type: 'raw', runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
+const rawChunk = (): ChunkType => ({ type: 'raw', runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
 
 const watchChunk = (): ChunkType =>
   ({ type: 'watch', runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
@@ -116,11 +110,7 @@ const redactedReasoningChunk = (data: string, providerMetadata?: Record<string, 
     payload: { data, ...(providerMetadata ? { providerMetadata } : {}) },
   }) as unknown as ChunkType;
 
-const toolCallChunk = (
-  toolCallId: string,
-  toolName: string,
-  args: Record<string, unknown>,
-): ChunkType =>
+const toolCallChunk = (toolCallId: string, toolName: string, args: Record<string, unknown>): ChunkType =>
   ({
     type: 'tool-call',
     runId: RUN_ID,
@@ -168,11 +158,7 @@ const toolErrorChunk = (toolCallId: string, error: string): ChunkType =>
     payload: { toolCallId, error },
   }) as unknown as ChunkType;
 
-const toolCallApprovalChunk = (
-  toolCallId: string,
-  toolName: string,
-  args: Record<string, unknown>,
-): ChunkType =>
+const toolCallApprovalChunk = (toolCallId: string, toolName: string, args: Record<string, unknown>): ChunkType =>
   ({
     type: 'tool-call-approval',
     runId: RUN_ID,
@@ -476,12 +462,7 @@ describe('accumulateChunk - text streaming', () => {
   });
 
   it('text-delta accumulates by textId', () => {
-    const out = reduce([
-      startChunk(),
-      textStartChunk('t1'),
-      textDeltaChunk('t1', 'Hel'),
-      textDeltaChunk('t1', 'lo'),
-    ]);
+    const out = reduce([startChunk(), textStartChunk('t1'), textDeltaChunk('t1', 'Hel'), textDeltaChunk('t1', 'lo')]);
     expect(out).toHaveLength(1);
     const textPart = out[0].content.parts.find(p => p.type === 'text') as MastraTextPart;
     expect(textPart.text).toBe('Hello');
@@ -490,12 +471,7 @@ describe('accumulateChunk - text streaming', () => {
   });
 
   it('text-end is a no-op (final state set by finish)', () => {
-    const out = reduce([
-      startChunk(),
-      textStartChunk('t1'),
-      textDeltaChunk('t1', 'hi'),
-      textEndChunk('t1'),
-    ]);
+    const out = reduce([startChunk(), textStartChunk('t1'), textDeltaChunk('t1', 'hi'), textEndChunk('t1')]);
     const textPart = out[0].content.parts.find(p => p.type === 'text') as MastraTextPart;
     expect(textPart.text).toBe('hi');
     expect(textPart.state).toBe('streaming');
@@ -624,10 +600,7 @@ describe('accumulateChunk - tool calls', () => {
   });
 
   it('tool-call-input-streaming-start creates a partial-call placeholder', () => {
-    const out = reduce([
-      startChunk(),
-      toolCallInputStreamingStartChunk('tc-1', 'search'),
-    ]);
+    const out = reduce([startChunk(), toolCallInputStreamingStartChunk('tc-1', 'search')]);
     const toolPart = out[0].content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
     expect(toolPart.toolInvocation).toMatchObject({
       state: 'partial-call',
@@ -675,9 +648,7 @@ describe('accumulateChunk - tool calls', () => {
       toolCallChunk('tc-1', 'weatherInfo', { location: 'Paris, France', _background: null }),
     ]);
 
-    const toolParts = out[0].content.parts.filter(
-      p => p.type === 'tool-invocation',
-    ) as MastraToolInvocationPart[];
+    const toolParts = out[0].content.parts.filter(p => p.type === 'tool-invocation') as MastraToolInvocationPart[];
     expect(toolParts).toHaveLength(1);
     expect(toolParts[0].toolInvocation).toMatchObject({
       state: 'call',
@@ -695,9 +666,7 @@ describe('accumulateChunk - tool calls', () => {
       toolCallChunk('tc-1', 'search', { q: 'mastra' }),
     ]);
 
-    const toolParts = out[0].content.parts.filter(
-      p => p.type === 'tool-invocation',
-    ) as MastraToolInvocationPart[];
+    const toolParts = out[0].content.parts.filter(p => p.type === 'tool-invocation') as MastraToolInvocationPart[];
     expect(toolParts).toHaveLength(1);
     expect(toolParts[0].toolInvocation).toMatchObject({
       state: 'call',
@@ -823,9 +792,7 @@ describe('accumulateChunk - background tasks', () => {
     ]);
     const toolPart = out[0].content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
     expect(toolPart.toolInvocation.state).toBe('partial-call');
-    expect((toolPart.toolInvocation as { result: unknown[] }).result).toEqual([
-      { from: 'TOOL', payload: 'chunk' },
-    ]);
+    expect((toolPart.toolInvocation as { result: unknown[] }).result).toEqual([{ from: 'TOOL', payload: 'chunk' }]);
   });
 
   it('background-task-suspended records suspendedTools metadata', () => {
@@ -1127,7 +1094,7 @@ describe('accumulateChunk - workflow tool finish', () => {
     // Accumulated step history is preserved
     expect(result.steps).toBeDefined();
     expect(Object.keys(result.steps as Record<string, unknown>)).toContain('step-a');
-    expect(((result.steps as Record<string, { status: string }>)['step-a']).status).toBe('success');
+    expect((result.steps as Record<string, { status: string }>)['step-a'].status).toBe('success');
     // Final status from the accumulated workflow stays
     expect(result.status).toBe('success');
     // Terminal scalar payload is still surfaced for downstream renderers

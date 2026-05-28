@@ -45,12 +45,12 @@ test.describe('agent panels', () => {
   test.describe('model settings', () => {
     test.beforeEach(async ({ page }) => {
       await page.goto('/agents/weather-agent/chat/new');
-      await page.click('text=Model settings');
+      await page.getByTestId('composer-model-settings-trigger').click();
     });
 
     test('model trigger modes', async ({ page }) => {
       const generateRadio = page.getByRole('radio', { name: 'Generate' });
-      await page.click('text=Model settings');
+      await page.getByTestId('composer-model-settings-trigger').click();
 
       await expect(generateRadio).toBeVisible();
       await expect(generateRadio).toHaveAttribute('aria-checked', 'false');
@@ -76,7 +76,7 @@ test.describe('agent panels', () => {
 
       // Act
       await page.reload();
-      await page.click('text=Model settings');
+      await page.getByTestId('composer-model-settings-trigger').click();
       await page.click('text=Advanced Settings');
 
       // Assert

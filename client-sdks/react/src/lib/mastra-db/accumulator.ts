@@ -62,11 +62,11 @@ const replaceLast = (conversation: MastraDBMessage[], message: MastraDBMessage):
   message,
 ];
 
-const replaceAt = (
-  conversation: MastraDBMessage[],
-  index: number,
-  message: MastraDBMessage,
-): MastraDBMessage[] => [...conversation.slice(0, index), message, ...conversation.slice(index + 1)];
+const replaceAt = (conversation: MastraDBMessage[], index: number, message: MastraDBMessage): MastraDBMessage[] => [
+  ...conversation.slice(0, index),
+  message,
+  ...conversation.slice(index + 1),
+];
 
 const newAssistantMessage = (
   id: string,
@@ -90,14 +90,12 @@ const appendAssistantMessage = (
   metadata: MastraDBMessageMetadata,
 ): MastraDBMessage[] => [...conversation, newAssistantMessage(id, parts, metadata)];
 
-const isToolPart = (part: MastraMessagePart): part is MastraToolInvocationPart =>
-  part.type === 'tool-invocation';
+const isToolPart = (part: MastraMessagePart): part is MastraToolInvocationPart => part.type === 'tool-invocation';
 
 const partTextId = (part: MastraMessagePart): string | undefined =>
   part.type === 'text' ? (part as MastraTextPart).textId : undefined;
 
-const partState = (part: MastraMessagePart): string | undefined =>
-  (part as { state?: string }).state;
+const partState = (part: MastraMessagePart): string | undefined => (part as { state?: string }).state;
 
 const partProviderMetadata = (part: MastraMessagePart): Record<string, unknown> | undefined =>
   (part as { providerMetadata?: Record<string, unknown> }).providerMetadata;
@@ -113,7 +111,10 @@ export const finishStreamingAssistantMessage = (conversation: MastraDBMessage[])
 
   const nextParts = lastMessage.content.parts.map(part => {
     if ((part.type === 'text' || part.type === 'reasoning') && partState(part) === 'streaming') {
-      return { ...(part as MastraTextPart | MastraReasoningPart), state: 'done' as const } as unknown as MastraMessagePart;
+      return {
+        ...(part as MastraTextPart | MastraReasoningPart),
+        state: 'done' as const,
+      } as unknown as MastraMessagePart;
     }
     return part;
   });
@@ -297,10 +298,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
   return prev;
 };
 
-const signalContentsToUserMessages = (
-  contents: unknown,
-  metadata: MastraDBMessageMetadata,
-): MastraDBMessage[] => {
+const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessageMetadata): MastraDBMessage[] => {
   const makeUserMessage = (parts: MastraMessagePart[]): MastraDBMessage => ({
     id: `signal-${Date.now()}`,
     role: 'user',
@@ -398,9 +396,8 @@ const isTemplateLiteralPassthrough = <T extends { type: string }>(
  * Narrow the chunk to the `data-${string}` family. Used so the trailing
  * exhaustiveness check can prove the switch covers every remaining variant.
  */
-const isDataChunk = <T extends { type: string }>(
-  chunk: T,
-): chunk is T & { type: `data-${string}` } => chunk.type.startsWith('data-');
+const isDataChunk = <T extends { type: string }>(chunk: T): chunk is T & { type: `data-${string}` } =>
+  chunk.type.startsWith('data-');
 
 export interface AccumulateChunkArgs {
   chunk: ChunkType;
@@ -673,9 +670,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
 
       const parts = [...lastMessage.content.parts];
-      const reasoningIndex = parts.findLastIndex(
-        part => part.type === 'reasoning' && partState(part) === 'streaming',
-      );
+      const reasoningIndex = parts.findLastIndex(part => part.type === 'reasoning' && partState(part) === 'streaming');
       if (reasoningIndex === -1) return result;
 
       const reasoningPart = parts[reasoningIndex] as unknown as MastraReasoningPart;
@@ -685,9 +680,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       parts[reasoningIndex] = {
         ...reasoningPart,
         state: 'done',
-        ...(existingMeta || endMeta
-          ? { providerMetadata: { ...(existingMeta ?? {}), ...(endMeta ?? {}) } }
-          : {}),
+        ...(existingMeta || endMeta ? { providerMetadata: { ...(existingMeta ?? {}), ...(endMeta ?? {}) } } : {}),
       } as unknown as MastraMessagePart;
 
       return replaceLast(result, withParts(lastMessage, parts));
@@ -710,9 +703,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       parts[reasoningIndex] = {
         ...reasoningPart,
-        ...(existingMeta || sigMeta
-          ? { providerMetadata: { ...(existingMeta ?? {}), ...(sigMeta ?? {}) } }
-          : {}),
+        ...(existingMeta || sigMeta ? { providerMetadata: { ...(existingMeta ?? {}), ...(sigMeta ?? {}) } } : {}),
       } as unknown as MastraMessagePart;
 
       return replaceLast(result, withParts(lastMessage, parts));
@@ -821,10 +812,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         );
       }
 
-      return replaceLast(
-        result,
-        withParts(lastMessage, [...lastMessage.content.parts, newPart as MastraMessagePart]),
-      );
+      return replaceLast(result, withParts(lastMessage, [...lastMessage.content.parts, newPart as MastraMessagePart]));
     }
 
     case 'tool-call-delta': {
@@ -941,13 +929,14 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         // boundary because the V4 part type pins it to SharedV2ProviderMetadata
         // (Record<string, Record<string, JSONValue>>) and Mastra payloads are
         // not constrained to that shape.
-        const providerMeta = (payloadProviderMetadata ?? toolPart.providerMetadata) as MastraToolInvocationPart['providerMetadata'];
+        const providerMeta = (payloadProviderMetadata ??
+          toolPart.providerMetadata) as MastraToolInvocationPart['providerMetadata'];
 
-        const isError =
-          chunk.type === 'tool-error' || chunk.type === 'background-task-failed' || payloadIsError;
+        const isError = chunk.type === 'tool-error' || chunk.type === 'background-task-failed' || payloadIsError;
 
         if (isError) {
-          const error = chunk.type === 'tool-error' || chunk.type === 'background-task-failed' ? payloadError : payloadResult;
+          const error =
+            chunk.type === 'tool-error' || chunk.type === 'background-task-failed' ? payloadError : payloadResult;
           const errorText =
             typeof error === 'string'
               ? error
@@ -984,9 +973,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             existingResult && typeof existingResult === 'object' && 'steps' in (existingResult as object),
           );
           const isWorkflow =
-            Boolean(resultObj?.result?.steps) ||
-            toolName?.startsWith('workflow-') ||
-            existingLooksLikeWorkflow;
+            Boolean(resultObj?.result?.steps) || toolName?.startsWith('workflow-') || existingLooksLikeWorkflow;
           const isAgent = chunk.from === 'AGENT';
           let output: unknown;
           if (isWorkflow) {
@@ -1006,12 +993,8 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
                 ...(payloadWorkflow ?? {}),
                 // Preserve `steps` from accumulated state when the terminal
                 // payload doesn't carry them.
-                steps:
-                  (payloadWorkflow?.steps as unknown) ?? (accumulated?.steps as unknown) ?? [],
-                status:
-                  (payloadWorkflow?.status as unknown) ??
-                  (accumulated?.status as unknown) ??
-                  'success',
+                steps: (payloadWorkflow?.steps as unknown) ?? (accumulated?.steps as unknown) ?? [],
+                status: (payloadWorkflow?.status as unknown) ?? (accumulated?.status as unknown) ?? 'success',
                 // Surface the terminal scalar output without losing history.
                 output: payloadResult,
               };
@@ -1019,7 +1002,8 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
               output = payloadResult;
             }
           } else if (isAgent) {
-            const existingOutput = toolPart.toolInvocation.state === 'result' ? toolPart.toolInvocation.result : undefined;
+            const existingOutput =
+              toolPart.toolInvocation.state === 'result' ? toolPart.toolInvocation.result : undefined;
             const existingChild = (existingOutput as { childMessages?: unknown[] } | undefined)?.childMessages;
             output = existingOutput
               ? {
@@ -1110,9 +1094,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       const { toolName, toolCallId, args } = toolPart.toolInvocation;
       const payloadOutput =
-        chunk.type === 'background-task-output'
-          ? chunk.payload.payload.payload.output
-          : chunk.payload.output;
+        chunk.type === 'background-task-output' ? chunk.payload.payload.payload.output : chunk.payload.output;
 
       // Workflow stream output: accumulate into watch-result state
       if (payloadOutput?.type?.startsWith('workflow-')) {
@@ -1336,10 +1318,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         [
           {
             type: 'text',
-            text:
-              typeof chunk.payload.error === 'string'
-                ? chunk.payload.error
-                : JSON.stringify(chunk.payload.error),
+            text: typeof chunk.payload.error === 'string' ? chunk.payload.error : JSON.stringify(chunk.payload.error),
           } as MastraMessagePart,
         ],
         {
