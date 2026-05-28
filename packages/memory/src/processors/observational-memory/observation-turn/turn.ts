@@ -212,6 +212,7 @@ export class ObservationTurn {
             messages: unobservedMessages,
             record,
             writer: this.writer,
+            agent: this.agent,
             sendSignal: this.sendSignal,
             requestContext: this.requestContext,
             currentModel: this.actorModelContext,

@@ -208,7 +208,8 @@ export abstract class ObservationStrategy {
               },
               threadId: update.threadId,
               resourceId: this.opts.resourceId,
-              mainAgent: this.opts.agent!,
+              mainAgent: this.opts.agent,
+              sendSignal: this.opts.sendSignal,
               requestContext: this.opts.requestContext ?? new RequestContext(),
               currentModel: this.opts.currentModel,
               previousValues: {
@@ -246,7 +247,8 @@ export abstract class ObservationStrategy {
         },
         threadId: this.opts.threadId,
         resourceId: this.opts.resourceId,
-        mainAgent: this.opts.agent!,
+        mainAgent: this.opts.agent,
+        sendSignal: this.opts.sendSignal,
         requestContext: this.opts.requestContext ?? new RequestContext(),
         currentModel: this.opts.currentModel,
         previousValues: {
@@ -341,7 +343,8 @@ export abstract class ObservationStrategy {
           },
           threadId: snapshot.threadId,
           resourceId: snapshot.resourceId,
-          mainAgent: this.opts.agent!,
+          mainAgent: this.opts.agent,
+          sendSignal: this.opts.sendSignal,
           requestContext: this.opts.requestContext ?? new RequestContext(),
           currentModel: this.opts.currentModel,
           previousValues: {

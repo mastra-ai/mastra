@@ -2077,6 +2077,7 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter,
     contextWindowTokens?: number,
     agent?: ProcessorAgent,
+    sendSignal?: ProcessorContext['sendSignal'],
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
   ): Promise<void> {
@@ -2104,6 +2105,7 @@ ${formattedMessages}
       bufferKey,
       writer,
       agent,
+      sendSignal,
       requestContext,
       observabilityContext,
     ).finally(() => {
@@ -2130,6 +2132,7 @@ ${formattedMessages}
     bufferKey: string,
     writer?: ProcessorStreamWriter,
     agent?: ProcessorAgent,
+    sendSignal?: ProcessorContext['sendSignal'],
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
   ): Promise<void> {
@@ -2241,6 +2244,7 @@ ${formattedMessages}
       startedAt,
       writer,
       agent,
+      sendSignal,
       requestContext,
       observabilityContext,
     }).run();
@@ -2271,6 +2275,7 @@ ${formattedMessages}
     threshold: number;
     writer?: ProcessorStreamWriter;
     agent?: ProcessorAgent;
+    sendSignal?: ProcessorContext['sendSignal'];
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
   }): Promise<boolean> {
@@ -2294,7 +2299,9 @@ ${formattedMessages}
         opts.writer,
         opts.unbufferedPendingTokens,
         opts.agent,
+        opts.sendSignal,
         opts.requestContext,
+        opts.observabilityContext,
       );
     }
 
@@ -3172,6 +3179,7 @@ ${formattedMessages}
         cycleId,
         startedAt,
         writer,
+        agent: opts.agent,
         sendSignal: opts.sendSignal,
         requestContext,
         currentModel: opts.currentModel,
@@ -3481,6 +3489,7 @@ ${formattedMessages}
     messages?: MastraDBMessage[];
     hooks?: ObserveHooks;
     agent?: ProcessorAgent;
+    sendSignal?: ProcessorContext['sendSignal'];
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
     currentModel?: ObservationModelContext;
@@ -3531,6 +3540,7 @@ ${formattedMessages}
           messages: unobservedMessages,
           reflectionHooks,
           agent,
+          sendSignal: opts.sendSignal,
           requestContext,
           writer: opts.writer,
           currentModel: opts.currentModel,

@@ -421,8 +421,47 @@ describe('Subconscious', () => {
     ).resolves.toEqual({ critic: { risks: ['risk'], needsReview: true } });
 
     const activityLog = await readFile(join(workspacePath, 'activity/subconscious-log.md'), 'utf-8');
-    expect(activityLog).toContain('Notification: `failed: mainAgent.sendSignal unavailable`');
+    expect(activityLog).toContain('Notification: `failed: sendSignal unavailable`');
     expect(activityLog).toContain('- critic created `review/entity-disambiguation.md`');
+  });
+
+  it('uses processor sendSignal when main agent signal support is unavailable', async () => {
+    const agent = createAgent('critic-agent');
+    vi.spyOn(agent, 'stream').mockResolvedValue(
+      streamWithParts([
+        {
+          type: 'tool-result',
+          toolName: 'mastra_workspace_write_file',
+          result: 'Wrote 6 bytes to review/entity-disambiguation.md',
+        },
+      ]),
+    );
+    const workspacePath = await mkdtemp(join(tmpdir(), 'subconscious-test-'));
+    const subconscious = new Subconscious({
+      model: createModel(),
+      workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: workspacePath }) }),
+      psyches: { critic: { agent } },
+    });
+    const extractor = subconscious.psyches({ active: ['critic'], phase: 'observation' });
+    const sendSignal = vi.fn().mockResolvedValue({ id: 'signal-1' });
+
+    await expect(
+      extractor.onExtracted?.({
+        ...createContext(extractor),
+        mainAgent: undefined,
+        sendSignal,
+        extracted: { current: { critic: { risks: ['risk'], needsReview: true } } },
+      }),
+    ).resolves.toEqual({ critic: { risks: ['risk'], needsReview: true } });
+
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'system-reminder',
+        attributes: expect.objectContaining({ type: 'subconscious' }),
+      }),
+    );
+    const activityLog = await readFile(join(workspacePath, 'activity/subconscious-log.md'), 'utf-8');
+    expect(activityLog).toContain('Notification: `sent`');
   });
 
   it('falls back to read and write when appendFile is unavailable', async () => {

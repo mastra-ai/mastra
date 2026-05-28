@@ -111,14 +111,18 @@ describe('turn.end() idle buffering', () => {
     const unobservedMessages = createMessages(5);
     const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages });
     const mockMessageList = createMockMessageList(unobservedMessages);
+    const sendSignal = vi.fn();
+    const agent = { id: 'main-agent' } as any;
+    const requestContext = { get: vi.fn() } as any;
 
     const turn = new ObservationTurn({
       om: mockOM as any,
       threadId,
       resourceId,
       messageList: mockMessageList as any,
-      sendSignal: vi.fn(),
-      requestContext: { get: vi.fn() } as any,
+      agent,
+      sendSignal,
+      requestContext,
     });
 
     (turn as any)._started = true;
@@ -134,6 +138,9 @@ describe('turn.end() idle buffering', () => {
         resourceId,
         messages: unobservedMessages,
         record: mockOM._mockRecord,
+        agent,
+        sendSignal,
+        requestContext,
       }),
     );
   });

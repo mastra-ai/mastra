@@ -3,7 +3,7 @@ import type { MessageList } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorAgent, ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorAgent, ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
@@ -218,6 +218,7 @@ export class ReflectorRunner {
     values: Record<string, unknown>,
     context: {
       agent?: ProcessorAgent;
+      sendSignal?: ProcessorContext['sendSignal'];
       requestContext?: RequestContext;
       writer?: ProcessorStreamWriter;
       cycleId?: string;
@@ -244,7 +245,8 @@ export class ReflectorRunner {
         },
         threadId,
         resourceId,
-        mainAgent: context.agent!,
+        mainAgent: context.agent,
+        sendSignal: context.sendSignal,
         requestContext: context.requestContext ?? new RequestContext(),
         currentModel: context.currentModel,
         previousValues: { extractedValues: priorMeta?.extracted },
@@ -282,6 +284,7 @@ export class ReflectorRunner {
     newObservations: string;
     writer?: ProcessorStreamWriter;
     agent?: ProcessorAgent;
+    sendSignal?: ProcessorContext['sendSignal'];
     requestContext?: RequestContext;
     currentModel?: ObservationModelContext;
   }): void {
@@ -313,6 +316,7 @@ export class ReflectorRunner {
         if (!result.extractedValues || Object.keys(result.extractedValues).length === 0) return;
         await this.persistExtractedValues(params.threadId, params.resourceId, result.extractedValues, {
           agent: params.agent,
+          sendSignal: params.sendSignal,
           requestContext: params.requestContext,
           writer: params.writer,
           cycleId,
@@ -584,6 +588,7 @@ export class ReflectorRunner {
     lockKey: string,
     writer?: ProcessorStreamWriter,
     agent?: ProcessorAgent,
+    sendSignal?: ProcessorContext['sendSignal'],
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>,
@@ -607,6 +612,7 @@ export class ReflectorRunner {
       bufferKey,
       writer,
       agent,
+      sendSignal,
       requestContext,
       observabilityContext,
     )
@@ -657,6 +663,7 @@ export class ReflectorRunner {
     _bufferKey: string,
     writer?: ProcessorStreamWriter,
     agent?: ProcessorAgent,
+    sendSignal?: ProcessorContext['sendSignal'],
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
   ): Promise<{ inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined> {
@@ -749,6 +756,7 @@ export class ReflectorRunner {
       newObservations: reflectResult.observations,
       writer,
       agent,
+      sendSignal,
       requestContext,
     });
 
@@ -957,6 +965,7 @@ export class ReflectorRunner {
     currentModel?: ObservationModelContext;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     agent?: ProcessorAgent;
+    sendSignal?: ProcessorContext['sendSignal'];
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     lastActivityAt?: number;
@@ -970,6 +979,7 @@ export class ReflectorRunner {
       currentModel,
       reflectionHooks,
       agent,
+      sendSignal,
       requestContext,
       observabilityContext,
       lastActivityAt,
@@ -1003,6 +1013,7 @@ export class ReflectorRunner {
           lockKey,
           writer,
           agent,
+          sendSignal,
           requestContext,
           observabilityContext,
           reflectionHooks,
@@ -1098,6 +1109,7 @@ export class ReflectorRunner {
           lockKey,
           writer,
           agent,
+          sendSignal,
           requestContext,
           observabilityContext,
           reflectionHooks,
@@ -1185,6 +1197,7 @@ export class ReflectorRunner {
         newObservations: reflectResult.observations,
         writer,
         agent,
+        sendSignal,
         requestContext,
         currentModel,
       });

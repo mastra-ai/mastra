@@ -114,10 +114,9 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             name: 'MastraCode Subconscious',
             filesystem: new LocalFilesystem({ basePath: subconsciousWorkspacePath }),
           }),
-          // signal: {
-          //   ifActive: { behavior: 'deliver' },
-          //   ifIdle: { behavior: 'persist' },
-          // },
+          signal: {
+            ifIdle: { behavior: 'persist' },
+          },
         })
       : undefined;
 

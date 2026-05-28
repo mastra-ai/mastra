@@ -978,28 +978,28 @@ export class Subconscious {
 
         const resourceId = context.resourceId ?? context.mainAgent?.id ?? 'global';
 
-        const sendSignal = context.mainAgent?.sendSignal?.bind(context.mainAgent);
-        if (!sendSignal) {
-          return { status: 'failed', error: 'mainAgent.sendSignal unavailable' };
+        if (!context.mainAgent?.sendSignal && !context.sendSignal) {
+          return { status: 'failed', error: 'sendSignal unavailable' };
         }
 
-        const result = sendSignal(
-          {
-            type: 'system-reminder' as const,
-            contents: [
-              'Your subconscious bubbled up an internal thought notification:',
-              '',
-              ...text,
-              '',
-              'Continue with the knowledge your subconscious surfaced, but do not respond directly to this notification or stop what you were doing.',
-            ].join('\n'),
-            attributes: primitiveAttributes({
-              type: 'subconscious',
-              phase: context.phase,
-              active: active.join(','),
-            }),
-          },
-          {
+        const signal = {
+          type: 'system-reminder' as const,
+          contents: [
+            'Your subconscious bubbled up an internal thought notification:',
+            '',
+            ...text,
+            '',
+            'Continue with the knowledge your subconscious surfaced, but do not respond directly to this notification or stop what you were doing.',
+          ].join('\n'),
+          attributes: primitiveAttributes({
+            type: 'subconscious',
+            phase: context.phase,
+            active: active.join(','),
+          }),
+        };
+
+        if (context.mainAgent?.sendSignal) {
+          const result = context.mainAgent.sendSignal(signal, {
             resourceId,
             threadId: context.threadId,
             ifActive: this.options.signal?.ifActive ?? { behavior: 'deliver' },
@@ -1015,9 +1015,11 @@ export class Subconscious {
                 },
               },
             },
-          },
-        );
-        await result.persisted;
+          });
+          await result.persisted;
+        } else {
+          await context.sendSignal!(signal);
+        }
         return { status: 'sent' };
       },
       runAndNotify: async runExtracted => {

@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { ProcessorAgent } from '@mastra/core/processors';
+import type { ProcessorAgent, ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
 
@@ -70,8 +70,11 @@ export type ExtractorOnExtractedContext<T> = ExtractorOnExtractedObservationCont
   /** The thread this extraction belongs to. */
   threadId: string;
 
-  /** The main agent execution this extraction belongs to. */
-  mainAgent: ProcessorAgent;
+  /** The main agent execution this extraction belongs to, when available. */
+  mainAgent?: ProcessorAgent;
+
+  /** Signal sender for processor-originated notifications, when available. */
+  sendSignal?: ProcessorContext['sendSignal'];
 
   /** Runtime context from the agent request. */
   requestContext: RequestContext;
@@ -589,7 +592,8 @@ export async function invokeExtractorHooks(
   ctx: ExtractorOnExtractedObservationContext & {
     threadId: string;
     resourceId?: string;
-    mainAgent: ProcessorAgent;
+    mainAgent?: ProcessorAgent;
+    sendSignal?: ProcessorContext['sendSignal'];
     requestContext: RequestContext;
     currentModel?: ObservationModelContext;
     previousValues?: {
@@ -627,6 +631,7 @@ export async function invokeExtractorHooks(
             extractor: extractor as Extractor<any>,
             threadId: ctx.threadId,
             mainAgent: ctx.mainAgent,
+            sendSignal: ctx.sendSignal,
             requestContext: ctx.requestContext,
             currentModel: ctx.currentModel,
             resourceId: ctx.resourceId,
