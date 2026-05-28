@@ -623,8 +623,13 @@ export class InngestRun<
    *
    * Mirrors `startAsync()`: send-time failures (invalid resume data, event send
    * failure) still reject synchronously and roll back the snapshot, but the result
-   * is never polled via `getRunOutput()`. Use this to avoid polling-based 404 races
-   * when you don't need the resolved result inline.
+   * is never polled via `getRunOutput()`. This avoids the polling-based 404 race when
+   * you don't need the resolved result inline.
+   *
+   * NOTE: this is exposed over HTTP / the client SDK as `resume-no-wait` / `resumeNoWait()`,
+   * not `resumeAsync`, because the existing `resumeAsync()` client/server surface awaits the
+   * full workflow result. TODO(v2): consolidate so `resumeAsync` consistently means
+   * fire-and-forget across core, client SDK and HTTP routes (breaking change deferred to v2).
    */
   async resumeAsync<TResume>(params: {
     resumeData?: TResume;

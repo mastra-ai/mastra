@@ -56,7 +56,7 @@ describe('Workflow resume', () => {
       resumeData: { approved: true },
     });
 
-    expectTypeOf(result).toEqualTypeOf<{ runId: string }>();
+    expectTypeOf(result).toEqualTypeOf<WorkflowRunResult>();
   });
 
   it('should accept requestContext', async () => {
@@ -68,6 +68,19 @@ describe('Workflow resume', () => {
       step: 'approval-step',
       resumeData: { approved: true },
       requestContext: { userId: 'user-123' },
+    });
+
+    expectTypeOf(result).toEqualTypeOf<WorkflowRunResult>();
+  });
+
+  it('resumeNoWait should return runId', async () => {
+    const workflow = client.getWorkflow('my-workflow');
+    const run = await workflow.createRun({
+      runId: 'run-123',
+    });
+    const result = await run.resumeNoWait({
+      step: 'approval-step',
+      resumeData: { approved: true },
     });
 
     expectTypeOf(result).toEqualTypeOf<{ runId: string }>();

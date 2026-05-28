@@ -3931,9 +3931,15 @@ export class Run<
    * Resumes a suspended workflow without waiting for completion (fire-and-forget).
    * Returns immediately with the runId after dispatching the resume.
    *
-   * Mirrors `startAsync()`: the resume executes in the background and the result is
-   * never awaited. Engines that poll for results (e.g. Inngest) override this with an
-   * implementation that skips polling entirely.
+   * The resume executes in the background and the result is never awaited. Engines that
+   * poll for results (e.g. Inngest) override this with an implementation that skips polling
+   * entirely, which avoids the `getRunOutput()` polling race.
+   *
+   * NOTE: this is exposed over HTTP / the client SDK as `resume-no-wait` / `resumeNoWait()`,
+   * not `resumeAsync`, because the existing `resumeAsync()` client/server surface awaits the
+   * full workflow result. TODO(v2): consolidate so `resumeAsync` consistently means
+   * fire-and-forget (mirroring `start`/`startAsync` semantics) across core, client SDK and
+   * HTTP routes; that consolidation is a breaking change deferred to Mastra v2.
    * @returns A promise that resolves to the runId
    */
   async resumeAsync<TResume>(
