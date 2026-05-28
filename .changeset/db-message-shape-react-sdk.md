@@ -1,10 +1,10 @@
 ---
-'@mastra/react': major
+'@mastra/react': patch
 ---
 
-Rewrite `@mastra/react` to emit `MastraDBMessage[]` directly from `useChat` and remove the AI SDK + assistant-ui adapter layers.
+Rewrite `@mastra/react` to emit `MastraDBMessage[]` directly from `useChat` and remove the AI SDK + assistant-ui adapter layers. Pre-v1 package, so breaking changes are allowed under the current major.
 
-**Breaking changes**
+**Changes**
 
 - Removed exports: `MastraUIMessage`, `MastraUIMessageMetadata`, `ExtendedMastraUIMessage`, `MastraExtendedTextPart`, `toUIMessage`, `toAssistantUIMessage`, `AISdkNetworkTransformer`, transformer types, `fromCoreUserMessageToUIMessage`, and the re-exports of `toAISdkMessages` / `toAISdkV4Messages` / `toAISdkV5Messages`.
 - `useChat().messages` is now `MastraDBMessage[]` end-to-end. `UseChatOptions.initialMessages` is also `MastraDBMessage[]`.
