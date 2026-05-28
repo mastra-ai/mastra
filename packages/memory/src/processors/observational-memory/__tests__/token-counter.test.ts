@@ -1051,30 +1051,38 @@ describe('TokenCounter', () => {
 
     it('counts raw MCP multimodal tool results as media instead of base64 JSON text', () => {
       const counter = new TokenCounter();
-      const rawResult = {
+      const rawResultWithoutMalformed = {
         content: [
           { type: 'text', text: 'Calculator screenshot' },
           { type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' },
         ],
       };
-      const message = createMessage({
-        format: 2,
-        parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tool-1',
-              toolName: 'cua_screenshot',
-              result: rawResult,
+      const rawResult = {
+        content: [...rawResultWithoutMalformed.content, { type: 'audio', mimeType: 'audio/wav' }],
+      };
+      const createScreenshotMessage = (result: unknown) =>
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-1',
+                toolName: 'cua_screenshot',
+                result,
+              },
             },
-          },
-        ],
-      });
+          ],
+        });
+      const message = createScreenshotMessage(rawResult);
+      const messageWithoutMalformed = createScreenshotMessage(rawResultWithoutMalformed);
 
       const tokens = counter.countMessage(message);
+      const tokensWithoutMalformed = counter.countMessage(messageWithoutMalformed);
       const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
+      expect(tokens).toBeGreaterThan(tokensWithoutMalformed);
       expect(tokens).toBeLessThan(2_000);
       expect(estimate.key).toContain('tool-result-multimodal-content');
       expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(rawResult)));

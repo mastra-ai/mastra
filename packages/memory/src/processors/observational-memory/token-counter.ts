@@ -161,7 +161,7 @@ function ensureMessageMastraMetadata(message: MastraDBMessage): NonNullable<Mast
 }
 
 function buildEstimateKey(kind: string, text: string): string {
-  const payloadHash = createHash('sha1').update(text).digest('hex');
+  const payloadHash = createHash('sha256').update(text).digest('hex');
   return `${kind}:${payloadHash}`;
 }
 
@@ -962,7 +962,7 @@ function getAttachmentFingerprint(asset: unknown): { url?: string; contentHash?:
 
   const base64 = encodeAttachmentBase64(asset);
   if (base64) {
-    return { contentHash: createHash('sha1').update(base64).digest('hex') };
+    return { contentHash: createHash('sha256').update(base64).digest('hex') };
   }
 
   return {};
@@ -1322,6 +1322,11 @@ export class TokenCounter {
     let hasAttachment = false;
     let tokens = 0;
     const cacheParts: unknown[] = [];
+    const countJsonContentPart = (contentPart: Record<string, unknown>) => {
+      const formatted = formatToolResultForObserver(contentPart);
+      tokens += this.countString(formatted);
+      cacheParts.push({ type: 'json', valueHash: createHash('sha256').update(formatted).digest('hex') });
+    };
 
     for (const item of content) {
       if (!item || typeof item !== 'object') {
@@ -1334,7 +1339,7 @@ export class TokenCounter {
       if (partType === 'text') {
         const text = typeof contentPart.text === 'string' ? contentPart.text : String(contentPart.value ?? '');
         tokens += this.countString(text);
-        cacheParts.push({ type: 'text', textHash: createHash('sha1').update(text).digest('hex') });
+        cacheParts.push({ type: 'text', textHash: createHash('sha256').update(text).digest('hex') });
         continue;
       }
 
@@ -1343,7 +1348,10 @@ export class TokenCounter {
         partType === 'image-data' ||
         (partType === 'media' && String(contentPart.mediaType ?? '').startsWith('image/'))
       ) {
-        if (typeof contentPart.data !== 'string') continue;
+        if (typeof contentPart.data !== 'string') {
+          countJsonContentPart(contentPart);
+          continue;
+        }
         hasAttachment = true;
         const imagePart = {
           type: 'image',
@@ -1359,7 +1367,10 @@ export class TokenCounter {
       }
 
       if (partType === 'audio' || partType === 'file-data' || partType === 'media') {
-        if (typeof contentPart.data !== 'string') continue;
+        if (typeof contentPart.data !== 'string') {
+          countJsonContentPart(contentPart);
+          continue;
+        }
         hasAttachment = true;
         const filePart = {
           type: 'file',
@@ -1390,9 +1401,7 @@ export class TokenCounter {
         continue;
       }
 
-      const formatted = formatToolResultForObserver(contentPart);
-      tokens += this.countString(formatted);
-      cacheParts.push({ type: 'json', valueHash: createHash('sha1').update(formatted).digest('hex') });
+      countJsonContentPart(contentPart);
     }
 
     if (!hasAttachment) {
