@@ -115,6 +115,84 @@ vi.mock('../tool-call-provider', () => ({
 }));
 
 import { MastraRuntimeProvider } from '../mastra-runtime-provider';
+import { extractThreadSignalPanels, removePinnedSignalParts } from '../signal-panels';
+
+describe('signal panel utilities', () => {
+  it('extracts state and notification signal panels from data parts', () => {
+    const messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-state',
+            data: {
+              id: 'state-1',
+              type: 'state',
+              tagName: 'state',
+              contents: 'Browser is open. Active tab URL: https://example.com.',
+              createdAt: '2026-05-28T00:00:00.000Z',
+              attributes: { type: 'browser' },
+            },
+          },
+          {
+            type: 'data-notification',
+            data: {
+              id: 'notification-1',
+              type: 'notification',
+              tagName: 'notification',
+              contents: 'CI failed on main.',
+              createdAt: '2026-05-28T00:01:00.000Z',
+              attributes: { source: 'github', priority: 'high', status: 'pending' },
+            },
+          },
+        ],
+      },
+    ];
+
+    expect(extractThreadSignalPanels(messages)).toEqual({
+      stateSignals: [
+        {
+          id: 'state-1',
+          title: 'browser state',
+          preview: 'Browser is open. Active tab URL: https://example.com.',
+          source: 'browser',
+          updatedAt: '2026-05-28T00:00:00.000Z',
+        },
+      ],
+      notifications: [
+        {
+          id: 'notification-1',
+          title: 'Notification',
+          preview: 'CI failed on main.',
+          source: 'github',
+          priority: 'high',
+          status: 'pending',
+          createdAt: '2026-05-28T00:01:00.000Z',
+          count: undefined,
+        },
+      ],
+    });
+  });
+
+  it('removes pinned state and notification parts from chat messages', () => {
+    const message = {
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: 'Visible response' },
+        { type: 'data-state', data: { type: 'state', contents: 'Pinned context' } },
+        { type: 'data-notification', data: { type: 'notification', contents: 'Inbox event' } },
+      ],
+    };
+
+    expect(removePinnedSignalParts(message)).toEqual({
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'Visible response' }],
+    });
+  });
+});
 
 describe('MastraRuntimeProvider', () => {
   beforeEach(() => {
