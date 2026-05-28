@@ -1,7 +1,8 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import {
   roundToTwoDecimals,
   getAssistantMessageFromRunOutput,
@@ -23,19 +24,21 @@ export interface ContextRelevanceOptions {
   };
 }
 
-const analyzeOutputSchema = z.object({
-  evaluations: z.array(
-    z.object({
-      context_index: z.number(),
-      contextPiece: z.string(),
-      relevanceLevel: z.enum(['high', 'medium', 'low', 'none']),
-      wasUsed: z.boolean(),
-      reasoning: z.string(),
-    }),
-  ),
-  missingContext: z.array(z.string()).optional().default([]),
-  overallAssessment: z.string(),
-});
+const analyzeOutputSchema = compileSchema(
+  z.object({
+    evaluations: z.array(
+      z.object({
+        context_index: z.number(),
+        contextPiece: z.string(),
+        relevanceLevel: z.enum(['high', 'medium', 'low', 'none']),
+        wasUsed: z.boolean(),
+        reasoning: z.string(),
+      }),
+    ),
+    missingContext: z.array(z.string()).optional().default([]),
+    overallAssessment: z.string(),
+  }),
+);
 
 // Default penalty constants for maintainability and clarity
 const DEFAULT_PENALTIES = {

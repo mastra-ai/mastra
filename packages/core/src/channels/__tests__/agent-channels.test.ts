@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
-import { AgentChannels, matchesDomain, extractUrls } from '../agent-channels';
+import { AgentChannels } from '../agent-channels';
+import { matchesDomain, extractUrls } from '../inline-media';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -94,6 +95,27 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('getInputProcessors', () => {
+    it('adds ChatChannelProcessor by default', () => {
+      const processors = agentChannels.getInputProcessors();
+      expect(processors).toHaveLength(1);
+      expect(processors[0]!.id).toBe('chat-channel-context');
+    });
+
+    it('skips ChatChannelProcessor entirely when threadContext.addSystemMessage is false', () => {
+      const disabled = new AgentChannels({
+        adapters: { test: createMockAdapter('test') },
+        threadContext: { addSystemMessage: false },
+      });
+      expect(disabled.getInputProcessors()).toEqual([]);
+    });
+
+    it('skips when the user already provided a ChatChannelProcessor', () => {
+      const userProcessor = { id: 'chat-channel-context', processInputStep: () => undefined } as any;
+      expect(agentChannels.getInputProcessors([userProcessor])).toEqual([]);
+    });
+  });
+
   describe('channelConfig', () => {
     it('exposes the original ChannelConfig (round-trippable)', () => {
       const discord = createMockAdapter('discord');
@@ -112,6 +134,20 @@ describe('AgentChannels', () => {
       const channels = new AgentChannels(originalConfig as any);
 
       expect(channels.channelConfig).toBe(originalConfig);
+    });
+
+    it('preserves the per-adapter streaming option', () => {
+      const adapter = createMockAdapter('test');
+      const streaming = new AgentChannels({
+        adapters: { test: { adapter, streaming: { updateIntervalMs: 250 } } },
+      });
+      expect(streaming.channelConfig.adapters.test).toMatchObject({
+        streaming: { updateIntervalMs: 250 },
+      });
+
+      const buffered = new AgentChannels({ adapters: { test: createMockAdapter('test') } });
+      // No adapter config wrapping means no streaming opt-in.
+      expect((buffered.channelConfig.adapters.test as any).streaming).toBeUndefined();
     });
 
     it('lets a provider rebuild AgentChannels while preserving existing adapters', () => {

@@ -6,6 +6,7 @@ on:
       - '**/pnpm-lock.yaml'
       - 'examples/**/package.json'
       - 'e2e-tests/**/package.json'
+      - 'packages/**/integration-tests/package.json'
 
 jobs:
   changeset:
@@ -27,13 +28,13 @@ jobs:
           install-dependencies: 'false'
           package-manager-cache: 'false'
 
-      - name: Check for package.json changes in examples and e2e-tests
-        id: check-examples
+      - name: Check for standalone package.json changes
+        id: check-standalone-packages
         run: |
-          if git diff --name-only HEAD^ HEAD | grep -q -E "(examples|e2e-tests)/.*package.json"; then
-            echo "examples_changed=true" >> "$GITHUB_OUTPUT"
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} HEAD | grep -q -E "(examples|e2e-tests|integration-tests)/.*package.json"; then
+            echo "standalone_changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "examples_changed=false" >> "$GITHUB_OUTPUT"
+            echo "standalone_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Configure git
@@ -50,7 +51,7 @@ jobs:
           INCLUDE_DEV_DEPS: '1'
 
       - name: Install dependencies
-        if: steps.check-examples.outputs.examples_changed == 'true'
+        if: steps.check-standalone-packages.outputs.standalone_changed == 'true'
         run: bash ./.github/scripts/install-deps.bash ${{ github.event.pull_request.base.sha }}
 
       - name: Approve PR
