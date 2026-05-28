@@ -247,6 +247,37 @@ Existing stored signal rows and older clients continue to load through the compa
 Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
 :::
 
+## Use the HTTP API
+
+Use the server message routes when you interact with Mastra over HTTP directly. They accept the same string, parts array, and object message shapes as `agent.sendMessage()` and `agent.queueMessage()`.
+
+```bash
+curl -X POST http://localhost:4111/api/agents/supportAgent/send-message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "message": {
+      "contents": "Show the shorter version.",
+      "attributes": { "sentFrom": "web" }
+    },
+    "resourceId": "user_123",
+    "threadId": "thread_456"
+  }'
+```
+
+Use `/queue-message` when the active run should finish before the new message starts a follow-up run:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/supportAgent/queue-message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "message": "Also check whether the tests need updates.",
+    "resourceId": "user_123",
+    "threadId": "thread_456"
+  }'
+```
+
+The lower-level `/agents/:agentId/signals` route remains available for system-generated signals and older clients.
+
 ## Use the client SDK
 
 The JavaScript client exposes thread signal APIs. Use `subscribeToThread()` before sending thread input so the client can render the stream that wakes from, or receives, the input.
