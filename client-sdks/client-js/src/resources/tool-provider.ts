@@ -17,6 +17,8 @@ import type {
   ToolProviderConnectionStatusParams,
   ToolProviderConnectionStatusResponse,
   ToolProviderHealthResponse,
+  UpdateToolProviderConnectionParams,
+  UpdateToolProviderConnectionResponse,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -175,6 +177,24 @@ export class ToolProvider extends BaseResource {
       }`,
       {
         method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Updates the persisted display label on a connection row. Pass `label: null`
+   * (or an empty string) to clear the existing label. Only the connection owner
+   * or an admin may rename, unless the row is `scope: 'shared'`.
+   */
+  updateConnection(
+    connectionId: string,
+    params: UpdateToolProviderConnectionParams,
+  ): Promise<UpdateToolProviderConnectionResponse> {
+    return this.request(
+      `/tool-providers/${encodeURIComponent(this.providerId)}/connections/${encodeURIComponent(connectionId)}`,
+      {
+        method: 'PATCH',
+        body: params,
       },
     );
   }
