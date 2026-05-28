@@ -221,7 +221,7 @@ Use these endpoints to populate dropdowns or to give an agent the menu of values
 Every query accepts the same `filters` object. The most useful fields:
 
 - `name`: Restrict to specific metric names. (Top-level `name` already does this for aggregate/breakdown/timeseries; use `filters.name` when you want to mix multiple metrics under a single query.)
-- `timestamp`: `{ start, end, startExclusive, endExclusive }`. Both bounds are optional; omit `end` for "since now".
+- `timestamp`: `{ start, end, startExclusive, endExclusive }`. Both bounds are optional; omit `end` for "until now".
 - `provider`, `model`, `costUnit`: For token and cost metrics.
 - `labels`: Exact key-value match on metric labels, for example `{ status: 'error' }` for duration metrics.
 - Correlation fields: `entityType`, `entityName`, `parentEntityName`, `rootEntityName`, `userId`, `organizationId`, `resourceId`, `runId`, `sessionId`, `threadId`, `requestId`, `executionSource`, `environment`, `serviceName`, `experimentId`, `tags`.
