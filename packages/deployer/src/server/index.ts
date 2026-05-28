@@ -487,7 +487,7 @@ export async function createHonoServer(
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
         templates: `'${templatesEnabled}'`,
-        telemetryDisabled: `''`,
+        telemetryDisabled: `'${process.env.MASTRA_TELEMETRY_DISABLED ?? ''}'`,
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
         experimentalUI: `'${experimentalUI}'`,
         agentSignals: `'${agentSignals}'`,

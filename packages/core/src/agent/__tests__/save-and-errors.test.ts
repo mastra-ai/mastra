@@ -2152,4 +2152,79 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       spy.mockRestore();
     }
   });
+
+  it('should end the AGENT_RUN span when the stream is aborted mid-flight', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const abortController = new AbortController();
+      let pullCalls = 0;
+
+      const abortMidStreamModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            pull(controller) {
+              switch (pullCalls++) {
+                case 0:
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  break;
+                case 1:
+                  controller.enqueue({
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: '__GATEWAY_OPENAI_MODEL__',
+                    timestamp: new Date(0),
+                  });
+                  break;
+                case 2:
+                  // Abort during streaming, before any finish chunk reaches output.ts.
+                  // This mirrors the browser-disconnect / AbortController.abort() path
+                  // that previously left the AGENT_RUN span orphaned.
+                  abortController.abort();
+                  controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                  break;
+              }
+            },
+          }),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-orphaned-span-abort',
+        name: 'Test Orphaned Span Abort',
+        model: abortMidStreamModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', {
+        abortSignal: abortController.signal,
+        modelSettings: { maxRetries: 0 },
+      });
+
+      try {
+        for await (const _chunk of output.fullStream) {
+          // drain
+        }
+      } catch {
+        // expected: stream may error on abort
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.end).toHaveBeenCalled();
+      expect(agentRunSpan.error).not.toHaveBeenCalled();
+      expect(agentRunSpan.end.mock.calls[0][0]).toMatchObject({
+        output: {
+          status: 'aborted',
+          reason: 'abort',
+        },
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
