@@ -296,6 +296,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
             return;
           }
 
+          if (payload.finishReason === 'aborted') {
+            agentSpan?.end({
+              output: {
+                status: 'aborted',
+                reason: 'abort',
+              },
+            });
+            return;
+          }
+
           // Skip memory persistence when the abort signal has fired.
           // The LLM response may have continued after the caller disconnected,
           // and we should not persist a partial or full response for an aborted request.
