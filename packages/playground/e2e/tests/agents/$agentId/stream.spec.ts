@@ -39,6 +39,7 @@ test('text stream', async () => {
   await page.goto(`/agents/weather-agent/chat/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
+  await page.keyboard.press('Escape');
 
   await fillAndSend(page, 'Give me the Lorem Ipsum thing');
 
@@ -70,6 +71,7 @@ test('tool stream', async () => {
   await page.goto(`/agents/weather-agent/chat/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
+  await page.keyboard.press('Escape');
 
   await fillAndSend(page, 'Give me the weather in Paris');
 
@@ -109,6 +111,7 @@ test('workflow stream', async () => {
   await page.goto(`/agents/weather-agent/chat/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
+  await page.keyboard.press('Escape');
 
   await fillAndSend(page, 'Give me the weather in Paris');
 

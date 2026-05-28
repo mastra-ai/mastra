@@ -42,6 +42,7 @@ test('Enter during IME composition does not submit, Enter after composition does
   await page.goto(`/agents/weather-agent/chat/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
+  await page.keyboard.press('Escape');
 
   const chatInput = page.getByPlaceholder('Enter your message...');
   await chatInput.click();
@@ -110,6 +111,7 @@ test('Enter after IME switch (no compositionend) still submits — #16464 regres
   await page.goto(`/agents/weather-agent/chat/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
+  await page.keyboard.press('Escape');
 
   const chatInput = page.getByPlaceholder('Enter your message...');
   await chatInput.click();
