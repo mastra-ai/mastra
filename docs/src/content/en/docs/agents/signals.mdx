@@ -188,6 +188,32 @@ When the agent is idle:
 
 Top-level `attributes` always apply. The selected branch's `attributes` are merged into them at delivery time. The `delivery` name shown above is not a special Mastra API field. It is a custom attribute name used for this example.
 
+## State signals
+
+Processors can expose thread-scoped state with `computeStateSignal()`. Mastra runs this hook once per model input step after normal per-step input processing and before the model request is finalized. State signal tracking requires memory because Mastra stores each processor's hash, version, last signal id, and active-copy bookkeeping on thread metadata.
+
+```typescript title="src/mastra/processors/browser-state.ts"
+const browserStateProcessor = {
+  id: 'browser-state',
+  computeStateSignal: ({ activeStateSignals }) => {
+    return {
+      tagName: 'state',
+      contents: activeStateSignals.length
+        ? 'changed: 11 open tabs'
+        : 'Browser is open. Active tab URL: https://example.com. 10 open tabs.',
+      attributes: { type: 'browser' },
+      metadata: {
+        state: { delta: activeStateSignals.length > 0 },
+        browser: { open: true, activeUrl: 'https://example.com', tabCount: 11 },
+        delta: { tabCount: 11 },
+      },
+    }
+  },
+}
+```
+
+The built-in browser context processor now emits an aggregate browser state signal with the active URL, open/closed status, tab count, and page metadata when those values are available. When a prior copy is still active, it emits a self-describing delta and keeps the delta marker in metadata instead of exposing it as an LLM-facing XML attribute.
+
 ## Compatibility
 
 Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `type: 'system-reminder'`. It normalizes them internally to the new category and tag shape:
