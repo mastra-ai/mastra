@@ -82,7 +82,7 @@ import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Step } from '../workflows/step';
-import type { OutputWriter, WorkflowResult } from '../workflows/types';
+import type { OutputWriter, WorkflowResult, WorkflowRunState } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
@@ -5487,7 +5487,7 @@ export class Agent<
     return existingSnapshot;
   }
 
-  #getSnapshotMemoryInfo(existingSnapshot: any): AgentSnapshotMemoryInfo | undefined {
+  #getSnapshotMemoryInfo(existingSnapshot: WorkflowRunState | null | undefined): AgentSnapshotMemoryInfo | undefined {
     for (const key in existingSnapshot?.context) {
       const step = existingSnapshot?.context[key];
       if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
@@ -5498,7 +5498,9 @@ export class Agent<
     return undefined;
   }
 
-  #getSuspendedToolInfo(existingSnapshot: any): { toolCallId?: string; toolName?: string } | undefined {
+  #getSuspendedToolInfo(
+    existingSnapshot: WorkflowRunState | null | undefined,
+  ): { toolCallId?: string; toolName?: string } | undefined {
     for (const key in existingSnapshot?.context) {
       const step = existingSnapshot?.context[key];
       if (step?.status !== 'suspended') continue;
@@ -5511,7 +5513,7 @@ export class Agent<
           toolName: payload.requireToolApproval.toolName,
         };
       }
-      if (payload.toolCallSuspended || payload.toolName) {
+      if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         return {
           toolCallId: payload.toolCallId,
           toolName: payload.toolName,
@@ -5527,16 +5529,31 @@ export class Agent<
       return resumeData;
     }
 
-    const resumeInput =
+    const resumeInput: Record<string, unknown> =
       resumeData && typeof resumeData === 'object' && !Array.isArray(resumeData)
         ? { ...(resumeData as Record<string, unknown>) }
         : { resumeData };
 
-    return {
-      ...resumeInput,
-      ...(suspendedToolInfo.toolName ? { toolName: suspendedToolInfo.toolName } : {}),
-      ...(suspendedToolInfo.toolCallId ? { toolCallId: suspendedToolInfo.toolCallId } : {}),
-    };
+    const hasConflictingToolName =
+      suspendedToolInfo.toolName &&
+      resumeInput.toolName !== undefined &&
+      resumeInput.toolName !== suspendedToolInfo.toolName;
+    const hasConflictingToolCallId =
+      suspendedToolInfo.toolCallId &&
+      resumeInput.toolCallId !== undefined &&
+      resumeInput.toolCallId !== suspendedToolInfo.toolCallId;
+    const spanInput: Record<string, unknown> =
+      hasConflictingToolName || hasConflictingToolCallId ? { resumeData: resumeInput } : { ...resumeInput };
+
+    if (suspendedToolInfo.toolName) {
+      spanInput.toolName = suspendedToolInfo.toolName;
+    }
+
+    if (suspendedToolInfo.toolCallId) {
+      spanInput.toolCallId = suspendedToolInfo.toolCallId;
+    }
+
+    return spanInput;
   }
 
   #getAgentExecutionResourceId({

@@ -257,6 +257,42 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     }
   }, 30000);
 
+  it('keeps suspended tool fields authoritative when resumeData has conflicting tool fields', async () => {
+    const { spy, agentRunCalls } = await spyOnAgentRunSpans();
+
+    try {
+      const agent = createRegisteredAgent();
+
+      const stream = await agent.stream('Find Dero Israel', { requireToolApproval: true });
+
+      let suspendedToolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-approval') suspendedToolCallId = chunk.payload.toolCallId;
+      }
+      expect(suspendedToolCallId).toBeTruthy();
+
+      const resumeStream = await agent.resumeStream(
+        { approved: true, toolName: 'caller-tool', toolCallId: 'caller-call' },
+        { runId: stream.runId },
+      );
+      await drainFullStream(resumeStream);
+
+      const resumedCall = agentRunCalls[1];
+      expect(resumedCall.name).toBe(`agent run: 'user-agent' (resumed)`);
+      expect(resumedCall.input).toMatchObject({
+        resumeData: {
+          approved: true,
+          toolName: 'caller-tool',
+          toolCallId: 'caller-call',
+        },
+        toolName: 'findUserTool',
+        toolCallId: suspendedToolCallId,
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
   it('preserves generic resumeData as resumed AGENT_RUN span input', async () => {
     const { spy, agentRunCalls } = await spyOnAgentRunSpans();
 
