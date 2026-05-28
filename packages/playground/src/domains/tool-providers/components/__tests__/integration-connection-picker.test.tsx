@@ -401,4 +401,49 @@ describe('IntegrationConnectionPicker', () => {
       window.open = originalOpen;
     }
   });
+
+  it('auto-pins the new connection in the form after a successful OAuth flow', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/tool-providers/${PROVIDER}/connections`, () => HttpResponse.json(noConnections)),
+      http.post(`${BASE_URL}/api/tool-providers/${PROVIDER}/authorize`, () =>
+        HttpResponse.json({ url: 'https://oauth.example/authorize', authId: 'auth_xyz' }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/${PROVIDER}/auth-status/auth_xyz`, () =>
+        HttpResponse.json({ status: 'completed' }),
+      ),
+    );
+
+    const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
+    const originalOpen = window.open;
+    window.open = openPopup as unknown as typeof window.open;
+
+    const spy = vi.fn();
+    try {
+      const { getByTestId, findByTestId } = render(
+        <Harness>
+          <IntegrationConnectionPicker providerId={PROVIDER} toolkit={TOOLKIT} multipleAllowed={true} />
+          <FormStateSpy onState={spy} />
+        </Harness>,
+      );
+
+      fireEvent.click(getByTestId(`integration-connection-add-${PROVIDER}-${TOOLKIT}`));
+      const connectNew = await findByTestId(`integration-connection-connect-new-${PROVIDER}-${TOOLKIT}`);
+      fireEvent.click(connectNew);
+
+      // Wait for the pinned row keyed by the new authId to appear in the picker —
+      // this is the user-visible signal that the auto-pin happened. The hook
+      // polls every 2s for auth status, so allow up to 5s here.
+      await findByTestId(`integration-connection-pinned-${PROVIDER}-${TOOLKIT}-auth_xyz`, undefined, {
+        timeout: 5000,
+      });
+
+      fireEvent.click(getByTestId('spy-form-state'));
+      const state = spy.mock.calls[spy.mock.calls.length - 1][0] as HarnessFormValues;
+      expect(state.toolProviders[PROVIDER].connections[TOOLKIT]).toEqual([
+        { kind: 'author', toolkit: TOOLKIT, connectionId: 'auth_xyz', scope: 'per-author' },
+      ]);
+    } finally {
+      window.open = originalOpen;
+    }
+  }, 10000);
 });

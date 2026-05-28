@@ -237,7 +237,13 @@ describe('Tools — integration rows without a connection', () => {
     );
   });
 
-  const ConnectHarness = ({ children }: { children: ReactNode }) => {
+  const ConnectHarness = ({
+    children,
+    onState,
+  }: {
+    children: ReactNode;
+    onState?: (state: AgentBuilderEditFormValues) => void;
+  }) => {
     const methods = useForm<AgentBuilderEditFormValues>({
       defaultValues: { tools: {}, agents: {}, workflows: {}, toolProviders: {} } as AgentBuilderEditFormValues,
     });
@@ -246,7 +252,14 @@ describe('Tools — integration rows without a connection', () => {
       <MastraReactProvider baseUrl={BASE_URL}>
         <QueryClientProvider client={queryClient}>
           <FormProvider {...methods}>
-            <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
+            <AgentColorProvider agentId="agent_test">
+              {children}
+              {onState && (
+                <button type="button" data-testid="spy-form-state" onClick={() => onState(methods.getValues())}>
+                  spy
+                </button>
+              )}
+            </AgentColorProvider>
           </FormProvider>
         </QueryClientProvider>
       </MastraReactProvider>
@@ -306,6 +319,69 @@ describe('Tools — integration rows without a connection', () => {
       window.open = originalOpen;
     }
   });
+
+  it('auto-pins the new connection on a checked integration card after successful OAuth', async () => {
+    const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
+    const originalOpen = window.open;
+    window.open = openPopup as unknown as typeof window.open;
+
+    const spy = vi.fn();
+    try {
+      const checkedAndUnconnected: AgentTool = { ...unconnectedIntegrationTool, isChecked: true };
+      const { getByTestId } = render(
+        <ConnectHarness onState={spy}>
+          <Tools availableAgentTools={[checkedAndUnconnected]} />
+        </ConnectHarness>,
+      );
+
+      fireEvent.click(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS'));
+
+      // Wait for the OAuth poll loop (2s default) to resolve. The auth-status
+      // handler immediately returns `completed`, so after one poll the
+      // mutation onSuccess fires and the parent writes the pin.
+      await waitFor(
+        () => {
+          fireEvent.click(getByTestId('spy-form-state'));
+          const state = spy.mock.calls[spy.mock.calls.length - 1]?.[0] as AgentBuilderEditFormValues | undefined;
+          expect(state?.toolProviders?.composio?.connections?.gmail).toEqual([
+            { kind: 'author', toolkit: 'gmail', connectionId: 'auth_abc', scope: 'per-author' },
+          ]);
+        },
+        { timeout: 5000 },
+      );
+    } finally {
+      window.open = originalOpen;
+    }
+  }, 10000);
+
+  it('does NOT auto-pin the new connection when the integration card is unchecked', async () => {
+    const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
+    const originalOpen = window.open;
+    window.open = openPopup as unknown as typeof window.open;
+
+    const spy = vi.fn();
+    try {
+      const { getByTestId } = render(
+        <ConnectHarness onState={spy}>
+          <Tools availableAgentTools={[unconnectedIntegrationTool]} />
+        </ConnectHarness>,
+      );
+
+      fireEvent.click(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS'));
+
+      // OAuth fires (popup opens) but since the tool is unchecked, no pin
+      // should appear in the form. Wait long enough for the poll cycle to
+      // complete (2s + buffer) before asserting nothing was written.
+      await waitFor(() => expect(openPopup).toHaveBeenCalled());
+      await new Promise(resolve => setTimeout(resolve, 2500));
+
+      fireEvent.click(getByTestId('spy-form-state'));
+      const state = spy.mock.calls[spy.mock.calls.length - 1][0] as AgentBuilderEditFormValues;
+      expect(state.toolProviders?.composio?.connections?.gmail ?? []).toEqual([]);
+    } finally {
+      window.open = originalOpen;
+    }
+  }, 10000);
 });
 
 describe('Tools — checked integration rows render the connection picker', () => {

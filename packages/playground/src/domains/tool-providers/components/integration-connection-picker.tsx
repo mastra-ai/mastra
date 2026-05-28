@@ -86,13 +86,20 @@ export const IntegrationConnectionPicker = ({
     authorize.mutate(
       { providerId, toolkit, scope: 'per-author' },
       {
-        onSuccess: () => {
+        onSuccess: result => {
           void queryClient.invalidateQueries({
             queryKey: ['tool-integration-connections', providerId, toolkit],
           });
           void queryClient.invalidateQueries({
             queryKey: ['tool-integration-connections-all', providerId, toolkit],
           });
+          // Auto-pin the freshly-authorized connection so users don't have to
+          // re-open the picker after the OAuth flow. Defensive guard against
+          // racing dupes and against violating the single-connection cap.
+          if (result.status !== 'completed') return;
+          if (!multipleAllowed && pinned.length >= 1) return;
+          if (pinned.some(c => c.connectionId === result.connectionId)) return;
+          writePinned([...pinned, { kind: 'author', toolkit, connectionId: result.connectionId, scope: 'per-author' }]);
         },
       },
     );
