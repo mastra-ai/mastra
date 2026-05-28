@@ -1,5 +1,5 @@
-import type { CoreUserMessage } from '@mastra/core/llm';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
+import type { CoreUserMessage } from '@mastra/core/llm';
 
 /**
  * Convert a CoreUserMessage into a canonical `MastraDBMessage` (`format: 2`).
