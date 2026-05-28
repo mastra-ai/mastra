@@ -351,6 +351,101 @@ describe('AgentChannels', () => {
       expect((agentChannels as any).threadSubscriptions.size).toBe(0);
     });
   });
+
+  describe('getOrCreateThread caching', () => {
+    function makeMastraStub() {
+      const listThreads = vi.fn().mockResolvedValue({
+        threads: [
+          {
+            id: 'mastra-thread-1',
+            resourceId: 'discord:user1',
+            title: 'Test',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: {},
+          },
+        ],
+      });
+      const saveThread = vi.fn();
+      const memoryStore = { listThreads, saveThread } as any;
+      const storage = { getStore: vi.fn().mockResolvedValue(memoryStore) } as any;
+      const mastra = { getStorage: vi.fn().mockReturnValue(storage) } as any;
+      return { mastra, listThreads, saveThread, memoryStore };
+    }
+
+    it('only hits storage once for repeated lookups of the same external thread id', async () => {
+      const { mastra, listThreads } = makeMastraStub();
+
+      const a = await (agentChannels as any).getOrCreateThread({
+        externalThreadId: 'discord:guild:chan:thread-x',
+        channelId: 'discord:guild:chan',
+        platform: 'discord',
+        resourceId: 'discord:user1',
+        mastra,
+      });
+      const b = await (agentChannels as any).getOrCreateThread({
+        externalThreadId: 'discord:guild:chan:thread-x',
+        channelId: 'discord:guild:chan',
+        platform: 'discord',
+        resourceId: 'discord:user1',
+        mastra,
+      });
+
+      expect(a).toEqual({ id: 'mastra-thread-1', resourceId: 'discord:user1' });
+      expect(b).toEqual(a);
+      expect(listThreads).toHaveBeenCalledTimes(1);
+    });
+
+    it('scopes the cache by platform', async () => {
+      const { mastra, listThreads } = makeMastraStub();
+
+      await (agentChannels as any).getOrCreateThread({
+        externalThreadId: 'shared:thread-id',
+        channelId: 'shared:chan',
+        platform: 'slack',
+        resourceId: 'slack:user1',
+        mastra,
+      });
+      await (agentChannels as any).getOrCreateThread({
+        externalThreadId: 'shared:thread-id',
+        channelId: 'shared:chan',
+        platform: 'discord',
+        resourceId: 'discord:user1',
+        mastra,
+      });
+
+      // Same externalThreadId but different platform must not collide.
+      expect(listThreads).toHaveBeenCalledTimes(2);
+    });
+
+    it('caches newly created threads too', async () => {
+      const { mastra, listThreads, saveThread } = makeMastraStub();
+      listThreads.mockResolvedValue({ threads: [] });
+      saveThread.mockResolvedValue({
+        id: 'mastra-thread-new',
+        resourceId: 'discord:user1',
+        title: 'created',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      });
+
+      const args = {
+        externalThreadId: 'discord:guild:chan:fresh',
+        channelId: 'discord:guild:chan',
+        platform: 'discord',
+        resourceId: 'discord:user1',
+        mastra,
+      };
+      const first = await (agentChannels as any).getOrCreateThread(args);
+      const second = await (agentChannels as any).getOrCreateThread(args);
+
+      expect(first).toEqual({ id: 'mastra-thread-new', resourceId: 'discord:user1' });
+      expect(second).toEqual(first);
+      expect(listThreads).toHaveBeenCalledTimes(1);
+      expect(saveThread).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe('matchesDomain', () => {
