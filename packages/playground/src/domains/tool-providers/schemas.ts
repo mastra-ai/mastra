@@ -6,18 +6,16 @@ import { z } from 'zod';
  * stored agent shape.
  *
  * `kind` is locked to `'author'` for v1. `scope` defaults to `'per-author'` at
- * the runtime layer when absent.
+ * the runtime layer when absent. Display labels live on the connection row
+ * itself and are renamed via `PATCH /tool-providers/.../connections/...` —
+ * the form pin only carries identifiers.
  */
-
-const LABEL_REGEX = /^[A-Za-z0-9 _-]+$/;
-const LABEL_MAX_LEN = 32;
 
 export const connectionFormSchema = z
   .object({
     kind: z.literal('author'),
     toolkit: z.string().min(1),
     connectionId: z.string().min(1),
-    label: z.string().max(LABEL_MAX_LEN).regex(LABEL_REGEX).optional().or(z.literal('')),
     scope: z.enum(['shared', 'per-author', 'caller-supplied']).optional(),
   })
   .passthrough();
@@ -55,33 +53,9 @@ export function validateToolProviders(
 
   for (const [providerId, config] of Object.entries(providers)) {
     for (const [toolkit, connections] of Object.entries(config.connections ?? {})) {
-      const seenLabels = new Map<string, number>();
       const seenConnectionIds = new Map<string, number>();
-      const nonCallerSupplied = connections.filter(c => c.scope !== 'caller-supplied');
-      const requireLabels = nonCallerSupplied.length >= 2;
       connections.forEach((connection, index) => {
         if (connection.scope === 'caller-supplied') return;
-        const trimmed = connection.label?.trim() ?? '';
-
-        if (requireLabels && trimmed.length === 0) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Connection label is required on ${toolkit} when there are two or more connections`,
-            path: [...basePath, providerId, 'connections', toolkit, index, 'label'],
-          });
-        } else if (requireLabels) {
-          const labelKey = trimmed.toLowerCase();
-          if (seenLabels.has(labelKey)) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `Duplicate label "${connection.label}" on ${toolkit} (case-insensitive)`,
-              path: [...basePath, providerId, 'connections', toolkit, index, 'label'],
-            });
-          } else {
-            seenLabels.set(labelKey, index);
-          }
-        }
-
         if (seenConnectionIds.has(connection.connectionId)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,

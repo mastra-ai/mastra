@@ -25,16 +25,12 @@ export function buildToolProvidersForSave(
 
     const connections: Record<string, StoredToolProviderConnection[]> = {};
     for (const [toolkit, list] of Object.entries(config.connections ?? {})) {
-      connections[toolkit] = list.map(connection => {
-        const trimmed = connection.label?.trim();
-        const { label: _label, ...rest } = connection;
-        return {
-          ...rest,
-          kind: 'author' as const,
-          ...(trimmed ? { label: trimmed } : {}),
-          ...(connection.scope ? { scope: connection.scope } : {}),
-        };
-      });
+      connections[toolkit] = list.map(connection => ({
+        kind: 'author' as const,
+        toolkit: connection.toolkit,
+        connectionId: connection.connectionId,
+        ...(connection.scope ? { scope: connection.scope } : {}),
+      }));
     }
 
     result[providerId] = { tools, connections };
@@ -86,7 +82,6 @@ export function extractFormToolProviders(value: unknown): ToolProvidersFormValue
         kind: 'author' as const,
         toolkit,
         connectionId: c.connectionId,
-        ...(c.label ? { label: c.label } : {}),
         ...(c.scope ? { scope: c.scope } : {}),
       }));
     }
