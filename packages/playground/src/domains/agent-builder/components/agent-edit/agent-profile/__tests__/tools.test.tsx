@@ -354,7 +354,7 @@ describe('Tools — integration rows without a connection', () => {
     }
   }, 10000);
 
-  it('does NOT auto-pin the new connection when the integration card is unchecked', async () => {
+  it('auto-checks the tool AND auto-pins the new connection when Connect is clicked on an unchecked card', async () => {
     const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
     const originalOpen = window.open;
     window.open = openPopup as unknown as typeof window.open;
@@ -369,15 +369,23 @@ describe('Tools — integration rows without a connection', () => {
 
       fireEvent.click(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS'));
 
-      // OAuth fires (popup opens) but since the tool is unchecked, no pin
-      // should appear in the form. Wait long enough for the poll cycle to
-      // complete (2s + buffer) before asserting nothing was written.
-      await waitFor(() => expect(openPopup).toHaveBeenCalled());
-      await new Promise(resolve => setTimeout(resolve, 2500));
-
-      fireEvent.click(getByTestId('spy-form-state'));
-      const state = spy.mock.calls[spy.mock.calls.length - 1][0] as AgentBuilderEditFormValues;
-      expect(state.toolProviders?.composio?.connections?.gmail ?? []).toEqual([]);
+      // Clicking Connect on an unchecked card means "I want this tool with
+      // this new connection" — the tool gets added to `tools` and the
+      // freshly-authorized connection gets pinned in one step.
+      await waitFor(
+        () => {
+          fireEvent.click(getByTestId('spy-form-state'));
+          const state = spy.mock.calls[spy.mock.calls.length - 1]?.[0] as AgentBuilderEditFormValues | undefined;
+          expect(state?.toolProviders?.composio?.tools?.GMAIL_FETCH_EMAILS).toEqual({
+            toolkit: 'gmail',
+            description: 'Fetch emails',
+          });
+          expect(state?.toolProviders?.composio?.connections?.gmail).toEqual([
+            { kind: 'author', toolkit: 'gmail', connectionId: 'auth_abc', scope: 'per-author' },
+          ]);
+        },
+        { timeout: 5000 },
+      );
     } finally {
       window.open = originalOpen;
     }

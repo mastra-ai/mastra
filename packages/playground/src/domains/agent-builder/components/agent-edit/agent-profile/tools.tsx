@@ -159,12 +159,11 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
                     toolkit={item.toolkit!}
                     disabled={!editable}
                     onConnected={connectionId => {
-                      // Pin the freshly-authorized connection only when the
-                      // tool is already toggled on. If the user clicked
-                      // Connect without selecting the tool, we leave the
-                      // form untouched and let the picker handle pinning
-                      // when they select it.
-                      if (!item.isChecked) return;
+                      // Clicking Connect on a tool card means "I want this
+                      // tool with this connection". Check the tool if it
+                      // isn't already, and pin the freshly-authorized
+                      // connection so the user doesn't have to open the
+                      // picker afterwards.
                       const current = (getValues('toolProviders') ?? {}) as Record<
                         string,
                         {
@@ -173,25 +172,35 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
                         }
                       >;
                       const existing = current[item.providerId!] ?? { tools: {}, connections: {} };
+                      const nextTools = { ...(existing.tools ?? {}) };
+                      if (!nextTools[item.name]) {
+                        nextTools[item.name] = {
+                          toolkit: item.toolkit!,
+                          ...(item.description ? { description: item.description } : {}),
+                        };
+                      }
                       const existingPinned = existing.connections?.[item.toolkit!] ?? [];
-                      if (existingPinned.some(c => c.connectionId === connectionId)) return;
+                      const alreadyPinned = existingPinned.some(c => c.connectionId === connectionId);
+                      const nextPinned = alreadyPinned
+                        ? existingPinned
+                        : [
+                            ...existingPinned,
+                            {
+                              kind: 'author' as const,
+                              toolkit: item.toolkit!,
+                              connectionId,
+                              scope: 'per-author' as const,
+                            },
+                          ];
                       const nextConnections = {
                         ...(existing.connections ?? {}),
-                        [item.toolkit!]: [
-                          ...existingPinned,
-                          {
-                            kind: 'author' as const,
-                            toolkit: item.toolkit!,
-                            connectionId,
-                            scope: 'per-author' as const,
-                          },
-                        ],
+                        [item.toolkit!]: nextPinned,
                       };
                       setValue(
                         'toolProviders',
                         {
                           ...current,
-                          [item.providerId!]: { ...existing, connections: nextConnections },
+                          [item.providerId!]: { ...existing, tools: nextTools, connections: nextConnections },
                         } as never,
                         { shouldDirty: true },
                       );
