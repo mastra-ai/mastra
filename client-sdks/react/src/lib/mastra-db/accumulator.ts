@@ -394,6 +394,81 @@ const isTemplateLiteralPassthrough = <T extends { type: string }>(
 ): chunk is T & { type: `agent-execution-event-${string}` | `workflow-execution-event-${string}` } =>
   chunk.type.startsWith('agent-execution-event-') || chunk.type.startsWith('workflow-execution-event-');
 
+// Tool names whose stream chunks must be suppressed end-to-end. Mirrors the
+// backend memory filter (`updateMessageToHideWorkingMemoryV2` in
+// `packages/memory/src/index.ts`) which strips `updateWorkingMemory`
+// tool-invocation parts before replay. Without this front-end filter, the
+// user would briefly see a working-memory tool call appear during streaming
+// and then disappear after refresh — a confusing live/persisted mismatch.
+const HIDDEN_TOOL_NAMES = new Set<string>(['updateWorkingMemory']);
+
+/**
+ * Tracks `toolCallId`s that belong to hidden tools (currently
+ * `updateWorkingMemory`). Registered on the first chunk that carries a
+ * `toolName` for that call (`tool-call`, `tool-call-input-streaming-start`,
+ * `tool-call-approval`, or `tool-call-suspended`) and consulted by every
+ * subsequent chunk for that id (`tool-call-delta`, `tool-call-input-streaming-end`,
+ * `tool-result`, `tool-error`, `tool-output`, background-task variants, etc.)
+ * so they are dropped before they ever reach the switch.
+ *
+ * Entries are evicted on terminal chunks for the tool call (result/error/
+ * background-task-completed/background-task-failed) to bound memory growth
+ * across a session. A safety cap also evicts oldest entries if a stream
+ * never terminates.
+ */
+const hiddenToolCallIds = new Set<string>();
+const HIDDEN_TOOL_CALL_CAP = 256;
+
+const registerHiddenToolCall = (toolCallId: string | undefined): void => {
+  if (!toolCallId) return;
+  if (hiddenToolCallIds.size >= HIDDEN_TOOL_CALL_CAP) {
+    // FIFO eviction: drop the oldest entry so the registry can't grow without
+    // bound in clients that stream for a very long time without terminal chunks.
+    const oldest = hiddenToolCallIds.values().next().value;
+    if (oldest) hiddenToolCallIds.delete(oldest);
+  }
+  hiddenToolCallIds.add(toolCallId);
+};
+
+/**
+ * Returns `true` for any chunk that targets a hidden tool (currently
+ * `updateWorkingMemory`). Callers must drop the chunk so it never reaches the
+ * main switch, mirroring the backend memory replay filter and keeping live
+ * streaming output consistent with what users see after a refresh.
+ */
+const isHiddenToolChunk = (chunk: ChunkType): boolean => {
+  const payload = (chunk as { payload?: { toolCallId?: string; toolName?: string } }).payload;
+  if (!payload) return false;
+
+  // Chunks that carry the tool name directly (e.g. `tool-call`,
+  // `tool-call-input-streaming-start`, `tool-call-approval`,
+  // `tool-call-suspended`): register the call id so later chunks that only
+  // carry `toolCallId` can be filtered too.
+  if (payload.toolName && HIDDEN_TOOL_NAMES.has(payload.toolName)) {
+    registerHiddenToolCall(payload.toolCallId);
+    return true;
+  }
+
+  // Follow-up chunks (deltas, streaming-end, results, errors, outputs,
+  // background-task lifecycle, suspensions) only carry `toolCallId`; match
+  // against the registry populated above.
+  if (payload.toolCallId && hiddenToolCallIds.has(payload.toolCallId)) {
+    // Best-effort cleanup on terminal chunks so the registry doesn't leak
+    // across long-lived sessions.
+    if (
+      chunk.type === 'tool-result' ||
+      chunk.type === 'tool-error' ||
+      chunk.type === 'background-task-completed' ||
+      chunk.type === 'background-task-failed'
+    ) {
+      hiddenToolCallIds.delete(payload.toolCallId);
+    }
+    return true;
+  }
+
+  return false;
+};
+
 /**
  * Narrow the chunk to the `data-${string}` family. Used so the trailing
  * exhaustiveness check can prove the switch covers every remaining variant.
@@ -416,6 +491,17 @@ export interface AccumulateChunkArgs {
  */
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
   const result = [...conversation];
+
+  // ----- Hidden internal tool calls (e.g. `updateWorkingMemory`) -----
+  // The backend memory layer hides `updateWorkingMemory` tool invocations on
+  // replay (see `updateMessageToHideWorkingMemoryV2` in
+  // `packages/memory/src/index.ts`). We mirror that here during streaming so
+  // the live UI doesn't flash a working-memory tool call that disappears on
+  // refresh. `isHiddenToolChunk` also registers the `toolCallId` so the rest
+  // of the call's chunks (deltas, end, result, errors) are filtered too.
+  if (isHiddenToolChunk(chunk)) {
+    return result;
+  }
 
   // ----- Template-literal passthrough chunk types from NetworkChunkType -----
   // `agent-execution-event-*` and `workflow-execution-event-*` carry nested

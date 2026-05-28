@@ -1083,3 +1083,69 @@ describe('finishStreamingAssistantMessage', () => {
     expect(finishStreamingAssistantMessage(userOnly)).toBe(userOnly);
   });
 });
+
+// =============================================================================
+// HIDDEN INTERNAL TOOL CALLS (updateWorkingMemory)
+// =============================================================================
+
+describe('hidden tool calls', () => {
+  // Mirrors the backend memory filter (`updateMessageToHideWorkingMemoryV2` in
+  // `packages/memory/src/index.ts`). The live UI must not show working-memory
+  // tool calls that the persisted replay will strip away.
+
+  it('drops `tool-call` for updateWorkingMemory and emits no tool-invocation part', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('wm-1', 'updateWorkingMemory', { memory: 'hello' }),
+    ]);
+    const assistant = out.find(m => m.role === 'assistant');
+    const toolParts = (assistant?.content.parts ?? []).filter(p => p.type === 'tool-invocation');
+    expect(toolParts).toHaveLength(0);
+  });
+
+  it('drops the full streaming-input lifecycle for updateWorkingMemory', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallInputStreamingStartChunk('wm-2', 'updateWorkingMemory'),
+      toolCallDeltaChunk('wm-2', '{"memory":"'),
+      toolCallDeltaChunk('wm-2', 'state"}'),
+      toolCallInputStreamingEndChunk('wm-2'),
+      toolCallChunk('wm-2', 'updateWorkingMemory', { memory: 'state' }),
+      toolResultChunk('wm-2', { success: true }),
+    ]);
+    const assistant = out.find(m => m.role === 'assistant');
+    const toolParts = (assistant?.content.parts ?? []).filter(p => p.type === 'tool-invocation');
+    expect(toolParts).toHaveLength(0);
+  });
+
+  it('keeps unrelated tool calls visible alongside the hidden updateWorkingMemory call', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('wm-3', 'updateWorkingMemory', { memory: 'x' }),
+      toolResultChunk('wm-3', { success: true }),
+      toolCallChunk('weather-1', 'getWeather', { city: 'Paris' }),
+      toolResultChunk('weather-1', { tempC: 21 }),
+    ]);
+    const assistant = out.find(m => m.role === 'assistant');
+    const toolParts = (assistant?.content.parts ?? []).filter(
+      p => p.type === 'tool-invocation',
+    ) as MastraToolInvocationPart[];
+    expect(toolParts).toHaveLength(1);
+    expect(toolParts[0].toolInvocation.toolName).toBe('getWeather');
+  });
+
+  it('drops tool-result/tool-error follow-ups even when only `toolCallId` is present', () => {
+    // First call registers the toolCallId as hidden; the follow-up chunks then
+    // get filtered purely by id, matching how providers actually stream them.
+    const out = reduce([
+      startChunk(),
+      toolCallInputStreamingStartChunk('wm-4', 'updateWorkingMemory'),
+      toolErrorChunk('wm-4', 'boom'),
+    ]);
+    const assistant = out.find(m => m.role === 'assistant');
+    const toolParts = (assistant?.content.parts ?? []).filter(p => p.type === 'tool-invocation');
+    expect(toolParts).toHaveLength(0);
+    // metadata must not carry an errored tool either
+    expect(assistant?.content.metadata).not.toHaveProperty('requireApprovalMetadata');
+  });
+});
