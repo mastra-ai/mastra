@@ -50,7 +50,7 @@ describe('externals: true', () => {
       const registry = inject('registry');
 
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-no-bundling-test-${pkgManager}-`));
-      process.env.npm_config_registry = registry;
+      process.env.pnpm_config_registry = registry;
       await setupTemplate(fixturePath, pkgManager);
     },
     10 * 60 * 1000,
