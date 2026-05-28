@@ -114,7 +114,7 @@ Keep as-is, **but lock it in before release**. Add a unit test that asserts the 
 ### FU-3: Rename generic CRUD methods on `ToolProviderConnectionsStorage` to match house style
 
 **Severity:** low — API consistency
-**Status:** open
+**Status:** in progress — pending manual smoke test (worktree dirty; backend/frontend commits not yet split)
 **Discovered:** Q8 in `.notes/pr-17224-qa.md` (sharpened after surveying all storage domains)
 
 **Problem**

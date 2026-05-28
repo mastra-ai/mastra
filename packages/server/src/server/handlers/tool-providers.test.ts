@@ -54,7 +54,7 @@ function makeToolProviderConnectionsStore(
   }
   return {
     rows,
-    upsert: vi.fn(
+    upsertConnection: vi.fn(
       async (row: {
         authorId: string;
         providerId: string;
@@ -68,7 +68,7 @@ function makeToolProviderConnectionsStore(
         return rows.get(key)!;
       },
     ),
-    list: vi.fn(
+    listConnectionsByAuthor: vi.fn(
       async ({
         authorId,
         providerId,
@@ -89,7 +89,7 @@ function makeToolProviderConnectionsStore(
         );
       },
     ),
-    get: vi.fn(
+    getConnectionById: vi.fn(
       async ({
         authorId,
         providerId,
@@ -103,7 +103,7 @@ function makeToolProviderConnectionsStore(
         return rows.get(key) ?? null;
       },
     ),
-    delete: vi.fn(
+    deleteConnection: vi.fn(
       async ({
         authorId,
         providerId,
@@ -329,7 +329,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE', () => {
       requestContext,
     } as any);
 
-    expect(store.upsert).toHaveBeenCalledWith({
+    expect(store.upsertConnection).toHaveBeenCalledWith({
       authorId: 'user_42',
       providerId: 'composio',
       toolkit: 'gmail',
@@ -352,7 +352,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE', () => {
       connectionId: '',
     } as any);
 
-    expect(store.upsert).toHaveBeenCalledWith({
+    expect(store.upsertConnection).toHaveBeenCalledWith({
       authorId: 'default',
       providerId: 'composio',
       toolkit: 'gmail',
@@ -489,7 +489,7 @@ describe('LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE', () => {
       requestContext,
     } as any);
 
-    expect(store.list).toHaveBeenCalledWith({
+    expect(store.listConnectionsByAuthor).toHaveBeenCalledWith({
       providerId: 'composio',
       toolkit: 'gmail',
     });
@@ -869,7 +869,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       toolName: undefined,
       config: undefined,
     });
-    expect(store.upsert).toHaveBeenCalledWith({
+    expect(store.upsertConnection).toHaveBeenCalledWith({
       authorId: 'shared',
       providerId: 'composio',
       toolkit: 'gmail',
@@ -901,7 +901,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       toolName: undefined,
       config: undefined,
     });
-    expect(store.upsert).toHaveBeenCalledWith({
+    expect(store.upsertConnection).toHaveBeenCalledWith({
       authorId: 'user_42',
       providerId: 'composio',
       toolkit: 'gmail',
@@ -934,7 +934,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       toolName: undefined,
       config: undefined,
     });
-    expect(store.upsert).toHaveBeenCalledWith({
+    expect(store.upsertConnection).toHaveBeenCalledWith({
       authorId: 'end_user_77',
       providerId: 'composio',
       toolkit: 'gmail',
@@ -963,7 +963,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       } as any),
     ).rejects.toMatchObject({ status: 400 });
     expect(authorize).not.toHaveBeenCalled();
-    expect(store.upsert).not.toHaveBeenCalled();
+    expect(store.upsertConnection).not.toHaveBeenCalled();
   });
 });
 
@@ -1002,7 +1002,7 @@ describe('DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE (scope)', () => {
     } as any);
 
     expect(revokeConnection).toHaveBeenCalledWith('ca_shared');
-    expect(store.delete).toHaveBeenCalledWith({
+    expect(store.deleteConnection).toHaveBeenCalledWith({
       authorId: 'shared',
       providerId: 'composio',
       connectionId: 'ca_shared',
@@ -1045,7 +1045,7 @@ describe('DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE (scope)', () => {
       } as any),
     ).rejects.toMatchObject({ status: 403 });
     expect(revokeConnection).not.toHaveBeenCalled();
-    expect(store.delete).not.toHaveBeenCalled();
+    expect(store.deleteConnection).not.toHaveBeenCalled();
   });
 });
 
@@ -1314,7 +1314,7 @@ describe('UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE', () => {
     } as any);
 
     expect(result).toEqual({ ok: true, label: 'Work' });
-    expect(toolConnections.upsert).toHaveBeenCalledWith({
+    expect(toolConnections.upsertConnection).toHaveBeenCalledWith({
       authorId: 'user-1',
       providerId: 'composio',
       toolkit: 'gmail',
@@ -1349,7 +1349,9 @@ describe('UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE', () => {
     } as any);
 
     expect(result).toEqual({ ok: true, label: null });
-    expect(toolConnections.upsert).toHaveBeenCalledWith(expect.objectContaining({ label: null, scope: 'per-author' }));
+    expect(toolConnections.upsertConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ label: null, scope: 'per-author' }),
+    );
   });
 
   it('clears the label when an empty string is passed', async () => {
@@ -1395,7 +1397,7 @@ describe('UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE', () => {
         requestContext: ctx,
       } as any),
     ).rejects.toMatchObject({ status: 404 });
-    expect(toolConnections.upsert).not.toHaveBeenCalled();
+    expect(toolConnections.upsertConnection).not.toHaveBeenCalled();
   });
 
   it('returns 403 when the caller is not the owner and the row is not shared', async () => {
@@ -1423,7 +1425,7 @@ describe('UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE', () => {
         requestContext: ctx,
       } as any),
     ).rejects.toMatchObject({ status: 403 });
-    expect(toolConnections.upsert).not.toHaveBeenCalled();
+    expect(toolConnections.upsertConnection).not.toHaveBeenCalled();
   });
 
   it('lets any caller rename a shared connection', async () => {
@@ -1451,7 +1453,7 @@ describe('UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE', () => {
     } as any);
 
     expect(result).toEqual({ ok: true, label: 'Team Renamed' });
-    expect(toolConnections.upsert).toHaveBeenCalledWith(
+    expect(toolConnections.upsertConnection).toHaveBeenCalledWith(
       expect.objectContaining({ authorId: 'shared', label: 'Team Renamed', scope: 'shared' }),
     );
   });
@@ -1482,7 +1484,7 @@ describe('UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE', () => {
     } as any);
 
     expect(result).toEqual({ ok: true, label: 'Renamed By Admin' });
-    expect(toolConnections.upsert).toHaveBeenCalledWith(
+    expect(toolConnections.upsertConnection).toHaveBeenCalledWith(
       expect.objectContaining({ authorId: 'user-owner', label: 'Renamed By Admin' }),
     );
   });

@@ -270,7 +270,7 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
         const storage = mastra.getStorage();
         const store = await storage?.getStore('toolProviderConnections');
         if (store && persistedConnectionId) {
-          await store.upsert({
+          await store.upsertConnection({
             authorId: ownerAuthorId,
             providerId: provider.info.id,
             toolkit,
@@ -405,7 +405,7 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
       }> = [];
       if (store) {
         try {
-          const rows = await store.list({
+          const rows = await store.listConnectionsByAuthor({
             providerId: provider.info.id,
             toolkit,
           });
@@ -546,7 +546,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       let ownerAuthorId: string | undefined;
       let ownerScope: 'shared' | 'per-author' | 'caller-supplied' | undefined;
       if (store) {
-        const rows = await store.list({ providerId: provider.info.id });
+        const rows = await store.listConnectionsByAuthor({ providerId: provider.info.id });
         const match = rows.find(r => r.connectionId === connectionId);
         ownerAuthorId = match?.authorId;
         ownerScope = match?.scope;
@@ -576,7 +576,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       }
 
       if (store) {
-        await store.delete({
+        await store.deleteConnection({
           authorId: effectiveOwner,
           providerId: provider.info.id,
           connectionId,
@@ -625,7 +625,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
         });
       }
 
-      const rows = await store.list({ providerId: provider.info.id });
+      const rows = await store.listConnectionsByAuthor({ providerId: provider.info.id });
       const match = rows.find(r => r.connectionId === connectionId);
       if (!match) {
         throw new HTTPException(404, {
@@ -643,7 +643,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       // Normalize: empty string and explicit null both clear the label.
       const nextLabel: string | null = typeof label === 'string' && label.trim().length > 0 ? label.trim() : null;
 
-      await store.upsert({
+      await store.upsertConnection({
         authorId: match.authorId,
         providerId: provider.info.id,
         toolkit: match.toolkit,
@@ -686,7 +686,7 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
       let ownerAuthorId: string | undefined;
       let ownerScope: 'shared' | 'per-author' | 'caller-supplied' | undefined;
       if (store) {
-        const rows = await store.list({ providerId: provider.info.id });
+        const rows = await store.listConnectionsByAuthor({ providerId: provider.info.id });
         const match = rows.find(r => r.connectionId === connectionId);
         ownerAuthorId = match?.authorId;
         ownerScope = match?.scope;

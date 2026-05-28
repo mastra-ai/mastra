@@ -36,7 +36,7 @@ export class InMemoryToolProviderConnectionsStorage extends ToolProviderConnecti
     this.db.toolProviderConnections.clear();
   }
 
-  async get({
+  async getConnectionById({
     authorId,
     providerId,
     connectionId,
@@ -44,7 +44,7 @@ export class InMemoryToolProviderConnectionsStorage extends ToolProviderConnecti
     return this.db.toolProviderConnections.get(connKey(authorId, providerId, connectionId)) ?? null;
   }
 
-  async upsert(input: StorageUpsertToolProviderConnectionInput): Promise<StorageToolProviderConnection> {
+  async upsertConnection(input: StorageUpsertToolProviderConnectionInput): Promise<StorageToolProviderConnection> {
     const key = connKey(input.authorId, input.providerId, input.connectionId);
     const existing = this.db.toolProviderConnections.get(key);
     const now = new Date();
@@ -62,7 +62,7 @@ export class InMemoryToolProviderConnectionsStorage extends ToolProviderConnecti
     return row;
   }
 
-  async list({
+  async listConnectionsByAuthor({
     authorId,
     providerId,
     toolkit,
@@ -79,7 +79,11 @@ export class InMemoryToolProviderConnectionsStorage extends ToolProviderConnecti
     return rows;
   }
 
-  async delete({ authorId, providerId, connectionId }: StorageDeleteToolProviderConnectionInput): Promise<void> {
+  async deleteConnection({
+    authorId,
+    providerId,
+    connectionId,
+  }: StorageDeleteToolProviderConnectionInput): Promise<void> {
     this.db.toolProviderConnections.delete(connKey(authorId, providerId, connectionId));
   }
 }

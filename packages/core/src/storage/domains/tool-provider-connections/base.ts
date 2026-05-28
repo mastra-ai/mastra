@@ -33,26 +33,28 @@ export abstract class ToolProviderConnectionsStorage extends MastraBase {
    * Fetch a single tool provider connection row. Returns `null` when no row
    * exists for the given `(authorId, providerId, connectionId)`.
    */
-  abstract get(key: StorageToolProviderConnectionKey): Promise<StorageToolProviderConnection | null>;
+  abstract getConnectionById(key: StorageToolProviderConnectionKey): Promise<StorageToolProviderConnection | null>;
 
   /**
    * Insert or update a tool provider connection row. Idempotent on
    * `(authorId, providerId, connectionId)` — the existing label/toolkit are
    * overwritten. `createdAt` is preserved on update.
    */
-  abstract upsert(input: StorageUpsertToolProviderConnectionInput): Promise<StorageToolProviderConnection>;
+  abstract upsertConnection(input: StorageUpsertToolProviderConnectionInput): Promise<StorageToolProviderConnection>;
 
   /**
    * List tool provider connection rows for the given author. Optionally
    * narrow by `providerId` and/or `toolkit`. Order is not guaranteed.
    */
-  abstract list(input: StorageListToolProviderConnectionsInput): Promise<StorageToolProviderConnection[]>;
+  abstract listConnectionsByAuthor(
+    input: StorageListToolProviderConnectionsInput,
+  ): Promise<StorageToolProviderConnection[]>;
 
   /**
    * Remove a single tool provider connection row. Idempotent — returns
    * silently when the row does not exist.
    */
-  abstract delete(input: StorageDeleteToolProviderConnectionInput): Promise<void>;
+  abstract deleteConnection(input: StorageDeleteToolProviderConnectionInput): Promise<void>;
 
   /**
    * Delete every tool provider connection row. Used by tests.

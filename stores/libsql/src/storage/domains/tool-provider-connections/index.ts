@@ -66,7 +66,7 @@ export class ToolProviderConnectionsLibSQL extends ToolProviderConnectionsStorag
     await this.#client.execute(`DELETE FROM "${TABLE_TOOL_PROVIDER_CONNECTIONS}"`);
   }
 
-  async get({
+  async getConnectionById({
     authorId,
     providerId,
     connectionId,
@@ -93,7 +93,7 @@ export class ToolProviderConnectionsLibSQL extends ToolProviderConnectionsStorag
     }
   }
 
-  async upsert(input: StorageUpsertToolProviderConnectionInput): Promise<StorageToolProviderConnection> {
+  async upsertConnection(input: StorageUpsertToolProviderConnectionInput): Promise<StorageToolProviderConnection> {
     const { authorId, providerId, toolkit, connectionId, label } = input;
     const now = new Date();
     const nowIso = now.toISOString();
@@ -155,7 +155,7 @@ export class ToolProviderConnectionsLibSQL extends ToolProviderConnectionsStorag
     }
   }
 
-  async list({
+  async listConnectionsByAuthor({
     authorId,
     providerId,
     toolkit,
@@ -200,7 +200,11 @@ export class ToolProviderConnectionsLibSQL extends ToolProviderConnectionsStorag
     }
   }
 
-  async delete({ authorId, providerId, connectionId }: StorageDeleteToolProviderConnectionInput): Promise<void> {
+  async deleteConnection({
+    authorId,
+    providerId,
+    connectionId,
+  }: StorageDeleteToolProviderConnectionInput): Promise<void> {
     try {
       await this.#client.execute({
         sql: `DELETE FROM "${TABLE_TOOL_PROVIDER_CONNECTIONS}" WHERE "authorId" = ? AND "providerId" = ? AND "connectionId" = ?`,
