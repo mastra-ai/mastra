@@ -181,6 +181,49 @@ describe('AgentBuilderAgentsPage', () => {
     expect(screen.queryByText('Create an agent')).toBeNull();
   });
 
+  it('renders the resolved author name returned by the API in each row', async () => {
+    server.use(
+      ...defaultHandlers(),
+      ...userHandler({ id: 'user-1' }),
+      http.get(`${BASE_URL}/api/stored/agents`, () => {
+        return HttpResponse.json({
+          agents: [
+            {
+              ...baseAgent,
+              id: 'agent-1',
+              name: 'Alpha',
+              description: 'd1',
+              authorId: 'user-1',
+              author: { id: 'user-1', name: 'Alice Doe' },
+            },
+            {
+              ...baseAgent,
+              id: 'agent-2',
+              name: 'Beta',
+              description: 'd2',
+              authorId: 'user-2',
+              author: { id: 'user-2', email: 'bob@example.com' },
+            },
+          ],
+          total: 2,
+          page: 1,
+          perPage: 100,
+          hasMore: false,
+        });
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha')).toBeTruthy();
+      expect(screen.getByText('Beta')).toBeTruthy();
+    });
+
+    expect(screen.getByText('Alice Doe')).toBeTruthy();
+    expect(screen.getByText('bob@example.com')).toBeTruthy();
+  });
+
   it('omits authorId when no current user is available', async () => {
     let capturedSearch: URLSearchParams | null = null;
     server.use(

@@ -373,6 +373,15 @@ export type PostAgentsAgentIdClone_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -20095,6 +20104,15 @@ export type GetStoredAgents_Response = {
     status: string;
     activeVersionId?: string | undefined;
     authorId?: string | undefined;
+    /** Resolved author identity (when an auth provider is configured) */
+    author?:
+      | {
+          id: string;
+          name?: string | undefined;
+          email?: string | undefined;
+          avatarUrl?: string | undefined;
+        }
+      | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -24475,6 +24493,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -32955,6 +32982,15 @@ export type PostStoredAgents_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -41485,6 +41521,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
       status: string;
       activeVersionId?: string | undefined;
       authorId?: string | undefined;
+      /** Resolved author identity (when an auth provider is configured) */
+      author?:
+        | {
+            id: string;
+            name?: string | undefined;
+            email?: string | undefined;
+            avatarUrl?: string | undefined;
+          }
+        | undefined;
       metadata?:
         | {
             [key: string]: unknown;

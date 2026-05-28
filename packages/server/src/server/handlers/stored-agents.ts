@@ -22,6 +22,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
 import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
+import { attachAuthor, prepareAuthorEnrichment } from './author-enrichment';
 import {
   assertReadAccess,
   assertWriteAccess,
@@ -171,8 +172,14 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         const endIdx = effectivePerPage === 0 ? 0 : startIdx + effectivePerPage;
         const sliced = effectivePerPage === 0 ? [] : visible.slice(startIdx, endIdx);
         const annotated = sliced.map(record => ({ ...record, isFavorited: true }));
+        const authors = await prepareAuthorEnrichment(
+          mastra,
+          requestContext,
+          annotated.map(a => a.authorId),
+        );
+        const withAuthors = authors ? annotated.map(record => attachAuthor(record, authors)) : annotated;
         const hasMore = effectivePerPage > 0 && endIdx < total;
-        return { agents: annotated, total, page, perPage: effectivePerPage, hasMore };
+        return { agents: withAuthors, total, page, perPage: effectivePerPage, hasMore };
       }
 
       const result = await agentsStore.listResolved({
@@ -193,8 +200,16 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       // filter as a view over the caller's scope — an approximation is OK.
       const visibleAgents = result.agents.filter(record => matchesAuthorFilter(record, filter));
 
+      const authors = await prepareAuthorEnrichment(
+        mastra,
+        requestContext,
+        visibleAgents.map(a => a.authorId),
+      );
+
       if (!favoritesEnabled) {
-        return { ...result, agents: visibleAgents.map(stripFavoriteFields) };
+        const stripped = visibleAgents.map(stripFavoriteFields);
+        const withAuthors = authors ? stripped.map(record => attachAuthor(record, authors)) : stripped;
+        return { ...result, agents: withAuthors };
       }
 
       const enrichment = await prepareFavoritesEnrichment(
@@ -206,8 +221,9 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       const annotated = enrichment
         ? visibleAgents.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
         : visibleAgents;
+      const withAuthors = authors ? annotated.map(record => attachAuthor(record, authors)) : annotated;
 
-      return { ...result, agents: annotated };
+      return { ...result, agents: withAuthors };
     } catch (error) {
       return handleError(error, 'Error listing stored agents');
     }
@@ -254,10 +270,11 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
       const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'agent', [agent.id]);
-      if (enrichment) {
-        return { ...agent, isFavorited: enrichment.starredIds.has(agent.id) };
-      }
-      return stripFavoriteFields(agent);
+      const authors = await prepareAuthorEnrichment(mastra, requestContext, [agent.authorId]);
+      const withFavorite = enrichment
+        ? { ...agent, isFavorited: enrichment.starredIds.has(agent.id) }
+        : stripFavoriteFields(agent);
+      return attachAuthor(withFavorite, authors);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
     }
