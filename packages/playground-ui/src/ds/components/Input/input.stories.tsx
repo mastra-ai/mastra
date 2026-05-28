@@ -136,3 +136,30 @@ export const SizesWithButton: Story = {
     </div>
   ),
 };
+
+export const Error: Story = {
+  args: {
+    placeholder: 'invalid@',
+    defaultValue: 'invalid@',
+    error: true,
+  },
+};
+
+export const OnDifferentSurfaces: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 w-96">
+      <div className="bg-surface1 p-4 rounded-lg border border-border1">
+        <Input placeholder="On bg-surface1 (darkest in dark mode)" />
+      </div>
+      <div className="bg-surface2 p-4 rounded-lg border border-border1">
+        <Input placeholder="On bg-surface2" />
+      </div>
+      <div className="bg-surface3 p-4 rounded-lg border border-border1">
+        <Input placeholder="On bg-surface3" />
+      </div>
+      <div className="bg-surface4 p-4 rounded-lg border border-border1">
+        <Input placeholder="On bg-surface4 (lightest)" />
+      </div>
+    </div>
+  ),
+};

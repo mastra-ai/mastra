@@ -4,7 +4,7 @@ import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { formElementSizes, formElementFocusWithin, formElementRadius } from '@/ds/primitives/form-element';
+import { formElementSizes } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -13,15 +13,19 @@ const InputGroupSizeContext = React.createContext<FormElementSize>('md');
 
 const inputGroupClassName = cn(
   'group/input-group relative flex w-full min-w-0 items-stretch',
-  'bg-surface2 border border-border1 text-neutral6',
-  'hover:border-border2',
-  formElementRadius,
-  formElementFocusWithin,
+  'bg-surface-overlay-soft border border-border1 text-neutral6 rounded-full',
+  'hover:bg-surface-overlay-strong hover:border-border2',
+  'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong focus-within:border-border2',
   transitions.all,
   'has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed',
-  'has-[[aria-invalid=true]]:border-error has-[[aria-invalid=true]]:focus-within:ring-error has-[[aria-invalid=true]]:focus-within:shadow-glow-accent2',
+  'has-[[aria-invalid=true]]:border-error',
   'has-[>[data-align=block-start]]:flex-col',
   'has-[>[data-align=block-end]]:flex-col',
+  // Pill (rounded-full) only fits single-line inline shapes. Fall back to rounded-xl
+  // whenever the group goes vertical (block-* addon) or wraps a textarea.
+  'has-[>[data-align=block-start]]:rounded-xl',
+  'has-[>[data-align=block-end]]:rounded-xl',
+  'has-[textarea]:rounded-xl',
   'has-[>[data-align=inline-start]]:[&>[data-slot=input-group-control]]:pl-0',
   'has-[>[data-align=inline-end]]:[&>[data-slot=input-group-control]]:pr-0',
   // In flex-col, flex-1 collapses the input to basis-0. Force flex-none so `h-form-*` applies.
@@ -121,6 +125,10 @@ const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>
           'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
+          // Hide native number-spinner arrows so consumers can compose their own
+          // stepper (see the NumberWithStepper story).
+          '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0',
+          '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0',
           className,
         )}
         {...props}

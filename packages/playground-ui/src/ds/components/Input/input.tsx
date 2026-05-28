@@ -4,9 +4,9 @@ import * as React from 'react';
 
 import {
   formElementSizes,
-  sharedFormElementStyle,
-  sharedFormElementFocusStyle,
+  inputSurfaceAndFocusStyle,
   sharedFormElementDisabledStyle,
+  unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
@@ -16,12 +16,17 @@ const inputVariants = cva(
     'transition-all duration-normal ease-out-custom',
     'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
+    // type="number": hide native browser spinner arrows (they clip the pill).
+    // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
+    // instead — see the NumberWithStepper story.
+    '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0',
+    '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0',
   ),
   {
     variants: {
       variant: {
-        default: cn(sharedFormElementStyle, sharedFormElementFocusStyle, sharedFormElementDisabledStyle),
-        unstyled: 'border-0 bg-transparent shadow-none focus:shadow-none focus:ring-0',
+        default: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
+        unstyled: unstyledFormElementStyle,
       },
       size: {
         sm: `${formElementSizes.sm} text-ui-sm px-[.75em]`,
@@ -48,12 +53,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <input
         type={type}
-        className={cn(
-          inputVariants({ variant, size }),
-          // Error state styling
-          error && 'border-error focus:ring-error focus:shadow-glow-accent2',
-          className,
-        )}
+        className={cn(inputVariants({ variant, size }), error && 'border-error focus-visible:border-error', className)}
         data-testid={testId}
         ref={ref}
         aria-invalid={error}

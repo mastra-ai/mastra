@@ -3,9 +3,9 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import {
-  sharedFormElementStyle,
-  sharedFormElementFocusStyle,
+  inputSurfaceAndFocusStyle,
   sharedFormElementDisabledStyle,
+  unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
@@ -23,8 +23,8 @@ const textareaVariants = cva(
   {
     variants: {
       variant: {
-        default: cn(sharedFormElementStyle, sharedFormElementFocusStyle, sharedFormElementDisabledStyle),
-        unstyled: 'border-0 bg-transparent shadow-none focus:shadow-none focus:ring-0',
+        default: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
+        unstyled: unstyledFormElementStyle,
       },
       size: {
         sm: 'px-2 py-1.5 text-ui-sm',
@@ -52,8 +52,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         className={cn(
           textareaVariants({ variant, size }),
-          // Error state styling
-          error && 'border-error focus:ring-error focus:shadow-glow-accent2',
+          error && 'border-error focus-visible:border-error',
           className,
         )}
         data-testid={testId}
