@@ -1065,6 +1065,119 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('queues active messages when delivery policy returns queue', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        streamCount += 1;
+        prompts.push(prompt);
+        const responseText = streamCount === 1 ? 'first response' : 'policy queued response';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `policy-queue-${streamCount}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (streamCount === 1) {
+                await firstFinished;
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'policy-queue-agent',
+      name: 'Policy Queue Agent',
+      instructions: 'Test',
+      model,
+      deliveryPolicy: { categories: { user: 'queue' } },
+    });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'policy-queue-thread',
+      resourceId: 'policy-queue-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const firstRun = readNextRunWithParts(iterator);
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'policy-queue-thread', resource: 'policy-queue-user' },
+    });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    const result = agent.sendMessage('Policy queued follow-up', {
+      resourceId: 'policy-queue-user',
+      threadId: 'policy-queue-thread',
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(result.runId).not.toBe(stream.runId);
+    await nextTick();
+    expect(streamCount).toBe(1);
+
+    releaseFirst();
+    await expect(stream.text).resolves.toBe('first response');
+    await firstRun;
+    const secondRun = await readNextRunWithParts(iterator);
+    expect(secondRun.value.runId).toBe(result.runId);
+    expect(secondRun.value.text).toBe('policy queued response');
+    expect(JSON.stringify(prompts[1])).toContain('Policy queued follow-up');
+
+    subscription.unsubscribe();
+  });
+
+  it('persists low-priority notifications by default when delivery policy is enabled', async () => {
+    let streamCount = 0;
+    const agent = new Agent({
+      id: 'policy-notification-agent',
+      name: 'Policy Notification Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+      deliveryPolicy: {},
+    });
+
+    const result = agent.sendSignal(
+      { type: 'notification', contents: 'Background notification', attributes: { priority: 'low' } },
+      { resourceId: 'policy-notification-user', threadId: 'policy-notification-thread' },
+    );
+
+    expect(result.accepted).toBe(true);
+    await expect(result.persisted).resolves.toBeUndefined();
+    expect(streamCount).toBe(0);
+  });
+
   it('fans out sequential idle signal runs to many same-thread subscribers', async () => {
     const resourceId = 'share-resource';
     const threadId = 'share-thread';

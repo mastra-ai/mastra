@@ -531,7 +531,10 @@ export const useChat = ({
         ifIdle: { streamOptions },
       });
       const echoedSignalId =
-        result.signal && typeof result.signal === 'object' && 'id' in result.signal && typeof result.signal.id === 'string'
+        result.signal &&
+        typeof result.signal === 'object' &&
+        'id' in result.signal &&
+        typeof result.signal.id === 'string'
           ? result.signal.id
           : resolvedSignalId;
       onSignalSent?.(echoedSignalId, getSignalPreview(coreUserMessages));
@@ -554,7 +557,9 @@ export const useChat = ({
           onSignalEcho?.(resolvedSignalId);
           if (isThreadSignalUnsupportedError(signalError)) {
             markThreadSignalsUnsupported();
-            setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToUIMessage)] as MastraUIMessage[]);
+            setMessages(
+              prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToUIMessage)] as MastraUIMessage[],
+            );
             await streamWithLegacyRoute();
             return;
           }
