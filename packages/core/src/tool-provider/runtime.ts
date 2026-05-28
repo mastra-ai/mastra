@@ -71,7 +71,14 @@ export async function resolveStoredToolProviders(
 ): Promise<Record<string, ToolAction<any, any, any>>> {
   const { requestContext, authorId, logger } = opts;
   const out: Record<string, ToolAction<any, any, any>> = {};
-  if (!toolProviders || Object.keys(toolProviders).length === 0) return out;
+  logger?.debug(`[resolveStoredToolProviders] called`, {
+    providerIds: Object.keys(toolProviders ?? {}),
+    authorId,
+  });
+  if (!toolProviders || Object.keys(toolProviders).length === 0) {
+    logger?.debug(`[resolveStoredToolProviders] no toolProviders on agent — returning {}`);
+    return out;
+  }
 
   for (const [providerId, cfg] of Object.entries(toolProviders)) {
     let provider: ToolProvider;
@@ -91,7 +98,12 @@ export async function resolveStoredToolProviders(
     const connectionsByToolkit = cfg.connections ?? {};
 
     for (const [toolkit, connections] of Object.entries(connectionsByToolkit)) {
-      if (!connections || connections.length === 0) continue;
+      if (!connections || connections.length === 0) {
+        logger?.debug(
+          `[resolveStoredToolProviders] toolkit "${toolkit}" on provider "${providerId}" has no pinned connections — skipping`,
+        );
+        continue;
+      }
 
       if (connections.length > 1 && !provider.capabilities?.multipleConnectionsPerToolkit) {
         throw new Error(
@@ -106,7 +118,17 @@ export async function resolveStoredToolProviders(
       const slugsForToolkit = Object.entries(tools)
         .filter(([slug, meta]) => (meta?.toolkit ? meta.toolkit === toolkit : slug.startsWith(`${toolkit}.`)))
         .map(([slug]) => slug);
-      if (slugsForToolkit.length === 0) continue;
+      if (slugsForToolkit.length === 0) {
+        logger?.debug(
+          `[resolveStoredToolProviders] toolkit "${toolkit}" on provider "${providerId}" has connections but no matching tool slugs — skipping`,
+          { availableSlugs: Object.keys(tools) },
+        );
+        continue;
+      }
+      logger?.debug(`[resolveStoredToolProviders] resolving tools for ${providerId}/${toolkit}`, {
+        slugs: slugsForToolkit,
+        connectionCount: connections.length,
+      });
 
       const skipSuffix = connections.length === 1;
       const usedSuffixes = new Set<string>();
