@@ -9,6 +9,9 @@ This is the #1 way to validate changes here — ABOVE Playwright E2E.
 Use the `playground-msw-tests` skill whenever you add or modify hooks, pages,
 routes, data-fetching, redirect/gating logic, or any React Query interactions.
 
+- You MUST activate the `playground-msw-tests` skill before adding or
+  modifying any tests in this package. This is non-optional.
+
 Rules for MSW tests in this package:
 
 - Drive the real @mastra/client-js + React Query stack; only mock the network.
