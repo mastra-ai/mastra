@@ -52,6 +52,13 @@ export type AgentSignalDataPart = {
     acceptedAt?: string;
     attributes?: AgentSignalAttributes;
     metadata?: Record<string, unknown>;
+    /**
+     * Out-of-band metadata that rides with the signal but is not shown to the model.
+     * Mirrors `AgentSignalInput.providerOptions` and is surfaced on the transient
+     * data part so downstream consumers (e.g. AgentChannels) can read it without
+     * waiting for the LLM round-trip.
+     */
+    providerOptions?: MastraProviderMetadata;
   };
   transient: true;
 };
@@ -372,6 +379,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
+      ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
     },
     transient: true,
   };
