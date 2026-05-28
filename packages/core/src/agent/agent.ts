@@ -3959,7 +3959,9 @@ export class Agent<
             // use the correct model version and memory config from the resolved agent.
             let resolvedAgent = agent;
             const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-            const agentVersionSelector = versionOverrides?.agents?.[agent.id];
+            const agentVersionSelector =
+              versionOverrides?.agents?.[agent.id] ??
+              (versionOverrides?.defaultStatus ? { status: versionOverrides.defaultStatus } : undefined);
             if (agentVersionSelector && this.#mastra && agent instanceof Agent) {
               try {
                 resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
@@ -4305,20 +4307,9 @@ export class Agent<
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
                 });
-                const subAgentToolResultsLegacy = generateResult.toolResults?.map((toolResult: any) => ({
-                  toolName: toolResult.toolName,
-                  toolCallId: toolResult.toolCallId,
-                  result: toolResult.result,
-                  args: toolResult.args,
-                  isError: toolResult.isError,
-                }));
-
                 result = {
                   text: generateResult.text,
-                  subAgentThreadId,
-                  subAgentResourceId,
-                  subAgentToolResults: subAgentToolResultsLegacy,
-                  usage: generateResult.usage,
+                  ...(generateResult.usage ? { usage: generateResult.usage } : {}),
                 };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&

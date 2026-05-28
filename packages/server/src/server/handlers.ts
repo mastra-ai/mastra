@@ -1,5 +1,5 @@
 export * as agentBuilder from './handlers/agent-builder';
-export { formatZodError } from './handlers/error';
+export { formatZodError, isZodError, type ZodErrorLike } from './handlers/error';
 export * as agents from './handlers/agents';
 export * as a2a from './handlers/a2a';
 export * as conversations from './handlers/conversations';

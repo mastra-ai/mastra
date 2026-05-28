@@ -127,3 +127,97 @@ describe('WorkflowsConvex.persistWorkflowSnapshot — $-prefixed keys', () => {
     expect(JSON.parse(persistedSnapshot as string)).toEqual(snapshot);
   });
 });
+
+describe('WorkflowsConvex atomic workflow updates', () => {
+  it('advertises concurrent update support', () => {
+    const { client } = createFakeClient();
+    const workflows = new WorkflowsConvex({ client });
+
+    expect(workflows.supportsConcurrentUpdates()).toBe(true);
+  });
+
+  it('delegates step result updates to the Convex storage merge op', async () => {
+    const requests: StorageRequest[] = [];
+    const callStorage = vi.fn(async (request: StorageRequest) => {
+      requests.push(request);
+      if (request.op === 'mergeWorkflowStepResult') {
+        return JSON.stringify({
+          [request.stepId]: JSON.parse(request.result),
+        });
+      }
+      return undefined;
+    });
+
+    const client = new ConvexAdminClient({
+      deploymentUrl: 'https://example.convex.cloud',
+      adminAuthToken: 'test-token',
+    });
+    (client as unknown as { callStorage: typeof callStorage }).callStorage = callStorage;
+    const workflows = new WorkflowsConvex({ client });
+
+    const result = {
+      status: 'success' as const,
+      output: { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } },
+      payload: { input: true },
+      startedAt: 1,
+      endedAt: 2,
+    };
+    await expect(
+      workflows.updateWorkflowResults({
+        workflowName: 'workflow-a',
+        runId: 'run-1',
+        stepId: 'step-1',
+        result,
+        requestContext: { requestId: 'req-1' },
+      }),
+    ).resolves.toEqual({ 'step-1': result });
+
+    expect(requests).toEqual([
+      {
+        op: 'mergeWorkflowStepResult',
+        tableName: 'mastra_workflow_snapshot',
+        workflowName: 'workflow-a',
+        runId: 'run-1',
+        stepId: 'step-1',
+        result: JSON.stringify(result),
+        requestContext: JSON.stringify({ requestId: 'req-1' }),
+      },
+    ]);
+  });
+
+  it('delegates workflow state updates to the Convex storage merge op', async () => {
+    const requests: StorageRequest[] = [];
+    const callStorage = vi.fn(async (request: StorageRequest) => {
+      requests.push(request);
+      if (request.op === 'mergeWorkflowState') {
+        return JSON.stringify({ runId: request.runId, context: {}, status: JSON.parse(request.opts).status });
+      }
+      return undefined;
+    });
+
+    const client = new ConvexAdminClient({
+      deploymentUrl: 'https://example.convex.cloud',
+      adminAuthToken: 'test-token',
+    });
+    (client as unknown as { callStorage: typeof callStorage }).callStorage = callStorage;
+    const workflows = new WorkflowsConvex({ client });
+
+    await expect(
+      workflows.updateWorkflowState({
+        workflowName: 'workflow-a',
+        runId: 'run-1',
+        opts: { status: 'success' },
+      }),
+    ).resolves.toEqual({ runId: 'run-1', context: {}, status: 'success' });
+
+    expect(requests).toEqual([
+      {
+        op: 'mergeWorkflowState',
+        tableName: 'mastra_workflow_snapshot',
+        workflowName: 'workflow-a',
+        runId: 'run-1',
+        opts: JSON.stringify({ status: 'success' }),
+      },
+    ]);
+  });
+});

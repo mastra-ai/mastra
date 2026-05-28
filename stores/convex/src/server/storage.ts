@@ -16,6 +16,7 @@ import type { GenericId } from 'convex/values';
 
 import type { EqualityFilter, StorageRequest, StorageResponse } from '../storage/types';
 import { findBestIndex } from './index-map';
+import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
 
 // Vector-specific table names (not in @mastra/core)
 const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
@@ -282,6 +283,11 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
     };
   }
 });
+
+function parseStoredSnapshot(stored: unknown, runId: string): Record<string, any> {
+  if (typeof stored === 'string') return JSON.parse(stored);
+  return JSON.parse(JSON.stringify(stored ?? createEmptyWorkflowSnapshot(runId)));
+}
 
 /**
  * Handle operations on typed tables (threads, messages, etc.)
@@ -636,6 +642,72 @@ export async function handleTypedOperation(
       }
       await deleteDocs(ctx, docsToDelete);
       return { ok: true };
+    }
+
+    case 'mergeWorkflowStepResult': {
+      if (convexTable !== CONVEX_TABLE_WORKFLOW_SNAPSHOTS) {
+        return { ok: false, error: `Unsupported operation ${request.op} for table ${request.tableName}` };
+      }
+
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_workflow_run', (q: any) =>
+          q.eq('workflow_name', request.workflowName).eq('run_id', request.runId),
+        )
+        .unique();
+
+      if (!existing) {
+        return { ok: false, error: `Workflow snapshot not found for runId ${request.runId}` };
+      }
+
+      const snapshot = parseStoredSnapshot(existing.snapshot, request.runId);
+      if (!snapshot.context) {
+        return { ok: false, error: `Snapshot for runId ${request.runId} is missing or has invalid context` };
+      }
+
+      const context = mergeWorkflowStepResult({
+        snapshot,
+        stepId: request.stepId,
+        result: JSON.parse(request.result),
+        requestContext: JSON.parse(request.requestContext),
+      });
+
+      await ctx.db.patch(existing._id, {
+        snapshot: JSON.stringify(snapshot),
+        updatedAt: new Date().toISOString(),
+      });
+
+      return { ok: true, result: JSON.stringify(context) };
+    }
+
+    case 'mergeWorkflowState': {
+      if (convexTable !== CONVEX_TABLE_WORKFLOW_SNAPSHOTS) {
+        return { ok: false, error: `Unsupported operation ${request.op} for table ${request.tableName}` };
+      }
+
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_workflow_run', (q: any) =>
+          q.eq('workflow_name', request.workflowName).eq('run_id', request.runId),
+        )
+        .unique();
+
+      if (!existing) {
+        return { ok: false, error: `Workflow snapshot not found for runId ${request.runId}` };
+      }
+
+      const snapshot = parseStoredSnapshot(existing.snapshot, request.runId);
+      if (!snapshot.context) {
+        return { ok: false, error: `Snapshot for runId ${request.runId} is missing or has invalid context` };
+      }
+
+      const mergedSnapshot = { ...snapshot, ...JSON.parse(request.opts) };
+      await ctx.db.patch(existing._id, {
+        snapshot: JSON.stringify(mergedSnapshot),
+        updatedAt: new Date().toISOString(),
+      });
+
+      return { ok: true, result: JSON.stringify(mergedSnapshot) };
     }
 
     default:
