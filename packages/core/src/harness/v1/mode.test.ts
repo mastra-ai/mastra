@@ -10,9 +10,24 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { MockAgent } from './__test-utils__/mock-agent';
-import { setupHarness } from './__test-utils__/setup';
-import type { HarnessMode } from './types';
+import type { MastraMemory } from '../../memory';
+import { Harness } from './harness';
+import type { HarnessConfig } from './harness.types';
+import type { HarnessMode } from './mode';
+
+const createMemory = () => ({}) as MastraMemory;
+
+const setupHarness = (config: Partial<HarnessConfig<HarnessMode[]>> = {}) => {
+  const harness = new Harness({
+    agents: {},
+    memory: createMemory(),
+    modes: [{ id: 'build', agentId: 'default' }],
+    defaultModeId: 'build',
+    ...config,
+  } as HarnessConfig<HarnessMode[]>);
+
+  return { harness };
+};
 
 describe('Harness.listModes()', () => {
   it('returns every registered mode in declaration order', () => {
@@ -79,7 +94,6 @@ describe('Harness.getMode()', () => {
 
   it('returns the same reference as the entry inside listModes()', () => {
     const { harness } = setupHarness({
-      agents: { default: new MockAgent({ id: 'default' }) },
       modes: [{ id: 'build', agentId: 'default' }],
     });
 

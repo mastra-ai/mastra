@@ -1,6 +1,7 @@
 import type { Agent } from '../../agent';
 import type { Mastra } from '../../mastra';
-import type { MastraCompositeStore } from '../../storage';
+import type { MastraMemory } from '../../memory';
+import type { HarnessStorage } from '../../storage/domains/harness';
 import type { HarnessMode } from './mode';
 
 export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
@@ -45,29 +46,16 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
   defaultModeId?: MODES[number]['id'];
 
   /**
-   * Session-runtime config (§9 + §5). Currently only carries the storage
-   * binding override; eviction, lease, and queue knobs land here as we
-   * wire them up.
+   * Override for where SessionRecords are persisted. Defaults to the harness
+   * domain on the bound Mastra storage.
    */
-  // sessions?: {
+  storage?: HarnessStorage;
+
   /**
-   * Override for where SessionRecords, leases, and attachment metadata
-   * are persisted. Defaults to the harness domain on the Mastra
-   * instance's storage (`mastra.getStorage().stores.harness`). Pass
-   * a custom adapter only if the harness needs to persist into a
-   * different store than the rest of the Mastra app.
-   *
-   * Thread records and messages still live in the bound Mastra memory
-   * store. If the session storage override is not the same object as the
-   * bound Mastra storage's `stores.harness` domain, `threads.delete(...)`
-   * fails closed before deleting session rows or global memory
-   * thread/message rows for that harness. A separate session storage may only
-   * attach to an existing memory thread; Harness writes a reserved internal
-   * marker so later `threads.delete(...)` calls in other processes fail
-   * closed instead of deleting global thread/message rows they cannot prove
-   * are unowned.
+   * Memory backing thread state for Sessions. Sessions use this to read/write
+   * messages and clone their backing thread content.
    */
-  //   storage?: HarnessStorage;
+  memory: MastraMemory;
 
   //   /**
   //    * Maximum number of items allowed to wait in `pendingQueue` per session.
@@ -247,7 +235,7 @@ export type HarnessConfig<MODES extends HarnessMode[]> = HarnessConfigCommon<MOD
     | {
         /**
          * Pre-built Mastra instance to drive this harness. Mutually
-         * exclusive with top-level `agents` / `storage`.
+         * exclusive with top-level `agents`.
          *
          * Prefer omitting this field when you want the parent `Mastra` to own
          * registration (`new Mastra({ harnesses })`).
@@ -256,7 +244,6 @@ export type HarnessConfig<MODES extends HarnessMode[]> = HarnessConfigCommon<MOD
          */
         mastra: Mastra;
         agents?: never;
-        storage?: never;
       }
     | {
         mastra?: never;
@@ -267,12 +254,5 @@ export type HarnessConfig<MODES extends HarnessMode[]> = HarnessConfigCommon<MOD
          * when the harness will be registered onto an existing Mastra.
          */
         agents: Record<string, Agent>;
-
-        /**
-         * Storage backing the internal Mastra. Optional — the in-memory
-         * default is fine for tests and short-lived scripts. Required for
-         * any harness that survives process restart.
-         */
-        storage: MastraCompositeStore;
       }
   );

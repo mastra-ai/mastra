@@ -1,7 +1,22 @@
+import type { MastraMemory } from '../../memory';
 import type { HarnessMode } from './mode';
 
+export type CloneSessionOptions = {
+  sessionId?: string;
+  threadId?: string;
+  resourceId?: string;
+  parentSessionId?: string;
+  origin?: 'top-level' | 'subagent-tool';
+  modeId?: string;
+  mode?: HarnessMode;
+  modelId?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+  messageLimit?: number;
+};
+
 export interface SessionConfig {
-  // harness: Harness;
+  memory: MastraMemory;
   // storage: HarnessStorage;
   // ownerId: string;
   /** Initial record loaded under the lease. The Session takes ownership. */

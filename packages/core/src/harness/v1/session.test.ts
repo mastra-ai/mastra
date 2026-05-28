@@ -1,0 +1,265 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import type { MastraDBMessage } from '../../agent/message-list';
+import type { MastraMemory } from '../../memory';
+import type { StorageCloneThreadInput } from '../../storage';
+import { HarnessStorage } from '../../storage/domains/harness';
+import type { SessionRecord } from '../../storage/domains/harness';
+import { Harness } from './harness';
+
+class RecordingHarnessStorage extends HarnessStorage {
+  readonly records = new Map<string, SessionRecord>();
+
+  async dangerouslyClearAll(): Promise<void> {
+    this.records.clear();
+  }
+
+  async loadSession(sessionId: string): Promise<SessionRecord | null> {
+    return this.records.get(sessionId) ?? null;
+  }
+
+  async saveSession(record: SessionRecord): Promise<void> {
+    this.records.set(record.id, record);
+  }
+
+  async listSessions(): Promise<SessionRecord[]> {
+    return [...this.records.values()];
+  }
+}
+
+const createMessage = (id: string, threadId = 'thread-1'): MastraDBMessage => ({
+  id,
+  role: 'user',
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  threadId,
+  resourceId: 'resource-1',
+  content: { format: 2, parts: [{ type: 'text', text: `message ${id}` }] },
+});
+
+const createMemory = () => {
+  const clonedThread = {
+    id: 'thread-2',
+    resourceId: 'resource-1',
+    title: 'Clone',
+    createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+  };
+  const messages = [createMessage('message-1')];
+  return {
+    getThreadById: vi.fn().mockResolvedValue(clonedThread),
+    recall: vi.fn().mockResolvedValue({ messages }),
+    saveMessages: vi.fn().mockImplementation(async ({ messages }) => ({ messages })),
+    cloneThread: vi.fn().mockImplementation(async ({ newThreadId, resourceId, title }: StorageCloneThreadInput) => ({
+      thread: {
+        ...clonedThread,
+        id: newThreadId ?? clonedThread.id,
+        resourceId: resourceId ?? clonedThread.resourceId,
+        title: title ?? clonedThread.title,
+      },
+      clonedMessages: messages,
+      messageIdMap: { 'message-1': 'message-2' },
+    })),
+  } as unknown as MastraMemory;
+};
+
+const createHarness = (memory: MastraMemory, storage = new RecordingHarnessStorage()) => ({
+  storage,
+  memory,
+  harness: new Harness({
+    agents: {},
+    storage,
+    memory,
+    modes: [
+      { id: 'build', agentId: 'default' },
+      { id: 'plan', agentId: 'default' },
+    ],
+    defaultModeId: 'build',
+  }),
+});
+
+describe('Harness.session()', () => {
+  it('saves a fresh thread session record', async () => {
+    const { harness, storage } = createHarness(createMemory());
+
+    const session = await harness.session({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      modeId: 'plan',
+      modelId: 'test-model',
+    });
+
+    expect(session.getMode()).toMatchObject({ id: 'plan' });
+    expect(session.getModelId()).toBe('test-model');
+    expect([...storage.records.values()]).toEqual([
+      {
+        id: expect.stringMatching(/^sess-[a-f0-9]{32}$/),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        origin: 'top-level',
+        modeId: 'plan',
+        modelId: 'test-model',
+      },
+    ]);
+  });
+
+  it('loads the existing record for the same resource and thread', async () => {
+    const { harness, storage } = createHarness(createMemory());
+
+    await harness.session({ threadId: 'thread-1', resourceId: 'resource-1', modeId: 'plan', modelId: 'test-model' });
+    const session = await harness.session({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      modeId: 'build',
+      modelId: 'ignored-model',
+    });
+
+    expect(session.getMode()).toMatchObject({ id: 'plan' });
+    expect(session.getModelId()).toBe('test-model');
+    expect(storage.records).toHaveLength(1);
+  });
+
+  it('loads a session by id', async () => {
+    const { harness, storage } = createHarness(createMemory());
+    await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    const [record] = storage.records.values();
+
+    const session = await harness.session({ sessionId: record!.id, resourceId: 'resource-1' });
+
+    expect(session.getMode()).toMatchObject({ id: 'build' });
+    expect(session.getModelId()).toBe('zai-coding-plan/glm-5-turbo');
+  });
+
+  it('uses top-level storage', async () => {
+    const storage = new RecordingHarnessStorage();
+    const harness = new Harness({
+      agents: {},
+      storage,
+      memory: createMemory(),
+      modes: [{ id: 'build', agentId: 'default' }],
+      defaultModeId: 'build',
+    });
+
+    await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    expect(storage.records).toHaveLength(1);
+    expect(session.getMode()).toMatchObject({ id: 'build' });
+  });
+
+  it('clones a session with a new memory thread', async () => {
+    const memory = createMemory();
+    const { harness, storage } = createHarness(memory);
+    const session = await harness.session({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      modeId: 'plan',
+      modelId: 'test-model',
+    });
+
+    const clone = await session.clone({ threadId: 'thread-2', title: 'Clone', metadata: { forkedSubagent: true } });
+
+    expect(clone.id).not.toBe(session.id);
+    expect(clone.threadId).toBe('thread-2');
+    expect(clone.resourceId).toBe('resource-1');
+    expect(clone.getMode()).toMatchObject({ id: 'plan' });
+    expect(clone.getModelId()).toBe('test-model');
+    expect(memory.cloneThread).toHaveBeenCalledWith({
+      sourceThreadId: 'thread-1',
+      newThreadId: 'thread-2',
+      resourceId: 'resource-1',
+      title: 'Clone',
+      metadata: { forkedSubagent: true },
+      options: undefined,
+    });
+    expect(storage.records).toHaveLength(1);
+  });
+
+  it('clones a session with overrides', async () => {
+    const memory = createMemory();
+    const { harness, storage } = createHarness(memory);
+    const session = await harness.session({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      modeId: 'plan',
+      modelId: 'test-model',
+    });
+
+    const clone = await harness.cloneSession(session, {
+      sessionId: 'session-2',
+      threadId: 'thread-2',
+      resourceId: 'resource-2',
+      parentSessionId: 'parent-session',
+      origin: 'subagent-tool',
+      modeId: 'build',
+      modelId: 'override-model',
+    });
+
+    expect(clone.id).toBe('session-2');
+    expect(clone.threadId).toBe('thread-2');
+    expect(clone.resourceId).toBe('resource-2');
+    expect(clone.getMode()).toMatchObject({ id: 'build' });
+    expect(clone.getModelId()).toBe('override-model');
+    expect(storage.records.get('session-2')).toEqual({
+      id: 'session-2',
+      threadId: 'thread-2',
+      resourceId: 'resource-2',
+      parentSessionId: 'parent-session',
+      origin: 'subagent-tool',
+      modeId: 'build',
+      modelId: 'override-model',
+    });
+  });
+
+  it('loads the backing memory thread', async () => {
+    const memory = createMemory();
+    const { harness } = createHarness(memory);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    const thread = await session.getThread();
+
+    expect(memory.getThreadById).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(thread).toMatchObject({ id: 'thread-2' });
+  });
+
+  it('gets messages from memory', async () => {
+    const memory = createMemory();
+    const { harness } = createHarness(memory);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    const messages = await session.getMessages();
+
+    expect(memory.recall).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1' });
+    expect(messages).toEqual([createMessage('message-1')]);
+  });
+
+  it('saves messages to memory', async () => {
+    const memory = createMemory();
+    const { harness } = createHarness(memory);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    const messages = [createMessage('message-2')];
+
+    const result = await session.saveMessages(messages);
+
+    expect(memory.saveMessages).toHaveBeenCalledWith({ messages });
+    expect(result.messages).toEqual(messages);
+  });
+});
+
+describe('Harness.listSessions()', () => {
+  it('returns all sessions across resources', async () => {
+    const { harness } = createHarness(createMemory());
+
+    await harness.session({ threadId: 'thread-1', resourceId: 'resource-1', modeId: 'build' });
+    await harness.session({ threadId: 'thread-2', resourceId: 'resource-2', modeId: 'plan' });
+
+    const sessions = await harness.listSessions();
+    expect(sessions).toHaveLength(2);
+    expect(sessions.map(s => s.resourceId).sort()).toEqual(['resource-1', 'resource-2']);
+  });
+
+  it('returns an empty array when no sessions exist', async () => {
+    const { harness } = createHarness(createMemory());
+    const sessions = await harness.listSessions();
+    expect(sessions).toEqual([]);
+  });
+});

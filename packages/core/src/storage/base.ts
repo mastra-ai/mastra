@@ -19,6 +19,7 @@ import type {
   BackgroundTasksStorage,
   SchedulesStorage,
   ChannelsStorage,
+  HarnessStorage,
 } from './domains';
 
 /** Map of all storage domain interfaces available in a composite store. */
@@ -41,6 +42,7 @@ export type StorageDomains = {
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
+  harness?: HarnessStorage;
 };
 
 /**
@@ -313,6 +315,7 @@ export class MastraCompositeStore extends MastraBase {
         backgroundTasks: resolve('backgroundTasks'),
         schedules: resolve('schedules'),
         channels: resolve('channels'),
+        harness: resolve('harness'),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves

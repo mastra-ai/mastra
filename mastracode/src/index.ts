@@ -20,7 +20,7 @@ import {
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
-import { MastraCompositeStore } from '@mastra/core/storage';
+import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import {
@@ -291,6 +291,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     default: storageResult.storage,
     domains: {
       ...(observabilityDomain ? { observability: observabilityDomain } : {}),
+      harness: new InMemoryHarness(),
     },
   });
 

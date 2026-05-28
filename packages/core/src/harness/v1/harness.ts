@@ -1,12 +1,34 @@
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+
+import type { MastraMemory } from '../../memory';
+import type { MastraCompositeStore } from '../../storage';
+import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
 import type { HarnessConfig } from './harness.types';
 import type { HarnessMode } from './mode';
 import { Session } from './session';
-import type { SessionRecord } from './session.types';
+import type { CloneSessionOptions } from './session.types';
+
+type SessionByIdOptions = {
+  sessionId: string;
+  resourceId?: string;
+};
+
+type SessionByThreadOptions = {
+  sessionId?: undefined;
+  threadId: string;
+  resourceId: string;
+  modeId?: string;
+  modelId?: string;
+};
+
+type SessionOptions = SessionByIdOptions | SessionByThreadOptions;
 
 export class Harness<MODES extends HarnessMode[]> {
   readonly #defaultMode: string;
   readonly #modesById = new Map<string, MODES[number]>();
+  readonly #storage?: HarnessStorage;
+  readonly #compositeStorage?: MastraCompositeStore;
+  readonly #memory: MastraMemory;
 
   constructor(config: HarnessConfig<MODES>) {
     if (!config.modes.length) {
@@ -14,6 +36,9 @@ export class Harness<MODES extends HarnessMode[]> {
     }
 
     this.#defaultMode = config.defaultModeId ?? config.modes[0]!.id;
+    this.#storage = config.storage;
+    this.#compositeStorage = config.mastra?.getStorage();
+    this.#memory = config.memory;
 
     const modes = config.modes ?? [];
     for (const mode of modes) {
@@ -28,6 +53,10 @@ export class Harness<MODES extends HarnessMode[]> {
     }
   }
 
+  listModes(): HarnessMode[] {
+    return [...this.#modesById.values()];
+  }
+
   /**
    * Look up a single mode by id. Returns `undefined` if no mode with that id
    * is registered. For the throwing variant used during request resolution,
@@ -37,27 +66,114 @@ export class Harness<MODES extends HarnessMode[]> {
     return this.#modesById.get(modeId);
   }
 
-  async session(opts: /*{ sessionId: string } |*/ {
-    sessionId?: never;
-    threadId: string;
-    resourceId: string;
-  }): Promise<Session> {
-    // if sessoinId, retrieve session from storage
-    let sessionRecord: SessionRecord | null = null;
-    if (sessionRecord) {
-      const session = new Session(sessionRecord);
-      const mode = this.#modesById.get(sessionRecord.modeId) ?? this.#modesById.get(this.#defaultMode);
-      session.setMode(this.#modesById.get(mode)!);
-      session.setModelId(sessionRecord.modelId);
+  async listSessions(): Promise<SessionRecord[]> {
+    const storage = await this.#requireStorage();
+    return storage.listSessions();
+  }
+
+  async session(opts: SessionOptions): Promise<Session> {
+    const storage = await this.#requireStorage();
+
+    if ('threadId' in opts) {
+      return this.#sessionByThread(storage, opts);
+    }
+
+    const record = await this.#loadSessionRecord(storage, opts.sessionId, opts.resourceId);
+    return this.#sessionFromRecord(record);
+  }
+
+  async cloneSession(session: Session, opts: CloneSessionOptions = {}): Promise<Session> {
+    const storage = await this.#requireStorage();
+    const source = await this.#loadSessionRecord(storage, session.id, session.resourceId);
+    const modeId = opts.modeId ?? source.modeId;
+    const mode = this.#modesById.get(modeId);
+    if (!mode) {
+      throw new Error(`Harness session "${source.id}" cannot clone into unknown mode "${modeId}"`);
+    }
+
+    const clone = await session.clone({
+      ...opts,
+      resourceId: opts.resourceId ?? source.resourceId,
+      mode,
+      modelId: opts.modelId ?? source.modelId,
+    });
+    const record: SessionRecord = {
+      ...source,
+      id: clone.id,
+      threadId: clone.threadId,
+      resourceId: clone.resourceId,
+      parentSessionId: opts.parentSessionId ?? source.id,
+      origin: opts.origin ?? source.origin,
+      modeId: opts.modeId ?? source.modeId,
+      modelId: opts.modelId ?? source.modelId,
+    };
+
+    await storage.saveSession(record);
+    return this.#sessionFromRecord(record);
+  }
+
+  async #sessionByThread(storage: HarnessStorage, opts: SessionByThreadOptions): Promise<Session> {
+    const id = this.#sessionIdFor(opts.resourceId, opts.threadId);
+    const existing = await storage.loadSession(id);
+    if (existing) {
+      return this.#sessionFromRecord(existing);
+    }
+
+    const record: SessionRecord = {
+      id,
+      threadId: opts.threadId,
+      resourceId: opts.resourceId,
+      origin: 'top-level',
+      modeId: opts.modeId ?? this.#defaultMode,
+      modelId: opts.modelId ?? 'zai-coding-plan/glm-5-turbo',
+    };
+
+    await storage.saveSession(record);
+    return this.#sessionFromRecord(record);
+  }
+
+  async #loadSessionRecord(storage: HarnessStorage, sessionId: string, resourceId?: string): Promise<SessionRecord> {
+    const record = await storage.loadSession(sessionId);
+    if (!record) {
+      throw new Error(`Harness session "${sessionId}" was not found`);
+    }
+    if (resourceId && record.resourceId !== resourceId) {
+      throw new Error(`Harness session "${sessionId}" does not belong to resource "${resourceId}"`);
+    }
+    return record;
+  }
+
+  async #requireStorage(): Promise<HarnessStorage> {
+    if (this.#storage) {
+      return this.#storage;
+    }
+
+    const storage = await this.#compositeStorage?.getStore('harness');
+    if (!storage) {
+      throw new Error('Harness session storage is not configured');
+    }
+    return storage;
+  }
+
+  #sessionFromRecord(record: SessionRecord): Session {
+    const mode = this.#modesById.get(record.modeId);
+    if (!mode) {
+      throw new Error(`Harness session "${record.id}" references unknown mode "${record.modeId}"`);
     }
 
     return new Session({
-      id: `sess-${randomUUID}`,
-      threadId: opts.threadId,
-      resourceId: opts.resourceId,
-      mode: this.#modesById.get(this.#defaultMode)!,
-      model: 'zai-coding-plan/glm-5-turbo',
+      id: record.id,
+      threadId: record.threadId,
+      resourceId: record.resourceId,
+      mode,
+      model: record.modelId,
       createdAt: new Date(),
+      memory: this.#memory,
     });
+  }
+
+  #sessionIdFor(resourceId: string, threadId: string): string {
+    const hash = createHash('sha256').update(`${resourceId}\0${threadId}`).digest('hex').slice(0, 32);
+    return `sess-${hash}`;
   }
 }
