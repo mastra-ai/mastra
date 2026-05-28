@@ -261,7 +261,11 @@ export function HeartbeatMetaCard({ heartbeat }: { heartbeat: Heartbeat }) {
       </MetaItem>
 
       <MetaItem label="Next fire">
-        <span title={formatScheduleTimestamp(heartbeat.nextFireAt)}>{formatRelativeTime(heartbeat.nextFireAt)}</span>
+        {heartbeat.status === 'paused' ? (
+          <span className="text-neutral4">Paused</span>
+        ) : (
+          <span title={formatRelativeTime(heartbeat.nextFireAt)}>{formatScheduleTimestamp(heartbeat.nextFireAt)}</span>
+        )}
       </MetaItem>
 
       <PromptRow heartbeat={heartbeat} />

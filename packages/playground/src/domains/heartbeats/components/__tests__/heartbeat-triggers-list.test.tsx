@@ -27,14 +27,15 @@ describe('HeartbeatTriggersList', () => {
     expect(container.textContent).not.toContain('Run ID');
   });
 
-  it('renders the Fired at, Status, Started, Duration headers', () => {
+  it('renders the Run, Status, Duration headers', () => {
     const trigger = makeHeartbeatTrigger();
     const { container } = render(<HeartbeatTriggersList triggers={[trigger]} isLoading={false} />);
 
     const text = container.textContent ?? '';
-    expect(text).toContain('Fired at');
+    expect(text).toContain('Run');
     expect(text).toContain('Status');
-    expect(text).toContain('Started');
     expect(text).toContain('Duration');
+    // We dropped the duplicate "Started" column — `actualFireAt` already conveys this.
+    expect(text).not.toContain('Started');
   });
 });

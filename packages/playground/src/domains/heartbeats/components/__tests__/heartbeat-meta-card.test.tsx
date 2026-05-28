@@ -195,4 +195,35 @@ describe('HeartbeatMetaCard', () => {
 
     await waitFor(() => expect(receivedBody).toEqual({ broadcast: 'on-complete' }));
   });
+
+  it('shows "Paused" instead of a stale next-fire timestamp when the heartbeat is paused', async () => {
+    // Server typically leaves the last-computed nextFireAt on the row even after pause,
+    // which would otherwise render as e.g. "1m ago". When paused, that's misleading.
+    const heartbeat = makeHeartbeat({
+      agentId: 'chef',
+      id: 'hb_chef_thread-1',
+      status: 'paused',
+      nextFireAt: Date.now() - 60_000,
+    });
+
+    server.use(
+      http.get(`${BASE_URL}/api/memory/threads/:threadId`, () =>
+        HttpResponse.json({
+          id: 'thread-1',
+          resourceId: 'chef',
+          title: 'A',
+          metadata: {},
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }),
+      ),
+    );
+
+    const { container } = render(<HeartbeatMetaCard heartbeat={heartbeat} />, { wrapper: makeWrapper() });
+
+    const text = container.textContent ?? '';
+    expect(text).toContain('Paused');
+    expect(text).not.toContain('1m ago');
+    expect(text).not.toContain('ago');
+  });
 });

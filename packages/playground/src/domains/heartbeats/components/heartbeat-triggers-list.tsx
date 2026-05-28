@@ -12,8 +12,8 @@ export interface HeartbeatTriggersListProps {
   setEndOfListElement?: (el: HTMLDivElement | null) => void;
 }
 
-// Columns: Fired at | Status | Started | Duration | Error
-const COLUMNS = 'auto auto auto auto 1fr';
+// Columns: Run | Status | Duration | Error
+const COLUMNS = 'auto auto auto 1fr';
 
 function formatDuration(durationMs?: number): string {
   if (durationMs === undefined) return '—';
@@ -53,9 +53,8 @@ export function HeartbeatTriggersList({
   return (
     <DataList columns={COLUMNS} className="min-w-0" data-testid="heartbeat-triggers-list">
       <DataList.Top>
-        <DataList.TopCell>Fired at</DataList.TopCell>
+        <DataList.TopCell>Run</DataList.TopCell>
         <DataList.TopCell>Status</DataList.TopCell>
-        <DataList.TopCell>Started</DataList.TopCell>
         <DataList.TopCell>Duration</DataList.TopCell>
         <DataList.TopCell>Error</DataList.TopCell>
       </DataList.Top>
@@ -70,10 +69,10 @@ export function HeartbeatTriggersList({
             <DataList.Cell height="compact">
               <span
                 className="text-ui-sm whitespace-nowrap"
-                title={formatScheduleTimestamp(t.actualFireAt)}
+                title={formatRelativeTime(t.actualFireAt)}
                 data-testid="heartbeat-trigger-fired-at"
               >
-                {formatRelativeTime(t.actualFireAt)}
+                {formatScheduleTimestamp(t.actualFireAt)}
               </span>
             </DataList.Cell>
 
@@ -92,16 +91,6 @@ export function HeartbeatTriggersList({
                   </span>
                 )}
               </span>
-            </DataList.Cell>
-
-            <DataList.Cell height="compact">
-              {t.run?.startedAt ? (
-                <span className="text-ui-sm whitespace-nowrap" title={formatScheduleTimestamp(t.run.startedAt)}>
-                  {formatRelativeTime(t.run.startedAt)}
-                </span>
-              ) : (
-                <span className="text-neutral4">—</span>
-              )}
             </DataList.Cell>
 
             <DataList.Cell height="compact">
