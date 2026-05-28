@@ -64,7 +64,7 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 | `agents` | agents, pickers, defaults, model-policy                   |
 | `infra`  | infrastructure, channels, reconciliation                  |
 | `ui`     | ui                                                        |
-| `quick`  | workspace, skills, agents, stars, ui (skips long-running) |
+| `quick`  | workspace, skills, agents, favorites, ui (skips long-running) |
 
 `--scope` and `--test` can be combined; the union is run.
 
@@ -76,7 +76,7 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 
 # Specific sections
 /builder-smoke-test --test workspace,skills
-/builder-smoke-test --test agents,stars
+/builder-smoke-test --test agents,favorites
 /builder-smoke-test --test reconciliation
 /builder-smoke-test --test ui
 
