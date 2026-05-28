@@ -14,11 +14,17 @@ export interface ResolveCurrentOrgOptions {
   forcePrompt?: boolean;
 }
 
+function isInteractive(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
+}
+
 /**
  * Resolve the current org, auto-selecting if only one exists.
  * If multiple orgs exist and none is currently set, prompts the user.
  * Pass `{ forcePrompt: true }` to always prompt when there's more than one
- * org, even if a current org is persisted.
+ * org, even if a current org is persisted. In non-interactive environments,
+ * a persisted current org is reused and otherwise a clear setup error is
+ * thrown instead of starting a prompt that cannot be answered.
  */
 export async function resolveCurrentOrg(
   token: string,
@@ -43,9 +49,13 @@ export async function resolveCurrentOrg(
 
   const currentOrgId = await getCurrentOrgId();
 
-  if (!opts.forcePrompt && currentOrgId) {
+  if (currentOrgId && (!opts.forcePrompt || !isInteractive())) {
     const match = orgs.find(o => o.id === currentOrgId);
     if (match) return { orgId: match.id, orgName: match.name };
+  }
+
+  if (!isInteractive()) {
+    throw new Error('Multiple organizations found. Run `mastra auth orgs switch` interactively or set MASTRA_ORG_ID.');
   }
 
   const selected = await p.select({
