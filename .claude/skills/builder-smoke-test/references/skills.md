@@ -20,8 +20,8 @@ Test stored skill create, read, update, delete, visibility, publish, and filesys
 | `/stored/skills/:id`         | PATCH  | Update fields on a stored skill        |
 | `/stored/skills/:id`         | DELETE | Delete a stored skill                  |
 | `/stored/skills/:id/publish` | POST   | Publish a skill from a filesystem path |
-| `/stored/skills/:id/star`    | PUT    | Star (see `references/stars.md`)       |
-| `/stored/skills/:id/star`    | DELETE | Unstar (see `references/stars.md`)     |
+| `/stored/skills/:id/favorite`| PUT    | Favorite (see `references/favorites.md`)|
+| `/stored/skills/:id/favorite`| DELETE | Unfavorite (see `references/favorites.md`)|
 
 The full schema definitions live in `packages/server/src/server/schemas/stored-skills.ts`. Treat that file as the source of truth for request and response shapes.
 
@@ -83,7 +83,7 @@ cat /tmp/skill-patch.json | jq .
 - [ ] `name` reflects the updated value
 - [ ] `description` and `instructions` are unchanged
 
-If a partial PATCH (single-field body) returns a non-2xx, log the exact status and response body in the run report under "Inaccuracies in skill" or "Open product questions" — don't normalize the result.
+A single-field partial PATCH (e.g. `{"description": "…"}` alone) is supported and returns 200 with only that field changed. If a partial PATCH ever returns a non-2xx, log the exact status and body in the run report — that would be a regression.
 
 ### 5. Create a second skill
 
@@ -136,6 +136,8 @@ cat /tmp/publish.json | jq .
 
 - [ ] If the directory exists with a valid `SKILL.md`, returns 200 with a persisted record (note any new `activeVersionId`)
 - [ ] If the directory doesn't exist, log the actual status and message; do not assume a specific code
+
+> **Frontmatter is authoritative on publish.** Publish reads `SKILL.md` frontmatter and rewrites the stored record's `name` / `description` / `instructions` from disk. If you PATCHed those fields and then publish, the patched values are overwritten by whatever the frontmatter says. The body's `instructions` returned by a subsequent GET will also be frontmatter-stripped from the file contents (no `---` block).
 
 ### 8. Delete skills (cleanup)
 
