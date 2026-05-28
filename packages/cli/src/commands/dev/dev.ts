@@ -17,7 +17,7 @@ import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
 import { loadAndValidatePresets } from '../../utils/validate-presets.js';
 
-import { acquireDevLock, releaseDevLock } from './dev-lock';
+import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
@@ -480,6 +480,8 @@ export async function dev({
       }),
     );
   }
+
+  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
 
   let httpsOptions: HTTPSOptions | undefined = undefined;
 
