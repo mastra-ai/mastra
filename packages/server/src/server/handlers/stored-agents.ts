@@ -752,8 +752,8 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // deleting the prior latest version, leaving a single rolling snapshot.
       // When the user explicitly provides a changeMessage we treat that as a
       // commit and keep the new version as a discrete history entry.
-      const isCodeMode = mastra.getEditor?.()?.getMode?.() === 'code';
-      if (isCodeMode && autoVersionResult.versionCreated && !changeMessage) {
+      const isCodeSource = mastra.getEditor?.()?.getSource?.() === 'code';
+      if (isCodeSource && autoVersionResult.versionCreated && !changeMessage) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 2 });
         const previousVersion = versions[1];
         if (previousVersion) {

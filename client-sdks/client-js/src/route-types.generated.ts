@@ -133,9 +133,26 @@ export type GetAgents_Response = {
           [key: string]: any;
         }
       | undefined;
+    source?: ('code' | 'stored') | undefined;
     status?: ('draft' | 'published' | 'archived') | undefined;
     activeVersionId?: string | undefined;
     hasDraft?: boolean | undefined;
+    editor?:
+      | (
+          | false
+          | {
+              instructions?: boolean | undefined;
+              tools?:
+                | (
+                    | boolean
+                    | {
+                        description?: boolean | undefined;
+                      }
+                  )
+                | undefined;
+            }
+        )
+      | undefined;
   };
 };
 
@@ -322,9 +339,26 @@ export type GetAgentsAgentId_Response = {
         [key: string]: any;
       }
     | undefined;
+  source?: ('code' | 'stored') | undefined;
   status?: ('draft' | 'published' | 'archived') | undefined;
   activeVersionId?: string | undefined;
   hasDraft?: boolean | undefined;
+  editor?:
+    | (
+        | false
+        | {
+            instructions?: boolean | undefined;
+            tools?:
+              | (
+                  | boolean
+                  | {
+                      description?: boolean | undefined;
+                    }
+                )
+              | undefined;
+          }
+      )
+    | undefined;
 };
 
 export type GetAgentsAgentId_Request = Simplify<
@@ -75721,6 +75755,7 @@ export type GetSystemPackages_Response = {
   }[];
   isDev: boolean;
   cmsEnabled: boolean;
+  editorSource?: ('code' | 'db') | undefined;
   observabilityEnabled: boolean;
   storageType?: string | undefined;
   observabilityStorageType?: string | undefined;
