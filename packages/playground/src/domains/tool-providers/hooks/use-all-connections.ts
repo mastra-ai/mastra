@@ -1,0 +1,86 @@
+import { useMastraClient } from '@mastra/react';
+import { useQueries } from '@tanstack/react-query';
+import { useMemo } from 'react';
+
+import { useToolProviders } from './use-tool-providers';
+
+/**
+ * Stale time long enough to avoid refetching on every picker re-render but
+ * short enough that an OAuth completion in a sibling tab is reflected
+ * promptly (React Query also re-fetches on window focus by default).
+ */
+const STALE_TIME_MS = 30_000;
+
+/**
+ * Fans out across every registered ToolProvider and every toolkit it
+ * exposes to determine whether the caller has an existing connection for a
+ * given `(providerId, toolkit)` pair.
+ *
+ * Used by the Builder tool picker to gate integration tool rows: if the
+ * pair has no connection, the card cannot be selected and surfaces an
+ * inline "Connect" button instead.
+ *
+ * Distinct from `useExistingConnections` (per-pair, used by `/integrations`)
+ * to keep their query caches independent.
+ */
+export const useAllConnections = () => {
+  const client = useMastraClient();
+  const providersQuery = useToolProviders();
+  const providers = useMemo(() => providersQuery.data?.providers ?? [], [providersQuery.data?.providers]);
+
+  // 1. For every provider, list its toolkits.
+  const toolkitsQueries = useQueries({
+    queries: providers.map(provider => ({
+      queryKey: ['tool-integration-services', provider.id],
+      queryFn: () => client.getToolProvider(provider.id).listToolkits(),
+    })),
+  });
+
+  // 2. Flatten to (providerId, toolkit) pairs.
+  const pairs = useMemo(() => {
+    const out: Array<{ providerId: string; toolkit: string }> = [];
+    providers.forEach((provider, idx) => {
+      const toolkits = toolkitsQueries[idx]?.data?.data ?? [];
+      for (const toolkit of toolkits) {
+        out.push({ providerId: provider.id, toolkit: toolkit.slug });
+      }
+    });
+    return out;
+  }, [providers, toolkitsQueries]);
+
+  // 3. One listConnections call per pair.
+  const connectionsQueries = useQueries({
+    queries: pairs.map(pair => ({
+      queryKey: ['tool-integration-connections-all', pair.providerId, pair.toolkit],
+      queryFn: () => client.getToolProvider(pair.providerId).listConnections({ toolkit: pair.toolkit }),
+      staleTime: STALE_TIME_MS,
+    })),
+  });
+
+  const isLoading =
+    providersQuery.isLoading || toolkitsQueries.some(q => q.isLoading) || connectionsQueries.some(q => q.isLoading);
+
+  // Build a per-pair list of connection summaries so callers can both gate
+  // ("does this row have any connection?") and auto-pin ("if exactly one
+  // exists, write it into the form on toggle-on").
+  const connectionsByKey = useMemo(() => {
+    const map = new Map<string, Array<{ connectionId: string; label?: string | null }>>();
+    pairs.forEach((pair, idx) => {
+      const items = connectionsQueries[idx]?.data?.items ?? [];
+      map.set(`${pair.providerId}:${pair.toolkit}`, items);
+    });
+    return map;
+  }, [pairs, connectionsQueries]);
+
+  const hasConnection = useMemo(
+    () => (providerId: string, toolkit: string) => (connectionsByKey.get(`${providerId}:${toolkit}`)?.length ?? 0) > 0,
+    [connectionsByKey],
+  );
+
+  const getConnections = useMemo(
+    () => (providerId: string, toolkit: string) => connectionsByKey.get(`${providerId}:${toolkit}`) ?? [],
+    [connectionsByKey],
+  );
+
+  return { hasConnection, getConnections, isLoading };
+};

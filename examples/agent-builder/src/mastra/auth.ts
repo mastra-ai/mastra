@@ -29,6 +29,7 @@ export async function initWorkOS() {
         'stored-workspaces:*',
         'tools:read',
         'tools:execute',
+        'tool-providers:*',
         'workflows:read',
         'workflows:execute',
         'memory:read',
