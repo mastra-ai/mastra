@@ -22,6 +22,7 @@ import {
   FileCodeIcon,
   PanelRightIcon,
   TagIcon,
+  TargetIcon,
   XIcon,
 } from 'lucide-react';
 
@@ -56,6 +57,7 @@ export function ExperimentResultPanel({
   const hasError = Boolean(result?.error);
   const inputStr = formatValue(result?.input);
   const outputStr = formatValue(result?.output);
+  const groundTruthStr = formatValue(result?.groundTruth);
 
   return (
     <>
@@ -167,6 +169,7 @@ export function ExperimentResultPanel({
 
         <SideDialog.CodeSection title="Input" icon={<FileCodeIcon />} codeStr={inputStr} />
         <SideDialog.CodeSection title="Output" icon={<FileOutputIcon />} codeStr={outputStr} />
+        <SideDialog.CodeSection title="Ground Truth" icon={<TargetIcon />} codeStr={groundTruthStr} />
 
         <div className="grid gap-2">
           <h4 className="text-sm font-medium text-neutral5 flex items-center gap-2">

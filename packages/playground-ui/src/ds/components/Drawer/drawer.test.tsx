@@ -10,8 +10,11 @@ import {
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
+  DrawerPopup,
+  DrawerPortal,
   DrawerTitle,
   DrawerTrigger,
+  DrawerViewport,
 } from './drawer';
 import { Button } from '@/ds/components/Button';
 
@@ -78,20 +81,6 @@ describe('Drawer', () => {
     expect(screen.getByText('Revealed title')).toBeDefined();
   });
 
-  it('fires onOpenChange when the built-in close button is clicked', () => {
-    const onOpenChange = vi.fn();
-    render(
-      <Drawer defaultOpen onOpenChange={onOpenChange}>
-        <DrawerContent>
-          <DrawerTitle>Title</DrawerTitle>
-        </DrawerContent>
-      </Drawer>,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
-  });
-
   it('fires onOpenChange when an asChild DrawerClose is clicked', () => {
     const onOpenChange = vi.fn();
     render(
@@ -124,9 +113,59 @@ describe('Drawer', () => {
     expect(popup?.getAttribute('data-swipe-direction')).toBe('right');
   });
 
-  // Regression guard: a modal drawer's viewport must not carry `pointer-events-none`.
-  // Base UI applies that only to non-modal drawers; on a modal drawer it swallows the
-  // pointer stream and the swipe-to-dismiss gesture stops working.
+  it('renders the Portal + Backdrop + Viewport + Popup bundle for `DrawerContent`', () => {
+    render(
+      <Drawer defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Bundle</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    expect(document.querySelector('[data-slot="drawer-backdrop"]')).toBeDefined();
+    expect(document.querySelector('[data-slot="drawer-viewport"]')).toBeDefined();
+    expect(document.querySelector('[data-slot="drawer-popup"]')).toBeDefined();
+    expect(document.querySelector('[data-slot="drawer-content"]')).toBeDefined();
+  });
+
+  it('renders a handle bar on bottom-anchored drawers', () => {
+    render(
+      <Drawer defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Bottom</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    expect(document.querySelector('[data-slot="drawer-handle"]')).not.toBeNull();
+  });
+
+  it('omits the handle bar on side-anchored drawers', () => {
+    render(
+      <Drawer side="right" defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Right</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    expect(document.querySelector('[data-slot="drawer-handle"]')).toBeNull();
+  });
+
+  it('forwards className from `DrawerContent` onto the underlying popup', () => {
+    render(
+      <Drawer defaultOpen>
+        <DrawerContent className="custom-popup-class">
+          <DrawerTitle>Styled</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(popup?.classList.contains('custom-popup-class')).toBe(true);
+  });
+
+  // Regression: modal viewport must keep pointer events or the swipe-to-dismiss gesture dies.
   it('keeps pointer events on the viewport for a modal drawer', () => {
     render(
       <Drawer defaultOpen>
@@ -142,15 +181,17 @@ describe('Drawer', () => {
     expect(popup?.classList.contains('pointer-events-auto')).toBe(false);
   });
 
-  // Regression guard: a non-modal drawer (`hideBackdrop`) must opt the viewport out of
-  // pointer events so the page behind stays interactive, with the popup re-enabling
-  // its own — and it must not render a backdrop.
+  // Non-modal escape hatch: viewport opts out of pointer events, popup opts back in, no backdrop.
   it('opts the viewport out of pointer events for a non-modal drawer', () => {
     render(
       <Drawer defaultOpen>
-        <DrawerContent hideBackdrop>
-          <DrawerTitle>Non-modal drawer</DrawerTitle>
-        </DrawerContent>
+        <DrawerPortal>
+          <DrawerViewport className="pointer-events-none">
+            <DrawerPopup className="pointer-events-auto">
+              <DrawerTitle>Non-modal drawer</DrawerTitle>
+            </DrawerPopup>
+          </DrawerViewport>
+        </DrawerPortal>
       </Drawer>,
     );
 

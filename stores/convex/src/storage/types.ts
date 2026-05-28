@@ -48,6 +48,22 @@ export type StorageRequest =
       ids: string[];
     }
   | {
+      op: 'mergeWorkflowStepResult';
+      tableName: TABLE_NAMES | string;
+      workflowName: string;
+      runId: string;
+      stepId: string;
+      result: string;
+      requestContext: string;
+    }
+  | {
+      op: 'mergeWorkflowState';
+      tableName: TABLE_NAMES | string;
+      workflowName: string;
+      runId: string;
+      opts: string;
+    }
+  | {
       op: 'createSchedule';
       tableName: TABLE_NAMES | string;
       record: Record<string, any>;
