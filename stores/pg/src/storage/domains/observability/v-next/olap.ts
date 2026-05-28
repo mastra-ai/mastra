@@ -16,7 +16,8 @@
  * accessed with `jsonb ->>`.
  */
 
-import type { AggregationInterval, AggregationType } from '@mastra/core/storage';
+import { METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
+import type { AggregationInterval, AggregationType, MetricDistinctColumn } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
 import type { FilterAccumulator } from './filters';
@@ -60,6 +61,31 @@ export function bucketSql(column: string, interval: AggregationInterval): string
   // The result is a timestamptz at UTC, which we render via the standard
   // pg driver (Date object) and pass straight back to clients.
   return `to_timestamp(floor(extract(epoch from ${column}) / ${seconds}) * ${seconds})`;
+}
+
+function resolveDistinctColumnSql(distinctColumn: MetricDistinctColumn | undefined): string {
+  if (!distinctColumn) {
+    throw new Error(`count_distinct aggregation requires a 'distinctColumn' argument`);
+  }
+  // Defense-in-depth: the schema enum already restricts this, but the value
+  // flows into raw SQL so we re-check against the system-level allowlist.
+  if (!(METRIC_DISTINCT_COLUMNS as readonly string[]).includes(distinctColumn)) {
+    throw new Error(`Invalid distinctColumn: ${distinctColumn}`);
+  }
+  return `"${parseFieldKey(distinctColumn)}"`;
+}
+
+/** SQL aggregate for metric queries, including metric-specific distinct counts. */
+export function metricAggregationSql(
+  agg: AggregationType,
+  measure: string,
+  timestampColumn = 'timestamp',
+  distinctColumn?: MetricDistinctColumn,
+): string {
+  if (agg === 'count_distinct') {
+    return `COUNT(DISTINCT ${resolveDistinctColumnSql(distinctColumn)})::double precision`;
+  }
+  return aggregationSql(agg, measure, timestampColumn);
 }
 
 /** SQL aggregate for the standard agg types over a numeric column. */

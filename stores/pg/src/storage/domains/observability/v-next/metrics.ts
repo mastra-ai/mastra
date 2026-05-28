@@ -30,7 +30,6 @@ import { applyCommonFilters, applySingleOrArrayFilter, newFilterAccumulator, whe
 import { metricRecordToRow, rowToMetricRecord } from './helpers';
 import { listSignalDelta, listSignalPage } from './listing';
 import {
-  aggregationSql,
   bucketDate,
   bucketSql,
   changePercent,
@@ -39,6 +38,7 @@ import {
   COST_SUMMARY_SELECT,
   costSummaryFromRow,
   dimensionsFromRow,
+  metricAggregationSql,
   percentileSelectSql,
   percentileSeriesFromRows,
   pushLabelExclusions,
@@ -168,6 +168,7 @@ async function runMetricAggregateQuery(
   filters: Record<string, any> | undefined,
   names: readonly string[],
   aggregation: GetMetricAggregateArgs['aggregation'],
+  distinctColumn: GetMetricAggregateArgs['distinctColumn'],
 ): Promise<{ value: number | null; cost: ReturnType<typeof costSummaryFromRow> }> {
   const acc = newFilterAccumulator();
   pushMetricNameFilter(acc, names);
@@ -175,7 +176,7 @@ async function runMetricAggregateQuery(
   const where = whereOrEmpty(acc);
 
   const sql = `
-    SELECT ${aggregationSql(aggregation, '"value"')} AS "value",
+    SELECT ${metricAggregationSql(aggregation, '"value"', 'timestamp', distinctColumn)} AS "value",
            ${COST_SUMMARY_SELECT}
     FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}
     ${where}
@@ -192,13 +193,27 @@ export async function getMetricAggregate(
   schema: string,
   args: GetMetricAggregateArgs,
 ): Promise<GetMetricAggregateResponse> {
-  const { value, cost } = await runMetricAggregateQuery(client, schema, args.filters, args.name, args.aggregation);
+  const { value, cost } = await runMetricAggregateQuery(
+    client,
+    schema,
+    args.filters,
+    args.name,
+    args.aggregation,
+    args.distinctColumn,
+  );
 
   if (args.comparePeriod && args.filters?.timestamp) {
     const prevRange = shiftRange(args.filters.timestamp, args.comparePeriod);
     if (prevRange) {
       const prevFilters = { ...(args.filters ?? {}), timestamp: prevRange };
-      const prev = await runMetricAggregateQuery(client, schema, prevFilters, args.name, args.aggregation);
+      const prev = await runMetricAggregateQuery(
+        client,
+        schema,
+        prevFilters,
+        args.name,
+        args.aggregation,
+        args.distinctColumn,
+      );
       return {
         value,
         estimatedCost: cost.estimatedCost,
@@ -235,15 +250,19 @@ export async function getMetricBreakdown(
   pushMetricNameFilter(acc, args.name);
   applyMetricFilters(acc, args.filters);
   pushLabelExclusions(acc, resolved);
+  const orderDirection = args.orderDirection === 'ASC' ? 'ASC' : 'DESC';
+  const limitClause = args.limit == null ? '' : `LIMIT $${acc.next++}`;
+  if (args.limit != null) acc.params.push(args.limit);
 
   const sql = `
     SELECT ${resolved.map(e => e.selectSql).join(', ')},
-           ${aggregationSql(args.aggregation, '"value"')} AS "value",
+           ${metricAggregationSql(args.aggregation, '"value"', 'timestamp', args.distinctColumn)} AS "value",
            ${COST_SUMMARY_SELECT}
     FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}
     ${whereOrEmpty(acc)}
     GROUP BY ${resolved.map(e => e.alias).join(', ')}
-    ORDER BY "value" DESC NULLS LAST
+    ORDER BY "value" ${orderDirection} NULLS LAST
+    ${limitClause}
   `;
 
   const rows = await client.manyOrNone<Record<string, unknown>>(sql, acc.params);
@@ -286,7 +305,7 @@ export async function getMetricTimeSeries(
     const sql = `
       SELECT ${bucket} AS bucket,
              ${resolved.map(e => e.selectSql).join(', ')},
-             ${aggregationSql(args.aggregation, '"value"')} AS "value",
+             ${metricAggregationSql(args.aggregation, '"value"', 'timestamp', args.distinctColumn)} AS "value",
              ${COST_SUMMARY_SELECT}
       FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}
       ${whereOrEmpty(acc)}
@@ -329,7 +348,7 @@ export async function getMetricTimeSeries(
 
   const sql = `
     SELECT ${bucket} AS bucket,
-           ${aggregationSql(args.aggregation, '"value"')} AS "value",
+           ${metricAggregationSql(args.aggregation, '"value"', 'timestamp', args.distinctColumn)} AS "value",
            ${COST_SUMMARY_SELECT}
     FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}
     ${whereOrEmpty(acc)}

@@ -2161,6 +2161,16 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.costUnit).toBe('usd');
       });
 
+      it('getMetricAggregate returns count_distinct for the requested dimension', async () => {
+        const result = await storage.getMetricAggregate({
+          name: ['mastra_agent_duration_ms'],
+          aggregation: 'count_distinct',
+          distinctColumn: 'entityName',
+        });
+
+        expect(result.value).toBe(2);
+      });
+
       it('listMetrics returns paginated metric records with shared filters', async () => {
         const result = await storage.listMetrics({
           filters: {
@@ -2200,6 +2210,20 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(code!.value).toBe(500);
         expect(code!.estimatedCost).toBeCloseTo(0.5);
         expect(code!.costUnit).toBe('usd');
+      });
+
+      it('getMetricBreakdown honors limit and ascending order direction', async () => {
+        const result = await storage.getMetricBreakdown({
+          name: ['mastra_agent_duration_ms'],
+          groupBy: ['entityName'],
+          aggregation: 'sum',
+          orderDirection: 'ASC',
+          limit: 1,
+        });
+
+        expect(result.groups).toHaveLength(1);
+        expect(result.groups[0]!.dimensions.entityName).toBe('weatherAgent');
+        expect(result.groups[0]!.value).toBe(300);
       });
 
       it('getMetricBreakdown groups by label keys', async () => {

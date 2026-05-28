@@ -97,6 +97,7 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ObservabilityStorageStrategy,
+  ScoreRecord,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
@@ -360,7 +361,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     return this.#run('LIST_SCORES', () => scoresOps.listScores(this.#client, this.#schema, args));
   }
 
-  override async getScoreById(scoreId: string) {
+  override async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     return this.#run('GET_SCORE_BY_ID', () => scoresOps.getScoreById(this.#client, this.#schema, scoreId), {
       scoreId,
     });
