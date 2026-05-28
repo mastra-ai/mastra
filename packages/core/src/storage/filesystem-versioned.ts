@@ -368,7 +368,13 @@ export class FilesystemVersionedHelpers<
 
     for (const commit of orderedPerEntity) {
       const snapshotConfig = await git.getFileAtCommit<Record<string, unknown>>(dir, commit.hash, filename);
-      if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
+      if (!snapshotConfig || typeof snapshotConfig !== 'object') {
+        // The file did not exist at this commit (e.g. it was deleted). Reset the
+        // dedupe baseline so a later restore with identical content is still
+        // recorded as a distinct version rather than skipped.
+        previousSnapshotForEntity = undefined;
+        continue;
+      }
 
       // The per-entity file IS the snapshot, so flatten one level
       // compared to the shared-file branch.
@@ -422,7 +428,10 @@ export class FilesystemVersionedHelpers<
           : snapshotConfig;
         perEntityData.set(entityId, stableSortKeys(filtered) as Record<string, unknown>);
       } else {
-        diskData[entityId] = snapshotConfig;
+        // Sort keys here too so shared-file domains get deterministic ordering.
+        // The shared git-history path dedupes with JSON.stringify, so without
+        // stable ordering a reorder-only write could surface as a fake version.
+        diskData[entityId] = stableSortKeys(snapshotConfig) as Record<string, unknown>;
       }
     }
 
@@ -648,24 +657,15 @@ export class FilesystemVersionedHelpers<
     const perPage = normalizePerPage(perPageInput, 20);
     if (page < 0) throw new Error('page must be >= 0');
 
-    let versions = Array.from(this.versions.values()).filter(
-      v => (v as Record<string, unknown>)[this.parentIdField] === entityId,
-    );
-
     // Lazily discover per-entity files that were deleted on disk but still
     // exist in git history. The bulk git-history pass only walks entities that
     // are currently on disk or in memory, so a deleted-then-requested entity
     // would otherwise surface no versions.
-    if (versions.length === 0 && this.perEntityFilesDir && entityId) {
-      const startCount = this.gitVersionCounts.get(entityId) ?? 0;
-      const newCount = await this.loadPerEntityGitHistory(entityId, startCount);
-      if (newCount > startCount) {
-        this.gitVersionCounts.set(entityId, newCount);
-        versions = Array.from(this.versions.values()).filter(
-          v => (v as Record<string, unknown>)[this.parentIdField] === entityId,
-        );
-      }
-    }
+    await this.ensurePerEntityGitHistory(entityId);
+
+    const versions = Array.from(this.versions.values()).filter(
+      v => (v as Record<string, unknown>)[this.parentIdField] === entityId,
+    );
 
     // Sort
     const field = (orderBy?.field as string) ?? 'versionNumber';
@@ -716,8 +716,30 @@ export class FilesystemVersionedHelpers<
     return count;
   }
 
+  /**
+   * Lazily discover per-entity git history for an entity that was deleted on
+   * disk but still exists in git commits. The bulk git-history pass only walks
+   * entities currently on disk or in memory, so without this an entity that has
+   * no in-memory versions would surface no git versions (and `gitVersionCounts`
+   * would stay 0, letting a recreated entity collide with git version numbers).
+   */
+  private async ensurePerEntityGitHistory(entityId: string): Promise<void> {
+    if (!this.perEntityFilesDir || !entityId) return;
+    const hasVersions = Array.from(this.versions.values()).some(
+      v => (v as Record<string, unknown>)[this.parentIdField] === entityId,
+    );
+    if (hasVersions) return;
+
+    const startCount = this.gitVersionCounts.get(entityId) ?? 0;
+    const newCount = await this.loadPerEntityGitHistory(entityId, startCount);
+    if (newCount > startCount) {
+      this.gitVersionCounts.set(entityId, newCount);
+    }
+  }
+
   async getNextVersionNumber(entityId: string): Promise<number> {
     await this.ensureGitHistory();
+    await this.ensurePerEntityGitHistory(entityId);
     return this._getNextVersionNumber(entityId);
   }
 

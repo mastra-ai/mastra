@@ -463,6 +463,42 @@ describe('FilesystemVersionedHelpers - Git integration', () => {
     expect(versions[1]!.id.startsWith('git-')).toBe(true);
   });
 
+  it('getNextVersionNumber accounts for git-only versions of a deleted-on-disk entity', async () => {
+    // A recreated entity must not be assigned a version number that collides
+    // with the git history that getNextVersionNumber would otherwise miss.
+    mkdirSync(join(storageDir, 'agents'), { recursive: true });
+    writeAndCommit(storageDir, 'agents.json', {}, 'Seed shared file');
+    writeAndCommit(
+      storageDir,
+      'agents/ghost-agent.json',
+      { name: 'Ghost v1', instructions: 'Be spooky' },
+      'Add ghost-agent',
+    );
+    writeAndCommit(
+      storageDir,
+      'agents/ghost-agent.json',
+      { name: 'Ghost v2', instructions: 'Be very spooky' },
+      'Update ghost-agent',
+    );
+    git(repoDir, ['rm', join('.mastra-storage', 'agents', 'ghost-agent.json')]);
+    git(repoDir, ['commit', '-m', 'Delete ghost-agent']);
+
+    const db = new FilesystemDB(storageDir);
+    const helpers = new FilesystemVersionedHelpers<StorageAgentType, AgentVersion>({
+      db,
+      entitiesFile: 'agents.json',
+      parentIdField: 'agentId',
+      name: 'TestAgents',
+      versionMetadataFields: ['id', 'agentId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt'],
+      perEntityFilesDir: 'agents',
+      shouldPersistToPerEntityFile: () => true,
+    });
+
+    // 2 git versions exist for the deleted entity, so the next number is 3 —
+    // not 1, which would collide with the lazily discovered git versions.
+    expect(await helpers.getNextVersionNumber('ghost-agent')).toBe(3);
+  });
+
   it('dangerouslyClearAll removes per-entity files', async () => {
     mkdirSync(join(storageDir, 'agents'), { recursive: true });
     writeFileSync(join(storageDir, 'agents', 'agent-1.json'), JSON.stringify({ name: 'Agent 1' }, null, 2));
