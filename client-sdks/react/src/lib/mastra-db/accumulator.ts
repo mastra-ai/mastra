@@ -368,6 +368,24 @@ const makeToolInvocationPart = (invocation: MastraToolInvocation): MastraToolInv
   toolInvocation: invocation,
 });
 
+/**
+ * Narrow the chunk to the template-literal passthrough variants from
+ * `NetworkChunkType`. Encoded as a type guard so the surrounding `switch`
+ * statement can stay exhaustive over the remaining string-literal cases.
+ */
+const isTemplateLiteralPassthrough = <T extends { type: string }>(
+  chunk: T,
+): chunk is T & { type: `agent-execution-event-${string}` | `workflow-execution-event-${string}` } =>
+  chunk.type.startsWith('agent-execution-event-') || chunk.type.startsWith('workflow-execution-event-');
+
+/**
+ * Narrow the chunk to the `data-${string}` family. Used so the trailing
+ * exhaustiveness check can prove the switch covers every remaining variant.
+ */
+const isDataChunk = <T extends { type: string }>(
+  chunk: T,
+): chunk is T & { type: `data-${string}` } => chunk.type.startsWith('data-');
+
 export interface AccumulateChunkArgs {
   chunk: ChunkType;
   conversation: MastraDBMessage[];
@@ -383,8 +401,18 @@ export interface AccumulateChunkArgs {
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
   const result = [...conversation];
 
+  // ----- Template-literal passthrough chunk types from NetworkChunkType -----
+  // `agent-execution-event-*` and `workflow-execution-event-*` carry nested
+  // events that are surfaced through other mechanisms (e.g. tool-output
+  // routing); at the top-level DB accumulator they are no-ops. The narrow is
+  // expressed as a function so the remaining switch can be exhaustive over
+  // the literal-typed variants.
+  if (isTemplateLiteralPassthrough(chunk)) {
+    return result;
+  }
+
   // ----- Custom `data-*` chunks (including signal-echo) -----
-  if (chunk.type.startsWith('data-')) {
+  if (isDataChunk(chunk)) {
     if (chunk.type === 'data-user-message' && 'data' in chunk && (chunk as any).data?.type === 'user-message') {
       const signalId = (chunk as any).data.id;
       if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
@@ -552,6 +580,13 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return replaceLast(result, withParts(lastMessage, parts));
     }
 
+    case 'text-end': {
+      // Lifecycle marker only. Streaming text parts stay in `state: 'streaming'`
+      // and are finalized by `finish` / `abort` via `finishStreamingAssistantMessage`.
+      // Returned as-is so the chunk-to-DB mapping stays total.
+      return result;
+    }
+
     case 'reasoning-start': {
       const lastMessage = result[result.length - 1];
       const newReasoningPart: MastraReasoningPart = {
@@ -642,6 +677,58 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return replaceLast(result, withParts(lastMessage, parts));
     }
 
+    case 'reasoning-signature': {
+      // Merge the signature provider metadata into the most recent reasoning part
+      // (streaming or done). Mirrors historical AI-SDK behavior where the
+      // signature payload becomes part of the reasoning part's providerMetadata.
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      const parts = [...lastMessage.content.parts];
+      const reasoningIndex = parts.findLastIndex(part => part.type === 'reasoning');
+      if (reasoningIndex === -1) return result;
+
+      const reasoningPart = parts[reasoningIndex] as unknown as MastraReasoningPart;
+      const existingMeta = reasoningPart.providerMetadata;
+      const sigMeta = chunk.payload.providerMetadata;
+
+      parts[reasoningIndex] = {
+        ...reasoningPart,
+        ...(existingMeta || sigMeta
+          ? { providerMetadata: { ...(existingMeta ?? {}), ...(sigMeta ?? {}) } }
+          : {}),
+      } as unknown as MastraMessagePart;
+
+      return replaceLast(result, withParts(lastMessage, parts));
+    }
+
+    case 'redacted-reasoning': {
+      // Emit a done reasoning part flagged as redacted. The provider redacted
+      // the content; the placeholder preserves the slot in the parts array.
+      const lastMessage = result[result.length - 1];
+      const redactedPart: MastraReasoningPart = {
+        type: 'reasoning',
+        reasoning: (chunk.payload as any).data ?? '',
+        state: 'done',
+        redacted: true,
+        providerMetadata: (chunk.payload as any).providerMetadata,
+      };
+
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        return appendAssistantMessage(
+          result,
+          `redacted-reasoning-${chunk.runId + Date.now()}`,
+          [redactedPart as unknown as MastraMessagePart],
+          metadata,
+        );
+      }
+
+      return replaceLast(
+        result,
+        withParts(lastMessage, [...lastMessage.content.parts, redactedPart as unknown as MastraMessagePart]),
+      );
+    }
+
     case 'tool-call': {
       const lastMessage = result[result.length - 1];
       const invocation: MastraToolInvocation = {
@@ -660,6 +747,101 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       }
 
       return replaceLast(result, withParts(lastMessage, [...lastMessage.content.parts, newPart]));
+    }
+
+    case 'tool-call-input-streaming-start': {
+      // Create a placeholder tool-invocation part in `partial-call` state with an
+      // empty args buffer; subsequent `tool-call-delta` chunks append JSON
+      // fragments to `argsText` and `tool-call-input-streaming-end` parses them.
+      const lastMessage = result[result.length - 1];
+      const invocation: MastraToolInvocation = {
+        state: 'partial-call',
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        args: {},
+      };
+      const newPart: MastraToolInvocationPart & { argsText?: string } = {
+        ...makeToolInvocationPart(invocation),
+        argsText: '',
+      };
+
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        return appendAssistantMessage(
+          result,
+          `tool-call-streaming-${chunk.runId + Date.now()}`,
+          [newPart as MastraMessagePart],
+          metadata,
+        );
+      }
+
+      return replaceLast(
+        result,
+        withParts(lastMessage, [...lastMessage.content.parts, newPart as MastraMessagePart]),
+      );
+    }
+
+    case 'tool-call-delta': {
+      // Append the streamed JSON fragment onto the matching tool invocation's
+      // `argsText` buffer. Keep `args` empty/parsed-so-far until the end chunk.
+      const location = locateToolPart(result, chunk.payload.toolCallId, false);
+      if (!location || location.toolPartIndex < 0) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = parts[toolPartIndex] as MastraToolInvocationPart & { argsText?: string };
+      if (!isToolPart(toolPart)) return result;
+
+      const nextArgsText = (toolPart.argsText ?? '') + ((chunk.payload as any).argsTextDelta ?? '');
+      parts[toolPartIndex] = {
+        ...toolPart,
+        argsText: nextArgsText,
+        toolInvocation: {
+          ...toolPart.toolInvocation,
+          state: 'partial-call',
+        } as MastraToolInvocation,
+      } as MastraMessagePart;
+
+      return replaceAt(result, messageIndex, withParts(targetMessage, parts));
+    }
+
+    case 'tool-call-input-streaming-end': {
+      // Finalize the streaming args: parse `argsText` and transition to `call`.
+      // If parsing fails, keep `args: {}` so downstream consumers stay safe.
+      const location = locateToolPart(result, chunk.payload.toolCallId, false);
+      if (!location || location.toolPartIndex < 0) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = parts[toolPartIndex] as MastraToolInvocationPart & { argsText?: string };
+      if (!isToolPart(toolPart)) return result;
+
+      let parsedArgs: Record<string, unknown> = {};
+      const argsText = toolPart.argsText;
+      if (typeof argsText === 'string' && argsText.length > 0) {
+        try {
+          const maybe = JSON.parse(argsText);
+          if (maybe && typeof maybe === 'object' && !Array.isArray(maybe)) {
+            parsedArgs = maybe as Record<string, unknown>;
+          }
+        } catch {
+          parsedArgs = {};
+        }
+      }
+
+      parts[toolPartIndex] = {
+        ...toolPart,
+        toolInvocation: {
+          ...toolPart.toolInvocation,
+          state: 'call',
+          args: parsedArgs,
+        } as MastraToolInvocation,
+      } as MastraMessagePart;
+
+      return replaceAt(result, messageIndex, withParts(targetMessage, parts));
     }
 
     case 'tool-error':
@@ -1025,10 +1207,81 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return [...result, newMessage];
     }
 
-    default:
+    // ----- Lifecycle / step / framing chunks (not surfaced on DB messages) -----
+    case 'step-start':
+    case 'step-finish':
+    case 'step-output':
+    case 'raw':
+    case 'watch':
+    case 'response-metadata':
       return result;
+
+    // ----- Object chunks (object/object-result are not stored on DB messages) -----
+    case 'object':
+    case 'object-result':
+      return result;
+
+    // ----- Background-task lifecycle markers not folded into messages -----
+    case 'background-task-started':
+    case 'background-task-cancelled':
+    case 'background-task-resumed':
+      return result;
+
+    // ----- Workflow lifecycle passthroughs (handled by mapWorkflowStreamChunkToWatchResult inside tool-output) -----
+    case 'workflow-start':
+    case 'workflow-finish':
+    case 'workflow-canceled':
+    case 'workflow-paused':
+    case 'workflow-step-start':
+    case 'workflow-step-finish':
+    case 'workflow-step-suspended':
+    case 'workflow-step-waiting':
+    case 'workflow-step-output':
+    case 'workflow-step-progress':
+    case 'workflow-step-result':
+      return result;
+
+    // ----- Nested-execution / routing / network passthroughs -----
+    case 'agent-execution-start':
+    case 'agent-execution-approval':
+    case 'agent-execution-suspended':
+    case 'agent-execution-end':
+    case 'agent-execution-abort':
+    case 'tool-execution-start':
+    case 'tool-execution-end':
+    case 'tool-execution-approval':
+    case 'tool-execution-suspended':
+    case 'tool-execution-abort':
+    case 'routing-agent-start':
+    case 'routing-agent-text-delta':
+    case 'routing-agent-text-start':
+    case 'routing-agent-end':
+    case 'routing-agent-abort':
+    case 'workflow-execution-start':
+    case 'workflow-execution-end':
+    case 'workflow-execution-suspended':
+    case 'workflow-execution-abort':
+    case 'network-execution-event-step-finish':
+    case 'network-execution-event-finish':
+    case 'network-validation-start':
+    case 'network-validation-end':
+    case 'network-object':
+    case 'network-object-result':
+      return result;
+
+    default:
+      // Exhaustiveness check: any new `ChunkType` variant must be added above.
+      return assertExhaustive(chunk, result);
   }
 };
+
+/**
+ * Compile-time exhaustiveness helper. At runtime, returns the conversation
+ * unchanged so unexpected chunk variants never throw inside the React stream
+ * pump; TypeScript will fail to compile if `ChunkType` ever grows a new branch
+ * that isn't enumerated above.
+ */
+const assertExhaustive = (_chunk: never, fallback: MastraDBMessage[]): MastraDBMessage[] => fallback;
 
 // ----- Nested agent-chunk accumulation (mirrors `toUIMessageFromAgent`) -----
 

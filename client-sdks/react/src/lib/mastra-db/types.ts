@@ -103,14 +103,26 @@ export type MastraTextPart = {
 
 /**
  * Mastra-extended reasoning part with per-stream identifier and streaming state.
+ * `redacted: true` indicates the upstream provider redacted the reasoning content.
  */
 export type MastraReasoningPart = {
   type: 'reasoning';
   reasoning: string;
   reasoningId?: string;
   state?: 'streaming' | 'done';
+  redacted?: boolean;
   providerMetadata?: MastraProviderMetadata;
   createdAt?: number;
+};
+
+/**
+ * Streaming buffer attached to a tool-invocation part while `tool-call-delta`
+ * fragments arrive. The accumulator concatenates JSON chunks into `argsText`
+ * and parses them on `tool-call-input-streaming-end`. Stored alongside the
+ * canonical `args` so the persisted shape still satisfies `MastraDBMessage`.
+ */
+export type StreamingToolInvocationExtension = {
+  argsText?: string;
 };
 
 /**
