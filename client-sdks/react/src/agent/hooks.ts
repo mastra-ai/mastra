@@ -504,44 +504,62 @@ export const useChat = ({
     }
 
     const resolvedSignalId = signalId ?? uuid();
-    onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
+    const messageContents = getSignalContents(coreUserMessages);
+    const streamOptions = {
+      maxSteps,
+      modelSettings: {
+        frequencyPenalty,
+        presencePenalty,
+        maxRetries,
+        maxOutputTokens: maxTokens,
+        temperature,
+        topK,
+        topP,
+      },
+      instructions,
+      requestContext: resolvedRequestContext,
+      providerOptions: providerOptions as any,
+      requireToolApproval,
+      tracingOptions,
+    };
 
     try {
-      await agent.sendSignal({
-        signal: {
-          id: resolvedSignalId,
-          type: 'user-message',
-          contents: getSignalContents(coreUserMessages),
-        },
+      const result = await agent.sendMessage({
+        message: messageContents,
         resourceId: resourceId || agentId,
         threadId,
-        ifIdle: {
-          streamOptions: {
-            maxSteps,
-            modelSettings: {
-              frequencyPenalty,
-              presencePenalty,
-              maxRetries,
-              maxOutputTokens: maxTokens,
-              temperature,
-              topK,
-              topP,
-            },
-            instructions,
-            requestContext: resolvedRequestContext,
-            providerOptions: providerOptions as any,
-            requireToolApproval,
-            tracingOptions,
-          },
-        },
+        ifIdle: { streamOptions },
       });
+      const echoedSignalId =
+        result.signal && typeof result.signal === 'object' && 'id' in result.signal && typeof result.signal.id === 'string'
+          ? result.signal.id
+          : resolvedSignalId;
+      onSignalSent?.(echoedSignalId, getSignalPreview(coreUserMessages));
     } catch (error) {
-      onSignalEcho?.(resolvedSignalId);
       if (isThreadSignalUnsupportedError(error)) {
-        markThreadSignalsUnsupported();
-        setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToUIMessage)] as MastraUIMessage[]);
-        await streamWithLegacyRoute();
-        return;
+        onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
+        try {
+          await agent.sendSignal({
+            signal: {
+              id: resolvedSignalId,
+              type: 'user-message',
+              contents: messageContents,
+            },
+            resourceId: resourceId || agentId,
+            threadId,
+            ifIdle: { streamOptions },
+          });
+          return;
+        } catch (signalError) {
+          onSignalEcho?.(resolvedSignalId);
+          if (isThreadSignalUnsupportedError(signalError)) {
+            markThreadSignalsUnsupported();
+            setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToUIMessage)] as MastraUIMessage[]);
+            await streamWithLegacyRoute();
+            return;
+          }
+          throw signalError;
+        }
       }
       throw error;
     }

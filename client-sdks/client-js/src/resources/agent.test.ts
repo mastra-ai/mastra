@@ -5,7 +5,13 @@ import { z } from 'zod/v3';
 
 import { MastraClient } from '../client';
 import type { Body } from '../route-types.generated';
-import type { ClientOptions, SendAgentSignalParams, SubscribeAgentThreadParams } from '../types';
+import type {
+  ClientOptions,
+  QueueAgentMessageParams,
+  SendAgentMessageParams,
+  SendAgentSignalParams,
+  SubscribeAgentThreadParams,
+} from '../types';
 import { processClientTools } from '../utils/process-client-tools';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { Agent } from './agent';
@@ -33,6 +39,75 @@ describe('Agent signal routes', () => {
       'x-mastra-client-type': 'js',
     },
   };
+
+  it('sends messages to the send-message route with string payloads unchanged', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      message: 'hello',
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } satisfies SendAgentMessageParams;
+    const routeBody: Body<'POST /agents/:agentId/send-message'> = params;
+
+    await agent.sendMessage(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-message', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('sends messages to the send-message route with object payloads unchanged', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      message: {
+        contents: 'hello',
+        attributes: { source: 'test' },
+        metadata: { client: 'sdk' },
+        providerOptions: { mastra: { channel: 'web' } },
+      },
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } satisfies SendAgentMessageParams;
+    const routeBody: Body<'POST /agents/:agentId/send-message'> = params;
+
+    await agent.sendMessage(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-message', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('queues messages to the queue-message route with parts payloads unchanged', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'queued-run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      message: [
+        { type: 'text', text: 'describe this' },
+        { type: 'file', data: 'file-data', mediaType: 'text/plain' },
+      ],
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      ifIdle: { streamOptions: { maxSteps: 3 } },
+    } satisfies QueueAgentMessageParams;
+    const routeBody: Body<'POST /agents/:agentId/queue-message'> = params;
+
+    await agent.queueMessage(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-message', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
 
   it('sends run-targeted signals with active behavior unchanged', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');

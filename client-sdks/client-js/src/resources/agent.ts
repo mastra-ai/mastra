@@ -40,7 +40,9 @@ import type {
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
+  SendAgentMessageParams,
   SendAgentSignalParams,
+  QueueAgentMessageParams,
   SubscribeAgentThreadParams,
   ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
@@ -397,6 +399,26 @@ export class Agent extends BaseResource {
     return this.request(`/agents/${this.agentId}/instructions/enhance`, {
       method: 'POST',
       body: { instructions, comment },
+    });
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  sendMessage(params: SendAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+    return this.request(`/agents/${this.agentId}/send-message`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  queueMessage(params: QueueAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+    return this.request(`/agents/${this.agentId}/queue-message`, {
+      method: 'POST',
+      body: params,
     });
   }
 
