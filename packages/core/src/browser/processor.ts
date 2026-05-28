@@ -20,7 +20,13 @@
  */
 
 import type { MastraDBMessage } from '../agent/message-list';
-import type { ProcessInputArgs, ProcessInputResult, ProcessInputStepArgs } from '../processors/index';
+import type {
+  ComputeStateSignalArgs,
+  ComputeStateSignalResult,
+  ProcessInputArgs,
+  ProcessInputResult,
+  ProcessInputStepArgs,
+} from '../processors/index';
 
 const REMINDER_TYPE = 'browser-context';
 
@@ -46,6 +52,15 @@ export interface BrowserContext {
 
   /** Current page title (updated per-request) */
   pageTitle?: string;
+
+  /** Whether the browser is currently open/connected. Defaults to true when browser context is present. */
+  isOpen?: boolean;
+
+  /** Number of currently open tabs, when available. */
+  tabCount?: number;
+
+  /** Additional active page metadata exposed by the browser provider. */
+  pageMetadata?: Record<string, string | number | boolean | null | undefined>;
 
   /**
    * CDP WebSocket URL for CLI providers.
@@ -127,6 +142,99 @@ export class BrowserContextProcessor {
 
     return args.messageList;
   }
+
+  computeStateSignal(args: ComputeStateSignalArgs): ComputeStateSignalResult {
+    const ctx = args.requestContext?.get('browser') as BrowserContext | undefined;
+    if (!ctx) return;
+
+    const browserState = getBrowserState(ctx);
+    const previousState = getMostRecentBrowserState(args.activeStateSignals);
+    const changed = getChangedBrowserState(previousState, browserState);
+    if (previousState && Object.keys(changed).length === 0) return;
+
+    const isDelta = Boolean(previousState);
+    return {
+      tagName: 'state',
+      contents: isDelta ? formatBrowserStateDelta(changed) : formatBrowserStateSnapshot(browserState),
+      attributes: {
+        type: 'browser',
+        updated: new Date().toISOString(),
+      },
+      metadata: {
+        state: {
+          delta: isDelta,
+        },
+        browser: browserState,
+        ...(isDelta ? { delta: changed } : {}),
+      },
+    };
+  }
+}
+
+type BrowserState = {
+  open: boolean;
+  activeUrl?: string;
+  pageTitle?: string;
+  tabCount?: number;
+  pageMetadata?: Record<string, string | number | boolean | null | undefined>;
+};
+
+function getBrowserState(ctx: BrowserContext): BrowserState {
+  return {
+    open: ctx.isOpen ?? true,
+    ...(ctx.currentUrl ? { activeUrl: ctx.currentUrl } : {}),
+    ...(ctx.pageTitle ? { pageTitle: ctx.pageTitle } : {}),
+    ...(typeof ctx.tabCount === 'number' ? { tabCount: ctx.tabCount } : {}),
+    ...(ctx.pageMetadata ? { pageMetadata: ctx.pageMetadata } : {}),
+  };
+}
+
+function getMostRecentBrowserState(
+  activeStateSignals: ComputeStateSignalArgs['activeStateSignals'],
+): BrowserState | undefined {
+  for (const signal of [...activeStateSignals].reverse()) {
+    const browser = signal.metadata?.browser;
+    if (browser && typeof browser === 'object' && !Array.isArray(browser)) {
+      return browser as BrowserState;
+    }
+  }
+  return undefined;
+}
+
+function getChangedBrowserState(previous: BrowserState | undefined, current: BrowserState): Partial<BrowserState> {
+  if (!previous) return current;
+
+  const changed: Partial<BrowserState> = {};
+  for (const key of Object.keys(current) as Array<keyof BrowserState>) {
+    if (JSON.stringify(previous[key]) !== JSON.stringify(current[key])) {
+      (changed as Record<string, unknown>)[key] = current[key];
+    }
+  }
+  return changed;
+}
+
+function formatBrowserStateSnapshot(state: BrowserState): string {
+  const parts = [`Browser is ${state.open ? 'open' : 'closed'}.`];
+  if (state.activeUrl) parts.push(`Active tab URL: ${state.activeUrl}.`);
+  if (state.pageTitle) parts.push(`Page title: ${state.pageTitle}.`);
+  if (typeof state.tabCount === 'number')
+    parts.push(`${state.tabCount} open ${state.tabCount === 1 ? 'tab' : 'tabs'}.`);
+  if (state.pageMetadata && Object.keys(state.pageMetadata).length > 0) {
+    parts.push(`Page metadata: ${JSON.stringify(state.pageMetadata)}.`);
+  }
+  return parts.join(' ');
+}
+
+function formatBrowserStateDelta(delta: Partial<BrowserState>): string {
+  const parts: string[] = [];
+  if (typeof delta.open === 'boolean') parts.push(`browser ${delta.open ? 'opened' : 'closed'}`);
+  if (delta.activeUrl) parts.push(`active tab URL changed to ${delta.activeUrl}`);
+  if (delta.pageTitle) parts.push(`page title changed to ${delta.pageTitle}`);
+  if (typeof delta.tabCount === 'number') parts.push(`${delta.tabCount} open ${delta.tabCount === 1 ? 'tab' : 'tabs'}`);
+  if (delta.pageMetadata && Object.keys(delta.pageMetadata).length > 0) {
+    parts.push(`page metadata changed to ${JSON.stringify(delta.pageMetadata)}`);
+  }
+  return `changed: ${parts.join('; ')}`;
 }
 
 interface BrowserReminderMetadata {

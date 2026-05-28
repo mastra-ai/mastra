@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { IMastraLogger } from '../logger';
+import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import { ChunkFrom } from '../stream/types';
 import { ProcessorRunner } from './runner';
@@ -2576,6 +2577,118 @@ describe('ProcessorRunner', () => {
       // Should swallow the error and return retry: false
       expect(result).toEqual({ retry: false });
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('processor state signals', () => {
+    it('adds state signals and stores tracking on thread metadata', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: {
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+        resourceId: 'resource-1',
+      });
+      const savedThreads: unknown[] = [];
+      const memory = {
+        getThreadById: vi.fn(async () => ({
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        })),
+        saveThread: vi.fn(async ({ thread }) => {
+          savedThreads.push(thread);
+          return thread;
+        }),
+      };
+      const chunks: unknown[] = [];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'state-processor',
+            computeStateSignal: ({ threadId, resourceId, activeStateSignals, tracking }) => ({
+              contents: `state for ${resourceId}/${threadId} (${activeStateSignals.length})`,
+              metadata: { seenTracking: Boolean(tracking) },
+            }),
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+        writer: {
+          custom: async chunk => {
+            chunks.push(chunk);
+          },
+        },
+      });
+
+      const signalMessage = messageList.get.all.db().at(-1);
+      expect(signalMessage?.role).toBe('signal');
+      expect(signalMessage?.content.metadata?.signal).toEqual(
+        expect.objectContaining({
+          type: 'state',
+          tagName: 'state',
+          metadata: expect.objectContaining({
+            state: expect.objectContaining({ processorId: 'state-processor', threadId: 'thread-1', version: 1 }),
+          }),
+        }),
+      );
+      expect(chunks).toEqual([
+        expect.objectContaining({
+          type: 'data-state',
+          data: expect.objectContaining({ type: 'state', contents: 'state for resource-1/thread-1 (0)' }),
+        }),
+      ]);
+      expect(memory.saveThread).toHaveBeenCalledTimes(1);
+      expect(savedThreads[0]).toEqual(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            mastra: expect.objectContaining({
+              stateSignals: expect.objectContaining({
+                'state-processor': expect.objectContaining({ version: 1, lastSignalId: expect.any(String) }),
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('requires memory for computeStateSignal processors', async () => {
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'state-processor', computeStateSignal: () => ({ contents: 'state' }) }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          steps: [],
+          model: {} as any,
+          tools: {},
+          retryCount: 0,
+        }),
+      ).rejects.toThrow('computeStateSignal requires Mastra memory');
     });
   });
 

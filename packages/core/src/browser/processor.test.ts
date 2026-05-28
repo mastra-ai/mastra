@@ -448,4 +448,102 @@ describe('BrowserContextProcessor', () => {
       });
     });
   });
+
+  describe('computeStateSignal', () => {
+    const createStateArgs = (browserCtx?: BrowserContext, activeStateSignals: any[] = []) => {
+      const requestContext = new RequestContext();
+      if (browserCtx) requestContext.set('browser', browserCtx);
+      return {
+        messages: [],
+        messageList: createMockMessageList() as any,
+        requestContext,
+        state: {},
+        abort: vi.fn() as any,
+        retryCount: 0,
+        stepNumber: 0,
+        steps: [],
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        activeStateSignals,
+      };
+    };
+
+    it('returns an aggregate browser state snapshot', () => {
+      const result = processor.computeStateSignal(
+        createStateArgs({
+          provider: 'agent-browser',
+          currentUrl: 'https://example.com',
+          pageTitle: 'Example',
+          isOpen: true,
+          tabCount: 3,
+          pageMetadata: { ready: true },
+        }),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          tagName: 'state',
+          contents: expect.stringContaining('Active tab URL: https://example.com'),
+          attributes: expect.objectContaining({ type: 'browser' }),
+          metadata: expect.objectContaining({
+            state: expect.objectContaining({ delta: false }),
+            browser: expect.objectContaining({ open: true, activeUrl: 'https://example.com', tabCount: 3 }),
+          }),
+        }),
+      );
+    });
+
+    it('returns metadata-backed deltas when active state exists', () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. 2 open tabs.',
+        metadata: {
+          state: { processorId: processor.id, threadId: 'thread-1', hash: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com', pageTitle: 'Example', tabCount: 2 },
+        },
+      });
+
+      const result = processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            currentUrl: 'https://example.com',
+            pageTitle: 'Example',
+            isOpen: true,
+            tabCount: 3,
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          contents: 'changed: 3 open tabs',
+          metadata: expect.objectContaining({
+            state: expect.objectContaining({ delta: true }),
+            delta: { tabCount: 3 },
+          }),
+        }),
+      );
+    });
+
+    it('does not emit when browser state has not changed', () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { processorId: processor.id, threadId: 'thread-1', hash: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', currentUrl: 'https://example.com', isOpen: true }, [
+          activeSignal as any,
+        ]),
+      );
+
+      expect(result).toBeUndefined();
+    });
+  });
 });
