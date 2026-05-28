@@ -79,6 +79,47 @@ describe('DuckDBConnection', () => {
     });
   });
 
+  describe('lock error handling', () => {
+    it('wraps DuckDB lock errors with a helpful message', async () => {
+      const db = new DuckDBConnection({ path: '/tmp/test-lock.duckdb' });
+
+      // Mock DuckDBInstance.create to throw a lock error
+      const { DuckDBInstance } = await import('@duckdb/node-api');
+      const origCreate = DuckDBInstance.create;
+      DuckDBInstance.create = vi
+        .fn()
+        .mockRejectedValue(
+          new Error(
+            'IO Error: Could not set lock on file "/tmp/test-lock.duckdb": Conflicting lock is held in /usr/bin/node (PID 12345) by user dev.',
+          ),
+        );
+
+      try {
+        await expect(db.query('SELECT 1')).rejects.toThrow(/DuckDB lock conflict/);
+        await expect(db.query('SELECT 1')).rejects.toThrow(/Stop any other `mastra dev` processes/);
+      } finally {
+        DuckDBInstance.create = origCreate;
+        await db.close();
+      }
+    });
+
+    it('does not alter non-lock errors', async () => {
+      const db = new DuckDBConnection({ path: '/tmp/test-other.duckdb' });
+
+      const { DuckDBInstance } = await import('@duckdb/node-api');
+      const origCreate = DuckDBInstance.create;
+      DuckDBInstance.create = vi.fn().mockRejectedValue(new Error('Some other DuckDB error'));
+
+      try {
+        await expect(db.query('SELECT 1')).rejects.toThrow('Some other DuckDB error');
+        await expect(db.query('SELECT 1')).rejects.not.toThrow(/DuckDB lock conflict/);
+      } finally {
+        DuckDBInstance.create = origCreate;
+        await db.close();
+      }
+    });
+  });
+
   describe('executeBatch', () => {
     it('executes multiple statements with one DuckDB connection', async () => {
       const db = new DuckDBConnection({ path: ':memory:' });

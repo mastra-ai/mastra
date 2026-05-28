@@ -51,6 +51,34 @@ function toJsValue(val: unknown): unknown {
 /** Default idle timeout before the DuckDB instance is closed to release its file lock. */
 const DEFAULT_IDLE_TIMEOUT_MS = 500;
 
+/** Pattern that DuckDB uses for file-lock conflicts. */
+const LOCK_ERROR_PATTERN = /Could not set lock on file|Conflicting lock is held/i;
+
+function isDuckDBLockError(error: unknown): error is Error {
+  return error instanceof Error && LOCK_ERROR_PATTERN.test(error.message);
+}
+
+function buildLockErrorMessage(originalMessage: string, dbPath: string): string {
+  return (
+    `\n` +
+    `===========================================================================\n` +
+    `DuckDB lock conflict: another process is using "${dbPath}"\n` +
+    `===========================================================================\n` +
+    `\n` +
+    `${originalMessage}\n` +
+    `\n` +
+    `Common causes:\n` +
+    `  • Another \`mastra dev\` is running in this directory\n` +
+    `  • A previous process crashed without releasing the lock\n` +
+    `\n` +
+    `To fix this:\n` +
+    `  1. Stop any other \`mastra dev\` processes for this project\n` +
+    `  2. If the problem persists, kill the PID shown above and retry\n` +
+    `  3. As a last resort, delete the .duckdb.wal file next to your database\n` +
+    `===========================================================================\n`
+  );
+}
+
 /** Configuration for the DuckDB database connection. */
 export interface DuckDBStorageConfig {
   /** Path to the DuckDB file. Defaults to 'mastra.duckdb'. Use ':memory:' for ephemeral. */
@@ -143,6 +171,11 @@ export class DuckDBConnection extends MastraBase {
         this.instance = null;
         this.initialized = false;
         this.initPromise = null;
+        if (isDuckDBLockError(error)) {
+          const msg = buildLockErrorMessage(error.message, this.path);
+          this.logger.error(msg);
+          throw new Error(msg, { cause: error });
+        }
         throw error;
       }
     })();
