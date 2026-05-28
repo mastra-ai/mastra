@@ -200,3 +200,42 @@ export const Textarea: Story = {
     </div>
   ),
 };
+
+export const OnDifferentSurfaces: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 w-96">
+      <div className="bg-surface1 p-4 rounded-lg border border-border1">
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput placeholder="On bg-surface1" />
+        </InputGroup>
+      </div>
+      <div className="bg-surface2 p-4 rounded-lg border border-border1">
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput placeholder="On bg-surface2" />
+        </InputGroup>
+      </div>
+      <div className="bg-surface3 p-4 rounded-lg border border-border1">
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput placeholder="On bg-surface3" />
+        </InputGroup>
+      </div>
+      <div className="bg-surface4 p-4 rounded-lg border border-border1">
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput placeholder="On bg-surface4" />
+        </InputGroup>
+      </div>
+    </div>
+  ),
+};
