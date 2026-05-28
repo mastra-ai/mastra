@@ -23,6 +23,7 @@ import {
   ProcessorState,
   ProcessorStepOutputSchema,
   ProcessorStepSchema,
+  applyReturnedSystemMessages,
   createProcessorSendSignal,
 } from '../../processors';
 import {
@@ -1159,7 +1160,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'input',
                 );
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                applyReturnedSystemMessages(passThrough.messageList, typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
@@ -1221,7 +1222,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               if (validatedResult.systemMessages) {
-                passThrough.messageList!.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
+                applyReturnedSystemMessages(passThrough.messageList!, validatedResult.systemMessages as CoreMessage[]);
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
@@ -1367,7 +1368,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'response',
                 );
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                applyReturnedSystemMessages(passThrough.messageList, typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
@@ -1447,7 +1448,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'response',
                 );
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                applyReturnedSystemMessages(passThrough.messageList, typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,

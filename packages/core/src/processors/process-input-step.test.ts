@@ -1827,6 +1827,43 @@ describe('processInputStep', () => {
         'Memory context',
       ]);
     });
+
+    it('should keep new untagged content when returned systemMessages has the same length as previous', async () => {
+      const processor: Processor = {
+        id: 'system-replacer',
+        processInputStep: async ({ systemMessages }) => {
+          const next = systemMessages.map((msg: any, index: number) =>
+            index === 1 ? { role: 'system' as const, content: 'Replacement instruction' } : msg,
+          );
+          return { systemMessages: next };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User message')], 'input');
+      messageList.addSystem('Original instruction');
+      messageList.addSystem('Memory context', 'observational-memory');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(messageList.getSystemMessages('observational-memory').map(m => m.content)).toEqual(['Memory context']);
+      expect(messageList.getSystemMessages().map(m => m.content)).toEqual([
+        'Original instruction',
+        'Replacement instruction',
+      ]);
+    });
   });
 
   describe('abort functionality', () => {

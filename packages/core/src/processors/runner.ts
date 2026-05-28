@@ -52,29 +52,17 @@ function getTaggedSystemMessages(messageList: MessageList): SystemMessage[] {
     .filter(message => !untaggedSystemMessages.some(untaggedMessage => untaggedMessage === message));
 }
 
-function applyReturnedSystemMessages(
-  messageList: MessageList,
-  systemMessages: SystemMessage[],
-  previousSystemMessages: SystemMessage[],
-): void {
+/**
+ * Replace the untagged system message bucket with the array a processor returned,
+ * while leaving tag buckets (owned by other processors) untouched. Any returned
+ * entry whose content matches a tagged message is dropped so the natural
+ * `[...args.systemMessages, ours]` pattern does not duplicate tagged content as
+ * untagged.
+ */
+export function applyReturnedSystemMessages(messageList: MessageList, systemMessages: SystemMessage[]): void {
   const taggedSystemMessages = getTaggedSystemMessages(messageList);
-  const containsPreviousTaggedMessage = systemMessages.some(message =>
-    taggedSystemMessages.some(taggedMessage => messagesAreEqual(taggedMessage, message)),
-  );
-  const canUsePreviousIndexes =
-    !containsPreviousTaggedMessage && systemMessages.length === previousSystemMessages.length;
-  const previousTaggedIndexes = canUsePreviousIndexes
-    ? new Set(
-        previousSystemMessages
-          .map((message, index) => ({ message, index }))
-          .filter(({ message }) => taggedSystemMessages.some(taggedMessage => taggedMessage === message))
-          .map(({ index }) => index),
-      )
-    : new Set<number>();
   const untaggedSystemMessages = systemMessages.filter(
-    (message, index) =>
-      !previousTaggedIndexes.has(index) &&
-      !taggedSystemMessages.some(taggedMessage => messagesAreEqual(taggedMessage, message)),
+    message => !taggedSystemMessages.some(taggedMessage => messagesAreEqual(taggedMessage, message)),
   );
 
   messageList.clearSystemMessages();
@@ -967,9 +955,7 @@ export class ProcessorRunner {
           // Processor returned { messages, systemMessages } - handle both
           mutations = messageList.stopRecording();
 
-          // Returned systemMessages replace only untagged system messages.
-          // Tagged messages are owned by the processors that added them via messageList.addSystem(..., tag).
-          applyReturnedSystemMessages(messageList, result.systemMessages, inputSystemMessagesBefore);
+          applyReturnedSystemMessages(messageList, result.systemMessages);
 
           // Handle regular messages
           const regularMessages = result.messages;
@@ -1258,7 +1244,7 @@ export class ProcessorRunner {
           ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
         }
         if (systemMessages) {
-          applyReturnedSystemMessages(messageList, systemMessages, inputData.systemMessages);
+          applyReturnedSystemMessages(messageList, systemMessages);
         }
         Object.assign(stepInput, rest);
 

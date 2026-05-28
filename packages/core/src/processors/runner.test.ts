@@ -391,29 +391,20 @@ describe('ProcessorRunner', () => {
         expect(systemTexts).toContain('Relevant context from previous conversations.');
       });
 
-      it('should allow InputProcessor to modify system messages via return value', async () => {
-        // Add system messages
-        messageList.addSystem('Original system prompt with verbose instructions.');
-        messageList.addSystem('Memory context that is too long and needs trimming.', 'memory');
-
-        // Add a user message
+      it('should preserve tagged system messages when InputProcessor returns systemMessages', async () => {
+        messageList.addSystem('Original system prompt.');
+        messageList.addSystem('Memory context.', 'memory');
         messageList.add([createMessage('Hello', 'user')], 'input');
 
         const inputProcessors: Processor[] = [
           {
-            id: 'system-trimmer',
-            name: 'System Trimmer',
+            id: 'system-appender',
+            name: 'System Appender',
             processInput: async ({ messages, systemMessages }) => {
-              // Modify system messages - trim them for smaller models
-              if (systemMessages) {
-                const modifiedSystemMessages = systemMessages.map((msg: any) => ({
-                  ...msg,
-                  content: typeof msg.content === 'string' ? msg.content.substring(0, 20) + '...' : msg.content,
-                }));
-                // Return modified system messages somehow (this is what the fix should enable)
-                return { messages, systemMessages: modifiedSystemMessages };
-              }
-              return messages;
+              return {
+                messages,
+                systemMessages: [...systemMessages, { role: 'system' as const, content: 'Appended instruction.' }],
+              };
             },
           },
         ];
@@ -427,21 +418,45 @@ describe('ProcessorRunner', () => {
 
         const result = await runner.runInputProcessors(messageList);
 
-        // After processing, only untagged system messages are modified through returned systemMessages.
-        // Tagged system messages remain owned by their original tags.
-        const allMessages = await result.get.all.aiV5.prompt();
-        const systemMessages = allMessages.filter((m: any) => m.role === 'system');
-
-        // Verify the untagged system message was trimmed, while tagged memory context stayed tagged and unmodified.
-        expect(systemMessages).toHaveLength(2);
-        const systemTexts = systemMessages.map((msg: any) =>
-          typeof msg.content === 'string' ? msg.content : msg.content[0]?.text,
-        );
-        expect(systemTexts).toContain('Original system prom...');
-        expect(systemTexts).toContain('Memory context that is too long and needs trimming.');
-        expect(messageList.getSystemMessages('memory').map(message => message.content)).toEqual([
-          'Memory context that is too long and needs trimming.',
+        expect(result.getSystemMessages().map(m => m.content)).toEqual([
+          'Original system prompt.',
+          'Appended instruction.',
         ]);
+        expect(result.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context.']);
+      });
+
+      it('should keep new untagged content when returned array has the same length as the previous array', async () => {
+        messageList.addSystem('Original system prompt.');
+        messageList.addSystem('Memory context.', 'memory');
+        messageList.add([createMessage('Hello', 'user')], 'input');
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-replacer',
+            name: 'System Replacer',
+            processInput: async ({ messages, systemMessages }) => {
+              const next = systemMessages.map((msg: any, index: number) =>
+                index === 1 ? { role: 'system' as const, content: 'Replacement instruction.' } : msg,
+              );
+              return { messages, systemMessages: next };
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        const result = await runner.runInputProcessors(messageList);
+
+        expect(result.getSystemMessages().map(m => m.content)).toEqual([
+          'Original system prompt.',
+          'Replacement instruction.',
+        ]);
+        expect(result.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context.']);
       });
 
       it('should continue to allow adding new system messages via return array (existing behavior)', async () => {

@@ -31,7 +31,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors';
+import { ProcessorRunner, ProcessorState, applyReturnedSystemMessages, createProcessorSendSignal } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import {
   summarizeActiveToolsForSpan,
@@ -1138,7 +1138,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'input',
                 );
-                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
+                applyReturnedSystemMessages(checkedMessageList, typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
@@ -1203,7 +1203,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               if (validatedResult.systemMessages) {
-                checkedMessageList.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
+                applyReturnedSystemMessages(checkedMessageList, validatedResult.systemMessages as CoreMessage[]);
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
@@ -1354,7 +1354,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'response',
                 );
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                applyReturnedSystemMessages(passThrough.messageList, typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
@@ -1437,7 +1437,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'response',
                 );
-                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
+                applyReturnedSystemMessages(checkedMessageList, typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
