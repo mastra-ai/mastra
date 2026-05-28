@@ -48,7 +48,7 @@ Use `sendMessage()` when the user expects the active agent to see the message im
 agent.sendMessage(
   {
     contents: 'Use the latest customer note too.',
-    attributes: { name: 'Devin', sentFrom: 'slack' },
+    attributes: { name: 'Jane', sentFrom: 'slack' },
   },
   {
     resourceId: 'user_123',
@@ -60,7 +60,7 @@ agent.sendMessage(
 The model receives attributed messages as XML-wrapped user input:
 
 ```xml
-<user name="Devin" sentFrom="slack">Use the latest customer note too.</user>
+<user name="Jane" sentFrom="slack">Use the latest customer note too.</user>
 ```
 
 Messages without attributes are sent as plain user input.

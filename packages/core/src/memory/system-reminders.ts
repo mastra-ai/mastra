@@ -24,8 +24,7 @@ export function isSystemReminderMessage(message: MastraDBMessage): boolean {
     return (
       isRecord(metadata) &&
       isRecord(metadata.signal) &&
-      (metadata.signal.type === 'system-reminder' ||
-        (metadata.signal.type === 'reactive' && metadata.signal.tagName === 'system-reminder'))
+      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
     );
   }
 
