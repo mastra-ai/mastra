@@ -30,11 +30,11 @@ export function setAnalytics(instance: PosthogAnalytics): void {
 }
 
 export class PosthogAnalytics {
-  private sessionId: string;
+  private sessionId: string = '';
   private client?: PostHog;
-  private distinctId: string;
+  private distinctId: string = '';
   private version: string;
-  private packageManager: string;
+  private packageManager: string = '';
 
   constructor({
     version,
@@ -46,6 +46,11 @@ export class PosthogAnalytics {
     host: string;
   }) {
     this.version = version;
+
+    if (!PosthogAnalytics.isTelemetryEnabled()) {
+      return;
+    }
+
     this.packageManager = getPackageManager();
     const cliConfigPath = path.join(__dirname, 'mastra-cli.json');
     if (existsSync(cliConfigPath)) {
@@ -71,9 +76,7 @@ export class PosthogAnalytics {
       });
     }
 
-    if (this.isTelemetryEnabled()) {
-      this.initializePostHog(apiKey, host);
-    }
+    this.initializePostHog(apiKey, host);
   }
 
   private writeCliConfig({ distinctId, sessionId }: { distinctId: string; sessionId: string }): void {
@@ -99,12 +102,11 @@ export class PosthogAnalytics {
     });
   }
 
-  private isTelemetryEnabled(): boolean {
-    // Check environment variable first
-    if (process.env.MASTRA_TELEMETRY_DISABLED) {
+  private static isTelemetryEnabled(): boolean {
+    const value = process.env.MASTRA_TELEMETRY_DISABLED;
+    if (value && ['1', 'true', 'yes'].includes(value.trim().toLowerCase())) {
       return false;
     }
-    // Default to enabled
     return true;
   }
 

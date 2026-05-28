@@ -4726,6 +4726,7 @@ export type PostAgentsAgentIdGenerate_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -4892,6 +4893,7 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5060,6 +5062,7 @@ export type PostAgentsAgentIdStream_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5226,6 +5229,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5397,6 +5401,7 @@ export type PostAgentsAgentIdStreamVnext_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5736,6 +5741,7 @@ export type PostAgentsAgentIdSignals_Body =
                                   };
                             }
                           | undefined;
+                        defaultStatus?: ('draft' | 'published') | undefined;
                       }
                     | undefined;
                   maxSteps?: number | undefined;
@@ -6074,6 +6080,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -6407,6 +6414,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -6578,6 +6586,7 @@ export type PostAgentsAgentIdNetwork_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -7220,6 +7229,7 @@ export type PostAgentsAgentIdStreamVNext_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -7391,6 +7401,7 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -7564,6 +7575,7 @@ export type PostAgentsAgentIdStreamUi_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -19297,6 +19309,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -19468,6 +19481,7 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -75650,6 +75664,7 @@ export type PostDatasetsDatasetIdExperiments_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
 };
