@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CheckIcon, MailIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
+import { CheckIcon, MailIcon, MinusIcon, PlusIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
+import { useState } from 'react';
 import { Kbd } from '../Kbd';
 import {
   InputGroup,
@@ -199,6 +200,36 @@ export const Textarea: Story = {
       </InputGroup>
     </div>
   ),
+};
+
+const NumberWithStepperDemo = () => {
+  const [value, setValue] = useState(0);
+  return (
+    <div className="w-80">
+      <InputGroup>
+        <InputGroupInput
+          type="number"
+          value={value}
+          onChange={event => {
+            const next = Number(event.target.value);
+            setValue(Number.isNaN(next) ? 0 : next);
+          }}
+        />
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton aria-label="Decrement" onClick={() => setValue(v => v - 1)}>
+            <MinusIcon />
+          </InputGroupButton>
+          <InputGroupButton aria-label="Increment" onClick={() => setValue(v => v + 1)}>
+            <PlusIcon />
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+    </div>
+  );
+};
+
+export const NumberWithStepper: Story = {
+  render: () => <NumberWithStepperDemo />,
 };
 
 export const OnDifferentSurfaces: Story = {

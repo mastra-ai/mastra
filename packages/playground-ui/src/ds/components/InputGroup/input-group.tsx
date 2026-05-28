@@ -125,6 +125,10 @@ const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>
           'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
+          // Hide native number-spinner arrows so consumers can compose their own
+          // stepper (see the NumberWithStepper story).
+          '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0',
+          '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0',
           className,
         )}
         {...props}
