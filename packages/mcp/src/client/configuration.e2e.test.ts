@@ -957,11 +957,7 @@ describe('MCPClient', () => {
       });
 
       try {
-        const { toolsets, errors } = await vi.waitFor(async () => {
-          const result = await mixedMcp.listToolsetsWithErrors();
-          expect(result.toolsets, JSON.stringify(result.errors)).toMatchObject({ weather: { getWeather: expect.any(Object) } });
-          return result;
-        }, 10000);
+        const { toolsets, errors } = await mixedMcp.listToolsetsWithErrors();
 
         // Should still get weather toolset from the healthy server
         expect(toolsets, JSON.stringify(errors)).toHaveProperty('weather');

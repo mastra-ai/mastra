@@ -1,6 +1,3 @@
-import type * as AiSdkV4 from '@internal/ai-sdk-v4';
-import type * as AiSdkV5 from '@internal/ai-sdk-v5';
-import type * as AiV6 from '@internal/ai-v6';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
@@ -8,8 +5,7 @@ import { Memory } from './index';
 
 // Mock embedMany for all AI SDK versions
 // v3 spec uses @internal/ai-v6
-vi.mock('@internal/ai-v6', async importOriginal => ({
-  ...(await importOriginal<typeof AiV6>()),
+vi.mock('@internal/ai-v6', () => ({
   embedMany: vi.fn().mockResolvedValue({
     embeddings: [[0.1, 0.2]],
     usage: { tokens: 42 },
@@ -17,8 +13,7 @@ vi.mock('@internal/ai-v6', async importOriginal => ({
 }));
 
 // v2 spec uses @internal/ai-sdk-v5
-vi.mock('@internal/ai-sdk-v5', async importOriginal => ({
-  ...(await importOriginal<typeof AiSdkV5>()),
+vi.mock('@internal/ai-sdk-v5', () => ({
   embedMany: vi.fn().mockResolvedValue({
     embeddings: [[0.1, 0.2]],
     usage: { tokens: 55 },
@@ -26,8 +21,7 @@ vi.mock('@internal/ai-sdk-v5', async importOriginal => ({
 }));
 
 // v1 spec uses @internal/ai-sdk-v4
-vi.mock('@internal/ai-sdk-v4', async importOriginal => ({
-  ...(await importOriginal<typeof AiSdkV4>()),
+vi.mock('@internal/ai-sdk-v4', () => ({
   embedMany: vi.fn().mockResolvedValue({
     embeddings: [[0.1, 0.2]],
     usage: { tokens: 33 },

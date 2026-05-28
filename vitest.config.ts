@@ -4,12 +4,7 @@ import { loadConfigFromFile } from 'vite';
 import type { TestProjectConfiguration, UserWorkspaceConfig } from 'vitest/config';
 import { defineConfig } from 'vitest/config';
 
-import {
-  SOURCE_MODE,
-  SOURCE_MODE_TEST_EXCLUDES,
-  sourceModeConfigFor,
-  withSourceModeConfig,
-} from './scripts/vitest-source-mode-config';
+import { SOURCE_MODE, sourceModeConfigFor, withSourceModeConfig } from './scripts/vitest-source-mode-config';
 
 // Directories to exclude from project discovery
 const EXCLUDED_DIRS = new Set([
@@ -108,7 +103,6 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
               ...config.test,
               name: config.test?.name ?? `unit:${projectDir}`,
               root: `./${projectDir}`,
-              exclude: [...(config.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES],
             },
           }),
         );
@@ -136,11 +130,7 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
                 ...projectConfig.test,
                 ...(SOURCE_MODE && !projectConfig.test?.name ? { name: `unit:${projectDir}` } : {}),
                 root: `./${projectDir}`,
-                ...(SOURCE_MODE
-                  ? { exclude: [...(projectConfig.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES] }
-                  : projectConfig.test?.exclude
-                    ? { exclude: projectConfig.test.exclude }
-                    : {}),
+                ...(projectConfig.test?.exclude ? { exclude: projectConfig.test.exclude } : {}),
               },
             }),
           );

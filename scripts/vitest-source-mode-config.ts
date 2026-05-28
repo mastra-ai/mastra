@@ -36,26 +36,6 @@ export const SOURCE_MODE_PACKAGE_GLOBS = [
   'channels/*/package.json',
   'browser/*/package.json',
 ];
-export const SOURCE_MODE_TEST_EXCLUDES = [
-  '**/node_modules/**',
-  '**/dist/**',
-  'packages/core/src/workflows/workflow.test.ts',
-  'src/workflows/workflow.test.ts',
-  'src/workflows/evented/evented-workflow.test.ts',
-  'src/storage/bundle.test.ts',
-  'src/events/__tests__/per-thread-pubsub-multiprocess.test.ts',
-  'src/workspace/lsp/servers.test.ts',
-  'packages/deployer/src/build/analyze/analyzeEntry.test.ts',
-  'packages/deployer/src/build/analyze.test.ts',
-  'packages/editor/src/editor-integration-tools.test.ts',
-  'src/editor-integration-tools.test.ts',
-  'packages/schema-compat/src/provider-compats/*.e2e.test.ts',
-  'src/provider-compats/*.e2e.test.ts',
-  'stores/redis/src/**/*.test.ts',
-  'src/build/analyze/analyzeEntry.test.ts',
-  'src/build/analyze.test.ts',
-];
-
 const SOURCE_MODE_WORKSPACE_PACKAGES = new Map<string, { root: string; exports: Record<string, any> }>();
 
 if (SOURCE_MODE) {
@@ -199,7 +179,6 @@ export function sourceModeConfigFor(project: UserWorkspaceConfig = {}): UserWork
       },
     },
     test: {
-      exclude: SOURCE_MODE_TEST_EXCLUDES,
       setupFiles: sourceModeSetupFiles(project.test?.setupFiles),
       server: {
         deps: {
@@ -237,7 +216,6 @@ function mergeSourceModeConfig<T extends UserWorkspaceConfig>(config: T): T {
     test: {
       ...sourceConfig.test,
       ...config.test,
-      exclude: [...(config.test?.exclude ?? []), ...SOURCE_MODE_TEST_EXCLUDES],
       setupFiles: sourceModeSetupFiles(config.test?.setupFiles),
       server: {
         ...sourceConfig.test?.server,

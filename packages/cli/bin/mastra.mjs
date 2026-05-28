@@ -45,7 +45,21 @@ function run(command, commandArgs, env = process.env) {
   });
 }
 
-if (sourceMode && existsSync(sourceEntry)) {
+async function runDistEntry() {
+  if (!existsSync(distEntry)) {
+    console.error('Mastra CLI build output was not found. Run `pnpm --filter mastra build:lib` first.');
+    process.exit(1);
+  }
+
+  await import(distEntry);
+}
+
+async function main() {
+  if (!sourceMode) {
+    await runDistEntry();
+    return;
+  }
+
   const localTsxBin = join(packageRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
   const repoTsxBin = join(workspaceRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
   const command = existsSync(localTsxBin) ? localTsxBin : existsSync(repoTsxBin) ? repoTsxBin : 'tsx';
@@ -56,11 +70,6 @@ if (sourceMode && existsSync(sourceEntry)) {
     MASTRA_SOURCE_MODE_WORKSPACE_ROOT: workspaceRoot,
     NODE_OPTIONS: withSourceModeCondition(process.env.NODE_OPTIONS),
   });
-} else {
-  if (!existsSync(distEntry)) {
-    console.error('Mastra CLI build output was not found. Run `pnpm --filter mastra build:lib` first.');
-    process.exit(1);
-  }
-
-  await import(distEntry);
 }
+
+await main();

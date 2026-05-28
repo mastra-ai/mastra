@@ -125,9 +125,7 @@ export class RequestContextService {
   }
 
   private applyRequestMetadata(context: RequestContext): void {
-    const clientType =
-      this.request.get?.(MASTRA_CLIENT_TYPE_HEADER) ?? this.request.headers?.[MASTRA_CLIENT_TYPE_HEADER];
-    if (isStudioClientTypeHeader(Array.isArray(clientType) ? clientType[0] : clientType)) {
+    if (isStudioClientTypeHeader(this.request.get(MASTRA_CLIENT_TYPE_HEADER))) {
       context.set(MASTRA_IS_STUDIO_KEY, true);
     }
   }

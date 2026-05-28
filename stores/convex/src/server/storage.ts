@@ -582,10 +582,6 @@ export async function handleTypedOperation(
       let docs = await applyConvexEqualityFilters(query, request.filters, indexedFields).take(maxDocs);
 
       if (isBackgroundTasksTable(convexTable, request)) {
-        if (request.filters && request.filters.length > 0) {
-          docs = docs.filter((record: Record<string, unknown>) => matchesFilters(record, request.filters!));
-        }
-
         const legacyDocs = await findGenericDocumentsByTable(ctx, request.tableName, maxDocs);
         let legacyRecords = legacyDocs.map(doc => doc.record);
         if (request.filters && request.filters.length > 0) {

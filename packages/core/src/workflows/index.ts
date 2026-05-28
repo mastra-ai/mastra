@@ -1,15 +1,15 @@
-export * from './workflow.js';
-export * from './execution-engine.js';
-export * from './default.js';
-export * from './step.js';
-export * from './types.js';
-export * from './utils.js';
-export * from './scheduler/index.js';
-export * from './state-reader.js';
+export * from './workflow';
+export * from './execution-engine';
+export * from './default';
+export * from './step';
+export * from './types';
+export * from './utils';
+export * from './scheduler/index';
+export * from './state-reader';
 
 // Load after the base workflow exports so EventedWorkflow can extend Workflow
 // without hitting an ESM init-time cycle.
-import { createWorkflow as createEventedWorkflow } from './evented/index.js';
+import { createWorkflow as createEventedWorkflow } from './evented/index';
 
 // Keep a live reference so bundlers do not drop the registration import.
 void createEventedWorkflow;
