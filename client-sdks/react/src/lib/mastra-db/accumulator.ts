@@ -7,7 +7,7 @@ import type {
 } from '@mastra/core/agent/message-list';
 import type { AgentChunkType, ChunkType } from '@mastra/core/stream';
 import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
-import { formatStreamCompletionFeedback } from '../ai-sdk/utils/formatCompletionFeedback';
+import { formatStreamCompletionFeedback } from './formatCompletionFeedback';
 import type {
   BackgroundTaskEntry,
   MastraDBMessageMetadata,
