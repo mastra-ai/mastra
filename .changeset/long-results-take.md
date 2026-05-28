@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed AGENT_RUN observability span not closing when an agent stream is aborted mid-flight (browser disconnect, consumer cancel, or AbortController.abort()). The span now ends with structured output `{ status: 'aborted', reason: 'abort' }` so traces reach Langfuse, Datadog, Braintrust, and other backends that export on SPAN_ENDED. Completes the work started in #17097 for issue #17074.
+Fixed AGENT_RUN spans not closing when an agent stream is aborted mid-flight (e.g. browser disconnect or `AbortController.abort()`). Aborted runs now end with `{ status: 'aborted', reason: 'abort' }` so traces are exported to observability backends.
