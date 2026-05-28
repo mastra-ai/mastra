@@ -16,6 +16,21 @@ import type {
   MastraTextPart,
 } from './types';
 
+// Boundary cast policy
+// --------------------
+// `MastraMessagePart` (from @mastra/core) is V4-shaped:
+//   - text/reasoning parts have no `state`, `textId`, `reasoningId`, or `redacted`
+//   - the V4 reasoning part requires a `details` array we do not synthesize
+//   - the V4 file part is `{ mimeType, data }`; we emit V5-shaped `{ mediaType, url }`
+//   - V4 source parts wrap a `LanguageModelV1Source` object; we emit V5-shaped
+//     flat `source-url` / `source-document` parts
+//
+// The React SDK targets AI SDK v5 only, so the accumulator stores a V5-flavored
+// superset of `MastraMessagePart`. Every `as unknown as MastraMessagePart` site
+// in this file is a deliberate storage-boundary cast for one of the above
+// extensions, not an accident. Downstream consumers (`toAISdkV5Messages`,
+// playground `to-assistant-ui-message`) read the V5 fields directly.
+
 type StreamChunk = {
   type: string;
   payload: any;
