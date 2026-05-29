@@ -124,8 +124,8 @@ import { InworldRealtimeVoice } from '@mastra/voice-inworld';
 
 const voice = new InworldRealtimeVoice({
   apiKey: process.env.INWORLD_API_KEY,
-  model: 'anthropic/claude-sonnet-4-6',
-  speaker: 'Dennis',
+  model: 'inworld/models/gemma-4-26b-a4b-it-maas',
+  speaker: 'Sarah',
   instructions: 'You are a helpful voice assistant.',
   // Typed first-class session knobs:
   session: {
@@ -173,8 +173,8 @@ voice.close();
 | ------------------ | ------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apiKey`           | `string`                        | `process.env.INWORLD_API_KEY`                  | Inworld API key (Basic-encoded, passed verbatim).                                                                                                                               |
 | `url`              | `string`                        | `wss://api.inworld.ai/api/v1/realtime/session` | Realtime websocket endpoint.                                                                                                                                                    |
-| `model`            | `string`                        | `anthropic/claude-sonnet-4-6`                  | LLM Router model ID.                                                                                                                                                            |
-| `speaker`          | `string`                        | `Dennis`                                       | Default voice ID. Any catalog voice is accepted.                                                                                                                                |
+| `model`            | `string`                        | `inworld/models/gemma-4-26b-a4b-it-maas`       | LLM Router model ID.                                                                                                                                                            |
+| `speaker`          | `string`                        | `Sarah`                                        | Default voice ID. Any catalog voice is accepted.                                                                                                                                |
 | `sessionId`        | `string`                        | `voice-{Date.now()}`                           | Client-generated session key surfaced as the URL `?key=` parameter.                                                                                                             |
 | `instructions`     | `string`                        | `undefined`                                    | System prompt sent with the initial `session.update`.                                                                                                                           |
 | `session`          | `Partial<InworldSessionConfig>` | `undefined`                                    | Typed first-class session knobs (see below). Deep-merged into every `session.update`.                                                                                           |
@@ -252,6 +252,10 @@ new InworldRealtimeVoice({
 `audio.input.turn_detection` defaults to `{ type: 'semantic_vad', eagerness: 'medium', create_response: true, interrupt_response: true }`. To override, set `session.audio.input.turn_detection` (or `providerData.audio.input.turn_detection`) to your own object. To disable turn detection entirely, set it to `null`.
 
 `eagerness` controls how quickly semantic VAD ends a user turn — `low` waits for clearer pauses (more interruption-resistant), `high` ends turns sooner (snappier, more prone to cutting users off). Default `medium` balances both.
+
+#### Default `transcription`
+
+`audio.input.transcription` defaults to `{ model: 'inworld/inworld-stt-1' }`, so user-side `writing` events (with `role: 'user'`) fire out of the box. To override, set `session.audio.input.transcription` (or `providerData.audio.input.transcription`) to your own object. To disable user-side transcription, set it to `null`.
 
 ### Full CLI example
 

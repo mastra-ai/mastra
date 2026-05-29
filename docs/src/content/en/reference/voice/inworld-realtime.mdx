@@ -26,8 +26,8 @@ const voice = new InworldRealtimeVoice()
 // Or initialize with explicit configuration
 const voiceWithConfig = new InworldRealtimeVoice({
   apiKey: 'your-inworld-api-key',
-  model: 'anthropic/claude-sonnet-4-6',
-  speaker: 'Dennis',
+  model: 'inworld/models/gemma-4-26b-a4b-it-maas',
+  speaker: 'Sarah',
   instructions: 'You are a helpful voice assistant.',
   session: {
     audio: {
@@ -89,14 +89,14 @@ voice.close()
     description:
       "LLM Router model ID. Sent via the initial session.update, not in the URL. Any model supported by Inworld's router is accepted.",
     isOptional: true,
-    defaultValue: "'anthropic/claude-sonnet-4-6'",
+    defaultValue: "'inworld/models/gemma-4-26b-a4b-it-maas'",
   },
   {
     name: 'speaker',
     type: 'string',
     description: "Default voice ID for speech synthesis. Any voice from Inworld's catalog is accepted.",
     isOptional: true,
-    defaultValue: "'Dennis'",
+    defaultValue: "'Sarah'",
   },
   {
     name: 'sessionId',
@@ -189,7 +189,8 @@ Use the typed `session` field for documented Inworld realtime options. Fields co
   {
     name: 'audio.input.transcription',
     type: '{ model?: string; language?: string }',
-    description: 'Server-side transcription for incoming user audio (e.g. `{ model: "inworld/inworld-stt-1" }`).',
+    description:
+      'Server-side transcription for incoming user audio. Defaults to `{ model: "inworld/inworld-stt-1" }`. Supply your own object to override; set to `null` to disable user-side transcription.',
     isOptional: true,
   },
   {
@@ -524,4 +525,5 @@ Any voice ID from [Inworld's voice catalog](https://docs.inworld.ai/quickstart-t
 - Use `connect()` before any send, speak, or listen call. Events sent before the WebSocket is open are queued and flushed once the server acknowledges `session.updated`.
 - The voice instance must be closed with `close()` or `disconnect()` to release the WebSocket.
 - `audio.input.turn_detection` defaults to semantic VAD when neither `session` nor `providerData` supplies it. Override with your own object, or pass `null` to disable turn detection entirely.
+- `audio.input.transcription` defaults to `{ model: 'inworld/inworld-stt-1' }`, so user-side `writing` events fire out of the box. Override with your own object, or pass `null` to disable user-side transcription.
 - `on()` and `off()` are typed against `InworldVoiceEventMap` — known event names yield a typed callback payload, unknown names fall back to `unknown`.

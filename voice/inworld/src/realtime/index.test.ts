@@ -154,7 +154,7 @@ describe('InworldRealtimeVoice', () => {
     it('should send model, instructions, and voice in the first session.update', async () => {
       const v = new InworldRealtimeVoice({
         apiKey: 'k',
-        model: 'anthropic/claude-sonnet-4-6',
+        model: 'openai/gpt-5.4-nano',
         speaker: 'Hades',
         instructions: 'Be brief.',
       });
@@ -163,10 +163,42 @@ describe('InworldRealtimeVoice', () => {
       const sessionUpdate = sentEvents(instance).find(e => e.type === 'session.update');
       expect(sessionUpdate).toBeDefined();
       expect(sessionUpdate.session).toMatchObject({
-        model: 'anthropic/claude-sonnet-4-6',
+        model: 'openai/gpt-5.4-nano',
         instructions: 'Be brief.',
         audio: { output: { voice: 'Hades' } },
       });
+    });
+
+    it('should default model, speaker, and STT when none are supplied', async () => {
+      const v = new InworldRealtimeVoice({ apiKey: 'k' });
+      await connectStubbed(v);
+      const { instance } = getLastInstance();
+      const sessionUpdate = sentEvents(instance).find(e => e.type === 'session.update');
+      expect(sessionUpdate.session.model).toBe('inworld/models/gemma-4-26b-a4b-it-maas');
+      expect(sessionUpdate.session.audio.output.voice).toBe('Sarah');
+      expect(sessionUpdate.session.audio.input.transcription).toEqual({ model: 'inworld/inworld-stt-1' });
+    });
+
+    it('should drop the transcription default when session sets it to null', async () => {
+      const v = new InworldRealtimeVoice({
+        apiKey: 'k',
+        session: { audio: { input: { transcription: null } } },
+      });
+      await connectStubbed(v);
+      const { instance } = getLastInstance();
+      const sessionUpdate = sentEvents(instance).find(e => e.type === 'session.update');
+      expect(sessionUpdate.session.audio.input.transcription).toBeNull();
+    });
+
+    it('should respect a user-supplied transcription without bleeding the default model in', async () => {
+      const v = new InworldRealtimeVoice({
+        apiKey: 'k',
+        session: { audio: { input: { transcription: { language: 'es-ES' } } } },
+      });
+      await connectStubbed(v);
+      const { instance } = getLastInstance();
+      const sessionUpdate = sentEvents(instance).find(e => e.type === 'session.update');
+      expect(sessionUpdate.session.audio.input.transcription).toEqual({ language: 'es-ES' });
     });
 
     it('should propagate instructions set via addInstructions', async () => {

@@ -3,7 +3,13 @@ import { PassThrough } from 'node:stream';
 import type { ToolsInput, RequestContext } from '@internal/voice';
 import { MastraVoice } from '@internal/voice';
 import { WebSocket } from 'ws';
-import type { InworldResponseConfig, InworldSessionConfig, InworldTurnDetection, InworldVoiceEventMap } from './types';
+import type {
+  InworldInputTranscription,
+  InworldResponseConfig,
+  InworldSessionConfig,
+  InworldTurnDetection,
+  InworldVoiceEventMap,
+} from './types';
 import { deepMerge, isReadableStream, transformTools } from './utils';
 
 type EventCallback = (...args: any[]) => void;
@@ -13,18 +19,18 @@ type StreamWithId = PassThrough & { id: string };
 type EventStore = Record<string, EventCallback[]>;
 
 /**
- * Default voice for Inworld TTS-2. Inworld ships a curated voice catalog; the
- * authoritative list comes from `getSpeakers()`.
+ * Default voice. Inworld ships a curated voice catalog; the authoritative list
+ * comes from `getSpeakers()`.
  */
-const DEFAULT_VOICE = 'Dennis';
+const DEFAULT_VOICE = 'Sarah';
 
 const DEFAULT_URL = 'wss://api.inworld.ai/api/v1/realtime/session';
 
 /**
- * Default realtime model. Inworld routes via an LLM Router; `anthropic/...`
- * model IDs are accepted directly.
+ * Default realtime model. Inworld routes via an LLM Router; any model ID it
+ * exposes is accepted (e.g. `inworld/...`, `anthropic/...`, `openai/...`).
  */
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-4-6';
+const DEFAULT_MODEL = 'inworld/models/gemma-4-26b-a4b-it-maas';
 
 /**
  * Default turn-detection config. Semantic VAD is the conversational default —
@@ -38,6 +44,16 @@ const DEFAULT_TURN_DETECTION: InworldTurnDetection = {
   eagerness: 'medium',
   create_response: true,
   interrupt_response: true,
+};
+
+/**
+ * Default user-side transcription. The realtime server transcribes incoming
+ * audio with its own engine by default; an Inworld voice provider should pick
+ * Inworld's own STT rather than inherit that fallback. Override per call via
+ * `session.audio.input.transcription`, or disable by passing `null`.
+ */
+const DEFAULT_TRANSCRIPTION: InworldInputTranscription = {
+  model: 'inworld/inworld-stt-1',
 };
 
 /** Default deadline for the WS handshake + initial `session.updated` round-trip. */
@@ -57,9 +73,9 @@ export interface InworldRealtimeVoiceOptions {
   apiKey?: string;
   /** Override the realtime WebSocket endpoint. */
   url?: string;
-  /** Default LLM Router model (e.g. `anthropic/claude-sonnet-4-6`). */
+  /** Default LLM Router model. Defaults to `inworld/models/gemma-4-26b-a4b-it-maas`. */
   model?: string;
-  /** Default voice catalog ID (e.g. `Dennis`). */
+  /** Default voice catalog ID. Defaults to `Sarah`. */
   speaker?: string;
   /**
    * Optional client-generated session ID surfaced as the `key` URL parameter.
@@ -108,8 +124,8 @@ export interface InworldRealtimeVoiceOptions {
  * ```typescript
  * const voice = new InworldRealtimeVoice({
  *   apiKey: process.env.INWORLD_API_KEY,
- *   model: 'anthropic/claude-sonnet-4-6',
- *   speaker: 'Dennis',
+ *   // Defaults: model 'inworld/models/gemma-4-26b-a4b-it-maas', speaker 'Sarah',
+ *   // STT 'inworld/inworld-stt-1', semantic-VAD turn detection.
  *   session: {
  *     audio: {
  *       output: { speed: 1.1 },
@@ -495,15 +511,24 @@ export class InworldRealtimeVoice extends MastraVoice {
 
       // Compose the connect-time defaults. The typed `session` field and
       // `providerData` escape hatch are deep-merged on top in updateConfig().
-      // `turn_detection` is opted out by setting it to `null` in either
-      // override; we also skip the default if either override supplies it
-      // explicitly so the user's shape doesn't inherit our defaults' fields.
+      // `turn_detection` and `transcription` are each opted out by setting them
+      // to `null` in either override; we also skip a default whenever the
+      // override supplies that field explicitly, so the user's shape doesn't
+      // inherit our defaults' nested fields.
       const userTd = this.userTurnDetection();
+      const userTranscription = this.userTranscription();
       const audio: NonNullable<InworldSessionConfig['audio']> = {
         output: { voice: this.speaker },
       };
+      const input: NonNullable<InworldSessionConfig['audio']>['input'] = {};
       if (userTd === undefined) {
-        audio.input = { turn_detection: { ...DEFAULT_TURN_DETECTION } };
+        input.turn_detection = { ...DEFAULT_TURN_DETECTION };
+      }
+      if (userTranscription === undefined) {
+        input.transcription = { ...DEFAULT_TRANSCRIPTION };
+      }
+      if (Object.keys(input).length > 0) {
+        audio.input = input;
       }
       const initial: Partial<InworldSessionConfig> = {
         model: this.options.model || DEFAULT_MODEL,
@@ -755,8 +780,8 @@ export class InworldRealtimeVoice extends MastraVoice {
       this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
     });
 
-    // User-side ASR. Only emitted when `audio.input.transcription` is set in
-    // the session config (e.g. `{ model: 'inworld/inworld-stt-1' }`). The OpenAI
+    // User-side ASR. Transcription defaults to `inworld/inworld-stt-1` (set it
+    // to `null` in `session`/`providerData` to disable). The OpenAI
     // Realtime GA spec describes `.delta` events as additive chunks, but Inworld
     // currently sends rolling-rewrite deltas (each one is the full transcript
     // so far). Streaming those naively would duplicate text, so we ignore deltas
@@ -815,6 +840,22 @@ export class InworldRealtimeVoice extends MastraVoice {
     const providerInput = (providerAudio?.input as Record<string, unknown> | undefined) ?? undefined;
     if (providerInput && 'turn_detection' in providerInput) {
       return providerInput.turn_detection as InworldTurnDetection | null;
+    }
+    return undefined;
+  }
+
+  /**
+   * Returns the user-supplied `transcription` value (or `null` for explicit
+   * opt-out), or `undefined` when neither override sets it. Used to decide
+   * whether to apply `DEFAULT_TRANSCRIPTION`.
+   */
+  private userTranscription(): InworldInputTranscription | null | undefined {
+    const fromSession = this.session?.audio?.input?.transcription;
+    if (fromSession !== undefined) return fromSession;
+    const providerAudio = (this.providerData?.audio as Record<string, unknown> | undefined) ?? undefined;
+    const providerInput = (providerAudio?.input as Record<string, unknown> | undefined) ?? undefined;
+    if (providerInput && 'transcription' in providerInput) {
+      return providerInput.transcription as InworldInputTranscription | null;
     }
     return undefined;
   }

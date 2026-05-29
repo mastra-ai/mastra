@@ -13,8 +13,8 @@ import { InworldRealtimeVoice } from '@mastra/voice-inworld';
 
 const voice = new InworldRealtimeVoice({
   apiKey: process.env.INWORLD_API_KEY,
-  model: 'anthropic/claude-sonnet-4-6',
-  speaker: 'Dennis',
+  // Defaults: model 'inworld/models/gemma-4-26b-a4b-it-maas', speaker 'Sarah',
+  // STT 'inworld/inworld-stt-1', semantic-VAD turn detection.
 });
 
 await voice.connect();
