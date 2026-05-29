@@ -5680,7 +5680,7 @@ export type PostAgentsAgentIdSendMessage_Body =
               | undefined;
           }
         | undefined;
-      runId?: string | undefined;
+      runId?: undefined | undefined;
       resourceId: string;
       threadId: string;
       ifIdle?:
@@ -6058,7 +6058,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
               | undefined;
           }
         | undefined;
-      runId?: string | undefined;
+      runId?: undefined | undefined;
       resourceId: string;
       threadId: string;
       ifIdle?:
@@ -6410,7 +6410,7 @@ export type PostAgentsAgentIdSignals_Body =
               | undefined;
           }
         | undefined;
-      runId?: string | undefined;
+      runId?: undefined | undefined;
       resourceId: string;
       threadId: string;
       ifIdle?:
