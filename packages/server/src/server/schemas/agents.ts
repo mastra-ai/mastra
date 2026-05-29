@@ -568,7 +568,7 @@ const signalTargetBodySchema = z.union([
     ifIdle: z.undefined().optional(),
   }),
   signalTargetBaseBodySchema.extend({
-    runId: z.string().optional(),
+    runId: z.undefined().optional(),
     resourceId: z.string(),
     threadId: z.string(),
     ifIdle: z

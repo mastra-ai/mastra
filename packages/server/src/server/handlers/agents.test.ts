@@ -1209,6 +1209,28 @@ describe('Agent Routes Authorization', () => {
       ).toBe(true);
     });
 
+    it('should reject idle behavior when targeting a run', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: 'pause here' },
+          runId: 'run-123',
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          ifIdle: { behavior: 'wake' },
+        }).success,
+      ).toBe(false);
+
+      expect(
+        sendAgentMessageBodySchema.safeParse({
+          message: 'pause here',
+          runId: 'run-123',
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          ifIdle: { behavior: 'wake' },
+        }).success,
+      ).toBe(false);
+    });
+
     it('should accept thread-targeted signal bodies with active and idle behavior', () => {
       expect(
         sendAgentSignalBodySchema.safeParse({
