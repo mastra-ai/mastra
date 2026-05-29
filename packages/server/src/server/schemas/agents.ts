@@ -555,6 +555,7 @@ const signalTargetBaseBodySchema = z.object({
   ifActive: z
     .object({
       behavior: signalActiveBehaviorSchema.optional(),
+      attributes: signalAttributesSchema.optional(),
     })
     .optional(),
 });
@@ -574,6 +575,7 @@ const signalTargetBodySchema = z.union([
       .object({
         behavior: signalIdleBehaviorSchema.optional(),
         streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
+        attributes: signalAttributesSchema.optional(),
       })
       .optional(),
   }),

@@ -1247,19 +1247,23 @@ describe('Agent Routes Authorization', () => {
         }).success,
       ).toBe(true);
 
-      expect(
-        queueAgentMessageBodySchema.safeParse({
-          message: {
-            contents: 'hello',
-            attributes: { source: 'test' },
-            metadata: { client: 'sdk' },
-            providerOptions: { mastra: { channel: 'web' } },
-          },
-          resourceId: 'user-a',
-          threadId: 'thread-a',
-          ifIdle: { streamOptions: { instructions: 'Use the fixture.' } },
-        }).success,
-      ).toBe(true);
+      const parsedMessageBody = queueAgentMessageBodySchema.parse({
+        message: {
+          contents: 'hello',
+          attributes: { source: 'test' },
+          metadata: { client: 'sdk' },
+          providerOptions: { mastra: { channel: 'web' } },
+        },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+        ifActive: { behavior: 'deliver', attributes: { delivery: 'active' } },
+        ifIdle: {
+          attributes: { delivery: 'idle' },
+          streamOptions: { instructions: 'Use the fixture.' },
+        },
+      });
+      expect(parsedMessageBody.ifActive?.attributes).toEqual({ delivery: 'active' });
+      expect(parsedMessageBody.ifIdle?.attributes).toEqual({ delivery: 'idle' });
     });
 
     it('should reject malformed message route bodies', () => {
@@ -1391,6 +1395,7 @@ describe('Agent Routes Authorization', () => {
         resourceId: 'user-a',
         threadId: 'queue-message-thread-with-context',
         ifIdle: {
+          attributes: { delivery: 'queued' },
           streamOptions: {
             instructions: 'Use the fixture.',
             requestContext: {
@@ -1402,6 +1407,7 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result).toEqual({ accepted: true, runId: 'queued-message-run-id' });
+      expect(capturedTarget.ifIdle.attributes).toEqual({ delivery: 'queued' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
