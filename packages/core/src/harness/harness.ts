@@ -1632,7 +1632,9 @@ export class Harness<TState = {}> {
           }
         }
         const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
-        return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
+        const maxBacktickRun = Math.max(0, ...Array.from(textContent.matchAll(/`+/g), match => match[0].length));
+        const fence = '`'.repeat(Math.max(3, maxBacktickRun + 1));
+        return { type: 'text' as const, text: `${label}\n${fence}\n${textContent}\n${fence}` };
       }
       return {
         type: 'file' as const,
