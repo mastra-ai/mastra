@@ -51,6 +51,14 @@ function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UI
     signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
       ? (signal.metadata as Record<string, unknown>)
       : {};
+  const attributes =
+    signal.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+      ? (signal.attributes as Record<string, unknown>)
+      : {};
+  const providerOptions =
+    signal.providerOptions && typeof signal.providerOptions === 'object' && !Array.isArray(signal.providerOptions)
+      ? (signal.providerOptions as Record<string, unknown>)
+      : {};
 
   const type = getSignalType(message) ?? 'signal';
   return {
@@ -60,7 +68,10 @@ function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UI
       type,
       contents: 'contents' in signal ? signal.contents : getTextContent(message),
       createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(typeof signal.acceptedAt === 'string' ? { acceptedAt: signal.acceptedAt } : {}),
+      ...(Object.keys(attributes).length ? { attributes } : {}),
       ...(Object.keys(metadata).length ? { metadata } : {}),
+      ...(Object.keys(providerOptions).length ? { providerOptions } : {}),
     },
   } as AIV5Type.DataUIPart<AIV5.UIDataTypes>;
 }
@@ -208,7 +219,7 @@ export class AIV5Adapter {
     if (dbMsg.role === 'signal' && !isUserMessageSignal) {
       return {
         id: dbMsg.id,
-        role: 'system',
+        role: 'user',
         metadata,
         parts,
       };
@@ -505,7 +516,7 @@ export class AIV5Adapter {
 
     return {
       id: dbMsg.id,
-      role: dbMsg.role === 'signal' ? (isUserMessageSignal ? 'user' : 'system') : dbMsg.role,
+      role: dbMsg.role === 'signal' ? 'user' : dbMsg.role,
       metadata,
       parts,
     };
