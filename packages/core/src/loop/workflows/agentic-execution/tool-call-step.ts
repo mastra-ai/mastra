@@ -1127,8 +1127,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         if (error instanceof Error && error.name === 'FGADeniedError') {
           throw error;
         }
+        // Sanitize error to prevent "Converting circular structure to JSON" crashes downstream.
+        // AWS SDK errors (and similar) hold references to TLSSocket/ClientRequest/Agent objects
+        // that form circular reference chains. ensureSerializable strips those.
+        const sanitizedError = ensureSerializable(error) as Error;
         return {
-          error: error as Error,
+          error: sanitizedError,
           ...inputData,
         };
       }

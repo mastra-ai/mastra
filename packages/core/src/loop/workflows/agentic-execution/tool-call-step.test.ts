@@ -240,6 +240,58 @@ describe('createToolCallStep tool execution error handling', () => {
     expect(result).not.toHaveProperty('result');
     expect(result.error).toBeInstanceOf(Error);
   });
+
+  it('should sanitize errors with circular references (e.g. AWS SDK network errors)', async () => {
+    // Simulate an AWS SDK-style error with circular TLSSocket→ClientRequest→Agent references
+    const circularError = new Error('connect ECONNREFUSED 127.0.0.1:443') as any;
+    const fakeSocket = { _httpMessage: null as any };
+    const fakeRequest = { agent: { sockets: { 'host:443': [fakeSocket] } }, socket: fakeSocket };
+    fakeSocket._httpMessage = fakeRequest; // circular!
+    circularError.$metadata = { httpStatusCode: undefined };
+    circularError.request = fakeRequest;
+
+    const failingTool = createTool({
+      id: 'circular-error-tool',
+      description: 'A tool that throws a circular error',
+      inputSchema: z.object({ param: z.string() }),
+      execute: async () => {
+        throw circularError;
+      },
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: failingTool,
+      options: {
+        name: 'circular-error-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'A tool that throws a circular error',
+        requestContext: new RequestContext(),
+      },
+    });
+
+    const builtTool = builder.build();
+    const tools = { 'circular-error-tool': builtTool };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    const inputData = { toolCallId: 'test-call-id', toolName: 'circular-error-tool', args: { param: 'test' } };
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
+
+    expect(result).toHaveProperty('error');
+    // The key assertion: JSON.stringify should not throw on the sanitized error
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
 });
 
 describe('createToolCallStep tool approval workflow', () => {
