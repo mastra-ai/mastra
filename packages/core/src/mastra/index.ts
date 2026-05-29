@@ -908,11 +908,7 @@ export class Mastra<
     // Server cache for temporary persistence and durable agent resumable streams
     this.#serverCache = config?.cache ?? new InMemoryServerCache();
 
-    // Set the editor if provided and register this Mastra instance with it
     this.#editor = config?.editor;
-    if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
-      this.#editor.registerWithMastra(this);
-    }
 
     // Store global version overrides
     this.#versions = config?.versions;
@@ -1045,6 +1041,17 @@ export class Mastra<
     this.#logger = dualLogger as unknown as TLogger;
 
     this.#storage = storage;
+
+    // Give storage adapters a back-pointer to this Mastra instance so they
+    // can look up code-defined agents, editor config, etc. when needed
+    // (e.g. filesystem code-mode snapshot filtering).
+    storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+
+    // Register the editor after storage is assigned so code mode can overlay
+    // filesystem-backed editor storage while preserving app storage domains.
+    if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
+      this.#editor.registerWithMastra(this);
+    }
 
     this.#backgroundTaskConfig = config?.backgroundTasks;
     // Auto-create the background-task manager only when this Mastra is
@@ -3306,6 +3313,7 @@ export class Mastra<
    */
   public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
+    this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
     this.#ensureBackgroundTaskManager();
     // If storage was attached after construction, the SchedulerWorker
     // will pick it up when startWorkers() is called.
