@@ -2413,6 +2413,10 @@ export type DisconnectToolProviderConnectionParams = GeneratedRequest<
 export type DisconnectToolProviderConnectionResponse =
   GeneratedResponse<'DELETE /tool-providers/:providerId/connections/:connectionId'>;
 
+export type GetToolProviderConnectionUsageParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connections/:connectionId/usage'>
+>;
+
 export type GetToolProviderConnectionUsageResponse =
   GeneratedResponse<'GET /tool-providers/:providerId/connections/:connectionId/usage'>;
 

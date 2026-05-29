@@ -4,6 +4,7 @@ import type {
   ClientOptions,
   DisconnectToolProviderConnectionParams,
   DisconnectToolProviderConnectionResponse,
+  GetToolProviderConnectionUsageParams,
   GetToolProviderConnectionUsageResponse,
   GetToolProviderToolSchemaResponse,
   ListToolProviderConnectionFieldsParams,
@@ -165,6 +166,9 @@ export class ToolProvider extends BaseResource {
     params?: DisconnectToolProviderConnectionParams,
   ): Promise<DisconnectToolProviderConnectionResponse> {
     const searchParams = new URLSearchParams();
+    if (params?.toolkit) {
+      searchParams.set('toolkit', params.toolkit);
+    }
     if (params?.force) {
       searchParams.set('force', 'true');
     }
@@ -183,9 +187,19 @@ export class ToolProvider extends BaseResource {
    * Lists the agents that currently pin a given connection. Used by the
    * picker to warn the user before disconnecting a shared account.
    */
-  getConnectionUsage(connectionId: string): Promise<GetToolProviderConnectionUsageResponse> {
+  getConnectionUsage(
+    connectionId: string,
+    params?: GetToolProviderConnectionUsageParams,
+  ): Promise<GetToolProviderConnectionUsageResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.toolkit) {
+      searchParams.set('toolkit', params.toolkit);
+    }
+    const queryString = searchParams.toString();
     return this.request(
-      `/tool-providers/${encodeURIComponent(this.providerId)}/connections/${encodeURIComponent(connectionId)}/usage`,
+      `/tool-providers/${encodeURIComponent(this.providerId)}/connections/${encodeURIComponent(connectionId)}/usage${
+        queryString ? `?${queryString}` : ''
+      }`,
     );
   }
 

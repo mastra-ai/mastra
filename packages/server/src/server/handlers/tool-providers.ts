@@ -559,11 +559,25 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
 
       let ownerAuthorId: string | undefined;
       let ownerScope: 'shared' | 'per-author' | 'caller-supplied' | undefined;
+      let matched = false;
       if (store) {
         const rows = await store.listConnectionsByAuthor({ providerId: provider.info.id });
         const match = rows.find(r => r.connectionId === connectionId);
-        ownerAuthorId = match?.authorId;
-        ownerScope = match?.scope;
+        if (match) {
+          matched = true;
+          ownerAuthorId = match.authorId;
+          ownerScope = match.scope;
+        }
+      }
+
+      // Fail closed: if storage is configured and no row matches the
+      // requested connectionId, refuse the call for non-admins. Without
+      // this guard, a caller could trigger provider-side `revokeConnection`
+      // against another tenant's connectionId by guessing it.
+      if (store && !matched && !isAdmin) {
+        throw new HTTPException(403, {
+          message: 'You do not have permission to disconnect this connection',
+        });
       }
 
       const effectiveOwner = ownerAuthorId ?? callerAuthorId;
@@ -630,12 +644,26 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
       const store = await storage?.getStore('toolProviderConnections');
       let ownerAuthorId: string | undefined;
       let ownerScope: 'shared' | 'per-author' | 'caller-supplied' | undefined;
+      let matched = false;
       if (store) {
         const rows = await store.listConnectionsByAuthor({ providerId: provider.info.id });
         const match = rows.find(r => r.connectionId === connectionId);
-        ownerAuthorId = match?.authorId;
-        ownerScope = match?.scope;
+        if (match) {
+          matched = true;
+          ownerAuthorId = match.authorId;
+          ownerScope = match.scope;
+        }
       }
+
+      // Fail closed: if storage is configured and no row matches the
+      // requested connectionId, refuse the call for non-admins so callers
+      // cannot probe for other tenants' connections.
+      if (store && !matched && !isAdmin) {
+        throw new HTTPException(403, {
+          message: 'You do not have permission to view usage for this connection',
+        });
+      }
+
       const effectiveOwner = ownerAuthorId ?? callerAuthorId;
       const isShared = ownerScope === 'shared';
       if (!isShared && effectiveOwner !== callerAuthorId && !isAdmin) {

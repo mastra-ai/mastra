@@ -173,9 +173,13 @@ export const authorizeToolProviderBodySchema = z.object({
     .describe('Provider-specific user-supplied connection fields (e.g. subdomain)'),
   label: z
     .string()
-    .max(64)
+    .min(1, 'Connection label is required')
+    .max(32, 'Connection label must be ≤ 32 characters')
+    .regex(/^[A-Za-z0-9 _-]+$/, 'Connection label may only contain letters, digits, spaces, _ and -')
     .nullish()
-    .describe('Optional human label to persist on the resulting tool_provider_connections row'),
+    .describe(
+      'Optional human label to persist on the resulting tool_provider_connections row. Must match the stored connection label rules (≤ 32 chars, [A-Za-z0-9 _-]+).',
+    ),
   scope: connectionScopeSchema
     .optional()
     .describe(
