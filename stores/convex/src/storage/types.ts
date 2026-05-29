@@ -40,7 +40,9 @@ export type StorageRequest =
       tableName: TABLE_NAMES | string;
       filters?: EqualityFilter[];
       limit?: number;
+      /** Cursor pagination is currently supported for vector table reads. */
       pageSize?: number;
+      /** Requires pageSize; currently supported for vector table reads. */
       cursor?: string | null;
       indexHint?: IndexHint;
     }
@@ -114,7 +116,7 @@ export type StorageResponse =
   | {
       ok: true;
       result?: any;
-      /** Indicates more batches remain for bulk operations (e.g., clearTable) */
+      /** Indicates more batches or pages remain for the operation. */
       hasMore?: boolean;
       /** Cursor for the next page when hasMore is true. */
       continuationCursor?: string | null;

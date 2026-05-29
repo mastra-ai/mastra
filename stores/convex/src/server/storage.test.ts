@@ -1556,6 +1556,20 @@ describe('mastraStorage bulk mutations', () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it('queryTable rejects vector pagination cursors without a page size', async () => {
+    const query = vi.fn();
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_vector_embeddings',
+      cursor: 'current-cursor',
+    });
+
+    expect(result).toEqual({ ok: false, error: 'queryTable cursor requires pageSize' });
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it('deleteMany applies the same concurrent lookup behavior to generic fallback tables', async () => {
     const deleteCtx = createIndexedDeleteCtx(
       new Map([

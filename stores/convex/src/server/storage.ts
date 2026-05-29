@@ -807,6 +807,10 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
     }
 
     case 'queryTable': {
+      if (request.cursor !== undefined && request.pageSize === undefined) {
+        throw new Error('queryTable cursor requires pageSize');
+      }
+
       if (request.pageSize !== undefined) {
         if (!Number.isInteger(request.pageSize) || request.pageSize <= 0) {
           throw new Error('queryTable pageSize must be a positive integer');
