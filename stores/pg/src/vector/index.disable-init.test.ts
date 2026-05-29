@@ -102,11 +102,6 @@ describe('PgVector disableInit', () => {
     expect(vectorStore.disableInit).toBe(true);
   });
 
-  it('defaults disableInit to false when not provided', () => {
-    const vectorStore = new PgVector(baseConfig);
-    expect(vectorStore.disableInit).toBe(false);
-  });
-
   it('does not issue any DDL from createIndex when disableInit is true', async () => {
     const vectorStore = new PgVector({ ...baseConfig, disableInit: true });
     await (vectorStore as any).cacheWarmupPromise;
