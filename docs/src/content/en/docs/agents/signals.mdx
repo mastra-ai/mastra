@@ -247,6 +247,10 @@ Existing stored signal rows and older clients continue to load through the compa
 Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
 :::
 
+## Use HTTP routes
+
+If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-message` for immediate messages and `POST /api/agents/:agentId/queue-message` for next-turn messages. See [Server routes reference](/reference/server/routes#agent-message-routes) for request and response schemas.
+
 ## Use the client SDK
 
 The JavaScript client exposes thread signal APIs. Use `subscribeToThread()` before sending thread input so the client can render the stream that wakes from, or receives, the input.
@@ -302,5 +306,6 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 - [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
 - [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
 - [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
+- [Server agent routes](/reference/server/routes#agent-message-routes)
 - [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)
