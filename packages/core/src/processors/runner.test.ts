@@ -2473,7 +2473,8 @@ describe('ProcessorRunner', () => {
         expect.objectContaining({
           type: 'data-system-reminder',
           data: expect.objectContaining({
-            type: 'system-reminder',
+            type: 'reactive',
+            tagName: 'system-reminder',
             contents: 'remember this',
             metadata: { type: 'test-reminder' },
           }),
