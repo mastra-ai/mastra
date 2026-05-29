@@ -1402,6 +1402,11 @@ describe('Agent Routes Authorization', () => {
               fixture: 'text-stream',
               [MASTRA_RESOURCE_ID_KEY]: 'user-b',
             },
+            versions: {
+              agents: {
+                'sub-agent': { versionId: 'version-1' },
+              },
+            },
           },
         },
       } as any);
@@ -1412,6 +1417,12 @@ describe('Agent Routes Authorization', () => {
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+      expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: {
+          'sub-agent': { versionId: 'version-1' },
+        },
+        defaultStatus: 'published',
+      });
     });
 
     it('should merge idle stream request context before waking a thread with a signal', async () => {

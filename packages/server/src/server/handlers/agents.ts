@@ -1658,21 +1658,27 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
     ifIdle,
   }) => {
     try {
-      const bodyRequestContext = ifIdle?.streamOptions?.requestContext;
+      const idleStreamOptions = ifIdle?.streamOptions as
+        | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
+        | undefined;
+      const bodyRequestContext = idleStreamOptions?.requestContext;
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(serverRequestContext, bodyRequestContext as Record<string, unknown>),
+        versionOptions,
         requestContext: serverRequestContext,
       });
+      stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
         ifIdle: {
           ...(ifIdle ?? {}),
-          streamOptions: { ...(ifIdle?.streamOptions ?? {}), requestContext: serverRequestContext } as any,
+          streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
         },
       };
 
@@ -1744,21 +1750,27 @@ async function handleAgentMessageRoute({
   ifIdle?: { behavior?: 'wake' | 'persist' | 'discard'; streamOptions?: Record<string, unknown> };
   methodName: 'sendMessage' | 'queueMessage';
 }) {
-  const bodyRequestContext = ifIdle?.streamOptions?.requestContext;
+  const idleStreamOptions = ifIdle?.streamOptions as
+    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
+    | undefined;
+  const bodyRequestContext = idleStreamOptions?.requestContext;
   mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+  const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
   const agent = await getAgentFromSystem({
     mastra,
     agentId,
-    versionOptions: extractVersionOptions(serverRequestContext, bodyRequestContext as Record<string, unknown>),
+    versionOptions,
     requestContext: serverRequestContext,
   });
+  stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+  ensureDefaultVersionStatus(serverRequestContext, versionOptions);
   const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
   const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
   const ifIdleWithContext = {
     ifIdle: {
       ...(ifIdle ?? {}),
-      streamOptions: { ...(ifIdle?.streamOptions ?? {}), requestContext: serverRequestContext } as any,
+      streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
     },
   };
 
