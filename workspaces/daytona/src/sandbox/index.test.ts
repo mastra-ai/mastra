@@ -592,6 +592,29 @@ describe('DaytonaSandbox', () => {
       expect(cmd).toContain('export KEEP=yes');
       expect(cmd).not.toContain('REMOVE');
     });
+
+    it('rejects invalid env names before building shell exports', async () => {
+      const sandbox = new DaytonaSandbox();
+
+      await sandbox._start();
+
+      await expect(
+        sandbox.executeCommand('echo', ['test'], { env: { 'sandbox not found; printf injected': 'x' } }),
+      ).rejects.toThrow('Invalid environment variable name');
+      expect(mockDaytona.create).toHaveBeenCalledTimes(1);
+      expect(mockSandbox.process.executeSessionCommand).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid sandbox env names', async () => {
+      const sandbox = new DaytonaSandbox({
+        env: { 'INVALID-NAME': 'x' },
+      });
+
+      await sandbox._start();
+
+      await expect(sandbox.executeCommand('echo', ['test'])).rejects.toThrow('Invalid environment variable name');
+      expect(mockSandbox.process.executeSessionCommand).not.toHaveBeenCalled();
+    });
   });
 
   describe('Mount Configuration', () => {
