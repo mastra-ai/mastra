@@ -45,6 +45,13 @@ export interface MessageMetadata {
   agentInput?: unknown;
   hasMoreMessages?: boolean;
   from?: string;
+  routingDecision?: {
+    isNetwork?: boolean;
+    agentId?: string;
+    selectionReason?: string;
+    [key: string]: unknown;
+  };
+  routingDecisionText?: string;
   backgroundTasks?: Record<string, BackgroundTaskEntry>;
   completionResult?: {
     passed?: boolean;

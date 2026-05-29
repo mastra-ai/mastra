@@ -642,10 +642,6 @@ export const useChat = ({
     _onNetworkChunk.current = onNetworkChunk;
     _networkRunId.current = runId;
 
-    // Seed the user message so the network projection has correct ordering for
-    // branches that operate on the trailing assistant message.
-    setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToMastraDBMessage)]);
-
     // Accumulate network chunks into `messages` as `MastraDBMessage` (temporary
     // bridge until the next major), while still forwarding chunks to the
     // consumer for side-effects (OM, working memory, thread list, errors).

@@ -85,6 +85,23 @@ export type MastraDBMessageMetadata = {
   selectionReason?: string;
   agentInput?: string | object | Array<object>;
   hasMoreMessages?: boolean;
+  /**
+   * Structured decision emitted by the routing agent. Parsed from the
+   * routing-agent text stream when it forms a balanced JSON object so the
+   * raw payload never reaches the rendered thread.
+   */
+  routingDecision?: Record<string, unknown>;
+  /**
+   * Raw routing-agent text used when the stream did not parse as JSON. Kept
+   * out of the visible parts but exposed for downstream UI (badge tooltips,
+   * metadata dialogs, debugging).
+   */
+  routingDecisionText?: string;
+  /**
+   * Internal buffer for partial routing-agent text deltas. Cleared once the
+   * buffer parses as JSON and is promoted to `routingDecision`.
+   */
+  routingDecisionBuffer?: string;
 };
 
 /**

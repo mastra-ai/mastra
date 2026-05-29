@@ -1576,30 +1576,69 @@ const lastAssistant = (conversation: MastraDBMessage[]): MastraDBMessage | undef
   return last && last.role === 'assistant' ? last : undefined;
 };
 
-const handleRoutingAgentDelta = (chunk: NetworkChunkType, conversation: MastraDBMessage[]): MastraDBMessage[] => {
+/**
+ * Try to parse the buffered routing-agent text as a JSON object. Returns the
+ * parsed object on success, or `null` while the buffer is still incomplete or
+ * not JSON at all.
+ */
+const tryParseRoutingDecision = (buffered: string): Record<string, unknown> | null => {
+  const trimmed = buffered.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Routing-agent text deltas describe the network's routing decision (often a
+ * JSON object such as `{ "isNetwork": true, "agentId": "...", ... }`). The raw
+ * payload is never useful in the rendered thread, so we buffer it in
+ * message-level metadata, promote it to `routingDecision` when it parses as
+ * JSON, and fall back to `routingDecisionText` for non-JSON routing models.
+ * No visible text part is produced.
+ */
+const handleRoutingAgentDelta = (
+  chunk: NetworkChunkType,
+  conversation: MastraDBMessage[],
+  metadata: MastraDBMessageMetadata,
+): MastraDBMessage[] => {
+  const delta = (chunk.payload as { text?: string })?.text ?? '';
+  if (!delta) return conversation;
+
   const lastMessage = lastAssistant(conversation);
-  if (!lastMessage) return conversation;
 
-  const agentChunk = chunk.payload as any;
-  const parts = [...lastMessage.content.parts];
-  const textPartIndex = findPartIndex(parts, part => part.type === 'text');
+  const mergeRoutingMetadata = (existing: MastraDBMessageMetadata): MastraDBMessageMetadata => {
+    const buffered = (existing.routingDecisionBuffer ?? '') + delta;
+    const next: MastraDBMessageMetadata = { ...cloneMetadata(existing), mode: 'network' };
+    const parsed = tryParseRoutingDecision(buffered);
+    if (parsed) {
+      next.routingDecision = parsed;
+      delete next.routingDecisionBuffer;
+      delete next.routingDecisionText;
+    } else {
+      next.routingDecisionBuffer = buffered;
+      next.routingDecisionText = buffered;
+    }
+    return next;
+  };
 
-  if (textPartIndex === -1) {
-    parts.push({ type: 'text', text: agentChunk.text, state: 'streaming' } as unknown as MastraMessagePart);
-    return replaceLast(conversation, withParts(lastMessage, parts));
+  if (!lastMessage) {
+    const seed = mergeRoutingMetadata({});
+    return appendAssistantMessage(
+      conversation,
+      `routing-agent-${(chunk.payload as { runId?: string })?.runId ?? 'unknown'}-${Date.now()}`,
+      [],
+      { ...networkMode(metadata), ...seed },
+    );
   }
 
-  const textPart = parts[textPartIndex];
-  if (textPart.type === 'text') {
-    parts[textPartIndex] = {
-      ...(textPart as MastraTextPart),
-      text: (textPart as MastraTextPart).text + agentChunk.text,
-      state: 'streaming',
-    } as unknown as MastraMessagePart;
-    return replaceLast(conversation, withParts(lastMessage, parts));
-  }
-
-  return conversation;
+  return replaceLast(conversation, withMetadata(lastMessage, mergeRoutingMetadata(lastMessage.content.metadata ?? {})));
 };
 
 const handleAgentNetworkChunk = (
@@ -1933,7 +1972,7 @@ export const accumulateNetworkChunk = ({
   const newConversation = [...conversation];
 
   if (chunk.type === 'routing-agent-text-delta') {
-    return handleRoutingAgentDelta(chunk, newConversation);
+    return handleRoutingAgentDelta(chunk, newConversation, metadata);
   }
 
   if (chunk.type.startsWith('agent-execution-')) {

@@ -48,8 +48,10 @@ export const AgentBadge = ({
   isComplete = false,
   keepOpenForStreamingChildMessages = false,
 }: AgentBadgeProps) => {
-  const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
-  const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+  const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
+  const selectionReason =
+    metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
+  const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const parentRequireApprovalMetadata =
     metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate'

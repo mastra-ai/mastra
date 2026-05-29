@@ -163,12 +163,47 @@ const expectValidNetworkMessage = (message: MastraDBMessage) => {
 };
 
 describe('accumulateNetworkChunk', () => {
-  it('accumulates routing-agent text deltas onto the trailing assistant message', () => {
-    const result = run([routingTextDeltaChunk('Hello '), routingTextDeltaChunk('world')], seedAssistant());
-    const part = firstPart(lastMessage(result));
-    expect(part.type).toBe('text');
-    expect(part.text).toBe('Hello world');
-    expect(part.state).toBe('streaming');
+  it('parses routing-agent JSON deltas into metadata.routingDecision without a visible text part', () => {
+    const decision = '{"isNetwork":true,"agentId":"weather","selectionReason":"User asked about weather"}';
+    const chunks = [
+      routingTextDeltaChunk(decision.slice(0, 20)),
+      routingTextDeltaChunk(decision.slice(20, 50)),
+      routingTextDeltaChunk(decision.slice(50)),
+    ];
+    const result = run(chunks, seedAssistant());
+    const message = lastMessage(result);
+
+    expect(message.content.parts).toHaveLength(0);
+    const metadata = meta(message);
+    expect(metadata.mode).toBe('network');
+    expect(metadata.routingDecision).toEqual({
+      isNetwork: true,
+      agentId: 'weather',
+      selectionReason: 'User asked about weather',
+    });
+    expect(metadata.routingDecisionBuffer).toBeUndefined();
+    expect(metadata.routingDecisionText).toBeUndefined();
+  });
+
+  it('keeps non-JSON routing-agent text in metadata.routingDecisionText without rendering it', () => {
+    const result = run([routingTextDeltaChunk('Routing to weather agent...')], seedAssistant());
+    const message = lastMessage(result);
+
+    expect(message.content.parts).toHaveLength(0);
+    const metadata = meta(message);
+    expect(metadata.routingDecision).toBeUndefined();
+    expect(metadata.routingDecisionText).toBe('Routing to weather agent...');
+  });
+
+  it('seeds a new assistant message when routing-agent text arrives before any other chunk', () => {
+    const decision = '{"isNetwork":true,"agentId":"weather"}';
+    const result = run([routingTextDeltaChunk(decision)], []);
+
+    expect(result).toHaveLength(1);
+    const message = lastMessage(result);
+    expect(message.role).toBe('assistant');
+    expect(message.content.parts).toHaveLength(0);
+    expect(meta(message).routingDecision).toEqual({ isNetwork: true, agentId: 'weather' });
   });
 
   it('handles agent-execution-start then agent-execution-end as a dynamic-tool lifecycle', () => {
