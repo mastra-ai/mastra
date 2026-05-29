@@ -16,7 +16,7 @@ import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
 import type { HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
-import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
+import type { StorageThreadType } from '@mastra/core/memory';
 import {
   AgentsMDInjector,
   PrefillErrorHandler,
@@ -26,7 +26,6 @@ import {
 import type { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
-import type { SessionRecord } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import {

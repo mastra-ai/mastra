@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 
+import type * as HarnessV1Module from '@mastra/core/harness/v1';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gatewayRegistrySyncGateways = vi.fn();
@@ -123,7 +124,7 @@ vi.mock('@mastra/core/harness', () => ({
 }));
 
 vi.mock('@mastra/core/harness/v1', async importOriginal => {
-  const actual = await importOriginal<typeof import('@mastra/core/harness/v1')>();
+  const actual = await importOriginal<typeof HarnessV1Module>();
   return {
     ...actual,
     Harness: class extends actual.Harness {
