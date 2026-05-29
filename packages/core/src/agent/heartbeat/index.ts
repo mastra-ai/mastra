@@ -1,8 +1,7 @@
-// Public surface: only types/constants. The workflow module is loaded via
-// `await import('./workflow')` from inside `Mastra.__ensureHeartbeatWorkflowRegistered`
-// to keep this barrel out of the `mastra → workflows/evented → agent` cycle.
+// Public surface: only types/constants. The worker module is loaded via
+// `await import('./worker')` from inside `Mastra.startWorkers` to keep
+// this barrel out of the `mastra → workflows/evented → agent` cycle.
 export {
-  HEARTBEAT_WORKFLOW_ID,
   HEARTBEAT_SCHEDULE_PREFIX,
   HeartbeatInputSchema,
   HeartbeatOutputSchema,

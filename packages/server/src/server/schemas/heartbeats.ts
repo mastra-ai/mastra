@@ -13,12 +13,11 @@ export const heartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'neve
 /**
  * Public Heartbeat view model.
  *
- * Heartbeats are persisted as `Schedule` rows targeting the built-in
- * `__mastra_heartbeat__` workflow, but the HTTP surface intentionally hides
- * that implementation detail. The Heartbeat object is a flat view of the
- * meaningful fields a user cares about (cron, prompt, threading, status,
- * lifecycle) without leaking `target.workflowId`, `inputData`, or any
- * internal-prefix identifier.
+ * Heartbeats are persisted as `Schedule` rows with a dedicated
+ * `target.type === 'heartbeat'` variant. The HTTP surface flattens that
+ * representation to the fields a user cares about (cron, prompt, threading,
+ * status, lifecycle) without exposing the schedule plumbing or internal
+ * identifier prefix.
  */
 export const heartbeatSchema = z.object({
   id: z.string(),

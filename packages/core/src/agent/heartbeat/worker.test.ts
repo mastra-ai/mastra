@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../../mastra';
-import type { HeartbeatInput } from './types';
-import { __internal, isWithinActiveHours } from './workflow';
+import type { ScheduleTarget } from '../../storage/domains/schedules/base';
+import { executeHeartbeat, isWithinActiveHours } from './worker';
+
+type HeartbeatTarget = Extract<ScheduleTarget, { type: 'heartbeat' }>;
 
 function makeStorage(deleteSchedule = vi.fn().mockResolvedValue(undefined)) {
   return {
@@ -30,21 +32,21 @@ function makeMastra(
   } as unknown as Mastra;
 }
 
-function baseInput(overrides: Partial<HeartbeatInput> = {}): HeartbeatInput {
+function makeTarget(overrides: Partial<HeartbeatTarget> = {}): HeartbeatTarget {
   return {
-    scheduleId: 'hb_a1',
+    type: 'heartbeat',
     agentId: 'a1',
     prompt: 'check in',
     ...overrides,
-  };
+  } as HeartbeatTarget;
 }
 
-describe('heartbeat workflow — executeHeartbeat', () => {
+describe('HeartbeatWorker — executeHeartbeat', () => {
   it('returns agent-missing and self-cleans when the agent is unregistered', async () => {
     const storage = makeStorage();
     const mastra = makeMastra({ agentThrows: true, storage });
 
-    const result = await __internal.executeHeartbeat(mastra, baseInput());
+    const result = await executeHeartbeat(mastra, 'hb_a1', makeTarget());
 
     expect(result.status).toBe('agent-missing');
     expect(storage.deleteSchedule).toHaveBeenCalledWith('hb_a1');
@@ -62,7 +64,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     };
     const mastra = makeMastra({ agent, storage });
 
-    const result = await __internal.executeHeartbeat(mastra, baseInput({ threadId: 't1', resourceId: 'r1' }));
+    const result = await executeHeartbeat(mastra, 'hb_a1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
 
     expect(result.status).toBe('thread-missing');
     expect(storage.deleteSchedule).toHaveBeenCalledWith('hb_a1');
@@ -73,7 +75,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     const agent = { sendSignal: vi.fn(), generate: vi.fn(), getMemory: vi.fn() };
     const mastra = makeMastra({ agent });
 
-    const result = await __internal.executeHeartbeat(mastra, baseInput({ threadId: 't1' }));
+    const result = await executeHeartbeat(mastra, 'hb_a1', makeTarget({ threadId: 't1' }));
 
     expect(result.status).toBe('invalid-input');
     expect(agent.sendSignal).not.toHaveBeenCalled();
@@ -90,15 +92,16 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     };
     const mastra = makeMastra({ agent });
 
-    const result = await __internal.executeHeartbeat(
+    const result = await executeHeartbeat(
       mastra,
-      baseInput({ threadId: 't1', resourceId: 'r1', prompt: 'ping' }),
+      'hb_a1',
+      makeTarget({ threadId: 't1', resourceId: 'r1', prompt: 'ping' }),
     );
 
     expect(result.status).toBe('signal-accepted');
     expect(sendSignal).toHaveBeenCalledTimes(1);
     const [signal, target] = sendSignal.mock.calls[0]!;
-    expect(signal).toEqual({ type: 'user-message', contents: 'ping' });
+    expect(signal).toEqual({ type: 'system-reminder', contents: 'ping' });
     expect(target).toMatchObject({
       threadId: 't1',
       resourceId: 'r1',
@@ -118,9 +121,10 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     };
     const mastra = makeMastra({ agent });
 
-    await __internal.executeHeartbeat(
+    await executeHeartbeat(
       mastra,
-      baseInput({
+      'hb_a1',
+      makeTarget({
         threadId: 't1',
         resourceId: 'r1',
         signalType: 'system-reminder',
@@ -147,9 +151,10 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     };
     const mastra = makeMastra({ agent });
 
-    const result = await __internal.executeHeartbeat(
+    const result = await executeHeartbeat(
       mastra,
-      baseInput({ threadId: 't1', resourceId: 'r1', idleThresholdMs: 30_000 }),
+      'hb_a1',
+      makeTarget({ threadId: 't1', resourceId: 'r1', idleThresholdMs: 30_000 }),
     );
 
     expect(result.status).toBe('skipped-idle-threshold');
@@ -162,7 +167,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     const agent = { sendSignal, generate, getMemory: vi.fn() };
     const mastra = makeMastra({ agent });
 
-    const result = await __internal.executeHeartbeat(mastra, baseInput({ prompt: 'tick' }));
+    const result = await executeHeartbeat(mastra, 'hb_a1', makeTarget({ prompt: 'tick' }));
 
     expect(result.status).toBe('fired');
     const call = generate.mock.calls[0] as any[];
@@ -184,9 +189,10 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     const endHour = (hour + 3) % 24;
     const pad = (n: number) => n.toString().padStart(2, '0');
 
-    const result = await __internal.executeHeartbeat(
+    const result = await executeHeartbeat(
       mastra,
-      baseInput({
+      'hb_a1',
+      makeTarget({
         activeHours: { start: `${pad(startHour)}:00`, end: `${pad(endHour)}:00`, timezone: 'UTC' },
       }),
     );
@@ -201,7 +207,7 @@ describe('heartbeat workflow — executeHeartbeat', () => {
     const agent = { sendSignal: vi.fn(), generate: vi.fn(async () => ({})), getMemory: vi.fn() };
     const mastra = makeMastra({ agent, storage });
 
-    await __internal.executeHeartbeat(mastra, baseInput());
+    await executeHeartbeat(mastra, 'hb_a1', makeTarget());
     expect(storage.deleteSchedule).not.toHaveBeenCalled();
   });
 });

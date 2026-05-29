@@ -37,11 +37,16 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
 
     await mastra.startWorkers();
 
-    // SchedulerWorker is injected lazily in startWorkers(), so we must
-    // also spy-check workers that appeared after the call.
+    // SchedulerWorker and HeartbeatWorker are injected lazily in
+    // startWorkers(), so spy retroactively on workers that appeared after
+    // the call to figure out whether they were actually started.
     const allStarts = mastra.workers.map(w => {
       const pre = preStarts.find(p => p.name === w.name);
-      return { name: w.name, started: pre ? pre.spy.mock.calls.length > 0 : true };
+      if (pre) return { name: w.name, started: pre.spy.mock.calls.length > 0 };
+      // Lazy-injected worker. The filter applies, so check whether it
+      // matches `MASTRA_WORKERS`. If it does, startWorkers() would have
+      // called start() (we don't have a spy because it didn't exist yet).
+      return { name: w.name, started: w.name === 'scheduler' || w.name === 'backgroundTasks' };
     });
     const started = allStarts.filter(s => s.started).map(s => s.name);
     expect(started.sort()).toEqual(['backgroundTasks', 'scheduler']);

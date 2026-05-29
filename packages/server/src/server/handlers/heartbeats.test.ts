@@ -1,11 +1,9 @@
-import { Agent, HEARTBEAT_WORKFLOW_ID, HEARTBEAT_SCHEDULE_PREFIX } from '@mastra/core/agent';
+import { Agent, HEARTBEAT_SCHEDULE_PREFIX } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Schedule, ScheduleTrigger } from '@mastra/core/storage';
 import { MockStore } from '@mastra/core/storage';
-import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
   CREATE_HEARTBEAT_ROUTE,
@@ -18,7 +16,6 @@ import {
   RESUME_HEARTBEAT_ROUTE,
   UPDATE_HEARTBEAT_ROUTE,
 } from './heartbeats';
-import { LIST_WORKFLOWS_ROUTE, GET_WORKFLOW_BY_ID_ROUTE } from './workflows';
 
 const baseCtx = () => ({
   requestContext: new RequestContext(),
@@ -30,17 +27,12 @@ const makeHeartbeatSchedule = (overrides: Partial<Schedule> = {}): Schedule => (
   ownerType: 'agent',
   ownerId: 'agent-1',
   target: {
-    type: 'workflow',
-    workflowId: HEARTBEAT_WORKFLOW_ID,
-    inputData: {
-      agentId: 'agent-1',
-      scheduleId: overrides.id ?? `${HEARTBEAT_SCHEDULE_PREFIX}agent-1_thread-1`,
-      threadId: 'thread-1',
-      resourceId: 'resource-1',
-      prompt: 'Check in',
-      mode: 'threaded',
-      ...((overrides.target as any)?.inputData ?? {}),
-    },
+    type: 'heartbeat',
+    agentId: 'agent-1',
+    threadId: 'thread-1',
+    resourceId: 'resource-1',
+    prompt: 'Check in',
+    ...((overrides.target as any) ?? {}),
   },
   cron: '0 * * * *',
   status: 'active',
@@ -93,16 +85,7 @@ describe('Heartbeats handlers', () => {
         makeHeartbeatSchedule({
           id: `${HEARTBEAT_SCHEDULE_PREFIX}agent-2_t`,
           ownerId: 'agent-2',
-          target: {
-            type: 'workflow',
-            workflowId: HEARTBEAT_WORKFLOW_ID,
-            inputData: {
-              agentId: 'agent-2',
-              scheduleId: `${HEARTBEAT_SCHEDULE_PREFIX}agent-2_t`,
-              prompt: 'Hi',
-              mode: 'threadless',
-            },
-          },
+          target: { type: 'heartbeat', agentId: 'agent-2', prompt: 'Hi' },
         }),
       );
 
@@ -118,16 +101,7 @@ describe('Heartbeats handlers', () => {
         makeHeartbeatSchedule({
           id: `${HEARTBEAT_SCHEDULE_PREFIX}agent-2_t`,
           ownerId: 'agent-2',
-          target: {
-            type: 'workflow',
-            workflowId: HEARTBEAT_WORKFLOW_ID,
-            inputData: {
-              agentId: 'agent-2',
-              scheduleId: `${HEARTBEAT_SCHEDULE_PREFIX}agent-2_t`,
-              prompt: 'Hi',
-              mode: 'threadless',
-            },
-          },
+          target: { type: 'heartbeat', agentId: 'agent-2', prompt: 'Hi' },
         }),
       );
 
@@ -169,16 +143,7 @@ describe('Heartbeats handlers', () => {
         makeHeartbeatSchedule({
           id: `${HEARTBEAT_SCHEDULE_PREFIX}other`,
           ownerId: 'other',
-          target: {
-            type: 'workflow',
-            workflowId: HEARTBEAT_WORKFLOW_ID,
-            inputData: {
-              agentId: 'other',
-              scheduleId: `${HEARTBEAT_SCHEDULE_PREFIX}other`,
-              prompt: 'x',
-              mode: 'threadless',
-            },
-          },
+          target: { type: 'heartbeat', agentId: 'other', prompt: 'x' },
         }),
       );
 
@@ -226,16 +191,7 @@ describe('Heartbeats handlers', () => {
       const schedule = makeHeartbeatSchedule({
         id: `${HEARTBEAT_SCHEDULE_PREFIX}foreign`,
         ownerId: 'someone-else',
-        target: {
-          type: 'workflow',
-          workflowId: HEARTBEAT_WORKFLOW_ID,
-          inputData: {
-            agentId: 'someone-else',
-            scheduleId: `${HEARTBEAT_SCHEDULE_PREFIX}foreign`,
-            prompt: 'x',
-            mode: 'threadless',
-          },
-        },
+        target: { type: 'heartbeat', agentId: 'someone-else', prompt: 'x' },
       });
       await schedulesStore.createSchedule(schedule);
 
@@ -283,16 +239,7 @@ describe('Heartbeats handlers', () => {
       const schedule = makeHeartbeatSchedule({
         id: `${HEARTBEAT_SCHEDULE_PREFIX}foreign`,
         ownerId: 'someone-else',
-        target: {
-          type: 'workflow',
-          workflowId: HEARTBEAT_WORKFLOW_ID,
-          inputData: {
-            agentId: 'someone-else',
-            scheduleId: `${HEARTBEAT_SCHEDULE_PREFIX}foreign`,
-            prompt: 'x',
-            mode: 'threadless',
-          },
-        },
+        target: { type: 'heartbeat', agentId: 'someone-else', prompt: 'x' },
       });
       await schedulesStore.createSchedule(schedule);
 
@@ -401,7 +348,7 @@ describe('Heartbeats handlers', () => {
       ).rejects.toThrow();
     });
 
-    it('patches broadcast mode and persists to inputData', async () => {
+    it('patches broadcast mode and persists to target', async () => {
       const schedulesStore = (await storage.getStore('schedules'))!;
       const schedule = makeHeartbeatSchedule();
       await schedulesStore.createSchedule(schedule);
@@ -417,7 +364,7 @@ describe('Heartbeats handlers', () => {
       expect(result.broadcast).toBe('on-complete');
 
       const updated = await schedulesStore.getSchedule(schedule.id);
-      expect((updated!.target.inputData as any).broadcast).toBe('on-complete');
+      expect((updated!.target as any).broadcast).toBe('on-complete');
     });
   });
 
@@ -457,7 +404,7 @@ describe('Heartbeats handlers', () => {
 
       const schedulesStore = (await storage.getStore('schedules'))!;
       const created = await schedulesStore.getSchedule(result.id);
-      expect((created!.target.inputData as any).broadcast).toBe('never');
+      expect((created!.target as any).broadcast).toBe('never');
     });
 
     it('404s when the agent does not exist', async () => {
@@ -500,70 +447,5 @@ describe('Heartbeats handlers', () => {
         } as any),
       ).rejects.toThrow(HTTPException);
     });
-  });
-});
-
-describe('Internal workflow filter', () => {
-  // Workflows whose id starts with `__mastra_` are internal Mastra plumbing
-  // (e.g. the heartbeat workflow). They must not appear on the public /workflows
-  // HTTP surface — Studio surfaces them through dedicated routes instead.
-
-  let mastra: Mastra;
-
-  beforeEach(() => {
-    const userStep = createStep({
-      id: 'noop',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-      execute: async () => ({}),
-    });
-    const userWorkflow = createWorkflow({
-      id: 'user-workflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    })
-      .then(userStep)
-      .commit();
-
-    const internalStep = createStep({
-      id: 'noop',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-      execute: async () => ({}),
-    });
-    const internalWorkflow = createWorkflow({
-      id: '__mastra_internal__',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    })
-      .then(internalStep)
-      .commit();
-
-    mastra = new Mastra({
-      workflows: { 'user-workflow': userWorkflow, __mastra_internal__: internalWorkflow },
-      logger: false,
-    });
-  });
-
-  it('LIST_WORKFLOWS_ROUTE excludes internal workflow ids', async () => {
-    const result = await LIST_WORKFLOWS_ROUTE.handler({ mastra, ...baseCtx() } as any);
-    const ids = Object.keys(result);
-    expect(ids).toContain('user-workflow');
-    expect(ids).not.toContain('__mastra_internal__');
-  });
-
-  it('GET_WORKFLOW_BY_ID_ROUTE 404s for internal workflow ids', async () => {
-    await expect(
-      GET_WORKFLOW_BY_ID_ROUTE.handler({ mastra, workflowId: '__mastra_internal__', ...baseCtx() } as any),
-    ).rejects.toThrow(HTTPException);
-  });
-
-  it('GET_WORKFLOW_BY_ID_ROUTE still resolves user workflow ids', async () => {
-    const result = await GET_WORKFLOW_BY_ID_ROUTE.handler({
-      mastra,
-      workflowId: 'user-workflow',
-      ...baseCtx(),
-    } as any);
-    expect(result).toBeDefined();
   });
 });

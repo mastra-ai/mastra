@@ -1,7 +1,6 @@
 import type { HeartbeatTrigger } from '@mastra/client-js';
 import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, Txt } from '@mastra/playground-ui';
-import { AlertTriangleIcon } from 'lucide-react';
-import { WorkflowRunStatusInline } from '@/domains/schedules/components/workflow-run-status-inline';
+import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react';
 import { formatRelativeTime, formatScheduleTimestamp } from '@/domains/schedules/utils/format';
 
 export interface HeartbeatTriggersListProps {
@@ -27,9 +26,18 @@ function formatDuration(durationMs?: number): string {
 /**
  * Triggers list for the heartbeat detail page. Mirrors `ScheduleTriggersList`
  * but replaces the `runId` column with a human-readable `actualFireAt`
- * timestamp ("Fired at"). Rows are non-navigable because the underlying
- * `__mastra_heartbeat__` workflow is hidden from the public `/workflows`
- * surface.
+ * timestamp ("Run"). Rows are non-navigable in this revision; future work
+ * can link `trigger.runId` to the agent thread chat (threaded heartbeats)
+ * or the observability traces page (threadless heartbeats).
+ *
+ * TODO(heartbeats follow-up): hydrate Duration and Error columns from
+ * observability traces filtered by `trigger.runId`. Today these columns
+ * stay `—` because the previous workflow-run hydration was removed with
+ * the rework; agent runs don't surface duration/error in the trigger row
+ * itself, but `/observability/traces?runId=:runId` has both. Wire a small
+ * lookup (per-row or paged) once the agent run summary endpoint exists,
+ * or surface trace duration/error directly on the heartbeat trigger row
+ * server-side.
  */
 export function HeartbeatTriggersList({
   triggers,
@@ -81,13 +89,12 @@ export function HeartbeatTriggersList({
                 {isPublishFailure ? (
                   <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent2">
                     <AlertTriangleIcon size={14} />
-                    publish failed
+                    failed
                   </span>
-                ) : t.run ? (
-                  <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-neutral3">
-                    pending
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent1">
+                    <CheckCircle2Icon size={14} />
+                    fired
                   </span>
                 )}
               </span>

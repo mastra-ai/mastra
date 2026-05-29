@@ -103,8 +103,8 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
-import { HEARTBEAT_SCHEDULE_PREFIX, HEARTBEAT_WORKFLOW_ID } from './heartbeat/types';
-import type { HeartbeatInput, SetHeartbeatOptions } from './heartbeat/types';
+import { HEARTBEAT_SCHEDULE_PREFIX } from './heartbeat/types';
+import type { SetHeartbeatOptions } from './heartbeat/types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -6560,14 +6560,17 @@ export class Agent<
     }
 
     const store = await this.#getSchedulesStore();
-    // Lazily register the built-in heartbeat workflow on the Mastra instance.
-    await this.#mastra!.__ensureHeartbeatWorkflowRegistered();
+    // Make sure the scheduler + heartbeat worker are running. The Mastra
+    // wiring path detects heartbeat schedule rows on startup, but
+    // imperative `setHeartbeat` calls that happen after startWorkers()
+    // need to flip the request flag and lazily inject the workers.
+    await this.#mastra!.__ensureHeartbeatRuntimeReady();
     const id = opts.id ?? this.#defaultHeartbeatId(opts.threadId);
     const now = Date.now();
     const nextFireAt = computeNextFireAt(opts.cron, { timezone: opts.timezone, after: now });
 
-    const inputData: HeartbeatInput = {
-      scheduleId: id,
+    const target: Schedule['target'] = {
+      type: 'heartbeat',
       agentId: this.id,
       prompt: opts.prompt,
       ...(opts.threadId ? { threadId: opts.threadId } : {}),
@@ -6580,12 +6583,6 @@ export class Agent<
       ...(opts.broadcast ? { broadcast: opts.broadcast } : {}),
     };
 
-    const target: Schedule['target'] = {
-      type: 'workflow',
-      workflowId: HEARTBEAT_WORKFLOW_ID,
-      inputData,
-    };
-
     const existing = await store.getSchedule(id);
     if (existing) {
       return store.updateSchedule(id, {
@@ -6596,6 +6593,7 @@ export class Agent<
         metadata: opts.metadata,
         ownerType: 'agent',
         ownerId: this.id,
+        ...(opts.status ? { status: opts.status } : {}),
       });
     }
 
@@ -6604,7 +6602,7 @@ export class Agent<
       target,
       cron: opts.cron,
       timezone: opts.timezone,
-      status: 'active',
+      status: opts.status ?? 'active',
       nextFireAt,
       createdAt: now,
       updatedAt: now,

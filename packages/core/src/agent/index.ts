@@ -4,13 +4,16 @@ export type { OutputFormat } from './message-list';
 export * from './types';
 export * from './signals';
 export {
-  HEARTBEAT_WORKFLOW_ID,
   HEARTBEAT_SCHEDULE_PREFIX,
   HeartbeatInputSchema,
   HeartbeatOutputSchema,
+  HeartbeatBroadcastModeSchema,
+  HEARTBEAT_BROADCAST_PROCESSOR_NAME,
+  createHeartbeatBroadcastProcessor,
   type HeartbeatInput,
   type HeartbeatOutput,
   type HeartbeatRunStatus,
+  type HeartbeatBroadcastMode,
   type SetHeartbeatOptions,
 } from './heartbeat';
 export * from './agent';

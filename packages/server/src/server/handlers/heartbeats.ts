@@ -1,6 +1,5 @@
 import type { Mastra } from '@mastra/core';
 import type { Schedule } from '@mastra/core/storage';
-import type { WorkflowRunState } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import {
   createHeartbeatBodySchema,
@@ -15,59 +14,17 @@ import {
   updateHeartbeatBodySchema,
 } from '../schemas/heartbeats';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { HEARTBEAT_SCHEDULE_PREFIX, HEARTBEAT_WORKFLOW_ID, HeartbeatInputSchema } from './heartbeats-core-shim';
-
-type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
+import { HEARTBEAT_SCHEDULE_PREFIX } from './heartbeats-core-shim';
 import { computeNextFireAt, validateCron } from './schedules-workflows-shim';
 
-type RunSummary = {
-  status: WorkflowRunState['status'];
-  startedAt?: number;
-  completedAt?: number;
-  durationMs?: number;
-  error?: string;
-};
+type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
 
-function snapshotToRunSummary(run: {
-  snapshot: WorkflowRunState | string;
-  createdAt: Date;
-  updatedAt: Date;
-}): RunSummary | undefined {
-  const snapshot = typeof run.snapshot === 'string' ? null : run.snapshot;
-  if (!snapshot) return undefined;
-  const startedAt = run.createdAt instanceof Date ? run.createdAt.getTime() : undefined;
-  const isTerminal =
-    snapshot.status === 'success' ||
-    snapshot.status === 'failed' ||
-    snapshot.status === 'canceled' ||
-    snapshot.status === 'bailed' ||
-    snapshot.status === 'tripwire';
-  const completedAt = isTerminal ? (run.updatedAt instanceof Date ? run.updatedAt.getTime() : undefined) : undefined;
-  const durationMs = startedAt !== undefined && completedAt !== undefined ? completedAt - startedAt : undefined;
-  return {
-    status: snapshot.status,
-    startedAt,
-    completedAt,
-    durationMs,
-    error: snapshot.error?.message,
-  };
-}
-
-async function fetchRunSummary(mastra: Mastra, workflowName: string, runId: string): Promise<RunSummary | undefined> {
-  try {
-    const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-    const run = await workflowsStore?.getWorkflowRunById({ runId, workflowName });
-    if (!run) return undefined;
-    return snapshotToRunSummary(run);
-  } catch {
-    return undefined;
-  }
-}
+type HeartbeatTarget = Extract<Schedule['target'], { type: 'heartbeat' }>;
 
 /**
- * Flat Heartbeat view returned to clients. Hides the underlying
- * `target.workflowId` / `target.inputData` shape so callers only see the
- * heartbeat surface — not the schedule + built-in workflow implementation.
+ * Flat Heartbeat view returned to clients. Projects the underlying
+ * `Schedule` + heartbeat target into a single object so clients never
+ * see the storage layer or have to know about `target.*` shape.
  */
 function scheduleToHeartbeat(schedule: Schedule): {
   id: string;
@@ -91,43 +48,30 @@ function scheduleToHeartbeat(schedule: Schedule): {
   createdAt: number;
   updatedAt: number;
 } | null {
-  if (schedule.target?.type !== 'workflow' || schedule.target.workflowId !== HEARTBEAT_WORKFLOW_ID) {
-    return null;
-  }
-  const parsed = HeartbeatInputSchema.safeParse(schedule.target.inputData);
-  if (!parsed.success) return null;
-  const input = parsed.data;
+  if (schedule.target?.type !== 'heartbeat') return null;
+  const target = schedule.target as HeartbeatTarget;
   return {
     id: schedule.id,
-    agentId: input.agentId,
-    ...(input.threadId ? { threadId: input.threadId } : {}),
-    ...(input.resourceId ? { resourceId: input.resourceId } : {}),
-    prompt: input.prompt,
+    agentId: target.agentId,
+    ...(target.threadId ? { threadId: target.threadId } : {}),
+    ...(target.resourceId ? { resourceId: target.resourceId } : {}),
+    prompt: target.prompt,
     cron: schedule.cron,
     ...(schedule.timezone ? { timezone: schedule.timezone } : {}),
     status: schedule.status,
     nextFireAt: schedule.nextFireAt,
     ...(schedule.lastFireAt !== undefined ? { lastFireAt: schedule.lastFireAt } : {}),
     ...(schedule.lastRunId ? { lastRunId: schedule.lastRunId } : {}),
-    ...(input.signalType ? { signalType: input.signalType } : {}),
-    ...(input.ifActive ? { ifActive: input.ifActive } : {}),
-    ...(input.ifIdle ? { ifIdle: input.ifIdle } : {}),
-    ...(input.activeHours ? { activeHours: input.activeHours } : {}),
-    ...(input.idleThresholdMs !== undefined ? { idleThresholdMs: input.idleThresholdMs } : {}),
-    ...(input.broadcast ? { broadcast: input.broadcast } : {}),
+    ...(target.signalType ? { signalType: target.signalType } : {}),
+    ...(target.ifActive ? { ifActive: target.ifActive } : {}),
+    ...(target.ifIdle ? { ifIdle: target.ifIdle } : {}),
+    ...(target.activeHours ? { activeHours: target.activeHours } : {}),
+    ...(target.idleThresholdMs !== undefined ? { idleThresholdMs: target.idleThresholdMs } : {}),
+    ...(target.broadcast ? { broadcast: target.broadcast } : {}),
     ...(schedule.metadata ? { metadata: schedule.metadata } : {}),
     createdAt: schedule.createdAt,
     updatedAt: schedule.updatedAt,
   };
-}
-
-async function hydrateHeartbeat<T extends ReturnType<typeof scheduleToHeartbeat>>(
-  mastra: Mastra,
-  heartbeat: NonNullable<T>,
-): Promise<NonNullable<T> & { lastRun?: RunSummary }> {
-  if (!heartbeat.lastRunId) return heartbeat;
-  const lastRun = await fetchRunSummary(mastra, HEARTBEAT_WORKFLOW_ID, heartbeat.lastRunId);
-  return lastRun ? { ...heartbeat, lastRun } : heartbeat;
 }
 
 /**
@@ -166,8 +110,7 @@ export const LIST_HEARTBEATS_ROUTE = createRoute({
   queryParamSchema: listHeartbeatsQuerySchema,
   responseSchema: listHeartbeatsResponseSchema,
   summary: 'List heartbeats across all agents',
-  description:
-    'Returns the configured heartbeats, optionally filtered by agentId. Hides the underlying schedule + workflow plumbing — each row is a flat Heartbeat view.',
+  description: 'Returns the configured heartbeats, optionally filtered by agentId. Each row is a flat Heartbeat view.',
   tags: ['Heartbeats'],
   requiresAuth: true,
   handler: async ({ mastra, agentId }) => {
@@ -180,8 +123,7 @@ export const LIST_HEARTBEATS_ROUTE = createRoute({
       ...(agentId ? { ownerId: agentId } : {}),
     });
     const heartbeats = schedules.map(scheduleToHeartbeat).filter((h): h is NonNullable<typeof h> => h !== null);
-    const hydrated = await Promise.all(heartbeats.map(h => hydrateHeartbeat(mastra, h)));
-    return { heartbeats: hydrated };
+    return { heartbeats };
   },
 });
 
@@ -202,8 +144,7 @@ export const LIST_AGENT_HEARTBEATS_ROUTE = createRoute({
     }
     const schedules = await schedulesStore.listSchedules({ ownerType: 'agent', ownerId: agentId });
     const heartbeats = schedules.map(scheduleToHeartbeat).filter((h): h is NonNullable<typeof h> => h !== null);
-    const hydrated = await Promise.all(heartbeats.map(h => hydrateHeartbeat(mastra, h)));
-    return { heartbeats: hydrated };
+    return { heartbeats };
   },
 });
 
@@ -219,7 +160,7 @@ export const GET_HEARTBEAT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, heartbeatId }) => {
     const { heartbeat } = await loadOwnedHeartbeat(mastra, agentId, heartbeatId);
-    return hydrateHeartbeat(mastra, heartbeat);
+    return heartbeat;
   },
 });
 
@@ -259,7 +200,7 @@ export const CREATE_HEARTBEAT_ROUTE = createRoute({
     if (!heartbeat) {
       throw new HTTPException(500, { message: 'Failed to materialize heartbeat from schedule' });
     }
-    return hydrateHeartbeat(mastra, heartbeat);
+    return heartbeat;
   },
 });
 
@@ -288,12 +229,11 @@ export const UPDATE_HEARTBEAT_ROUTE = createRoute({
       validateCron(nextCron, nextTimezone);
     }
 
-    // Rebuild target.inputData by merging existing parsed input with the
-    // patch. `agentId`, `scheduleId`, `threadId`, `resourceId` are identity
-    // fields and are never editable.
-    const existingInput = HeartbeatInputSchema.parse(schedule.target.inputData);
-    const nextInput = {
-      ...existingInput,
+    // Merge patch into the heartbeat target. `agentId`, `threadId`, and
+    // `resourceId` are identity fields and never editable.
+    const existingTarget = schedule.target as HeartbeatTarget;
+    const nextTarget: HeartbeatTarget = {
+      ...existingTarget,
       ...(body.prompt !== undefined ? { prompt: body.prompt } : {}),
       ...(body.signalType !== undefined ? { signalType: body.signalType } : {}),
       ...(body.ifActive !== undefined ? { ifActive: body.ifActive } : {}),
@@ -301,12 +241,6 @@ export const UPDATE_HEARTBEAT_ROUTE = createRoute({
       ...(body.activeHours !== undefined ? { activeHours: body.activeHours } : {}),
       ...(body.idleThresholdMs !== undefined ? { idleThresholdMs: body.idleThresholdMs } : {}),
       ...(body.broadcast !== undefined ? { broadcast: body.broadcast } : {}),
-    };
-
-    const nextTarget: Schedule['target'] = {
-      type: 'workflow',
-      workflowId: HEARTBEAT_WORKFLOW_ID,
-      inputData: nextInput,
     };
 
     const nextFireAt =
@@ -325,7 +259,7 @@ export const UPDATE_HEARTBEAT_ROUTE = createRoute({
     if (!heartbeat) {
       throw new HTTPException(500, { message: 'Failed to materialize heartbeat from schedule' });
     }
-    return hydrateHeartbeat(mastra, heartbeat);
+    return heartbeat;
   },
 });
 
@@ -375,12 +309,12 @@ export const PAUSE_HEARTBEAT_ROUTE = createRoute({
     if (schedule.status === 'paused') {
       const view = scheduleToHeartbeat(schedule);
       if (!view) throw new HTTPException(500, { message: 'Failed to materialize heartbeat from schedule' });
-      return hydrateHeartbeat(mastra, view);
+      return view;
     }
     const updated = await schedulesStore.updateSchedule(heartbeatId, { status: 'paused' });
     const view = scheduleToHeartbeat(updated);
     if (!view) throw new HTTPException(500, { message: 'Failed to materialize heartbeat from schedule' });
-    return hydrateHeartbeat(mastra, view);
+    return view;
   },
 });
 
@@ -404,7 +338,7 @@ export const RESUME_HEARTBEAT_ROUTE = createRoute({
     if (schedule.status === 'active') {
       const view = scheduleToHeartbeat(schedule);
       if (!view) throw new HTTPException(500, { message: 'Failed to materialize heartbeat from schedule' });
-      return hydrateHeartbeat(mastra, view);
+      return view;
     }
     const nextFireAt = computeNextFireAt(schedule.cron, {
       timezone: schedule.timezone,
@@ -413,7 +347,7 @@ export const RESUME_HEARTBEAT_ROUTE = createRoute({
     const updated = await schedulesStore.updateSchedule(heartbeatId, { status: 'active', nextFireAt });
     const view = scheduleToHeartbeat(updated);
     if (!view) throw new HTTPException(500, { message: 'Failed to materialize heartbeat from schedule' });
-    return hydrateHeartbeat(mastra, view);
+    return view;
   },
 });
 
@@ -426,7 +360,7 @@ export const LIST_HEARTBEAT_TRIGGERS_ROUTE = createRoute({
   responseSchema: listHeartbeatTriggersResponseSchema,
   summary: 'List trigger history for a heartbeat',
   description:
-    'Returns the audit trail of fire attempts for a heartbeat, ordered by actualFireAt descending. Each trigger row is hydrated with the associated workflow run summary when available.',
+    'Returns the audit trail of fire attempts for a heartbeat, ordered by actualFireAt descending. Each trigger row carries the agent runId for the run that was started.',
   tags: ['Heartbeats'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, heartbeatId, limit, fromActualFireAt, toActualFireAt }) => {
@@ -436,13 +370,6 @@ export const LIST_HEARTBEAT_TRIGGERS_ROUTE = createRoute({
       return { triggers: [] };
     }
     const triggers = await schedulesStore.listTriggers(heartbeatId, { limit, fromActualFireAt, toActualFireAt });
-    const hydrated = await Promise.all(
-      triggers.map(async trigger => {
-        if (trigger.outcome !== 'published' || !trigger.runId) return trigger;
-        const run = await fetchRunSummary(mastra, HEARTBEAT_WORKFLOW_ID, trigger.runId);
-        return run ? { ...trigger, run } : trigger;
-      }),
-    );
-    return { triggers: hydrated };
+    return { triggers };
   },
 });

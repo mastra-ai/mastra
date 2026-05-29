@@ -67,6 +67,12 @@ describe('Agent heartbeats — scheduler integration', () => {
       const current = await schedulesStore.getSchedule(scheduleId);
       return !!current && current.nextFireAt !== initial.nextFireAt;
     });
+    // HeartbeatWorker records the trigger after the agent dispatch
+    // completes, which races with nextFireAt advancement in the scheduler.
+    await waitUntil(async () => {
+      const t = await schedulesStore.listTriggers(scheduleId);
+      return t.length > 0;
+    });
 
     const triggers = await schedulesStore.listTriggers(scheduleId);
     expect(triggers.length).toBeGreaterThan(0);
@@ -92,8 +98,8 @@ describe('Agent heartbeats — scheduler integration', () => {
 
     await agent.setHeartbeat({ cron: '* * * * * *', prompt: 'ping' });
 
-    // setHeartbeat() should have lazily injected + started a scheduler
-    // worker as part of __ensureHeartbeatWorkflowRegistered().
+    // setHeartbeat() should have lazily injected + started the scheduler
+    // and heartbeat workers via __ensureHeartbeatRuntimeReady().
     await waitForScheduler(mastra);
 
     const schedulesStore = (await storage.getStore('schedules'))!;
@@ -104,6 +110,10 @@ describe('Agent heartbeats — scheduler integration', () => {
       const current = await schedulesStore.getSchedule(scheduleId);
       return !!current && current.nextFireAt !== initial.nextFireAt;
     });
+    await waitUntil(async () => {
+      const t = await schedulesStore.listTriggers(scheduleId);
+      return t.length > 0;
+    });
 
     const triggers = await schedulesStore.listTriggers(scheduleId);
     expect(triggers.length).toBeGreaterThan(0);
@@ -112,7 +122,7 @@ describe('Agent heartbeats — scheduler integration', () => {
     await mastra.shutdown();
   }, 10_000);
 
-  it('rehydrates the built-in heartbeat workflow on boot when heartbeat schedule rows already exist in storage', async () => {
+  it('auto-starts the scheduler and heartbeat worker on boot when heartbeat schedule rows already exist in storage', async () => {
     const storage = new MockStore();
 
     // Boot 1: create a heartbeat, then shut down without clearing it. This
@@ -131,10 +141,9 @@ describe('Agent heartbeats — scheduler integration', () => {
       await mastra.shutdown();
     }
 
-    // Boot 2: fresh Mastra instance reusing the same storage. The heartbeat
-    // workflow must be re-registered automatically before workers start;
-    // otherwise the scheduler would fire ticks against an unregistered
-    // workflow and the UI's getWorkflowById would 404.
+    // Boot 2: fresh Mastra instance reusing the same storage. The scheduler
+    // and heartbeat worker must start automatically because storage already
+    // has a heartbeat row, without anyone calling setHeartbeat() again.
     const agent2 = makeAgent('beat-rehydrate');
     const mastra2 = new Mastra({
       logger: false,
@@ -145,10 +154,7 @@ describe('Agent heartbeats — scheduler integration', () => {
 
     await mastra2.startWorkers();
 
-    // The built-in heartbeat workflow should be findable by id without
-    // anyone having to call setHeartbeat() again.
-    const wf = mastra2.getWorkflowById('__mastra_heartbeat__');
-    expect(wf).toBeDefined();
+    // Scheduler should be running because storage has a heartbeat target.
     await waitForScheduler(mastra2);
 
     await mastra2.shutdown();

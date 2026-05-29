@@ -77613,17 +77613,42 @@ export type GetSchedules_QueryParams = {
 export type GetSchedules_Response = {
   schedules: {
     id: string;
-    target: {
-      type: 'workflow';
-      workflowId: string;
-      inputData?: unknown | undefined;
-      initialState?: unknown | undefined;
-      requestContext?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-    };
+    target:
+      | {
+          type: 'workflow';
+          workflowId: string;
+          inputData?: unknown | undefined;
+          initialState?: unknown | undefined;
+          requestContext?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+        }
+      | {
+          type: 'heartbeat';
+          agentId: string;
+          prompt: string;
+          threadId?: string | undefined;
+          resourceId?: string | undefined;
+          signalType?: string | undefined;
+          ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+          ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+          activeHours?:
+            | {
+                start: string;
+                end: string;
+                timezone?: string | undefined;
+              }
+            | undefined;
+          idleThresholdMs?: number | undefined;
+          broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+          requestContext?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+        };
     cron: string;
     timezone?: string | undefined;
     status: 'active' | 'paused';
@@ -77689,17 +77714,42 @@ export type GetSchedulesScheduleId_PathParams = {
 
 export type GetSchedulesScheduleId_Response = {
   id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
+  target:
+    | {
+        type: 'workflow';
+        workflowId: string;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }
+    | {
+        type: 'heartbeat';
+        agentId: string;
+        prompt: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        signalType?: string | undefined;
+        ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+        ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+        activeHours?:
+          | {
+              start: string;
+              end: string;
+              timezone?: string | undefined;
+            }
+          | undefined;
+        idleThresholdMs?: number | undefined;
+        broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
   cron: string;
   timezone?: string | undefined;
   status: 'active' | 'paused';
@@ -77842,17 +77892,42 @@ export type PostSchedulesScheduleIdPause_PathParams = {
 
 export type PostSchedulesScheduleIdPause_Response = {
   id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
+  target:
+    | {
+        type: 'workflow';
+        workflowId: string;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }
+    | {
+        type: 'heartbeat';
+        agentId: string;
+        prompt: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        signalType?: string | undefined;
+        ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+        ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+        activeHours?:
+          | {
+              start: string;
+              end: string;
+              timezone?: string | undefined;
+            }
+          | undefined;
+        idleThresholdMs?: number | undefined;
+        broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
   cron: string;
   timezone?: string | undefined;
   status: 'active' | 'paused';
@@ -77913,17 +77988,42 @@ export type PostSchedulesScheduleIdResume_PathParams = {
 
 export type PostSchedulesScheduleIdResume_Response = {
   id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
+  target:
+    | {
+        type: 'workflow';
+        workflowId: string;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }
+    | {
+        type: 'heartbeat';
+        agentId: string;
+        prompt: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        signalType?: string | undefined;
+        ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+        ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+        activeHours?:
+          | {
+              start: string;
+              end: string;
+              timezone?: string | undefined;
+            }
+          | undefined;
+        idleThresholdMs?: number | undefined;
+        broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
   cron: string;
   timezone?: string | undefined;
   status: 'active' | 'paused';

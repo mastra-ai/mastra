@@ -4,25 +4,16 @@ import type { HeartbeatBroadcastMode } from './broadcast-processor';
 
 export const HeartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
 
-/**
- * Workflow id used for the built-in heartbeat workflow that fires per
- * scheduled tick for any heartbeat registered via {@link Agent.setHeartbeat}.
- *
- * Intentionally distinct from the `wf_` prefix used by declarative
- * `createWorkflow({ schedule })` rows so the declarative reconciler ignores it.
- */
-export const HEARTBEAT_WORKFLOW_ID = '__mastra_heartbeat__';
-
 /** Stable schedule id prefix for heartbeats. */
 export const HEARTBEAT_SCHEDULE_PREFIX = 'hb_';
 
 /**
- * Status reported by a single heartbeat run. Persisted via `recordTrigger`'s
- * `metadata.heartbeatStatus` field by the workflow step.
+ * Status reported by a single heartbeat run. The {@link HeartbeatWorker}
+ * derives the scheduler trigger row's `outcome` (`published`/`failed`)
+ * from this; the status is also surfaced on the trigger row's metadata.
  *
  * Distinct from `ScheduleTriggerOutcome` (which describes scheduler-level
- * dispatch results like `published`/`failed`); this describes what the
- * heartbeat tick itself did.
+ * dispatch results); this describes what the heartbeat tick itself did.
  */
 export type HeartbeatRunStatus =
   | 'fired'
@@ -110,7 +101,10 @@ export interface SetHeartbeatOptions {
   prompt: string;
 
   /**
-   * Type of signal sent in threaded mode. Defaults to `'user-message'`.
+   * Type of signal sent in threaded mode. Defaults to `'system-reminder'`,
+   * so heartbeat-driven turns are surfaced as a system reminder rather than
+   * appearing in the thread as a user message. Set to `'user-message'` if
+   * you want the heartbeat to look like the user said something.
    * Ignored when `threadId` is not provided.
    */
   signalType?: string;
@@ -137,4 +131,10 @@ export interface SetHeartbeatOptions {
    * Defaults to `'live'`.
    */
   broadcast?: HeartbeatBroadcastMode;
+  /**
+   * Schedule status. On create, omitting defaults to `'active'`. On update
+   * of an existing heartbeat, omitting preserves the current status; pass
+   * `'paused'` or `'active'` to flip it.
+   */
+  status?: 'active' | 'paused';
 }

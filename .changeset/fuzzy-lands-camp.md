@@ -2,9 +2,9 @@
 '@mastra/core': minor
 ---
 
-**Added** `agent.setHeartbeat()` to schedule recurring agent activity on a cron, built on top of scheduled workflows.
+**Added** `agent.setHeartbeat()` to schedule recurring agent activity on a cron, backed by a first-class `type: 'heartbeat'` schedule target.
 
-Heartbeats let an agent run periodically — either inside an existing thread (via `agent.sendSignal()` so subscribers receive the message through the normal channel pipeline) or in isolation (via a one-off `agent.generate()`). They self-clean when the agent or thread is gone.
+Heartbeats let an agent run periodically — either inside an existing thread (via `agent.sendSignal()` so subscribers receive the message through the normal channel pipeline) or in isolation (via a one-off `agent.generate()`). They self-clean when the agent or thread is gone, and survive process restarts: any persisted heartbeat row automatically starts the scheduler on boot, with no per-process registration step.
 
 ```ts
 // Threaded heartbeat: signals the thread on a cron.
@@ -27,3 +27,9 @@ await agent.getHeartbeat(threadId);
 await agent.listHeartbeats();
 await agent.clearHeartbeat(threadId);
 ```
+
+Internally heartbeats now ride on a dedicated `HeartbeatWorker` consuming a
+`heartbeats` pubsub topic, instead of a built-in workflow. The schedule
+dispatcher (previously `WorkflowScheduler`, now `Scheduler`) generalises to
+any target type and only knows about CAS, cron advancement, and topic
+routing.

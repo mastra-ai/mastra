@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { Agent } from '../agent';
-import { HEARTBEAT_SCHEDULE_PREFIX, HEARTBEAT_WORKFLOW_ID } from './types';
+import { HEARTBEAT_SCHEDULE_PREFIX } from './types';
 
 function makeAgent(id: string): Agent {
   return new Agent({
@@ -31,13 +31,13 @@ describe('Agent.setHeartbeat / clearHeartbeat / getHeartbeat / listHeartbeats', 
     expect(schedule.id).toBe(`${HEARTBEAT_SCHEDULE_PREFIX}pinger`);
     expect(schedule.ownerType).toBe('agent');
     expect(schedule.ownerId).toBe('pinger');
-    expect(schedule.target.type).toBe('workflow');
-    expect((schedule.target as any).workflowId).toBe(HEARTBEAT_WORKFLOW_ID);
-    expect((schedule.target as any).inputData).toMatchObject({
+    expect(schedule.target.type).toBe('heartbeat');
+    expect(schedule.target as any).toMatchObject({
+      type: 'heartbeat',
       agentId: 'pinger',
       prompt: 'ping',
     });
-    expect((schedule.target as any).inputData.threadId).toBeUndefined();
+    expect((schedule.target as any).threadId).toBeUndefined();
     expect(schedule.status).toBe('active');
     expect(typeof schedule.nextFireAt).toBe('number');
   });
@@ -57,7 +57,8 @@ describe('Agent.setHeartbeat / clearHeartbeat / getHeartbeat / listHeartbeats', 
     });
 
     expect(schedule.id).toBe(`${HEARTBEAT_SCHEDULE_PREFIX}pinger_t1`);
-    expect((schedule.target as any).inputData).toMatchObject({
+    expect(schedule.target as any).toMatchObject({
+      type: 'heartbeat',
       threadId: 't1',
       resourceId: 'u1',
       signalType: 'system-reminder',
@@ -75,7 +76,7 @@ describe('Agent.setHeartbeat / clearHeartbeat / getHeartbeat / listHeartbeats', 
 
     expect(second.id).toBe(first.id);
     expect(second.cron).toBe('*/10 * * * *');
-    expect((second.target as any).inputData.prompt).toBe('b');
+    expect((second.target as any).prompt).toBe('b');
 
     const list = await agent.listHeartbeats();
     expect(list).toHaveLength(1);

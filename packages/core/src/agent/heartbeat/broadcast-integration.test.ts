@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
-import { __internal } from './workflow';
+import { executeHeartbeat } from './worker';
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -73,8 +73,8 @@ describe('heartbeat broadcast processor on subscribed thread stream', () => {
     const iterator = subscription.stream[Symbol.asyncIterator]();
     const runPromise = readWholeRun(iterator);
 
-    await __internal.executeHeartbeat(mastra, {
-      scheduleId: 'hb_live',
+    await executeHeartbeat(mastra, 'hb_live', {
+      type: 'heartbeat',
       agentId: agent.id,
       prompt: 'tick',
       threadId,
@@ -101,8 +101,8 @@ describe('heartbeat broadcast processor on subscribed thread stream', () => {
     const iterator = subscription.stream[Symbol.asyncIterator]();
     const runPromise = readWholeRun(iterator);
 
-    await __internal.executeHeartbeat(mastra, {
-      scheduleId: 'hb_oc',
+    await executeHeartbeat(mastra, 'hb_oc', {
+      type: 'heartbeat',
       agentId: agent.id,
       prompt: 'tick',
       threadId,
@@ -149,8 +149,8 @@ describe('heartbeat broadcast processor on subscribed thread stream', () => {
       }
     })();
 
-    await __internal.executeHeartbeat(mastra, {
-      scheduleId: 'hb_never',
+    await executeHeartbeat(mastra, 'hb_never', {
+      type: 'heartbeat',
       agentId: agent.id,
       prompt: 'tick',
       threadId,
