@@ -362,6 +362,38 @@ describe('DockerSandbox', () => {
       });
     });
 
+    it('should pass the sandbox id as the container name by default', async () => {
+      const sandbox = new DockerSandbox({ id: 'test-sandbox' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('test-sandbox');
+    });
+
+    it('should prefer an explicit name over the id', async () => {
+      const sandbox = new DockerSandbox({ id: 'test-sandbox', name: 'custom-name' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('custom-name');
+    });
+
+    it('should sanitize a name with characters Docker disallows', async () => {
+      const sandbox = new DockerSandbox({ name: 'user/1001:dev' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('user-1001-dev');
+    });
+
+    it('should prefix the name when it does not start with an alphanumeric', async () => {
+      const sandbox = new DockerSandbox({ name: '-leading-dash' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('s--leading-dash');
+    });
+
     it('should pull image if not available locally', async () => {
       mockDocker.getImage.mockReturnValue({
         inspect: vi.fn().mockRejectedValue(new Error('No such image')),
