@@ -80,4 +80,21 @@ export type WorkflowSchedulerConfig = {
    * Optional callback invoked when a tick fails to publish a schedule.
    */
   onError?: (err: unknown, context: { scheduleId: string }) => void;
+  /**
+   * Predicate used to check whether a workflow id is currently registered
+   * with the host Mastra instance. When provided, the scheduler refuses to
+   * fire schedules whose target workflow is unknown and deletes the row
+   * after a small number of consecutive misses (see `missesBeforeDelete`).
+   *
+   * Wired up by `SchedulerWorker` from `mastra.getWorkflowById(...)`.
+   */
+  isWorkflowRegistered?: (workflowId: string) => boolean;
+  /**
+   * Number of consecutive ticks a schedule's target workflow may be missing
+   * before the scheduler deletes the row. Defaults to 3 (≈30s with the
+   * default tick interval). Provides a grace window for deploy/startup
+   * ordering races where the scheduler ticks before workflows finish
+   * registering.
+   */
+  missesBeforeDelete?: number;
 };

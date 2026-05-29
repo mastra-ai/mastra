@@ -1,10 +1,41 @@
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
+/**
+ * Delivery model for a PubSub implementation.
+ *
+ * - `pull`: consumers actively read from the broker (e.g. Redis Streams
+ *   XREADGROUP, GCP Pub/Sub streamingPull, SQS ReceiveMessage). Mastra runs
+ *   a long-lived `OrchestrationWorker` that owns a subscription loop.
+ *
+ * - `push`: events arrive without the consumer asking — either in-process
+ *   (EventEmitter dispatching to a registered listener) or out-of-process
+ *   (the broker POSTs to an HTTP endpoint, e.g. GCP Pub/Sub push, SNS,
+ *   EventBridge). Mastra wires the workflow handler directly to the pubsub
+ *   for in-process push, or relies on `POST /api/workers/events` for
+ *   broker push delivered over HTTP.
+ */
+export type PubSubDeliveryMode = 'pull' | 'push';
+
 export abstract class PubSub {
   abstract publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void>;
   abstract subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void>;
   abstract unsubscribe(topic: string, cb: EventCallback): Promise<void>;
   abstract flush(): Promise<void>;
+
+  /**
+   * Delivery modes this PubSub implementation supports.
+   *
+   * Defaults to `['pull']` for backward compatibility — third-party
+   * implementations that don't override this property are treated as
+   * pull-mode, which preserves today's behavior.
+   *
+   * Implementations that deliver events without an active read loop (e.g.
+   * EventEmitter, GCP Pub/Sub push subscriptions) should declare `'push'`.
+   * Implementations that support both modes should declare both.
+   */
+  get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
+    return ['pull'];
+  }
 
   /**
    * Get historical events for a topic.

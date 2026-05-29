@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-const { visibleWidthMock } = vi.hoisted(() => ({
+const { visibleWidthMock, chalkRgbMock } = vi.hoisted(() => ({
   visibleWidthMock: vi.fn((value: string) => value.length),
+  chalkRgbMock: vi.fn(),
 }));
 
 vi.mock('@mariozechner/pi-tui', () => ({
@@ -15,7 +16,13 @@ vi.mock('chalk', () => {
       get: (_target, prop) => {
         if (prop === 'call' || prop === 'apply' || prop === 'bind') return Reflect.get(_target, prop);
         // Methods that take args (hex, bgHex, rgb, bgRgb) return a new chain
-        if (['hex', 'bgHex', 'rgb', 'bgRgb'].includes(prop as string)) return () => makeChain();
+        if (prop === 'rgb') {
+          return (...args: unknown[]) => {
+            chalkRgbMock(...args);
+            return makeChain();
+          };
+        }
+        if (['hex', 'bgHex', 'bgRgb'].includes(prop as string)) return () => makeChain();
         // Properties like bold, italic, dim return a new chain
         return makeChain();
       },
@@ -83,6 +90,7 @@ function createState() {
       gitBranch: 'feat/mc-queueing-ux',
     },
     pendingQueuedActions: [],
+    goalManager: { getGoal: vi.fn(() => null) },
     ui: { requestRender: vi.fn() },
   } as any;
 }
@@ -92,10 +100,12 @@ describe('updateStatusLine', () => {
 
   beforeEach(() => {
     visibleWidthMock.mockClear();
+    chalkRgbMock.mockClear();
     process.stdout.columns = 200;
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     process.stdout.columns = originalColumns;
   });
 
@@ -180,5 +190,94 @@ describe('updateStatusLine', () => {
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('fireworks/minimax-m2.7');
     expect(rendered).not.toContain('minimax-m2p7');
+  });
+
+  it('shows judge mode and judge model while goal judge is active', () => {
+    const state = createState();
+    state.harness.listModes.mockReturnValue([
+      { id: 'build', name: 'build', color: '#00ff00' },
+      { id: 'fast', name: 'Fast', color: '#f97316' },
+    ]);
+    state.activeGoalJudge = { modelId: 'openrouter/openai/gpt-5.4-mini' };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('judge');
+    expect(rendered).toContain('openai/gpt-5.4-mini');
+    expect(rendered).not.toContain('goal');
+    expect(rendered).not.toContain('claude-sonnet-4-20250514');
+    expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
+  });
+
+  it('shows active goal duration instead of attempt count', () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-05-15T12:00:00.000Z');
+    vi.setSystemTime(now);
+    const state = createState();
+    state.goalManager = {
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        turnsUsed: 0,
+        maxTurns: 20,
+        startedAt: '2026-05-15T10:50:00.000Z',
+        activeStartedAt: '2026-05-15T10:50:00.000Z',
+        activeDurationMs: 0,
+      })),
+    };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('pursuing goal (1hr10m)');
+    expect(rendered).not.toContain('goal attempt');
+    expect(rendered).not.toContain('1/20');
+    vi.useRealTimers();
+  });
+
+  it('freezes active goal duration while waiting for user input', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T17:00:00.000Z'));
+    const state = createState();
+    state.goalManager = {
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        turnsUsed: 0,
+        maxTurns: 20,
+        startedAt: '2026-05-15T10:50:00.000Z',
+        activeDurationMs: 10 * 60_000,
+      })),
+    };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('pursuing goal (10m)');
+    expect(rendered).not.toContain('6hr10m');
+    vi.useRealTimers();
+  });
+
+  it('uses a compact active goal duration label on narrow screens', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
+    const state = createState();
+    state.goalManager = {
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        turnsUsed: 0,
+        maxTurns: 20,
+        startedAt: '2026-05-13T09:00:00.000Z',
+        activeStartedAt: '2026-05-13T09:00:00.000Z',
+        activeDurationMs: 0,
+      })),
+    };
+    process.stdout.columns = 35;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('goal (2days3hr)');
+    expect(rendered).not.toContain('pursuing goal');
+    vi.useRealTimers();
   });
 });

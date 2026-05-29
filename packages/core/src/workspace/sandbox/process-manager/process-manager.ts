@@ -8,6 +8,7 @@
  */
 
 import type { MastraSandbox } from '../mastra-sandbox';
+import { validateMaxRetainedProcessOutputBytes } from './process-handle';
 import type { ProcessHandle } from './process-handle';
 import type { ProcessInfo, SpawnProcessOptions } from './types';
 
@@ -69,6 +70,10 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     };
 
     this.spawn = async (...args: Parameters<typeof impl.spawn>) => {
+      // Validate before starting a sandbox; ProcessHandle validates again for direct subclass construction.
+      if (args[1]?.maxRetainedBytes !== undefined) {
+        validateMaxRetainedProcessOutputBytes(args[1].maxRetainedBytes);
+      }
       await this.sandbox.ensureRunning();
       const handle = await impl.spawn(...args);
       handle.command = args[0];

@@ -3,8 +3,10 @@
  * Keeps handlers decoupled from the MastraTUI class.
  */
 import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessMessage, TaskItem } from '@mastra/core/harness';
+import type { HarnessMessage, TaskItemSnapshot } from '@mastra/core/harness';
 
+import type { MastraCodeAnalytics } from '../../analytics.js';
+import type { StartGoalOptions } from '../commands/goal.js';
 import type { NotificationReason } from '../notify.js';
 import type { TUIState } from '../state.js';
 
@@ -17,13 +19,15 @@ export interface EventHandlerContext {
   ) => void;
   updateStatusLine: () => void;
   notify: (reason: NotificationReason, message?: string) => void;
+  analytics?: MastraCodeAnalytics;
   handleSlashCommand: (input: string) => Promise<boolean>;
   addUserMessage: (message: HarnessMessage) => void;
   addChildBeforeFollowUps: (child: Component) => void;
   fireMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => void;
+  startGoal: (objective: string, cancelMessage?: string, options?: StartGoalOptions) => Promise<void>;
   queueFollowUpMessage: (content: string) => void;
   renderExistingMessages: () => Promise<void>;
-  renderCompletedTasksInline: (tasks: TaskItem[], insertIndex?: number, collapsed?: boolean) => void;
-  renderClearedTasksInline: (clearedTasks: TaskItem[], insertIndex?: number) => void;
+  renderCompletedTasksInline: (tasks: TaskItemSnapshot[], insertIndex?: number, collapsed?: boolean) => void;
+  renderClearedTasksInline: (clearedTasks: TaskItemSnapshot[], insertIndex?: number) => void;
   refreshModelAuthStatus: () => Promise<void>;
 }

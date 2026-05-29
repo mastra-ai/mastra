@@ -2,6 +2,68 @@ import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 
+export {
+  generateSpeechBodySchema,
+  getListenerResponseSchema,
+  speakResponseSchema,
+  transcribeSpeechBodySchema,
+  transcribeSpeechResponseSchema,
+  voiceSpeakersResponseSchema,
+} from '@internal/voice/routes';
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+const jsonRecordSchema = z.record(z.string(), jsonValueSchema);
+
+const signalAttributesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()]),
+);
+
+const baseSignalSchema = z.object({
+  id: z.string().optional(),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+  metadata: jsonRecordSchema.optional(),
+  attributes: signalAttributesSchema.optional(),
+});
+
+const partProviderOptionsSchema = z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional();
+
+const signalTextPartSchema = z.object({
+  type: z.literal('text'),
+  text: z.string(),
+  providerOptions: partProviderOptionsSchema,
+});
+
+const signalFilePartSchema = z.object({
+  type: z.literal('file'),
+  data: z.string(),
+  mediaType: z.string(),
+  filename: z.string().optional(),
+  providerOptions: partProviderOptionsSchema,
+});
+
+const userMessageSignalContentsSchema = z.union([
+  z.string(),
+  z.array(z.union([signalTextPartSchema, signalFilePartSchema])),
+]);
+
+const agentSignalSchema = baseSignalSchema.extend({
+  type: z.string(),
+  contents: userMessageSignalContentsSchema,
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+});
+
 // Path parameter schemas
 export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
@@ -117,6 +179,7 @@ const modelConfigSchema = z.object({
 export const serializedAgentSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   instructions: systemMessageSchema.optional(),
   tools: z.record(z.string(), serializedToolSchema),
   agents: z.record(z.string(), serializedAgentDefinitionSchema),
@@ -150,6 +213,10 @@ export const providerSchema = z.object({
   name: z.string(),
   label: z.string().optional(),
   description: z.string().optional(),
+  envVar: z.union([z.string(), z.array(z.string())]),
+  connected: z.boolean(),
+  docUrl: z.string().optional(),
+  models: z.array(z.string()),
 });
 
 /**
@@ -232,6 +299,7 @@ export const agentExecutionBodySchema = z
             z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
           )
           .optional(),
+        defaultStatus: z.enum(['draft', 'published']).optional(),
       })
       .optional(),
 
@@ -303,6 +371,13 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
   maxIdleMs: z.number().int().positive().optional(),
 });
+
+export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
+  runId: z.string(),
+  resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
+  toolCallId: z.string().optional(),
+  maxIdleMs: z.number().int().positive().optional(),
+});
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
@@ -320,18 +395,6 @@ export const executeToolBodySchema = executeToolDataBodySchema.extend({
 export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
   requestContext: z.record(z.string(), z.any()).optional(),
 });
-
-/**
- * Response schema for voice speakers endpoint
- * Flexible to accommodate provider-specific metadata
- */
-export const voiceSpeakersResponseSchema = z.array(
-  z
-    .object({
-      voiceId: z.string(),
-    })
-    .passthrough(), // Allow provider-specific fields like name, language, etc.
-);
 
 // ============================================================================
 // Tool Approval Schemas
@@ -434,44 +497,12 @@ export const updateAgentModelInModelListBodySchema = z.object({
 export const modelManagementResponseSchema = messageResponseSchema;
 
 // ============================================================================
-// Voice Schemas
+// Response schemas for agent generation endpoints
+// These return AI SDK types which have complex structures
 // ============================================================================
 
-/**
- * Body schema for generating speech
- */
-export const generateSpeechBodySchema = z.object({
-  text: z.string(),
-  speakerId: z.string().optional(),
-});
-
-/**
- * Body schema for transcribing speech
- */
-export const transcribeSpeechBodySchema = z.object({
-  audio: z.any(), // Buffer
-  options: z.record(z.string(), z.any()).optional(),
-});
-
-/**
- * Response schema for transcribe speech
- */
-export const transcribeSpeechResponseSchema = z.object({
-  text: z.string(),
-});
-
-/**
- * Response schema for get listener
- */
-export const getListenerResponseSchema = z.any(); // Listener info structure varies
-
-/**
- * Response schema for agent generation endpoints
- * These return AI SDK types which have complex structures
- */
 export const generateResponseSchema = z.any(); // AI SDK GenerateResult type
 export const streamResponseSchema = z.any(); // AI SDK StreamResult type
-export const speakResponseSchema = z.any(); // Voice synthesis result
 export const executeToolResponseSchema = z.any(); // Tool execution result varies by tool
 
 // ============================================================================
@@ -505,6 +536,43 @@ export const enhanceInstructionsResponseSchema = z.object({
 export const observeAgentBodySchema = z.object({
   runId: z.string().describe('The run ID to observe/reconnect to'),
   offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
+});
+
+const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);
+const signalIdleBehaviorSchema = z.enum(['wake', 'persist', 'discard']);
+
+const sendAgentSignalBaseBodySchema = z.object({
+  signal: agentSignalSchema,
+  ifActive: z
+    .object({
+      behavior: signalActiveBehaviorSchema.optional(),
+    })
+    .optional(),
+});
+
+export const sendAgentSignalBodySchema = z.union([
+  sendAgentSignalBaseBodySchema.extend({
+    runId: z.string(),
+    resourceId: z.string().optional(),
+    threadId: z.string().optional(),
+    ifIdle: z.undefined().optional(),
+  }),
+  sendAgentSignalBaseBodySchema.extend({
+    runId: z.string().optional(),
+    resourceId: z.string(),
+    threadId: z.string(),
+    ifIdle: z
+      .object({
+        behavior: signalIdleBehaviorSchema.optional(),
+        streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
+      })
+      .optional(),
+  }),
+]);
+
+export const subscribeAgentThreadBodySchema = z.object({
+  resourceId: z.string().optional(),
+  threadId: z.string(),
 });
 
 /**

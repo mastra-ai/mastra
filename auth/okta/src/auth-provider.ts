@@ -116,6 +116,7 @@ export class MastraAuthOkta
   protected clientId: string;
   protected clientSecret: string;
   protected issuer: string;
+  protected endpointBase: string;
   protected redirectUri: string;
   protected scopes: string[];
   protected cookieName: string;
@@ -165,7 +166,13 @@ export class MastraAuthOkta
     this.domain = domain;
     this.clientId = clientId;
     this.clientSecret = clientSecret;
-    this.issuer = issuer ?? `https://${domain}/oauth2/default`;
+    // Normalize trailing slashes so a stray `OKTA_ISSUER=https://domain/` doesn't produce `.../oauth2//v1/...`
+    this.issuer = (issuer ?? `https://${domain}/oauth2/default`).replace(/\/+$/, '');
+    // Org authorization servers use issuer `https://{domain}` but serve endpoints under `/oauth2/v1/*`.
+    // Custom authorization servers use issuer `https://{domain}/oauth2/<name>` and serve endpoints under `<issuer>/v1/*`.
+    // `issuer` is still used verbatim for JWT `iss`-claim validation on both server types.
+    this.endpointBase =
+      this.issuer.includes('/oauth2/') || this.issuer.endsWith('/oauth2') ? this.issuer : `${this.issuer}/oauth2`;
     this.redirectUri = redirectUri;
     this.scopes = options?.scopes ?? DEFAULT_SCOPES;
     this.cookieName = options?.session?.cookieName ?? DEFAULT_COOKIE_NAME;
@@ -173,7 +180,7 @@ export class MastraAuthOkta
     this.cookiePassword = cookiePassword;
     this.secureCookies = options?.session?.secureCookies ?? process.env.NODE_ENV === 'production';
     this.apiToken = options?.apiToken ?? process.env.OKTA_API_TOKEN;
-    this.jwks = createRemoteJWKSet(new URL(`${this.issuer}/v1/keys`));
+    this.jwks = createRemoteJWKSet(new URL(`${this.endpointBase}/v1/keys`));
 
     // Warn about insecure defaults in production
     if (!options?.session?.cookiePassword && !process.env.OKTA_COOKIE_PASSWORD) {
@@ -380,7 +387,7 @@ export class MastraAuthOkta
       state,
     });
 
-    return `${this.issuer}/v1/authorize?${params.toString()}`;
+    return `${this.endpointBase}/v1/authorize?${params.toString()}`;
   }
 
   /**
@@ -400,7 +407,7 @@ export class MastraAuthOkta
     }
 
     // Exchange code for tokens using client_secret (confidential client)
-    const tokenResponse = await fetch(`${this.issuer}/v1/token`, {
+    const tokenResponse = await fetch(`${this.endpointBase}/v1/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -475,7 +482,7 @@ export class MastraAuthOkta
       }
     }
 
-    return `${this.issuer}/v1/logout?${params.toString()}`;
+    return `${this.endpointBase}/v1/logout?${params.toString()}`;
   }
 
   /**

@@ -1,4 +1,3 @@
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Button } from '../../Button';
@@ -6,6 +5,7 @@ import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
+import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {

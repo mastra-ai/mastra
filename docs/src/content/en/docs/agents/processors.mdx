@@ -18,7 +18,7 @@ You can use individual [`Processor`](/reference/processors/processor-interface) 
 
 Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
 
-Some built-in processors also persist hidden system reminder messages using `<system-reminder>...</system-reminder>` text plus `metadata.systemReminder`. These reminders stay available in raw memory history and retry/prompt reconstruction paths, but standard UI-facing message conversions and default memory recall hide them unless you explicitly opt in.
+Some built-in processors also send hidden system reminder signals. These signals are persisted in raw memory history and converted to `<system-reminder>...</system-reminder>` context before the next model call, but standard UI-facing message conversions and default memory recall hide them unless you explicitly opt in.
 
 ## When to use processors
 
@@ -46,10 +46,10 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const moderatedAgent = new Agent({
   name: 'moderated-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   inputProcessors: [
     new ModerationProcessor({
-      model: 'openai/gpt-5-mini',
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
       categories: ['hate', 'harassment', 'violence'],
       threshold: 0.7,
       strategy: 'block',
@@ -100,13 +100,13 @@ import { PrefillErrorHandler, TokenLimiter, ModerationProcessor } from '@mastra/
 
 const agent = new Agent({
   name: 'support-agent',
-  model: 'openai/gpt-5',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: '...',
   inputProcessors: [
     new TokenLimiter(4000),
-    new ModerationProcessor({ model: 'openai/gpt-4.1-nano' }),
+    new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' }),
   ],
-  outputProcessors: [new ModerationProcessor({ model: 'openai/gpt-4.1-nano' })],
+  outputProcessors: [new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' })],
   errorProcessors: [new PrefillErrorHandler()],
 })
 ```
@@ -200,7 +200,7 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-5-mini' }
+      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
     }
 
     // Disable tools after 5 steps to force completion
@@ -218,6 +218,32 @@ The method receives the current `stepNumber`, `model`, `tools`, `toolChoice`, `m
 
 See the [`Processor` reference](/reference/processors/processor-interface#processinputstep) for all available arguments and return types.
 
+### Rewrite the LLM request before the provider call
+
+Use `processLLMRequest()` when you need to rewrite the final prompt that Mastra sends to the model. This hook runs after Mastra converts the `MessageList` into the provider-facing prompt format (`LanguageModelV2Prompt`) and immediately before the provider call.
+
+Use the message-based hooks for conversation changes:
+
+- `processInput()`: Change the conversation once before the agentic loop starts.
+- `processInputStep()`: Change messages or step configuration before each LLM call.
+- `processLLMRequest()`: Change only the outbound prompt for the current provider call.
+
+Changes returned from `processLLMRequest()` are transient. They don't persist back to `MessageList`, memory, UI history, or future provider calls. This makes the hook a good fit for provider compatibility rewrites, role/content normalization, or other model-specific prompt changes that shouldn't alter stored conversation history.
+
+The method receives `prompt`, `model`, `stepNumber`, `steps`, `state`, and the shared processor context. Calling `abort()` from `processLLMRequest()` emits the normal tripwire response and stops the call.
+
+See the [`Processor` reference](/reference/processors/processor-interface#processllmrequest) for all available arguments and return types.
+
+### Act on the LLM response after the provider call
+
+Use `processLLMResponse()` to act on the completed LLM response after the step finishes and stream chunks have been collected. This hook pairs with `processLLMRequest()`: stash state (such as a cache key) in the request hook, then read it back in the response hook to perform side effects like writing to a cache.
+
+The `state` object is the same instance passed to `processLLMRequest()` for the same step. When `fromCache` is `true`, the response was replayed from a cache rather than produced by a live model call — processors that write to a cache should skip writes in this case.
+
+The method receives `chunks`, `model`, `stepNumber`, `steps`, `state`, `fromCache`, and the shared processor context.
+
+See the [`Processor` reference](/reference/processors/processor-interface#processllmresponse) for all available arguments and return types.
+
 ### Use the `prepareStep()` callback
 
 The `prepareStep()` callback on `generate()` or `stream()` is a shorthand for `processInputStep()`. Internally, Mastra wraps it in a processor that calls your function at each step. It accepts the same arguments and return type as `processInputStep()`, but doesn't require creating a class:
@@ -226,7 +252,7 @@ The `prepareStep()` callback on `generate()` or `stream()` is a shorthand for `p
 await agent.generate('Complex task', {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-5-mini' }
+      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
     }
     if (stepNumber > 5) {
       return { toolChoice: 'none' }
@@ -324,7 +350,7 @@ For more on retry behavior, see [Retry mechanism](#retry-mechanism) in Advanced 
 
 ### Persist data across chunks and steps
 
-Output methods receive a `state` object that persists for the lifetime of one request. State is keyed by the processor's `id`, so each processor sees only its own data, and it is shared between `processOutputStream`, `processOutputStep`, and `processOutputResult`. A new state object is created for every new `agent.generate()` or `agent.stream()` call.
+Output methods receive a `state` object that persists for the lifetime of one request. State is keyed by the processor's `id`, so each processor sees only its own data, and it's shared between `processOutputStream`, `processOutputStep`, and `processOutputResult`. A new state object is created for every new `agent.generate()` or `agent.stream()` call.
 
 ```typescript title="src/mastra/processors/word-counter.ts"
 import type { Processor } from '@mastra/core/processors'
@@ -364,7 +390,7 @@ import { TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [new TokenLimiter(127000)],
 })
 ```
@@ -383,6 +409,14 @@ new ToolCallFilter({
 })
 ```
 
+Set `preserveModelOutput: true` to keep compact `toModelOutput` history for filtered completed tool results. The filter keeps only the model-facing output and removes raw tool args and raw results.
+
+```typescript
+new ToolCallFilter({
+  preserveModelOutput: true,
+})
+```
+
 See the [`ToolCallFilter` reference](/reference/processors/tool-call-filter) for configuration options and the [Memory Processors](/docs/memory/memory-processors#manual-control-and-deduplication) page for pre-memory filtering.
 
 ### `ToolSearchProcessor`
@@ -390,6 +424,14 @@ See the [`ToolCallFilter` reference](/reference/processors/tool-call-filter) for
 Enables dynamic tool discovery for agents with large tool libraries. Instead of providing all tools upfront, the processor gives the agent `search_tools` and `load_tool` meta-tools to find and load tools by keyword on demand, reducing context token usage.
 
 See the [`ToolSearchProcessor` reference](/reference/processors/tool-search-processor) for configuration options and usage examples.
+
+### `ProviderHistoryCompat`
+
+Handles provider-specific history incompatibilities when agents reuse messages across model providers. It can rewrite the outbound LLM request before the provider call, or recover from known provider API errors and retry.
+
+Add `ProviderHistoryCompat` explicitly when you need provider history compatibility rules, reactive API error recovery, custom compatibility rules, or predictable processor ordering.
+
+See the [`ProviderHistoryCompat` reference](/reference/processors/provider-history-compat) for setup, built-in rules, and custom rule options.
 
 ## Advanced patterns
 
@@ -502,7 +544,7 @@ for await (const chunk of stream.fullStream) {
 
 Custom chunk types must use the `data-` prefix (e.g., `data-moderation-update`, `data-status`).
 
-By default, `processOutputStream()` skips `data-*` chunks so it does not accidentally operate on tool telemetry or other processors' output. To inspect, modify, or block these chunks in a processor, set `processDataParts = true` on that processor:
+By default, `processOutputStream()` skips `data-*` chunks so it doesn't accidentally operate on tool telemetry or other processors' output. To inspect, modify, or block these chunks in a processor, set `processDataParts = true` on that processor:
 
 ```typescript
 class ModerationCollector implements Processor {
@@ -613,7 +655,7 @@ const moderationWorkflow = createWorkflow({
 const agent = new Agent({
   id: 'moderated-agent',
   name: 'Moderated Agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [moderationWorkflow],
 })
 ```
@@ -652,7 +694,7 @@ export class QualityChecker implements Processor {
 const agent = new Agent({
   id: 'quality-agent',
   name: 'Quality Agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   outputProcessors: [new QualityChecker()],
   maxProcessorRetries: 3, // Maximum retry attempts. If unset, retries are disabled (unless errorProcessors are configured, in which case it defaults to 10).
 })
@@ -673,7 +715,7 @@ All processors expose an `onViolation` property that fires whenever a policy vio
 import { ModerationProcessor, CostGuardProcessor } from '@mastra/core/processors'
 
 const moderation = new ModerationProcessor({
-  model: 'openai/gpt-5-nano',
+  model: '__GATEWAY_OPENAI_MODEL_NANO__',
   strategy: 'block',
 })
 

@@ -54,6 +54,14 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
   const registry = new ViewerRegistry();
 
+  // Normalize the API prefix so we can build paths like `${apiPrefix}/agents/...`
+  // without producing `//agents/...` when the prefix is missing or has a single
+  // trailing slash. Anything weirder than that (e.g. `'/api//'`) is a config
+  // bug we don't try to silently fix.
+  const rawPrefix = config.apiPrefix ?? '/api';
+  const trimmed = rawPrefix.endsWith('/') ? rawPrefix.slice(0, -1) : rawPrefix;
+  const apiPrefix = trimmed || '/api';
+
   app.get(
     '/browser/:agentId/stream',
     upgradeWebSocket(c => {
@@ -76,7 +84,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
         onMessage(event, _ws) {
           const data = typeof event.data === 'string' ? event.data : null;
           if (data) {
-            handleInputMessage(data, config.getToolset, agentId, threadId);
+            void handleInputMessage(data, config.getToolset, agentId, threadId);
           }
         },
 
@@ -95,14 +103,35 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
     }),
   );
 
-  // Close browser session endpoint
-  app.post('/api/agents/:agentId/browser/close', async c => {
+  // Browser session probe endpoint - tells the client whether to open a WS.
+  // Returns:
+  //   - screencastAvailable: true (this route only exists if setupBrowserStream succeeded)
+  //   - hasSession: whether the agent has an active browser session for the given thread
+  app.get(`${apiPrefix}/agents/:agentId/browser/session`, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);
     }
 
-    const toolset = config.getToolset(agentId);
+    const threadId = c.req.query('threadId');
+    const toolset = await config.getToolset(agentId);
+
+    if (!toolset) {
+      return c.json({ hasSession: false, screencastAvailable: true });
+    }
+
+    const hasSession = threadId ? toolset.hasThreadSession(threadId) : false;
+    return c.json({ hasSession, screencastAvailable: true });
+  });
+
+  // Close browser session endpoint
+  app.post(`${apiPrefix}/agents/:agentId/browser/close`, async c => {
+    const agentId = c.req.param('agentId');
+    if (!agentId) {
+      return c.json({ error: 'Agent ID is required' }, 400);
+    }
+
+    const toolset = await config.getToolset(agentId);
     if (!toolset) {
       return c.json({ error: 'No browser session for this agent' }, 404);
     }

@@ -147,6 +147,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
   #streamFinished = false;
+  #finishCallbackSent = false;
   #emitter = new EventEmitter();
   #bufferedSteps: LLMStepResult<OUTPUT>[] = [];
   #bufferedReasoningDetails: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]> = {};
@@ -186,7 +187,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolCallDeltaIdNameMap: Record<string, string> = {};
   #toolCallStreamingMeta: Record<
     string,
-    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata; dynamic?: boolean }
+    {
+      toolName: string;
+      providerExecuted?: boolean;
+      providerMetadata?: ProviderMetadata;
+      dynamic?: boolean;
+      observability?: ToolCallChunk['payload']['observability'];
+    }
   > = {};
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
@@ -423,6 +430,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#status = 'suspended';
               self.#delayedPromises.suspendPayload.resolve(chunk.payload);
               self.#delayedPromises.resumeSchema.resolve(chunk.payload.resumeSchema);
+              if (!self.#finishCallbackSent) {
+                self.#finishCallbackSent = true;
+                await options?.onFinish?.(self.#createSuspendedOnFinishPayload(chunk));
+              }
+              break;
+            case 'abort':
+              self.#status = 'canceled';
+              if (!self.#finishCallbackSent) {
+                self.#finishCallbackSent = true;
+                await options?.onFinish?.(self.#createAbortedOnFinishPayload());
+              }
+              self.#closeTransportIfNeeded();
               break;
             case 'raw':
               if (!self.#options.includeRawChunks) {
@@ -456,6 +475,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 providerExecuted: chunk.payload.providerExecuted,
                 providerMetadata: chunk.payload.providerMetadata,
                 dynamic: chunk.payload.dynamic,
+                ...(chunk.payload.observability ? { observability: chunk.payload.observability } : {}),
               };
               break;
             case 'tool-call-input-streaming-end': {
@@ -486,6 +506,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     providerExecuted: meta.providerExecuted,
                     providerMetadata: meta.providerMetadata,
                     dynamic: meta.dynamic,
+                    ...(meta.observability ? { observability: meta.observability } : {}),
                   },
                 };
                 self.#toolCalls.push(synthetic);
@@ -573,7 +594,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 if (chunk.payload.dynamic != null && existingSynthetic.payload.dynamic == null) {
                   existingSynthetic.payload.dynamic = chunk.payload.dynamic;
                 }
-
+                if (chunk.payload.observability && !existingSynthetic.payload.observability) {
+                  existingSynthetic.payload.observability = chunk.payload.observability;
+                }
                 return;
               }
               self.#toolCalls.push(chunk);
@@ -1000,7 +1023,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                           : undefined,
                 };
 
-                await options?.onFinish?.(onFinishPayload);
+                if (!self.#finishCallbackSent) {
+                  self.#finishCallbackSent = true;
+                  await options?.onFinish?.(onFinishPayload);
+                }
               }
 
               self.#closeTransportIfNeeded();
@@ -1550,6 +1576,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     return this.#baseStream;
   }
 
+  /** @internal */
+  _waitUntilFinished() {
+    if (this.#streamFinished) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>(resolve => {
+      this.#emitter.once('finish', resolve);
+    });
+  }
+
   #getTotalUsage(): LanguageModelUsage {
     let total = this.#usageCount.totalTokens;
 
@@ -1568,6 +1605,76 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       cachedInputTokens: this.#usageCount.cachedInputTokens,
       cacheCreationInputTokens: this.#usageCount.cacheCreationInputTokens,
       ...(this.#usageCount.raw !== undefined && { raw: this.#usageCount.raw }),
+    };
+  }
+
+  #createAbortedOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
+    // Abort flow invokes options?.onFinish so map-results-step.ts can close the AGENT_RUN span.
+    // That span path only reads finishReason. The remaining LLMStepResult fields are empty
+    // defaults to satisfy the MastraOnFinishCallback shape without reconstructing partial
+    // buffered state from a stream that was canceled mid-flight.
+    return {
+      finishReason: 'aborted',
+      text: '',
+      reasoning: [],
+      reasoningText: undefined,
+      sources: [],
+      files: [],
+      toolCalls: [],
+      toolResults: [],
+      staticToolCalls: [],
+      staticToolResults: [],
+      dynamicToolCalls: [],
+      dynamicToolResults: [],
+      content: [],
+      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      warnings: [],
+      providerMetadata: undefined,
+      request: {},
+      response: {},
+      steps: [],
+      totalUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      object: undefined as OUTPUT,
+    };
+  }
+
+  #createSuspendedOnFinishPayload(
+    chunk: Extract<ChunkType<OUTPUT>, { type: 'tool-call-approval' | 'tool-call-suspended' }>,
+  ): MastraOnFinishCallbackArgs<OUTPUT> & {
+    suspendReason: 'tool-call-approval' | 'tool-call-suspended';
+    toolName: string;
+    toolCallId: string;
+  } {
+    // Suspend flow invokes options?.onFinish so map-results-step.ts can close the AGENT_RUN span.
+    // That span path only reads finishReason + suspendReason/toolName/toolCallId. The remaining
+    // LLMStepResult fields are empty defaults to satisfy the MastraOnFinishCallback shape without
+    // reconstructing partial buffered text/tool/message state from a half-finished stream.
+    return {
+      finishReason: 'suspended',
+      suspendReason: chunk.type,
+      toolName: chunk.payload.toolName,
+      toolCallId: chunk.payload.toolCallId,
+      // Empty defaults for the LLMStepResult/MastraOnFinishCallback shape.
+      text: '',
+      reasoning: [],
+      reasoningText: undefined,
+      sources: [],
+      files: [],
+      toolCalls: [],
+      toolResults: [],
+      staticToolCalls: [],
+      staticToolResults: [],
+      dynamicToolCalls: [],
+      dynamicToolResults: [],
+      content: [],
+      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      warnings: [],
+      providerMetadata: undefined,
+      request: {},
+      response: {},
+      steps: [],
+      totalUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      object: undefined as OUTPUT,
     };
   }
 

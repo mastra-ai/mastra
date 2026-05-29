@@ -371,7 +371,8 @@ export function createDependencyInjectionTests(ctx: WorkflowTestContext, registr
       const { workflow, resetMocks } = registry!['di-bug-4442-workflow']!;
       resetMocks?.();
       const runId = `di-4442-${Date.now()}`;
-      const requestContext = new Map([['responses', []]]) as any;
+      const requestContext = new RequestContext();
+      requestContext.set('responses', []);
       const result = await execute(workflow, { input: 'test' }, { runId, requestContext });
       expect(result.status).toBe('suspended');
       expect(result.steps.promptAgent!.status).toBe('suspended');
@@ -391,7 +392,8 @@ export function createDependencyInjectionTests(ctx: WorkflowTestContext, registr
         const { workflow, resetMocks, getCapturedValue } = registry!['di-resume-requestcontext-workflow']!;
         resetMocks?.();
         const runId = `di-resume-ctx-${Date.now()}`;
-        const requestContext = new Map([['injectedKey', 'injected-value']]) as any;
+        const requestContext = new RequestContext();
+        requestContext.set('injectedKey', 'injected-value');
         const result = await execute(workflow, {}, { runId, requestContext });
         expect(result.status).toBe('suspended');
         const resumeResult = await ctx.resume!(workflow, {

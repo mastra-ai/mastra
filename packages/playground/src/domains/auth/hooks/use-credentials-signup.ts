@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -56,32 +57,47 @@ export type CredentialsSignUpResponse = {
  * }
  * ```
  */
+/**
+ * Makes a credentials sign-up request.
+ * Exported for testing purposes.
+ *
+ * @internal
+ */
+export async function makeCredentialsSignUpRequest(
+  client: MastraClient,
+  { email, password, name }: CredentialsSignUpRequest,
+): Promise<CredentialsSignUpResponse> {
+  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options || {};
+  const raw = (apiPrefix ?? '/api').trim();
+  const normalized = raw === '' ? '' : raw.startsWith('/') ? raw : `/${raw}`;
+  const prefix = normalized.replace(/\/+$/, '');
+
+  // Generic Mastra auth endpoint - works with any credentials provider
+  const response = await fetch(`${baseUrl}${prefix}/auth/credentials/sign-up`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      ...clientHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password, name }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'Failed to create account');
+  }
+
+  return data;
+}
+
 export function useCredentialsSignUp() {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
   return useMutation<CredentialsSignUpResponse, Error, CredentialsSignUpRequest>({
-    mutationFn: async ({ email, password, name }) => {
-      const baseUrl = (client as any).options?.baseUrl || '';
-
-      // Generic Mastra auth endpoint - works with any credentials provider
-      const response = await fetch(`${baseUrl}/api/auth/credentials/sign-up`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password, name }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || data.error || 'Failed to create account');
-      }
-
-      return data;
-    },
+    mutationFn: ({ email, password, name }) => makeCredentialsSignUpRequest(client, { email, password, name }),
     onSuccess: () => {
       // Invalidate auth queries to refetch user state
       void queryClient.invalidateQueries({ queryKey: ['auth'] });

@@ -256,6 +256,40 @@ describe('TokenLimiterProcessor', () => {
       expect(result).toEqual(part);
     });
 
+    it('should handle text-delta chunks containing special token strings', async () => {
+      processor = new TokenLimiterProcessor({ limit: 10 });
+
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello <|endoftext|>', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+
+      await expect(
+        processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort }),
+      ).resolves.toEqual(part);
+    });
+
+    it('should handle tool-result chunks containing special token strings', async () => {
+      processor = new TokenLimiterProcessor({ limit: 10 });
+
+      const part: ChunkType = {
+        type: 'tool-result' as const,
+        payload: {
+          toolCallId: 'call_1',
+          toolName: 'leakyTool',
+          result: 'raw model output <|endoftext|>',
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+
+      await expect(
+        processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort }),
+      ).resolves.toEqual(part);
+    });
+
     it('should handle object chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 50 });
 
@@ -459,6 +493,18 @@ describe('TokenLimiterProcessor', () => {
   });
 
   describe('processOutputResult', () => {
+    it('should handle text content containing special token strings', async () => {
+      processor = new TokenLimiterProcessor({ limit: 50 });
+
+      const originalText = 'Final answer <|endoftext|>';
+      const messages = [createTestMessage(originalText)];
+
+      const result = await processor.processOutputResult({ messages, abort: mockAbort });
+
+      expect(result).toHaveLength(1);
+      expect((result[0].content.parts[0] as TextPart).text).toBe(originalText);
+    });
+
     it('should truncate text content that exceeds token limit', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
@@ -592,6 +638,77 @@ describe('TokenLimiterProcessor', () => {
         doStream: async () => ({}),
       }) as any;
 
+    it('should count system messages containing special token strings', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 1000 });
+      const messageList = new MessageList();
+
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'input',
+      );
+
+      await expect(
+        processor.processInputStep({
+          messageList,
+          stepNumber: 1,
+          model: createMockModel(),
+          steps: [],
+          systemMessages: [{ role: 'system', content: 'System text <|endoftext|>' }],
+          state: {},
+          retryCount: 0,
+          abort: mockAbort,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should count tool results containing special token strings', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 1000 });
+      const messageList = new MessageList();
+
+      messageList.add(
+        {
+          id: 'tool-result',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_1',
+                  toolName: 'leakyTool',
+                  args: {},
+                  result: 'raw model output <|endoftext|>',
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'memory',
+      );
+
+      await expect(
+        processor.processInputStep({
+          messageList,
+          stepNumber: 1,
+          model: createMockModel(),
+          steps: [],
+          systemMessages: [],
+          state: {},
+          retryCount: 0,
+          abort: mockAbort,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
     it('should prune old messages at each step to stay within token limit', async () => {
       const processor = new TokenLimiterProcessor({ limit: 50 });
 
@@ -628,7 +745,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -654,7 +771,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:03:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -719,7 +836,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi there', parts: [{ type: 'text', text: 'Hi there' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -777,7 +894,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi how can I help', parts: [{ type: 'text', text: 'Hi how can I help' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -952,7 +1069,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'response',
+        'memory',
       );
 
       // Add tool result
@@ -978,7 +1095,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
 
       // Add user follow-up
@@ -1041,7 +1158,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {

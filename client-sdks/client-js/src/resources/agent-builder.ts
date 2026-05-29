@@ -289,17 +289,19 @@ export class AgentBuilder extends BaseResource {
    */
   async stream(
     params: AgentBuilderActionRequest,
-    runId?: string,
+    runId: string,
   ): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
-    const searchParams = new URLSearchParams();
-    if (runId) {
-      searchParams.set('runId', runId);
+    if (!runId) {
+      throw new Error('runId is required to stream an agent builder action');
     }
+
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', runId);
 
     const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...actionParams } = params;
 
-    const url = `/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    const url = `/agent-builder/${this.actionId}/stream?${searchParams.toString()}`;
     const response: Response = await this.request(url, {
       method: 'POST',
       body: { ...actionParams, requestContext },
