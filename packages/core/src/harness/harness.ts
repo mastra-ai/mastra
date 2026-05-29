@@ -2951,6 +2951,7 @@ export class Harness<TState = {}> {
     this.displayState.pendingPlanApproval = null;
     this.displayState.activeSubagents = new Map();
     this.displayState.currentMessage = null;
+    this.followUpQueue = [];
     this.displayState.queuedFollowUps = 0;
     this.displayState.modifiedFiles = new Map();
     this.displayState.tasks = [];
