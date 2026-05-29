@@ -1,15 +1,26 @@
+import type { Client } from '@libsql/client';
 import { createClient } from '@libsql/client';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ToolProviderConnectionsLibSQL } from './index';
 
 describe('ToolProviderConnectionsLibSQL', () => {
+  let client: Client;
   let store: ToolProviderConnectionsLibSQL;
 
   beforeEach(async () => {
-    const client = createClient({ url: 'file::memory:?cache=shared' });
+    // libsql only treats path-exact ":memory:" as in-memory and only supports
+    // `cache=shared`. Since transactions open a separate underlying connection,
+    // we need the shared cache so the table created in init() is visible there.
+    // To prevent cross-test leakage, close the client in afterEach — the shared
+    // in-memory DB is reclaimed when the last connection closes.
+    client = createClient({ url: 'file::memory:?cache=shared' });
     store = new ToolProviderConnectionsLibSQL({ client, maxRetries: 1, initialBackoffMs: 10 });
     await store.init();
+  });
+
+  afterEach(() => {
+    client.close();
   });
 
   describe('upsert / get', () => {
