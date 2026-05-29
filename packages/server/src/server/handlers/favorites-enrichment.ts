@@ -59,3 +59,23 @@ export function stripFavoriteFields<T extends object>(record: T): T {
   }
   return record;
 }
+
+/**
+ * Convenience for single-entity handlers (GET / POST / PATCH): annotate
+ * `isFavorited` from the caller's favorites set when enrichment is available,
+ * otherwise strip both favorite fields. `favoriteCount` is the canonical
+ * mirrored counter and is left in place so callers can render share-count UI
+ * (it's identical across viewers).
+ */
+export async function enrichOrStripFavorites<T extends { id: string }>(
+  mastra: Mastra,
+  requestContext: RequestContext,
+  entityType: StorageFavoriteEntityType,
+  record: T,
+): Promise<T> {
+  const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, entityType, [record.id]);
+  if (enrichment) {
+    return { ...record, isFavorited: enrichment.starredIds.has(record.id) };
+  }
+  return stripFavoriteFields(record);
+}
