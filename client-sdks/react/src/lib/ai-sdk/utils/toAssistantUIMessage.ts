@@ -221,7 +221,10 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     }
   }
 
-  // Build the ThreadMessageLike object
+  // Build the ThreadMessageLike object. Surface UIMessage-level metadata onto
+  // `metadata.custom` so renderers (e.g. signal badges, heartbeat indicators)
+  // can access provenance like `metadata.signal` and `metadata.providerMetadata`
+  // without re-deriving them from individual parts.
   const threadMessage: ThreadMessageLike = {
     role: message.role,
     content,
@@ -229,6 +232,7 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     createdAt: extendedMessage.createdAt,
     status,
     attachments: extendedMessage.experimental_attachments,
+    ...(message.metadata ? { metadata: { custom: message.metadata as ReadonlyJSONObject } } : {}),
   };
 
   return threadMessage;
