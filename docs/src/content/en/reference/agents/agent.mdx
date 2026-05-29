@@ -232,9 +232,9 @@ Sends a signal to an active run or memory thread.
   content={[
   {
     name: 'signal',
-    type: "{ type: 'user' | 'state' | 'reactive' | 'notification' | string; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
+    type: "{ type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
     description:
-      "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'reactive', tagName: 'system-reminder' }` renders as `<system-reminder>...</system-reminder>`. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized.",
+      "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
   },
   {
     name: 'options.runId',

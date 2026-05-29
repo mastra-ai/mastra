@@ -11,7 +11,8 @@ export type AgentSignalCategory = 'user' | 'state' | 'reactive' | 'notification'
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export type AgentSignalType = AgentSignalCategory | 'user-message' | 'system-reminder' | string;
+export type AgentLegacySignalType = 'user-message' | 'system-reminder';
+export type AgentSignalType = AgentSignalCategory | AgentLegacySignalType;
 
 export type AgentSignalTagName = string;
 
@@ -111,7 +112,9 @@ function normalizeSignalType(input: Pick<AgentSignalInput, 'type' | 'tagName'>):
     return { type: 'reactive', tagName: input.tagName ?? 'system-reminder' };
   }
 
-  return { type: 'reactive', tagName: input.tagName ?? input.type };
+  throw new Error(
+    `Invalid signal type: ${input.type}. Use a supported signal type and set tagName for custom XML tags.`,
+  );
 }
 
 function normalizeSignal(signal: AgentSignalInput | CreatedAgentSignal) {
@@ -538,6 +541,7 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
       : undefined;
 
   const rawType = typeof signalMetadata?.type === 'string' ? signalMetadata.type : (message.type ?? 'user-message');
+  const type = rawType as AgentSignalType;
   const tagName = typeof signalMetadata?.tagName === 'string' ? signalMetadata.tagName : undefined;
   // Reconstruct contents from content.parts — the canonical source. Legacy rows (pre stash
   // removal) preserved the original input shape on metadata.signal.contents; recover whatever
@@ -569,7 +573,7 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
         : undefined,
   };
 
-  return createSignal({ ...base, type: rawType, tagName, contents });
+  return createSignal({ ...base, type, tagName, contents });
 }
 
 export function createMessageSignal(

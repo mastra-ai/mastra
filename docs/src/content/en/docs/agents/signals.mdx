@@ -80,14 +80,13 @@ When the thread is idle, `queueMessage()` starts a run immediately. When the thr
 
 ## Control low-level signal behavior
 
-Use `sendSignal()` when you need to send system-generated context instead of user-authored input. By default, Mastra delivers signals to active runs and wakes idle threads. Use `ifActive.behavior` and `ifIdle.behavior` to change that behavior.
+Use `sendSignal()` when you need to send system-generated context instead of user-authored input. For external events, use `type: 'notification'`. By default, Mastra delivers signals to active runs and wakes idle threads. Use `ifActive.behavior` and `ifIdle.behavior` to change that behavior.
 
 ```typescript title="src/mastra/signals.ts"
 const result = agent.sendSignal(
   {
-    type: 'reactive',
-    tagName: 'system-reminder',
-    contents: 'Store this for later, but do not wake the agent.',
+    type: 'notification',
+    contents: 'GitHub CI failed on PR #123: 3 tests failed.',
   },
   {
     resourceId: 'user_123',
@@ -125,16 +124,17 @@ agent.sendMessage('Continue with the next step.', {
 })
 ```
 
-## Send external event context
+## Send notification context
 
 Signals have a semantic `type` and an LLM-facing `tagName`. Use `type` to describe the signal category. Use `tagName` to control the XML tag the model sees.
+
+For external events, use `type: 'notification'`. Reactive signals are reserved for processor- or runtime-generated context, such as policy guidance, background task results, and auto-loaded instructions.
 
 ```typescript title="src/mastra/signals.ts"
 agent.sendSignal(
   {
-    type: 'reactive',
-    tagName: 'system-reminder',
-    contents: 'User X has left a new PR comment asking for a smaller API surface.',
+    type: 'notification',
+    contents: 'PR #123 has a new review comment from User X about the API surface.',
     attributes: {
       source: 'github',
       pr: '123',
@@ -150,7 +150,7 @@ agent.sendSignal(
 The model receives the signal as context like this:
 
 ```xml
-<system-reminder source="github" pr="123">User X has left a new PR comment asking for a smaller API surface.</system-reminder>
+<notification source="github" pr="123">PR #123 has a new review comment from User X about the API surface.</notification>
 ```
 
 Use XML-safe `tagName` and attribute names. They can contain letters, numbers, underscores, periods, and hyphens. They must start with a letter or underscore.

@@ -272,9 +272,16 @@ describe('Agent signals', () => {
       content: '<system-reminder>Default reminder tag</system-reminder>',
     });
 
-    const customLegacy = createSignal({ type: 'custom-reminder', contents: 'Legacy custom' });
-    expect(customLegacy.type).toBe('reactive');
-    expect(customLegacy.tagName).toBe('custom-reminder');
+    const customTaggedReminder = createSignal({
+      type: 'reactive',
+      tagName: 'custom-reminder',
+      contents: 'Custom tag',
+    });
+    expect(customTaggedReminder.type).toBe('reactive');
+    expect(customTaggedReminder.tagName).toBe('custom-reminder');
+    expect(() => createSignal({ type: 'custom-reminder' as any, contents: 'Legacy custom' })).toThrow(
+      'Invalid signal type: custom-reminder',
+    );
   });
 
   it('renders user-message attributes inline-wrapped for text and multimodal contents', () => {
@@ -669,7 +676,8 @@ describe('Agent signals', () => {
   it('rejects invalid XML names for contextual signal markup', () => {
     expect(() =>
       createSignal({
-        type: 'system reminder',
+        type: 'reactive',
+        tagName: 'system reminder',
         contents: 'invalid tag name',
       }).toLLMMessage(),
     ).toThrow('Invalid signal XML tag name: system reminder');
