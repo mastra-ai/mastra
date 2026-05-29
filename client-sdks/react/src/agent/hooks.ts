@@ -9,6 +9,7 @@ import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/st
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accumulateChunk,
+  accumulateNetworkChunk,
   finishStreamingAssistantMessage,
   fromCoreUserMessageToMastraDBMessage,
 } from '../lib/mastra-db';
@@ -641,16 +642,21 @@ export const useChat = ({
     _onNetworkChunk.current = onNetworkChunk;
     _networkRunId.current = runId;
 
-    // Network chunks are emitted to the consumer via `onNetworkChunk`.
-    // Per the new architecture, the React SDK no longer maintains a UI-message
-    // projection of network state — consumers that need a network view build
-    // it themselves from the chunk stream.
+    // Seed the user message so the network projection has correct ordering for
+    // branches that operate on the trailing assistant message.
+    setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToMastraDBMessage)]);
+
+    // Accumulate network chunks into `messages` as `MastraDBMessage` (temporary
+    // bridge until the next major), while still forwarding chunks to the
+    // consumer for side-effects (OM, working memory, thread list, errors).
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
+        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         void onNetworkChunk?.(chunk);
       },
     });
 
+    setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
   };
 
@@ -801,10 +807,12 @@ export const useChat = ({
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
+        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         void onNetworkChunk?.(chunk);
       },
     });
 
+    setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
   };
 
@@ -831,10 +839,12 @@ export const useChat = ({
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
+        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         void onNetworkChunk?.(chunk);
       },
     });
 
+    setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
   };
 

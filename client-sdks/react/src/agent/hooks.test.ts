@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,6 +37,19 @@ const generateMock = vi.fn(async () => ({
   response: { uiMessages: [] },
   finishReason: 'stop',
 }));
+let nextNetworkChunks: Array<any> = [];
+let nextApproveNetworkChunks: Array<any> = [];
+let nextDeclineNetworkChunks: Array<any> = [];
+const networkResponse = (chunks: Array<any>) => ({
+  processDataStream: async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
+    for (const chunk of chunks) {
+      await onChunk(chunk);
+    }
+  },
+});
+const networkMock = vi.fn(async () => networkResponse(nextNetworkChunks));
+const approveNetworkToolCallMock = vi.fn(async () => networkResponse(nextApproveNetworkChunks));
+const declineNetworkToolCallMock = vi.fn(async () => networkResponse(nextDeclineNetworkChunks));
 
 vi.mock('@mastra/client-js', () => ({
   MastraClient: class MockMastraClient {
@@ -50,6 +63,9 @@ vi.mock('@mastra/client-js', () => ({
         streamUntilIdle: streamUntilIdleMock,
         subscribeToThread: subscribeToThreadMock,
         generate: generateMock,
+        network: networkMock,
+        approveNetworkToolCall: approveNetworkToolCallMock,
+        declineNetworkToolCall: declineNetworkToolCallMock,
       };
     }
   },
@@ -60,6 +76,20 @@ const { MastraClientProvider } = await import('../mastra-client-context');
 
 const wrapper = ({ children }: { children: ReactNode }) =>
   createElement(MastraClientProvider, { baseUrl: 'http://localhost:4111', children });
+
+const toolExecutionStartChunk = (toolName: string, toolCallId: string) => ({
+  type: 'tool-execution-start',
+  runId: 'run-net-1',
+  from: 'AGENT',
+  payload: { runId: 'run-net-1', args: { toolName, toolCallId, args: { city: 'sf' } } },
+});
+
+const toolExecutionEndChunk = (toolCallId: string, result: unknown) => ({
+  type: 'tool-execution-end',
+  runId: 'run-net-1',
+  from: 'AGENT',
+  payload: { toolCallId, result },
+});
 
 describe('useChat forwards clientTools', () => {
   const clientTools = {
@@ -76,7 +106,13 @@ describe('useChat forwards clientTools', () => {
     streamUntilIdleMock.mockClear();
     subscribeToThreadMock.mockClear();
     generateMock.mockClear();
+    networkMock.mockClear();
+    approveNetworkToolCallMock.mockClear();
+    declineNetworkToolCallMock.mockClear();
     nextSubscribeChunks = [];
+    nextNetworkChunks = [];
+    nextApproveNetworkChunks = [];
+    nextDeclineNetworkChunks = [];
     keepSubscriptionOpen = false;
   });
 
@@ -211,5 +247,79 @@ describe('useChat forwards clientTools', () => {
     const calls = streamUntilIdleMock.mock.calls as unknown as Array<[unknown, { clientTools: unknown }]>;
     expect(calls[0]?.[1].clientTools).toBe(clientTools);
     expect(sendSignalMock).not.toHaveBeenCalled();
+  });
+
+  it('accumulates approveNetworkToolCall chunks into messages and forwards onNetworkChunk', async () => {
+    const onNetworkChunk = vi.fn();
+    nextApproveNetworkChunks = [
+      toolExecutionStartChunk('sendEmail', 'tc-approval'),
+      toolExecutionEndChunk('tc-approval', 'sent'),
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'network', message: 'approve it', onNetworkChunk });
+    });
+    onNetworkChunk.mockClear();
+
+    await act(async () => {
+      await result.current.approveNetworkToolCall('sendEmail', 'run-net-1');
+    });
+
+    await waitFor(() => expect(result.current.messages.length).toBeGreaterThanOrEqual(2));
+    expect(onNetworkChunk).toHaveBeenCalledTimes(2);
+    const message = result.current.messages[result.current.messages.length - 1];
+    expect(message.role).toBe('assistant');
+    expect(message.content.format).toBe(2);
+    expect(message.content.metadata?.mode).toBe('network');
+    const part = message.content.parts[0] as Record<string, unknown>;
+    expect(part.type).toBe('dynamic-tool');
+    expect(part.toolName).toBe('sendEmail');
+    expect(part.state).toBe('output-available');
+    expect(part.output).toBe('sent');
+  });
+
+  it('accumulates declineNetworkToolCall chunks into messages and forwards onNetworkChunk', async () => {
+    const onNetworkChunk = vi.fn();
+    nextDeclineNetworkChunks = [
+      toolExecutionStartChunk('askHuman', 'tc-decline'),
+      toolExecutionEndChunk('tc-decline', { declined: true }),
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'network', message: 'decline it', onNetworkChunk });
+    });
+    onNetworkChunk.mockClear();
+
+    await act(async () => {
+      await result.current.declineNetworkToolCall('askHuman', 'run-net-1');
+    });
+
+    await waitFor(() => expect(result.current.messages.length).toBeGreaterThanOrEqual(2));
+    expect(onNetworkChunk).toHaveBeenCalledTimes(2);
+    const message = result.current.messages[result.current.messages.length - 1];
+    expect(message.role).toBe('assistant');
+    expect(message.content.format).toBe(2);
+    expect(message.content.metadata?.mode).toBe('network');
+    const part = message.content.parts[0] as Record<string, unknown>;
+    expect(part.type).toBe('dynamic-tool');
+    expect(part.toolName).toBe('askHuman');
+    expect(part.state).toBe('output-available');
+    expect(part.output).toEqual({ declined: true });
   });
 });
