@@ -1,9 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ChevronDownIcon, CopyIcon, ScissorsIcon, ClipboardIcon, SearchIcon, XIcon } from 'lucide-react';
+import { ChevronDownIcon, CopyIcon, ScissorsIcon, ClipboardIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
 import { DropdownMenu } from '../DropdownMenu';
-import { Input } from '../Input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { ButtonsGroup, ButtonsGroupSeparator, ButtonsGroupText } from './buttons-group';
@@ -175,70 +174,21 @@ export const WithText: Story = {
 };
 
 /**
- * Searchbar + dropdown fused into a single pill — the recommended composition.
+ * Searchbar + dropdown fused into a single pill — the recommended composition. The search
+ * segment is an `InputGroup` (icon + input in one bordered box) nested inside the
+ * `ButtonsGroup` merger; an interactive clear button would go in an `InputGroupAddon`
+ * (`align="inline-end"`) with an `InputGroupButton`.
  *
- * No layout classes on the children: the group owns sizing in `spacing="close"` — the
- * Input fills the row, the Select trigger sizes to its content. The group also collapses
- * the touching borders into a divider and flattens the inner corners, leaving the outer
- * pill rounded. The search icon lives in the Input via `leadingIcon`; the clear button
- * via `trailingIcon`.
+ * No layout classes on the children (`flex-1`/`min-w-0`/`shrink-0`): the group owns sizing in
+ * `spacing="close"` — the InputGroup fills the row and the Select trigger sizes to its content.
+ * The group collapses the touching borders into a divider and flattens the inner corners,
+ * leaving the outer pill rounded.
  *
- * Only one class is passed: `rounded-full` on the `SelectTrigger`, an intentional shape
- * choice so its outer corner matches the Input pill (the trigger's standalone default is
+ * Only one class is passed: `rounded-full` on the `SelectTrigger`, an intentional shape choice
+ * so its outer corner matches the InputGroup pill (the trigger's standalone default is
  * `rounded-lg`). The `w-[420px]` on the group is just the demo container width.
  */
 export const SearchWithDropdown: Story = {
-  render: () => {
-    const [search, setSearch] = useState('');
-    const [sort, setSort] = useState('recent');
-    return (
-      <ButtonsGroup spacing="close" className="w-[420px]">
-        <Input
-          variant="outline"
-          type="search"
-          aria-label="Search projects"
-          placeholder="Search projects..."
-          leadingIcon={<SearchIcon />}
-          trailingIcon={
-            search ? (
-              <button
-                type="button"
-                aria-label="Clear search"
-                onClick={() => setSearch('')}
-                className="flex items-center text-neutral3 hover:text-neutral6"
-              >
-                <XIcon className="size-4" />
-              </button>
-            ) : undefined
-          }
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-        <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger aria-label="Sort by" className="rounded-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent align="end">
-            <SelectItem value="recent">Most recent</SelectItem>
-            <SelectItem value="oldest">Oldest</SelectItem>
-            <SelectItem value="name">Name</SelectItem>
-          </SelectContent>
-        </Select>
-      </ButtonsGroup>
-    );
-  },
-};
-
-/**
- * Same result, but the search segment reuses the addon-box `InputGroup` (icon + input in
- * one bordered box) nested inside the `ButtonsGroup` merger. Use this when the search
- * segment needs the richer addon-box features (block addons, Kbd, steppers). For a plain
- * leading icon, prefer `SearchWithDropdown` above.
- *
- * Note there are no `flex-1`/`min-w-0`/`shrink-0` classes: the InputGroup fills the row
- * on its own and the group sizes the Select trigger to content.
- */
-export const SearchWithDropdownUsingInputGroup: Story = {
   render: () => {
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState('recent');

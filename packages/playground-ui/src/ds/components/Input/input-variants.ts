@@ -22,8 +22,8 @@ export const inputVariants = cva(
     '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0',
     '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0',
     '[&[type=number]]:[appearance:textfield]',
-    // type="search": drop WebKit's native clear button so it doesn't double up with a
-    // custom trailingIcon clear control (keeps type="search" semantics intact).
+    // type="search": drop WebKit's native clear button so the DS owns the search chrome.
+    // Compose an <InputGroup> with an InputGroupButton to add a clear control.
     '[&::-webkit-search-cancel-button]:appearance-none',
   ),
   {

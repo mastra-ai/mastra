@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SearchIcon, XIcon } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment } from 'react';
 import { Button } from '../Button/Button';
 import { Input } from './input';
 
@@ -151,46 +150,6 @@ export const Error: Story = {
     placeholder: 'invalid@',
     defaultValue: 'invalid@',
     error: true,
-  },
-};
-
-/**
- * `leadingIcon` / `trailingIcon` render nodes inside the input's box (a search glyph, a
- * clear button, a unit…). The styled box moves to a flex wrapper and the input becomes a
- * transparent fill, so the element stays composable inside a ButtonsGroup pill.
- */
-export const WithIcons: Story = {
-  render: () => {
-    const [value, setValue] = useState('');
-    return (
-      <div className="flex w-72 flex-col gap-3">
-        <Input variant="outline" leadingIcon={<SearchIcon />} placeholder="Search..." />
-        <Input
-          variant="outline"
-          placeholder="Type to see the clear button"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          leadingIcon={<SearchIcon />}
-          trailingIcon={
-            value ? (
-              <button
-                type="button"
-                aria-label="Clear"
-                onClick={() => setValue('')}
-                className="flex items-center text-neutral3 hover:text-neutral6"
-              >
-                <XIcon className="size-4" />
-              </button>
-            ) : undefined
-          }
-        />
-        <Input
-          variant="default"
-          trailingIcon={<span className="text-ui-sm text-neutral3">USD</span>}
-          placeholder="0.00"
-        />
-      </div>
-    );
   },
 };
 

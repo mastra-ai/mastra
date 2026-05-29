@@ -23,8 +23,8 @@ const inputGroupBaseClassName = cn(
   transitions.all,
   'has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed',
   'has-[[aria-invalid=true]]:border-error',
-  // Height is on the root (border-box, like <Input leadingIcon>'s wrapper) so the group
-  // matches a same-size sibling. Auto height when vertical (block-* addon) or wrapping a textarea.
+  // Height is on the root (border-box) so the group matches a same-size sibling control.
+  // Auto height when vertical (block-* addon) or wrapping a textarea.
   'has-[>[data-align=block-start]]:flex-col has-[>[data-align=block-start]]:h-auto',
   'has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-end]]:h-auto',
   'has-[textarea]:h-auto',

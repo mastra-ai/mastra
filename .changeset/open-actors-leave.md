@@ -2,16 +2,19 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `leadingIcon` and `trailingIcon` to `Input`, and made `ButtonsGroup` compose joined controls (searchbar + dropdown pills, split buttons, steppers) cleanly.
+Made `ButtonsGroup` compose joined controls (searchbar + dropdown pills, split buttons, steppers) cleanly, and improved `InputGroup` so it drops straight into one.
 
-- `Input` now accepts `leadingIcon` / `trailingIcon` to place an icon, clear button or unit inside the field; the focus outline follows the rounded shape.
 - `ButtonsGroup` with `spacing="close"` fuses outline, filled and `Select` segments into one pill with a single clean divider, a complete focus ring (no missing side), and no consumer width classes.
-- `InputGroup` fills a flex row on its own, matches a same-size sibling height, and propagates size via `data-size` (no React context).
+- `InputGroup` fills a flex row on its own, matches a same-size sibling height, and propagates size via `data-size` (no React context) — so an icon + input segment composes inside a `ButtonsGroup` pill with no layout classes.
+
+Use `InputGroup` (icon as an `InputGroupAddon`, optional clear button as an `InputGroupButton`) to build an icon input — it owns the box, focus, hover and error states on the focusable wrapper:
 
 ```tsx
 import {
   ButtonsGroup,
-  Input,
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
   Select,
   SelectTrigger,
   SelectValue,
@@ -20,7 +23,12 @@ import {
 } from '@mastra/playground-ui';
 
 <ButtonsGroup spacing="close">
-  <Input variant="outline" leadingIcon={<SearchIcon />} placeholder="Search projects..." />
+  <InputGroup variant="outline">
+    <InputGroupAddon align="inline-start">
+      <SearchIcon />
+    </InputGroupAddon>
+    <InputGroupInput placeholder="Search projects..." />
+  </InputGroup>
   <Select value={sort} onValueChange={setSort}>
     <SelectTrigger className="rounded-full">
       <SelectValue />
