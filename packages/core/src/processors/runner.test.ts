@@ -375,20 +375,23 @@ describe('ProcessorRunner', () => {
         expect(receivedMessages).toHaveLength(1);
         expect(receivedMessages[0].role).toBe('user');
 
-        // NEW: systemMessages parameter should be provided and contain all system messages
+        // systemMessages parameter exposes the untagged system message bucket only.
+        // Tagged buckets remain owned by the processors that added them and reach the
+        // model via messageList.getAllSystemMessages() at final assembly.
         expect(receivedSystemMessages).toBeDefined();
-        expect(receivedSystemMessages).toHaveLength(3);
+        expect(receivedSystemMessages).toHaveLength(1);
 
-        // Verify system messages content
         const systemTexts = receivedSystemMessages!.map((m: any) => {
           if (typeof m.content === 'string') return m.content;
-          // Handle structured content format with parts array
           if (m.content?.parts?.[0]?.text) return m.content.parts[0].text;
           return m.content;
         });
-        expect(systemTexts).toContain('You are a helpful assistant.');
-        expect(systemTexts).toContain('Remember the user prefers formal language.');
-        expect(systemTexts).toContain('Relevant context from previous conversations.');
+        expect(systemTexts).toEqual(['You are a helpful assistant.']);
+
+        const allSystemTexts = messageList.getAllSystemMessages().map((m: any) => m.content);
+        expect(allSystemTexts).toContain('You are a helpful assistant.');
+        expect(allSystemTexts).toContain('Remember the user prefers formal language.');
+        expect(allSystemTexts).toContain('Relevant context from previous conversations.');
       });
 
       it('should preserve tagged system messages when InputProcessor returns systemMessages', async () => {
@@ -425,20 +428,19 @@ describe('ProcessorRunner', () => {
         expect(result.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context.']);
       });
 
-      it('should keep new untagged content when returned array has the same length as the previous array', async () => {
+      it('should not pass tagged system messages into processor args.systemMessages', async () => {
+        let seenSystemMessages: any[] = [];
         messageList.addSystem('Original system prompt.');
         messageList.addSystem('Memory context.', 'memory');
         messageList.add([createMessage('Hello', 'user')], 'input');
 
         const inputProcessors: Processor[] = [
           {
-            id: 'system-replacer',
-            name: 'System Replacer',
+            id: 'system-inspector',
+            name: 'System Inspector',
             processInput: async ({ messages, systemMessages }) => {
-              const next = systemMessages.map((msg: any, index: number) =>
-                index === 1 ? { role: 'system' as const, content: 'Replacement instruction.' } : msg,
-              );
-              return { messages, systemMessages: next };
+              seenSystemMessages = systemMessages;
+              return messages;
             },
           },
         ];
@@ -452,11 +454,11 @@ describe('ProcessorRunner', () => {
 
         const result = await runner.runInputProcessors(messageList);
 
-        expect(result.getSystemMessages().map(m => m.content)).toEqual([
+        expect(seenSystemMessages.map(m => m.content)).toEqual(['Original system prompt.']);
+        expect(result.getAllSystemMessages().map(m => m.content)).toEqual([
           'Original system prompt.',
-          'Replacement instruction.',
+          'Memory context.',
         ]);
-        expect(result.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context.']);
       });
 
       it('should continue to allow adding new system messages via return array (existing behavior)', async () => {

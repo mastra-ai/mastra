@@ -1828,14 +1828,13 @@ describe('processInputStep', () => {
       ]);
     });
 
-    it('should keep new untagged content when returned systemMessages has the same length as previous', async () => {
+    it('should not include tagged system messages in processor args.systemMessages', async () => {
+      let seenSystemMessages: any[] = [];
       const processor: Processor = {
-        id: 'system-replacer',
-        processInputStep: async ({ systemMessages }) => {
-          const next = systemMessages.map((msg: any, index: number) =>
-            index === 1 ? { role: 'system' as const, content: 'Replacement instruction' } : msg,
-          );
-          return { systemMessages: next };
+        id: 'system-inspector',
+        processInputStep: async ({ systemMessages, messageList }) => {
+          seenSystemMessages = systemMessages;
+          return { messageList };
         },
       };
 
@@ -1858,10 +1857,10 @@ describe('processInputStep', () => {
         steps: [],
       });
 
-      expect(messageList.getSystemMessages('observational-memory').map(m => m.content)).toEqual(['Memory context']);
-      expect(messageList.getSystemMessages().map(m => m.content)).toEqual([
+      expect(seenSystemMessages.map(m => m.content)).toEqual(['Original instruction']);
+      expect(messageList.getAllSystemMessages().map(m => m.content)).toEqual([
         'Original instruction',
-        'Replacement instruction',
+        'Memory context',
       ]);
     });
   });

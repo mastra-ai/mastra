@@ -1232,19 +1232,13 @@ export class MessageList {
   /**
    * Replace the untagged system message bucket with the provided array while
    * leaving tagged system message buckets (owned by other processors) intact.
-   * Returned messages whose content matches an existing tagged message are
-   * dropped so the natural `[...args.systemMessages, ours]` processor pattern
-   * does not duplicate tagged content as untagged.
    * @param messages - Array of system messages to set as untagged
    */
   public replaceAllSystemMessages(messages: CoreMessageV4[]): this {
-    const taggedMessages = Object.values(this.taggedSystemMessages).flat();
-
     this.systemMessages = [];
 
     for (const message of messages) {
       if (message.role !== 'system') continue;
-      if (taggedMessages.some(tagged => messagesAreEqual(tagged, message))) continue;
       this.systemMessages.push(message);
     }
 

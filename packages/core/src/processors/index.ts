@@ -117,7 +117,7 @@ export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputR
  * Arguments for processInput method
  */
 export interface ProcessInputArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
-  /** All system messages (agent instructions, user-provided, memory) for read/modify access */
+  /** Untagged system messages for read/modify access. Tagged processor-owned messages remain on messageList. */
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
@@ -166,7 +166,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   /** Mark the current assistant response message ID as complete and rotate to a fresh one, when supported by the caller */
   rotateResponseMessageId?: () => string;
 
-  /** All system messages (agent instructions, user-provided, memory) for read/modify access */
+  /** Untagged system messages for read/modify access. Tagged processor-owned messages remain on messageList. */
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
@@ -409,7 +409,7 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   text?: string;
   /** Token usage for the current step (input tokens, output tokens, etc.) */
   usage: LanguageModelUsage;
-  /** All system messages */
+  /** Untagged system messages. Tagged processor-owned messages remain on messageList. */
   systemMessages: CoreMessageV4[];
   /** All completed steps so far (including the current step) */
   steps: Array<StepResult<any>>;

@@ -4297,21 +4297,6 @@ describe('MessageList', () => {
       expect(list.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context']);
     });
 
-    it('should drop returned messages whose content matches a tagged message', () => {
-      const list = new MessageList();
-      list.addSystem('Original instruction');
-      list.addSystem('Memory context', 'memory');
-
-      list.replaceAllSystemMessages([
-        { role: 'system', content: 'Original instruction' },
-        { role: 'system', content: 'Memory context' },
-        { role: 'system', content: 'Channel context' },
-      ]);
-
-      expect(list.getSystemMessages().map(m => m.content)).toEqual(['Original instruction', 'Channel context']);
-      expect(list.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context']);
-    });
-
     it('should preserve tagged system messages when called with an empty array', () => {
       const list = new MessageList();
       list.addSystem('Instruction');

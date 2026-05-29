@@ -24,6 +24,8 @@ function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
     stopRecording: vi.fn(() => []),
     makeMessageSourceChecker: vi.fn(() => ({ getSource: () => 'input' })),
     getAllSystemMessages: vi.fn(() => []),
+    getSystemMessages: vi.fn(() => []),
+    replaceAllSystemMessages: vi.fn(),
   } as unknown as MessageList;
   return mockMessageList;
 }
@@ -347,7 +349,7 @@ describe('createStep with Processor', () => {
         phase: 'input' as const,
         messages: [],
         messageList,
-        systemMessages: messageList.getAllSystemMessages(),
+        systemMessages: messageList.getSystemMessages(),
       };
 
       await step.execute({ inputData } as any);
@@ -377,7 +379,7 @@ describe('createStep with Processor', () => {
         messages: [],
         messageList,
         stepNumber: 0,
-        systemMessages: messageList.getAllSystemMessages(),
+        systemMessages: messageList.getSystemMessages(),
       };
 
       await step.execute({ inputData } as any);
@@ -388,7 +390,7 @@ describe('createStep with Processor', () => {
       expect(messageList.getSystemMessages().map(m => m.content)).toEqual(['Original instruction', 'channel context']);
     });
 
-    it('should pass tagged system messages to the next step in a chained processor workflow', async () => {
+    it('should keep tagged system messages off args.systemMessages in a chained processor workflow but preserve them on messageList', async () => {
       const replacerStep = createStep({
         id: 'replacer',
         processInputStep: async ({ messages, systemMessages }) => ({
@@ -416,7 +418,7 @@ describe('createStep with Processor', () => {
           messages: [],
           messageList,
           stepNumber: 0,
-          systemMessages: messageList.getAllSystemMessages(),
+          systemMessages: messageList.getSystemMessages(),
         },
       } as any);
 
@@ -430,9 +432,11 @@ describe('createStep with Processor', () => {
         },
       } as any);
 
-      expect(secondStepSeenSystemMessages.map(m => m.content)).toContain('<observations>memory</observations>');
-      expect(secondStepSeenSystemMessages.map(m => m.content)).toContain('Original instruction');
-      expect(secondStepSeenSystemMessages.map(m => m.content)).toContain('channel context');
+      expect(secondStepSeenSystemMessages.map(m => m.content)).toEqual(['Original instruction', 'channel context']);
+      expect(messageList.getSystemMessages('observational-memory').map(m => m.content)).toEqual([
+        '<observations>memory</observations>',
+      ]);
+      expect(messageList.getAllSystemMessages().map(m => m.content)).toContain('<observations>memory</observations>');
     });
 
     it('should call processOutputStream when phase is outputStream (messageList optional)', async () => {
