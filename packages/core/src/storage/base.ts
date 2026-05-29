@@ -336,15 +336,17 @@ export class MastraCompositeStore extends MastraBase {
    * `this.mastra` after this is called.
    * @internal
    */
-  __registerMastra(mastra: StorageMastraRef): void {
+  __registerMastra(mastra: StorageMastraRef, seen: Set<unknown> = new Set<unknown>()): void {
+    if (seen.has(this)) return;
+    seen.add(this);
     this.mastra = mastra;
-    const seen = new Set<unknown>();
     const cascade = (target: unknown) => {
       if (!target || typeof target !== 'object' || seen.has(target)) return;
-      seen.add(target);
-      const fn = (target as { __registerMastra?: (m: StorageMastraRef) => void }).__registerMastra;
-      if (typeof fn === 'function' && target !== this) {
-        fn.call(target, mastra);
+      const fn = (target as { __registerMastra?: (m: StorageMastraRef, s?: Set<unknown>) => void }).__registerMastra;
+      if (typeof fn === 'function') {
+        fn.call(target, mastra, seen);
+      } else {
+        seen.add(target);
       }
     };
     if (this.parentDefault) cascade(this.parentDefault);

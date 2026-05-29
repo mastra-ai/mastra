@@ -16,3 +16,16 @@ storage overlays observe the assigned storage.
 
 A new `StorageMastraRef` interface exposes only the methods storage needs
 today (`getAgentById`, `getEditor`).
+
+```ts
+// Inside a domain store, read the registered reference after Mastra wires it up:
+class MyAgentsStore extends AgentsStorage {
+  protected getEditorConfig(agentId: string) {
+    // `this.mastra` is populated by MastraCompositeStore.__registerMastra,
+    // which runs during Mastra construction and on setStorage().
+    const agent = this.mastra?.getAgentById?.(agentId);
+    if (agent?.source !== 'code') return undefined;
+    return agent.__getEditorConfig?.();
+  }
+}
+```
