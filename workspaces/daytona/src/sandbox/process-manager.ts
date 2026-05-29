@@ -104,6 +104,8 @@ class DaytonaProcessHandle extends ProcessHandle {
             stdout: this.stdout,
             stderr: this.stderr || error.message,
             executionTimeMs: Date.now() - this._startTime,
+            killed: true,
+            timedOut: true,
           };
         }
         throw error;
@@ -123,6 +125,8 @@ class DaytonaProcessHandle extends ProcessHandle {
         stdout: this.stdout,
         stderr: this.stderr,
         executionTimeMs: Date.now() - this._startTime,
+        killed: true,
+        timedOut: false,
       };
     }
 
