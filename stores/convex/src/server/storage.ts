@@ -807,6 +807,27 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
     }
 
     case 'queryTable': {
+      if (request.pageSize) {
+        const page = await ctx.db
+          .query(convexTable)
+          .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
+          .paginate({ cursor: request.cursor ?? null, numItems: request.pageSize });
+
+        let docs = page.page;
+
+        // Apply filters if provided
+        if (request.filters && request.filters.length > 0) {
+          docs = docs.filter((doc: any) => request.filters!.every(filter => doc[filter.field] === filter.value));
+        }
+
+        return {
+          ok: true,
+          result: docs,
+          hasMore: !page.isDone,
+          continuationCursor: page.continueCursor,
+        };
+      }
+
       // Use take() to avoid hitting Convex's 32k document limit
       const maxDocs = request.limit ? Math.min(request.limit * 2, 10000) : 10000;
       let docs = await ctx.db

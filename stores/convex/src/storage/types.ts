@@ -40,6 +40,8 @@ export type StorageRequest =
       tableName: TABLE_NAMES | string;
       filters?: EqualityFilter[];
       limit?: number;
+      pageSize?: number;
+      cursor?: string | null;
       indexHint?: IndexHint;
     }
   | {
@@ -114,6 +116,8 @@ export type StorageResponse =
       result?: any;
       /** Indicates more batches remain for bulk operations (e.g., clearTable) */
       hasMore?: boolean;
+      /** Cursor for the next page when hasMore is true. */
+      continuationCursor?: string | null;
     }
   | {
       ok: false;
