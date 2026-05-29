@@ -85,6 +85,36 @@ describe('ScorersToolbar', () => {
     expect(input.value).toBe('');
   });
 
+  it('Reset clears an in-flight (typed-but-uncommitted) search and cancels the pending commit', () => {
+    // Reset is visible from an active source filter alone (parent: hasActiveFilters =
+    // sourceFilter !== 'all' || search !== ''), so the user can type then Reset before the
+    // 300ms commit. The field must clear immediately AND the pending debounce must not later
+    // resurrect the just-reset term.
+    const onSearchChange = vi.fn();
+    const onReset = vi.fn();
+    render(
+      <ScorersToolbar
+        search=""
+        onSearchChange={onSearchChange}
+        sourceFilter="code"
+        onSourceFilterChange={() => {}}
+        onReset={onReset}
+        hasActiveFilters
+      />,
+    );
+    const input = screen.getByLabelText('Search scorers') as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: 'abc' } });
+    expect(input.value).toBe('abc');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(input.value).toBe('');
+    expect(onReset).toHaveBeenCalledTimes(1);
+
+    act(() => vi.advanceTimersByTime(300));
+    expect(onSearchChange).not.toHaveBeenCalledWith('abc');
+  });
+
   it('does not rewind the field when the parent echoes the committed value (no dropped keystroke)', () => {
     render(<ControlledToolbar />);
     const input = screen.getByLabelText('Search scorers') as HTMLInputElement;

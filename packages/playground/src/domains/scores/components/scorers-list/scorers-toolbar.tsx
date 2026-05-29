@@ -13,7 +13,7 @@ import {
 } from '@mastra/playground-ui';
 import { SearchIcon, XIcon } from 'lucide-react';
 import type { ChangeEvent } from 'react';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { SCORER_SOURCE_OPTIONS } from './constants';
 
@@ -34,7 +34,6 @@ export function ScorersToolbar({
   onReset,
   hasActiveFilters,
 }: ScorersToolbarProps) {
-  const id = useId();
   const [value, setValue] = useState(search);
   // Tracks the last value this toolbar committed upstream, so the sync effect can tell
   // an external `search` change (e.g. a Reset button) from our own debounced echo.
@@ -75,6 +74,17 @@ export function ScorersToolbar({
     onSearchChange('');
   }, [onSearchChange, debouncedSearch]);
 
+  // Reset is our own button, so clear the local field + cancel any pending commit before
+  // delegating. The `search`-only sync effect can't catch this: an external reset sets
+  // `search=''`, which equals committedRef when the user typed but hasn't committed yet, so
+  // the guard never fires — leaving a stale term that the pending debounce would re-apply.
+  const handleReset = useCallback(() => {
+    committedRef.current = '';
+    debouncedSearch.cancel();
+    setValue('');
+    onReset?.();
+  }, [onReset, debouncedSearch]);
+
   return (
     <div className="flex items-center gap-2 w-full max-w-[40rem]">
       {/* Search + source filter fused into one pill (ButtonsGroup spacing="close").
@@ -85,7 +95,6 @@ export function ScorersToolbar({
             <SearchIcon />
           </InputGroupAddon>
           <InputGroupInput
-            id={id}
             name="scorer-search"
             type="search"
             aria-label="Search scorers"
@@ -116,7 +125,7 @@ export function ScorersToolbar({
       </ButtonsGroup>
 
       {onReset && hasActiveFilters && (
-        <Button onClick={onReset} variant="outline">
+        <Button onClick={handleReset} variant="outline">
           <XIcon /> Reset
         </Button>
       )}

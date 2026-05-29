@@ -69,7 +69,10 @@ const buttonsGroupVariants = cva(
         orientation: 'vertical',
         spacing: 'close',
         // Children are capsules (rounded-full); re-round the outer ends to rounded-xl and
-        // flatten the touching ones. Seam logic mirrors horizontal (see above).
+        // flatten the touching ones. Unlike the horizontal block, these use plain structural
+        // selectors (no aria-hidden / data-base-ui-focus-guard / aria-owns ignore-list): vertical
+        // close-spacing is only used with plain buttons, so it never hosts a Select/DropdownMenu
+        // that injects guard siblings. Mirror the horizontal ignore-list here if one ever does.
         className: cn(
           '[&>*:not(:last-child)]:rounded-b-none',
           '[&>*:not(:first-child)]:rounded-t-none',
