@@ -1,8 +1,45 @@
 import { z } from 'zod/v4';
 import type { AgentSignalActiveBehavior, AgentSignalIdleBehavior } from '../types';
-import type { HeartbeatBroadcastMode } from './broadcast-processor';
 
 export const HeartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
+
+/**
+ * Advisory per-heartbeat broadcast policy. Stamped onto the heartbeat
+ * signal's `providerOptions.mastra.heartbeat` (and on the threadless
+ * `agent.generate` run options) so consumers — channel renderers, Studio
+ * UI, observability surfaces — can decide independently whether to honor
+ * it.
+ *
+ * - `live`         consumers should render chunks as they arrive (default)
+ * - `on-complete`  consumers should buffer intermediate text deltas and
+ *                  only render once the run finishes
+ * - `never`        consumers should suppress all rendering for the run
+ *
+ * Filtering is NEVER applied inside the agent loop or an output processor
+ * — it would gate the agent loop itself (tool-calls/results never reach
+ * the loop's reducers and tools never execute). All policy lives in
+ * consumers; see {@link AgentChannels} for the channel renderer
+ * implementation.
+ */
+export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
+
+/** Action to take when the target thread is actively streaming. Threaded only. */
+export type HeartbeatIfActive = 'deliver' | 'persist' | 'discard';
+
+/** Action to take when the target thread is idle. Threaded only. */
+export type HeartbeatIfIdle = 'wake' | 'persist' | 'discard';
+
+/**
+ * Daily active-hours window. Outside the window heartbeat fires are
+ * skipped (`status: 'skipped-outside-hours'`). Times are HH:mm in the
+ * provided IANA `timezone` (defaults to UTC). When `start > end` the
+ * window wraps midnight.
+ */
+export type HeartbeatActiveHours = {
+  start: string;
+  end: string;
+  timezone?: string;
+};
 
 /** Stable schedule id prefix for heartbeats. */
 export const HEARTBEAT_SCHEDULE_PREFIX = 'hb_';

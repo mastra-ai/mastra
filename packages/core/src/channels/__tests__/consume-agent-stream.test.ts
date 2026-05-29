@@ -1554,4 +1554,93 @@ describe('consumeAgentStream', () => {
       expect(typeof postArgs[1]).toBe('object');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Heartbeat broadcast policy
+  // ---------------------------------------------------------------------------
+  //
+  // The HeartbeatWorker stamps `providerOptions.mastra.heartbeat` onto the
+  // signal it sends to the agent. AgentChannels picks that up off the
+  // `data-<signal-type>` chunk and applies the user's broadcast policy at the
+  // consumer boundary: `live` shows everything, `on-complete` waits for the
+  // final assistant text and emits one synthesized burst, `never` suppresses
+  // every chunk for that run.
+  describe('heartbeat broadcast policy', () => {
+    function heartbeatSignalChunk(runId: string, broadcast: 'live' | 'on-complete' | 'never') {
+      return {
+        type: 'data-system-reminder',
+        runId,
+        from: 'AGENT',
+        data: {
+          id: 'sig_1',
+          type: 'system-reminder',
+          contents: 'Heartbeat',
+          providerOptions: { mastra: { heartbeat: { scheduleId: 'hb_1', broadcast, threadId: 't1' } } },
+        },
+      };
+    }
+
+    it("broadcasts every chunk for 'live' heartbeats", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          heartbeatSignalChunk('run_live', 'live'),
+          { type: 'text-delta', runId: 'run_live', from: 'AGENT', payload: { text: 'hello' } },
+          { type: 'step-finish', runId: 'run_live', from: 'AGENT', payload: {} },
+          { type: 'finish', runId: 'run_live', from: 'AGENT', payload: {} },
+        ],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: 'hello' }]);
+    });
+
+    it("suppresses every chunk for 'never' heartbeats", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          heartbeatSignalChunk('run_never', 'never'),
+          { type: 'text-delta', runId: 'run_never', from: 'AGENT', payload: { text: 'hello' } },
+          { type: 'step-finish', runId: 'run_never', from: 'AGENT', payload: {} },
+          { type: 'finish', runId: 'run_never', from: 'AGENT', payload: {} },
+        ],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+
+    it("buffers text and emits a single burst on finish for 'on-complete' heartbeats", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          heartbeatSignalChunk('run_oc', 'on-complete'),
+          { type: 'text-delta', runId: 'run_oc', from: 'AGENT', payload: { text: 'Hello' } },
+          { type: 'text-delta', runId: 'run_oc', from: 'AGENT', payload: { text: ', world' } },
+          { type: 'step-finish', runId: 'run_oc', from: 'AGENT', payload: {} },
+          { type: 'finish', runId: 'run_oc', from: 'AGENT', payload: {} },
+        ],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: 'Hello, world' }]);
+    });
+
+    it('passes through chunks from non-heartbeat runs even alongside a policed run', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          heartbeatSignalChunk('run_never', 'never'),
+          { type: 'text-delta', runId: 'run_never', from: 'AGENT', payload: { text: 'suppressed' } },
+          { type: 'text-delta', runId: 'run_user', from: 'AGENT', payload: { text: 'visible' } },
+          { type: 'step-finish', runId: 'run_user', from: 'AGENT', payload: {} },
+          { type: 'finish', runId: 'run_user', from: 'AGENT', payload: {} },
+          { type: 'finish', runId: 'run_never', from: 'AGENT', payload: {} },
+        ],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: 'visible' }]);
+    });
+  });
 });

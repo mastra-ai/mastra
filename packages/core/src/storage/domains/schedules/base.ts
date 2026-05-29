@@ -1,3 +1,9 @@
+import type {
+  HeartbeatActiveHours,
+  HeartbeatBroadcastMode,
+  HeartbeatIfActive,
+  HeartbeatIfIdle,
+} from '../../../agent/heartbeat/types';
 import { StorageDomain } from '../base';
 
 /**
@@ -19,25 +25,15 @@ export type WorkflowScheduleTarget = {
   requestContext?: Record<string, unknown>;
 };
 
-/** Broadcast policy applied to chunks emitted by a heartbeat agent run. */
-export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
-
-/** Action to take when the target thread is actively streaming. */
-export type HeartbeatIfActive = 'deliver' | 'persist' | 'discard';
-/** Action to take when the target thread is idle. */
-export type HeartbeatIfIdle = 'wake' | 'persist' | 'discard';
-
-/**
- * Daily active-hours window. Outside the window heartbeat fires are
- * skipped (`status: 'skipped-outside-hours'`). Times are HH:mm in the
- * provided IANA `timezone` (defaults to UTC). When `start > end` the
- * window wraps midnight.
- */
-export type HeartbeatActiveHours = {
-  start: string;
-  end: string;
-  timezone?: string;
-};
+// Heartbeat semantic types are owned by `agent/heartbeat/types.ts` (the
+// feature module) and re-exported here so callers describing schedule rows can
+// reach them through the storage barrel.
+export type {
+  HeartbeatActiveHours,
+  HeartbeatBroadcastMode,
+  HeartbeatIfActive,
+  HeartbeatIfIdle,
+} from '../../../agent/heartbeat/types';
 
 /**
  * Schedule target that fires an agent run on a cron. The heartbeat

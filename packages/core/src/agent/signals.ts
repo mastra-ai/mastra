@@ -44,6 +44,13 @@ export type AgentSignalInput = {
  */
 export type AgentSignalDataPart = {
   type: `data-${string}`;
+  /**
+   * Run id of the agent run that emitted this signal data part. Populated by
+   * the loop at enqueue time. Optional for backwards compatibility — consumers
+   * that key off run id (e.g. `AgentChannels.withHeartbeatBroadcastPolicy`)
+   * fall back to `live` behavior when unset.
+   */
+  runId?: string;
   data: {
     id: string;
     type: AgentSignalType;

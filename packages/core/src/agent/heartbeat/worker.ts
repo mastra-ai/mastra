@@ -5,7 +5,6 @@ import { PullTransport } from '../../worker/transport/pull-transport';
 import type { WorkerTransport } from '../../worker/transport/transport';
 import { MastraWorker } from '../../worker/worker';
 import type { WorkerDeps } from '../../worker/worker';
-import { createHeartbeatBroadcastProcessor } from './broadcast-processor';
 import type { HeartbeatRunStatus } from './types';
 
 /** PubSub topic on which the scheduler publishes `heartbeat.fire` events. */
@@ -230,10 +229,10 @@ export async function executeHeartbeat(
 ): Promise<{ status: HeartbeatRunStatus; reason?: string; runId?: string }> {
   const { agentId, prompt, threadId, resourceId, activeHours, idleThresholdMs, broadcast } = target;
   const broadcastMode = broadcast ?? 'live';
-  const broadcastProcessor = createHeartbeatBroadcastProcessor({ mode: broadcastMode, scheduleId, threadId });
   // Run-level marker carried on the signal / agent run so consumers (typing
-  // status, UI badges, history renderers) can detect that this run was
-  // heartbeat-driven even after loading from storage.
+  // status, AgentChannels broadcast policy, UI badges) can detect that this
+  // run was heartbeat-driven. Threaded runs ride along on the signal's
+  // `providerOptions`; threadless runs stamp it directly on `agent.generate`.
   const heartbeatRunMeta = {
     scheduleId,
     broadcast: broadcastMode,
@@ -285,13 +284,7 @@ export async function executeHeartbeat(
         resourceId,
         threadId,
         ifActive: { behavior: target.ifActive ?? 'discard' },
-        ifIdle: {
-          behavior: target.ifIdle ?? 'wake',
-          streamOptions: {
-            outputProcessors: [broadcastProcessor],
-            providerOptions: { mastra: { heartbeat: heartbeatRunMeta } },
-          },
-        },
+        ifIdle: { behavior: target.ifIdle ?? 'wake' },
       },
     );
     return {
@@ -301,7 +294,6 @@ export async function executeHeartbeat(
   }
 
   const result = await agent.generate(prompt, {
-    outputProcessors: [broadcastProcessor],
     providerOptions: { mastra: { heartbeat: heartbeatRunMeta } },
   });
   return {

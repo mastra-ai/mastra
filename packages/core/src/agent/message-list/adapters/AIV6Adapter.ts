@@ -268,23 +268,6 @@ export class AIV6Adapter {
     const metadata = (v5Message.metadata || {}) as Record<string, unknown>;
     const parts: AIV6Type.UIMessage['parts'] = [];
 
-    if (dbMsg.role === 'signal') {
-      const signalMeta = dbMsg.content.metadata?.signal;
-      const signalType =
-        signalMeta && typeof signalMeta === 'object' && !Array.isArray(signalMeta)
-          ? (signalMeta as Record<string, unknown>).type
-          : undefined;
-      const isUserMessageSignal = signalType === 'user-message';
-      if (!isUserMessageSignal) {
-        return {
-          id: dbMsg.id,
-          role: 'user',
-          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-          parts: v5Message.parts.map(part => AIV6Adapter.toUIPartFromV5(part)),
-        };
-      }
-    }
-
     const dbParts = dbMsg.content.parts || [];
     const hasToolInvocationParts = dbParts.some(part => part.type === 'tool-invocation');
     const hasReasoningParts = dbParts.some(part => part.type === 'reasoning');

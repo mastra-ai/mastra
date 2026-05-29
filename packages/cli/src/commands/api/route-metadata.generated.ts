@@ -5389,6 +5389,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/heartbeats/:heartbeatId/run": {
+    "method": "POST",
+    "path": "/agents/:agentId/heartbeats/:heartbeatId/run",
+    "pathParams": [
+      "agentId",
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /agents/:agentId/heartbeats/:heartbeatId/triggers": {
     "method": "GET",
     "path": "/agents/:agentId/heartbeats/:heartbeatId/triggers",

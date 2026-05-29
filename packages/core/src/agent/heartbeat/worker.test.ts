@@ -112,9 +112,7 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
       ifActive: { behavior: 'discard' },
       ifIdle: { behavior: 'wake' },
     });
-    expect(target.ifIdle.streamOptions.providerOptions).toEqual({
-      mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } },
-    });
+    expect(target.ifIdle.streamOptions).toBeUndefined();
   });
 
   it('forwards signalType, ifActive, ifIdle to sendSignal', async () => {
@@ -142,9 +140,11 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
 
     const [signal, target] = sendSignal.mock.calls[0]!;
     expect(signal.type).toBe('system-reminder');
+    expect(signal.providerOptions).toEqual({
+      mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } },
+    });
     expect(target.ifActive).toEqual({ behavior: 'deliver' });
-    expect(target.ifIdle.behavior).toBe('persist');
-    expect(target.ifIdle.streamOptions.outputProcessors[0].id).toBe('__heartbeat-broadcast__');
+    expect(target.ifIdle).toEqual({ behavior: 'persist' });
   });
 
   it('skips when the thread updated within idleThresholdMs', async () => {
@@ -179,7 +179,6 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     expect(result.status).toBe('fired');
     const call = generate.mock.calls[0] as any[];
     expect(call[0]).toBe('tick');
-    expect(call[1].outputProcessors[0].id).toBe('__heartbeat-broadcast__');
     expect(call[1].providerOptions).toEqual({
       mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live' } },
     });

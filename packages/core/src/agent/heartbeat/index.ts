@@ -6,13 +6,9 @@ export {
   HeartbeatInputSchema,
   HeartbeatOutputSchema,
   HeartbeatBroadcastModeSchema,
+  type HeartbeatBroadcastMode,
   type HeartbeatInput,
   type HeartbeatOutput,
   type HeartbeatRunStatus,
   type SetHeartbeatOptions,
 } from './types';
-export {
-  HEARTBEAT_BROADCAST_PROCESSOR_NAME,
-  createHeartbeatBroadcastProcessor,
-  type HeartbeatBroadcastMode,
-} from './broadcast-processor';

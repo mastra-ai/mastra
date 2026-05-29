@@ -1,5 +1,5 @@
+import type { HeartbeatBroadcastMode } from '../agent/heartbeat/types';
 import type { AgentChunkType } from '../stream/types';
-import { asHeartbeatRunChunk } from './heartbeat-run';
 import { asOmChunk } from './om';
 /**
  * Return value from a `TypingStatusFn`. Returning a non-empty string sets the
@@ -62,7 +62,7 @@ export type TypingStatusFn = (chunk: AgentChunkType<any>, ctx: TypingStatusConte
  * | `tool-call-approval`  | `is requesting approval for ${toolName}…`  |
  * | `data-om-buffering-start` | `is saving to memory…`                 |
  * | `data-om-activation`  | `is recalling memory…`                     |
- * | `data-heartbeat-run-start` | `is checking in…`                     |
+ * | `data-<signal-type>` (with `providerOptions.mastra.heartbeat`) | `is checking in…` |
  * | _everything else_     | _no change_                                |
  */
 export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatusContext): TypingStatusReturn {
@@ -76,8 +76,7 @@ export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatu
           return STATUS_TEXT.RECALLING_MEMORY;
       }
     }
-    const hbChunk = asHeartbeatRunChunk(chunk);
-    if (hbChunk?.type === 'data-heartbeat-run-start') {
+    if (isHeartbeatSignalChunk(chunk)) {
       return STATUS_TEXT.HEARTBEAT_CHECKING_IN;
     }
   }
@@ -100,6 +99,36 @@ export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatu
     default:
       return undefined;
   }
+}
+
+/**
+ * A signal data chunk carries `providerOptions.mastra.heartbeat` when the
+ * signal was sent by the {@link HeartbeatWorker}. Detect that across any
+ * `data-<signal-type>` chunk shape so typing status reacts as soon as the
+ * heartbeat signal is broadcast.
+ */
+function isHeartbeatSignalChunk(chunk: AgentChunkType<any>): boolean {
+  return extractHeartbeatBroadcast(chunk) !== undefined;
+}
+
+/**
+ * Pull the heartbeat broadcast mode off a `data-<signal-type>` chunk's
+ * `providerOptions.mastra.heartbeat.broadcast` slot. Returns `undefined` for
+ * non-heartbeat chunks. Defaults to `'live'` when the heartbeat marker is
+ * present but no explicit broadcast value is set.
+ */
+export function extractHeartbeatBroadcast(chunk: AgentChunkType<any>): HeartbeatBroadcastMode | undefined {
+  const data = (chunk as { data?: unknown }).data;
+  if (!data || typeof data !== 'object') return undefined;
+  const providerOptions = (data as { providerOptions?: unknown }).providerOptions;
+  if (!providerOptions || typeof providerOptions !== 'object') return undefined;
+  const mastra = (providerOptions as { mastra?: unknown }).mastra;
+  if (!mastra || typeof mastra !== 'object') return undefined;
+  const heartbeat = (mastra as { heartbeat?: unknown }).heartbeat;
+  if (!heartbeat || typeof heartbeat !== 'object') return undefined;
+  const broadcast = (heartbeat as { broadcast?: unknown }).broadcast;
+  if (broadcast === 'live' || broadcast === 'on-complete' || broadcast === 'never') return broadcast;
+  return 'live';
 }
 
 const STATUS_TEXT = {

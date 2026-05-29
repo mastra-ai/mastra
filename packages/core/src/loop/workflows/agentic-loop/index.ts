@@ -86,7 +86,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         typedInputData.messageId = _internal?.generateId?.() ?? randomUUID();
         for (const pendingSignal of pendingSignals) {
           messageList.add(pendingSignal.toLLMMessage(), 'input');
-          safeEnqueue(controller, pendingSignal.toDataPart() as any);
+          safeEnqueue(controller, { ...pendingSignal.toDataPart(), runId } as any);
         }
         if (typedInputData.stepResult) {
           typedInputData.stepResult.isContinued = true;

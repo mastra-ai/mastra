@@ -77833,7 +77833,7 @@ export type GetSchedulesScheduleIdTriggers_Response = {
       | 'dropped-superseded'
       | 'dropped-busy';
     error?: string | undefined;
-    triggerKind?: ('schedule-fire' | 'queue-drain') | undefined;
+    triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
     parentTriggerId?: string | undefined;
     metadata?:
       | {
@@ -78700,6 +78700,37 @@ export interface PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/heartbeats/:heartbeatId/run
+// ============================================================================
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams = {
+  agentId: string;
+  heartbeatId: string;
+};
+
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Response = {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
+};
+
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Request = Simplify<
+  (PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract {
+  pathParams: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Request;
+  response: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /agents/:agentId/heartbeats/:heartbeatId/triggers
 // ============================================================================
 export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_PathParams = {
@@ -78732,7 +78763,7 @@ export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Response = {
       | 'dropped-superseded'
       | 'dropped-busy';
     error?: string | undefined;
-    triggerKind?: ('schedule-fire' | 'queue-drain') | undefined;
+    triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
     parentTriggerId?: string | undefined;
     metadata?:
       | {
@@ -79287,6 +79318,7 @@ export interface RouteTypes {
   'DELETE /agents/:agentId/heartbeats/:heartbeatId': DeleteAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
   'POST /agents/:agentId/heartbeats/:heartbeatId/pause': PostAgentsAgentIdHeartbeatsHeartbeatIdPause_RouteContract;
   'POST /agents/:agentId/heartbeats/:heartbeatId/resume': PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract;
+  'POST /agents/:agentId/heartbeats/:heartbeatId/run': PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract;
   'GET /agents/:agentId/heartbeats/:heartbeatId/triggers': GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
@@ -79407,6 +79439,9 @@ export interface Client {
   };
   '/agents/:agentId/heartbeats/:heartbeatId/resume': {
     POST: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract;
+  };
+  '/agents/:agentId/heartbeats/:heartbeatId/run': {
+    POST: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract;
   };
   '/agents/:agentId/heartbeats/:heartbeatId/triggers': {
     GET: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_RouteContract;

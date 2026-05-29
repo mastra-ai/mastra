@@ -8,8 +8,6 @@ export {
   HeartbeatInputSchema,
   HeartbeatOutputSchema,
   HeartbeatBroadcastModeSchema,
-  HEARTBEAT_BROADCAST_PROCESSOR_NAME,
-  createHeartbeatBroadcastProcessor,
   type HeartbeatInput,
   type HeartbeatOutput,
   type HeartbeatRunStatus,

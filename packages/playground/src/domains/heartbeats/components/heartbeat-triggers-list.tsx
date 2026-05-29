@@ -2,50 +2,48 @@ import type { HeartbeatTrigger } from '@mastra/client-js';
 import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, Txt } from '@mastra/playground-ui';
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react';
 import { formatRelativeTime, formatScheduleTimestamp } from '@/domains/schedules/utils/format';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface HeartbeatTriggersListProps {
   triggers: HeartbeatTrigger[];
   isLoading: boolean;
+  /** Owning agent id — used to link threaded heartbeat trigger rows to the agent thread chat. */
+  agentId?: string;
+  /** Thread id of the heartbeat (threaded only). When set, rows with a `runId` link to the chat. */
+  threadId?: string;
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   setEndOfListElement?: (el: HTMLDivElement | null) => void;
 }
 
-// Columns: Run | Status | Duration | Error
-const COLUMNS = 'auto auto auto 1fr';
+// Columns: Run | Status | Started
+const COLUMNS = 'auto auto 1fr';
 
-function formatDuration(durationMs?: number): string {
-  if (durationMs === undefined) return '—';
-  if (durationMs < 1000) return `${durationMs}ms`;
-  if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(durationMs / 60_000);
-  const seconds = Math.floor((durationMs % 60_000) / 1000);
-  return `${minutes}m ${seconds}s`;
+function formatDriftValue(driftMs: number): string {
+  const abs = Math.abs(driftMs);
+  const sign = driftMs < 0 ? '-' : '';
+  if (abs < 1000) return `${sign}${abs}ms`;
+  if (abs < 60_000) return `${sign}${(abs / 1000).toFixed(1)}s`;
+  if (abs < 3_600_000) return `${sign}${(abs / 60_000).toFixed(1)}m`;
+  return `${sign}${(abs / 3_600_000).toFixed(1)}h`;
 }
 
-/**
- * Triggers list for the heartbeat detail page. Mirrors `ScheduleTriggersList`
- * but replaces the `runId` column with a human-readable `actualFireAt`
- * timestamp ("Run"). Rows are non-navigable in this revision; future work
- * can link `trigger.runId` to the agent thread chat (threaded heartbeats)
- * or the observability traces page (threadless heartbeats).
- *
- * TODO(heartbeats follow-up): hydrate Duration and Error columns from
- * observability traces filtered by `trigger.runId`. Today these columns
- * stay `—` because the previous workflow-run hydration was removed with
- * the rework; agent runs don't surface duration/error in the trigger row
- * itself, but `/observability/traces?runId=:runId` has both. Wire a small
- * lookup (per-row or paged) once the agent run summary endpoint exists,
- * or surface trace duration/error directly on the heartbeat trigger row
- * server-side.
- */
+// Warn when the scheduler published noticeably late (>30s) but skip cases where
+// the row is almost certainly stale (paused schedule, long downtime, clock skew).
+const DRIFT_WARN_MIN_MS = 30_000;
+const DRIFT_WARN_MAX_MS = 5 * 60_000;
+
 export function HeartbeatTriggersList({
   triggers,
   isLoading,
+  agentId,
+  threadId,
   hasNextPage,
   isFetchingNextPage,
   setEndOfListElement,
 }: HeartbeatTriggersListProps) {
+  const { Link, paths } = useLinkComponent();
+
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
   }
@@ -63,34 +61,50 @@ export function HeartbeatTriggersList({
       <DataList.Top>
         <DataList.TopCell>Run</DataList.TopCell>
         <DataList.TopCell>Status</DataList.TopCell>
-        <DataList.TopCell>Duration</DataList.TopCell>
-        <DataList.TopCell>Error</DataList.TopCell>
+        <DataList.TopCell>Started</DataList.TopCell>
       </DataList.Top>
 
       {triggers.map(t => {
+        const driftMs = t.actualFireAt - t.scheduledFireAt;
+        const driftValue = formatDriftValue(driftMs);
+        const startedTooltip = `Scheduled ${formatScheduleTimestamp(t.scheduledFireAt)} — published ${formatScheduleTimestamp(t.actualFireAt)} (drift ${driftValue})`;
         const isPublishFailure = t.outcome === 'failed';
-        const errorMessage = isPublishFailure ? t.error : t.run?.error;
+        const absDrift = Math.abs(driftMs);
+        const showDriftWarning = !isPublishFailure && absDrift > DRIFT_WARN_MIN_MS && absDrift <= DRIFT_WARN_MAX_MS;
         const rowKey = `${t.scheduleId}-${t.actualFireAt}-${t.runId ?? 'none'}`;
+        const isLinked = Boolean(agentId && threadId && t.runId && !isPublishFailure);
 
-        return (
-          <DataList.RowStatic key={rowKey}>
-            <DataList.Cell height="compact">
-              <span
-                className="text-ui-sm whitespace-nowrap"
-                title={formatRelativeTime(t.actualFireAt)}
-                data-testid="heartbeat-trigger-fired-at"
-              >
-                {formatScheduleTimestamp(t.actualFireAt)}
-              </span>
-            </DataList.Cell>
+        const runIdLabel = t.runId ? (
+          <span
+            className={
+              isLinked
+                ? 'text-accent1 font-mono text-ui-sm whitespace-nowrap'
+                : 'text-neutral3 font-mono text-ui-sm whitespace-nowrap'
+            }
+            data-testid="heartbeat-trigger-run-id"
+          >
+            {t.runId}
+          </span>
+        ) : (
+          <span className="text-neutral4">—</span>
+        );
+
+        const cells = (
+          <>
+            <DataList.Cell height="compact">{runIdLabel}</DataList.Cell>
 
             <DataList.Cell height="compact">
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent2">
-                    <AlertTriangleIcon size={14} />
-                    failed
-                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent2">
+                        <AlertTriangleIcon size={14} />
+                        failed
+                      </span>
+                    </TooltipTrigger>
+                    {t.error ? <TooltipContent>{t.error}</TooltipContent> : null}
+                  </Tooltip>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent1">
                     <CheckCircle2Icon size={14} />
@@ -109,29 +123,31 @@ export function HeartbeatTriggersList({
             </DataList.Cell>
 
             <DataList.Cell height="compact">
-              {t.run ? (
-                <span className="text-ui-sm">{formatDuration(t.run.durationMs)}</span>
-              ) : (
-                <span className="text-neutral4">—</span>
-              )}
+              <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                <span title={startedTooltip} data-testid="heartbeat-trigger-fired-at">
+                  {formatRelativeTime(t.actualFireAt)}
+                </span>
+                {showDriftWarning ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-accent3 inline-flex">
+                        <AlertTriangleIcon size={14} />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Published {driftValue} after the scheduled fire time</TooltipContent>
+                  </Tooltip>
+                ) : null}
+              </span>
             </DataList.Cell>
+          </>
+        );
 
-            <DataList.Cell height="compact">
-              {errorMessage ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent2 max-w-full">
-                      <AlertTriangleIcon size={14} className="shrink-0" />
-                      <span className="truncate">{errorMessage}</span>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>{errorMessage}</TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="text-neutral4">—</span>
-              )}
-            </DataList.Cell>
-          </DataList.RowStatic>
+        return isLinked ? (
+          <DataList.RowLink key={rowKey} to={paths.agentThreadLink(agentId!, threadId!, t.runId!)} LinkComponent={Link}>
+            {cells}
+          </DataList.RowLink>
+        ) : (
+          <DataList.RowStatic key={rowKey}>{cells}</DataList.RowStatic>
         );
       })}
 

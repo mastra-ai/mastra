@@ -34,15 +34,20 @@ dispatcher (previously `WorkflowScheduler`, now `Scheduler`) generalises to
 any target type and only knows about CAS, cron advancement, and topic
 routing.
 
-Heartbeat-driven runs are now marked end-to-end so subscribers and history
-renderers can distinguish them from user-driven runs:
+Heartbeat-driven runs are now marked end-to-end so subscribers can distinguish
+them from user-driven runs and enforce per-heartbeat broadcast policy without
+any extra processor wiring:
 
 - `signal.providerOptions.mastra.heartbeat = { scheduleId, broadcast, threadId? }`
   is stamped on the heartbeat signal (threaded) and on the `agent.generate`
-  run options (threadless), surviving onto the transient `data-${type}`
+  run options (threadless). It rides onto the transient `data-${signalType}`
   chunk and onto persisted messages.
-- The broadcast processor emits transient `data-heartbeat-run-start` and
-  `data-heartbeat-run-finish` lifecycle chunks once per run (skipped in
-  `'never'` broadcast mode). UIs can key off these to render run-scoped
-  affordances without polluting thread history. The default typing-status
-  resolver maps `data-heartbeat-run-start` to `'is checking in…'`.
+- The transient signal data chunk now also carries `runId`, so consumers can
+  correlate the heartbeat marker with all subsequent chunks for that run.
+- `AgentChannels.consumeAgentStream` applies broadcast policy per run: `live`
+  passes everything through, `on-complete` buffers text deltas and flushes a
+  single text part on finish, and `never` drops the run from the channel
+  entirely. Tool execution is unaffected — the agent loop still sees every
+  chunk.
+- The default typing-status resolver maps any heartbeat signal chunk to
+  `'is checking in…'`.
