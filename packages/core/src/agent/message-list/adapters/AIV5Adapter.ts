@@ -1,10 +1,15 @@
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
-import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
+import type {
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
+  MastraToolInvocationPart,
+  MessageSource,
+} from '../state/types';
 import type { AIV5Type } from '../types';
 import { sanitizeToolName } from '../utils/tool-name';
 
@@ -610,7 +615,7 @@ export class AIV5Adapter {
               },
               providerMetadata: callProviderMetadata,
               createdAt: getMastraCreatedAt(callProviderMetadata),
-            } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata; createdAt?: number };
+            } satisfies MastraToolInvocationPart;
           }
           return {
             type: 'tool-invocation' as const,
@@ -622,7 +627,7 @@ export class AIV5Adapter {
             },
             providerMetadata: callProviderMetadata,
             createdAt: getMastraCreatedAt(callProviderMetadata),
-          } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata; createdAt?: number };
+          } satisfies MastraToolInvocationPart;
         }
 
         if (p.type === 'reasoning') {

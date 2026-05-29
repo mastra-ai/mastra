@@ -1,6 +1,6 @@
-import type { Attachment } from '@ai-sdk/ui-utils-v5';
 import type { FilePart, ImagePart } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
+import type { Attachment } from './attachments-to-parts';
 import { attachmentsToParts } from './attachments-to-parts';
 
 describe('attachmentsToParts', () => {
