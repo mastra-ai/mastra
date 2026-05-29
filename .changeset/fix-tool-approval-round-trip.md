@@ -2,7 +2,7 @@
 "@mastra/core": patch
 ---
 
-fix tool approval round-trip: persist output-denied state and approval object on recall
+Fixed tool approval round-trip persistence for recalled messages.
 
 When a requireApproval tool call is declined or approved, the write path now correctly
 persists the approval object and output-denied state so memory.recall() +
