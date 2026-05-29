@@ -391,36 +391,6 @@
         "default": "./dist/schema/index.cjs"
       }
     },
-    "./sdk-agents": {
-      "import": {
-        "types": "./dist/sdk-agents/index.d.ts",
-        "default": "./dist/sdk-agents/index.js"
-      },
-      "require": {
-        "types": "./dist/sdk-agents/index.d.ts",
-        "default": "./dist/sdk-agents/index.cjs"
-      }
-    },
-    "./sdk-agents/claude": {
-      "import": {
-        "types": "./dist/sdk-agents/claude/index.d.ts",
-        "default": "./dist/sdk-agents/claude/index.js"
-      },
-      "require": {
-        "types": "./dist/sdk-agents/claude/index.d.ts",
-        "default": "./dist/sdk-agents/claude/index.cjs"
-      }
-    },
-    "./sdk-agents/cursor": {
-      "import": {
-        "types": "./dist/sdk-agents/cursor/index.d.ts",
-        "default": "./dist/sdk-agents/cursor/index.js"
-      },
-      "require": {
-        "types": "./dist/sdk-agents/cursor/index.d.ts",
-        "default": "./dist/sdk-agents/cursor/index.cjs"
-      }
-    },
     "./server": {
       "import": {
         "types": "./dist/server/index.d.ts",
@@ -811,13 +781,7 @@
     "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
-    "@cursor/sdk": "^1.0.13",
     "zod": "^3.25.0 || ^4.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@cursor/sdk": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.79",
@@ -842,10 +806,8 @@
     "@ai-sdk/togetherai-v5": "npm:@ai-sdk/togetherai@1.0.42",
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.72",
     "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.89",
-    "@anthropic-ai/claude-agent-sdk": "^0.3.145",
     "@ast-grep/napi": "^0.40.5",
     "@babel/core": "^7.29.0",
-    "@cursor/sdk": "^1.0.13",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",

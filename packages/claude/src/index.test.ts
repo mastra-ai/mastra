@@ -1,7 +1,7 @@
 import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { isAgentCompatible } from '@mastra/core/agent';
 import { describe, expect, it, vi } from 'vitest';
 
-import { isAgentCompatible } from '../../agent';
 import { ClaudeSDKAgent } from './index';
 import type { ClaudeQueryFunction } from './index';
 

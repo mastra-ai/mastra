@@ -470,7 +470,21 @@ describe('AutoExtractedMetrics', () => {
         allocation: 'query_total',
       },
     });
-    expect(byName('mastra_model_total_output_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext).toMatchObject({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+    });
+    expect(byName('mastra_model_input_cache_read_tokens')!.metric.costContext).toMatchObject({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+    });
+    expect(byName('mastra_model_input_cache_write_tokens')!.metric.costContext).toMatchObject({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+    });
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeUndefined();
+    expect(byName('mastra_model_input_cache_read_tokens')!.metric.costContext?.estimatedCost).toBeUndefined();
+    expect(byName('mastra_model_input_cache_write_tokens')!.metric.costContext?.estimatedCost).toBeUndefined();
   });
 
   it('should keep total output cost only when no output detail row has a successful cost', () => {

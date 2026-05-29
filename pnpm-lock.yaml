@@ -3045,6 +3045,42 @@ importers:
         specifier: 'catalog:'
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
 
+  packages/claude:
+    devDependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.3.145
+        version: 0.3.145(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3)
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.5(vitest@4.1.5)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.1.5(vitest@4.1.5)
+      eslint:
+        specifier: ^10.2.1
+        version: 10.3.0(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+
   packages/cli:
     dependencies:
       '@babel/parser':
@@ -3234,7 +3270,7 @@ importers:
     dependencies:
       '@a2a-js/sdk':
         specifier: ~0.3.13
-        version: 0.3.13(@bufbuild/protobuf@1.10.0)(@grpc/grpc-js@1.14.3)(express@5.2.1)
+        version: 0.3.13(@grpc/grpc-js@1.14.3)(express@5.2.1)
       '@ai-sdk/provider-utils-v5':
         specifier: npm:@ai-sdk/provider-utils@3.0.25
         version: '@ai-sdk/provider-utils@3.0.25(zod@4.3.6)'
@@ -3392,18 +3428,12 @@ importers:
       '@ai-sdk/xai-v6':
         specifier: npm:@ai-sdk/xai@3.0.89
         version: '@ai-sdk/xai@3.0.89(zod@4.3.6)'
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.145
-        version: 0.3.145(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(zod@4.3.6)
       '@ast-grep/napi':
         specifier: ^0.40.5
         version: 0.40.5
       '@babel/core':
         specifier: ^7.29.0
         version: 7.29.0
-      '@cursor/sdk':
-        specifier: ^1.0.13
-        version: 1.0.13
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -3546,6 +3576,42 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+
+  packages/cursor:
+    devDependencies:
+      '@cursor/sdk':
+        specifier: ^1.0.13
+        version: 1.0.13
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.5(vitest@4.1.5)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.1.5(vitest@4.1.5)
+      eslint:
+        specifier: ^10.2.1
+        version: 10.3.0(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
 
   packages/deployer:
     dependencies:
@@ -29305,11 +29371,10 @@ snapshots:
     optionalDependencies:
       graphql: 16.14.0
 
-  '@a2a-js/sdk@0.3.13(@bufbuild/protobuf@1.10.0)(@grpc/grpc-js@1.14.3)(express@5.2.1)':
+  '@a2a-js/sdk@0.3.13(@grpc/grpc-js@1.14.3)(express@5.2.1)':
     dependencies:
       uuid: 11.1.0
     optionalDependencies:
-      '@bufbuild/protobuf': 1.10.0
       '@grpc/grpc-js': 1.14.3
       express: 5.2.1
 
@@ -29874,11 +29939,11 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.145':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.145(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(zod@4.3.6)':
+  '@anthropic-ai/claude-agent-sdk@0.3.145(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
       '@anthropic-ai/sdk': 0.39.0(encoding@0.1.13)
-      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
-      zod: 4.3.6
+      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      zod: 4.4.3
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.145
       '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.145
@@ -36434,6 +36499,30 @@ snapshots:
       raw-body: 3.0.1
       zod: 4.3.6
       zod-to-json-schema: 3.25.1(zod@4.3.6)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)':
+    dependencies:
+      '@hono/node-server': 1.19.14(hono@4.12.18)
+      ajv: 8.18.0
+      ajv-formats: 3.0.1(ajv@8.18.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      express: 5.2.1
+      express-rate-limit: 8.5.1(express@5.2.1)
+      hono: 4.12.18
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.1
+      zod: 4.4.3
+      zod-to-json-schema: 3.25.1(zod@4.4.3)
     optionalDependencies:
       '@cfworker/json-schema': 4.1.1
     transitivePeerDependencies:
@@ -57221,6 +57310,10 @@ snapshots:
   zod-to-json-schema@3.25.1(zod@4.3.6):
     dependencies:
       zod: 4.3.6
+
+  zod-to-json-schema@3.25.1(zod@4.4.3):
+    dependencies:
+      zod: 4.4.3
 
   zod-to-ts@2.0.0(typescript@6.0.3)(zod@4.3.6):
     dependencies:

@@ -3,12 +3,12 @@ import { ReadableStream } from 'node:stream/web';
 
 import type { ModelUsage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
-import { Agent } from '../../agent';
-import type { MessageListInput } from '../../agent/message-list';
-import type { Mastra } from '../../mastra';
-import type { CostContext } from '../../observability';
-import type { ChunkType, FullOutput, LanguageModelUsage, ProviderMetadata, MastraModelOutput } from '../../stream';
-import { ChunkFrom } from '../../stream';
+import { Agent } from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { Mastra } from '@mastra/core/mastra';
+import type { CostContext } from '@mastra/core/observability';
+import type { ChunkType, FullOutput, LanguageModelUsage, ProviderMetadata, MastraModelOutput } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 import {
   createMastraOutput,
   createNoopModel,
@@ -21,8 +21,8 @@ import {
   sumDefined,
   toFullOutput,
   toLanguageModelUsage,
-} from '../shared';
-import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from '../shared';
+} from './shared';
+import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from './shared';
 
 const PROVIDER = '@anthropic-ai/claude-agent-sdk';
 const MODEL_ID = 'claude-agent-sdk';

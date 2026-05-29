@@ -2,18 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { ReadableStreamDefaultController } from 'node:stream/web';
 
-import type { AgentExecutionOptionsBase } from '../agent/agent.types';
-import { MessageList } from '../agent/message-list';
-import type { MessageListInput } from '../agent/message-list';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
-import type { Mastra } from '../mastra';
-import { EntityType, SpanType } from '../observability';
-import type { AIModelGenerationSpan, CostContext, IModelSpanTracker, Span, UsageStats } from '../observability';
-import { executeWithContext, getOrCreateSpan } from '../observability/utils';
-import { RequestContext } from '../request-context';
-import type { ChunkType, FullOutput, JSONValue, LanguageModelUsage, ProviderMetadata } from '../stream';
-import { ChunkFrom, MastraModelOutput } from '../stream';
-import type { MastraModelOutputOptions } from '../stream/types';
+import type { AgentExecutionOptionsBase, MastraLanguageModel } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent/message-list';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { Mastra } from '@mastra/core/mastra';
+import { EntityType, executeWithContext, getOrCreateSpan, SpanType } from '@mastra/core/observability';
+import type { AIModelGenerationSpan, CostContext, IModelSpanTracker, Span, UsageStats } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
+import type { ChunkType, FullOutput, JSONValue, LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
+import { ChunkFrom, MastraModelOutput } from '@mastra/core/stream';
+type MastraModelOutputOptions<OUTPUT = undefined> = ConstructorParameters<typeof MastraModelOutput<OUTPUT>>[0]['options'];
 
 export type SDKAgentRunOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   signal?: AbortSignal;

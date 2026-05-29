@@ -16,11 +16,11 @@ import type {
   SendOptions,
 } from '@cursor/sdk';
 
-import { Agent } from '../../agent';
-import type { MessageListInput } from '../../agent/message-list';
-import type { Mastra } from '../../mastra';
-import type { ChunkType, FullOutput, LanguageModelUsage, ProviderMetadata, MastraModelOutput } from '../../stream';
-import { ChunkFrom } from '../../stream';
+import { Agent } from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { Mastra } from '@mastra/core/mastra';
+import type { ChunkType, FullOutput, LanguageModelUsage, ProviderMetadata, MastraModelOutput } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 import {
   createMastraOutput,
   createNoopModel,
@@ -33,8 +33,8 @@ import {
   sumDefined,
   toFullOutput,
   toLanguageModelUsage,
-} from '../shared';
-import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from '../shared';
+} from './shared';
+import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from './shared';
 
 const PROVIDER = '@cursor/sdk';
 const MODEL_ID = 'cursor-agent-sdk';

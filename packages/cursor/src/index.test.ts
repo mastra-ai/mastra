@@ -1,7 +1,7 @@
 import type { InteractionUpdate, ModelSelection, Run, SDKAgent, SDKMessage, SendOptions } from '@cursor/sdk';
+import { isAgentCompatible } from '@mastra/core/agent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { isAgentCompatible } from '../../agent';
 import { CursorSDKAgent } from './index';
 
 const createCursorAgent = vi.fn();
@@ -113,6 +113,35 @@ describe('CursorSDKAgent', () => {
     expect(agent.name).toBe('Cursor Agent');
     expect(agent.getDescription()).toBe('Use Cursor Agent as a Mastra agent.');
     expect(isAgentCompatible(agent)).toBe(true);
+  });
+
+  it('accepts a direct CursorAgent.create promise as the wrapped SDK agent', async () => {
+    const { sdkAgent } = createSDKAgent(createRun({ id: 'promise-run', result: 'promise text' }));
+    createCursorAgent.mockResolvedValueOnce(sdkAgent);
+    const sdkAgentPromise = createCursorAgent({
+      apiKey: 'cursor-key',
+      model: { id: 'gpt-5.5' },
+      local: {
+        cwd: '/repo',
+      },
+    });
+
+    const agent = new CursorSDKAgent({
+      id: 'cursor-agent',
+      description: 'Cursor',
+      agent: sdkAgentPromise,
+    });
+
+    const result = await agent.generate('Generate prompt');
+
+    expect(result.text).toBe('promise text');
+    expect(createCursorAgent).toHaveBeenCalledWith({
+      apiKey: 'cursor-key',
+      model: { id: 'gpt-5.5' },
+      local: {
+        cwd: '/repo',
+      },
+    });
   });
 
   it('creates a Cursor SDK agent from options and falls back to CURSOR_API_KEY', async () => {

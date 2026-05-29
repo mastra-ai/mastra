@@ -116,20 +116,28 @@ function getProvidedCostContext(
   }
 
   const carrierMetric = usage.inputTokens !== undefined ? TokenMetrics.TOTAL_INPUT : TokenMetrics.TOTAL_OUTPUT;
-  return new Map([
-    [
-      carrierMetric,
-      {
-        ...costContext,
-        provider: costContext.provider ?? attrs.provider,
-        model: costContext.model ?? attrs.responseModel ?? attrs.model,
-        costMetadata: {
-          ...costContext.costMetadata,
-          allocation: 'query_total',
-        },
-      },
-    ],
-  ]);
+  const provider = costContext.provider ?? attrs.provider;
+  const model = costContext.model ?? attrs.responseModel ?? attrs.model;
+  const contexts = new Map<TokenMetrics, CostContext>();
+
+  for (const sample of getTokenMetricSamples(usage)) {
+    contexts.set(sample.name, {
+      provider,
+      model,
+    });
+  }
+
+  contexts.set(carrierMetric, {
+    ...costContext,
+    provider,
+    model,
+    costMetadata: {
+      ...costContext.costMetadata,
+      allocation: 'query_total',
+    },
+  });
+
+  return contexts;
 }
 
 function getDurationMetricName(span: AnySpan): string | null {
