@@ -31,7 +31,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import { ProcessorRunner, ProcessorState, applyReturnedSystemMessages, createProcessorSendSignal } from '../processors';
+import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import {
   summarizeActiveToolsForSpan,
@@ -1138,11 +1138,11 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'input',
                 );
-                applyReturnedSystemMessages(checkedMessageList, typedResult.systemMessages);
+                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: checkedMessageList.getAllSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1203,7 +1203,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               if (validatedResult.systemMessages) {
-                applyReturnedSystemMessages(checkedMessageList, validatedResult.systemMessages as CoreMessage[]);
+                checkedMessageList.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
@@ -1212,6 +1212,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                systemMessages: checkedMessageList.getAllSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1354,11 +1355,11 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'response',
                 );
-                applyReturnedSystemMessages(passThrough.messageList, typedResult.systemMessages);
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getAllSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1437,11 +1438,11 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'response',
                 );
-                applyReturnedSystemMessages(checkedMessageList, typedResult.systemMessages);
+                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: checkedMessageList.getAllSystemMessages(),
                 };
               }
               return { ...passThrough, messages };

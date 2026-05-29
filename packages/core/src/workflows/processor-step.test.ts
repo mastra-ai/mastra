@@ -388,6 +388,53 @@ describe('createStep with Processor', () => {
       expect(messageList.getSystemMessages().map(m => m.content)).toEqual(['Original instruction', 'channel context']);
     });
 
+    it('should pass tagged system messages to the next step in a chained processor workflow', async () => {
+      const replacerStep = createStep({
+        id: 'replacer',
+        processInputStep: async ({ messages, systemMessages }) => ({
+          messages: messages as MastraDBMessage[],
+          systemMessages: [...systemMessages, { role: 'system' as const, content: 'channel context' }],
+        }),
+      });
+
+      let secondStepSeenSystemMessages: any[] = [];
+      const inspectorStep = createStep({
+        id: 'inspector',
+        processInputStep: async ({ systemMessages, messageList }) => {
+          secondStepSeenSystemMessages = systemMessages;
+          return { messageList };
+        },
+      });
+
+      const messageList = new MessageList({ threadId: 't1', resourceId: 'r1' });
+      messageList.addSystem('Original instruction');
+      messageList.addSystem('<observations>memory</observations>', 'observational-memory');
+
+      const step1Output = await replacerStep.execute({
+        inputData: {
+          phase: 'inputStep' as const,
+          messages: [],
+          messageList,
+          stepNumber: 0,
+          systemMessages: messageList.getAllSystemMessages(),
+        },
+      } as any);
+
+      await inspectorStep.execute({
+        inputData: {
+          phase: 'inputStep' as const,
+          messages: (step1Output as any).messages ?? [],
+          messageList,
+          stepNumber: 1,
+          systemMessages: (step1Output as any).systemMessages,
+        },
+      } as any);
+
+      expect(secondStepSeenSystemMessages.map(m => m.content)).toContain('<observations>memory</observations>');
+      expect(secondStepSeenSystemMessages.map(m => m.content)).toContain('Original instruction');
+      expect(secondStepSeenSystemMessages.map(m => m.content)).toContain('channel context');
+    });
+
     it('should call processOutputStream when phase is outputStream (messageList optional)', async () => {
       const processOutputStreamMock = async ({ part }) => {
         return { ...part, processed: true };

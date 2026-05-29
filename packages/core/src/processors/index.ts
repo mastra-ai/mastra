@@ -752,7 +752,7 @@ export {
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
-export { ProcessorState, ProcessorRunner, applyReturnedSystemMessages, createProcessorSendSignal } from './runner';
+export { ProcessorState, ProcessorRunner, createProcessorSendSignal } from './runner';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

@@ -23,7 +23,6 @@ import {
   ProcessorState,
   ProcessorStepOutputSchema,
   ProcessorStepSchema,
-  applyReturnedSystemMessages,
   createProcessorSendSignal,
 } from '../../processors';
 import {
@@ -1160,11 +1159,11 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'input',
                 );
-                applyReturnedSystemMessages(passThrough.messageList, typedResult.systemMessages);
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getAllSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1222,7 +1221,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               if (validatedResult.systemMessages) {
-                applyReturnedSystemMessages(passThrough.messageList!, validatedResult.systemMessages as CoreMessage[]);
+                passThrough.messageList!.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
@@ -1231,6 +1230,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                systemMessages: passThrough.messageList!.getAllSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1368,11 +1368,11 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'response',
                 );
-                applyReturnedSystemMessages(passThrough.messageList, typedResult.systemMessages);
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getAllSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1448,11 +1448,11 @@ function createStepFromProcessor<TProcessorId extends string>(
                   check,
                   'response',
                 );
-                applyReturnedSystemMessages(passThrough.messageList, typedResult.systemMessages);
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getAllSystemMessages(),
                 };
               }
               return { ...passThrough, messages };

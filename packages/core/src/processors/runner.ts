@@ -43,32 +43,6 @@ import type {
   ToolCallInfo,
 } from './index';
 
-type SystemMessage = ReturnType<MessageList['getAllSystemMessages']>[number];
-
-function getTaggedSystemMessages(messageList: MessageList): SystemMessage[] {
-  const untaggedSystemMessages = messageList.getSystemMessages();
-  return messageList
-    .getAllSystemMessages()
-    .filter(message => !untaggedSystemMessages.some(untaggedMessage => untaggedMessage === message));
-}
-
-/**
- * Replace the untagged system message bucket with the array a processor returned,
- * while leaving tag buckets (owned by other processors) untouched. Any returned
- * entry whose content matches a tagged message is dropped so the natural
- * `[...args.systemMessages, ours]` pattern does not duplicate tagged content as
- * untagged.
- */
-export function applyReturnedSystemMessages(messageList: MessageList, systemMessages: SystemMessage[]): void {
-  const taggedSystemMessages = getTaggedSystemMessages(messageList);
-  const untaggedSystemMessages = systemMessages.filter(
-    message => !taggedSystemMessages.some(taggedMessage => messagesAreEqual(taggedMessage, message)),
-  );
-
-  messageList.clearSystemMessages();
-  messageList.addSystem(untaggedSystemMessages);
-}
-
 /**
  * Safely invoke a processor's onViolation callback when a TripWire is caught.
  * Errors from the callback are silently caught.
@@ -955,7 +929,7 @@ export class ProcessorRunner {
           // Processor returned { messages, systemMessages } - handle both
           mutations = messageList.stopRecording();
 
-          applyReturnedSystemMessages(messageList, result.systemMessages);
+          messageList.replaceAllSystemMessages(result.systemMessages);
 
           // Handle regular messages
           const regularMessages = result.messages;
@@ -1244,7 +1218,7 @@ export class ProcessorRunner {
           ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
         }
         if (systemMessages) {
-          applyReturnedSystemMessages(messageList, systemMessages);
+          messageList.replaceAllSystemMessages(systemMessages);
         }
         Object.assign(stepInput, rest);
 
