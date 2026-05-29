@@ -1,4 +1,8 @@
 import type { StepResult, WorkflowRunState } from '../workflows';
+import { serializeWorkflowSnapshotValue } from '../workflows/snapshot-serialization';
+import type { UpdateWorkflowStateOptions } from './types';
+
+export { serializeWorkflowSnapshotValue };
 
 const PENDING_MARKER_KEY = '__mastra_pending__';
 
@@ -9,6 +13,34 @@ function isPendingMarker(val: unknown): boolean {
     PENDING_MARKER_KEY in val &&
     (val as Record<string, unknown>)[PENDING_MARKER_KEY] === true
   );
+}
+
+function isSuspendedStepResult(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+
+  const result = value as {
+    status?: unknown;
+    suspendedAt?: unknown;
+    suspendPayload?: unknown;
+  };
+
+  return (
+    result.status === 'suspended' &&
+    typeof result.suspendedAt === 'number' &&
+    result.suspendPayload !== null &&
+    typeof result.suspendPayload === 'object' &&
+    '__workflow_meta' in result.suspendPayload
+  );
+}
+
+function hasPartialForeachValue(output: unknown[]): boolean {
+  return output.some(value => value === null || isPendingMarker(value) || isSuspendedStepResult(value));
+}
+
+function hasForeachPayload(result: unknown): boolean {
+  return Array.isArray((result as { payload?: unknown })?.payload);
 }
 
 export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
@@ -42,18 +74,21 @@ export function mergeWorkflowStepResult({
     throw new Error(`Snapshot context not found for runId ${snapshot?.runId}`);
   }
 
+  const serializedResult = serializeWorkflowSnapshotValue(result);
   const existingResult = snapshot.context[stepId];
   if (
     existingResult &&
     'output' in existingResult &&
     Array.isArray(existingResult.output) &&
-    result &&
-    typeof result === 'object' &&
-    'output' in result &&
-    Array.isArray(result.output)
+    serializedResult &&
+    typeof serializedResult === 'object' &&
+    'output' in serializedResult &&
+    Array.isArray(serializedResult.output) &&
+    (hasForeachPayload(existingResult) || hasForeachPayload(serializedResult)) &&
+    (hasPartialForeachValue(existingResult.output) || hasPartialForeachValue(serializedResult.output))
   ) {
     const existingOutput = existingResult.output as unknown[];
-    const newOutput = result.output as unknown[];
+    const newOutput = serializedResult.output as unknown[];
     const mergedOutput = [...existingOutput];
     for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
       if (i < newOutput.length) {
@@ -69,13 +104,23 @@ export function mergeWorkflowStepResult({
     }
     snapshot.context[stepId] = {
       ...existingResult,
-      ...(result as any),
+      ...(serializedResult as any),
       output: mergedOutput,
     };
   } else {
-    snapshot.context[stepId] = result;
+    snapshot.context[stepId] = serializedResult;
   }
 
   snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
   return JSON.parse(JSON.stringify(snapshot.context));
+}
+
+export function mergeWorkflowState({
+  snapshot,
+  opts,
+}: {
+  snapshot: WorkflowRunState;
+  opts: UpdateWorkflowStateOptions;
+}): WorkflowRunState {
+  return serializeWorkflowSnapshotValue({ ...snapshot, ...opts }) as WorkflowRunState;
 }

@@ -5,6 +5,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   safelyParseJSON,
   normalizePerPage,
+  serializeWorkflowSnapshotValue,
 } from '@mastra/core/storage';
 import type {
   WorkflowRun,
@@ -137,6 +138,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         runId: runId,
         requestContext: {},
       };
+      const serializedResult = serializeWorkflowSnapshotValue(result);
 
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
       // This ensures concurrent updates don't overwrite each other
@@ -155,7 +157,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
                   // Merge the new context entry
                   {
                     context: {
-                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] }, { [stepId]: result }],
+                      $mergeObjects: [
+                        { $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] },
+                        { [stepId]: serializedResult },
+                      ],
                     },
                   },
                   // Merge the new request context
@@ -205,6 +210,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }): Promise<WorkflowRunState | undefined> {
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const serializedOpts = serializeWorkflowSnapshotValue(opts);
 
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
       // This ensures concurrent updates don't overwrite each other
@@ -220,7 +226,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
             $set: {
               // Merge the new options into the existing snapshot
               snapshot: {
-                $mergeObjects: ['$snapshot', opts],
+                $mergeObjects: ['$snapshot', serializedOpts],
               },
               updatedAt: new Date(),
             },

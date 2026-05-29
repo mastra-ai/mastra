@@ -751,6 +751,7 @@ export const API_ROUTE_METADATA = {
       "foreachIdx",
       "format",
       "input",
+      "isResuming",
       "perStep",
       "requestContext",
       "resumeData",

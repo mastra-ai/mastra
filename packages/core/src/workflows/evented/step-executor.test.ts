@@ -220,6 +220,82 @@ describe('StepExecutor', () => {
     expect(serialized).not.toContain('stack');
   });
 
+  it('does not carry previous output into a fresh suspended step execution', async () => {
+    const largeOutput = `large-output:${'x'.repeat(1024)}`;
+    const suspendingStep = createStep({
+      id: 'loop-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async ({ suspend }) => {
+        await suspend({ reason: 'Need approval' });
+        return { ok: false };
+      },
+    });
+
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      step: suspendingStep,
+      runId: 'test-run',
+      input: {},
+      stepResults: {
+        'loop-step': {
+          status: 'success',
+          output: { largeOutput },
+          endedAt: Date.now(),
+          startedAt: Date.now(),
+          payload: {},
+        },
+      },
+      state: {},
+      requestContext,
+    });
+
+    expect(result.status).toBe('suspended');
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('endedAt');
+  });
+
+  it('preserves explicit false resume payloads when resuming a suspended step', async () => {
+    const approvalStep = createStep({
+      id: 'approval-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ approved: z.boolean() }),
+      resumeSchema: z.boolean(),
+      execute: async ({ resumeData }) => ({ approved: resumeData }),
+    });
+
+    const startedAt = Date.now() - 1000;
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      step: approvalStep,
+      runId: 'test-run',
+      input: {},
+      resumeData: false,
+      isResuming: true,
+      stepResults: {
+        'approval-step': {
+          status: 'suspended',
+          startedAt,
+          payload: {},
+          suspendPayload: { reason: 'Need approval', __workflow_meta: { runId: 'test-run' } },
+          suspendedAt: startedAt + 500,
+        },
+      },
+      state: {},
+      requestContext,
+    });
+
+    expect(result).toMatchObject({
+      status: 'success',
+      startedAt,
+      resumePayload: false,
+      output: { approved: false },
+    });
+    expect(result).not.toHaveProperty('suspendPayload.__workflow_meta');
+    expect(result.resumedAt).toEqual(expect.any(Number));
+  });
+
   it('should save MastraError message without stack trace when step fails', async () => {
     const errorMessage = 'Test MastraError: step execution failed.';
     const thrownError = new MastraError({

@@ -63,6 +63,7 @@ export class InProcessStrategy implements StepExecutionStrategy {
       requestContext: rc,
       input: params.input,
       resumeData: params.resumeData,
+      isResuming: params.isResuming,
       retryCount: params.retryCount,
       foreachIdx: params.foreachIdx,
       validateInputs: params.validateInputs,

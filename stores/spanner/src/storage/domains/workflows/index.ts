@@ -6,6 +6,8 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   normalizePerPage,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
 } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
@@ -348,8 +350,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
               const raw = existing.snapshot;
               snapshot = (typeof raw === 'string' ? JSON.parse(raw) : raw) as WorkflowRunState;
             }
-            snapshot.context[stepId] = result;
-            snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+            const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
             const now = new Date();
             const resolvedCreatedAt = existing?.createdAt
               ? new Date(existing.createdAt instanceof Date ? existing.createdAt.getTime() : existing.createdAt)
@@ -365,7 +366,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
               },
               transaction: tx,
             });
-            mergedContext = snapshot.context;
+            mergedContext = context;
             await tx.commit();
           } catch (err) {
             await tx.rollback().catch(() => {});
@@ -427,7 +428,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
                 new Error(`Snapshot not found for runId ${runId}`),
               );
             }
-            updated = { ...snapshot, ...opts } as WorkflowRunState;
+            updated = mergeWorkflowState({ snapshot, opts });
             await this.db.update({
               tableName: TABLE_WORKFLOW_SNAPSHOT,
               keys: { workflow_name: workflowName, run_id: runId },

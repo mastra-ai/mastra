@@ -5,6 +5,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   WorkflowsStorage,
   ensureDate,
+  serializeWorkflowSnapshotValue,
 } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
@@ -134,9 +135,108 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           snapshot.context = {}
         end
 
+        local pendingMarkerKey = '__mastra_pending__'
+
+        local function is_array(value)
+          if type(value) ~= 'table' then
+            return false
+          end
+
+          local count = 0
+          local maxIndex = 0
+          for key, _ in pairs(value) do
+            if type(key) ~= 'number' or key < 1 or key % 1 ~= 0 then
+              return false
+            end
+            count = count + 1
+            if key > maxIndex then
+              maxIndex = key
+            end
+          end
+
+          return count > 0 and maxIndex == count
+        end
+
+        local function is_pending_marker(value)
+          return type(value) == 'table' and value[pendingMarkerKey] == true
+        end
+
+        local function is_suspended_step_result(value)
+          return type(value) == 'table'
+            and value.status == 'suspended'
+            and type(value.suspendedAt) == 'number'
+            and type(value.suspendPayload) == 'table'
+            and value.suspendPayload.__workflow_meta ~= nil
+        end
+
+        local function has_partial_foreach_value(output)
+          if type(output) ~= 'table' then
+            return false
+          end
+
+          for _, value in ipairs(output) do
+            if value == cjson.null or is_pending_marker(value) or is_suspended_step_result(value) then
+              return true
+            end
+          end
+
+          return false
+        end
+
+        local function has_foreach_payload(result)
+          return type(result) == 'table' and is_array(result.payload)
+        end
+
+        local function copy_array(values)
+          local copy = {}
+          if type(values) ~= 'table' then
+            return copy
+          end
+
+          for i = 1, #values do
+            copy[i] = values[i]
+          end
+
+          return copy
+        end
+
         -- Merge the new step result
         local stepResult = cjson.decode(resultJson)
-        snapshot.context[stepId] = stepResult
+        local existingStepResult = snapshot.context[stepId]
+
+        if type(existingStepResult) == 'table'
+          and is_array(existingStepResult.output)
+          and type(stepResult) == 'table'
+          and is_array(stepResult.output)
+          and (has_foreach_payload(existingStepResult) or has_foreach_payload(stepResult))
+          and (has_partial_foreach_value(existingStepResult.output) or has_partial_foreach_value(stepResult.output))
+        then
+          local existingOutput = existingStepResult.output
+          local newOutput = stepResult.output
+          local mergedOutput = copy_array(existingOutput)
+          local maxLength = math.max(#existingOutput, #newOutput)
+
+          for i = 1, maxLength do
+            if i <= #newOutput then
+              local newValue = newOutput[i]
+              if is_pending_marker(newValue) then
+                mergedOutput[i] = cjson.null
+              elseif newValue ~= nil and newValue ~= cjson.null then
+                mergedOutput[i] = newValue
+              elseif i > #existingOutput then
+                mergedOutput[i] = cjson.null
+              end
+            end
+          end
+
+          for k, v in pairs(stepResult) do
+            existingStepResult[k] = v
+          end
+          existingStepResult.output = mergedOutput
+          snapshot.context[stepId] = existingStepResult
+        else
+          snapshot.context[stepId] = stepResult
+        end
 
         -- Merge request context
         local newRequestContext = cjson.decode(requestContextJson)
@@ -163,7 +263,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         [key],
         [
           stepId,
-          JSON.stringify(result),
+          JSON.stringify(serializeWorkflowSnapshotValue(result)),
           JSON.stringify(requestContext),
           now,
           'workflows',
@@ -257,7 +357,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         return cjson.encode(data)
       `;
 
-      const resultJson = await this.client.eval(luaScript, [key], [JSON.stringify(opts), now]);
+      const resultJson = await this.client.eval(
+        luaScript,
+        [key],
+        [JSON.stringify(serializeWorkflowSnapshotValue(opts)), now],
+      );
 
       if (!resultJson) {
         return undefined;

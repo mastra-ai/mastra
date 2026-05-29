@@ -5,6 +5,8 @@ import {
   TABLE_SCHEMAS,
   WorkflowsStorage,
   createStorageErrorId,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
 } from '@mastra/core/storage';
 import type {
   UpdateWorkflowStateOptions,
@@ -212,9 +214,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
         }
 
-        // Merge the new step result and request context
-        snapshot.context[stepId] = result;
-        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+        const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
         // Upsert the snapshot within the same transaction
         const now = new Date();
@@ -227,7 +227,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           [workflowName, runId, sanitizedSnapshot, now, now],
         );
 
-        return snapshot.context;
+        return context;
       });
     } catch (error) {
       throw new MastraError(
@@ -279,7 +279,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         }
 
         // Merge the new options with the existing snapshot
-        const updatedSnapshot = { ...snapshot, ...opts };
+        const updatedSnapshot = mergeWorkflowState({ snapshot, opts });
 
         // Update the snapshot within the same transaction
         const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));

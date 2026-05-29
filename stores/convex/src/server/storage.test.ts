@@ -95,7 +95,11 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       context: {
         foreach: {
           status: 'success',
-          output: ['kept', { status: 'suspended' }, 'old-tail'],
+          output: [
+            'kept',
+            { status: 'suspended', suspendedAt: 1, suspendPayload: { __workflow_meta: { path: ['foreach'] } } },
+            'old-tail',
+          ],
           payload: ['a', 'b', 'c'],
           startedAt: 1,
         },
@@ -162,6 +166,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
         foreach: {
           status: 'success',
           output: [1, 2],
+          payload: ['a', 'b', 'c'],
         },
       },
     };
@@ -176,6 +181,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       result: JSON.stringify({
         status: 'success',
         output: [null, 3, null],
+        payload: ['a', 'b', 'c'],
       }),
       requestContext: JSON.stringify({}),
     });
@@ -185,6 +191,104 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
     expect(patchedSnapshot.context.foreach.output).toEqual([1, 3, null]);
     expect(2 in patchedSnapshot.context.foreach.output).toBe(true);
+  });
+
+  it('replaces normal step result arrays instead of treating them as partial forEach output', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        'array-step': {
+          status: 'success',
+          output: [1, 2, 3],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'array-step',
+      result: JSON.stringify({
+        status: 'success',
+        output: [4],
+      }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
+    expect(patchedSnapshot.context['array-step'].output).toEqual([4]);
+  });
+
+  it('replaces normal step result arrays that contain null values', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        'array-step': {
+          status: 'success',
+          output: [1, 2, 3],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'array-step',
+      result: JSON.stringify({
+        status: 'success',
+        output: [null],
+      }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
+    expect(patchedSnapshot.context['array-step'].output).toEqual([null]);
+  });
+
+  it('does not treat user outputs shaped like suspended results as partial forEach markers', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        foreach: {
+          status: 'success',
+          output: [{ status: 'suspended', reason: 'user-domain-status' }, 2],
+          payload: ['a', 'b'],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'foreach',
+      result: JSON.stringify({
+        status: 'success',
+        output: [{ status: 'suspended', reason: 'new-user-domain-status' }],
+        payload: ['a', 'b'],
+      }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
+    expect(patchedSnapshot.context.foreach.output).toEqual([{ status: 'suspended', reason: 'new-user-domain-status' }]);
   });
 
   it('returns an error instead of dropping step results when the snapshot row is missing', async () => {

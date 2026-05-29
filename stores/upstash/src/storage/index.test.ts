@@ -140,6 +140,133 @@ describe('Upstash Domain with URL/token config', () => {
   });
 });
 
+describe('WorkflowsUpstash workflow snapshot merge operations', () => {
+  it('atomically merges forEach partial step result arrays in Lua', async () => {
+    const workflowDomain = new WorkflowsUpstash({ client: createTestClient() });
+    const workflowName = `workflow-merge-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            foreach: {
+              status: 'success',
+              output: [1, 2],
+              payload: ['a', 'b', 'c'],
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          status: 'success',
+          output: [null, null, 3],
+          payload: ['a', 'b', 'c'],
+        } as any,
+        requestContext: { incoming: true },
+      });
+
+      expect(context.foreach?.output).toEqual([1, 2, 3]);
+
+      const snapshot = await workflowDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId });
+      expect(snapshot?.context.foreach?.output).toEqual([1, 2, 3]);
+      expect(snapshot?.requestContext).toEqual({ incoming: true });
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
+
+  it('does not treat user outputs shaped like suspended results as partial forEach markers', async () => {
+    const workflowDomain = new WorkflowsUpstash({ client: createTestClient() });
+    const workflowName = `workflow-user-status-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            foreach: {
+              status: 'success',
+              output: [{ status: 'suspended', reason: 'user-domain-status' }, 2],
+              payload: ['a', 'b'],
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          status: 'success',
+          output: [{ status: 'suspended', reason: 'new-user-domain-status' }],
+          payload: ['a', 'b'],
+        } as any,
+        requestContext: {},
+      });
+
+      expect(context.foreach?.output).toEqual([{ status: 'suspended', reason: 'new-user-domain-status' }]);
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
+
+  it('replaces normal array outputs for object-payload steps', async () => {
+    const workflowDomain = new WorkflowsUpstash({ client: createTestClient() });
+    const workflowName = `workflow-object-payload-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            'array-step': {
+              status: 'success',
+              output: [1, 2, 3],
+              payload: { input: true },
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'array-step',
+        result: {
+          status: 'success',
+          output: [null],
+          payload: { input: false },
+        } as any,
+        requestContext: {},
+      });
+
+      expect(context['array-step']?.output).toEqual([null]);
+      expect(context['array-step']?.payload).toEqual({ input: false });
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
+});
+
 describe('saveMessages uses msg-idx index instead of scanning', () => {
   it('uses index lookup instead of scan when moving a message between threads', async () => {
     const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });

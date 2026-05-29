@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
 
 import { MastraBase } from '@mastra/core/base';
-import { TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  serializeWorkflowSnapshotValue,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES, UpdateWorkflowStateOptions } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
@@ -193,7 +198,7 @@ export class ConvexDB extends MastraBase {
       workflowName,
       runId,
       stepId,
-      result: JSON.stringify(result),
+      result: JSON.stringify(serializeWorkflowSnapshotValue(result)),
       requestContext: JSON.stringify(requestContext),
     });
     if (!context) {
@@ -216,7 +221,7 @@ export class ConvexDB extends MastraBase {
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       workflowName,
       runId,
-      opts: JSON.stringify(opts),
+      opts: JSON.stringify(serializeWorkflowSnapshotValue(opts)),
     });
     if (!snapshot) {
       throw new Error(`Convex workflow state merge returned no snapshot for runId ${runId}`);

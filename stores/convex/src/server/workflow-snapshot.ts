@@ -9,6 +9,34 @@ function isPendingMarker(val: unknown): boolean {
   );
 }
 
+function isSuspendedStepResult(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+
+  const result = value as {
+    status?: unknown;
+    suspendedAt?: unknown;
+    suspendPayload?: unknown;
+  };
+
+  return (
+    result.status === 'suspended' &&
+    typeof result.suspendedAt === 'number' &&
+    result.suspendPayload !== null &&
+    typeof result.suspendPayload === 'object' &&
+    '__workflow_meta' in result.suspendPayload
+  );
+}
+
+function hasPartialForeachValue(output: unknown[]): boolean {
+  return output.some(value => value === null || isPendingMarker(value) || isSuspendedStepResult(value));
+}
+
+function hasForeachPayload(result: unknown): boolean {
+  return Array.isArray((result as { payload?: unknown })?.payload);
+}
+
 export function createEmptyWorkflowSnapshot(runId: string): Record<string, any> {
   return {
     context: {},
@@ -48,7 +76,9 @@ export function mergeWorkflowStepResult({
     result &&
     typeof result === 'object' &&
     'output' in result &&
-    Array.isArray(result.output)
+    Array.isArray(result.output) &&
+    (hasForeachPayload(existingResult) || hasForeachPayload(result)) &&
+    (hasPartialForeachValue(existingResult.output) || hasPartialForeachValue(result.output))
   ) {
     const existingOutput = existingResult.output as unknown[];
     const newOutput = result.output as unknown[];

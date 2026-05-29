@@ -9394,6 +9394,7 @@ export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
   };
   input?: any | undefined;
   resumeData?: any | undefined;
+  isResuming?: boolean | undefined;
   retryCount?: number | undefined;
   foreachIdx?: number | undefined;
   format?: ('legacy' | 'vnext') | undefined;

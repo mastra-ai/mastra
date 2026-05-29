@@ -5,6 +5,8 @@ import {
   TABLE_SCHEMAS,
   WorkflowsStorage,
   createStorageErrorId,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
 } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
@@ -161,8 +163,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
             }
 
-            snapshot.context[stepId] = result;
-            snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+            const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
             const now = new Date();
             await t.none(
@@ -173,7 +174,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               [workflowName, runId, JSON.stringify(snapshot), now, now],
             );
 
-            return snapshot.context;
+            return context;
           });
         },
         {
@@ -237,7 +238,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               throw new Error(`Snapshot not found for runId ${runId}`);
             }
 
-            const updatedSnapshot = { ...snapshot, ...opts };
+            const updatedSnapshot = mergeWorkflowState({ snapshot, opts });
 
             await t.none(
               `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,

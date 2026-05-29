@@ -15,6 +15,7 @@ import type {
   WorkflowRunState,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
+import { serializeWorkflowSnapshotValue } from '../../snapshot-serialization';
 import { createRestartExecutionParams, createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import { StepExecutor } from '../step-executor';
@@ -74,6 +75,20 @@ export type ParentWorkflow = {
     input: any;
   };
 };
+
+const TERMINAL_WORKFLOW_STATUSES = new Set(['success', 'failed', 'canceled', 'bailed', 'tripwire']);
+
+function isSuspendedStepResult(value: any): boolean {
+  return (
+    value &&
+    typeof value === 'object' &&
+    value.status === 'suspended' &&
+    typeof value.suspendedAt === 'number' &&
+    value.suspendPayload &&
+    typeof value.suspendPayload === 'object' &&
+    '__workflow_meta' in value.suspendPayload
+  );
+}
 
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
@@ -273,9 +288,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           timestamp: Date.now(),
           runId,
           context: {
-            ...(stepResults ?? {
-              input: prevResult?.status === 'success' ? prevResult.output : undefined,
-            }),
+            ...(serializeWorkflowSnapshotValue(
+              stepResults ?? {
+                input: prevResult?.status === 'success' ? prevResult.output : undefined,
+              },
+            ) as Record<string, any>),
             __state: initialState,
           },
           status: 'running',
@@ -1235,15 +1252,19 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
 
     let resumeDataToUse;
-    if (timeTravelResumeData && !timeTravelResumeValidationError) {
+    let isResumingStep = false;
+    const hasTimeTravelResumeData = timeTravelResumeData !== undefined;
+    if (hasTimeTravelResumeData && !timeTravelResumeValidationError) {
       resumeDataToUse = timeTravelResumeData;
-    } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+      isResumingStep = true;
+    } else if (hasTimeTravelResumeData && timeTravelResumeValidationError) {
       this.mastra.getLogger()?.warn('Time travel resume data validation failed', {
         stepId: step.step.id,
         error: timeTravelResumeValidationError.message,
       });
     } else if (resumeSteps?.length > 0 && resumeSteps?.[0] === step.step.id) {
       resumeDataToUse = resumeData;
+      isResumingStep = true;
     }
 
     // Get the abort controller for this workflow run
@@ -1262,6 +1283,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext: Object.fromEntries(rc.entries()),
         input: (prevResult as any)?.output,
         resumeData: resumeDataToUse,
+        isResuming: isResumingStep,
         retryCount,
         foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
         format: streamFormat,
@@ -1279,6 +1301,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext: rc,
         input: (prevResult as any)?.output,
         resumeData: resumeDataToUse,
+        isResuming: isResumingStep,
         retryCount,
         foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
         validateInputs: workflow.options.validateInputs,
@@ -1704,16 +1727,25 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Cache workflows store to avoid redundant async calls
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: workflowId,
+      runId,
+    });
+    const isTerminalSnapshot = Boolean(snapshot?.status && TERMINAL_WORKFLOW_STATUSES.has(snapshot.status));
 
     if (step.type === 'foreach') {
-      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-        workflowName: workflowId,
-        runId,
-      });
-
       const currentIdx = executionPath[1];
       const existingStepResult = snapshot?.context?.[step.step.id] as any;
       const currentResult = existingStepResult?.output;
+      const canFillTerminalFailedIteration =
+        snapshot?.status === 'failed' &&
+        currentIdx !== undefined &&
+        Array.isArray(currentResult) &&
+        currentResult[currentIdx] === null &&
+        prevResult.status === 'success';
+      if (isTerminalSnapshot && !canFillTerminalFailedIteration) {
+        return;
+      }
       // Preserve the original payload (the input array) from the existing step result
       const originalPayload = existingStepResult?.payload;
 
@@ -1760,18 +1792,25 @@ export class WorkflowEventProcessor extends EventProcessor {
         // For foreach, store the full iteration result (including status, suspendPayload, etc.)
         // not just the output, so suspend state is preserved
         const iterationResult =
-          prevResult.status === 'suspended'
+          prevResult.status === 'suspended' || prevResult.status === 'failed'
             ? prevResult // Keep full result for suspended iterations
             : (prevResult as any).output; // Just output for completed iterations
 
         if (currentResult) {
           currentResult[currentIdx] = iterationResult;
+          const failedIterationResult =
+            existingStepResult?.status === 'failed'
+              ? existingStepResult
+              : prevResult.status === 'failed'
+                ? prevResult
+                : undefined;
           // Merge foreach step-level properties (suspendPayload, resumePayload, suspendedAt, resumedAt)
           // New iteration's resume properties take precedence for resumePayload/resumedAt (most recent resume)
           // Existing step's suspend properties are preserved (first suspend)
           newResult = {
             ...existingStepResult, // Preserve step-level properties
             ...prevResult, // Get iteration timing info
+            ...(failedIterationResult ? { status: 'failed', error: failedIterationResult.error } : {}),
             output: currentResult,
             payload: originalPayload,
             // Preserve suspend metadata from first suspension
@@ -1794,6 +1833,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
 
       if (!newStepResults) {
+        return;
+      }
+
+      if (isTerminalSnapshot) {
         return;
       }
 
@@ -1825,15 +1868,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         // Count iterations by status - pending iterations appear as null in stepResults after
         // storage merge (pending markers are converted to null by the storage layer).
         const pendingCount = iterationResults.filter((r: any) => r === null).length;
-        const suspendedCount = iterationResults.filter(
-          (r: any) => r && typeof r === 'object' && r.status === 'suspended',
-        ).length;
+        const suspendedCount = iterationResults.filter((r: any) => isSuspendedStepResult(r)).length;
+        const failedResult = foreachResult?.status === 'failed' ? foreachResult : undefined;
         const iterationsStarted = iterationResults.length;
 
         // Emit per-iteration progress event
-        const completedCount = iterationResults.filter(
-          (r: any) => r !== null && !(typeof r === 'object' && r.status === 'suspended'),
-        ).length;
+        const completedCount = iterationResults.filter((r: any) => r !== null && !isSuspendedStepResult(r)).length;
         const iterationStatus =
           prevResult.status === 'suspended'
             ? ('suspended' as const)
@@ -1857,6 +1897,44 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
 
+        if (failedResult) {
+          const shouldPersist =
+            workflow?.options?.shouldPersistSnapshot?.({
+              stepResults: stepResults ?? {},
+              workflowStatus: 'failed',
+            }) ?? true;
+          if (shouldPersist) {
+            await workflowsStore?.updateWorkflowState({
+              workflowName: workflowId,
+              runId,
+              opts: {
+                status: 'failed',
+                result: failedResult,
+              },
+            });
+          }
+          await this.mastra.pubsub.publish('workflows', {
+            type: 'workflow.fail',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath,
+              resumeSteps,
+              parentWorkflow,
+              stepResults,
+              timeTravel,
+              restart,
+              prevResult: failedResult,
+              activeStepsPath,
+              requestContext,
+              state: currentState,
+              outputOptions,
+            },
+          });
+          return;
+        }
+
         if (pendingCount > 0) {
           // There are still pending (null) iterations - concurrent execution in progress
           // Wait for them to complete
@@ -1876,7 +1954,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath: [executionPath[0]!],
               stepResults,
               activeStepsPath,
-              resumeSteps,
+              resumeSteps: [],
               timeTravel,
               restart,
               resumeData: undefined, // Don't pass resumeData when starting new iterations
@@ -1906,7 +1984,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
           for (let i = 0; i < iterationResults.length; i++) {
             const iterResult = iterationResults[i];
-            if (iterResult && typeof iterResult === 'object' && iterResult.status === 'suspended') {
+            if (isSuspendedStepResult(iterResult)) {
               // Collect resume labels
               if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
                 Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
@@ -2002,7 +2080,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             executionPath: [executionPath[0]!],
             stepResults,
             activeStepsPath,
-            resumeSteps,
+            resumeSteps: [],
             timeTravel,
             restart,
             resumeData: undefined,
@@ -2021,6 +2099,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
     } else if (isExecutableStep(step)) {
+      if (isTerminalSnapshot) {
+        return;
+      }
+
       // clear from activeStepsPath
       delete activeStepsPath[step.step.id];
 
@@ -2391,7 +2473,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId: workflowData.runId,
     });
 
-    if (currentState?.status === 'canceled' && type !== 'workflow.end' && type !== 'workflow.cancel') {
+    if (
+      currentState?.status &&
+      TERMINAL_WORKFLOW_STATUSES.has(currentState.status) &&
+      !['workflow.end', 'workflow.cancel', 'workflow.fail', 'workflow.step.end'].includes(type)
+    ) {
       return;
     }
 

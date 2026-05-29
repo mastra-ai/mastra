@@ -12,6 +12,8 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   WorkflowsStorage,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
 } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -154,9 +156,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
         }
 
-        // Merge the new step result and request context
-        snapshot.context[stepId] = result;
-        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+        const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
         // Upsert the snapshot within the same transaction
         const now = new Date().toISOString();
@@ -169,7 +169,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         });
 
         await tx.commit();
-        return snapshot.context;
+        return context;
       } catch (error) {
         if (!tx.closed) {
           await tx.rollback();
@@ -213,7 +213,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         }
 
         // Merge the new options with the existing snapshot
-        const updatedSnapshot = { ...snapshot, ...opts };
+        const updatedSnapshot = mergeWorkflowState({ snapshot, opts });
 
         // Update the snapshot within the same transaction
         await tx.execute({

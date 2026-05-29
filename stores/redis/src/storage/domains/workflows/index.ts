@@ -5,6 +5,8 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   WorkflowsStorage,
   ensureDate,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
 } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
@@ -107,8 +109,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
         } as WorkflowRunState;
       }
 
-      snapshot.context[stepId] = result;
-      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+      const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
       await this.persistWorkflowSnapshot({
         namespace: 'workflows',
@@ -118,7 +119,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
       });
 
-      return snapshot.context;
+      return context;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -167,7 +168,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
         return undefined;
       }
 
-      const updatedSnapshot = { ...existingSnapshot, ...opts };
+      const updatedSnapshot = mergeWorkflowState({ snapshot: existingSnapshot, opts });
 
       await this.persistWorkflowSnapshot({
         namespace: 'workflows',
