@@ -148,7 +148,30 @@
     "@internal/voice": "0.0.0"
   },
   "changesets": [
+    "breezy-crews-poke",
+    "chat-channel-processor-preserves-tags",
+    "chat-channel-thread-system-message",
+    "dull-peaches-pump",
+    "eight-insects-behave",
+    "eleven-animals-obey",
+    "express-zod-v3-validation",
+    "fastify-zod-v3-validation",
     "fine-countess-voice-utils",
-    "green-birds-knock"
+    "green-birds-knock",
+    "hono-zod-v3-validation",
+    "hot-aliens-sing",
+    "koa-zod-v3-validation",
+    "lovely-boxes-train",
+    "memory-update-thread-api",
+    "mighty-cameras-dig",
+    "neat-ants-open",
+    "nestjs-zod-v3-validation",
+    "public-steaks-kiss",
+    "silly-wings-read",
+    "social-points-add",
+    "sour-parents-take",
+    "tasty-cloths-invent",
+    "thick-numbers-dance",
+    "wide-cities-jog"
   ]
 }

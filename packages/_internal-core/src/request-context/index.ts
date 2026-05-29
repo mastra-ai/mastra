@@ -54,6 +54,8 @@ export type VersionSelector = { versionId: string } | { status: 'draft' | 'publi
 
 export type VersionOverrides = {
   agents?: Record<string, VersionSelector>;
+  /** Fallback status for sub-agents (and future primitives) without an explicit entry. */
+  defaultStatus?: 'draft' | 'published';
 };
 
 export function mergeVersionOverrides(
@@ -69,6 +71,12 @@ export function mergeVersionOverrides(
       ...base?.agents,
       ...overrides?.agents,
     },
+    // overrides.defaultStatus wins; fall back to base.defaultStatus
+    ...(overrides?.defaultStatus
+      ? { defaultStatus: overrides.defaultStatus }
+      : base?.defaultStatus
+        ? { defaultStatus: base.defaultStatus }
+        : {}),
   };
 }
 

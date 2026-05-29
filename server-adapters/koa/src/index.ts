@@ -9,12 +9,12 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  isZodError,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
 import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
-import { ZodError } from 'zod';
 export { createAuthMiddleware } from './auth-middleware';
 export type { KoaAuthMiddlewareOptions } from './auth-middleware';
 
@@ -391,7 +391,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         this.mastra.getLogger()?.error('Error parsing query params', {
           error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         });
-        if (error instanceof ZodError) {
+        if (isZodError(error)) {
           const resolved = this.resolveValidationError(route, error, 'query');
           ctx.status = resolved.status;
           ctx.body = resolved.body;
@@ -413,7 +413,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         this.mastra.getLogger()?.error('Error parsing body', {
           error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         });
-        if (error instanceof ZodError) {
+        if (isZodError(error)) {
           const resolved = this.resolveValidationError(route, error, 'body');
           ctx.status = resolved.status;
           ctx.body = resolved.body;
@@ -436,7 +436,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         this.mastra.getLogger()?.error('Error parsing path params', {
           error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         });
-        if (error instanceof ZodError) {
+        if (isZodError(error)) {
           const resolved = this.resolveValidationError(route, error, 'path');
           ctx.status = resolved.status;
           ctx.body = resolved.body;

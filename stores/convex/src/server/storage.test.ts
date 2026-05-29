@@ -58,6 +58,260 @@ describe('mastraStorage typed load', () => {
   });
 });
 
+describe('mastraStorage workflow snapshot merge operations', () => {
+  function createWorkflowSnapshotCtx(snapshot: unknown, { missing = false }: { missing?: boolean } = {}) {
+    const patches: Array<{ id: GenericId<string>; data: Record<string, unknown> }> = [];
+    const workflowRun = {
+      _id: asConvexId('snapshot-doc'),
+      id: 'workflow-a-run-1',
+      workflow_name: 'workflow-a',
+      run_id: 'run-1',
+      snapshot,
+      createdAt: '2026-05-15T00:00:00.000Z',
+      updatedAt: '2026-05-15T00:00:00.000Z',
+    };
+
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const unique = vi.fn(async () => (missing ? null : workflowRun));
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { unique };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const patch = vi.fn(async (id: GenericId<string>, data: Record<string, unknown>) => {
+      patches.push({ id, data });
+    });
+    const ctx = { db: { query, patch } } as unknown as TypedOperationCtx;
+
+    return { ctx, builder, unique, withIndex, query, patch, patches };
+  }
+
+  it('atomically merges forEach step results and stores the snapshot as a string', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        foreach: {
+          status: 'success',
+          output: ['kept', { status: 'suspended' }, 'old-tail'],
+          payload: ['a', 'b', 'c'],
+          startedAt: 1,
+        },
+      },
+      requestContext: { existing: true },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'foreach',
+      result: JSON.stringify({
+        status: 'success',
+        output: [
+          null,
+          { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } },
+          { __mastra_pending__: true },
+        ],
+        payload: ['a', 'b', 'c'],
+        startedAt: 2,
+        endedAt: 3,
+      }),
+      requestContext: JSON.stringify({ incoming: true }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(typeof result.result).toBe('string');
+    expect(JSON.parse(result.result)).toEqual({
+      foreach: {
+        status: 'success',
+        output: ['kept', { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } }, null],
+        payload: ['a', 'b', 'c'],
+        startedAt: 2,
+        endedAt: 3,
+      },
+    });
+    expect(testCtx.withIndex).toHaveBeenCalledWith('by_workflow_run', expect.any(Function));
+    expect(testCtx.builder.eq).toHaveBeenNthCalledWith(1, 'workflow_name', 'workflow-a');
+    expect(testCtx.builder.eq).toHaveBeenNthCalledWith(2, 'run_id', 'run-1');
+    expect(testCtx.patch).toHaveBeenCalledTimes(1);
+    expect(testCtx.patches[0]?.id).toBe(asConvexId('snapshot-doc'));
+    expect(typeof testCtx.patches[0]?.data.snapshot).toBe('string');
+
+    const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
+    expect(patchedSnapshot.context.foreach.output).toEqual([
+      'kept',
+      { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } },
+      null,
+    ]);
+    expect(patchedSnapshot.requestContext).toEqual({ existing: true, incoming: true });
+    expect(patchedSnapshot.updatedAt).toBeUndefined();
+    expect(typeof testCtx.patches[0]?.data.updatedAt).toBe('string');
+  });
+
+  it('merges longer forEach arrays without creating sparse trailing null entries', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        foreach: {
+          status: 'success',
+          output: [1, 2],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'foreach',
+      result: JSON.stringify({
+        status: 'success',
+        output: [null, 3, null],
+      }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
+    expect(patchedSnapshot.context.foreach.output).toEqual([1, 3, null]);
+    expect(2 in patchedSnapshot.context.foreach.output).toBe(true);
+  });
+
+  it('returns an error instead of dropping step results when the snapshot row is missing', async () => {
+    const testCtx = createWorkflowSnapshotCtx(null, { missing: true });
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'step-1',
+      result: JSON.stringify({ status: 'success' }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result).toEqual({ ok: false, error: 'Workflow snapshot not found for runId run-1' });
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
+  it('atomically merges workflow state and preserves existing context', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: { step: { status: 'success' } },
+      waitingPaths: { old: [0] },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowState',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      opts: JSON.stringify({
+        status: 'suspended',
+        waitingPaths: { next: [1] },
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(typeof result.result).toBe('string');
+    expect(JSON.parse(result.result)).toEqual({
+      runId: 'run-1',
+      status: 'suspended',
+      context: { step: { status: 'success' } },
+      waitingPaths: { next: [1] },
+    });
+    expect(testCtx.patch).toHaveBeenCalledTimes(1);
+    const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
+    expect(patchedSnapshot).toEqual(JSON.parse(result.result));
+  });
+
+  it('merges workflow state from an object snapshot', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: { step: { status: 'success' } },
+    };
+    const testCtx = createWorkflowSnapshotCtx(snapshot);
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowState',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      opts: JSON.stringify({ status: 'success' }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(JSON.parse(result.result)).toEqual({
+      runId: 'run-1',
+      status: 'success',
+      context: { step: { status: 'success' } },
+    });
+    expect(testCtx.patch).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an error when workflow state update has no snapshot row', async () => {
+    const testCtx = createWorkflowSnapshotCtx(null, { missing: true });
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowState',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      opts: JSON.stringify({ status: 'success' }),
+    });
+
+    expect(result).toEqual({ ok: false, error: 'Workflow snapshot not found for runId run-1' });
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
+  it('returns ok:false when a step result merge finds a stored snapshot with missing context', async () => {
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify({ runId: 'run-1', status: 'running' }));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'step-1',
+      result: JSON.stringify({ status: 'success' }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result).toEqual({ ok: false, error: 'Snapshot for runId run-1 is missing or has invalid context' });
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
+  it('returns ok:false when a workflow state merge finds a stored snapshot with missing context', async () => {
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify({ runId: 'run-1', status: 'running' }));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowState',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      opts: JSON.stringify({ status: 'success' }),
+    });
+
+    expect(result).toEqual({ ok: false, error: 'Snapshot for runId run-1 is missing or has invalid context' });
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+});
+
 describe('mastraStorage schedules', () => {
   function createScheduleClaimCtx(schedule: Record<string, unknown> | null) {
     const builder: TestQueryBuilder = {
@@ -1240,6 +1494,80 @@ describe('mastraStorage bulk mutations', () => {
       asConvexId('vector-doc-2'),
     ]);
     expect(clearCtx.maxConcurrentDeletes).toBe(3);
+  });
+
+  it('queryTable paginates vector table reads when a page size is provided', async () => {
+    const docs = [{ _id: asConvexId('vector-doc-0'), id: 'vector-0', indexName: 'embeddings' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const paginate = vi.fn(async () => ({
+      page: docs,
+      isDone: false,
+      continueCursor: 'next-cursor',
+    }));
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { paginate };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_vector_embeddings',
+      pageSize: 256,
+      cursor: 'current-cursor',
+    });
+
+    expect(result).toEqual({ ok: true, result: docs, hasMore: true, continuationCursor: 'next-cursor' });
+    expect(query).toHaveBeenCalledWith('mastra_vectors');
+    expect(withIndex).toHaveBeenCalledWith('by_index', expect.any(Function));
+    expect(builder.eq).toHaveBeenCalledWith('indexName', 'embeddings');
+    expect(paginate).toHaveBeenCalledWith({ cursor: 'current-cursor', numItems: 256 });
+  });
+
+  it('queryTable rejects invalid vector pagination page sizes', async () => {
+    const query = vi.fn();
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_vector_embeddings',
+      pageSize: 0,
+    });
+
+    expect(result).toEqual({ ok: false, error: 'queryTable pageSize must be a positive integer' });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('queryTable rejects vector pagination requests that also provide a limit', async () => {
+    const query = vi.fn();
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_vector_embeddings',
+      pageSize: 256,
+      limit: 10,
+    });
+
+    expect(result).toEqual({ ok: false, error: 'queryTable limit cannot be combined with pageSize' });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('queryTable rejects vector pagination cursors without a page size', async () => {
+    const query = vi.fn();
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_vector_embeddings',
+      cursor: 'current-cursor',
+    });
+
+    expect(result).toEqual({ ok: false, error: 'queryTable cursor requires pageSize' });
+    expect(query).not.toHaveBeenCalled();
   });
 
   it('deleteMany applies the same concurrent lookup behavior to generic fallback tables', async () => {

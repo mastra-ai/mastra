@@ -434,6 +434,15 @@ export interface ChannelConfig {
      * Set to 0 to disable.
      */
     maxMessages?: number;
+
+    /**
+     * Whether to add a built-in system message telling the agent which
+     * channel/platform a request came from (DM vs public, bot identity, etc.).
+     * Set to `false` to skip it entirely.
+     *
+     * @default true
+     */
+    addSystemMessage?: boolean;
   };
 
   /**

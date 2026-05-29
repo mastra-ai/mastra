@@ -628,6 +628,51 @@ describe('MastraMCPClient - tools without outputSchema preserve envelope', () =>
   });
 });
 
+describe('MastraMCPClient - multimodal content', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'multimodal-test',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should not attach toModelOutput that duplicates MCP image content into providerMetadata', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'screenshot',
+          description: 'Takes a screenshot',
+          inputSchema: { type: 'object' as const, properties: {} },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const tool = tools['screenshot'];
+    expect(tool).toBeDefined();
+    expect((tool as any).toModelOutput).toBeUndefined();
+  });
+});
+
 describe('MastraMCPClient - AbortSignal forwarding', () => {
   let testServer: {
     httpServer: HttpServer;
