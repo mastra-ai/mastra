@@ -31,7 +31,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "catalog:"
   },
   "devDependencies": {
