@@ -256,15 +256,30 @@ function checkMissingEnvVars(source: string, envVars: Record<string, string>): P
 /*  Check 2 — local storage paths                                     */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Real configuration values (e.g. `url:"file:./mastra.db"`) live in short JS
+ * string literals.  Long strings — like Agent Builder LLM prompt templates —
+ * may *contain* example code with the same patterns as text content but are
+ * not actual runtime values.
+ *
+ * Rather than scanning the raw combined source we first extract the text
+ * content of every JS string literal that is shorter than a comfortable
+ * threshold, then only run the pattern checks against those short strings.
+ * This structurally avoids false positives from any long template / doc
+ * string, regardless of its content.
+ */
+const MAX_CONFIG_STRING_LEN = 200;
+
 function checkLocalStoragePaths(source: string): PreflightIssue[] {
   const issues: PreflightIssue[] = [];
   const seen = new Set<string>();
 
+  const shortStrings = extractShortStringValues(source, MAX_CONFIG_STRING_LEN);
+  const filteredSource = shortStrings.join('\n');
+
   for (const { pattern, hint } of LOCAL_HOST_PATTERNS) {
     const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
-    for (const match of source.matchAll(globalPattern)) {
-      if (looksLikeCodeExample(source, match.index!)) continue;
-
+    for (const match of filteredSource.matchAll(globalPattern)) {
       const value = match[0];
       const key = `${hint}::${value}`;
       if (seen.has(key)) continue;
@@ -287,21 +302,96 @@ function checkLocalStoragePaths(source: string): PreflightIssue[] {
 /* ------------------------------------------------------------------ */
 
 /**
- * Detect whether a match position sits inside a code-example / documentation
- * string (e.g. a prompt template that embeds markdown code blocks).  In the
- * bundled output these template strings contain markdown code fences — either
- * literal triple-backticks (inside regular strings) or escaped backticks
- * (inside template literals).  When found near the match we treat the path as
- * illustrative, not as a real runtime configuration value.
+ * Lightweight JS-string-literal scanner.  Walks the source character by
+ * character and yields the *content* (without delimiters) of every string
+ * literal whose content length is ≤ `maxLen`.
+ *
+ * Handles double-quoted, single-quoted, and template-literal strings
+ * including `${…}` expressions.  Comments are skipped so they don't
+ * confuse quote detection.  This is intentionally not a full parser — it
+ * covers the patterns produced by bundlers (esbuild / rollup) and
+ * gracefully falls through on exotic edge cases.
  */
-function looksLikeCodeExample(source: string, matchIndex: number): boolean {
-  const WINDOW = 500;
-  const start = Math.max(0, matchIndex - WINDOW);
-  const end = Math.min(source.length, matchIndex + WINDOW);
-  const ctx = source.slice(start, end);
-  // Normalise escaped backticks (\`) to plain backticks so both
-  // template-literal and regular-string code fences are detected.
-  return ctx.replace(/\\`/g, '`').includes('```');
+function extractShortStringValues(source: string, maxLen: number): string[] {
+  const out: string[] = [];
+  const len = source.length;
+  let i = 0;
+
+  while (i < len) {
+    const ch = source.charCodeAt(i);
+
+    // Double-quote (34) or single-quote (39)
+    if (ch === 34 || ch === 39) {
+      const contentStart = i + 1;
+      i++; // skip opening quote
+      while (i < len) {
+        const c = source.charCodeAt(i);
+        if (c === 92) {
+          i += 2;
+          continue;
+        } // backslash escape
+        if (c === ch) break;
+        i++;
+      }
+      const contentEnd = i;
+      i++; // skip closing quote
+      if (contentEnd - contentStart <= maxLen) {
+        out.push(source.slice(contentStart, contentEnd));
+      }
+      continue;
+    }
+
+    // Template literal (96 = backtick)
+    if (ch === 96) {
+      const contentStart = i + 1;
+      i++;
+      let depth = 0;
+      while (i < len) {
+        const c = source.charCodeAt(i);
+        if (c === 92) {
+          i += 2;
+          continue;
+        }
+        if (c === 36 && i + 1 < len && source.charCodeAt(i + 1) === 123) {
+          depth++;
+          i += 2;
+          continue;
+        } // ${
+        if (depth > 0 && c === 125) {
+          depth--;
+          i++;
+          continue;
+        } // }
+        if (depth === 0 && c === 96) break;
+        i++;
+      }
+      const contentEnd = i;
+      i++;
+      if (contentEnd - contentStart <= maxLen) {
+        out.push(source.slice(contentStart, contentEnd));
+      }
+      continue;
+    }
+
+    // Line comment — skip to EOL
+    if (ch === 47 && i + 1 < len && source.charCodeAt(i + 1) === 47) {
+      i += 2;
+      while (i < len && source.charCodeAt(i) !== 10) i++;
+      continue;
+    }
+
+    // Block comment — skip to */
+    if (ch === 47 && i + 1 < len && source.charCodeAt(i + 1) === 42) {
+      i += 2;
+      while (i + 1 < len && !(source.charCodeAt(i) === 42 && source.charCodeAt(i + 1) === 47)) i++;
+      i += 2;
+      continue;
+    }
+
+    i++;
+  }
+
+  return out;
 }
 
 function truncate(s: string, max: number): string {
