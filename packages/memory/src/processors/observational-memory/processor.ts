@@ -241,6 +241,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           },
         });
         this.turn.writer = writer;
+        this.turn.sendSignal = args.sendSignal;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
         if (stepNumber === 0 && this.temporalMarkers) {

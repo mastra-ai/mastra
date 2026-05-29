@@ -138,7 +138,7 @@ export function PromptBlockEditSidebar({
             <Input
               id="prompt-block-name"
               placeholder="My Prompt Block"
-              className="bg-surface3"
+              variant="outline"
               {...register('name')}
               error={!!errors.name}
             />
@@ -153,7 +153,7 @@ export function PromptBlockEditSidebar({
             <Textarea
               id="prompt-block-description"
               placeholder="Describe what this prompt block does"
-              className="bg-surface3"
+              variant="outline"
               {...register('description')}
               error={!!errors.description}
             />
