@@ -47,6 +47,12 @@ export type InworldServerEventType =
   | 'input_audio_buffer.speech_stopped'
   | 'input_audio_buffer.committed'
   | 'input_audio_buffer.cleared'
+  | 'input_audio_buffer.turn_suggestion'
+  | 'input_audio_buffer.turn_suggestion_revoked'
+  | 'input_audio_buffer.timeout_triggered'
+  | 'output_audio_buffer.started'
+  | 'output_audio_buffer.stopped'
+  | 'output_audio_buffer.cleared'
   | 'error';
 
 export interface InworldTool {
@@ -69,8 +75,32 @@ export type InworldToolChoice =
 export interface InworldInputTranscription {
   model?: string;
   language?: string;
+  /** Optional prompt to bias transcription (vocabulary, spelling, style). */
+  prompt?: string;
   [key: string]: unknown;
 }
+
+/** Input noise-reduction mode applied before transcription/VAD. */
+export interface InworldNoiseReduction {
+  type: 'near_field' | 'far_field';
+}
+
+/**
+ * Audio format for `audio.input.format` / `audio.output.format`. Accepts a
+ * codec string or an object with an optional sample `rate` (Hz). `rate` applies
+ * to `audio/pcm` and `audio/float32` (default 24000); `audio/pcmu` and
+ * `audio/pcma` are fixed at 8000.
+ */
+export type InworldAudioFormat =
+  | 'audio/pcm'
+  | 'audio/pcmu'
+  | 'audio/pcma'
+  | 'audio/float32'
+  | 'pcm16'
+  | 'g711_ulaw'
+  | 'g711_alaw'
+  | 'float32'
+  | { type: 'audio/pcm' | 'audio/pcmu' | 'audio/pcma' | 'audio/float32'; rate?: number };
 
 /**
  * Voice activity detection / turn detection configuration. Inworld supports
@@ -83,20 +113,23 @@ export interface InworldTurnDetection {
   silence_duration_ms?: number;
   /** Semantic-VAD only: how eagerly to end a user turn. */
   eagerness?: 'low' | 'medium' | 'high' | 'auto';
+  /** `server_vad` only: idle window before the server commits a user turn. */
+  idle_timeout_ms?: number;
   create_response?: boolean;
   interrupt_response?: boolean;
   [key: string]: unknown;
 }
 
 export interface InworldAudioInput {
-  format?: 'audio/pcm' | 'audio/pcmu' | 'audio/pcma';
+  format?: InworldAudioFormat;
   transcription?: InworldInputTranscription;
   turn_detection?: InworldTurnDetection | null;
+  noise_reduction?: InworldNoiseReduction;
   [key: string]: unknown;
 }
 
 export interface InworldAudioOutput {
-  format?: 'audio/pcm' | 'audio/pcmu' | 'audio/pcma';
+  format?: InworldAudioFormat;
   /** Voice catalog ID (e.g. "Dennis", "Hades"). */
   voice?: string;
   /** Inworld TTS model (e.g. "inworld-tts-2"). */
@@ -262,6 +295,12 @@ export interface InworldMemoryState {
   [key: string]: unknown;
 }
 
+/**
+ * Distributed-tracing config. `'auto'` lets the server pick defaults; the
+ * object form names the workflow/group and attaches arbitrary metadata.
+ */
+export type InworldTracing = 'auto' | { workflow_name?: string; group_id?: string; metadata?: Record<string, unknown> };
+
 export interface InworldSessionConfig {
   model?: string;
   instructions?: string;
@@ -272,22 +311,31 @@ export interface InworldSessionConfig {
   temperature?: number;
   max_output_tokens?: number | 'inf';
   truncation?: 'auto' | 'disabled' | { type: 'retention_ratio'; retention_ratio: number };
+  /** Distributed-tracing config (`'auto'` or an explicit workflow/group object). */
+  tracing?: InworldTracing;
+  /** Opt-in extra fields the server should include on emitted events. */
+  include?: Array<'item.input_audio_transcription.logprobs'>;
+  /** Reference to a server-side prompt template; `null` clears it. */
+  prompt?: string | null;
   /** Typed Inworld extension object, sent verbatim under `session.providerData`. */
   providerData?: InworldProviderData;
   [key: string]: unknown;
 }
 
 /**
- * Per-response override for `response.create`. Inworld accepts the same audio
- * config nesting as the OpenAI Realtime GA spec.
+ * Per-response override for `response.create`. Per the schema's `ResponseConfig`,
+ * the voice override is a FLAT `voice` field (not nested under `audio.output`),
+ * and there is no per-response `audio` config.
  */
 export interface InworldResponseConfig {
-  instructions?: string;
+  conversation?: 'auto' | string;
   output_modalities?: Array<'text' | 'audio'>;
-  audio?: InworldAudioConfig;
-  tool_choice?: InworldToolChoice;
-  temperature?: number;
+  instructions?: string;
+  /** Per-response voice override. Flat field — NOT nested under `audio.output`. */
+  voice?: string;
   max_output_tokens?: number | 'inf';
+  tool_choice?: InworldToolChoice;
+  tools?: InworldTool[];
   [key: string]: unknown;
 }
 
@@ -333,6 +381,29 @@ export interface InworldVoiceEventMap {
   'backchannel.skipped': { reason: string };
   'speech-started': Record<string, unknown>;
   'speech-stopped': Record<string, unknown>;
+  /** Smart-turn endpointing suggestion for a buffered user utterance. */
+  'turn-suggestion': {
+    item_id: string;
+    utterance_index: number;
+    probability: number;
+    trailing_silence_ms?: number;
+    audio_duration_ms?: number;
+    inference_ms?: number;
+  };
+  /** A previously emitted turn suggestion was retracted. */
+  'turn-suggestion-revoked': { item_id: string; utterance_index: number };
+  /** Buffered input audio was committed as a user turn. */
+  'input-committed': { item_id: string; previous_item_id?: string | null };
+  /** Buffered input audio was discarded. */
+  'input-cleared': Record<string, never>;
+  /** Server-VAD idle timeout committed (or would have committed) a user turn. */
+  'input-timeout': { audio_start_ms: number; audio_end_ms: number; item_id: string };
+  /** Server began emitting output audio (playback should start). */
+  'output-audio-started': Record<string, never>;
+  /** Server stopped emitting output audio for the current response. */
+  'output-audio-stopped': Record<string, never>;
+  /** Server's output audio buffer was flushed (playback stopped). */
+  'output-audio-cleared': Record<string, never>;
   'function_call.arguments': { call_id: string; name: string; arguments: string };
   'tool-call-start': { toolCallId: string; toolName: string; toolDescription?: string; args: unknown };
   'tool-call-result': {

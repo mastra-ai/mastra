@@ -42,3 +42,22 @@ voice.on('memory', state => console.log(state.summary, state.facts));
 voice.on('backchannel', stream => playAudio(stream));
 voice.on('writing', ({ role, voiceProfile }) => console.log(role, voiceProfile?.emotion));
 ```
+
+**Realtime fixes and additions**
+
+- Fixed the per-call `speak(text, { speaker })` voice override. It is now sent as the flat `response.voice` field, so the per-call speaker is no longer silently ignored by the server.
+- Added manual turn-taking methods `commitInput()`, `clearInput()`, and `clearOutput()` for push-to-talk and manual turn control (use `clearOutput()` only to hard-stop all playback — it also stops in-flight back-channels).
+- Added smart-turn and playback-state events: `turn-suggestion`, `turn-suggestion-revoked`, `input-committed`, `input-cleared`, `input-timeout`, and `output-audio-started` / `output-audio-stopped` / `output-audio-cleared`.
+- Added richer typed session config: input noise reduction, telephony (8 kHz) and float32 audio formats, a server-VAD `idle_timeout_ms`, plus `tracing`, `include`, and `prompt`.
+
+```typescript
+// Push-to-talk with no auto-VAD
+const voice = new InworldRealtimeVoice({
+  session: { audio: { input: { turn_detection: null } } },
+});
+
+await voice.send(getMicrophoneStream());
+voice.commitInput(); // end the user turn manually
+
+voice.on('output-audio-stopped', () => console.log('playback finished'));
+```

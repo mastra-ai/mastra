@@ -226,7 +226,7 @@ export class InworldRealtimeVoice extends MastraVoice {
    * Generate speech from text. The model is asked to repeat the input
    * verbatim — this mirrors the behavior of @mastra/voice-openai-realtime.
    * A per-call `speaker` is scoped to this response only (sent via
-   * `response.audio.output.voice`); it does NOT mutate session state.
+   * `response.voice`); it does NOT mutate session state.
    *
    * Awaits the full response lifecycle: the returned promise resolves once
    * the next `response.done` (or rejects on `interrupted` / `error`) for
@@ -263,7 +263,7 @@ export class InworldRealtimeVoice extends MastraVoice {
       instructions: `Repeat the following text: ${input}`,
     };
     if (options?.speaker) {
-      response.audio = { output: { voice: options.speaker } };
+      response.voice = options.speaker;
     }
     this.sendEvent('response.create', { response });
 
@@ -629,6 +629,31 @@ export class InworldRealtimeVoice extends MastraVoice {
     this.sendEvent('response.create', { response: options ?? {} });
   }
 
+  /**
+   * Manually commit buffered input audio as a user turn. Use for push-to-talk
+   * or manual turn-taking when `turn_detection` is `null` (no auto-VAD).
+   */
+  commitInput(): void {
+    this.sendEvent('input_audio_buffer.commit', {});
+  }
+
+  /**
+   * Discard buffered input audio without committing it as a user turn.
+   */
+  clearInput(): void {
+    this.sendEvent('input_audio_buffer.clear', {});
+  }
+
+  /**
+   * Clear the server's ENTIRE output audio buffer, stopping playback. This also
+   * stops any in-flight BACK-CHANNEL audio. The default barge-in path
+   * (`response.cancel` on `interrupted`) is back-channel-safe; prefer it. Use
+   * `clearOutput()` only when you explicitly want to flush everything.
+   */
+  clearOutput(): void {
+    this.sendEvent('output_audio_buffer.clear', {});
+  }
+
   on<E extends keyof InworldVoiceEventMap>(event: E, callback: (data: InworldVoiceEventMap[E]) => void): void;
   on(event: string, callback: EventCallback): void;
   on(event: string, callback: EventCallback): void {
@@ -773,6 +798,47 @@ export class InworldRealtimeVoice extends MastraVoice {
     });
     this.client.on('input_audio_buffer.speech_stopped', ev => {
       this.emit('speech-stopped', ev);
+    });
+
+    // Smart-turn endpointing + manual turn-taking acks. These re-emit the raw
+    // server events under ergonomic names; the trailing/duration/inference
+    // timings are optional and passed through only when present.
+    this.client.on('input_audio_buffer.turn_suggestion', ev => {
+      this.emit('turn-suggestion', {
+        item_id: ev.item_id,
+        utterance_index: ev.utterance_index,
+        probability: ev.probability,
+        trailing_silence_ms: ev.trailing_silence_ms,
+        audio_duration_ms: ev.audio_duration_ms,
+        inference_ms: ev.inference_ms,
+      });
+    });
+    this.client.on('input_audio_buffer.turn_suggestion_revoked', ev => {
+      this.emit('turn-suggestion-revoked', { item_id: ev.item_id, utterance_index: ev.utterance_index });
+    });
+    this.client.on('input_audio_buffer.committed', ev => {
+      this.emit('input-committed', { item_id: ev.item_id, previous_item_id: ev.previous_item_id });
+    });
+    this.client.on('input_audio_buffer.cleared', () => {
+      this.emit('input-cleared', {});
+    });
+    this.client.on('input_audio_buffer.timeout_triggered', ev => {
+      this.emit('input-timeout', {
+        audio_start_ms: ev.audio_start_ms,
+        audio_end_ms: ev.audio_end_ms,
+        item_id: ev.item_id,
+      });
+    });
+
+    // Output playback-state signals. None carry a response_id on the wire.
+    this.client.on('output_audio_buffer.started', () => {
+      this.emit('output-audio-started', {});
+    });
+    this.client.on('output_audio_buffer.stopped', () => {
+      this.emit('output-audio-stopped', {});
+    });
+    this.client.on('output_audio_buffer.cleared', () => {
+      this.emit('output-audio-cleared', {});
     });
     // STT deltas are a near-realtime "user is talking" signal that fires even
     // when semantic_vad has suppressed `speech_started`. Treat the first one
@@ -1015,18 +1081,21 @@ export class InworldRealtimeVoice extends MastraVoice {
 
 export type {
   InworldAudioConfig,
+  InworldAudioFormat,
   InworldAudioInput,
   InworldAudioOutput,
   InworldBackchannelProviderData,
   InworldInputTranscription,
   InworldMemoryProviderData,
   InworldMemoryState,
+  InworldNoiseReduction,
   InworldProviderData,
   InworldResponseConfig,
   InworldResponsivenessProviderData,
   InworldSessionConfig,
   InworldSttProviderData,
   InworldToolChoice,
+  InworldTracing,
   InworldTtsProviderData,
   InworldTurnDetection,
   InworldVoiceEventMap,

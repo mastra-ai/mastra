@@ -204,6 +204,16 @@ new InworldRealtimeVoice({
 });
 ```
 
+Other typed `session` fields:
+
+- `audio.input.noise_reduction`: `{ type: 'near_field' | 'far_field' }` — denoise input before VAD/transcription.
+- `audio.{input,output}.format`: a codec string or `{ type, rate? }` object. Supports telephony 8kHz (`audio/pcmu`, `audio/pcma`) and `audio/float32`; `rate` (Hz) applies to `audio/pcm` + `audio/float32` (default 24000).
+- `audio.input.turn_detection.idle_timeout_ms`: `server_vad` only — idle window before the server commits a turn.
+- `audio.input.transcription.prompt`: bias transcription with vocabulary/spelling/style hints.
+- `tracing`: `'auto'` or `{ workflow_name?, group_id?, metadata? }`.
+- `include`: opt-in extra event fields (e.g. `['item.input_audio_transcription.logprobs']`).
+- `prompt`: a server-side prompt-template reference (string or `null`).
+
 #### `providerData` (Inworld extensions)
 
 `providerData` is a typed object for Inworld-specific realtime extensions. It's sent under `session.providerData` on every `session.update` and composes with any `session.providerData` you set via the `session` field — the constructor option wins on key collisions.
@@ -242,6 +252,14 @@ new InworldRealtimeVoice({
 | `speech-started`          | Raw server `input_audio_buffer.speech_started` payload (VAD edge).                                                                                                                                                                                  |
 | `speech-stopped`          | Raw server `input_audio_buffer.speech_stopped` payload (VAD edge).                                                                                                                                                                                  |
 | `interrupted`             | `{ response_id: string }`. Synthesized once per in-flight response when the user starts speaking.                                                                                                                                                   |
+| `turn-suggestion`         | `{ item_id, utterance_index, probability, trailing_silence_ms?, audio_duration_ms?, inference_ms? }`. Smart-turn endpointing hint for a buffered user utterance.                                                                                    |
+| `turn-suggestion-revoked` | `{ item_id, utterance_index }`. A prior `turn-suggestion` was retracted.                                                                                                                                                                            |
+| `input-committed`         | `{ item_id, previous_item_id? }`. Buffered input audio was committed as a user turn (`previous_item_id` may be `null`).                                                                                                                             |
+| `input-cleared`           | `{}`. Buffered input audio was discarded.                                                                                                                                                                                                           |
+| `input-timeout`           | `{ audio_start_ms, audio_end_ms, item_id }`. Server-VAD idle timeout committed a user turn.                                                                                                                                                         |
+| `output-audio-started`    | `{}`. Server began emitting output audio.                                                                                                                                                                                                           |
+| `output-audio-stopped`    | `{}`. Server stopped emitting output audio for the current response.                                                                                                                                                                                |
+| `output-audio-cleared`    | `{}`. Server output audio buffer was flushed (playback stopped).                                                                                                                                                                                    |
 | `memory`                  | `InworldMemoryState` — Inworld's rolling summary/facts state (deduped by version). Requires `providerData.memory.enabled`.                                                                                                                          |
 | `backchannel`             | `PassThrough` stream of back-channel PCM audio. Requires `providerData.backchannel.enabled`.                                                                                                                                                        |
 | `backchannel.done`        | `{ backchannel_id: string; phrase? }`. Fires when a back-channel finishes.                                                                                                                                                                          |
@@ -277,6 +295,33 @@ voice.on('backchannel', stream => startPlayer(bcPlayers, stream.id, stream)); //
 ```
 
 Enable back-channels with `providerData: { backchannel: { enabled: true } }` (gated by server prerequisites — contact your Inworld account team).
+
+#### Manual turn-taking & playback signals
+
+For push-to-talk or manual turn-taking (set `turn_detection` to `null` to disable auto-VAD), drive turns yourself:
+
+- `commitInput()` — commit buffered input audio as a user turn.
+- `clearInput()` — discard buffered input audio.
+- `clearOutput()` — clear the server's **entire** output audio buffer, stopping playback. This also stops any in-flight **back-channel** audio. The default barge-in path (`response.cancel` on `interrupted`) is back-channel-safe; prefer it. Use `clearOutput()` only when you explicitly want to flush everything.
+
+```typescript
+voice.commitInput(); // end the current user turn
+voice.clearInput(); // throw away what's buffered
+voice.clearOutput(); // hard-stop all playback (back-channels included)
+```
+
+The server emits matching signals you can listen to:
+
+- `turn-suggestion` / `turn-suggestion-revoked` — smart-turn endpointing hints (and retractions) for a buffered utterance.
+- `input-committed` / `input-cleared` — acknowledgements for `commitInput()` / `clearInput()` (also fire on auto-VAD commits).
+- `input-timeout` — a server-VAD idle timeout committed a user turn.
+- `output-audio-started` / `output-audio-stopped` / `output-audio-cleared` — output playback state on the server.
+
+```typescript
+voice.on('turn-suggestion', ({ probability }) => console.log('end-of-turn?', probability));
+voice.on('input-committed', ({ item_id }) => console.log('committed', item_id));
+voice.on('output-audio-stopped', () => console.log('playback finished'));
+```
 
 #### Awaitable `speak()`
 
@@ -391,7 +436,7 @@ process.on('SIGINT', () => {
 
 These match what the live API emits (verified via raw-websocket smoke tests):
 
-- Audio default: PCM16 @ 24kHz. Also supports `audio/pcmu` and `audio/pcma` @ 8kHz.
+- Audio default: PCM16 @ 24kHz. Also supports telephony `audio/pcmu` / `audio/pcma` @ 8kHz and `audio/float32`.
 - Server emits `session.created` on connect (older docs claim it doesn't).
 - Function call args arrive via `response.function_call_arguments.delta` (singular). Some docs say plural; the docs are wrong.
 - Audio deltas arrive on `response.output_audio.delta` / `…audio.done` (GA spec), not the older `response.audio.delta`.

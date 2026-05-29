@@ -176,28 +176,36 @@ Use the typed `session` field for documented Inworld realtime options. Fields co
   },
   {
     name: 'audio.output.format',
-    type: '"audio/pcm" | "audio/pcmu" | "audio/pcma"',
-    description: 'Output audio encoding. PCM is 24 kHz; PCMU and PCMA are 8 kHz.',
+    type: 'InworldAudioFormat',
+    description:
+      'Output audio encoding. A codec string (e.g. "audio/pcm", "audio/pcmu", "audio/pcma", "audio/float32") or an object `{ type, rate? }`. `rate` (Hz) applies to audio/pcm and audio/float32 (default 24000); audio/pcmu and audio/pcma are fixed at 8 kHz.',
     isOptional: true,
   },
   {
     name: 'audio.input.format',
-    type: '"audio/pcm" | "audio/pcmu" | "audio/pcma"',
-    description: 'Input audio encoding sent to the server.',
+    type: 'InworldAudioFormat',
+    description:
+      'Input audio encoding sent to the server. Same shape as `audio.output.format` — a codec string or `{ type, rate? }` object.',
+    isOptional: true,
+  },
+  {
+    name: 'audio.input.noise_reduction',
+    type: '{ type: "near_field" | "far_field" }',
+    description: 'Input noise-reduction mode applied before transcription and VAD.',
     isOptional: true,
   },
   {
     name: 'audio.input.transcription',
-    type: '{ model?: string; language?: string }',
+    type: '{ model?: string; language?: string; prompt?: string }',
     description:
-      'Server-side transcription for incoming user audio. Defaults to `{ model: "inworld/inworld-stt-1" }`. Supply your own object to override; set to `null` to disable user-side transcription.',
+      'Server-side transcription for incoming user audio. Defaults to `{ model: "inworld/inworld-stt-1" }`. `prompt` biases transcription with vocabulary, spelling, or style hints. Supply your own object to override; set to `null` to disable user-side transcription.',
     isOptional: true,
   },
   {
     name: 'audio.input.turn_detection',
     type: 'InworldTurnDetection | null',
     description:
-      'Voice activity / turn detection. Defaults to `{ type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }`. Supply your own object to override; set to `null` to disable turn detection entirely. The `eagerness` field controls how quickly semantic VAD ends a user turn — `low` waits for clearer pauses (more interruption-resistant), `high` ends turns sooner (snappier, more prone to cutting users off). Default `medium` balances both.',
+      'Voice activity / turn detection. Defaults to `{ type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }`. Supply your own object to override; set to `null` to disable turn detection entirely. The `eagerness` field controls how quickly semantic VAD ends a user turn — `low` waits for clearer pauses (more interruption-resistant), `high` ends turns sooner (snappier, more prone to cutting users off). Default `medium` balances both. `idle_timeout_ms` (server_vad only) sets the idle window before the server commits a turn.',
     isOptional: true,
   },
   {
@@ -223,6 +231,24 @@ Use the typed `session` field for documented Inworld realtime options. Fields co
     name: 'truncation',
     type: '"auto" | "disabled" | { type: "retention_ratio"; retention_ratio: number }',
     description: 'Conversation truncation strategy.',
+    isOptional: true,
+  },
+  {
+    name: 'tracing',
+    type: '"auto" | { workflow_name?: string; group_id?: string; metadata?: Record<string, unknown> }',
+    description: 'Distributed-tracing config. Use "auto" for server defaults, or name the workflow/group explicitly.',
+    isOptional: true,
+  },
+  {
+    name: 'include',
+    type: 'Array<"item.input_audio_transcription.logprobs">',
+    description: 'Opt-in extra fields the server should include on emitted events.',
+    isOptional: true,
+  },
+  {
+    name: 'prompt',
+    type: 'string | null',
+    description: 'Reference to a server-side prompt template. Pass null to clear it.',
     isOptional: true,
   },
 ]}
@@ -415,6 +441,38 @@ Sends a `response.create` event to trigger a model response, optionally with per
 
 Returns: `Promise<void>`
 
+### Turn-taking
+
+#### `commitInput()`
+
+Manually commits buffered input audio as a user turn. Use this for push-to-talk or manual turn-taking when `turn_detection` is set to `null`.
+
+```typescript
+voice.commitInput()
+```
+
+Returns: `void`
+
+#### `clearInput()`
+
+Discards buffered input audio without committing it as a user turn.
+
+```typescript
+voice.clearInput()
+```
+
+Returns: `void`
+
+#### `clearOutput()`
+
+Clears the server's entire output audio buffer, stopping playback. This also stops any in-flight back-channel audio. The default barge-in path (`response.cancel` on `interrupted`) is back-channel-safe; prefer it. Use `clearOutput()` only when you want to flush everything.
+
+```typescript
+voice.clearOutput()
+```
+
+Returns: `void`
+
 ### `close()` and `disconnect()`
 
 Both methods close the WebSocket and mark the instance as disconnected.
@@ -474,6 +532,49 @@ The `InworldRealtimeVoice` class emits the following events:
     type: 'event',
     description:
       'Synthetic client-side signal: emitted once per in-flight `response_id` when the user starts speaking. Use this to stop main response playback on barge-in. Callback receives `{ response_id: string }`. Only carries main-response ids — never back-channel ids — so stopping the matching `speaker` stream leaves `backchannel` streams playing (back-channels are meant to overlap user speech and are never cancelled by barge-in).',
+  },
+  {
+    name: 'turn-suggestion',
+    type: 'event',
+    description:
+      'Smart-turn endpointing hint for a buffered user utterance. Callback receives { item_id, utterance_index, probability, trailing_silence_ms?, audio_duration_ms?, inference_ms? }.',
+  },
+  {
+    name: 'turn-suggestion-revoked',
+    type: 'event',
+    description: 'A previously emitted turn suggestion was retracted. Callback receives { item_id, utterance_index }.',
+  },
+  {
+    name: 'input-committed',
+    type: 'event',
+    description:
+      'Buffered input audio was committed as a user turn (via commitInput() or auto-VAD). Callback receives { item_id, previous_item_id? } where previous_item_id may be null.',
+  },
+  {
+    name: 'input-cleared',
+    type: 'event',
+    description: 'Buffered input audio was discarded (via clearInput()). Callback receives {}.',
+  },
+  {
+    name: 'input-timeout',
+    type: 'event',
+    description:
+      'A server-VAD idle timeout committed a user turn. Callback receives { audio_start_ms, audio_end_ms, item_id }.',
+  },
+  {
+    name: 'output-audio-started',
+    type: 'event',
+    description: 'Server began emitting output audio. Callback receives {}.',
+  },
+  {
+    name: 'output-audio-stopped',
+    type: 'event',
+    description: 'Server stopped emitting output audio for the current response. Callback receives {}.',
+  },
+  {
+    name: 'output-audio-cleared',
+    type: 'event',
+    description: 'Server output audio buffer was flushed, stopping playback (via clearOutput()). Callback receives {}.',
   },
   {
     name: 'memory',
@@ -562,8 +663,8 @@ Any voice ID from [Inworld's voice catalog](https://docs.inworld.ai/quickstart-t
 
 - API keys can be provided via constructor options or the `INWORLD_API_KEY` environment variable. Keys are pre-Basic-encoded; do not re-encode them.
 - The WebSocket URL appends `?key=<sessionId>&protocol=realtime`. The model is configured via the initial `session.update`, not the URL.
-- Per-call `speak(input, { speaker })` scopes the voice override to a single response (via `response.audio.output.voice`) and does NOT mutate the session.
-- Audio output defaults to PCM16 at 24 kHz. `audio/pcmu` and `audio/pcma` at 8 kHz are also supported via `session.audio.output.format`.
+- Per-call `speak(input, { speaker })` scopes the voice override to a single response (via the flat `response.voice` field) and does NOT mutate the session.
+- Audio output defaults to PCM16 at 24 kHz. Telephony `audio/pcmu` and `audio/pcma` at 8 kHz, and `audio/float32`, are also supported via `session.audio.output.format`.
 - Use `connect()` before any send, speak, or listen call. Events sent before the WebSocket is open are queued and flushed once the server acknowledges `session.updated`.
 - The voice instance must be closed with `close()` or `disconnect()` to release the WebSocket.
 - `audio.input.turn_detection` defaults to semantic VAD when `session` does not supply it. Override with your own object, or pass `null` to disable turn detection entirely.

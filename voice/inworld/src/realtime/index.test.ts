@@ -285,6 +285,29 @@ describe('InworldRealtimeVoice', () => {
       // Constructor option wins on collision; other keys are preserved.
       expect(sessionUpdate.session.providerData.tts).toEqual({ language: 'en-US', delivery_mode: 'CREATIVE' });
     });
+
+    it('should pass through typed session config additions unchanged (noise_reduction, format object, tracing, include)', async () => {
+      const v = new InworldRealtimeVoice({
+        apiKey: 'k',
+        session: {
+          audio: {
+            input: {
+              noise_reduction: { type: 'near_field' },
+              format: { type: 'audio/pcm', rate: 16000 },
+            },
+          },
+          tracing: 'auto',
+          include: ['item.input_audio_transcription.logprobs'],
+        },
+      });
+      await connectStubbed(v);
+      const { instance } = getLastInstance();
+      const sessionUpdate = sentEvents(instance).find(e => e.type === 'session.update');
+      expect(sessionUpdate.session.audio.input.noise_reduction).toEqual({ type: 'near_field' });
+      expect(sessionUpdate.session.audio.input.format).toEqual({ type: 'audio/pcm', rate: 16000 });
+      expect(sessionUpdate.session.tracing).toBe('auto');
+      expect(sessionUpdate.session.include).toEqual(['item.input_audio_transcription.logprobs']);
+    });
   });
 
   describe('speak', () => {
@@ -330,7 +353,10 @@ describe('InworldRealtimeVoice', () => {
       const events = sentEvents(instance);
       expect(events.find(e => e.type === 'session.update')).toBeUndefined();
       const response = events.find(e => e.type === 'response.create');
-      expect(response.response.audio.output.voice).toBe('Hades');
+      // Per-response voice is a FLAT field (`response.voice`), not nested under
+      // `response.audio.output.voice`.
+      expect(response.response.voice).toBe('Hades');
+      expect(response.response.audio).toBeUndefined();
     });
 
     it('should reject the pending speak() when close() runs mid-response', async () => {
@@ -629,6 +655,78 @@ describe('InworldRealtimeVoice', () => {
       client.emit('response.backchannel.skipped', { reason: 'min_gap_not_elapsed' });
 
       expect(skippedSpy).toHaveBeenCalledWith({ reason: 'min_gap_not_elapsed' });
+    });
+  });
+
+  describe('manual turn-taking & playback signals', () => {
+    it('should send parameterless input_audio_buffer.commit on commitInput()', async () => {
+      await connectStubbed(voice);
+      const { instance } = getLastInstance();
+      (instance.send as ReturnType<typeof vi.fn>).mockClear();
+
+      voice.commitInput();
+
+      const events = sentEvents(instance);
+      expect(events).toEqual([{ type: 'input_audio_buffer.commit' }]);
+    });
+
+    it('should send parameterless input_audio_buffer.clear on clearInput()', async () => {
+      await connectStubbed(voice);
+      const { instance } = getLastInstance();
+      (instance.send as ReturnType<typeof vi.fn>).mockClear();
+
+      voice.clearInput();
+
+      const events = sentEvents(instance);
+      expect(events).toEqual([{ type: 'input_audio_buffer.clear' }]);
+    });
+
+    it('should send parameterless output_audio_buffer.clear on clearOutput()', async () => {
+      await connectStubbed(voice);
+      const { instance } = getLastInstance();
+      (instance.send as ReturnType<typeof vi.fn>).mockClear();
+
+      voice.clearOutput();
+
+      const events = sentEvents(instance);
+      expect(events).toEqual([{ type: 'output_audio_buffer.clear' }]);
+    });
+
+    it('should re-emit input_audio_buffer.turn_suggestion as turn-suggestion', async () => {
+      await connectStubbed(voice);
+      const spy = vi.fn();
+      voice.on('turn-suggestion', spy);
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('input_audio_buffer.turn_suggestion', { item_id: 'i1', utterance_index: 2, probability: 0.8 });
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ item_id: 'i1', utterance_index: 2, probability: 0.8 }),
+      );
+    });
+
+    it('should re-emit input_audio_buffer.turn_suggestion_revoked as turn-suggestion-revoked', async () => {
+      await connectStubbed(voice);
+      const spy = vi.fn();
+      voice.on('turn-suggestion-revoked', spy);
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('input_audio_buffer.turn_suggestion_revoked', { item_id: 'i1', utterance_index: 2 });
+
+      expect(spy).toHaveBeenCalledWith({ item_id: 'i1', utterance_index: 2 });
+    });
+
+    it('should re-emit output_audio_buffer.started as output-audio-started', async () => {
+      await connectStubbed(voice);
+      const spy = vi.fn();
+      voice.on('output-audio-started', spy);
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('output_audio_buffer.started', { type: 'output_audio_buffer.started' });
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith({});
     });
   });
 
