@@ -248,7 +248,7 @@ Returns `{ accepted: true, runId: string }`.
   content={[
   {
     name: 'signal',
-    type: "{ type: 'user' | 'reactive' | 'state' | 'notification' | string; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
+    type: "{ type: 'user' | 'reactive' | 'notification' | string; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
     description:
       'Lower-level signal payload. Use `type` for the semantic signal category and `tagName` for the XML tag shown to the model. `providerOptions` is attached to the resulting prompt turn and persisted on the stored signal message.',
   },
