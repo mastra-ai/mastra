@@ -17,7 +17,7 @@ const AGENT_GETTERS = ['getAgent', 'getAgentById'];
 const AGENT_METHODS_TO_WRAP = ['generate', 'stream', 'generateLegacy', 'streamLegacy'];
 
 const WORKFLOW_GETTERS = ['getWorkflow', 'getWorkflowById'];
-const WORKFLOW_METHODS_TO_WRAP = ['execute', 'createRun', 'createRun'];
+const WORKFLOW_METHODS_TO_WRAP = ['execute', 'createRun'];
 
 /**
  * Helper function to detect NoOp spans to avoid unnecessary wrapping
@@ -146,8 +146,9 @@ function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: TracingCo
         try {
           // Wrap workflow execution methods with tracing context
           if (WORKFLOW_METHODS_TO_WRAP.includes(prop as string)) {
-            // Handle createRun and createRun methods differently
-            if (prop === 'createRun' || prop === 'createRun') {
+            // createRun returns a Run instance that must be wrapped to inject tracing
+            // context into its start() method.
+            if (prop === 'createRun') {
               return async (options: any = {}) => {
                 const run = await (target as any)[prop](options);
                 return run ? wrapRun(run, tracingContext) : run;
