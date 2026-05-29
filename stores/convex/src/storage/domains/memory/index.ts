@@ -34,8 +34,17 @@ type StoredMessage = {
   resourceId: string | null;
 };
 
-type StoredThread = Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string };
-type StoredResource = Omit<StorageResourceType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string };
+type StoredMetadata = Record<string, unknown> | string | null | undefined;
+type StoredThread = Omit<StorageThreadType, 'createdAt' | 'updatedAt' | 'metadata'> & {
+  createdAt: string;
+  updatedAt: string;
+  metadata?: StoredMetadata;
+};
+type StoredResource = Omit<StorageResourceType, 'createdAt' | 'updatedAt' | 'metadata'> & {
+  createdAt: string;
+  updatedAt: string;
+  metadata?: StoredMetadata;
+};
 
 function parseStoredThread(row: StoredThread): StorageThreadType {
   return {
@@ -162,6 +171,20 @@ export class MemoryConvex extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 100);
 
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CONVEX', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
     const { field, direction } = this.parseOrderBy(orderBy);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
@@ -179,7 +202,7 @@ export class MemoryConvex extends MemoryStorage {
     // Apply metadata filters if provided (AND logic)
     if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
       threads = threads.filter(thread => {
-        if (!thread.metadata) return false;
+        if (!thread.metadata || typeof thread.metadata !== 'object' || Array.isArray(thread.metadata)) return false;
         return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
       });
     }

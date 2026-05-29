@@ -129,6 +129,41 @@ describe('MemoryConvex atomic memory writes', () => {
     });
   });
 
+  it('rejects unsafe thread metadata filter keys before querying storage', async () => {
+    const { calls, memory } = createMemoryDomain(() => {
+      throw new Error('storage should not be queried for invalid metadata filters');
+    });
+
+    await expect(memory.listThreads({ filter: { metadata: { constructor: 'polluted' } } })).rejects.toMatchObject({
+      id: 'MASTRA_STORAGE_CONVEX_LIST_THREADS_INVALID_METADATA_KEY',
+      category: 'USER',
+    });
+
+    expect(calls).toHaveLength(0);
+  });
+
+  it('does not match malformed stored metadata strings against metadata filters', async () => {
+    const { memory } = createMemoryDomain(request => {
+      expect(request.op).toBe('queryTable');
+      if (request.op !== 'queryTable') return [];
+      return [
+        {
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          title: 'thread',
+          metadata: '{not-json',
+          createdAt: '2026-05-29T00:00:00.000Z',
+          updatedAt: '2026-05-29T00:01:00.000Z',
+        },
+      ];
+    });
+
+    await expect(memory.listThreads({ filter: { metadata: { topic: 'support' } } })).resolves.toMatchObject({
+      threads: [],
+      total: 0,
+    });
+  });
+
   it('bumps saved-message threads with timestamp-only patches', async () => {
     const { calls, memory } = createMemoryDomain(request => {
       if (request.op === 'batchInsert') return undefined;
