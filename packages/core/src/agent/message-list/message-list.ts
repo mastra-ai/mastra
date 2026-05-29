@@ -180,6 +180,7 @@ export class MessageList {
     const signalForTranscript = createSignal({
       id: signal.id,
       type: signal.type,
+      tagName: signal.tagName,
       contents: signal.contents,
       attributes: signal.attributes,
       metadata: signal.metadata,

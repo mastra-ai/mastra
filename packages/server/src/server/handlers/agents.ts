@@ -1,5 +1,10 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
-import type { AgentModelManagerConfig, AgentSignalInput, DurableAgentLike } from '@mastra/core/agent';
+import type {
+  AgentMessageInput,
+  AgentModelManagerConfig,
+  AgentSignalInput,
+  DurableAgentLike,
+} from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
@@ -49,7 +54,9 @@ import {
   declineNetworkToolCallBodySchema,
   observeAgentBodySchema,
   observeAgentResponseSchema,
+  sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
+  queueAgentMessageBodySchema,
   subscribeAgentThreadBodySchema,
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
@@ -1607,10 +1614,13 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   },
 });
 
-const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string }> = z.object({
+const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; signal?: unknown }> = z.object({
   accepted: z.literal(true),
   runId: z.string(),
+  signal: z.any().optional(),
 });
+
+const sendAgentMessageResponseSchema = sendAgentSignalResponseSchema;
 
 export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
   InferParams<typeof agentIdPathParams, undefined, typeof sendAgentSignalBodySchema>,
@@ -1648,21 +1658,27 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
     ifIdle,
   }) => {
     try {
-      const bodyRequestContext = ifIdle?.streamOptions?.requestContext;
+      const idleStreamOptions = ifIdle?.streamOptions as
+        | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
+        | undefined;
+      const bodyRequestContext = idleStreamOptions?.requestContext;
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(serverRequestContext, bodyRequestContext as Record<string, unknown>),
+        versionOptions,
         requestContext: serverRequestContext,
       });
+      stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
         ifIdle: {
           ...(ifIdle ?? {}),
-          streamOptions: { ...(ifIdle?.streamOptions ?? {}), requestContext: serverRequestContext } as any,
+          streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
         },
       };
 
@@ -1687,7 +1703,9 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
           ...(ifActive ? { ifActive } : {}),
         });
-        return { accepted: result.accepted, runId: result.runId, signal: result.signal };
+        return result.signal === undefined
+          ? { accepted: result.accepted, runId: result.runId }
+          : { accepted: result.accepted, runId: result.runId, signal: result.signal };
       }
 
       if (!effectiveResourceId || !effectiveThreadId) {
@@ -1700,9 +1718,140 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         ...(ifActive ? { ifActive } : {}),
         ...ifIdleWithContext,
       });
-      return { accepted: result.accepted, runId: result.runId, signal: result.signal };
+      return result.signal === undefined
+        ? { accepted: result.accepted, runId: result.runId }
+        : { accepted: result.accepted, runId: result.runId, signal: result.signal };
     } catch (error) {
       return handleError(error, 'error sending agent signal');
+    }
+  },
+});
+
+async function handleAgentMessageRoute({
+  mastra,
+  agentId,
+  requestContext: serverRequestContext,
+  message,
+  runId,
+  resourceId,
+  threadId,
+  ifActive,
+  ifIdle,
+  methodName,
+}: {
+  mastra: any;
+  agentId: string;
+  requestContext: RequestContext;
+  message: AgentMessageInput;
+  runId?: string;
+  resourceId?: string;
+  threadId?: string;
+  ifActive?: { behavior?: 'deliver' | 'persist' | 'discard' };
+  ifIdle?: { behavior?: 'wake' | 'persist' | 'discard'; streamOptions?: Record<string, unknown> };
+  methodName: 'sendMessage' | 'queueMessage';
+}) {
+  const idleStreamOptions = ifIdle?.streamOptions as
+    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
+    | undefined;
+  const bodyRequestContext = idleStreamOptions?.requestContext;
+  mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+  const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
+
+  const agent = await getAgentFromSystem({
+    mastra,
+    agentId,
+    versionOptions,
+    requestContext: serverRequestContext,
+  });
+  stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+  ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+  const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+  const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
+  const ifIdleWithContext = {
+    ifIdle: {
+      ...(ifIdle ?? {}),
+      streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
+    },
+  };
+
+  if (effectiveThreadId && effectiveResourceId) {
+    const memory = await agent.getMemory({ requestContext: serverRequestContext });
+    if (memory) {
+      const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+      await validateThreadOwnership(thread, effectiveResourceId);
+    }
+  }
+
+  if (typeof (agent as unknown as Record<string, unknown>)[methodName] !== 'function') {
+    throw new HTTPException(501, { message: `agent ${methodName} is not supported by this Mastra core version` });
+  }
+
+  if (runId) {
+    const result = await agent[methodName](message, {
+      runId,
+      ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
+      ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
+      ...(ifActive ? { ifActive } : {}),
+    } as any);
+    return result.signal === undefined
+      ? { accepted: result.accepted, runId: result.runId }
+      : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+  }
+
+  if (!effectiveResourceId || !effectiveThreadId) {
+    throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
+  }
+
+  const result = await agent[methodName](message, {
+    resourceId: effectiveResourceId,
+    threadId: effectiveThreadId,
+    ...(ifActive ? { ifActive } : {}),
+    ...ifIdleWithContext,
+  } as any);
+  return result.signal === undefined
+    ? { accepted: result.accepted, runId: result.runId }
+    : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+}
+
+export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/send-message',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: sendAgentMessageBodySchema,
+  responseSchema: sendAgentMessageResponseSchema,
+  summary: 'Send agent message',
+  description: 'Sends a user message to an active agent run or starts a memory thread run when the thread is idle',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async params => {
+    try {
+      return await handleAgentMessageRoute({ ...params, methodName: 'sendMessage' });
+    } catch (error) {
+      return handleError(error, 'error sending agent message');
+    }
+  },
+});
+
+export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/queue-message',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: queueAgentMessageBodySchema,
+  responseSchema: sendAgentMessageResponseSchema,
+  summary: 'Queue agent message',
+  description:
+    'Queues a user message to run after the active thread run completes, or starts a memory thread run when idle',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async params => {
+    try {
+      return await handleAgentMessageRoute({ ...params, methodName: 'queueMessage' });
+    } catch (error) {
+      return handleError(error, 'error queueing agent message');
     }
   },
 });
