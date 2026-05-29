@@ -1164,6 +1164,16 @@ describe('Agent Routes Authorization', () => {
       ).toBe(false);
     });
 
+    it('should reject unknown signal types', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'custom-reminder', tagName: 'custom-reminder', contents: 'use explicit category' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
     it('should require non-user signals to use string contents', () => {
       expect(
         sendAgentSignalBodySchema.safeParse({

@@ -124,7 +124,8 @@ describe('sendSignal integration through ProcessorRunner', () => {
     // Verify metadata.signal is preserved with the right structure
     const signalMeta = signalMsg!.content.metadata?.signal as Record<string, unknown> | undefined;
     expect(signalMeta).toBeDefined();
-    expect(signalMeta!.type).toBe('system-reminder');
+    expect(signalMeta!.type).toBe('reactive');
+    expect(signalMeta!.tagName).toBe('system-reminder');
     expect(signalMeta!.attributes).toEqual(
       expect.objectContaining({ type: 'dynamic-agents-md', path: '/project/AGENTS.md' }),
     );
@@ -174,7 +175,8 @@ describe('sendSignal integration through ProcessorRunner', () => {
       expect.objectContaining({
         type: 'data-system-reminder',
         data: expect.objectContaining({
-          type: 'system-reminder',
+          type: 'reactive',
+          tagName: 'system-reminder',
           contents: 'stream test',
         }),
       }),

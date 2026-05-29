@@ -59,7 +59,8 @@ const userMessageSignalContentsSchema = z.union([
 ]);
 
 const agentSignalSchema = baseSignalSchema.extend({
-  type: z.string(),
+  type: z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']),
+  tagName: z.string().optional(),
   contents: userMessageSignalContentsSchema,
   providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
 });
