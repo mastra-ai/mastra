@@ -263,6 +263,8 @@ function checkLocalStoragePaths(source: string): PreflightIssue[] {
   for (const { pattern, hint } of LOCAL_HOST_PATTERNS) {
     const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
     for (const match of source.matchAll(globalPattern)) {
+      if (looksLikeCodeExample(source, match.index!)) continue;
+
       const value = match[0];
       const key = `${hint}::${value}`;
       if (seen.has(key)) continue;
@@ -283,6 +285,24 @@ function checkLocalStoragePaths(source: string): PreflightIssue[] {
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Detect whether a match position sits inside a code-example / documentation
+ * string (e.g. a prompt template that embeds markdown code blocks).  In the
+ * bundled output these template strings contain markdown code fences — either
+ * literal triple-backticks (inside regular strings) or escaped backticks
+ * (inside template literals).  When found near the match we treat the path as
+ * illustrative, not as a real runtime configuration value.
+ */
+function looksLikeCodeExample(source: string, matchIndex: number): boolean {
+  const WINDOW = 500;
+  const start = Math.max(0, matchIndex - WINDOW);
+  const end = Math.min(source.length, matchIndex + WINDOW);
+  const ctx = source.slice(start, end);
+  // Normalise escaped backticks (\`) to plain backticks so both
+  // template-literal and regular-string code fences are detected.
+  return ctx.replace(/\\`/g, '`').includes('```');
+}
 
 function truncate(s: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;

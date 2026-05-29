@@ -134,6 +134,22 @@ describe('preflightBuildOutput', () => {
       const issues = await preflightBuildOutput(tmpDir, {});
       expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
     });
+
+    it('does not flag file: paths inside code-example template strings (agent-builder prompts)', async () => {
+      writeBundle(`
+        const prompt = "Here is an example:\\n\`\`\`typescript\\nimport { LibSQLStore } from '@mastra/libsql';\\nconst store = new LibSQLStore({ url: 'file:./mastra.db' });\\n\`\`\`";
+        const another = "\\n\`\`\`\\nurl: 'file:../mastra.db', // default storage\\n\`\`\`\\n";
+      `);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('still flags real file: paths that are not inside code examples', async () => {
+      writeBundle(`const url = 'file:./mastra.db'; const other = 'file:../data.db';`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      const storageIssues = issues.filter(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(storageIssues.length).toBe(2);
+    });
   });
 
   it('scans nested .mjs files in the output directory', async () => {
