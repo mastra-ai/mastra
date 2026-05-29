@@ -110,6 +110,36 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
     return toToolCallContent(message, part);
   }
 
+  if ((part.type as string) === 'dynamic-tool') {
+    const dynamicPart = part as unknown as {
+      toolCallId: string;
+      toolName: string;
+      input: unknown;
+      output?: unknown;
+      state?: string;
+      errorText?: string;
+    };
+
+    const baseToolCall: ContentPart = {
+      type: 'tool-call' as const,
+      toolCallId: dynamicPart.toolCallId,
+      toolName: dynamicPart.toolName,
+      argsText: JSON.stringify(dynamicPart.input),
+      args: dynamicPart.input as ReadonlyJSONObject,
+      metadata: getPartMetadata(message, part),
+    };
+
+    if (dynamicPart.state === 'output-error' && dynamicPart.errorText !== undefined) {
+      return { ...baseToolCall, result: dynamicPart.errorText, isError: true };
+    }
+
+    if (dynamicPart.output !== undefined) {
+      return { ...baseToolCall, result: dynamicPart.output };
+    }
+
+    return baseToolCall;
+  }
+
   if (part.type.startsWith('data-')) {
     return {
       type: 'data',

@@ -143,8 +143,6 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isBackgroundTaskResult =
     result && typeof result === 'string' && (result as string)?.toLowerCase()?.includes('background task');
 
-  console.log('lol', toolName);
-
   if (toolName === 'updateWorkingMemory') {
     // We want to hide the updateWorkingMemory tool call in the UI
     return null;
