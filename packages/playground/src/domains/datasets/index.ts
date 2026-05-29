@@ -45,8 +45,10 @@ export { DatasetCombobox } from './components/dataset-combobox';
 export type { DatasetComboboxProps } from './components/dataset-combobox';
 
 // Dataset detail components
-export { DatasetPageContent } from './components/dataset-detail/dataset-page-content';
-export type { TabValue as DatasetTabValue } from './components/dataset-detail/dataset-page-content';
+export { DatasetHeader } from './components/dataset-detail/dataset-header';
+export type { DatasetHeaderProps } from './components/dataset-detail/dataset-header';
+export { DatasetPageTabs } from './components/dataset-detail/dataset-page-tabs';
+export type { TabValue as DatasetTabValue } from './components/dataset-detail/dataset-page-tabs';
 export { DatasetItemsList } from './components/items/dataset-items-list';
 export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
