@@ -3,10 +3,18 @@ import type { ToolsInput } from '@internal/core/types';
 
 export type VoiceEventType = 'speaking' | 'writing' | 'error' | string;
 
+export type VoiceTurnRole = 'user' | 'assistant';
+
+export interface VoiceTurnEvent {
+  role: VoiceTurnRole;
+  text: string;
+}
+
 export interface VoiceEventMap {
   speaker: NodeJS.ReadableStream;
   speaking: { audio?: string };
   writing: { text: string; role: 'assistant' | 'user' };
+  turn: VoiceTurnEvent;
   error: { message: string; code?: string; details?: unknown };
   [key: string]: unknown;
 }

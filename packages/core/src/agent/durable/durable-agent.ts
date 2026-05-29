@@ -347,8 +347,8 @@ export class DurableAgent<
     return this.#wrappedAgent.getMemory();
   }
 
-  override getVoice() {
-    return this.#wrappedAgent.getVoice();
+  override getVoice(options?: Parameters<Agent['getVoice']>[0]) {
+    return this.#wrappedAgent.getVoice(options);
   }
 
   // ===========================================================================
