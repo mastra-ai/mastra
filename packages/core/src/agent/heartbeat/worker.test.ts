@@ -101,12 +101,19 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     expect(result.status).toBe('signal-accepted');
     expect(sendSignal).toHaveBeenCalledTimes(1);
     const [signal, target] = sendSignal.mock.calls[0]!;
-    expect(signal).toEqual({ type: 'system-reminder', contents: 'ping' });
+    expect(signal).toMatchObject({
+      type: 'system-reminder',
+      contents: 'ping',
+      providerOptions: { mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } } },
+    });
     expect(target).toMatchObject({
       threadId: 't1',
       resourceId: 'r1',
       ifActive: { behavior: 'discard' },
       ifIdle: { behavior: 'wake' },
+    });
+    expect(target.ifIdle.streamOptions.providerOptions).toEqual({
+      mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } },
     });
   });
 
@@ -173,6 +180,9 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     const call = generate.mock.calls[0] as any[];
     expect(call[0]).toBe('tick');
     expect(call[1].outputProcessors[0].id).toBe('__heartbeat-broadcast__');
+    expect(call[1].providerOptions).toEqual({
+      mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live' } },
+    });
     expect(sendSignal).not.toHaveBeenCalled();
   });
 

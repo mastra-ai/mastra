@@ -897,7 +897,7 @@ describe('consumeAgentStream', () => {
       expect(typingStatuses).toEqual(['is typing…']);
     });
 
-    it('emits "is working…" on the start chunk before other activity', async () => {
+    it('does not emit a status on the start chunk; first status comes from text-delta', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
@@ -910,7 +910,7 @@ describe('consumeAgentStream', () => {
         chatThread,
       );
       const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
-      expect(typingStatuses).toEqual(['is working…', 'is typing…']);
+      expect(typingStatuses).toEqual(['is typing…']);
     });
 
     it('dedups consecutive same-status calls', async () => {

@@ -1,4 +1,5 @@
 import type { AgentChunkType } from '../stream/types';
+import { asHeartbeatRunChunk } from './heartbeat-run';
 import { asOmChunk } from './om';
 /**
  * Return value from a `TypingStatusFn`. Returning a non-empty string sets the
@@ -55,13 +56,13 @@ export type TypingStatusFn = (chunk: AgentChunkType<any>, ctx: TypingStatusConte
  *
  * | Chunk type            | Status                                     |
  * | --------------------- | ------------------------------------------ |
- * | `start`               | `is working…`                              |
  * | `text-delta`          | `is typing…`                               |
  * | `reasoning-delta`     | `is thinking…`                             |
  * | `tool-call`           | `is calling ${toolName}…`                  |
  * | `tool-call-approval`  | `is requesting approval for ${toolName}…`  |
  * | `data-om-buffering-start` | `is saving to memory…`                 |
  * | `data-om-activation`  | `is recalling memory…`                     |
+ * | `data-heartbeat-run-start` | `is checking in…`                     |
  * | _everything else_     | _no change_                                |
  */
 export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatusContext): TypingStatusReturn {
@@ -75,12 +76,13 @@ export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatu
           return STATUS_TEXT.RECALLING_MEMORY;
       }
     }
+    const hbChunk = asHeartbeatRunChunk(chunk);
+    if (hbChunk?.type === 'data-heartbeat-run-start') {
+      return STATUS_TEXT.HEARTBEAT_CHECKING_IN;
+    }
   }
 
   switch (chunk.type) {
-    case 'start':
-      return STATUS_TEXT.WORKING;
-
     case 'text-delta':
       return STATUS_TEXT.TYPING;
 
@@ -102,10 +104,10 @@ export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatu
 
 const STATUS_TEXT = {
   TYPING: 'is typing…',
-  WORKING: 'is working…',
   THINKING: 'is thinking…',
   SAVING_MEMORY: 'is saving to memory…',
   RECALLING_MEMORY: 'is recalling memory…',
+  HEARTBEAT_CHECKING_IN: 'is checking in…',
   CALLING_TOOL: (name: string) => `is calling ${name}…`,
   REQUESTING_APPROVAL: (name: string) => `is requesting approval for ${name}…`,
 };

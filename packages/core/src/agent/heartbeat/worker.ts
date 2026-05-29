@@ -228,7 +228,16 @@ export async function executeHeartbeat(
   target: Extract<ScheduleTarget, { type: 'heartbeat' }>,
 ): Promise<{ status: HeartbeatRunStatus; reason?: string; runId?: string }> {
   const { agentId, prompt, threadId, resourceId, activeHours, idleThresholdMs, broadcast } = target;
-  const broadcastProcessor = createHeartbeatBroadcastProcessor({ mode: broadcast ?? 'live', scheduleId });
+  const broadcastMode = broadcast ?? 'live';
+  const broadcastProcessor = createHeartbeatBroadcastProcessor({ mode: broadcastMode, scheduleId, threadId });
+  // Run-level marker carried on the signal / agent run so consumers (typing
+  // status, UI badges, history renderers) can detect that this run was
+  // heartbeat-driven even after loading from storage.
+  const heartbeatRunMeta = {
+    scheduleId,
+    broadcast: broadcastMode,
+    ...(threadId ? { threadId } : {}),
+  };
 
   const agent = (() => {
     try {
@@ -269,6 +278,7 @@ export async function executeHeartbeat(
       {
         type: target.signalType ?? 'system-reminder',
         contents: prompt,
+        providerOptions: { mastra: { heartbeat: heartbeatRunMeta } },
       },
       {
         resourceId,
@@ -276,7 +286,10 @@ export async function executeHeartbeat(
         ifActive: { behavior: target.ifActive ?? 'discard' },
         ifIdle: {
           behavior: target.ifIdle ?? 'wake',
-          streamOptions: { outputProcessors: [broadcastProcessor] },
+          streamOptions: {
+            outputProcessors: [broadcastProcessor],
+            providerOptions: { mastra: { heartbeat: heartbeatRunMeta } },
+          },
         },
       },
     );
@@ -286,7 +299,10 @@ export async function executeHeartbeat(
     };
   }
 
-  const result = await agent.generate(prompt, { outputProcessors: [broadcastProcessor] });
+  const result = await agent.generate(prompt, {
+    outputProcessors: [broadcastProcessor],
+    providerOptions: { mastra: { heartbeat: heartbeatRunMeta } },
+  });
   return {
     status: 'fired',
     runId: extractRunId(result),

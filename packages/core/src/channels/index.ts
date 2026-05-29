@@ -3,6 +3,8 @@ export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';
 export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
+export { asHeartbeatRunChunk } from './heartbeat-run';
+export type { DataHeartbeatRunFinishPart, DataHeartbeatRunStartPart, HeartbeatRunChunk } from './heartbeat-run';
 export type {
   ChannelAdapterBaseConfig,
   ChannelAdapterConfig,

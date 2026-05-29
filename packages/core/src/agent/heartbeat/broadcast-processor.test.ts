@@ -59,9 +59,45 @@ describe('createHeartbeatBroadcastProcessor', () => {
       }
       expect(out).toEqual(parts);
     });
+
+    it('emits data-heartbeat-run-start once and data-heartbeat-run-finish on finish', async () => {
+      const p = createHeartbeatBroadcastProcessor({
+        mode: 'live',
+        scheduleId: 'hb_a',
+        threadId: 't1',
+      });
+      const enqueued: ChunkType[] = [];
+      const ctx = makeContext(enqueued);
+      await p.processOutputStream!({ part: chunk('start'), ...ctx } as any);
+      await p.processOutputStream!({ part: textDelta('x'), ...ctx } as any);
+      await p.processOutputStream!({ part: textDelta('y'), ...ctx } as any);
+      await p.processOutputStream!({ part: finishChunk(), ...ctx } as any);
+      const lifecycle = enqueued.filter(c => String(c.type).startsWith('data-heartbeat-run-'));
+      expect(lifecycle.map(c => c.type)).toEqual(['data-heartbeat-run-start', 'data-heartbeat-run-finish']);
+      const startPart = lifecycle[0] as unknown as { data: any; transient?: boolean };
+      expect(startPart.transient).toBe(true);
+      expect(startPart.data.scheduleId).toBe('hb_a');
+      expect(startPart.data.broadcast).toBe('live');
+      expect(startPart.data.threadId).toBe('t1');
+      expect(typeof startPart.data.startedAt).toBe('string');
+      const finishPart = lifecycle[1] as unknown as { data: any; transient?: boolean };
+      expect(finishPart.transient).toBe(true);
+      expect(finishPart.data.status).toBe('finished');
+    });
   });
 
   describe('mode: never', () => {
+    it('does not emit any data-heartbeat-run-* lifecycle chunks', async () => {
+      const p = createHeartbeatBroadcastProcessor({ mode: 'never', scheduleId: 'hb_a' });
+      const enqueued: ChunkType[] = [];
+      const ctx = makeContext(enqueued);
+      await p.processOutputStream!({ part: chunk('start'), ...ctx } as any);
+      await p.processOutputStream!({ part: textDelta('hi'), ...ctx } as any);
+      await p.processOutputStream!({ part: finishChunk(), ...ctx } as any);
+      const lifecycle = enqueued.filter(c => String(c.type).startsWith('data-heartbeat-run-'));
+      expect(lifecycle).toEqual([]);
+    });
+
     it('drops every non-terminal chunk', async () => {
       const p = createHeartbeatBroadcastProcessor({ mode: 'never', scheduleId: 'hb_a' });
       const ctx = makeContext();
@@ -109,22 +145,26 @@ describe('createHeartbeatBroadcastProcessor', () => {
       const result = await p.processOutputStream!({ part: finish, ...ctx } as any);
       expect(result).toEqual(finish);
 
-      // burst order: text-start, text-delta(full), text-end
-      expect(enqueued.map(c => c.type)).toEqual(['text-start', 'text-delta', 'text-end']);
-      expect(((enqueued[1] as any).payload as { text: string }).text).toBe('hello world');
+      // burst order: text-start, text-delta(full), text-end (plus heartbeat-run lifecycle markers around it)
+      const textBurst = enqueued.filter(c => String(c.type).startsWith('text-'));
+      expect(textBurst.map(c => c.type)).toEqual(['text-start', 'text-delta', 'text-end']);
+      expect(((textBurst[1] as any).payload as { text: string }).text).toBe('hello world');
       const textId = `hb-broadcast-hb_a`;
-      expect(((enqueued[0] as any).payload as { id: string }).id).toBe(textId);
-      expect(((enqueued[2] as any).payload as { id: string }).id).toBe(textId);
+      expect(((textBurst[0] as any).payload as { id: string }).id).toBe(textId);
+      expect(((textBurst[2] as any).payload as { id: string }).id).toBe(textId);
+      const lifecycle = enqueued.filter(c => String(c.type).startsWith('data-heartbeat-run-'));
+      expect(lifecycle.map(c => c.type)).toEqual(['data-heartbeat-run-start', 'data-heartbeat-run-finish']);
     });
 
-    it('does not enqueue a burst when no text was buffered', async () => {
+    it('does not enqueue a text burst when no text was buffered', async () => {
       const p = createHeartbeatBroadcastProcessor({ mode: 'on-complete', scheduleId: 'hb_a' });
       const enqueued: ChunkType[] = [];
       const ctx = makeContext(enqueued);
       const finish = finishChunk();
       const result = await p.processOutputStream!({ part: finish, ...ctx } as any);
       expect(result).toEqual(finish);
-      expect(enqueued).toEqual([]);
+      const textBurst = enqueued.filter(c => String(c.type).startsWith('text-'));
+      expect(textBurst).toEqual([]);
     });
 
     it('flushes buffered text before error and abort chunks', async () => {
@@ -137,8 +177,12 @@ describe('createHeartbeatBroadcastProcessor', () => {
         const term = chunk(terminal, terminal === 'error' ? { error: 'boom' } : {});
         const out = await p.processOutputStream!({ part: term, ...ctx } as any);
         expect(out).toEqual(term);
-        expect(enqueued.map(c => c.type)).toEqual(['text-start', 'text-delta', 'text-end']);
-        expect(((enqueued[1] as any).payload as { text: string }).text).toBe('partial answer');
+        const textBurst = enqueued.filter(c => String(c.type).startsWith('text-'));
+        expect(textBurst.map(c => c.type)).toEqual(['text-start', 'text-delta', 'text-end']);
+        expect(((textBurst[1] as any).payload as { text: string }).text).toBe('partial answer');
+        const lifecycle = enqueued.filter(c => String(c.type).startsWith('data-heartbeat-run-'));
+        const finishMarker = lifecycle.find(c => c.type === 'data-heartbeat-run-finish') as unknown as { data: any };
+        expect(finishMarker?.data.status).toBe(terminal === 'error' ? 'error' : 'aborted');
       }
     });
 

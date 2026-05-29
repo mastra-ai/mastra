@@ -1,3 +1,4 @@
+import type { DataHeartbeatRunStartPart, DataHeartbeatRunFinishPart } from '../../channels/heartbeat-run';
 import type { OutputProcessor } from '../../processors';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -25,8 +26,11 @@ export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
 
 interface HeartbeatBroadcastState {
   initialized: boolean;
+  startEmitted: boolean;
+  finishEmitted: boolean;
   mode: HeartbeatBroadcastMode;
   scheduleId: string;
+  threadId?: string;
   bufferedText: string;
   textId: string;
   controller?: { enqueue: (chunk: ChunkType) => void };
@@ -74,9 +78,12 @@ function buildTextEnd(runId: string, textId: string): ChunkType {
 export function createHeartbeatBroadcastProcessor({
   mode,
   scheduleId,
+  threadId,
 }: {
   mode: HeartbeatBroadcastMode;
   scheduleId: string;
+  /** Optional — supplied for threaded heartbeats so UIs can scope per-thread indicators. */
+  threadId?: string;
 }): OutputProcessor {
   return {
     id: HEARTBEAT_BROADCAST_PROCESSOR_NAME,
@@ -86,13 +93,55 @@ export function createHeartbeatBroadcastProcessor({
       const s = readState(state);
       if (!s.initialized) {
         s.initialized = true;
+        s.startEmitted = false;
+        s.finishEmitted = false;
         s.mode = mode;
         s.scheduleId = scheduleId;
+        s.threadId = threadId;
         s.bufferedText = '';
         s.textId = `hb-broadcast-${scheduleId}`;
       }
 
+      // Emit the run-start lifecycle chunk once per run, before any other
+      // chunks reach subscribers. Skipped in 'never' mode since the whole
+      // point of 'never' is silent execution.
+      if (!s.startEmitted && s.mode !== 'never' && s.controller) {
+        s.startEmitted = true;
+        const startChunk: DataHeartbeatRunStartPart = {
+          type: 'data-heartbeat-run-start',
+          data: {
+            scheduleId: s.scheduleId,
+            broadcast: s.mode,
+            threadId: s.threadId,
+            startedAt: new Date().toISOString(),
+          },
+          transient: true,
+        };
+        s.controller.enqueue(startChunk as unknown as ChunkType);
+      }
+
+      const emitFinishIfTerminal = (terminalType: 'finish' | 'error' | 'abort') => {
+        if (s.finishEmitted || s.mode === 'never' || !s.controller) return;
+        s.finishEmitted = true;
+        const status = terminalType === 'finish' ? 'finished' : terminalType === 'error' ? 'error' : 'aborted';
+        const finishChunk: DataHeartbeatRunFinishPart = {
+          type: 'data-heartbeat-run-finish',
+          data: {
+            scheduleId: s.scheduleId,
+            broadcast: s.mode,
+            threadId: s.threadId,
+            finishedAt: new Date().toISOString(),
+            status,
+          },
+          transient: true,
+        };
+        s.controller.enqueue(finishChunk as unknown as ChunkType);
+      };
+
       if (s.mode === 'live') {
+        if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') {
+          emitFinishIfTerminal(part.type);
+        }
         return part;
       }
 
@@ -140,6 +189,7 @@ export function createHeartbeatBroadcastProcessor({
             s.controller.enqueue(buildTextEnd(part.runId, s.textId));
             s.bufferedText = '';
           }
+          emitFinishIfTerminal(part.type);
           return part;
         case 'finish':
           if (s.bufferedText.length > 0 && s.controller) {
@@ -148,6 +198,7 @@ export function createHeartbeatBroadcastProcessor({
             s.controller.enqueue(buildTextEnd(part.runId, s.textId));
             s.bufferedText = '';
           }
+          emitFinishIfTerminal('finish');
           return part;
         default:
           // data-* chunks and anything else: drop in on-complete

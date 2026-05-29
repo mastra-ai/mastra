@@ -33,3 +33,16 @@ Internally heartbeats now ride on a dedicated `HeartbeatWorker` consuming a
 dispatcher (previously `WorkflowScheduler`, now `Scheduler`) generalises to
 any target type and only knows about CAS, cron advancement, and topic
 routing.
+
+Heartbeat-driven runs are now marked end-to-end so subscribers and history
+renderers can distinguish them from user-driven runs:
+
+- `signal.providerOptions.mastra.heartbeat = { scheduleId, broadcast, threadId? }`
+  is stamped on the heartbeat signal (threaded) and on the `agent.generate`
+  run options (threadless), surviving onto the transient `data-${type}`
+  chunk and onto persisted messages.
+- The broadcast processor emits transient `data-heartbeat-run-start` and
+  `data-heartbeat-run-finish` lifecycle chunks once per run (skipped in
+  `'never'` broadcast mode). UIs can key off these to render run-scoped
+  affordances without polluting thread history. The default typing-status
+  resolver maps `data-heartbeat-run-start` to `'is checking in…'`.
