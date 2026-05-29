@@ -33,7 +33,7 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
 // would otherwise replace them with __vite-browser-external (no named exports).
 // Node-only npm packages imported by @mastra/core server-only code (e.g. sandbox).
 // These are never called in the browser — stub them alongside Node builtins.
-const nodeOnlyPackages = new Set(['execa']);
+const nodeOnlyPackages = new Set(['execa', 'posthog-node', 'dotenv', 'ws']);
 
 const stubNodeBuiltinsPlugin: Plugin = {
   name: 'stub-node-builtins',
@@ -51,6 +51,32 @@ const stubNodeBuiltinsPlugin: Plugin = {
   },
   load(id) {
     if (id.startsWith('\0node-stub:')) {
+      return { code: 'export default {}', syntheticNamedExports: true };
+    }
+  },
+};
+
+// Specifiers that must resolve to an EMPTY module in the Studio browser graph (dev + build).
+// @mastra/core dist top-level-imports these from browser-reachable subpaths, but only uses them
+// on lazy/server-only paths the browser never runs (e.g. posthog-node's `new PostHog()` lives in
+// `getClient()`; dotenv/ws are Node-only). stubNodeBuiltinsPlugin is apply:'build', so dev needs
+// its own stub. Two failure modes, one fix:
+//   - @standard-schema/spec: 0-byte type-only runtime -> "does not provide an export named 'default'".
+//   - posthog-node: pre-bundled module reads process.argv[1] at eval (process is {env:{}}) -> TypeError.
+// Pair with optimizeDeps.exclude below so esbuild never pre-bundles the crashing artifact. Root cause
+// is in @mastra/core dist; this stub holds until those imports are made lazy there.
+const browserStubPackages = new Set(['@standard-schema/spec', 'posthog-node', 'dotenv', 'ws']);
+
+const stubBrowserPackagesPlugin: Plugin = {
+  name: 'stub-browser-packages',
+  enforce: 'pre',
+  resolveId(source) {
+    if (browserStubPackages.has(source)) {
+      return { id: `\0browser-stub:${source}`, moduleSideEffects: false };
+    }
+  },
+  load(id) {
+    if (id.startsWith('\0browser-stub:')) {
       return { code: 'export default {}', syntheticNamedExports: true };
     }
   },
@@ -213,7 +239,7 @@ const routesManifestPlugin = (): Plugin => {
 
 export default defineConfig(({ mode }) => {
   const commonConfig: UserConfig = {
-    plugins: [stubNodeBuiltinsPlugin, tailwindcss(), react(), routesManifestPlugin()],
+    plugins: [stubNodeBuiltinsPlugin, stubBrowserPackagesPlugin, tailwindcss(), react(), routesManifestPlugin()],
     base: './',
     resolve: {
       dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-resizable-panels', '@tanstack/react-query'],
@@ -224,6 +250,12 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       cssCodeSplit: false,
+    },
+    optimizeDeps: {
+      // esbuild can't run Vite plugins, so without exclude it pre-bundles these server-only/empty
+      // packages into artifacts that crash at module-eval in the browser. Excluding them lets the
+      // stub plugin above answer the bare imports instead.
+      exclude: ['@standard-schema/spec', 'posthog-node', 'dotenv', 'ws'],
     },
     server: {
       fs: {
