@@ -12,12 +12,12 @@ import { MastraClient } from '@mastra/client-js';
 
 const client = new MastraClient({ baseUrl: '…' });
 
-await client.toolProvider('composio').updateConnection('auth_abc', {
+await client.getToolProvider('composio').updateConnection('auth_abc', {
   label: 'Work inbox',
 });
 ```
 
-Pass `label: null` to clear the existing label. Labels are 1–32 characters.
+Pass `label: null` to clear the existing label. Labels are 1–32 characters and accept letters, digits, spaces, and the punctuation `_ - ' . , & ( ) /`.
 
 **Ownership enforced server-side**
 

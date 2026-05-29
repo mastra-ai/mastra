@@ -630,7 +630,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
     try {
       const editor = requireEditor(mastra.getEditor());
       const provider = resolveProvider(editor, providerId);
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
 
       const storage = mastra.getStorage();

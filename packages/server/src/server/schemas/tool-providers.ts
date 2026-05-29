@@ -23,7 +23,10 @@ const labelSchema = z
   .string()
   .min(1, 'Connection label is required')
   .max(32, 'Connection label must be ≤ 32 characters')
-  .regex(/^[A-Za-z0-9 _-]+$/, 'Connection label may only contain letters, digits, spaces, _ and -');
+  .regex(
+    /^[\p{L}\p{N} _\-'.,&()/]+$/u,
+    "Connection label may only contain letters, digits, spaces, and the punctuation _ - ' . , & ( ) /",
+  );
 
 /**
  * Per-pin identity bucketing.

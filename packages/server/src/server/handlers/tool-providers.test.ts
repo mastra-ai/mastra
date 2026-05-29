@@ -1489,6 +1489,34 @@ describe('UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE', () => {
       expect.objectContaining({ authorId: 'user-owner', label: 'Renamed By Admin' }),
     );
   });
+
+  it('returns 403 when a non-admin caller does not own a caller-supplied row', async () => {
+    const provider = makeProvider();
+    const editor = makeEditor(provider);
+    const toolConnections = makeToolProviderConnectionsStore([
+      {
+        authorId: 'tenant-A',
+        providerId: 'composio',
+        toolkit: 'gmail',
+        connectionId: 'ca_1',
+        label: 'Tenant A Label',
+        scope: 'caller-supplied',
+      },
+    ]);
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, 'tenant-B');
+
+    await expect(
+      UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE.handler({
+        mastra: makeMastraWithStorage(editor, toolConnections),
+        providerId: 'composio',
+        connectionId: 'ca_1',
+        label: 'Hijack',
+        requestContext: ctx,
+      } as any),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(toolConnections.upsertConnection).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE', () => {
@@ -1619,4 +1647,22 @@ describe('GET_TOOL_PROVIDER_HEALTH_ROUTE', () => {
     } as any);
     expect(result).toEqual({ ok: false, message: 'no api key' });
   });
+});
+
+describe('updateConnectionBodySchema label charset', () => {
+  it.each(["Joe's Work", 'Q4/2025', 'Sales (EMEA)', 'work.account', 'A, B & C', 'Café Connection'])(
+    'accepts realistic label %j',
+    async label => {
+      const { updateConnectionBodySchema } = await import('../schemas/tool-providers');
+      expect(updateConnectionBodySchema.safeParse({ label }).success).toBe(true);
+    },
+  );
+
+  it.each(['has\ttab', 'has\nnewline', 'pipe|char', 'semi;colon'])(
+    'rejects label with disallowed character %j',
+    async label => {
+      const { updateConnectionBodySchema } = await import('../schemas/tool-providers');
+      expect(updateConnectionBodySchema.safeParse({ label }).success).toBe(false);
+    },
+  );
 });
