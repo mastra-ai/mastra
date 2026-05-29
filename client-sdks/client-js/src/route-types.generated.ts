@@ -5590,7 +5590,8 @@ export type PostAgentsAgentIdSignals_Body =
               [key: string]: string | number | boolean | null | undefined;
             }
           | undefined;
-        type: string;
+        type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
+        tagName?: string | undefined;
         contents:
           | string
           | (
@@ -5651,7 +5652,8 @@ export type PostAgentsAgentIdSignals_Body =
               [key: string]: string | number | boolean | null | undefined;
             }
           | undefined;
-        type: string;
+        type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
+        tagName?: string | undefined;
         contents:
           | string
           | (
