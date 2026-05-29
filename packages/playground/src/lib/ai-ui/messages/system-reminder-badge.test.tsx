@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import { SystemReminderBadge } from './system-reminder-badge';
 import { parseSystemReminder } from './system-reminder-utils';
 
@@ -31,6 +31,8 @@ describe('parseSystemReminder', () => {
 });
 
 describe('SystemReminderBadge', () => {
+  afterEach(() => cleanup());
+
   it('falls back to plain text when the content is not a system reminder', () => {
     render(<SystemReminderBadge text="plain user text" />);
 
@@ -49,5 +51,26 @@ describe('SystemReminderBadge', () => {
     fireEvent.click(screen.getByRole('button', { name: /system reminder/i }));
 
     expect(screen.getByText('Remember nested instructions')).toBeTruthy();
+  });
+
+  it('renders a structured signal without parsing XML and surfaces the heartbeat indicator', () => {
+    render(
+      <SystemReminderBadge
+        signal={{
+          type: 'system-reminder',
+          body: 'Check in on the user',
+          heartbeat: { scheduleId: 'hb_demo', broadcast: 'on-complete' },
+        }}
+      />,
+    );
+
+    expect(screen.getByText('System reminder')).toBeTruthy();
+    expect(screen.getByText('heartbeat')).toBeTruthy();
+    expect(screen.getByText('system-reminder')).toBeTruthy();
+    expect(screen.queryByText('Check in on the user')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /system reminder/i }));
+
+    expect(screen.getByText('Check in on the user')).toBeTruthy();
   });
 });

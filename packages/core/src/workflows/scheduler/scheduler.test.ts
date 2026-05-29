@@ -3,7 +3,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemorySchedulesStorage } from '../../storage/domains/schedules/inmemory';
-import { WorkflowScheduler } from './scheduler';
+import { Scheduler } from './scheduler';
 
 function makeStore(): { store: InMemorySchedulesStorage; db: InMemoryDB } {
   const db = new InMemoryDB();
@@ -19,7 +19,7 @@ function captureWorkflowsTopic(pubsub: EventEmitterPubSub): { events: Event[] } 
   return { events };
 }
 
-describe('WorkflowScheduler', () => {
+describe('Scheduler', () => {
   beforeEach(() => {
     vi.useRealTimers();
   });
@@ -32,7 +32,7 @@ describe('WorkflowScheduler', () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub });
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
 
     const past = Date.now() - 5_000;
     const created = await store.createSchedule({
@@ -70,7 +70,7 @@ describe('WorkflowScheduler', () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub });
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
 
     const past = Date.now() - 5_000;
     await store.createSchedule({
@@ -92,7 +92,7 @@ describe('WorkflowScheduler', () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub });
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
 
     const future = Date.now() + 60_000;
     await store.createSchedule({
@@ -114,8 +114,8 @@ describe('WorkflowScheduler', () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
-    const a = new WorkflowScheduler({ schedulesStore: store, pubsub });
-    const b = new WorkflowScheduler({ schedulesStore: store, pubsub });
+    const a = new Scheduler({ schedulesStore: store, pubsub });
+    const b = new Scheduler({ schedulesStore: store, pubsub });
 
     const past = Date.now() - 5_000;
     await store.createSchedule({
@@ -146,7 +146,7 @@ describe('WorkflowScheduler', () => {
       return original(topic, event);
     });
     const onError = vi.fn();
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub, config: { onError } });
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { onError } });
 
     const past = Date.now() - 5_000;
     await store.createSchedule({
@@ -187,7 +187,7 @@ describe('WorkflowScheduler', () => {
     const onError = vi.fn().mockImplementationOnce(() => {
       throw new Error('hook exploded');
     });
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub, config: { onError } });
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { onError } });
 
     const past = Date.now() - 5_000;
     await store.createSchedule({
@@ -224,7 +224,7 @@ describe('WorkflowScheduler', () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub });
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
 
     const past = Date.now() - 5_000;
     const fireAt = past;
@@ -247,7 +247,7 @@ describe('WorkflowScheduler', () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
-    const scheduler = new WorkflowScheduler({
+    const scheduler = new Scheduler({
       schedulesStore: store,
       pubsub,
       config: { tickIntervalMs: 60_000 }, // long enough that the immediate tick is the only one
@@ -276,12 +276,12 @@ describe('WorkflowScheduler', () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
-    const scheduler = new WorkflowScheduler({
+    const scheduler = new Scheduler({
       schedulesStore: store,
       pubsub,
       config: {
         tickIntervalMs: 60_000,
-        isWorkflowRegistered: () => false,
+        isTargetReady: () => false,
         missesBeforeDelete: 3,
       },
     });
@@ -310,12 +310,12 @@ describe('WorkflowScheduler', () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
-    const scheduler = new WorkflowScheduler({
+    const scheduler = new Scheduler({
       schedulesStore: store,
       pubsub,
       config: {
         tickIntervalMs: 60_000,
-        isWorkflowRegistered: () => false,
+        isTargetReady: () => false,
         missesBeforeDelete: 3,
       },
     });
@@ -348,12 +348,12 @@ describe('WorkflowScheduler', () => {
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
     let registered = false;
-    const scheduler = new WorkflowScheduler({
+    const scheduler = new Scheduler({
       schedulesStore: store,
       pubsub,
       config: {
         tickIntervalMs: 60_000,
-        isWorkflowRegistered: () => registered,
+        isTargetReady: () => registered,
         missesBeforeDelete: 3,
       },
     });
@@ -390,7 +390,7 @@ describe('WorkflowScheduler', () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
     const { events } = captureWorkflowsTopic(pubsub);
-    const scheduler = new WorkflowScheduler({
+    const scheduler = new Scheduler({
       schedulesStore: store,
       pubsub,
       config: { tickIntervalMs: 60_000 },
@@ -419,7 +419,7 @@ describe('WorkflowScheduler', () => {
 
     // Simulate a user config where optional fields are present but undefined,
     // e.g. from destructuring a partial object.
-    const scheduler = new WorkflowScheduler({
+    const scheduler = new Scheduler({
       schedulesStore: store,
       pubsub,
       config: { enabled: true, tickIntervalMs: undefined, batchSize: undefined },

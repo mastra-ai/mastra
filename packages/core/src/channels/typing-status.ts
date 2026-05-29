@@ -1,3 +1,4 @@
+import type { HeartbeatBroadcastMode } from '../agent/heartbeat/types';
 import type { AgentChunkType } from '../stream/types';
 import { asOmChunk } from './om';
 /**
@@ -55,7 +56,6 @@ export type TypingStatusFn = (chunk: AgentChunkType<any>, ctx: TypingStatusConte
  *
  * | Chunk type            | Status                                     |
  * | --------------------- | ------------------------------------------ |
- * | `start`               | `is working…`                              |
  * | `text-delta`          | `is typing…`                               |
  * | `reasoning-delta`     | `is thinking…`                             |
  * | `tool-call`           | `is calling ${toolName}…`                  |
@@ -78,9 +78,6 @@ export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatu
   }
 
   switch (chunk.type) {
-    case 'start':
-      return STATUS_TEXT.WORKING;
-
     case 'text-delta':
       return STATUS_TEXT.TYPING;
 
@@ -100,9 +97,28 @@ export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatu
   }
 }
 
+/**
+ * Pull the heartbeat broadcast mode off a `data-<signal-type>` chunk's
+ * `providerOptions.mastra.heartbeat.broadcast` slot. Returns `undefined` for
+ * non-heartbeat chunks. Defaults to `'live'` when the heartbeat marker is
+ * present but no explicit broadcast value is set.
+ */
+export function extractHeartbeatBroadcast(chunk: AgentChunkType<any>): HeartbeatBroadcastMode | undefined {
+  const data = (chunk as { data?: unknown }).data;
+  if (!data || typeof data !== 'object') return undefined;
+  const providerOptions = (data as { providerOptions?: unknown }).providerOptions;
+  if (!providerOptions || typeof providerOptions !== 'object') return undefined;
+  const mastra = (providerOptions as { mastra?: unknown }).mastra;
+  if (!mastra || typeof mastra !== 'object') return undefined;
+  const heartbeat = (mastra as { heartbeat?: unknown }).heartbeat;
+  if (!heartbeat || typeof heartbeat !== 'object') return undefined;
+  const broadcast = (heartbeat as { broadcast?: unknown }).broadcast;
+  if (broadcast === 'live' || broadcast === 'on-complete' || broadcast === 'never') return broadcast;
+  return 'live';
+}
+
 const STATUS_TEXT = {
   TYPING: 'is typing…',
-  WORKING: 'is working…',
   THINKING: 'is thinking…',
   SAVING_MEMORY: 'is saving to memory…',
   RECALLING_MEMORY: 'is recalling memory…',

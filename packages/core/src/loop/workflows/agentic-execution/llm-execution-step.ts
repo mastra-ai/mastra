@@ -836,7 +836,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           const initialSignalEchoes = _internal?.initialSignalEchoes?.splice(0) ?? [];
           for (const initialSignal of initialSignalEchoes) {
-            safeEnqueue(controller, initialSignal.toDataPart());
+            safeEnqueue(controller, { ...initialSignal.toDataPart(), runId });
           }
 
           const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
@@ -847,7 +847,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
             for (const pendingSignal of pendingSignals) {
               const signalForTranscript = messageList.addSignal(pendingSignal);
-              safeEnqueue(controller, signalForTranscript.toDataPart());
+              safeEnqueue(controller, { ...signalForTranscript.toDataPart(), runId });
             }
           }
 

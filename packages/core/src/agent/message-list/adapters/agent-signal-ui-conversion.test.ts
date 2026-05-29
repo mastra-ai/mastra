@@ -32,7 +32,7 @@ describe('agent signal UI conversion', () => {
     });
   });
 
-  it('converts non-user signals to data parts instead of user text messages', () => {
+  it('converts non-user signals to user messages with the signal contents as text parts', () => {
     const dbMessage = signalToMastraDBMessage({
       id: 'signal-system-1',
       type: 'system-reminder',
@@ -46,21 +46,10 @@ describe('agent signal UI conversion', () => {
       AIV5Adapter.toUIMessage(dbMessage),
       AIV6Adapter.toUIMessage(dbMessage),
     ]) {
-      expect(uiMessage.role).toBe('system');
-      expect(uiMessage.parts).toEqual([
-        {
-          type: 'data-system-reminder',
-          data: {
-            id: 'signal-system-1',
-            type: 'system-reminder',
-            contents: 'continue',
-            createdAt: '2024-01-01T00:00:00.000Z',
-            metadata: { reminderType: 'anthropic-prefill-processor-retry' },
-          },
-        },
-      ]);
+      expect(uiMessage.role).toBe('user');
+      expect(uiMessage.parts).toEqual([{ type: 'text', text: 'continue' }]);
     }
 
-    expect(AIV4Adapter.toUIMessage(dbMessage).content).toBe('');
+    expect(AIV4Adapter.toUIMessage(dbMessage).content).toBe('continue');
   });
 });

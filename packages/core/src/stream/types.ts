@@ -943,7 +943,12 @@ export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
   | NetworkChunkType<OUTPUT>
-  | (DataChunkType & { from: never; runId: never; metadata?: BaseChunkType['metadata']; payload: never });
+  | (DataChunkType & { from: never; runId?: string; metadata?: BaseChunkType['metadata']; payload: never });
+// Note: `runId` is optional (rather than `never`) so internal emitters (e.g.
+// the agentic loop stamping a signal data part with the run that produced it)
+// can tag data chunks with their originating run. `from` and `payload` stay
+// `never` to keep tool authors using `writer.custom({...})` from accidentally
+// supplying loop-internal fields.
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;

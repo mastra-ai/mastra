@@ -2,6 +2,7 @@ import type { Chat, Adapter, ChatConfig, Message, StateAdapter, Thread } from 'c
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
+import type { HeartbeatBroadcastMode } from '../agent/heartbeat/types';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
 import type { AgentThreadSubscription } from '../agent/types';
@@ -42,7 +43,7 @@ import type {
   ToolDisplay,
   ToolDisplayFn,
 } from './types';
-import { defaultTypingStatus } from './typing-status';
+import { defaultTypingStatus, extractHeartbeatBroadcast } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 
 /**
@@ -1209,11 +1210,20 @@ export class AgentChannels {
       });
     }
 
+    // Apply the heartbeat broadcast policy BEFORE the typing-status wrapper so
+    // that suppressed/buffered runs don't trigger transient typing indicators
+    // for chunks the channel never renders. `nonLiveRuns` tracks runIds whose
+    // broadcast mode is `on-complete` or `never` so typing-status can skip
+    // them — otherwise the `on-complete` flush + finish can race past the
+    // status update and leave a stuck "is typing…".
+    const nonLiveRuns = new Set<string>();
+    const policed = this.withHeartbeatBroadcastPolicy(stream, nonLiveRuns);
+
     // The streaming driver flips `typingGate.active = true` while a
     // StreamingPlan post is in flight; the typing-status wrapper reads it
     // and skips `startTyping` during that window.
     const typingGate = { active: false };
-    const wrapped = this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate);
+    const wrapped = this.withTypingStatus(policed, chatThread, platform, adapterConfig, typingGate, nonLiveRuns);
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
       this.pendingApprovalCards.set(toolCallId, record);
@@ -1273,6 +1283,83 @@ export class AgentChannels {
   }
 
   /**
+   * Applies the heartbeat broadcast policy to a chunk stream:
+   *
+   * - `live` (default): all chunks pass through unchanged.
+   * - `never`: drop every chunk for the heartbeat's runId — channels never see
+   *   that the run happened.
+   * - `on-complete`: drop intermediate chunks for that runId but buffer
+   *   `text-delta` payloads, then synthesize a single `text-delta` containing
+   *   the concatenated text right before the matching `finish` (or `error` /
+   *   `abort`) chunk. The agent loop has already executed any tool calls
+   *   upstream, so dropping intermediates here only affects what the channel
+   *   renders, not the run itself.
+   *
+   * The policy is keyed off the heartbeat metadata stamped onto the signal's
+   * `data-<signal-type>` chunk's `providerOptions.mastra.heartbeat` by the
+   * worker. Runs without that marker fall through as `live`.
+   */
+  private async *withHeartbeatBroadcastPolicy(
+    stream: AsyncIterable<AgentChunkType<any>>,
+    nonLiveRuns: Set<string>,
+  ): AsyncGenerator<AgentChunkType<any>> {
+    type State = { mode: HeartbeatBroadcastMode; buffered: string };
+    const policies = new Map<string, State>();
+
+    for await (const chunk of stream) {
+      // Heartbeat signal data chunk: record the broadcast policy for this runId.
+      const heartbeatMode = extractHeartbeatBroadcast(chunk);
+      if (heartbeatMode && chunk.runId) {
+        policies.set(chunk.runId, { mode: heartbeatMode, buffered: '' });
+        if (heartbeatMode !== 'live') nonLiveRuns.add(chunk.runId);
+        // The signal data chunk itself is informational — pass it through for
+        // live/on-complete so consumers can render the signal in transcripts.
+        if (heartbeatMode !== 'never') yield chunk;
+        continue;
+      }
+
+      const state = chunk.runId ? policies.get(chunk.runId) : undefined;
+      if (!state || state.mode === 'live') {
+        yield chunk;
+        continue;
+      }
+
+      if (state.mode === 'never') {
+        if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
+          policies.delete(chunk.runId);
+          nonLiveRuns.delete(chunk.runId);
+        }
+        continue;
+      }
+
+      // on-complete: buffer text, flush on terminal chunk, drop intermediates.
+      if (chunk.type === 'text-delta') {
+        const text = (chunk as { payload?: { text?: string } }).payload?.text;
+        if (typeof text === 'string') state.buffered += text;
+        continue;
+      }
+
+      if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
+        if (state.buffered.length > 0) {
+          yield {
+            type: 'text-delta',
+            runId: chunk.runId,
+            from: chunk.from,
+            payload: { id: `heartbeat-on-complete-${chunk.runId}`, text: state.buffered },
+          } as AgentChunkType<any>;
+        }
+        policies.delete(chunk.runId);
+        nonLiveRuns.delete(chunk.runId);
+        yield chunk;
+        continue;
+      }
+
+      // All other chunk types for an on-complete run are suppressed for the
+      // channel (tool calls etc. already drove the upstream loop).
+    }
+  }
+
+  /**
    * Pass-through async generator that yields chunks unchanged but emits
    * typing-status updates (`startTyping`) along the way. Lives outside the
    * drivers so both drivers benefit from the same dedup + gate logic.
@@ -1290,6 +1377,7 @@ export class AgentChannels {
     platform: string,
     adapterConfig: ChannelAdapterConfig | undefined,
     typingGate: { active: boolean },
+    nonLiveRuns: Set<string>,
   ): AsyncGenerator<AgentChunkType<any>> {
     const typingStatusOption = adapterConfig?.typingStatus;
     const typingStatusFn: TypingStatusFn | null =
@@ -1302,7 +1390,11 @@ export class AgentChannels {
     let currentTypingStatus: string | undefined;
 
     for await (const chunk of stream) {
-      if (typingStatusFn && !typingGate.active) {
+      // Skip typing-status for heartbeat runs whose broadcast mode is
+      // `on-complete` or `never` — the burst flush + finish can race past
+      // the status update and leave a stuck indicator.
+      const isNonLiveRun = !!chunk.runId && nonLiveRuns.has(chunk.runId);
+      if (typingStatusFn && !typingGate.active && !isNonLiveRun) {
         let result: ReturnType<TypingStatusFn>;
         try {
           const ctx: TypingStatusContext = {

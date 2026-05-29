@@ -20,13 +20,22 @@
 
 import * as coreWorkflows from '@mastra/core/workflows';
 
-const exported = (coreWorkflows as Record<string, unknown>).computeNextFireAt;
+const exportedNext = (coreWorkflows as Record<string, unknown>).computeNextFireAt;
+const exportedValidate = (coreWorkflows as Record<string, unknown>).validateCron;
 
 export const computeNextFireAt: any =
-  exported ??
+  exportedNext ??
   (() => {
     throw new Error(
       '`computeNextFireAt` is not available in this version of @mastra/core. ' +
         'Schedules require @mastra/core >= 1.32.0.',
+    );
+  });
+
+export const validateCron: any =
+  exportedValidate ??
+  (() => {
+    throw new Error(
+      '`validateCron` is not available in this version of @mastra/core. ' + 'Schedules require @mastra/core >= 1.32.0.',
     );
   });

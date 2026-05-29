@@ -19,6 +19,8 @@ type LinkComponentPaths = {
   workflowLink: (workflowId: string) => string;
   schedulesLink: () => string;
   scheduleLink: (scheduleId: string) => string;
+  heartbeatsLink: () => string;
+  heartbeatLink: (scheduleId: string) => string;
 
   networkLink: (networkId: string) => string;
   networkNewThreadLink: (networkId: string) => string;
@@ -72,6 +74,8 @@ const LinkComponentContext = createContext<{
     workflowLink: () => '',
     schedulesLink: () => '',
     scheduleLink: () => '',
+    heartbeatsLink: () => '',
+    heartbeatLink: () => '',
     networkLink: () => '',
     networkNewThreadLink: () => '',
     networkThreadLink: () => '',

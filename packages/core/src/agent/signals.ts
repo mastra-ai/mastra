@@ -44,6 +44,13 @@ export type AgentSignalInput = {
  */
 export type AgentSignalDataPart = {
   type: `data-${string}`;
+  /**
+   * Run id of the agent run that emitted this signal data part. Populated by
+   * the loop at enqueue time. Optional for backwards compatibility — consumers
+   * that key off run id (e.g. `AgentChannels.withHeartbeatBroadcastPolicy`)
+   * fall back to `live` behavior when unset.
+   */
+  runId?: string;
   data: {
     id: string;
     type: AgentSignalType;
@@ -52,6 +59,13 @@ export type AgentSignalDataPart = {
     acceptedAt?: string;
     attributes?: AgentSignalAttributes;
     metadata?: Record<string, unknown>;
+    /**
+     * Out-of-band metadata that rides with the signal but is not shown to the model.
+     * Mirrors `AgentSignalInput.providerOptions` and is surfaced on the transient
+     * data part so downstream consumers (e.g. AgentChannels) can read it without
+     * waiting for the LLM round-trip.
+     */
+    providerOptions?: MastraProviderMetadata;
   };
   transient: true;
 };
@@ -372,6 +386,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
+      ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
     },
     transient: true,
   };
