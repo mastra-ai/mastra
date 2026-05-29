@@ -262,27 +262,28 @@ describe('InworldRealtimeVoice', () => {
       expect(sessionUpdate.session.audio.output).toEqual(expect.objectContaining({ voice: 'Dennis', speed: 1.1 }));
     });
 
-    it('should merge providerData into the session payload', async () => {
+    it('should nest providerData under session.providerData in the payload', async () => {
       const v = new InworldRealtimeVoice({
         apiKey: 'k',
-        providerData: { tool_choice: { type: 'mcp', server_label: 'mcp1' } },
+        providerData: { tts: { delivery_mode: 'CREATIVE' } },
       });
       await connectStubbed(v);
       const { instance } = getLastInstance();
       const sessionUpdate = sentEvents(instance).find(e => e.type === 'session.update');
-      expect(sessionUpdate.session.tool_choice).toEqual({ type: 'mcp', server_label: 'mcp1' });
+      expect(sessionUpdate.session.providerData.tts.delivery_mode).toBe('CREATIVE');
     });
 
-    it('should let providerData override `session` when keys collide (escape-hatch wins)', async () => {
+    it('should let constructor providerData override `session.providerData` on key collision', async () => {
       const v = new InworldRealtimeVoice({
         apiKey: 'k',
-        session: { audio: { output: { speed: 1.0 } } },
-        providerData: { audio: { output: { speed: 1.4 } } },
+        session: { providerData: { tts: { language: 'en-US', delivery_mode: 'STABLE' } } },
+        providerData: { tts: { delivery_mode: 'CREATIVE' } },
       });
       await connectStubbed(v);
       const { instance } = getLastInstance();
       const sessionUpdate = sentEvents(instance).find(e => e.type === 'session.update');
-      expect(sessionUpdate.session.audio.output.speed).toBe(1.4);
+      // Constructor option wins on collision; other keys are preserved.
+      expect(sessionUpdate.session.providerData.tts).toEqual({ language: 'en-US', delivery_mode: 'CREATIVE' });
     });
   });
 
@@ -541,6 +542,93 @@ describe('InworldRealtimeVoice', () => {
         .map((c: any[]) => c[0])
         .filter((p: any) => p.role === 'user' && p.text !== '\n');
       expect(userTexts.map((p: any) => p.text)).toEqual(['Hey, man! Hi.']);
+    });
+
+    it('should surface voiceProfile on the user writing event when present', async () => {
+      await connectStubbed(voice);
+      const writingSpy = vi.fn();
+      voice.on('writing', writingSpy);
+
+      const voiceProfile = {
+        emotion: [{ label: 'happy', confidence: 0.9 }],
+        gender: [{ label: 'female', confidence: 0.8 }],
+      };
+      const client = (voice as any).client as EventEmitter;
+      client.emit('conversation.item.input_audio_transcription.completed', {
+        item_id: 'item-vp',
+        transcript: 'hi there',
+        providerData: { voiceProfile },
+      });
+
+      const userTexts = writingSpy.mock.calls.map((c: any[]) => c[0]).filter((p: any) => p.text !== '\n');
+      expect(userTexts).toEqual([{ text: 'hi there', response_id: 'item-vp', role: 'user', voiceProfile }]);
+    });
+  });
+
+  describe('memory', () => {
+    it('should emit memory state from session.updated and dedupe by version', async () => {
+      await connectStubbed(voice);
+      const memorySpy = vi.fn();
+      voice.on('memory', memorySpy);
+
+      const client = (voice as any).client as EventEmitter;
+      const state1 = { version: 1, summary: 's', facts: ['f'] };
+      client.emit('session.updated', { session: { providerData: { memory: { state: state1 } } } });
+      expect(memorySpy).toHaveBeenCalledTimes(1);
+      expect(memorySpy).toHaveBeenCalledWith(state1);
+
+      // Same version -> no re-emit.
+      client.emit('session.updated', { session: { providerData: { memory: { state: state1 } } } });
+      expect(memorySpy).toHaveBeenCalledTimes(1);
+
+      // New version -> emit again.
+      const state2 = { version: 2, summary: 's2', facts: ['f', 'g'] };
+      client.emit('session.updated', { session: { providerData: { memory: { state: state2 } } } });
+      expect(memorySpy).toHaveBeenCalledTimes(2);
+      expect(memorySpy).toHaveBeenLastCalledWith(state2);
+    });
+  });
+
+  describe('back-channel', () => {
+    it('should emit a backchannel stream that receives decoded audio bytes', async () => {
+      await connectStubbed(voice);
+      const backchannelSpy = vi.fn();
+      voice.on('backchannel', backchannelSpy);
+
+      const client = (voice as any).client as EventEmitter;
+      const delta = Buffer.from('hi').toString('base64');
+      client.emit('response.backchannel.audio.delta', { backchannel_id: 'b1', delta });
+
+      expect(backchannelSpy).toHaveBeenCalledTimes(1);
+      const stream = backchannelSpy.mock.calls[0][0] as NodeJS.ReadableStream;
+      const received = stream.read() as Buffer;
+      expect(received.toString()).toBe('hi');
+    });
+
+    it('should emit backchannel.done with the phrase and clean up the stream', async () => {
+      await connectStubbed(voice);
+      const doneSpy = vi.fn();
+      voice.on('backchannel.done', doneSpy);
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('response.backchannel.audio.delta', {
+        backchannel_id: 'b1',
+        delta: Buffer.from('hi').toString('base64'),
+      });
+      client.emit('response.backchannel.audio.done', { backchannel_id: 'b1', phrase: 'uh-huh' });
+
+      expect(doneSpy).toHaveBeenCalledWith({ backchannel_id: 'b1', phrase: 'uh-huh' });
+    });
+
+    it('should emit backchannel.skipped with the reason', async () => {
+      await connectStubbed(voice);
+      const skippedSpy = vi.fn();
+      voice.on('backchannel.skipped', skippedSpy);
+
+      const client = (voice as any).client as EventEmitter;
+      client.emit('response.backchannel.skipped', { reason: 'min_gap_not_elapsed' });
+
+      expect(skippedSpy).toHaveBeenCalledWith({ reason: 'min_gap_not_elapsed' });
     });
   });
 

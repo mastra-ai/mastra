@@ -115,7 +115,7 @@ Inworld's wire protocol is the OpenAI Realtime GA spec — same client/server ev
 - Endpoint: `wss://api.inworld.ai/api/v1/realtime/session?key=<sessionId>&protocol=realtime`. The model is configured via the initial `session.update`, not the URL.
 - Auth: `Authorization: Basic <key>` (Inworld keys ship pre-encoded; pass verbatim).
 - Typed first-class session knobs (`audio.output.speed`, `audio.output.model`, `audio.input.turn_detection`, `audio.input.transcription`, `output_modalities`, `tool_choice`, …) via the `session` constructor field.
-- An untyped `providerData` escape hatch for fields Inworld may add ahead of typed support. Both are deep-merged into every `session.update`.
+- A typed `providerData` object for Inworld extensions (STT tuning, TTS segmentation/steering, automatic memory, back-channel, responsiveness, plus `user_id`/`metadata`), sent under `session.providerData`.
 
 ### Usage
 
@@ -179,7 +179,7 @@ voice.close();
 | `instructions`     | `string`                        | `undefined`                                    | System prompt sent with the initial `session.update`.                                                                                                                           |
 | `session`          | `Partial<InworldSessionConfig>` | `undefined`                                    | Typed first-class session knobs (see below). Deep-merged into every `session.update`.                                                                                           |
 | `debug`            | `boolean`                       | `false`                                        | Log raw server events.                                                                                                                                                          |
-| `providerData`     | `Record<string, unknown>`       | `undefined`                                    | Untyped escape hatch for fields Inworld adds before typed support lands. Also deep-merged.                                                                                      |
+| `providerData`     | `InworldProviderData`           | `undefined`                                    | Inworld extension config sent under `session.providerData`; composes with `session.providerData` (constructor option wins on collision).                                        |
 | `connectTimeoutMs` | `number`                        | `15000`                                        | Max time `connect()` will wait for both the WebSocket handshake and the initial `session.updated` round-trip. A pre-open error/close or timeout becomes a rejected `connect()`. |
 
 #### `session` (typed knobs)
@@ -204,15 +204,27 @@ new InworldRealtimeVoice({
 });
 ```
 
-#### `providerData` (untyped escape hatch)
+#### `providerData` (Inworld extensions)
 
-Use `providerData` for fields not yet covered by the typed `session` interface — Inworld can roll out new realtime knobs faster than this package picks them up. Anything you put here is deep-merged into every `session.update`, and overrides `session` on key collisions.
+`providerData` is a typed object for Inworld-specific realtime extensions. It's sent under `session.providerData` on every `session.update` and composes with any `session.providerData` you set via the `session` field — the constructor option wins on key collisions.
+
+It has five branches plus two session-level fields:
+
+- `stt`: STT tuning (`prompt`, `voice_profile`, `language_hints`, VAD/end-of-turn thresholds).
+- `tts`: TTS segmentation and delivery (`segmenter_strategy`, `steering_handling`, `delivery_mode`, `conversational`, `user_turn_mode`, `language`).
+- `memory`: automatic rolling memory (`enabled`, `turn_interval`, `max_facts`, …). Inworld echoes its state back via the `memory` event.
+- `backchannel`: short acknowledgements ("uh-huh") while the user speaks. Audio arrives on the `backchannel` event.
+- `responsiveness`: early "filler" audio while the main response generates. Filler audio reuses the normal `speaker`/`speaking` path — there are no distinct events.
+- `user_id` and `metadata`: session-level identifiers passed through to Inworld.
 
 ```typescript
 new InworldRealtimeVoice({
   providerData: {
-    // Hypothetical forward-compat fields:
-    some_new_realtime_feature: true,
+    stt: { voice_profile: true, language_hints: ['en-US'] },
+    tts: { delivery_mode: 'CREATIVE', segmenter_strategy: 'balanced' },
+    memory: { enabled: true, turn_interval: 4 },
+    backchannel: { enabled: true, max_per_turn: 1 },
+    user_id: 'user-123',
   },
 });
 ```
@@ -221,27 +233,50 @@ new InworldRealtimeVoice({
 
 `on()` and `off()` are typed against `InworldVoiceEventMap` — known event names give you a typed callback payload, unknown event names fall back to `unknown`.
 
-| Event                     | Payload                                                                                                                                   |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `speaking`                | `{ audio: Buffer; response_id: string }`                                                                                                  |
-| `speaking.done`           | `{ response_id: string }`                                                                                                                 |
-| `speaker`                 | `PassThrough` stream of PCM audio                                                                                                         |
-| `writing`                 | `{ text: string; response_id: string; role: 'assistant' \| 'user' }`. Deduplicated across audio-transcript + text deltas in one response. |
-| `speech-started`          | Raw server `input_audio_buffer.speech_started` payload (VAD edge).                                                                        |
-| `speech-stopped`          | Raw server `input_audio_buffer.speech_stopped` payload (VAD edge).                                                                        |
-| `interrupted`             | `{ response_id: string }`. Synthesized once per in-flight response when the user starts speaking.                                         |
-| `response.created`        | Full server event.                                                                                                                        |
-| `response.done`           | Full server event.                                                                                                                        |
-| `conversation.item.added` | Full server event.                                                                                                                        |
-| `conversation.item.done`  | Full server event.                                                                                                                        |
-| `function_call.arguments` | `{ call_id, name, arguments }` JSON.                                                                                                      |
-| `tool-call-start`         | `{ toolCallId, toolName, args, … }`.                                                                                                      |
-| `tool-call-result`        | `{ toolCallId, …, result }`.                                                                                                              |
-| `error`                   | `Error` (or a server error event).                                                                                                        |
+| Event                     | Payload                                                                                                                                                                                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `speaking`                | `{ audio: Buffer; response_id: string }`                                                                                                                                                                                                            |
+| `speaking.done`           | `{ response_id: string }`                                                                                                                                                                                                                           |
+| `speaker`                 | `PassThrough` stream of PCM audio                                                                                                                                                                                                                   |
+| `writing`                 | `{ text: string; response_id: string; role: 'assistant' \| 'user'; voiceProfile? }`. Deduplicated across audio-transcript + text deltas in one response. `voiceProfile` is present on user events when `providerData.stt.voice_profile` is enabled. |
+| `speech-started`          | Raw server `input_audio_buffer.speech_started` payload (VAD edge).                                                                                                                                                                                  |
+| `speech-stopped`          | Raw server `input_audio_buffer.speech_stopped` payload (VAD edge).                                                                                                                                                                                  |
+| `interrupted`             | `{ response_id: string }`. Synthesized once per in-flight response when the user starts speaking.                                                                                                                                                   |
+| `memory`                  | `InworldMemoryState` — Inworld's rolling summary/facts state (deduped by version). Requires `providerData.memory.enabled`.                                                                                                                          |
+| `backchannel`             | `PassThrough` stream of back-channel PCM audio. Requires `providerData.backchannel.enabled`.                                                                                                                                                        |
+| `backchannel.done`        | `{ backchannel_id: string; phrase? }`. Fires when a back-channel finishes.                                                                                                                                                                          |
+| `backchannel.skipped`     | `{ reason: string }`. Fires when the decider skips a back-channel before any audio.                                                                                                                                                                 |
+| `response.created`        | Full server event.                                                                                                                                                                                                                                  |
+| `response.done`           | Full server event.                                                                                                                                                                                                                                  |
+| `conversation.item.added` | Full server event.                                                                                                                                                                                                                                  |
+| `conversation.item.done`  | Full server event.                                                                                                                                                                                                                                  |
+| `function_call.arguments` | `{ call_id, name, arguments }` JSON.                                                                                                                                                                                                                |
+| `tool-call-start`         | `{ toolCallId, toolName, args, … }`.                                                                                                                                                                                                                |
+| `tool-call-result`        | `{ toolCallId, …, result }`.                                                                                                                                                                                                                        |
+| `error`                   | `Error` (or a server error event).                                                                                                                                                                                                                  |
 
 #### Barge-in
 
 `speech-started` and `speech-stopped` mirror Inworld's raw VAD edges. `interrupted` is a synthetic, client-side signal: whenever `speech-started` fires while one or more responses are in flight, `interrupted` is emitted once per active `response_id`. Listen to `interrupted` to stop audio playback without having to track response state yourself.
+
+**Back-channels are exempt from barge-in — by design.** Back-channel audio (`"uh-huh"`, `"I see"`) is meant to play _while the user is still speaking_, so it must NOT be cut off when they do. The two audio kinds are kept on separate channels so this falls out naturally:
+
+- Main response audio arrives on the **`speaker`** event; each stream's `.id` is a `response_id`. `interrupted` only ever carries `response_id`s, so stopping the `speaker` stream whose id matches `interrupted.response_id` stops main content instantly on barge-in.
+- Back-channel audio arrives on the **`backchannel`** event; each stream's `.id` is a `backchannel_id`. These ids never appear in `interrupted`, and the SDK never sends `response.cancel` for them — so a client that keys players by stream id and only kills on `interrupted` will leave back-channels playing automatically.
+
+The one footgun: don't blanket-kill all players on barge-in. Keep back-channel players in a separate collection (or just key by stream `.id` and match only `interrupted.response_id`). Each back-channel stream ends itself on `backchannel.done`, so its player exits naturally.
+
+```typescript
+const players = new Map(); // main response audio — stopped on barge-in
+const bcPlayers = new Map(); // back-channels — never stopped on barge-in
+
+voice.on('speaker', stream => startPlayer(players, stream.id, stream));
+voice.on('interrupted', ({ response_id }) => players.get(response_id)?.stop()); // main only
+
+voice.on('backchannel', stream => startPlayer(bcPlayers, stream.id, stream)); // overlaps user speech
+```
+
+Enable back-channels with `providerData: { backchannel: { enabled: true } }` (gated by server prerequisites — contact your Inworld account team).
 
 #### Awaitable `speak()`
 
@@ -249,13 +284,13 @@ new InworldRealtimeVoice({
 
 #### Default `turn_detection`
 
-`audio.input.turn_detection` defaults to `{ type: 'semantic_vad', eagerness: 'medium', create_response: true, interrupt_response: true }`. To override, set `session.audio.input.turn_detection` (or `providerData.audio.input.turn_detection`) to your own object. To disable turn detection entirely, set it to `null`.
+`audio.input.turn_detection` defaults to `{ type: 'semantic_vad', eagerness: 'medium', create_response: true, interrupt_response: true }`. To override, set `session.audio.input.turn_detection` to your own object. To disable turn detection entirely, set it to `null`.
 
 `eagerness` controls how quickly semantic VAD ends a user turn — `low` waits for clearer pauses (more interruption-resistant), `high` ends turns sooner (snappier, more prone to cutting users off). Default `medium` balances both.
 
 #### Default `transcription`
 
-`audio.input.transcription` defaults to `{ model: 'inworld/inworld-stt-1' }`, so user-side `writing` events (with `role: 'user'`) fire out of the box. To override, set `session.audio.input.transcription` (or `providerData.audio.input.transcription`) to your own object. To disable user-side transcription, set it to `null`.
+`audio.input.transcription` defaults to `{ model: 'inworld/inworld-stt-1' }`, so user-side `writing` events (with `role: 'user'`) fire out of the box. To override, set `session.audio.input.transcription` to your own object. To disable user-side transcription, set it to `null`.
 
 ### Full CLI example
 

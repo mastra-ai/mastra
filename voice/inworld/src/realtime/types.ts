@@ -111,6 +111,157 @@ export interface InworldAudioConfig {
   output?: InworldAudioOutput;
 }
 
+/**
+ * STT (speech-to-text) tuning sent under `session.providerData.stt`. These are
+ * Inworld-specific knobs layered on top of the standard
+ * `audio.input.transcription` config.
+ */
+export interface InworldSttProviderData {
+  prompt?: string;
+  voice_profile?: boolean;
+  language_hints?: string[];
+  end_of_turn_confidence_threshold?: number;
+  vad_threshold?: number;
+  min_end_of_turn_silence?: number;
+  max_turn_silence?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * TTS (text-to-speech) tuning sent under `session.providerData.tts`. Controls
+ * segmentation, steering, and delivery of synthesized speech.
+ */
+export interface InworldTtsProviderData {
+  segmenter_strategy?:
+    | 'auto'
+    | 'balanced'
+    | 'sentence'
+    | 'full_turn'
+    | 'fast_start'
+    | 'per_segment_context'
+    | (string & {});
+  steering_handling?: 'repeat_each_chunk' | 'emit_once' | (string & {});
+  language?: string;
+  delivery_mode?: 'STABLE' | 'BALANCED' | 'CREATIVE' | (string & {});
+  conversational?: boolean;
+  user_turn_mode?: 'both' | 'audio_only' | 'text_only' | 'none' | (string & {});
+  [key: string]: unknown;
+}
+
+/**
+ * Automatic memory config sent under `session.providerData.memory`. Inworld
+ * maintains a rolling summary/facts state and surfaces it back via the
+ * `memory` event.
+ */
+export interface InworldMemoryProviderData {
+  enabled?: boolean;
+  turn_interval?: number;
+  max_memory_length?: number;
+  max_transcript_items?: number;
+  max_facts?: number;
+  trim_after_summarize?: boolean;
+  state?: InworldMemoryState;
+  [key: string]: unknown;
+}
+
+/**
+ * Back-channel config sent under `session.providerData.backchannel`. Controls
+ * when and how the model emits short acknowledgements ("uh-huh", "right")
+ * while the user is speaking.
+ */
+export interface InworldBackchannelProviderData {
+  enabled?: boolean;
+  small_model?: string;
+  eval_interval_ms?: number;
+  min_speech_ms?: number;
+  min_gap_ms?: number;
+  max_per_turn?: number;
+  hard_deadline_ms?: number;
+  history_tail_items?: number;
+  temperature?: number;
+  max_tokens?: number;
+  volume_gain?: number;
+  require_pause?: boolean;
+  allowed_phrases?: string[];
+  prompt_template?: string;
+  decider_kind?: 'llm' | 'rule';
+  rule_fire_probability?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Responsiveness config sent under `session.providerData.responsiveness`.
+ * Drives early "filler" audio while the main response is still generating.
+ * Filler audio reuses the normal `response.output_audio.delta` path — there
+ * are no distinct inbound events.
+ */
+export interface InworldResponsivenessProviderData {
+  enabled?: boolean;
+  small_model?: string;
+  initial_wait_timeout_ms?: number;
+  hard_deadline_ms?: number;
+  history_tail_items?: number;
+  temperature?: number;
+  max_tokens?: number;
+  min_filler_gap_ms?: number;
+  max_initial_per_turn?: number;
+  max_buffer_deltas?: number;
+  enable_filler_on_first_assistant_reply?: boolean;
+  prompt_template?: string;
+  pause_text?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Typed Inworld extension object sent under `session.providerData` in every
+ * `session.update`. Groups the provider-specific knobs (stt/tts/memory/
+ * backchannel/responsiveness) plus session-level `user_id`/`metadata`.
+ */
+export interface InworldProviderData {
+  stt?: InworldSttProviderData;
+  tts?: InworldTtsProviderData;
+  memory?: InworldMemoryProviderData;
+  backchannel?: InworldBackchannelProviderData;
+  responsiveness?: InworldResponsivenessProviderData;
+  user_id?: string;
+  metadata?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+/** A single classified label from Inworld's voice-profile analysis. */
+export interface InworldVoiceProfileLabel {
+  label: string;
+  confidence: number;
+}
+
+/**
+ * Voice profile surfaced on user `writing` events when `stt.voice_profile` is
+ * enabled. Each dimension is a ranked list of classified labels.
+ */
+export interface InworldVoiceProfile {
+  age?: InworldVoiceProfileLabel[];
+  gender?: InworldVoiceProfileLabel[];
+  emotion?: InworldVoiceProfileLabel[];
+  vocal_style?: InworldVoiceProfileLabel[];
+  accent?: InworldVoiceProfileLabel[];
+  [key: string]: InworldVoiceProfileLabel[] | undefined;
+}
+
+/**
+ * Rolling memory state Inworld maintains across the conversation. Surfaced via
+ * the `memory` event and echoed back on `session.providerData.memory.state`.
+ */
+export interface InworldMemoryState {
+  version?: number;
+  facts?: string[];
+  summary?: string;
+  context_text?: string;
+  turns_since_gen?: number;
+  total_turns?: number;
+  items_trimmed?: number;
+  [key: string]: unknown;
+}
+
 export interface InworldSessionConfig {
   model?: string;
   instructions?: string;
@@ -121,6 +272,8 @@ export interface InworldSessionConfig {
   temperature?: number;
   max_output_tokens?: number | 'inf';
   truncation?: 'auto' | 'disabled' | { type: 'retention_ratio'; retention_ratio: number };
+  /** Typed Inworld extension object, sent verbatim under `session.providerData`. */
+  providerData?: InworldProviderData;
   [key: string]: unknown;
 }
 
@@ -170,8 +323,14 @@ export interface InworldVoiceEventMap {
   speaker: NodeJS.ReadableStream;
   speaking: { audio: Buffer; response_id: string };
   'speaking.done': { response_id: string };
-  writing: { text: string; response_id: string; role: 'assistant' | 'user' };
+  writing: { text: string; response_id: string; role: 'assistant' | 'user'; voiceProfile?: InworldVoiceProfile };
   interrupted: { response_id: string };
+  /** Rolling summary/facts state Inworld maintains, deduped by version. */
+  memory: InworldMemoryState;
+  /** PassThrough stream of back-channel PCM audio. Mirrors `speaker`. */
+  backchannel: NodeJS.ReadableStream;
+  'backchannel.done': { backchannel_id: string; phrase?: string };
+  'backchannel.skipped': { reason: string };
   'speech-started': Record<string, unknown>;
   'speech-stopped': Record<string, unknown>;
   'function_call.arguments': { call_id: string; name: string; arguments: string };

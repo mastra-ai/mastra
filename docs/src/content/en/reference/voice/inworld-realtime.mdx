@@ -10,7 +10,7 @@ packages:
 
 The `InworldRealtimeVoice` class provides real-time, full-duplex voice interaction using [Inworld AI's Realtime API](https://docs.inworld.ai/realtime/quickstart-websocket) over WebSockets. It supports speech-to-speech, tool calling, and Inworld-specific session knobs such as semantic voice activity detection, MCP tool routing, and playback speed.
 
-Inworld's wire protocol is the OpenAI Realtime GA spec, so client and server event names match `@mastra/voice-openai-realtime`. The provider-level differences are the endpoint (which uses a client-generated session key in the URL), the `Authorization: Basic <key>` header, the typed `session` constructor field for Inworld-specific knobs, and an untyped `providerData` escape hatch for fields not yet covered by the typed interface.
+Inworld's wire protocol is the OpenAI Realtime GA spec, so client and server event names match `@mastra/voice-openai-realtime`. The provider-level differences are the endpoint (which uses a client-generated session key in the URL), the `Authorization: Basic <key>` header, the typed `session` constructor field for Inworld-specific knobs, and a typed `providerData` object for Inworld extensions (STT, TTS, memory, back-channel, responsiveness) sent under `session.providerData`.
 
 For batch text-to-speech and speech-to-text, see [`@mastra/voice-inworld`](/reference/voice/inworld).
 
@@ -128,9 +128,9 @@ voice.close()
   },
   {
     name: 'providerData',
-    type: 'Record<string, unknown>',
+    type: 'InworldProviderData',
     description:
-      'Untyped escape hatch for realtime fields not yet covered by the typed `session` interface. Deep-merged into every session.update and overrides `session` on key collisions. Use this for forward-compatibility with new Inworld features.',
+      'Typed Inworld extension config (stt, tts, memory, backchannel, responsiveness, plus user_id and metadata). Sent under session.providerData on every session.update. Composes with any session.providerData set via the `session` field; the constructor option wins on key collisions.',
     isOptional: true,
   },
   {
@@ -228,11 +228,30 @@ Use the typed `session` field for documented Inworld realtime options. Fields co
 ]}
 />
 
-### `providerData` (untyped escape hatch)
+### `providerData` (Inworld extensions)
 
-`providerData` is intentionally untyped. Inworld can roll out new realtime knobs faster than this package picks them up, and `providerData` lets you forward any field straight through to the server. Its contents are deep-merged into every `session.update`, and override the typed `session` field on key collisions.
+`providerData` is a typed object for Inworld-specific realtime extensions. It is sent under `session.providerData` on every `session.update`, and composes with any `session.providerData` you set via the `session` field — the constructor `providerData` wins on key collisions.
 
-Prefer the typed `session` field for documented options. Reach for `providerData` only when sending fields the typed interface does not yet cover.
+It has five branches plus two session-level fields:
+
+- `stt`: STT tuning, such as `prompt`, `voice_profile`, `language_hints`, and VAD or end-of-turn thresholds.
+- `tts`: TTS segmentation and delivery, such as `segmenter_strategy`, `steering_handling`, `delivery_mode`, `conversational`, and `user_turn_mode`.
+- `memory`: automatic rolling memory, such as `enabled`, `turn_interval`, and `max_facts`. Inworld echoes its state back through the `memory` event.
+- `backchannel`: short acknowledgements ("uh-huh") while the user speaks. Audio arrives on the `backchannel` event.
+- `responsiveness`: early filler audio while the main response generates. Filler audio reuses the normal `speaker` and `speaking` events, so there are no distinct events.
+- `user_id` and `metadata`: session-level identifiers passed through to Inworld.
+
+```typescript
+const voice = new InworldRealtimeVoice({
+  providerData: {
+    stt: { voice_profile: true, language_hints: ['en-US'] },
+    tts: { delivery_mode: 'CREATIVE', segmenter_strategy: 'balanced' },
+    memory: { enabled: true, turn_interval: 4 },
+    backchannel: { enabled: true, max_per_turn: 1 },
+    user_id: 'user-123',
+  },
+})
+```
 
 ## Methods
 
@@ -330,7 +349,7 @@ Returns: `Promise<void>`
 
 ### `updateConfig()`
 
-Sends a `session.update` to the server. Any `providerData` configured on the constructor is shallow-merged into the payload.
+Sends a `session.update` to the server. The typed `session` field is deep-merged into the payload, and any constructor `providerData` is nested under `session.providerData`.
 
 <PropertiesTable
   content={[
@@ -438,7 +457,7 @@ The `InworldRealtimeVoice` class emits the following events:
     name: 'writing',
     type: 'event',
     description:
-      'Emitted as transcribed text becomes available. Callback receives { text: string, response_id: string, role: "assistant" | "user" }. Deduplicated across audio-transcript and text deltas in the same response so a single response only emits one stream.',
+      'Emitted as transcribed text becomes available. Callback receives { text: string, response_id: string, role: "assistant" | "user", voiceProfile? }. Deduplicated across audio-transcript and text deltas in the same response so a single response only emits one stream. On user events, voiceProfile is present when providerData.stt.voice_profile is enabled.',
   },
   {
     name: 'speech-started',
@@ -454,7 +473,30 @@ The `InworldRealtimeVoice` class emits the following events:
     name: 'interrupted',
     type: 'event',
     description:
-      'Synthetic client-side signal: emitted once per in-flight `response_id` when the user starts speaking. Use this to stop audio playback on barge-in. Callback receives `{ response_id: string }`.',
+      'Synthetic client-side signal: emitted once per in-flight `response_id` when the user starts speaking. Use this to stop main response playback on barge-in. Callback receives `{ response_id: string }`. Only carries main-response ids — never back-channel ids — so stopping the matching `speaker` stream leaves `backchannel` streams playing (back-channels are meant to overlap user speech and are never cancelled by barge-in).',
+  },
+  {
+    name: 'memory',
+    type: 'event',
+    description:
+      "Emitted with Inworld's rolling summary and facts state, deduplicated by version. Requires providerData.memory.enabled. Callback receives InworldMemoryState.",
+  },
+  {
+    name: 'backchannel',
+    type: 'event',
+    description:
+      "Emitted with a PassThrough stream of back-channel PCM audio (short acknowledgements while the user speaks). Each stream's `.id` is a `backchannel_id` that never appears in `interrupted`, so play these on a separate track that barge-in does not stop. Requires providerData.backchannel.enabled.",
+  },
+  {
+    name: 'backchannel.done',
+    type: 'event',
+    description: 'Emitted when a back-channel finishes. Callback receives { backchannel_id: string, phrase? }.',
+  },
+  {
+    name: 'backchannel.skipped',
+    type: 'event',
+    description:
+      'Emitted when the decider skips a back-channel before any audio is produced. Callback receives { reason: string }.',
   },
   {
     name: 'response.created',
@@ -524,6 +566,6 @@ Any voice ID from [Inworld's voice catalog](https://docs.inworld.ai/quickstart-t
 - Audio output defaults to PCM16 at 24 kHz. `audio/pcmu` and `audio/pcma` at 8 kHz are also supported via `session.audio.output.format`.
 - Use `connect()` before any send, speak, or listen call. Events sent before the WebSocket is open are queued and flushed once the server acknowledges `session.updated`.
 - The voice instance must be closed with `close()` or `disconnect()` to release the WebSocket.
-- `audio.input.turn_detection` defaults to semantic VAD when neither `session` nor `providerData` supplies it. Override with your own object, or pass `null` to disable turn detection entirely.
+- `audio.input.turn_detection` defaults to semantic VAD when `session` does not supply it. Override with your own object, or pass `null` to disable turn detection entirely.
 - `audio.input.transcription` defaults to `{ model: 'inworld/inworld-stt-1' }`, so user-side `writing` events fire out of the box. Override with your own object, or pass `null` to disable user-side transcription.
 - `on()` and `off()` are typed against `InworldVoiceEventMap` — known event names yield a typed callback payload, unknown names fall back to `unknown`.

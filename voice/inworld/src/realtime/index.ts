@@ -5,10 +5,13 @@ import { MastraVoice } from '@internal/voice';
 import { WebSocket } from 'ws';
 import type {
   InworldInputTranscription,
+  InworldMemoryState,
+  InworldProviderData,
   InworldResponseConfig,
   InworldSessionConfig,
   InworldTurnDetection,
   InworldVoiceEventMap,
+  InworldVoiceProfile,
 } from './types';
 import { deepMerge, isReadableStream, transformTools } from './utils';
 
@@ -95,11 +98,12 @@ export interface InworldRealtimeVoiceOptions {
   session?: Partial<InworldSessionConfig>;
   debug?: boolean;
   /**
-   * Untyped escape hatch for fields that don't yet have first-class support.
-   * Deep-merged into the `session` object on every `session.update`.
-   * Prefer `session` for documented fields.
+   * Typed Inworld extension object (stt/tts/memory/backchannel/responsiveness
+   * plus session-level `user_id`/`metadata`). Sent under `session.providerData`
+   * in every `session.update`. Composes with `session.providerData` (deep-merged);
+   * this constructor option wins on key collisions.
    */
-  providerData?: Record<string, unknown>;
+  providerData?: InworldProviderData;
   /**
    * Max time `connect()` will wait for the WebSocket to open AND for the
    * initial `session.updated` handshake to land. A pre-open `error` or `close`
@@ -115,7 +119,8 @@ export interface InworldRealtimeVoiceOptions {
  * names on both sides (`conversation.item.added`, `conversation.item.done`,
  * `response.output_audio.delta`, etc.). Provider-level differences are the
  * endpoint, Basic auth, the URL session-key handshake, and Inworld-specific
- * session knobs surfaced through typed `session` + escape-hatch `providerData`.
+ * session knobs surfaced through typed `session` + typed `providerData`
+ * extensions (sent under `session.providerData`).
  *
  * Auth: Inworld API keys are already Basic-encoded — they are passed verbatim
  * in the `Authorization: Basic ...` header (do NOT re-encode).
@@ -150,7 +155,7 @@ export class InworldRealtimeVoice extends MastraVoice {
   private queue: unknown[] = [];
   private requestContext?: RequestContext;
   private session?: Partial<InworldSessionConfig>;
-  private providerData?: Record<string, unknown>;
+  private providerData?: InworldProviderData;
   private sessionId: string;
   /** response_ids currently between `response.created` and `response.done`. */
   private activeResponseIds: Set<string> = new Set();
@@ -163,6 +168,14 @@ export class InworldRealtimeVoice extends MastraVoice {
   private writingSource: Map<string, 'audio_transcript' | 'text'> = new Map();
   /** Reject closures for `speak()` calls awaiting a response lifecycle. Drained on `close()`/`disconnect()`. */
   private pendingLifecycleRejecters: Set<(err: Error) => void> = new Set();
+  /** Last emitted memory state version, used to dedupe rolling `memory` events. */
+  private lastMemoryVersion?: number;
+  /**
+   * Ends + clears the per-connection stream maps owned by `setupEventListeners`
+   * (the maps are closure-local). Called from `close()`/`disconnect()` so
+   * in-flight back-channel streams don't leak when the socket goes away.
+   */
+  private endActiveStreams?: () => void;
 
   constructor(private options: InworldRealtimeVoiceOptions = {}) {
     super();
@@ -195,8 +208,10 @@ export class InworldRealtimeVoice extends MastraVoice {
     // double-fire on `client.emit`. Consumer-facing listeners on `this.events`
     // persist across reconnects.
     this.client.removeAllListeners();
+    this.endActiveStreams?.();
     this.activeResponseIds.clear();
     this.writingSource.clear();
+    this.lastMemoryVersion = undefined;
   }
 
   addInstructions(instructions?: string) {
@@ -306,15 +321,21 @@ export class InworldRealtimeVoice extends MastraVoice {
   }
 
   /**
-   * Apply a new session config. The typed `session` constructor field and the
-   * untyped `providerData` escape hatch are deep-merged into the per-call
-   * payload, so nested fields (e.g. `audio.output.voice` + `audio.output.speed`)
-   * compose rather than overwrite each other.
+   * Apply a new session config. The typed `session` constructor field is
+   * deep-merged into the per-call payload, so nested fields (e.g.
+   * `audio.output.voice` + `audio.output.speed`) compose rather than overwrite
+   * each other. The constructor `providerData` is nested under
+   * `session.providerData` (matching Inworld's wire field) and deep-merged on
+   * top of any `session.providerData` set via the `session` field — the
+   * constructor option wins on key collisions.
    */
   updateConfig(sessionConfig: Partial<InworldSessionConfig> | Record<string, unknown>): void {
     let merged: Record<string, unknown> = { ...sessionConfig } as Record<string, unknown>;
     if (this.session) merged = deepMerge(merged, this.session as Record<string, unknown>);
-    if (this.providerData) merged = deepMerge(merged, this.providerData);
+    if (this.providerData) {
+      const existing = (merged.providerData as Record<string, unknown> | undefined) ?? {};
+      merged.providerData = deepMerge(existing, this.providerData as Record<string, unknown>);
+    }
     this.sendEvent('session.update', { session: merged });
   }
 
@@ -509,12 +530,12 @@ export class InworldRealtimeVoice extends MastraVoice {
       ready = this.waitForSessionCreated();
       await opened;
 
-      // Compose the connect-time defaults. The typed `session` field and
-      // `providerData` escape hatch are deep-merged on top in updateConfig().
-      // `turn_detection` and `transcription` are each opted out by setting them
-      // to `null` in either override; we also skip a default whenever the
-      // override supplies that field explicitly, so the user's shape doesn't
-      // inherit our defaults' nested fields.
+      // Compose the connect-time defaults. The typed `session` field is
+      // deep-merged on top in updateConfig() (and `providerData` is nested under
+      // `session.providerData` there). `turn_detection` and `transcription` are
+      // each opted out by setting them to `null` in `session`; we also skip a
+      // default whenever `session` supplies that field explicitly, so the user's
+      // shape doesn't inherit our defaults' nested fields.
       const userTd = this.userTurnDetection();
       const userTranscription = this.userTranscription();
       const audio: NonNullable<InworldSessionConfig['audio']> = {
@@ -558,8 +579,10 @@ export class InworldRealtimeVoice extends MastraVoice {
     this.ws?.close();
     this.rejectPendingLifecycles();
     this.client.removeAllListeners();
+    this.endActiveStreams?.();
     this.activeResponseIds.clear();
     this.writingSource.clear();
+    this.lastMemoryVersion = undefined;
   }
 
   /**
@@ -636,6 +659,7 @@ export class InworldRealtimeVoice extends MastraVoice {
 
   private setupEventListeners(): void {
     const speakerStreams = new Map<string, StreamWithId>();
+    const backchannelStreams = new Map<string, StreamWithId>();
     const functionCallArgs = new Map<string, string>();
 
     if (!this.ws) {
@@ -648,6 +672,15 @@ export class InworldRealtimeVoice extends MastraVoice {
     this.client.removeAllListeners();
     this.activeResponseIds.clear();
     this.writingSource.clear();
+    this.lastMemoryVersion = undefined;
+
+    // Lets close()/disconnect() drain the closure-local stream maps below.
+    this.endActiveStreams = () => {
+      for (const stream of speakerStreams.values()) stream.end();
+      speakerStreams.clear();
+      for (const stream of backchannelStreams.values()) stream.end();
+      backchannelStreams.clear();
+    };
 
     this.ws.on('message', message => {
       // Surface malformed inbound frames as `error` events. Without the try,
@@ -673,6 +706,17 @@ export class InworldRealtimeVoice extends MastraVoice {
 
     this.client.on('session.updated', ev => {
       this.emit('session.updated', ev);
+
+      // Inworld echoes its rolling memory state back on the session object.
+      // Dedupe by version so a `session.updated` for an unrelated config change
+      // doesn't re-emit an unchanged memory snapshot.
+      const memoryState: InworldMemoryState | undefined = ev.session?.providerData?.memory?.state;
+      if (memoryState) {
+        if (memoryState.version === undefined || memoryState.version !== this.lastMemoryVersion) {
+          this.lastMemoryVersion = memoryState.version;
+          this.emit('memory', memoryState);
+        }
+      }
 
       const queue = this.queue.splice(0, this.queue.length);
       for (const queued of queue) {
@@ -787,8 +831,12 @@ export class InworldRealtimeVoice extends MastraVoice {
     // so far). Streaming those naively would duplicate text, so we ignore deltas
     // and emit the final transcript once on `.completed`.
     this.client.on('conversation.item.input_audio_transcription.completed', ev => {
+      // Voice profile (age/gender/emotion/...) rides along on the completed
+      // transcript when `providerData.stt.voice_profile` is enabled. Attach it
+      // to the user `writing` emit; it's optional and may be undefined.
+      const voiceProfile: InworldVoiceProfile | undefined = ev.providerData?.voiceProfile;
       if (typeof ev.transcript === 'string' && ev.transcript.length > 0) {
-        this.emit('writing', { text: ev.transcript, response_id: ev.item_id, role: 'user' });
+        this.emit('writing', { text: ev.transcript, response_id: ev.item_id, role: 'user', voiceProfile });
       }
       this.emit('writing', { text: '\n', response_id: ev.item_id, role: 'user' });
     });
@@ -808,6 +856,31 @@ export class InworldRealtimeVoice extends MastraVoice {
         name: ev.name,
         arguments: args,
       });
+    });
+
+    // Back-channel audio. Short acknowledgements ("uh-huh", "right") that the
+    // model emits while the user is still talking. Mirrors the `speaker` stream
+    // pattern: a PassThrough per `backchannel_id`, written from base64 deltas.
+    this.client.on('response.backchannel.audio.delta', ev => {
+      const audio = Buffer.from(ev.delta, 'base64');
+      let stream = backchannelStreams.get(ev.backchannel_id);
+      if (!stream) {
+        stream = new PassThrough() as StreamWithId;
+        stream.id = ev.backchannel_id;
+        backchannelStreams.set(ev.backchannel_id, stream);
+        this.emit('backchannel', stream);
+      }
+      stream.write(audio);
+    });
+    this.client.on('response.backchannel.audio.done', ev => {
+      const stream = backchannelStreams.get(ev.backchannel_id);
+      stream?.end();
+      backchannelStreams.delete(ev.backchannel_id);
+      this.emit('backchannel.done', { backchannel_id: ev.backchannel_id, phrase: ev.phrase });
+    });
+    // The decider can skip a back-channel before any audio is produced.
+    this.client.on('response.backchannel.skipped', ev => {
+      this.emit('backchannel.skipped', { reason: ev.reason });
     });
 
     this.client.on('response.done', ev => {
@@ -830,34 +903,22 @@ export class InworldRealtimeVoice extends MastraVoice {
 
   /**
    * Returns the user-supplied `turn_detection` value (or `null` for explicit
-   * opt-out), or `undefined` when neither override sets it. Used to decide
-   * whether to apply `DEFAULT_TURN_DETECTION`.
+   * opt-out), or `undefined` when it isn't set. `turn_detection` is a standard
+   * `audio.input` field (not a providerData extension), so it's read only from
+   * `session`. Used to decide whether to apply `DEFAULT_TURN_DETECTION`.
    */
   private userTurnDetection(): InworldTurnDetection | null | undefined {
-    const fromSession = this.session?.audio?.input?.turn_detection;
-    if (fromSession !== undefined) return fromSession;
-    const providerAudio = (this.providerData?.audio as Record<string, unknown> | undefined) ?? undefined;
-    const providerInput = (providerAudio?.input as Record<string, unknown> | undefined) ?? undefined;
-    if (providerInput && 'turn_detection' in providerInput) {
-      return providerInput.turn_detection as InworldTurnDetection | null;
-    }
-    return undefined;
+    return this.session?.audio?.input?.turn_detection;
   }
 
   /**
    * Returns the user-supplied `transcription` value (or `null` for explicit
-   * opt-out), or `undefined` when neither override sets it. Used to decide
-   * whether to apply `DEFAULT_TRANSCRIPTION`.
+   * opt-out), or `undefined` when it isn't set. `transcription` is a standard
+   * `audio.input` field (not a providerData extension), so it's read only from
+   * `session`. Used to decide whether to apply `DEFAULT_TRANSCRIPTION`.
    */
   private userTranscription(): InworldInputTranscription | null | undefined {
-    const fromSession = this.session?.audio?.input?.transcription;
-    if (fromSession !== undefined) return fromSession;
-    const providerAudio = (this.providerData?.audio as Record<string, unknown> | undefined) ?? undefined;
-    const providerInput = (providerAudio?.input as Record<string, unknown> | undefined) ?? undefined;
-    if (providerInput && 'transcription' in providerInput) {
-      return providerInput.transcription as InworldInputTranscription | null;
-    }
-    return undefined;
+    return this.session?.audio?.input?.transcription;
   }
 
   private async handleFunctionCalls(ev: any) {
@@ -956,10 +1017,19 @@ export type {
   InworldAudioConfig,
   InworldAudioInput,
   InworldAudioOutput,
+  InworldBackchannelProviderData,
   InworldInputTranscription,
+  InworldMemoryProviderData,
+  InworldMemoryState,
+  InworldProviderData,
   InworldResponseConfig,
+  InworldResponsivenessProviderData,
   InworldSessionConfig,
+  InworldSttProviderData,
   InworldToolChoice,
+  InworldTtsProviderData,
   InworldTurnDetection,
   InworldVoiceEventMap,
+  InworldVoiceProfile,
+  InworldVoiceProfileLabel,
 } from './types';
