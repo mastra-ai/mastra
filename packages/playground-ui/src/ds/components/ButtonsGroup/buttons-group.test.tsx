@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { Button } from '../Button';
@@ -24,11 +24,16 @@ describe('ButtonsGroup', () => {
     );
 
     const cls = getGroup().className;
-    // Robust rule: a child rounds its right corner flat only when a *visible* sibling follows it.
-    expect(cls).toContain('[&>*:has(+_*:not([aria-hidden=true]))]:rounded-r-none');
-    // The brittle structural rule must be gone, otherwise a trailing hidden input
-    // (see the Select test below) would square off the last visible segment.
+    // Robust rule: a child rounds its right corner flat only when a *real* segment follows it
+    // anywhere (general sibling `~`), ignoring injected non-segments (aria-hidden inputs, Base UI
+    // focus guards, positioner anchors). Adjacent `+` would break when a framework injects a
+    // node between two segments (e.g. an open DropdownMenu's focus guard before its trigger).
+    expect(cls).toContain(
+      '[&>*:has(~_*:not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]))]:rounded-r-none',
+    );
+    // The brittle structural rules must be gone.
     expect(cls).not.toContain('[&>*:not(:last-child)]:rounded-r-none');
+    expect(cls).not.toContain('[&>*:has(+_*:not([aria-hidden=true]))]:rounded-r-none');
   });
 
   it('a Select trigger stays the last *visible* segment: its only trailing sibling is the aria-hidden form input', () => {
@@ -65,14 +70,18 @@ describe('ButtonsGroup', () => {
     const cls = getGroup().className;
     // Overlap by 1px (no reflow) and keep all four border slots; the overlapped left
     // border is transparent at rest (single-opacity seam, no doubled translucent line),
-    // and the hover/focus z-10 lift makes the active segment paint its complete border on
-    // top — so no "missing side" and the seam follows the hover colour.
+    // and the hover / keyboard-focus z-10 lift makes the active segment paint its complete
+    // border on top — so no "missing side" and the seam follows the active colour.
     expect(cls).toContain(':-ml-px');
     expect(cls).not.toContain(':border-l-0');
-    // Transparent-at-rest seam: excluded on :hover/:focus-within so the active colour shows.
-    expect(cls).toContain(':not(:hover):not(:focus-within)]:border-l-transparent');
-    expect(cls).toContain('[&>*:hover]:relative');
+    // Transparent-at-rest seam: revealed on :hover and keyboard focus (:focus-visible /
+    // :has(:focus-visible)), NOT on :focus-within — a mouse click leaves a plain :focus on a
+    // button, which must not keep its seam border highlighted. So `:focus-within` is gone.
+    expect(cls).toContain(':not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-l-transparent');
+    expect(cls).not.toContain(':focus-within');
     expect(cls).toContain('[&>*:hover]:z-10');
+    expect(cls).toContain('[&>*:focus-visible]:z-10');
+    expect(cls).toContain('[&>*:has(:focus-visible)]:z-10');
   });
 
   it('close spacing draws ONE seam for FILLED (opaque-bg) segments by keeping their own border, not a doubling inset shadow', () => {
@@ -120,7 +129,7 @@ describe('ButtonsGroup', () => {
     expect(document.querySelector('button')!.getAttribute('data-slot')).toBe('select-trigger');
   });
 
-  it('a DropdownMenu trigger composes as a real split-button segment (no DOM wrapper, stays the last child)', () => {
+  it('a DropdownMenu trigger composes as a real split-button segment, and the seam survives opening', () => {
     render(
       <ButtonsGroup spacing="close">
         <Button>Save</Button>
@@ -135,11 +144,26 @@ describe('ButtonsGroup', () => {
       </ButtonsGroup>,
     );
     const group = getGroup();
-    // DropdownMenu renders no DOM of its own and the (closed) menu content is portaled out,
-    // so the group has exactly the two button segments as direct children — the split button.
+    const trigger = group.querySelector('[aria-label="More save options"]')!;
+    // Closed: DropdownMenu renders no DOM of its own and the menu content is portaled out, so
+    // the group has exactly the two button segments — the trigger is the last one (pill corner).
     expect(group.querySelectorAll(':scope > button').length).toBe(2);
-    // The trigger stays the last segment, so the group keeps its pill corner on that side
-    // (the right-edge rounding keys off a visible *next* sibling, and there is none).
-    expect(group.querySelector('[aria-label="More save options"]')).toBe(group.lastElementChild);
+    expect(trigger).toBe(group.lastElementChild);
+
+    // Open the menu: Base UI injects visually-hidden focus guards / a positioner anchor as
+    // siblings of the trigger (incl. one BEFORE it). The seam must ignore them. This asserts the
+    // invariant the CSS relies on: every injected non-button child is a recognizable guard, and
+    // the trigger remains the last *real* segment (so the group keeps its right pill corner).
+    fireEvent.click(trigger);
+    const isGuard = (el: Element) =>
+      el.getAttribute('aria-hidden') === 'true' ||
+      el.hasAttribute('data-base-ui-focus-guard') ||
+      el.hasAttribute('aria-owns');
+    const injected = Array.from(group.children).filter(el => el.tagName !== 'BUTTON');
+    expect(injected.length).toBeGreaterThan(0); // Base UI did inject guards
+    injected.forEach(el => expect(isGuard(el)).toBe(true)); // ...and all are covered by the ignore-list
+    const realSegments = Array.from(group.children).filter(el => !isGuard(el));
+    expect(realSegments).toEqual([group.firstElementChild, trigger]);
+    expect(realSegments[realSegments.length - 1]).toBe(trigger);
   });
 });

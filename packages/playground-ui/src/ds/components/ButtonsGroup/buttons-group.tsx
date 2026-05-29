@@ -11,10 +11,18 @@ type Orientation = 'horizontal' | 'vertical';
 const ButtonsGroupOrientationContext = React.createContext<Orientation>('horizontal');
 
 const buttonsGroupVariants = cva(
-  // Lift the hovered/focused segment so its full border paints over the collapsed seam
-  // (else a neighbour clips a side / the seam ignores the hover colour). `:focus-within`
-  // also catches a nested focusable, e.g. the <input> inside an InputGroup.
-  cn('flex', '[&>*:hover]:relative [&>*:hover]:z-10', '[&>*:focus-within]:relative [&>*:focus-within]:z-10'),
+  // Lift the hovered/focused segment so its full border paints over the collapsed seam (else a
+  // neighbour clips a side / the seam ignores the active colour). Use `:focus-visible`, NOT
+  // `:focus-within`: a mouse click leaves a plain `:focus` on a button, which would otherwise
+  // keep its seam border highlighted until blur. `:has(:focus-visible)` covers a nested
+  // focusable (the <input> inside an InputGroup); text inputs match :focus-visible on click too,
+  // which is the wanted behaviour for a field.
+  cn(
+    'flex',
+    '[&>*:hover]:relative [&>*:hover]:z-10',
+    '[&>*:focus-visible]:relative [&>*:focus-visible]:z-10',
+    '[&>*:has(:focus-visible)]:relative [&>*:has(:focus-visible)]:z-10',
+  ),
   {
     variants: {
       orientation: {
@@ -30,19 +38,23 @@ const buttonsGroupVariants = cva(
       {
         orientation: 'horizontal',
         spacing: 'close',
-        // Flatten inner corners. Round the right edge off ":has a visible next sibling"
-        // (not `:not(:last-child)`) so Base UI's trailing `<input aria-hidden>` (Select,
-        // Combobox) doesn't square off the trigger. Hidden inputs/separators are skipped.
+        // Flatten inner corners. A segment rounds its right edge off having a *real* segment
+        // somewhere after it (general sibling `~`, not `:not(:last-child)` and not adjacent
+        // `+`). This survives non-segment children that frameworks inject between/around the
+        // real ones: Base UI's trailing `<input aria-hidden>` (Select), and the visually
+        // -hidden focus guards (`[data-base-ui-focus-guard]`) + positioner anchor (`[aria-owns]`)
+        // a Menu/Popover inserts while OPEN — without this a DropdownMenu split-button seam
+        // breaks the moment the menu opens. The same ignore-list is applied to every seam rule.
         className: cn(
-          '[&>*:has(+_*:not([aria-hidden=true]))]:rounded-r-none',
-          '[&>*:not(:first-child):not([aria-hidden=true])]:rounded-l-none',
+          '[&>*:has(~_*:not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]))]:rounded-r-none',
+          '[&>*:not(:first-child):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns])]:rounded-l-none',
           // One-line seam: `-ml-px` overlaps adjacent borders onto the same pixel. Filled
           // segments (opaque bg: default/primary buttons, the text chip) keep their own
           // border — the bg hides the neighbour's. Transparent/outline segments null their
-          // left border at rest (so the neighbour's shows without doubling) and reveal it
-          // on hover/focus, where the z-10 lift paints the complete border on top.
-          '[&>*:not([data-slot=buttons-group-separator]):not([aria-hidden=true]):not(:first-child)]:-ml-px',
-          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([aria-hidden=true]):not(:first-child):not(:hover):not(:focus-within)]:border-l-transparent',
+          // left border at rest (so the neighbour's shows without doubling) and reveal it on
+          // hover / keyboard-focus, where the z-10 lift paints the complete border on top.
+          '[&>*:not([data-slot=buttons-group-separator]):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child)]:-ml-px',
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-l-transparent',
           // `primary` is filled but borderless — give it (only) an inset-shadow divider.
           '[&>[data-variant=primary]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset_1px_0_0_0_var(--color-border1)]',
           // Animate only colour/bg so the seam + ring snap (no fade desynced from the z-10 drop).
@@ -64,7 +76,7 @@ const buttonsGroupVariants = cva(
           '[&>:first-child]:rounded-t-xl',
           '[&>:last-child]:rounded-b-xl',
           '[&>*:not([data-slot=buttons-group-separator]):not(:first-child)]:-mt-px',
-          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not(:first-child):not(:hover):not(:focus-within)]:border-t-transparent',
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-t-transparent',
           '[&>[data-variant=primary]:not(:first-child)]:shadow-[inset_0_1px_0_0_var(--color-border1)]',
           '[&>*:not([data-slot=buttons-group-separator])]:transition-[color,background-color]',
         ),
