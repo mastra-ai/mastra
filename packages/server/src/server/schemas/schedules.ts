@@ -83,7 +83,7 @@ export const scheduleTriggerOutcomeSchema = z.enum([
   'dropped-busy',
 ]);
 
-export const scheduleTriggerKindSchema = z.enum(['schedule-fire', 'queue-drain']);
+export const scheduleTriggerKindSchema = z.enum(['schedule-fire', 'queue-drain', 'manual']);
 
 export const scheduleTriggerResponseSchema = z.object({
   id: z.string().optional(),

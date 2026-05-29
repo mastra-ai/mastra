@@ -2824,7 +2824,7 @@ export type ScheduleTriggerOutcome =
   | 'dropped-superseded'
   | 'dropped-busy';
 
-export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain';
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
 export interface ScheduleTriggerResponse {
   id?: string;
@@ -2975,6 +2975,19 @@ export interface ListHeartbeatTriggersParams {
 
 export interface ListHeartbeatTriggersResponse {
   triggers: HeartbeatTrigger[];
+}
+
+/**
+ * Response for POST /agents/:agentId/heartbeats/:heartbeatId/run.
+ *
+ * The run runs asynchronously through the same HeartbeatWorker pipeline as
+ * scheduled fires. `claimId` is the trigger row's `runId` (used to look up
+ * the resulting trigger row).
+ */
+export interface RunHeartbeatResponse {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
 }
 
 export interface ExperimentReviewCounts {

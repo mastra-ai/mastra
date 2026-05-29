@@ -2,6 +2,7 @@ import type {
   Heartbeat,
   HeartbeatTrigger,
   ListHeartbeatTriggersResponse,
+  RunHeartbeatResponse,
   UpdateHeartbeatOptions,
 } from '@mastra/client-js';
 import { toast, useInView } from '@mastra/playground-ui';
@@ -137,6 +138,31 @@ export const useResumeHeartbeat = (agentId: string | undefined, heartbeatId: str
       void queryClient.invalidateQueries({ queryKey: ['heartbeat', agentId, heartbeatId] });
       void queryClient.invalidateQueries({ queryKey: ['heartbeats'] });
       toast.success('Heartbeat resumed');
+    },
+    onError: error => {
+      toast.error(error.message);
+    },
+  });
+};
+
+/**
+ * Manually fires a heartbeat once, out-of-band from its cron schedule.
+ * Runs through the same `HeartbeatWorker` pipeline as a scheduled fire and
+ * records a trigger row with `triggerKind: 'manual'`. Does not advance
+ * `nextFireAt`.
+ */
+export const useRunHeartbeat = (agentId: string | undefined, heartbeatId: string | undefined) => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<RunHeartbeatResponse, Error, void>({
+    mutationFn: () => {
+      if (!agentId || !heartbeatId) throw new Error('agentId and heartbeatId are required');
+      return client.getAgent(agentId).runHeartbeat(heartbeatId);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['heartbeat-triggers', agentId, heartbeatId] });
+      toast.success('Heartbeat fired');
     },
     onError: error => {
       toast.error(error.message);

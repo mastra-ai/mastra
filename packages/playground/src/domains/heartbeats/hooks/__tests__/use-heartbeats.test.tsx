@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { makeHeartbeat, makeHeartbeatList } from '../../__tests__/fixtures/heartbeats';
-import { useDeleteHeartbeat, useHeartbeats, useUpdateHeartbeat } from '../use-heartbeats';
+import { useDeleteHeartbeat, useHeartbeats, useRunHeartbeat, useUpdateHeartbeat } from '../use-heartbeats';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -161,6 +161,50 @@ describe('useDeleteHeartbeat', () => {
     );
 
     const { result } = renderHook(() => useDeleteHeartbeat('chef', 'hb_missing'), {
+      wrapper: makeWrapper(),
+    });
+
+    result.current.mutate();
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+describe('useRunHeartbeat', () => {
+  it('POSTs to the run route and returns the publish acknowledgement', async () => {
+    const fireAt = Date.now();
+    const calls = vi.fn<() => void>();
+    server.use(
+      http.post(`${BASE_URL}/api/agents/chef/heartbeats/hb_chef_thread-1/run`, () => {
+        calls();
+        return HttpResponse.json({
+          scheduleId: 'hb_chef_thread-1',
+          claimId: `manual_hb_chef_thread-1_${fireAt}`,
+          scheduledFireAt: fireAt,
+        });
+      }),
+    );
+
+    const { result } = renderHook(() => useRunHeartbeat('chef', 'hb_chef_thread-1'), {
+      wrapper: makeWrapper(),
+    });
+
+    result.current.mutate();
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(result.current.data?.scheduleId).toBe('hb_chef_thread-1');
+    expect(result.current.data?.scheduledFireAt).toBe(fireAt);
+  });
+
+  it('surfaces server errors as mutation errors', async () => {
+    server.use(
+      http.post(`${BASE_URL}/api/agents/chef/heartbeats/hb_missing/run`, () =>
+        HttpResponse.json({ error: 'Heartbeat not found' }, { status: 404 }),
+      ),
+    );
+
+    const { result } = renderHook(() => useRunHeartbeat('chef', 'hb_missing'), {
       wrapper: makeWrapper(),
     });
 

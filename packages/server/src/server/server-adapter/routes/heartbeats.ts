@@ -7,6 +7,7 @@ import {
   LIST_HEARTBEATS_ROUTE,
   PAUSE_HEARTBEAT_ROUTE,
   RESUME_HEARTBEAT_ROUTE,
+  RUN_HEARTBEAT_ROUTE,
   UPDATE_HEARTBEAT_ROUTE,
 } from '../../handlers/heartbeats';
 import type { ServerRoute } from '.';
@@ -20,5 +21,6 @@ export const HEARTBEATS_ROUTES: ServerRoute<any, any, any>[] = [
   DELETE_HEARTBEAT_ROUTE,
   PAUSE_HEARTBEAT_ROUTE,
   RESUME_HEARTBEAT_ROUTE,
+  RUN_HEARTBEAT_ROUTE,
   LIST_HEARTBEAT_TRIGGERS_ROUTE,
 ];

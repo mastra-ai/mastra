@@ -11,6 +11,7 @@ import {
   listHeartbeatsResponseSchema,
   listHeartbeatTriggersQuerySchema,
   listHeartbeatTriggersResponseSchema,
+  runHeartbeatResponseSchema,
   updateHeartbeatBodySchema,
 } from '../schemas/heartbeats';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -371,5 +372,40 @@ export const LIST_HEARTBEAT_TRIGGERS_ROUTE = createRoute({
     }
     const triggers = await schedulesStore.listTriggers(heartbeatId, { limit, fromActualFireAt, toActualFireAt });
     return { triggers };
+  },
+});
+
+export const RUN_HEARTBEAT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/heartbeats/:heartbeatId/run',
+  responseType: 'json' as const,
+  pathParamSchema: heartbeatPathParams,
+  responseSchema: runHeartbeatResponseSchema,
+  summary: 'Fire a heartbeat now',
+  description:
+    'Manually triggers a single heartbeat run out-of-band from the cron schedule. Goes through the same `HeartbeatWorker` pipeline as a scheduled fire (activeHours, ifActive/ifIdle, broadcast processor) and records a trigger row with `triggerKind: "manual"`. Does not advance `nextFireAt`.',
+  tags: ['Heartbeats'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, heartbeatId }) => {
+    const { schedule } = await loadOwnedHeartbeat(mastra, agentId, heartbeatId);
+    const target = schedule.target as HeartbeatTarget;
+    const now = Date.now();
+    const claimId = `manual_${schedule.id}_${now}`;
+    await mastra.pubsub.publish('heartbeats', {
+      type: 'heartbeat.fire',
+      runId: claimId,
+      data: {
+        scheduleId: schedule.id,
+        claimId,
+        scheduledFireAt: now,
+        target,
+        triggerKind: 'manual',
+      },
+    });
+    return {
+      scheduleId: schedule.id,
+      claimId,
+      scheduledFireAt: now,
+    };
   },
 });

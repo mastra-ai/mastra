@@ -97,6 +97,14 @@ export function HeartbeatTriggersList({
                     fired
                   </span>
                 )}
+                {t.triggerKind === 'manual' ? (
+                  <span
+                    className="text-ui-xs text-neutral4 uppercase tracking-wide"
+                    data-testid="heartbeat-trigger-manual-badge"
+                  >
+                    manual
+                  </span>
+                ) : null}
               </span>
             </DataList.Cell>
 

@@ -136,4 +136,11 @@ export const deleteHeartbeatResponseSchema = z.object({
   message: z.string(),
 });
 
+/** Response for POST /agents/:agentId/heartbeats/:heartbeatId/run. */
+export const runHeartbeatResponseSchema = z.object({
+  scheduleId: z.string(),
+  claimId: z.string(),
+  scheduledFireAt: z.number(),
+});
+
 export type HeartbeatResponse = z.infer<typeof heartbeatSchema>;

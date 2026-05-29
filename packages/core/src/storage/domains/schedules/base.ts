@@ -131,10 +131,11 @@ export type ScheduleTriggerOutcome =
   | 'dropped-busy';
 
 /**
- * Distinguishes a tick-loop schedule fire from a deferred drain event.
- * Drain rows reference the original fire via `parentTriggerId`.
+ * Distinguishes a tick-loop schedule fire from a deferred drain event or a
+ * manual ("fire now") invocation. Drain rows reference the original fire
+ * via `parentTriggerId`.
  */
-export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain';
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
 /** Audit record produced for each trigger attempt. */
 export type ScheduleTrigger = {

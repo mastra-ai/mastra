@@ -10,7 +10,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { ArrowLeftIcon, PauseIcon, PlayIcon, Trash2Icon } from 'lucide-react';
+import { ArrowLeftIcon, PauseIcon, PlayIcon, Trash2Icon, ZapIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { HeartbeatMetaCard } from '@/domains/heartbeats/components/heartbeat-meta-card';
@@ -22,6 +22,7 @@ import {
   useHeartbeats,
   usePauseHeartbeat,
   useResumeHeartbeat,
+  useRunHeartbeat,
 } from '@/domains/heartbeats/hooks/use-heartbeats';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -50,6 +51,7 @@ export default function HeartbeatPage() {
   const pause = usePauseHeartbeat(agentId, heartbeatId);
   const resume = useResumeHeartbeat(agentId, heartbeatId);
   const remove = useDeleteHeartbeat(agentId, heartbeatId);
+  const fireNow = useRunHeartbeat(agentId, heartbeatId);
   const toggleBusy = pause.isPending || resume.isPending;
 
   const handleConfirmDelete = () => {
@@ -97,6 +99,15 @@ export default function HeartbeatPage() {
             </Button>
             {heartbeat ? (
               <>
+                <Button
+                  variant="outline"
+                  onClick={() => fireNow.mutate()}
+                  disabled={fireNow.isPending}
+                  data-testid="heartbeat-fire-now-button"
+                >
+                  <ZapIcon />
+                  Fire now
+                </Button>
                 <Button
                   onClick={() => (heartbeat.status === 'active' ? pause.mutate() : resume.mutate())}
                   disabled={toggleBusy}

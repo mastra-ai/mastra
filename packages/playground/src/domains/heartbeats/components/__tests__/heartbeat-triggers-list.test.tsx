@@ -38,4 +38,19 @@ describe('HeartbeatTriggersList', () => {
     // We dropped the duplicate "Started" column — `actualFireAt` already conveys this.
     expect(text).not.toContain('Started');
   });
+
+  it('shows a manual badge on rows fired out-of-band', () => {
+    const scheduledTrigger = makeHeartbeatTrigger({ id: 'trg_scheduled', triggerKind: 'schedule-fire' });
+    const manualTrigger = makeHeartbeatTrigger({
+      id: 'trg_manual',
+      triggerKind: 'manual',
+      actualFireAt: scheduledTrigger.actualFireAt + 1000,
+    });
+
+    render(<HeartbeatTriggersList triggers={[scheduledTrigger, manualTrigger]} isLoading={false} />);
+
+    const badges = screen.queryAllByTestId('heartbeat-trigger-manual-badge');
+    expect(badges).toHaveLength(1);
+    expect(badges[0]?.textContent).toBe('manual');
+  });
 });

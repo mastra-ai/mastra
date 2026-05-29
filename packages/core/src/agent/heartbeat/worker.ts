@@ -22,6 +22,8 @@ export interface HeartbeatFireEventData {
   claimId: string;
   scheduledFireAt: number;
   target: Extract<ScheduleTarget, { type: 'heartbeat' }>;
+  /** Defaults to `'schedule-fire'`. `'manual'` for fire-now invocations. */
+  triggerKind?: 'schedule-fire' | 'manual';
 }
 
 /**
@@ -154,6 +156,7 @@ export class HeartbeatWorker extends MastraWorker {
       status: result.status,
       runId: result.runId,
       error: result.reason,
+      triggerKind: data.triggerKind ?? 'schedule-fire',
     });
   }
 
@@ -165,21 +168,19 @@ export class HeartbeatWorker extends MastraWorker {
     status: HeartbeatRunStatus;
     runId?: string;
     error?: string;
+    triggerKind: 'schedule-fire' | 'manual';
   }): Promise<void> {
     const store = await this.deps?.storage.getStore('schedules');
     if (!store) return;
     try {
       await store.recordTrigger({
         scheduleId: args.scheduleId,
-        // Prefer the real agent runId for linkability; fall back to the
-        // scheduler's claim id when we don't have one (e.g. skipped or
-        // failed before a run started).
         runId: args.runId ?? args.claimId,
         scheduledFireAt: args.scheduledFireAt,
         actualFireAt: args.actualFireAt,
         outcome: deriveTriggerOutcome(args.status),
         error: args.error,
-        triggerKind: 'schedule-fire',
+        triggerKind: args.triggerKind,
       });
     } catch (err) {
       this.deps?.logger?.error('HeartbeatWorker: failed to record trigger', {

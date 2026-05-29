@@ -51,6 +51,7 @@ import type {
   Heartbeat,
   ListHeartbeatTriggersParams,
   ListHeartbeatTriggersResponse,
+  RunHeartbeatResponse,
   SetHeartbeatOptions,
   UpdateHeartbeatOptions,
 } from '../types';
@@ -3278,6 +3279,18 @@ export class Agent extends BaseResource {
    */
   resumeHeartbeat(heartbeatId: string): Promise<Heartbeat> {
     return this.request(`/agents/${this.agentId}/heartbeats/${encodeURIComponent(heartbeatId)}/resume`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Fires a heartbeat manually, out-of-band from the cron schedule.
+   * The run goes through the same HeartbeatWorker pipeline as a scheduled
+   * fire (activeHours, ifActive/ifIdle, broadcast processor). Does not
+   * advance nextFireAt. The returned `claimId` is the trigger row's runId.
+   */
+  runHeartbeat(heartbeatId: string): Promise<RunHeartbeatResponse> {
+    return this.request(`/agents/${this.agentId}/heartbeats/${encodeURIComponent(heartbeatId)}/run`, {
       method: 'POST',
     });
   }
