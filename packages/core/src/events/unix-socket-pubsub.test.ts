@@ -69,6 +69,58 @@ describe('UnixSocketPubSub', () => {
     expect(secondCb.mock.calls[0]![0].type).toBe('hello');
   });
 
+  it('does not let a backpressured remote client block local or healthy subscribers', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path, { maxRemoteClientQueuedBytes: 256 * 1024 });
+    const healthy = new UnixSocketPubSub(path, { maxRemoteClientQueuedBytes: 256 * 1024 });
+    pubsubs.push(broker, healthy);
+
+    const brokerCb = vi.fn();
+    const healthyCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await healthy.subscribe('topic-a', healthyCb);
+
+    const stuck = net.createConnection(path);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        stuck.once('connect', resolve);
+        stuck.once('error', reject);
+      });
+      await new Promise<void>((resolve, reject) => {
+        stuck.write(`${JSON.stringify({ type: 'subscribe', topic: 'topic-a' })}\n`, (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      stuck.pause();
+
+      await waitFor(() => {
+        expect(broker.remoteClientCount).toBe(2);
+      });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const payload = 'x'.repeat(32 * 1024);
+      for (let i = 0; i < 20; i++) {
+        const result = await Promise.race([
+          broker.publish('topic-a', makeEvent({ type: `large-${i}`, data: { payload } })).then(() => 'published'),
+          new Promise(resolve => setTimeout(() => resolve('timeout'), 500)),
+        ]);
+        expect(result).toBe('published');
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
+      expect(brokerCb).toHaveBeenCalledTimes(20);
+      await waitFor(() => {
+        expect(healthyCb.mock.calls.some(call => call[0].type === 'large-19')).toBe(true);
+      });
+      await waitFor(() => {
+        expect(broker.remoteClientCount).toBe(1);
+      });
+    } finally {
+      stuck.destroy();
+    }
+  });
+
   it('isolates local subscriber failures from other subscribers', async () => {
     const path = await socketPath();
     const pubsub = new UnixSocketPubSub(path);
