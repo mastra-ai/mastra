@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,9 +20,13 @@ const streamUntilIdleMock = vi.fn(async () => ({
 // producer that simulates the server pushing chunks over the open subscription.
 let nextSubscribeChunks: Array<any> = [];
 let keepSubscriptionOpen = false;
+const threadSubscriptionAbortMock = vi.fn(async () => true);
+const threadSubscriptionUnsubscribeMock = vi.fn();
 const subscribeToThreadMock = vi.fn(async (_params: any) => {
   const chunks = nextSubscribeChunks;
   return {
+    abort: threadSubscriptionAbortMock,
+    unsubscribe: threadSubscriptionUnsubscribeMock,
     processDataStream: async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
       for (const chunk of chunks) {
         await onChunk(chunk);
@@ -75,6 +79,8 @@ describe('useChat forwards clientTools', () => {
     sendSignalMock.mockClear();
     streamUntilIdleMock.mockClear();
     subscribeToThreadMock.mockClear();
+    threadSubscriptionAbortMock.mockClear();
+    threadSubscriptionUnsubscribeMock.mockClear();
     generateMock.mockClear();
     nextSubscribeChunks = [];
     keepSubscriptionOpen = false;
@@ -106,6 +112,52 @@ describe('useChat forwards clientTools', () => {
     expect(subscribeToThreadMock).toHaveBeenCalledTimes(1);
     expect(sendSignalMock).toHaveBeenCalledTimes(1);
     expect(streamUntilIdleMock).not.toHaveBeenCalled();
+  });
+
+  it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
+    keepSubscriptionOpen = true;
+    const { rerender } = renderHook(
+      ({ enableThreadSignals }: { enableThreadSignals: boolean }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals,
+        }),
+      { wrapper, initialProps: { enableThreadSignals: true } },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      rerender({ enableThreadSignals: false });
+    });
+
+    await waitFor(() => expect(threadSubscriptionUnsubscribeMock).toHaveBeenCalledTimes(1));
+    expect(threadSubscriptionAbortMock).not.toHaveBeenCalled();
+  });
+
+  it('aborts and unsubscribes on explicit cancel', async () => {
+    keepSubscriptionOpen = true;
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      result.current.cancelRun();
+    });
+
+    expect(threadSubscriptionAbortMock).toHaveBeenCalledTimes(1);
+    expect(threadSubscriptionUnsubscribeMock).toHaveBeenCalledTimes(1);
   });
 
   it('uses the legacy stream path when thread signals are explicitly disabled', async () => {

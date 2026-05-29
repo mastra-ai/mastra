@@ -576,6 +576,12 @@ export const subscribeAgentThreadBodySchema = z.object({
   threadId: z.string(),
 });
 
+export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
+
+export const abortAgentThreadResponseSchema = z.object({
+  aborted: z.boolean(),
+});
+
 /**
  * Response schema for observe endpoint (streaming response)
  */

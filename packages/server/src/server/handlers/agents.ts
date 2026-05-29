@@ -51,6 +51,8 @@ import {
   observeAgentResponseSchema,
   sendAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
+  abortAgentThreadBodySchema,
+  abortAgentThreadResponseSchema,
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
@@ -1707,6 +1709,49 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
   },
 });
 
+export const ABORT_AGENT_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/threads/abort',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: abortAgentThreadBodySchema,
+  responseSchema: abortAgentThreadResponseSchema,
+  summary: 'Abort active agent thread run',
+  description: 'Aborts the currently active stream run for a memory thread without changing thread subscriptions',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, resourceId, threadId, requestContext: serverRequestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      if (typeof (agent as { abortThreadStream?: unknown }).abortThreadStream !== 'function') {
+        throw new HTTPException(501, {
+          message: 'agent thread aborts are not supported by this Mastra core version',
+        });
+      }
+
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
+
+      if (!effectiveThreadId) {
+        throw new HTTPException(400, { message: 'threadId is required' });
+      }
+
+      if (effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
+      }
+
+      return { aborted: agent.abortThreadStream({ resourceId: effectiveResourceId, threadId: effectiveThreadId }) };
+    } catch (error) {
+      return handleError(error, 'error aborting agent thread');
+    }
+  },
+});
+
 export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/threads/subscribe',
@@ -1762,7 +1807,6 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         if (cleanedUp) return;
         cleanedUp = true;
         clearHeartbeat();
-        subscription.abort();
         subscription.unsubscribe();
         if (closeController) {
           try {

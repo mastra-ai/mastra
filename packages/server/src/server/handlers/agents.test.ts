@@ -11,7 +11,11 @@ import {
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { sendAgentSignalBodySchema, subscribeAgentThreadBodySchema } from '../schemas/agents';
+import {
+  abortAgentThreadBodySchema,
+  sendAgentSignalBodySchema,
+  subscribeAgentThreadBodySchema,
+} from '../schemas/agents';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
@@ -20,6 +24,7 @@ import {
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
+  ABORT_AGENT_THREAD_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
   isProviderConnected,
   extractVersionOptions,
@@ -1220,13 +1225,14 @@ describe('Agent Routes Authorization', () => {
       ).toBe(true);
     });
 
-    it('should accept subscribe thread bodies', () => {
-      expect(
-        subscribeAgentThreadBodySchema.safeParse({
-          resourceId: 'resource-123',
-          threadId: 'thread-123',
-        }).success,
-      ).toBe(true);
+    it('should accept subscribe and abort thread bodies', () => {
+      const body = {
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+      };
+
+      expect(subscribeAgentThreadBodySchema.safeParse(body).success).toBe(true);
+      expect(abortAgentThreadBodySchema.safeParse(body).success).toBe(true);
     });
 
     it('should send a signal using context resource and thread values', async () => {
@@ -1376,7 +1382,7 @@ describe('Agent Routes Authorization', () => {
       expect(abort).not.toHaveBeenCalled();
       expect(unsubscribe).not.toHaveBeenCalled();
       await reader.cancel();
-      expect(abort).toHaveBeenCalledTimes(1);
+      expect(abort).not.toHaveBeenCalled();
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 
@@ -1454,7 +1460,7 @@ describe('Agent Routes Authorization', () => {
         abortController.abort();
         await Promise.resolve();
 
-        expect(abort).toHaveBeenCalledTimes(1);
+        expect(abort).not.toHaveBeenCalled();
         expect(unsubscribe).toHaveBeenCalledTimes(1);
         expect(vi.getTimerCount()).toBe(0);
         await vi.advanceTimersByTimeAsync(25_000);
@@ -1462,6 +1468,35 @@ describe('Agent Routes Authorization', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('should abort an active thread run without unsubscribing listeners', async () => {
+      await mockMemory.createThread({
+        threadId: 'abort-thread-owned-by-context',
+        resourceId: 'user-a',
+        title: 'Abort Thread',
+      });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'abort-thread-owned-by-context',
+      });
+      const abortThreadStream = vi.fn(() => true);
+      (mockAgent as any).abortThreadStream = abortThreadStream;
+
+      await expect(
+        ABORT_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          resourceId: 'ignored-resource',
+          threadId: 'ignored-thread',
+        } as any),
+      ).resolves.toEqual({ aborted: true });
+
+      expect(abortThreadStream).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'abort-thread-owned-by-context',
+      });
     });
 
     it('should reject subscribing to a thread owned by a different resource', async () => {

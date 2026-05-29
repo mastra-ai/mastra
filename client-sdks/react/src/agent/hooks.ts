@@ -123,6 +123,9 @@ export const useChat = ({
   // continuation turns on the server.
   const _streamAbortRef = useRef<AbortController | null>(null);
   const _threadSubscriptionAbortRef = useRef<AbortController | null>(null);
+  const _threadSubscriptionRef = useRef<{ abort?: () => Promise<boolean> | boolean; unsubscribe?: () => void } | null>(
+    null,
+  );
   const _threadSubscriptionKeyRef = useRef<string | undefined>(undefined);
   const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
   const _threadSignalsUnsupportedRef = useRef(false);
@@ -215,7 +218,12 @@ export const useChat = ({
   };
 
   const closeThreadSubscription = useCallback(() => {
-    _threadSubscriptionAbortRef.current?.abort();
+    const subscription = _threadSubscriptionRef.current;
+    subscription?.unsubscribe?.();
+    if (!subscription) {
+      _threadSubscriptionAbortRef.current?.abort();
+    }
+    _threadSubscriptionRef.current = null;
     _threadSubscriptionAbortRef.current = null;
     _threadSubscriptionKeyRef.current = undefined;
     _threadSubscriptionPromiseRef.current = null;
@@ -253,7 +261,7 @@ export const useChat = ({
         return;
       }
 
-      _threadSubscriptionAbortRef.current?.abort();
+      closeThreadSubscription();
       const subscriptionAbort = new AbortController();
       _threadSubscriptionAbortRef.current = subscriptionAbort;
       _threadSubscriptionKeyRef.current = subscriptionKey;
@@ -267,7 +275,14 @@ export const useChat = ({
       _threadSubscriptionPromiseRef.current = subscriptionAgent
         .subscribeToThread({ resourceId, threadId })
         .then(response => {
-          void response
+          const subscription = response as typeof response & { unsubscribe?: () => void };
+          if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
+            subscription.unsubscribe?.();
+            return;
+          }
+
+          _threadSubscriptionRef.current = subscription;
+          void subscription
             .processDataStream({
               onChunk: chunk => processStreamChunk(chunk),
             })
@@ -278,6 +293,9 @@ export const useChat = ({
               }
             })
             .finally(() => {
+              if (_threadSubscriptionRef.current === subscription) {
+                _threadSubscriptionRef.current = null;
+              }
               if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
                 _threadSubscriptionAbortRef.current = null;
                 _threadSubscriptionKeyRef.current = undefined;
@@ -289,6 +307,7 @@ export const useChat = ({
           if (isThreadSignalUnsupportedError(error)) {
             markThreadSignalsUnsupported();
             if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+              _threadSubscriptionRef.current = null;
               _threadSubscriptionAbortRef.current = null;
               _threadSubscriptionKeyRef.current = undefined;
               _threadSubscriptionPromiseRef.current = null;
@@ -305,7 +324,7 @@ export const useChat = ({
 
       await _threadSubscriptionPromiseRef.current;
     },
-    [agentId, baseClient, markThreadSignalsUnsupported, processStreamChunk],
+    [agentId, baseClient, closeThreadSubscription, markThreadSignalsUnsupported, processStreamChunk],
   );
 
   useEffect(() => {
@@ -643,6 +662,8 @@ export const useChat = ({
   const handleCancelRun = () => {
     _streamAbortRef.current?.abort();
     _streamAbortRef.current = null;
+    const threadSubscription = _threadSubscriptionRef.current;
+    void threadSubscription?.abort?.();
     closeThreadSubscription();
     setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
