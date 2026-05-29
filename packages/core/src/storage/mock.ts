@@ -17,6 +17,7 @@ import { InMemorySchedulesStorage } from './domains/schedules/inmemory';
 import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import { InMemorySkillsStorage } from './domains/skills/inmemory';
+import { InMemoryToolProviderConnectionsStorage } from './domains/tool-provider-connections/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 import { InMemoryWorkspacesStorage } from './domains/workspaces/inmemory';
 /**
@@ -76,6 +77,7 @@ export class InMemoryStore extends MastraCompositeStore {
       blobs: new InMemoryBlobStore(),
       backgroundTasks: new BackgroundTasksInMemory({ db: this.#db }),
       schedules: new InMemorySchedulesStorage({ db: this.#db }),
+      toolProviderConnections: new InMemoryToolProviderConnectionsStorage({ db: this.#db }),
     };
   }
 
