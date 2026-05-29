@@ -62,11 +62,12 @@ const createMemory = () => {
   } as unknown as MastraMemory;
 };
 
-const createHarness = (memory: MastraMemory, storage = new RecordingHarnessStorage()) => ({
+const createHarness = (memory: MastraMemory, storage = new RecordingHarnessStorage(), ownerId?: string) => ({
   storage,
   memory,
   harness: new Harness({
     agents: {},
+    ownerId,
     storage,
     memory,
     modes: [
@@ -90,14 +91,18 @@ describe('Harness.session()', () => {
 
     expect(session.getMode()).toMatchObject({ id: 'plan' });
     expect(session.getModelId()).toBe('test-model');
+    expect(session.ownerId).toBe(harness.ownerId);
     expect([...storage.records.values()]).toEqual([
       {
         id: expect.stringMatching(/^sess-[a-f0-9]{32}$/),
+        ownerId: harness.ownerId,
         threadId: 'thread-1',
         resourceId: 'resource-1',
         origin: 'top-level',
         modeId: 'plan',
         modelId: 'test-model',
+        createdAt: expect.any(Date),
+        lastActivityAt: expect.any(Date),
       },
     ]);
   });
@@ -199,14 +204,18 @@ describe('Harness.session()', () => {
     expect(clone.resourceId).toBe('resource-2');
     expect(clone.getMode()).toMatchObject({ id: 'build' });
     expect(clone.getModelId()).toBe('override-model');
+    expect(clone.ownerId).toBe(harness.ownerId);
     expect(storage.records.get('session-2')).toEqual({
       id: 'session-2',
+      ownerId: harness.ownerId,
       threadId: 'thread-2',
       resourceId: 'resource-2',
       parentSessionId: 'parent-session',
       origin: 'subagent-tool',
       modeId: 'build',
       modelId: 'override-model',
+      createdAt: expect.any(Date),
+      lastActivityAt: expect.any(Date),
     });
   });
 
@@ -261,5 +270,52 @@ describe('Harness.listSessions()', () => {
     const { harness } = createHarness(createMemory());
     const sessions = await harness.listSessions();
     expect(sessions).toEqual([]);
+  });
+});
+
+describe('Harness.ownerId', () => {
+  it('uses a configured ownerId when provided', async () => {
+    const { harness, storage } = createHarness(createMemory(), new RecordingHarnessStorage(), 'owner-custom');
+
+    expect(harness.ownerId).toBe('owner-custom');
+
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    const [record] = storage.records.values();
+
+    expect(session.ownerId).toBe('owner-custom');
+    expect(record!.ownerId).toBe('owner-custom');
+  });
+
+  it('generates a unique ownerId per Harness instance when not configured', () => {
+    const { harness: a } = createHarness(createMemory());
+    const { harness: b } = createHarness(createMemory());
+
+    expect(a.ownerId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(b.ownerId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(a.ownerId).not.toBe(b.ownerId);
+  });
+
+  it('propagates the ownerId to cloned sessions on session.clone()', async () => {
+    const memory = createMemory();
+    const { harness } = createHarness(memory);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    const clone = await session.clone({ threadId: 'thread-2' });
+
+    expect(clone.ownerId).toBe(harness.ownerId);
+  });
+
+  it('reflects the persisted ownerId when reloading a session created by another harness', async () => {
+    const memory = createMemory();
+    const storage = new RecordingHarnessStorage();
+    const { harness: creator } = createHarness(memory, storage);
+    await creator.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    const [record] = storage.records.values();
+
+    const { harness: reader } = createHarness(createMemory(), storage);
+    const session = await reader.session({ sessionId: record!.id, resourceId: 'resource-1' });
+
+    expect(session.ownerId).toBe(creator.ownerId);
+    expect(session.ownerId).not.toBe(reader.ownerId);
   });
 });

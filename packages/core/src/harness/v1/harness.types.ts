@@ -20,6 +20,12 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
   runtimeCompatibilityGeneration?: string;
 
   /**
+   * Stable owner identifier for sessions created by this harness. Defaults to
+   * a generated UUID when omitted.
+   */
+  ownerId?: string;
+
+  /**
    * Operating modes. Each mode pins a backing agent and may override or
    * extend its tool surface and instructions. Mode ids must be unique;
    * each mode's `agentId` must reference an agent visible to the harness

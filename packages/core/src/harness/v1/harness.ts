@@ -1,8 +1,9 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { MastraMemory } from '../../memory';
 import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
+import type { DynamicArgument } from '../../types';
 import type { HarnessConfig } from './harness.types';
 import type { HarnessMode } from './mode';
 import { Session } from './session';
@@ -24,17 +25,19 @@ type SessionByThreadOptions = {
 type SessionOptions = SessionByIdOptions | SessionByThreadOptions;
 
 export class Harness<MODES extends HarnessMode[]> {
+  readonly #ownerId: string;
   readonly #defaultMode: string;
   readonly #modesById = new Map<string, MODES[number]>();
   readonly #storage?: HarnessStorage;
   readonly #compositeStorage?: MastraCompositeStore;
-  readonly #memory: MastraMemory;
+  readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
 
   constructor(config: HarnessConfig<MODES>) {
     if (!config.modes.length) {
       throw new Error('The harness needs modes to operate.');
     }
 
+    this.#ownerId = config.ownerId ?? randomUUID();
     this.#defaultMode = config.defaultModeId ?? config.modes[0]!.id;
     this.#storage = config.storage;
     this.#compositeStorage = config.mastra?.getStorage();
@@ -51,6 +54,10 @@ export class Harness<MODES extends HarnessMode[]> {
       }
       this.#modesById.set(mode.id, mode);
     }
+  }
+
+  get ownerId(): string {
+    return this.#ownerId;
   }
 
   listModes(): HarnessMode[] {
@@ -100,6 +107,7 @@ export class Harness<MODES extends HarnessMode[]> {
     const record: SessionRecord = {
       ...source,
       id: clone.id,
+      ownerId: this.#ownerId,
       threadId: clone.threadId,
       resourceId: clone.resourceId,
       parentSessionId: opts.parentSessionId ?? source.id,
@@ -121,11 +129,14 @@ export class Harness<MODES extends HarnessMode[]> {
 
     const record: SessionRecord = {
       id,
+      ownerId: this.#ownerId,
       threadId: opts.threadId,
       resourceId: opts.resourceId,
       origin: 'top-level',
       modeId: opts.modeId ?? this.#defaultMode,
       modelId: opts.modelId ?? 'zai-coding-plan/glm-5-turbo',
+      createdAt: new Date(),
+      lastActivityAt: new Date(),
     };
 
     await storage.saveSession(record);
@@ -156,18 +167,20 @@ export class Harness<MODES extends HarnessMode[]> {
   }
 
   #sessionFromRecord(record: SessionRecord): Session {
-    const mode = this.#modesById.get(record.modeId);
+    const mode = record.modeId ? this.#modesById.get(record.modeId) : this.#modesById.values().next().value;
     if (!mode) {
       throw new Error(`Harness session "${record.id}" references unknown mode "${record.modeId}"`);
     }
 
     return new Session({
       id: record.id,
+      ownerId: record.ownerId,
       threadId: record.threadId,
       resourceId: record.resourceId,
-      mode,
+      mode: mode,
       model: record.modelId,
-      createdAt: new Date(),
+      createdAt: record.createdAt,
+      lastActivityAt: record.lastActivityAt,
       memory: this.#memory,
     });
   }

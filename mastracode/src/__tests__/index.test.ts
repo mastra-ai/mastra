@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { hostname } from 'node:os';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gatewayRegistrySyncGateways = vi.fn();
@@ -25,8 +28,16 @@ vi.mock('@mastra/core/agent', () => ({
 const agentConstructorMock = vi.fn();
 
 const harnessConstructorMock = vi.fn();
+const harnessV1ConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const harnessSubscribeMock = vi.fn();
+const detectProjectMock = vi.fn(() => ({
+  mode: 'none',
+  rootPath: process.cwd(),
+  packageManager: 'pnpm',
+  hasGit: false,
+  contextFiles: [],
+}));
 const harnessGetCurrentThreadIdMock = vi.fn();
 const harnessListThreadsMock = vi.fn();
 const harnessSetStateMock = vi.fn();
@@ -110,6 +121,19 @@ vi.mock('@mastra/core/harness', () => ({
   taskWriteTool: {},
   taskCheckTool: {},
 }));
+
+vi.mock('@mastra/core/harness/v1', async importOriginal => {
+  const actual = await importOriginal<typeof import('@mastra/core/harness/v1')>();
+  return {
+    ...actual,
+    Harness: class extends actual.Harness {
+      constructor(config: ConstructorParameters<typeof actual.Harness>[0]) {
+        harnessV1ConstructorMock(config);
+        super(config);
+      }
+    },
+  };
+});
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
@@ -227,13 +251,7 @@ vi.mock('./utils/gateway-sync.js', () => ({
 }));
 
 vi.mock('./utils/project.js', () => ({
-  detectProject: vi.fn(() => ({
-    mode: 'none',
-    rootPath: process.cwd(),
-    packageManager: 'pnpm',
-    hasGit: false,
-    contextFiles: [],
-  })),
+  detectProject: detectProjectMock,
   getStorageConfig: vi.fn(() => ({ type: 'memory' })),
   getResourceIdOverride: vi.fn(() => undefined),
 }));
@@ -272,6 +290,15 @@ describe('createMastraCode', () => {
     harnessSetStateMock.mockResolvedValue(undefined);
     harnessSetThreadSettingMock.mockReset();
     harnessSetThreadSettingMock.mockResolvedValue(undefined);
+    harnessV1ConstructorMock.mockReset();
+    detectProjectMock.mockReset();
+    detectProjectMock.mockReturnValue({
+      mode: 'none',
+      rootPath: process.cwd(),
+      packageManager: 'pnpm',
+      hasGit: false,
+      contextFiles: [],
+    });
     harnessStateMock = { cavemanObservations: false };
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
@@ -314,6 +341,26 @@ describe('createMastraCode', () => {
     expect(harnessConstructorMock).toHaveBeenCalled();
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof harnessConfig?.memory).toBe('function');
+  });
+
+  it('configures Harness V1 ownerId from machine and project path', async () => {
+    const projectPath = '/tmp/mastracode-project';
+    detectProjectMock.mockReturnValue({
+      mode: 'none',
+      rootPath: projectPath,
+      resourceId: 'project-resource',
+      packageManager: 'pnpm',
+      hasGit: false,
+      contextFiles: [],
+    });
+    const expectedHash = createHash('sha256').update(`${hostname()}\0${projectPath}`).digest('hex').slice(0, 32);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ cwd: projectPath });
+
+    expect(harnessV1ConstructorMock).toHaveBeenCalled();
+    const harnessConfig = harnessV1ConstructorMock.mock.calls[0]?.[0] as { ownerId?: string } | undefined;
+    expect(harnessConfig?.ownerId).toBe(`mastracode-${expectedHash}`);
   });
 
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {

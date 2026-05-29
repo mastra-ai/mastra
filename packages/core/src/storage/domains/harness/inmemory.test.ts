@@ -6,6 +6,7 @@ import type { SessionRecord } from './types';
 function sampleSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
     id: 'session-1',
+    ownerId: 'owner-1',
     resourceId: 'resource-1',
     threadId: 'thread-1',
     origin: 'top-level',

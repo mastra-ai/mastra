@@ -1,4 +1,5 @@
 import type { MastraMemory } from '../../memory';
+import type { DynamicArgument } from '../../types';
 import type { HarnessMode } from './mode';
 
 export type CloneSessionOptions = {
@@ -16,9 +17,10 @@ export type CloneSessionOptions = {
 };
 
 export interface SessionConfig {
-  memory: MastraMemory;
+  memory: MastraMemory | DynamicArgument<MastraMemory>;
   // storage: HarnessStorage;
-  // ownerId: string;
+  /** Identifier of the Harness instance that owns this session. */
+  ownerId: string;
   /** Initial record loaded under the lease. The Session takes ownership. */
   // record: SessionRecord;
   /** Lease TTL the Harness acquired the lease for. */
@@ -31,6 +33,7 @@ export interface SessionConfig {
   model: string;
   mode: HarnessMode;
   createdAt: Date;
+  lastActivityAt: Date;
 }
 
 export type { SessionRecord } from '../../storage/domains/harness';

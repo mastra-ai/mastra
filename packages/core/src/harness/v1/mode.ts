@@ -19,6 +19,9 @@ export interface HarnessMode {
    */
   agentId: string;
 
+  /** bootstrap model default when a session enters this mode. */
+  defaultModelId: string;
+
   /** Surfaced in mode pickers / Studio UI. Free text. */
   description?: string;
 
