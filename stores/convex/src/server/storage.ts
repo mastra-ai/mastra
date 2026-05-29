@@ -257,7 +257,7 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
 
     // Handle vector data tables specially (but NOT vector_indexes which is a typed table)
     if (request.tableName.startsWith(VECTOR_TABLE_PREFIX) && request.tableName !== TABLE_VECTOR_INDEXES) {
-      return handleVectorOperation(ctx, request);
+      return await handleVectorOperation(ctx, request);
     }
 
     // Handle typed tables
@@ -807,7 +807,14 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
     }
 
     case 'queryTable': {
-      if (request.pageSize) {
+      if (request.pageSize !== undefined) {
+        if (!Number.isInteger(request.pageSize) || request.pageSize <= 0) {
+          throw new Error('queryTable pageSize must be a positive integer');
+        }
+        if (request.limit !== undefined) {
+          throw new Error('queryTable limit cannot be combined with pageSize');
+        }
+
         const page = await ctx.db
           .query(convexTable)
           .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
