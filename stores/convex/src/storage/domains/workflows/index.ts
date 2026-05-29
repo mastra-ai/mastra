@@ -26,7 +26,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
   }
 
   supportsConcurrentUpdates(): boolean {
-    return false;
+    return true;
   }
 
   async init(): Promise<void> {
@@ -37,26 +37,22 @@ export class WorkflowsConvex extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  async updateWorkflowResults(_args: {
+  async updateWorkflowResults(args: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error(
-      'updateWorkflowResults is not implemented for Convex storage. Convex does not support atomic read-modify-write operations needed for concurrent workflow updates.',
-    );
+    return this.#db.mergeWorkflowStepResult(args);
   }
 
-  async updateWorkflowState(_args: {
+  async updateWorkflowState(args: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    throw new Error(
-      'updateWorkflowState is not implemented for Convex storage. Convex does not support atomic read-modify-write operations needed for concurrent workflow updates.',
-    );
+    return this.#db.mergeWorkflowState(args);
   }
 
   async persistWorkflowSnapshot({

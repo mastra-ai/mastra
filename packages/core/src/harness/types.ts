@@ -587,6 +587,10 @@ export interface HarnessDisplayState {
   /** The message currently being streamed (null when idle) */
   currentMessage: HarnessMessage | null;
 
+  // ── Follow-up queue ──────────────────────────────────────────────────
+  /** Number of follow-up messages queued locally by the Harness */
+  queuedFollowUps: number;
+
   // ── Token usage ──────────────────────────────────────────────────────
   /** Cumulative token usage for the current thread */
   tokenUsage: TokenUsage;
@@ -666,6 +670,7 @@ export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
+    queuedFollowUps: 0,
     tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
@@ -759,7 +764,7 @@ export type HarnessEvent =
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
   | { type: 'error'; error: Error; errorType?: string; retryable?: boolean; retryDelay?: number }
-  | { type: 'follow_up_queued'; count: number }
+  | { type: 'follow_up_queued'; count: number; runId?: string }
   | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error }
   | { type: 'workspace_ready'; workspaceId: string; workspaceName: string }
   | { type: 'workspace_error'; error: Error }
@@ -940,6 +945,7 @@ export interface HarnessMessage {
   role: 'user' | 'assistant' | 'system';
   content: HarnessMessageContent[];
   createdAt: Date;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
   stopReason?: 'complete' | 'tool_use' | 'aborted' | 'error';
   errorMessage?: string;
 }

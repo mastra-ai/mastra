@@ -1,5 +1,477 @@
 # @mastra/playground-ui
 
+## 30.0.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`d779de3`](https://github.com/mastra-ai/mastra/commit/d779de3cd9d2e7ed8110547190e2f15e786a0e41), [`1750c97`](https://github.com/mastra-ai/mastra/commit/1750c975d6179fbf6db2813b15229d4f8f23fc55), [`0e32507`](https://github.com/mastra-ai/mastra/commit/0e32507962cdfa5569b7bda5bc6fb3dd34e40b03), [`3a081c1`](https://github.com/mastra-ai/mastra/commit/3a081c1255c5ae8c99f6dad91cc612934ef6f2bd), [`fe9eacd`](https://github.com/mastra-ai/mastra/commit/fe9eacd9545a0a9d64aad31c9fa90294a425289e), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194)]:
+  - @mastra/core@1.38.0-alpha.2
+  - @mastra/client-js@1.21.2-alpha.2
+  - @mastra/react@0.4.3-alpha.2
+
+## 30.0.2-alpha.1
+
+### Patch Changes
+
+- Pointer drags inside the `SideDialog` body now select text reliably instead of fighting with the close-swipe gesture. The popup chrome (header, edges) still closes the drawer on drag. ([#16959](https://github.com/mastra-ai/mastra/pull/16959))
+
+  **Drawer composition**
+
+  `DrawerContent` is now the shadcn-style opinionated bundle (`DrawerPortal` + `DrawerBackdrop` + `DrawerViewport` + `DrawerPopup`, with a handle bar on top/bottom-anchored drawers and a fade-out when a nested drawer covers the parent). Most drawers can now be written as:
+
+  ```tsx
+  <Drawer>
+    <DrawerTrigger>…</DrawerTrigger>
+    <DrawerContent>
+      <DrawerHeader>…</DrawerHeader>
+      <DrawerBody>…</DrawerBody>
+    </DrawerContent>
+  </Drawer>
+  ```
+
+  The low-level primitives (`DrawerPortal`, `DrawerBackdrop`, `DrawerViewport`, `DrawerPopup`) remain exported for drawers that need a custom portal target, non-modal page behavior, or chrome outside the popup (see the `SwipeToOpen` and `NonModal` Storybook examples).
+
+  Base UI's text-selectable region (the `Drawer.Content` part — pointer drags inside it select text instead of closing the drawer) is now exported as `DrawerInteractive`. Migration:
+
+  ```tsx
+  // Before
+  import { DrawerContent } from '@mastra/playground-ui';
+  <DrawerContent render={<div>...</div>} />;
+
+  // After
+  import { DrawerInteractive } from '@mastra/playground-ui';
+  <DrawerInteractive render={<div>...</div>} />;
+  ```
+
+- Improved `@mastra/playground-ui` stability by removing legacy runtime UI dependencies without changing `SideDialog`, `MainSidebar`, or accessibility behavior. Nested `SideDialog` levels now stack consistently, so multi-level flows behave predictably. ([#16959](https://github.com/mastra-ai/mastra/pull/16959))
+
+- Updated dependencies [[`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c)]:
+  - @mastra/client-js@1.21.2-alpha.1
+  - @mastra/core@1.37.2-alpha.1
+  - @mastra/react@0.4.3-alpha.1
+
+## 30.0.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`07c3de7`](https://github.com/mastra-ai/mastra/commit/07c3de7f7bc418beccaea3b5e6b7f7cdda79d492)]:
+  - @mastra/core@1.37.2-alpha.0
+  - @mastra/client-js@1.21.2-alpha.0
+  - @mastra/react@0.4.3-alpha.0
+
+## 30.0.1
+
+### Patch Changes
+
+- Renamed `DataList.Row` (the non-interactive grid wrapper) to `DataList.RowWrapper` for clarity, since the name `Row` was easy to confuse with the interactive row primitives (`.RowButton`, `.RowLink`, `.RowStatic`). The corresponding exported component is now `DataListRowWrapper` (was `DataListRow`). ([#17123](https://github.com/mastra-ai/mastra/pull/17123))
+
+  **Migration**
+
+  ```tsx
+  // Before
+  <DataList.Row>
+    <DataList.SelectCell ... />
+    <DataList.RowButton ...>...</DataList.RowButton>
+  </DataList.Row>
+
+  // After
+  <DataList.RowWrapper>
+    <DataList.SelectCell ... />
+    <DataList.RowButton ...>...</DataList.RowButton>
+  </DataList.RowWrapper>
+  ```
+
+  The `.RowButton`, `.RowLink`, and `.RowStatic` primitives are unchanged.
+
+- `ContextMenu` Positioner and popup raised from `z-50` to `z-1000` with `isolate`, so the menu sits above app chrome that uses higher stacking contexts (e.g. sticky headers with `z-500`). Previously the menu would render behind such elements when opened on triggers near them. ([#17133](https://github.com/mastra-ai/mastra/pull/17133))
+
+- Removed the EntityList and EntityListPageLayout components — they were superseded by DataList. The 9 Studio root list pages (Agents, Datasets, Experiments, MCPs, Processors, Prompts, Scorers, Tools, Workflows) now build on DataList, matching the condensed layout shared across the rest of Studio. ([#17058](https://github.com/mastra-ai/mastra/pull/17058))
+
+  **Migration**
+
+  If you were importing EntityList or EntityListPageLayout from `@mastra/playground-ui`, switch to DataList — its API is a strict superset:
+
+  ```tsx
+  // Before
+  import { EntityList, EntityListSkeleton } from '@mastra/playground-ui';
+
+  // After
+  import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+  ```
+
+  The primitive names match (`.Top`, `.TopCell`, `.TopCellSmart`, `.RowLink`, `.Cell`, `.TextCell`, `.NameCell`, `.DescriptionCell`, `.NoMatch`, `.Pagination`). DataList additionally exposes `.Row`, `.RowButton`, `.RowStatic`, `.IdCell`, `.MonoCell`, `.SelectCell`, `.NextPageLoading`, and more — useful when you need selection rows or action cells outside a RowLink.
+
+- Updated dependencies [[`21db1a4`](https://github.com/mastra-ai/mastra/commit/21db1a4b8ac058d5a4fbe38b516cc1b81e526915)]:
+  - @mastra/core@1.37.1
+  - @mastra/client-js@1.21.1
+  - @mastra/react@0.4.2
+
+## 30.0.1-alpha.0
+
+### Patch Changes
+
+- Removed the EntityList and EntityListPageLayout components — they were superseded by DataList. The 9 Studio root list pages (Agents, Datasets, Experiments, MCPs, Processors, Prompts, Scorers, Tools, Workflows) now build on DataList, matching the condensed layout shared across the rest of Studio. ([#17058](https://github.com/mastra-ai/mastra/pull/17058))
+
+  **Migration**
+
+  If you were importing EntityList or EntityListPageLayout from `@mastra/playground-ui`, switch to DataList — its API is a strict superset:
+
+  ```tsx
+  // Before
+  import { EntityList, EntityListSkeleton } from '@mastra/playground-ui';
+
+  // After
+  import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+  ```
+
+  The primitive names match (`.Top`, `.TopCell`, `.TopCellSmart`, `.RowLink`, `.Cell`, `.TextCell`, `.NameCell`, `.DescriptionCell`, `.NoMatch`, `.Pagination`). DataList additionally exposes `.Row`, `.RowButton`, `.RowStatic`, `.IdCell`, `.MonoCell`, `.SelectCell`, `.NextPageLoading`, and more — useful when you need selection rows or action cells outside a RowLink.
+
+## 30.0.0
+
+### Minor Changes
+
+- Added a Drawer component — a panel that slides in from any edge of the screen with swipe-to-dismiss gestures. ([#16958](https://github.com/mastra-ai/mastra/pull/16958))
+
+  The Drawer can be anchored to any of the four screen edges and supports snap points, nested stacking, controlled state, non-modal mode, swipe-to-open areas, and detached triggers.
+
+  ```tsx
+  import {
+    Drawer,
+    DrawerTrigger,
+    DrawerContent,
+    DrawerHeader,
+    DrawerTitle,
+    DrawerDescription,
+    DrawerFooter,
+    DrawerClose,
+    Button,
+  } from '@mastra/playground-ui';
+
+  <Drawer side="right">
+    <DrawerTrigger asChild>
+      <Button>Open</Button>
+    </DrawerTrigger>
+    <DrawerContent>
+      <DrawerHeader>
+        <DrawerTitle>Library</DrawerTitle>
+        <DrawerDescription>A panel that slides in from the right edge.</DrawerDescription>
+      </DrawerHeader>
+      <DrawerFooter>
+        <DrawerClose asChild>
+          <Button variant="outline">Close</Button>
+        </DrawerClose>
+      </DrawerFooter>
+    </DrawerContent>
+  </Drawer>;
+  ```
+
+- Added a reusable `HoverCard` component (`HoverCard`, `HoverCardTrigger`, `HoverCardContent`) built on Base UI. You can now use these exported components to add hover card interactions anywhere in your UI. ([#16919](https://github.com/mastra-ai/mastra/pull/16919))
+
+  ```tsx
+  import { HoverCard, HoverCardTrigger, HoverCardContent } from '@mastra/playground-ui';
+
+  <HoverCard>
+    <HoverCardTrigger>Weather Agent</HoverCardTrigger>
+    <HoverCardContent>Answers questions about current conditions and forecasts.</HoverCardContent>
+  </HoverCard>;
+  ```
+
+### Patch Changes
+
+- Migrated the Switch component to Base UI for smoother animations and consistent behavior. No API changes — `checked`, `defaultChecked`, `onCheckedChange`, and `disabled` work exactly as before. ([#16891](https://github.com/mastra-ai/mastra/pull/16891))
+
+- Improved the Select component by migrating it to Base UI for more reliable positioning and accessibility. The public API (`Select`, `SelectTrigger`, `SelectContent`, `SelectItem`, `SelectValue`, `SelectGroup`) is unchanged, so no consumer updates are needed. ([#16918](https://github.com/mastra-ai/mastra/pull/16918))
+
+- Added `DataList.RowStatic`, a non-interactive row primitive. It renders a row that looks identical to other list rows but does not respond to clicks and shows no hover/focus state — use it alongside `DataList.RowButton` / `DataList.RowLink` when only some rows are clickable (e.g. error or placeholder entries in an otherwise navigable list). ([#16970](https://github.com/mastra-ai/mastra/pull/16970))
+
+  ```tsx
+  {
+    rows.map(row =>
+      row.href ? (
+        <DataList.RowLink key={row.id} to={row.href} LinkComponent={Link}>
+          {row.cells}
+        </DataList.RowLink>
+      ) : (
+        <DataList.RowStatic key={row.id}>{row.cells}</DataList.RowStatic>
+      ),
+    );
+  }
+  ```
+
+- Added `DataList` primitives and props for building selection-aware, condensed list rows that match the Traces/Logs visual style. ([#16820](https://github.com/mastra-ai/mastra/pull/16820))
+
+  **New cells** on `DataList`:
+  - `IdCell` — compact mono cell that truncates long IDs to 8 chars.
+  - `MonoCell` — compact mono + truncate text cell (for input previews, JSON summaries, etc.).
+  - `DateCell` — compact date cell rendering "Today" or "MMM dd".
+  - `TimeCell` — compact mono time cell rendering `HH:mm:ss.SSS` with the millisecond portion tinted.
+  - `SelectCell` — labelled checkbox cell with a shift-key range-select handler.
+  - `TopSelectCell` — header version with `indeterminate` support for "select all".
+  - `TopCells` — non-interactive header sibling of `RowButton`, for hosting top cells beside a leading select cell.
+
+  **New props** on `DataList.RowButton` and `DataList.RowLink`:
+  - `flushLeft` — drops the default left margin when wrapped beside a leading cell.
+  - `colStart` — places the row starting at a column line (e.g. `colStart={2}` to leave column 1 for a leading cell).
+  - `featured` — applies the highlighted background to mark the active row.
+
+  **New props** on existing wrappers:
+  - `as` on `DataList.Cell` and `DataList.TopCell` — render the cell as any HTML element (e.g. `<label>` so the whole cell is clickable).
+  - `hasLeadingCell` on `DataList.Top` — drops default gap and left padding so a leading cell sits flush, mirroring how `Row` + `RowButton` compose.
+
+  **Example** — selection row with a checkbox in column 1 and an interactive button spanning the rest:
+
+  ```tsx
+  <DataList.Row>
+    <DataList.SelectCell checked={isSelected} onToggle={shiftKey => toggle(id, shiftKey)} />
+    <DataList.RowButton flushLeft colStart={2} featured={isFeatured} onClick={onRowClick}>
+      <DataList.IdCell id={item.id} />
+      <DataList.MonoCell>{item.input}</DataList.MonoCell>
+    </DataList.RowButton>
+  </DataList.Row>
+  ```
+
+  Internally the Traces and Logs list views now use the shared primitives — no behavior change for those consumers.
+
+- Added support for trailing cells in `DataList` rows. `DataList.RowButton` and `DataList.RowLink` now accept `colEnd` and `flushRight` (mirrors of the existing `colStart`/`flushLeft`), so a row can sit beside a non-interactive trailing cell (e.g. an actions column) and stay aligned with the header. Rows wrapped in `DataList.Row` now render a full-width separator that extends through the leading and trailing cells. `DataList.MonoCell` also gained an optional `height` prop so non-compact lists can use it without forcing compact padding. ([#16888](https://github.com/mastra-ai/mastra/pull/16888))
+
+  **Usage**
+
+  ```tsx
+  <DataList.Row>
+    <DataList.RowButton flushLeft flushRight colEnd={-2} onClick={onClick}>
+      {/* main row content */}
+    </DataList.RowButton>
+    <DataList.Cell>
+      {/* trailing actions, e.g. icon buttons */}
+    </DataList.Cell>
+  </DataList.Row>
+
+  <DataList.MonoCell height="default">long mono text…</DataList.MonoCell>
+  ```
+
+- Migrated the Label component off Radix UI. It now renders a native `<label>` element with the same props and styling — `htmlFor`, `className`, and children behave exactly as before. ([#16892](https://github.com/mastra-ai/mastra/pull/16892))
+
+- Fixed Studio Settings page (and other default-height `PageLayout` pages) clipping their content with no scrollbar on viewports shorter than the form. Users on short laptop screens (under ~991px tall) could not reach the Save button under the Mastra Connection headers form, making it impossible to apply changes. Default-height `PageLayout` pages now grow with their content and scroll through the studio chrome wrapper; `height="full"` pages (Logs, Traces, Metrics, etc.) are unchanged. ([#16999](https://github.com/mastra-ai/mastra/pull/16999))
+
+- Restyled scrollbars across the studio UI to match the design system — thin, themed thumb on a transparent track — replacing the default OS scrollbars that clashed with dark and light surfaces. ([#16918](https://github.com/mastra-ai/mastra/pull/16918))
+
+- Exported ContextMenu from the package entry so it can be imported alongside other Base UI primitives. ([#17062](https://github.com/mastra-ai/mastra/pull/17062))
+
+- Design-system additions to support theming: ([#17059](https://github.com/mastra-ai/mastra/pull/17059))
+  - `Avatar` now accepts optional `color` and `textColor` props for per-instance tinting, and falls back to the initial when the image fails to load.
+  - `Searchbar` accepts an optional `className` to let consumers tune layout without forking.
+  - `TabList` accepts a `style` prop and the active-tab indicator now reads from the `--tab-indicator-color` CSS variable, letting parents theme the indicator (e.g. per-agent accent color).
+  - `stringToColor` now accepts any `number` for the `lightness` argument and defaults to `90` instead of `75` for a lighter fallback chip.
+  - Global `body` rule enables `font-smoothing` / `-webkit-font-smoothing` for crisper UI text.
+
+- Removed `EntryList` and its sub-components (`EntryList.Header`, `EntryList.Entries`, `EntryList.Entry`, `EntryList.EntryText`, `EntryList.Pagination`, `EntryList.NoMatch`, `EntryListSkeleton`, etc.) from the public API. All in-repo list views have migrated to `DataList`, which is the recommended replacement. ([#16910](https://github.com/mastra-ai/mastra/pull/16910))
+
+  **Migration:**
+
+  ```tsx
+  // Before
+  import { EntryList, EntryListSkeleton } from '@mastra/playground-ui';
+
+  <EntryList>
+    <EntryList.Trim>
+      <EntryList.Header columns={columns} />
+      <EntryList.Entries>
+        {items.map(item => (
+          <EntryList.Entry key={item.id} columns={columns} entry={item} onClick={…}>
+            {columns.map(col => <EntryList.EntryText key={col.name}>{item[col.name]}</EntryList.EntryText>)}
+          </EntryList.Entry>
+        ))}
+      </EntryList.Entries>
+    </EntryList.Trim>
+    <EntryList.Pagination …/>
+  </EntryList>
+
+  // After
+  import { DataList } from '@mastra/playground-ui';
+
+  <DataList columns={gridColumns}>
+    <DataList.Top>
+      {columns.map(col => <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>)}
+    </DataList.Top>
+    {items.map(item => (
+      <DataList.RowButton key={item.id} onClick={…}>
+        {columns.map(col => <DataList.Cell key={col.name}>{item[col.name]}</DataList.Cell>)}
+      </DataList.RowButton>
+    ))}
+    <DataList.Pagination …/>
+  </DataList>
+  ```
+
+- Improved the Checkbox component by migrating it to Base UI. The public API is unchanged — `checked` (including the `'indeterminate'` value), `defaultChecked`, `onCheckedChange`, and `disabled` all behave as before. ([#16905](https://github.com/mastra-ai/mastra/pull/16905))
+
+- Fixed MetricsDataTable sticky header and column backgrounds to use surface3 token, matching DashboardCard surface ([#16828](https://github.com/mastra-ai/mastra/pull/16828))
+
+- Improved the RadioGroup component by migrating it to Base UI. The public API (`RadioGroup`, `RadioGroupItem`, `value`, `onValueChange`, `disabled`) is unchanged. Also fixes the radio indicator sizing/centering — the control now stays square and the inner dot is properly centered. ([#16904](https://github.com/mastra-ai/mastra/pull/16904))
+
+- Updated dependencies [[`cfa2e3a`](https://github.com/mastra-ai/mastra/commit/cfa2e3a5292322f48bb28b4d257d631da7f9d3cc), [`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`2f5f58a`](https://github.com/mastra-ai/mastra/commit/2f5f58a9a8bb13bcdc6789db221eef7c9bf1ff02), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`ac442a4`](https://github.com/mastra-ai/mastra/commit/ac442a42fda0354ac2bcea772bf6691cb3e9dbb3), [`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`d72dc4b`](https://github.com/mastra-ai/mastra/commit/d72dc4b12d832546c05c20255fa96fe4eb515900), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`f1b9f87`](https://github.com/mastra-ai/mastra/commit/f1b9f87a00505f15d4fe39f92de287674adc2198), [`1e5c067`](https://github.com/mastra-ai/mastra/commit/1e5c067d2e20a781af670578180d1ee249806d41), [`168fa09`](https://github.com/mastra-ai/mastra/commit/168fa09d6b39114cb8c13bd06f1dccb9bc81c6cd), [`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67), [`af2e1f8`](https://github.com/mastra-ai/mastra/commit/af2e1f8e2a2d2c4ba75167d5c93ca44395639eff), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`271d891`](https://github.com/mastra-ai/mastra/commit/271d8917e4323340f9fe549f3e8de55810dbbcbe), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`8116436`](https://github.com/mastra-ai/mastra/commit/81164363eb225d774e41ff27da6a5ea611406688), [`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`c27c4b9`](https://github.com/mastra-ai/mastra/commit/c27c4b9f137df5414fca4e45896aceccff6b0ed5), [`08b3b59`](https://github.com/mastra-ai/mastra/commit/08b3b590dd960dee6c9a6e39272f8927d803db6e), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5), [`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`9be1545`](https://github.com/mastra-ai/mastra/commit/9be1545475eb81a716169bb1281a37853cc739e0), [`4084113`](https://github.com/mastra-ai/mastra/commit/408411370fc48a822e8b616b3b63f9409774e0e9), [`bc01b1b`](https://github.com/mastra-ai/mastra/commit/bc01b1bfafe381d90af909f8bce7eeb4eee779f2), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd), [`1120b4f`](https://github.com/mastra-ai/mastra/commit/1120b4fa928552c6ee1751efa5603d955841e766), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0
+  - @mastra/client-js@1.21.0
+  - @mastra/react@0.4.1
+
+## 30.0.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`d72dc4b`](https://github.com/mastra-ai/mastra/commit/d72dc4b12d832546c05c20255fa96fe4eb515900)]:
+  - @mastra/core@1.37.0-alpha.9
+  - @mastra/client-js@1.21.0-alpha.10
+  - @mastra/react@0.4.1-alpha.10
+
+## 30.0.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`271d891`](https://github.com/mastra-ai/mastra/commit/271d8917e4323340f9fe549f3e8de55810dbbcbe)]:
+  - @mastra/client-js@1.21.0-alpha.9
+  - @mastra/react@0.4.1-alpha.9
+
+## 30.0.0-alpha.8
+
+### Patch Changes
+
+- Exported ContextMenu from the package entry so it can be imported alongside other Base UI primitives. ([#17062](https://github.com/mastra-ai/mastra/pull/17062))
+
+- Updated dependencies [[`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`c35b962`](https://github.com/mastra-ai/mastra/commit/c35b9625c7e854fcfdeee226a3338a750d0ff211), [`9be1545`](https://github.com/mastra-ai/mastra/commit/9be1545475eb81a716169bb1281a37853cc739e0), [`4084113`](https://github.com/mastra-ai/mastra/commit/408411370fc48a822e8b616b3b63f9409774e0e9), [`bc01b1b`](https://github.com/mastra-ai/mastra/commit/bc01b1bfafe381d90af909f8bce7eeb4eee779f2), [`1120b4f`](https://github.com/mastra-ai/mastra/commit/1120b4fa928552c6ee1751efa5603d955841e766)]:
+  - @mastra/core@1.37.0-alpha.8
+  - @mastra/client-js@1.21.0-alpha.8
+  - @mastra/react@0.4.1-alpha.8
+
+## 30.0.0-alpha.7
+
+### Patch Changes
+
+- Design-system additions to support theming: ([#17059](https://github.com/mastra-ai/mastra/pull/17059))
+  - `Avatar` now accepts optional `color` and `textColor` props for per-instance tinting, and falls back to the initial when the image fails to load.
+  - `Searchbar` accepts an optional `className` to let consumers tune layout without forking.
+  - `TabList` accepts a `style` prop and the active-tab indicator now reads from the `--tab-indicator-color` CSS variable, letting parents theme the indicator (e.g. per-agent accent color).
+  - `stringToColor` now accepts any `number` for the `lightness` argument and defaults to `90` instead of `75` for a lighter fallback chip.
+  - Global `body` rule enables `font-smoothing` / `-webkit-font-smoothing` for crisper UI text.
+
+- Updated dependencies [[`f1b9f87`](https://github.com/mastra-ai/mastra/commit/f1b9f87a00505f15d4fe39f92de287674adc2198), [`168fa09`](https://github.com/mastra-ai/mastra/commit/168fa09d6b39114cb8c13bd06f1dccb9bc81c6cd), [`af2e1f8`](https://github.com/mastra-ai/mastra/commit/af2e1f8e2a2d2c4ba75167d5c93ca44395639eff)]:
+  - @mastra/react@0.4.1-alpha.7
+  - @mastra/core@1.37.0-alpha.7
+  - @mastra/client-js@1.21.0-alpha.7
+
+## 30.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`0cbece9`](https://github.com/mastra-ai/mastra/commit/0cbece9d832cb134a74cdbf3682d390a058215a4), [`7dfe1bc`](https://github.com/mastra-ai/mastra/commit/7dfe1bcfe71d261a6fd6bbf29b1dec49d78fb98f), [`70cb714`](https://github.com/mastra-ai/mastra/commit/70cb7149c8f16f478e15b58498254a53181750a4), [`7f9da22`](https://github.com/mastra-ai/mastra/commit/7f9da22efd5aa595e138a31de55a5f0f2f28b33d)]:
+  - @mastra/core@1.37.0-alpha.6
+  - @mastra/client-js@1.21.0-alpha.6
+  - @mastra/react@0.4.1-alpha.6
+
+## 30.0.0-alpha.5
+
+### Patch Changes
+
+- Improved the Select component by migrating it to Base UI for more reliable positioning and accessibility. The public API (`Select`, `SelectTrigger`, `SelectContent`, `SelectItem`, `SelectValue`, `SelectGroup`) is unchanged, so no consumer updates are needed. ([#16918](https://github.com/mastra-ai/mastra/pull/16918))
+
+- Added `DataList.RowStatic`, a non-interactive row primitive. It renders a row that looks identical to other list rows but does not respond to clicks and shows no hover/focus state — use it alongside `DataList.RowButton` / `DataList.RowLink` when only some rows are clickable (e.g. error or placeholder entries in an otherwise navigable list). ([#16970](https://github.com/mastra-ai/mastra/pull/16970))
+
+  ```tsx
+  {
+    rows.map(row =>
+      row.href ? (
+        <DataList.RowLink key={row.id} to={row.href} LinkComponent={Link}>
+          {row.cells}
+        </DataList.RowLink>
+      ) : (
+        <DataList.RowStatic key={row.id}>{row.cells}</DataList.RowStatic>
+      ),
+    );
+  }
+  ```
+
+- Fixed Studio Settings page (and other default-height `PageLayout` pages) clipping their content with no scrollbar on viewports shorter than the form. Users on short laptop screens (under ~991px tall) could not reach the Save button under the Mastra Connection headers form, making it impossible to apply changes. Default-height `PageLayout` pages now grow with their content and scroll through the studio chrome wrapper; `height="full"` pages (Logs, Traces, Metrics, etc.) are unchanged. ([#16999](https://github.com/mastra-ai/mastra/pull/16999))
+
+- Restyled scrollbars across the studio UI to match the design system — thin, themed thumb on a transparent track — replacing the default OS scrollbars that clashed with dark and light surfaces. ([#16918](https://github.com/mastra-ai/mastra/pull/16918))
+
+- Updated dependencies [[`6096445`](https://github.com/mastra-ai/mastra/commit/60964459733f0ab384584d95e19c36607ffdf7b0), [`91cf0e0`](https://github.com/mastra-ai/mastra/commit/91cf0e027e511b871481a8576b56b7af83b15afd)]:
+  - @mastra/core@1.37.0-alpha.5
+  - @mastra/client-js@1.21.0-alpha.5
+  - @mastra/react@0.4.1-alpha.5
+
+## 30.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b7286f4`](https://github.com/mastra-ai/mastra/commit/b7286f4308267f5fd70e6bfee10dba9472640906), [`a481027`](https://github.com/mastra-ai/mastra/commit/a481027b549ba1018414990c8f045eaee7b9f413), [`801baa0`](https://github.com/mastra-ai/mastra/commit/801baa07cccdbaec1d00942a92bdc831111744a2), [`b3c3b18`](https://github.com/mastra-ai/mastra/commit/b3c3b189121489a3a51a8fd8204b569be9a89fe5)]:
+  - @mastra/core@1.37.0-alpha.4
+  - @mastra/client-js@1.21.0-alpha.4
+  - @mastra/react@0.4.1-alpha.4
+
+## 30.0.0-alpha.3
+
+### Minor Changes
+
+- Added a Drawer component — a panel that slides in from any edge of the screen with swipe-to-dismiss gestures. ([#16958](https://github.com/mastra-ai/mastra/pull/16958))
+
+  The Drawer can be anchored to any of the four screen edges and supports snap points, nested stacking, controlled state, non-modal mode, swipe-to-open areas, and detached triggers.
+
+  ```tsx
+  import {
+    Drawer,
+    DrawerTrigger,
+    DrawerContent,
+    DrawerHeader,
+    DrawerTitle,
+    DrawerDescription,
+    DrawerFooter,
+    DrawerClose,
+    Button,
+  } from '@mastra/playground-ui';
+
+  <Drawer side="right">
+    <DrawerTrigger asChild>
+      <Button>Open</Button>
+    </DrawerTrigger>
+    <DrawerContent>
+      <DrawerHeader>
+        <DrawerTitle>Library</DrawerTitle>
+        <DrawerDescription>A panel that slides in from the right edge.</DrawerDescription>
+      </DrawerHeader>
+      <DrawerFooter>
+        <DrawerClose asChild>
+          <Button variant="outline">Close</Button>
+        </DrawerClose>
+      </DrawerFooter>
+    </DrawerContent>
+  </Drawer>;
+  ```
+
+- Added a reusable `HoverCard` component (`HoverCard`, `HoverCardTrigger`, `HoverCardContent`) built on Base UI. You can now use these exported components to add hover card interactions anywhere in your UI. ([#16919](https://github.com/mastra-ai/mastra/pull/16919))
+
+  ```tsx
+  import { HoverCard, HoverCardTrigger, HoverCardContent } from '@mastra/playground-ui';
+
+  <HoverCard>
+    <HoverCardTrigger>Weather Agent</HoverCardTrigger>
+    <HoverCardContent>Answers questions about current conditions and forecasts.</HoverCardContent>
+  </HoverCard>;
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ac442a4`](https://github.com/mastra-ai/mastra/commit/ac442a42fda0354ac2bcea772bf6691cb3e9dbb3), [`1e5c067`](https://github.com/mastra-ai/mastra/commit/1e5c067d2e20a781af670578180d1ee249806d41), [`008baaf`](https://github.com/mastra-ai/mastra/commit/008baafd8d851f831407045aebead5a2e3342eff), [`8116436`](https://github.com/mastra-ai/mastra/commit/81164363eb225d774e41ff27da6a5ea611406688), [`c27c4b9`](https://github.com/mastra-ai/mastra/commit/c27c4b9f137df5414fca4e45896aceccff6b0ed5), [`08b3b59`](https://github.com/mastra-ai/mastra/commit/08b3b590dd960dee6c9a6e39272f8927d803db6e)]:
+  - @mastra/core@1.37.0-alpha.3
+  - @mastra/client-js@1.21.0-alpha.3
+  - @mastra/react@0.4.1-alpha.3
+
+## 30.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`df1947a`](https://github.com/mastra-ai/mastra/commit/df1947affa40f742067542251fac7ca759492ef4), [`ee59b74`](https://github.com/mastra-ai/mastra/commit/ee59b743ce73ad11784b4d9c6fbba8568edee1c8), [`a97b1a0`](https://github.com/mastra-ai/mastra/commit/a97b1a0abaed83946c3519d1e0f680d0815b8a67)]:
+  - @mastra/core@1.37.0-alpha.2
+  - @mastra/client-js@1.21.0-alpha.2
+  - @mastra/react@0.4.1-alpha.2
+
 ## 30.0.0-alpha.1
 
 ### Patch Changes
