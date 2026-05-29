@@ -108,7 +108,7 @@ function normalizeSignalType(input: Pick<AgentSignalInput, 'type' | 'tagName'>):
   }
 
   if (input.type === 'reactive') {
-    return { type: 'reactive', tagName: input.tagName ?? 'reactive' };
+    return { type: 'reactive', tagName: input.tagName ?? 'system-reminder' };
   }
 
   return { type: 'reactive', tagName: input.tagName ?? input.type };

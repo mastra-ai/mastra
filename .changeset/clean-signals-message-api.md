@@ -2,7 +2,7 @@
 "@mastra/core": minor
 ---
 
-Add experimental `agent.sendMessage()` and `agent.queueMessage()` APIs for sending user-authored input into agent threads. These are intended to be used with `agent.subscribeToThread()` and replace lower-level `agent.sendSignal()` calls for regular user messages.
+Added `agent.sendMessage()` and `agent.queueMessage()` APIs for sending user-authored input into agent threads. These are intended to be used with `agent.subscribeToThread()` and replace lower-level `agent.sendSignal()` calls for regular user messages.
 
 ```ts
 await agent.sendMessage('Continue with the latest user input', { resourceId, threadId });

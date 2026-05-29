@@ -264,6 +264,14 @@ describe('Agent signals', () => {
       content: '<system-reminder>Remember this</system-reminder>',
     });
 
+    const reactiveReminder = createSignal({ type: 'reactive', contents: 'Default reminder tag' });
+    expect(reactiveReminder.type).toBe('reactive');
+    expect(reactiveReminder.tagName).toBe('system-reminder');
+    expect(reactiveReminder.toLLMMessage()).toEqual({
+      role: 'user',
+      content: '<system-reminder>Default reminder tag</system-reminder>',
+    });
+
     const customLegacy = createSignal({ type: 'custom-reminder', contents: 'Legacy custom' });
     expect(customLegacy.type).toBe('reactive');
     expect(customLegacy.tagName).toBe('custom-reminder');
