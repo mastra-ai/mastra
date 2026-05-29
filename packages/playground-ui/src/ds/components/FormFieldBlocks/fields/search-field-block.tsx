@@ -25,6 +25,7 @@ export type SearchFieldBlockProps = {
   layout?: 'horizontal' | 'vertical';
   className?: string;
   size?: InputProps['size'];
+  variant?: InputProps['variant'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
 };
@@ -44,6 +45,7 @@ export function SearchFieldBlock({
   onReset,
   className,
   size,
+  variant,
   isMinimized,
   onMinimizedChange,
 }: SearchFieldBlockProps) {
@@ -97,6 +99,7 @@ export function SearchFieldBlock({
             placeholder={placeholder}
             onChange={onChange}
             size={size}
+            variant={variant}
             className={cn(
               size === 'sm' && 'pl-8 pr-8',
               size === 'md' && 'pl-9 pr-9',
