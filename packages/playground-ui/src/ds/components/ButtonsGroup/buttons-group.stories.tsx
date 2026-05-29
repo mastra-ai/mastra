@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ChevronDownIcon, CopyIcon, ScissorsIcon, ClipboardIcon, SearchIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
+import { DropdownMenu } from '../DropdownMenu';
 import { Input } from '../Input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
@@ -46,13 +47,29 @@ export const CloseSpacing: Story = {
   ),
 };
 
+/**
+ * A split button: a primary action joined to a chevron that opens a real menu of related
+ * actions. The chevron is a `DropdownMenu.Trigger asChild`, so it stays a real `Button` and
+ * the group fuses the two into one pill with a single divider — no width or corner classes on
+ * either segment. (`DropdownMenu` renders no DOM of its own, so the trigger is still a direct
+ * child of the group; the menu content is portaled out.)
+ */
 export const AsSplitButton: Story = {
   render: () => (
     <ButtonsGroup spacing="close">
-      <Button>Cancel</Button>
-      <Button aria-label="Open Menu">
-        <ChevronDownIcon />
-      </Button>
+      <Button>Save</Button>
+      <DropdownMenu>
+        <DropdownMenu.Trigger asChild>
+          <Button aria-label="More save options">
+            <ChevronDownIcon />
+          </Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <DropdownMenu.Item>Save as draft</DropdownMenu.Item>
+          <DropdownMenu.Item>Save and close</DropdownMenu.Item>
+          <DropdownMenu.Item>Save a copy</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
     </ButtonsGroup>
   ),
 };

@@ -3,6 +3,7 @@ import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { Button } from '../Button';
+import { DropdownMenu } from '../DropdownMenu';
 import { Input } from '../Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { ButtonsGroup } from './buttons-group';
@@ -117,5 +118,28 @@ describe('ButtonsGroup', () => {
     expect(getGroup().className).toContain('[&>[data-slot=select-trigger]]:w-fit');
     // And the trigger actually carries the data-slot the rule targets.
     expect(document.querySelector('button')!.getAttribute('data-slot')).toBe('select-trigger');
+  });
+
+  it('a DropdownMenu trigger composes as a real split-button segment (no DOM wrapper, stays the last child)', () => {
+    render(
+      <ButtonsGroup spacing="close">
+        <Button>Save</Button>
+        <DropdownMenu>
+          <DropdownMenu.Trigger asChild>
+            <Button aria-label="More save options">▾</Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content>
+            <DropdownMenu.Item>Save as draft</DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      </ButtonsGroup>,
+    );
+    const group = getGroup();
+    // DropdownMenu renders no DOM of its own and the (closed) menu content is portaled out,
+    // so the group has exactly the two button segments as direct children — the split button.
+    expect(group.querySelectorAll(':scope > button').length).toBe(2);
+    // The trigger stays the last segment, so the group keeps its pill corner on that side
+    // (the right-edge rounding keys off a visible *next* sibling, and there is none).
+    expect(group.querySelector('[aria-label="More save options"]')).toBe(group.lastElementChild);
   });
 });
