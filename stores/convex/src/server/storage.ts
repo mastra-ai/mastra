@@ -289,6 +289,29 @@ function parseStoredSnapshot(stored: unknown, runId: string): Record<string, any
   return JSON.parse(JSON.stringify(stored ?? createEmptyWorkflowSnapshot(runId)));
 }
 
+function parseMetadataForMerge(metadata: unknown): Record<string, unknown> {
+  if (metadata == null) return {};
+  if (typeof metadata === 'string') {
+    try {
+      const parsed = JSON.parse(metadata);
+      return parseMetadataForMerge(parsed);
+    } catch {
+      return {};
+    }
+  }
+  if (typeof metadata === 'object' && !Array.isArray(metadata)) {
+    return metadata as Record<string, unknown>;
+  }
+  return {};
+}
+
+function mergeMetadata(existing: unknown, update: Record<string, unknown> | undefined): Record<string, unknown> {
+  return {
+    ...parseMetadataForMerge(existing),
+    ...(update ?? {}),
+  };
+}
+
 /**
  * Handle operations on typed tables (threads, messages, etc.)
  * Records are stored with their `id` field as a regular field (not _id).
@@ -476,6 +499,65 @@ export async function handleTypedOperation(
         }
       });
       return { ok: true };
+    }
+
+    case 'updateThread': {
+      if (convexTable !== 'mastra_threads') {
+        return { ok: false, error: `Unsupported operation ${request.op} for table ${request.tableName}` };
+      }
+
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
+        .unique();
+
+      if (!existing) {
+        return { ok: true, result: null };
+      }
+
+      const patchRecord = {
+        title: request.title,
+        metadata: mergeMetadata(existing.metadata, request.metadata),
+        updatedAt: request.updatedAt,
+      };
+      await ctx.db.patch(existing._id, patchRecord);
+      return { ok: true, result: { ...existing, ...patchRecord } };
+    }
+
+    case 'updateResource': {
+      if (convexTable !== 'mastra_resources') {
+        return { ok: false, error: `Unsupported operation ${request.op} for table ${request.tableName}` };
+      }
+
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.resourceId))
+        .unique();
+
+      if (!existing) {
+        const record = {
+          id: request.resourceId,
+          ...(request.workingMemory !== undefined ? { workingMemory: request.workingMemory } : {}),
+          metadata: request.metadata ?? {},
+          createdAt: request.createdAt,
+          updatedAt: request.updatedAt,
+        };
+        await ctx.db.insert(convexTable, record);
+        return { ok: true, result: record };
+      }
+
+      const patchRecord: Record<string, unknown> = {
+        updatedAt: request.updatedAt,
+      };
+      if (request.workingMemory !== undefined) {
+        patchRecord.workingMemory = request.workingMemory;
+      }
+      if (request.metadata !== undefined) {
+        patchRecord.metadata = mergeMetadata(existing.metadata, request.metadata);
+      }
+
+      await ctx.db.patch(existing._id, patchRecord);
+      return { ok: true, result: { ...existing, ...patchRecord } };
     }
 
     case 'patch': {

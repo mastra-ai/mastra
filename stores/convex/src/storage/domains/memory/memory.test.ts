@@ -1,0 +1,247 @@
+import type { MastraDBMessage } from '@mastra/core/memory';
+import { TABLE_MESSAGES, TABLE_RESOURCES, TABLE_THREADS } from '@mastra/core/storage';
+import { describe, expect, it, vi } from 'vitest';
+
+import type { ConvexAdminClient } from '../../client';
+import type { StorageRequest } from '../../types';
+import { MemoryConvex } from './index';
+
+function createMemoryDomain(handler: (request: StorageRequest) => unknown | Promise<unknown>) {
+  const calls: StorageRequest[] = [];
+  const client = {
+    callStorage: vi.fn(async (request: StorageRequest) => {
+      calls.push(request);
+      return handler(request);
+    }),
+  } as unknown as ConvexAdminClient;
+
+  return {
+    calls,
+    memory: new MemoryConvex({ client }),
+  };
+}
+
+function createMessage(id: string, threadId: string): MastraDBMessage {
+  return {
+    id,
+    threadId,
+    resourceId: 'resource-1',
+    role: 'user',
+    createdAt: new Date('2026-05-29T00:00:00.000Z'),
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: `message ${id}` }],
+      content: `message ${id}`,
+    },
+  };
+}
+
+describe('MemoryConvex atomic memory writes', () => {
+  it('delegates thread metadata merges to one storage mutation', async () => {
+    const { calls, memory } = createMemoryDomain(request => {
+      expect(request.op).toBe('updateThread');
+      if (request.op !== 'updateThread') return null;
+      return {
+        id: request.id,
+        resourceId: 'resource-1',
+        title: request.title,
+        metadata: { keep: true, ...request.metadata },
+        createdAt: '2026-05-29T00:00:00.000Z',
+        updatedAt: request.updatedAt,
+      };
+    });
+
+    const updated = await memory.updateThread({
+      id: 'thread-1',
+      title: 'new title',
+      metadata: { added: true },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      title: 'new title',
+      metadata: { added: true },
+    });
+    expect(updated).toMatchObject({
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      title: 'new title',
+      metadata: { keep: true, added: true },
+      createdAt: new Date('2026-05-29T00:00:00.000Z'),
+    });
+    expect(updated.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it('parses malformed thread metadata strings without failing the update result', async () => {
+    const { memory } = createMemoryDomain(request => {
+      expect(request.op).toBe('updateThread');
+      if (request.op !== 'updateThread') return null;
+      return {
+        id: request.id,
+        resourceId: 'resource-1',
+        title: request.title,
+        metadata: '{not-json',
+        createdAt: '2026-05-29T00:00:00.000Z',
+        updatedAt: request.updatedAt,
+      };
+    });
+
+    await expect(
+      memory.updateThread({
+        id: 'thread-1',
+        title: 'new title',
+        metadata: { added: true },
+      }),
+    ).resolves.toMatchObject({
+      id: 'thread-1',
+      metadata: '{not-json',
+    });
+  });
+
+  it('bumps saved-message threads with timestamp-only patches', async () => {
+    const { calls, memory } = createMemoryDomain(request => {
+      if (request.op === 'batchInsert') return undefined;
+      if (request.op === 'patch') return true;
+      throw new Error(`Unexpected storage op ${request.op}`);
+    });
+
+    await memory.saveMessages({
+      messages: [createMessage('message-1', 'thread-1'), createMessage('message-2', 'thread-1')],
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({
+      op: 'batchInsert',
+      tableName: TABLE_MESSAGES,
+      records: expect.arrayContaining([
+        expect.objectContaining({ id: 'message-1', thread_id: 'thread-1' }),
+        expect.objectContaining({ id: 'message-2', thread_id: 'thread-1' }),
+      ]),
+    });
+    expect(calls[1]).toMatchObject({
+      op: 'patch',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      record: { updatedAt: expect.any(String) },
+    });
+  });
+
+  it('bumps updated-message threads with timestamp-only patches', async () => {
+    const { calls, memory } = createMemoryDomain(request => {
+      if (request.op === 'queryTable') {
+        return [
+          {
+            id: 'message-1',
+            thread_id: 'old-thread',
+            resourceId: 'resource-1',
+            role: 'user',
+            type: 'v2',
+            content: JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'old' }], content: 'old' }),
+            createdAt: '2026-05-29T00:00:00.000Z',
+          },
+        ];
+      }
+      if (request.op === 'insert') return undefined;
+      if (request.op === 'patch') return true;
+      throw new Error(`Unexpected storage op ${request.op}`);
+    });
+
+    await memory.updateMessages({
+      messages: [
+        {
+          id: 'message-1',
+          threadId: 'new-thread',
+          content: { content: 'new' },
+        },
+      ],
+    });
+
+    expect(calls.filter(call => call.op === 'load')).toEqual([]);
+    expect(calls.filter(call => call.op === 'patch')).toEqual([
+      {
+        op: 'patch',
+        tableName: TABLE_THREADS,
+        id: 'old-thread',
+        record: { updatedAt: expect.any(String) },
+      },
+      {
+        op: 'patch',
+        tableName: TABLE_THREADS,
+        id: 'new-thread',
+        record: { updatedAt: expect.any(String) },
+      },
+    ]);
+  });
+
+  it('delegates resource upserts and metadata merges to one storage mutation', async () => {
+    const { calls, memory } = createMemoryDomain(request => {
+      expect(request.op).toBe('updateResource');
+      if (request.op !== 'updateResource') return null;
+      return {
+        id: request.resourceId,
+        workingMemory: request.workingMemory,
+        metadata: { keep: true, ...request.metadata },
+        createdAt: request.createdAt,
+        updatedAt: request.updatedAt,
+      };
+    });
+
+    const updated = await memory.updateResource({
+      resourceId: 'resource-1',
+      workingMemory: 'new memory',
+      metadata: { added: true },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      op: 'updateResource',
+      tableName: TABLE_RESOURCES,
+      resourceId: 'resource-1',
+      workingMemory: 'new memory',
+      metadata: { added: true },
+    });
+    expect(updated).toMatchObject({
+      id: 'resource-1',
+      workingMemory: 'new memory',
+      metadata: { keep: true, added: true },
+    });
+    expect(updated.createdAt).toBeInstanceOf(Date);
+    expect(updated.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it('parses resources created by the updateResource storage mutation', async () => {
+    const { calls, memory } = createMemoryDomain(request => {
+      expect(request.op).toBe('updateResource');
+      if (request.op !== 'updateResource') return null;
+      return {
+        id: request.resourceId,
+        metadata: request.metadata,
+        createdAt: request.createdAt,
+        updatedAt: request.updatedAt,
+      };
+    });
+
+    const created = await memory.updateResource({
+      resourceId: 'resource-1',
+      metadata: { created: true },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      op: 'updateResource',
+      resourceId: 'resource-1',
+      metadata: { created: true },
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
+    });
+    expect(created).toMatchObject({
+      id: 'resource-1',
+      metadata: { created: true },
+    });
+    expect(created.createdAt).toBeInstanceOf(Date);
+    expect(created.updatedAt).toBeInstanceOf(Date);
+  });
+});
