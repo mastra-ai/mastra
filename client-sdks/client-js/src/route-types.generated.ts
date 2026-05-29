@@ -74472,7 +74472,7 @@ export type PostToolProvidersProviderIdAuthorize_Body = {
         [key: string]: unknown;
       }
     | undefined;
-  /** Optional human label to persist on the resulting tool_provider_connections row */
+  /** Optional human label to persist on the resulting tool_provider_connections row. Must match the stored connection label rules (≤ 32 chars, [A-Za-z0-9 _-]+). */
   label?: (string | null) | undefined;
   /** Identity bucket. "shared" pins under SHARED_BUCKET_ID. "caller-supplied" pins under the request-context resourceId (returns 400 when missing). Defaults to "per-author". */
   scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
