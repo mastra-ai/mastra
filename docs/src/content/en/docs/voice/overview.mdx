@@ -11,7 +11,6 @@ packages:
   - "@mastra/voice-elevenlabs"
   - "@mastra/voice-google"
   - "@mastra/voice-google-gemini-live"
-  - "@mastra/voice-inworld-realtime"
   - "@mastra/voice-murf"
   - "@mastra/voice-openai"
   - "@mastra/voice-openai-realtime"
@@ -727,7 +726,7 @@ For detailed configuration options and advanced features, check out [Speech to S
     ```typescript
     import { Agent } from '@mastra/core/agent'
     import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
-    import { InworldRealtimeVoice } from '@mastra/voice-inworld-realtime'
+    import { InworldRealtimeVoice } from '@mastra/voice-inworld'
 
     const voiceAgent = new Agent({
       id: 'voice-agent',

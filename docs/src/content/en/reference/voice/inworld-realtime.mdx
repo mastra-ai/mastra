@@ -3,7 +3,7 @@ title: "Reference: Inworld Realtime voice | Voice"
 description: "Documentation for the InworldRealtimeVoice class, providing real-time speech-to-speech, tool calling, and Inworld-specific session controls via WebSockets."
 packages:
   - "@mastra/node-audio"
-  - "@mastra/voice-inworld-realtime"
+  - "@mastra/voice-inworld"
 ---
 
 # Inworld Realtime voice
@@ -17,7 +17,7 @@ For batch text-to-speech and speech-to-text, see [`@mastra/voice-inworld`](/refe
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { InworldRealtimeVoice } from '@mastra/voice-inworld-realtime'
+import { InworldRealtimeVoice } from '@mastra/voice-inworld'
 import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 // Initialize with INWORLD_API_KEY from the environment

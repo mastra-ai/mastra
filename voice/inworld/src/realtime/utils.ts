@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import type { ToolsInput } from '@mastra/core/agent';
+import type { ToolsInput } from '@internal/voice';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 type ToolDefinition = {

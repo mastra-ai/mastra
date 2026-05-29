@@ -6,7 +6,7 @@ packages:
   - "@mastra/node-audio"
   - "@mastra/voice-aws-nova-sonic"
   - "@mastra/voice-google-gemini-live"
-  - "@mastra/voice-inworld-realtime"
+  - "@mastra/voice-inworld"
   - "@mastra/voice-openai-realtime"
 ---
 
@@ -162,7 +162,7 @@ Note:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
-import { InworldRealtimeVoice } from '@mastra/voice-inworld-realtime'
+import { InworldRealtimeVoice } from '@mastra/voice-inworld'
 import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 const agent = new Agent({

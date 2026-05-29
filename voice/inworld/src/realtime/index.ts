@@ -1,8 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { ToolsInput } from '@mastra/core/agent';
-import type { RequestContext } from '@mastra/core/request-context';
-import { MastraVoice } from '@mastra/core/voice';
+import type { ToolsInput, RequestContext } from '@internal/voice';
+import { MastraVoice } from '@internal/voice';
 import { WebSocket } from 'ws';
 import type { InworldResponseConfig, InworldSessionConfig, InworldTurnDetection, InworldVoiceEventMap } from './types';
 import { deepMerge, isReadableStream, transformTools } from './utils';

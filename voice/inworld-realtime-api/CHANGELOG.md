@@ -1,1 +1,0 @@
-# @mastra/voice-inworld-realtime
