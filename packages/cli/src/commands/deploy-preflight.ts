@@ -67,23 +67,18 @@ const ENV_VAR_ALLOWLIST_PREFIXES = [
 ];
 
 /**
- * Connection-string-shaped patterns that resolve to the build host and will
- * never work inside the deploy container.
+ * Metadata emitted by the `mastra-local-storage-detector` Rollup plugin
+ * during bundling.  Each entry represents a host-local URL found in a
+ * *user* module (node_modules are excluded) that survived tree-shaking.
  */
-const LOCAL_HOST_PATTERNS: Array<{ pattern: RegExp; hint: string }> = [
-  {
-    pattern: /\bfile:\.{1,2}\/[^\s'"`]+\.(?:db|sqlite)\b/i,
-    hint: 'LibSQL/SQLite file path relative to the build host',
-  },
-  {
-    pattern: /\b(?:postgres(?:ql)?|mysql|mongodb|redis|libsql):\/\/[^/\s'"`]*localhost\b/i,
-    hint: 'localhost in a connection string',
-  },
-  {
-    pattern: /\b(?:postgres(?:ql)?|mysql|mongodb|redis|libsql):\/\/[^/\s'"`]*127\.0\.0\.1\b/,
-    hint: '127.0.0.1 in a connection string',
-  },
-];
+interface LocalStorageDetection {
+  value: string;
+  hint: string;
+  module: string;
+}
+
+/** Name of the metadata file the Rollup plugin emits into the output dir. */
+const LOCAL_PATHS_METADATA_FILE = 'preflight-local-paths.json';
 
 /* ------------------------------------------------------------------ */
 /*  Public API                                                        */
@@ -118,7 +113,12 @@ export async function preflightBuildOutput(
   const issues: PreflightIssue[] = [];
 
   issues.push(...checkMissingEnvVars(combinedSource, envVars));
-  issues.push(...checkLocalStoragePaths(combinedSource));
+
+  // LOCAL_STORAGE_PATH — read from bundler-generated metadata.  The Rollup
+  // plugin `mastra-local-storage-detector` runs during bundling and only
+  // reports paths from user modules (not node_modules) that survived
+  // tree-shaking, so library examples are structurally excluded.
+  issues.push(...(await checkLocalStoragePaths(outputDir)));
 
   return issues;
 }
@@ -198,7 +198,6 @@ async function collectMjsFiles(dir: string): Promise<string[]> {
     return out;
   }
   for (const entry of entries) {
-    // Tests sometimes mock readdir with plain string arrays — fall back to stat
     const name = typeof entry === 'string' ? entry : entry.name;
     if (name === 'node_modules') continue;
     const full = join(dir, name);
@@ -253,146 +252,38 @@ function checkMissingEnvVars(source: string, envVars: Record<string, string>): P
 }
 
 /* ------------------------------------------------------------------ */
-/*  Check 2 — local storage paths                                     */
+/*  Check 2 — local storage paths (bundler-generated metadata)        */
 /* ------------------------------------------------------------------ */
 
 /**
- * Real configuration values (e.g. `url:"file:./mastra.db"`) live in short JS
- * string literals.  Long strings — like Agent Builder LLM prompt templates —
- * may *contain* example code with the same patterns as text content but are
- * not actual runtime values.
- *
- * Rather than scanning the raw combined source we first extract the text
- * content of every JS string literal that is shorter than a comfortable
- * threshold, then only run the pattern checks against those short strings.
- * This structurally avoids false positives from any long template / doc
- * string, regardless of its content.
+ * Read detections written by the `mastra-local-storage-detector` Rollup
+ * plugin.  If the metadata file is absent (e.g. older build, or the plugin
+ * wasn't active) the check is silently skipped — no false positives.
  */
-const MAX_CONFIG_STRING_LEN = 200;
+async function checkLocalStoragePaths(outputDir: string): Promise<PreflightIssue[]> {
+  const metadataPath = join(outputDir, LOCAL_PATHS_METADATA_FILE);
 
-function checkLocalStoragePaths(source: string): PreflightIssue[] {
-  const issues: PreflightIssue[] = [];
-  const seen = new Set<string>();
-
-  const shortStrings = extractShortStringValues(source, MAX_CONFIG_STRING_LEN);
-  const filteredSource = shortStrings.join('\n');
-
-  for (const { pattern, hint } of LOCAL_HOST_PATTERNS) {
-    const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
-    for (const match of filteredSource.matchAll(globalPattern)) {
-      const value = match[0];
-      const key = `${hint}::${value}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      issues.push({
-        code: 'LOCAL_STORAGE_PATH',
-        severity: 'error',
-        message: `Build contains a host-local storage URL: ${truncate(value, 80)} (${hint})`,
-        fix: `Replace it with a hosted URL (e.g. a Turso \`libsql://...\` URL or a public Postgres connection string) and store it in your env file.`,
-      });
-    }
+  let detections: LocalStorageDetection[];
+  try {
+    const raw = await readFile(metadataPath, 'utf-8');
+    detections = JSON.parse(raw) as LocalStorageDetection[];
+  } catch {
+    return [];
   }
 
-  return issues;
+  if (!Array.isArray(detections) || detections.length === 0) return [];
+
+  return detections.map(d => ({
+    code: 'LOCAL_STORAGE_PATH' as const,
+    severity: 'error' as const,
+    message: `Build contains a host-local storage URL: ${truncate(d.value, 80)} (${d.hint})`,
+    fix: `Replace it with a hosted URL (e.g. a Turso \`libsql://...\` URL or a public Postgres connection string) and store it in your env file.`,
+  }));
 }
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
-
-/**
- * Lightweight JS-string-literal scanner.  Walks the source character by
- * character and yields the *content* (without delimiters) of every string
- * literal whose content length is ≤ `maxLen`.
- *
- * Handles double-quoted, single-quoted, and template-literal strings
- * including `${…}` expressions.  Comments are skipped so they don't
- * confuse quote detection.  This is intentionally not a full parser — it
- * covers the patterns produced by bundlers (esbuild / rollup) and
- * gracefully falls through on exotic edge cases.
- */
-function extractShortStringValues(source: string, maxLen: number): string[] {
-  const out: string[] = [];
-  const len = source.length;
-  let i = 0;
-
-  while (i < len) {
-    const ch = source.charCodeAt(i);
-
-    // Double-quote (34) or single-quote (39)
-    if (ch === 34 || ch === 39) {
-      const contentStart = i + 1;
-      i++; // skip opening quote
-      while (i < len) {
-        const c = source.charCodeAt(i);
-        if (c === 92) {
-          i += 2;
-          continue;
-        } // backslash escape
-        if (c === ch) break;
-        i++;
-      }
-      const contentEnd = i;
-      i++; // skip closing quote
-      if (contentEnd - contentStart <= maxLen) {
-        out.push(source.slice(contentStart, contentEnd));
-      }
-      continue;
-    }
-
-    // Template literal (96 = backtick)
-    if (ch === 96) {
-      const contentStart = i + 1;
-      i++;
-      let depth = 0;
-      while (i < len) {
-        const c = source.charCodeAt(i);
-        if (c === 92) {
-          i += 2;
-          continue;
-        }
-        if (c === 36 && i + 1 < len && source.charCodeAt(i + 1) === 123) {
-          depth++;
-          i += 2;
-          continue;
-        } // ${
-        if (depth > 0 && c === 125) {
-          depth--;
-          i++;
-          continue;
-        } // }
-        if (depth === 0 && c === 96) break;
-        i++;
-      }
-      const contentEnd = i;
-      i++;
-      if (contentEnd - contentStart <= maxLen) {
-        out.push(source.slice(contentStart, contentEnd));
-      }
-      continue;
-    }
-
-    // Line comment — skip to EOL
-    if (ch === 47 && i + 1 < len && source.charCodeAt(i + 1) === 47) {
-      i += 2;
-      while (i < len && source.charCodeAt(i) !== 10) i++;
-      continue;
-    }
-
-    // Block comment — skip to */
-    if (ch === 47 && i + 1 < len && source.charCodeAt(i + 1) === 42) {
-      i += 2;
-      while (i + 1 < len && !(source.charCodeAt(i) === 42 && source.charCodeAt(i + 1) === 47)) i++;
-      i += 2;
-      continue;
-    }
-
-    i++;
-  }
-
-  return out;
-}
 
 function truncate(s: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;

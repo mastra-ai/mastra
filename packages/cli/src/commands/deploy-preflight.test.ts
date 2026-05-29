@@ -100,8 +100,19 @@ describe('preflightBuildOutput', () => {
   });
 
   describe('LOCAL_STORAGE_PATH', () => {
-    it('flags file:./*.db LibSQL paths as errors', async () => {
-      writeBundle(`const url = 'file:./mastra.db';`);
+    function writePreflightMetadata(detections: Array<{ value: string; hint: string; module: string }>) {
+      writeFileSync(join(tmpDir, '.mastra', 'output', 'preflight-local-paths.json'), JSON.stringify(detections));
+    }
+
+    it('flags detections from bundler metadata as errors', async () => {
+      writeBundle(`export {};`);
+      writePreflightMetadata([
+        {
+          value: 'file:./mastra.db',
+          hint: 'LibSQL/SQLite file path relative to the build host',
+          module: 'src/mastra/index.ts',
+        },
+      ]);
       const issues = await preflightBuildOutput(tmpDir, {});
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
       expect(issue).toBeDefined();
@@ -109,51 +120,39 @@ describe('preflightBuildOutput', () => {
       expect(issue?.message).toContain('file:./mastra.db');
     });
 
-    it('flags localhost in connection strings', async () => {
-      writeBundle(`const pg = 'postgresql://user:pass@localhost:5432/db';`);
-      const issues = await preflightBuildOutput(tmpDir, {});
-      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
-      expect(issue).toBeDefined();
-      expect(issue?.severity).toBe('error');
-    });
-
-    it('flags 127.0.0.1 in connection strings', async () => {
-      writeBundle(`const r = 'redis://127.0.0.1:6379';`);
-      const issues = await preflightBuildOutput(tmpDir, {});
-      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeDefined();
-    });
-
-    it('does not flag hosted libsql:// URLs', async () => {
-      writeBundle(`const url = 'libsql://my-db-acme.turso.io';`);
-      const issues = await preflightBuildOutput(tmpDir, {});
-      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
-    });
-
-    it('does not flag the word "localhost" in unrelated strings', async () => {
-      writeBundle(`const msg = 'You can run this on localhost too';`);
-      const issues = await preflightBuildOutput(tmpDir, {});
-      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
-    });
-
-    it('does not flag file: paths embedded in long strings (agent-builder prompt templates)', async () => {
-      // Simulate a bundled prompt template: one very long double-quoted string
-      // that contains example code with a local file: path as text content.
-      // The inner single-quoted 'file:./mastra.db' is NOT a standalone JS
-      // string — it's text inside the outer long string.
-      const padding = 'x'.repeat(300);
-      writeBundle(
-        `const prompt = "Here is an example: ${padding} url: 'file:./mastra.db' ${padding}";` +
-          `const other = "More template text ${padding} url: 'file:../mastra.db' ${padding}";`,
-      );
-      const issues = await preflightBuildOutput(tmpDir, {});
-      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
-    });
-
-    it('still flags real file: paths in short string literals', async () => {
-      writeBundle(`const url = 'file:./mastra.db'; const other = 'file:../data.db';`);
+    it('flags multiple detections from metadata', async () => {
+      writeBundle(`export {};`);
+      writePreflightMetadata([
+        { value: 'file:./mastra.db', hint: 'LibSQL/SQLite file path', module: 'src/mastra/index.ts' },
+        { value: 'file:../data.db', hint: 'LibSQL/SQLite file path', module: 'src/mastra/config.ts' },
+      ]);
       const issues = await preflightBuildOutput(tmpDir, {});
       const storageIssues = issues.filter(i => i.code === 'LOCAL_STORAGE_PATH');
       expect(storageIssues.length).toBe(2);
+    });
+
+    it('reports no issues when metadata file is empty array', async () => {
+      writeBundle(`export {};`);
+      writePreflightMetadata([]);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('reports no issues when metadata file is absent (older build)', async () => {
+      // Bundle exists but no preflight metadata — plugin wasn't active.
+      writeBundle(`const url = 'file:./mastra.db';`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('excludes library code by design (agent-builder prompt templates)', async () => {
+      // The Rollup plugin only records detections from user modules (not
+      // node_modules), so agent-builder prompt templates are never present
+      // in the metadata.  An empty metadata array = no false positives.
+      writeBundle(`const prompt = "url: 'file:./mastra.db'"; // from agent-builder`);
+      writePreflightMetadata([]);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
     });
   });
 
