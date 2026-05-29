@@ -92,7 +92,51 @@ describe('Agent voice memory persistence', () => {
     mockVoice.emitTurn({ role: 'assistant', text: 'Hi there' });
     await vi.waitFor(() => expect(saveMessages).toHaveBeenCalledTimes(2));
 
+    const assistantMessage = saveMessages.mock.calls[1]![0].messages[0];
+    expect(assistantMessage).toMatchObject({
+      role: 'assistant',
+      threadId: 'thread-voice-1',
+      resourceId: 'user-1',
+      content: { format: 2, parts: [{ type: 'text', text: 'Hi there' }] },
+    });
+
     expect(voice).toBe(mockVoice);
+  });
+
+  it('rebinds persistence when getVoice memory scope changes', async () => {
+    const mockVoice = createMockVoice();
+    const memory = new MockMemory({ storage: new MockStore() });
+    const saveMessages = vi.spyOn(memory, 'saveMessages');
+
+    const agent = new Agent({
+      id: 'voice-memory-agent',
+      name: 'Voice Memory Agent',
+      instructions: 'You are helpful.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'ok' }],
+          warnings: [],
+        }),
+      }),
+      memory,
+      voice: mockVoice,
+    });
+
+    await agent.getVoice({ memory: { thread: 'thread-a', resource: 'user-1' } });
+    mockVoice.emitTurn({ role: 'user', text: 'scope a' });
+    await vi.waitFor(() => expect(saveMessages).toHaveBeenCalled());
+
+    await agent.getVoice({ memory: { thread: 'thread-b', resource: 'user-2' } });
+    mockVoice.emitTurn({ role: 'user', text: 'scope b' });
+    await vi.waitFor(() => expect(saveMessages).toHaveBeenCalledTimes(2));
+
+    expect(saveMessages.mock.calls[1]![0].messages[0]).toMatchObject({
+      threadId: 'thread-b',
+      resourceId: 'user-2',
+      content: { format: 2, parts: [{ type: 'text', text: 'scope b' }] },
+    });
   });
 
   it('requires resource when persisting voice turns', async () => {

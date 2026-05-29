@@ -1670,12 +1670,23 @@ export class Agent<
 
       if (memoryOption) {
         this.#attachVoiceMemoryPersistence(voice, memoryOption, requestContext);
+      } else {
+        this.#detachVoiceMemoryPersistence();
       }
 
       return voice;
     } else {
       return new DefaultVoice();
     }
+  }
+
+  #detachVoiceMemoryPersistence(): void {
+    if (!this.#voiceMemoryPersistence) {
+      return;
+    }
+
+    this.#voiceMemoryPersistence.voice.off('turn', this.#voiceMemoryPersistence.handler);
+    this.#voiceMemoryPersistence = undefined;
   }
 
   #attachVoiceMemoryPersistence(
@@ -1696,73 +1707,70 @@ export class Agent<
       throw error;
     }
 
+    this.#detachVoiceMemoryPersistence();
+
     const thread =
       typeof memoryOption.thread === 'string' ? { id: memoryOption.thread } : memoryOption.thread;
     const threadId = thread.id;
     const memoryConfig = memoryOption.options;
 
-    if (this.#voiceMemoryPersistence?.voice !== voice) {
-      if (this.#voiceMemoryPersistence) {
-        this.#voiceMemoryPersistence.voice.off('turn', this.#voiceMemoryPersistence.handler);
+    let threadReady = false;
+    let saveQueue: Promise<void> = Promise.resolve();
+
+    const handler = (turn: VoiceTurnEvent) => {
+      const text = turn.text.trim();
+      if (!text) {
+        return;
       }
 
-      let threadReady = false;
-
-      const handler = (turn: VoiceTurnEvent) => {
-        const text = turn.text.trim();
-        if (!text) {
-          return;
-        }
-
-        void (async () => {
+      saveQueue = saveQueue
+        .then(async () => {
           const memory = await this.getMemory({ requestContext });
           if (!memory) {
             this.logger.warn(`[Agent:${this.name}] - voice memory scope provided but agent has no memory configured`);
             return;
           }
 
-          try {
-            if (!threadReady) {
-              const existingThread = await memory.getThreadById({ threadId });
-              if (!existingThread) {
-                await memory.createThread({
-                  threadId,
-                  resourceId,
-                  metadata: thread.metadata,
-                  title: thread.title,
-                  memoryConfig,
-                  saveThread: true,
-                });
-              }
-              threadReady = true;
+          if (!threadReady) {
+            const existingThread = await memory.getThreadById({ threadId });
+            if (!existingThread) {
+              await memory.createThread({
+                threadId,
+                resourceId,
+                metadata: thread.metadata,
+                title: thread.title,
+                memoryConfig,
+                saveThread: true,
+              });
             }
-
-            const message: MastraDBMessage = {
-              id: this.#mastra?.generateId() || randomUUID(),
-              role: turn.role,
-              type: 'text',
-              createdAt: new Date(),
-              threadId,
-              resourceId,
-              content: {
-                format: 2,
-                parts: [{ type: 'text', text }],
-              },
-            };
-
-            await memory.saveMessages({
-              messages: [message],
-              memoryConfig,
-            });
-          } catch (err) {
-            this.logger.error(`[Agent:${this.name}] - failed to persist voice turn`, { err, threadId });
+            threadReady = true;
           }
-        })();
-      };
 
-      voice.on('turn', handler);
-      this.#voiceMemoryPersistence = { voice, handler };
-    }
+          const message: MastraDBMessage = {
+            id: this.#mastra?.generateId() || randomUUID(),
+            role: turn.role,
+            type: 'text',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text }],
+            },
+          };
+
+          await memory.saveMessages({
+            messages: [message],
+            memoryConfig,
+          });
+        })
+        .catch(err => {
+          this.logger.error(`[Agent:${this.name}] - failed to persist voice turn`, { err, threadId });
+        });
+    };
+
+    voice.on('turn', handler);
+    this.#voiceMemoryPersistence = { voice, handler };
   }
 
   /**
