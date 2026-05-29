@@ -59,7 +59,8 @@ const agent = new Agent({
   {
     name: 'name',
     type: 'string',
-    description: 'Container display name passed to Docker as `--name`. Characters outside `[a-zA-Z0-9_.-]` are replaced with `-` and the result is prefixed if it would not start with an alphanumeric character.',
+    description:
+      'Container display name passed to Docker as `--name`. Characters outside `[a-zA-Z0-9_.-]` are replaced with `-` and the result is prefixed if it would not start with an alphanumeric character.',
     isOptional: true,
     defaultValue: 'The sandbox `id`',
   },
