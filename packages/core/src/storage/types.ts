@@ -305,7 +305,7 @@ export interface StorageToolProviderConfigConnection {
   connectionId: string;
   toolkit: string;
   label?: string;
-  scope?: 'per-author' | 'shared' | 'caller-supplied';
+  scope?: StorageToolProviderConnectionScope;
 }
 
 /**

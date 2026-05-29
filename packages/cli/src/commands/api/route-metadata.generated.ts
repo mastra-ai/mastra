@@ -582,6 +582,29 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /workflows/:workflowId/resume-no-wait": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/resume-no-wait",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /workflows/:workflowId/resume": {
     "method": "POST",
     "path": "/workflows/:workflowId/resume",
@@ -5251,6 +5274,29 @@ export const API_ROUTE_METADATA = {
   "POST /agent-builder/:actionId/resume-async": {
     "method": "POST",
     "path": "/agent-builder/:actionId/resume-async",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/resume-no-wait": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/resume-no-wait",
     "pathParams": [
       "actionId"
     ],
