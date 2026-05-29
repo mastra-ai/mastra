@@ -55,9 +55,10 @@ export function ScorersToolbar({
 
   return (
     <div className="flex items-center gap-2 w-full max-w-[40rem]">
-      {/* Search + source filter fused into one pill (ButtonsGroup spacing="close"). */}
+      {/* Search + source filter fused into one pill (ButtonsGroup spacing="close").
+          `size="default"` to match the other list searches (e.g. /agents). */}
       <ButtonsGroup spacing="close" className="flex-1 min-w-0">
-        <InputGroup variant="outline" size="md">
+        <InputGroup variant="outline" size="default">
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>
@@ -82,7 +83,7 @@ export function ScorersToolbar({
           )}
         </InputGroup>
         <Select value={sourceFilter} onValueChange={onSourceFilterChange}>
-          <SelectTrigger size="md" aria-label="Filter by source" className="rounded-full">
+          <SelectTrigger aria-label="Filter by source" className="rounded-full">
             <SelectValue placeholder="All sources" />
           </SelectTrigger>
           <SelectContent align="end">
@@ -96,7 +97,7 @@ export function ScorersToolbar({
       </ButtonsGroup>
 
       {onReset && hasActiveFilters && (
-        <Button onClick={onReset} variant="outline" size="md">
+        <Button onClick={onReset} variant="outline">
           <XIcon /> Reset
         </Button>
       )}
