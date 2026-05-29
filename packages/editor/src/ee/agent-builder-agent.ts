@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { AgentConfig } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
@@ -35,11 +36,11 @@ const workspace = new Workspace({
  */
 
 export function createBuilderAgent(
-  args?: Partial<ConstructorParameters<typeof Agent<'builder-agent'>>[0]>,
+  args?: Partial<Omit<AgentConfig<'builder-agent'>, 'editor'>>,
 ): Agent<'builder-agent'> {
   const memory = new Memory();
 
-  return new Agent<'builder-agent'>({
+  const config: AgentConfig<'builder-agent'> = {
     instructions: `You are the Agent Builder.
 
 Your job: turn a non-technical user's plain-language request into a fully configured, production-quality agent in a single turn.
@@ -175,5 +176,7 @@ The system prompt written into \`set-agent-instructions\` MUST include all of th
     id: 'builder-agent',
     name: 'Agent Builder Agent',
     description: 'An agent that can build agents',
-  });
+  };
+
+  return new Agent<'builder-agent'>(config);
 }
