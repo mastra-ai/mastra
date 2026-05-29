@@ -171,16 +171,9 @@ export class MemoryConvex extends MemoryStorage {
       queryFilters.push({ field: 'resourceId', value: filter.resourceId });
     }
 
-    const rows = await this.#db.queryTable<
-      Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
-    >(TABLE_THREADS, queryFilters);
+    const rows = await this.#db.queryTable<StoredThread>(TABLE_THREADS, queryFilters);
 
-    let threads = rows.map(row => ({
-      ...row,
-      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-    }));
+    let threads = rows.map(row => parseStoredThread(row));
 
     // Apply metadata filters if provided (AND logic)
     if (filter?.metadata && Object.keys(filter.metadata).length > 0) {

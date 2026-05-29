@@ -101,6 +101,34 @@ describe('MemoryConvex atomic memory writes', () => {
     });
   });
 
+  it('parses malformed thread metadata strings when listing threads', async () => {
+    const { memory } = createMemoryDomain(request => {
+      expect(request.op).toBe('queryTable');
+      if (request.op !== 'queryTable') return [];
+      return [
+        {
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          title: 'thread',
+          metadata: '{not-json',
+          createdAt: '2026-05-29T00:00:00.000Z',
+          updatedAt: '2026-05-29T00:01:00.000Z',
+        },
+      ];
+    });
+
+    await expect(memory.listThreads({})).resolves.toMatchObject({
+      threads: [
+        {
+          id: 'thread-1',
+          metadata: '{not-json',
+          createdAt: new Date('2026-05-29T00:00:00.000Z'),
+          updatedAt: new Date('2026-05-29T00:01:00.000Z'),
+        },
+      ],
+    });
+  });
+
   it('bumps saved-message threads with timestamp-only patches', async () => {
     const { calls, memory } = createMemoryDomain(request => {
       if (request.op === 'batchInsert') return undefined;
