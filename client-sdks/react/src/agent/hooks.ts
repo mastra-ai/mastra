@@ -1,11 +1,11 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { AIV5Type, MastraDBMessage } from '@mastra/core/agent/message-list';
 import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accumulateChunk,
@@ -101,13 +101,21 @@ const isThreadSignalUnsupportedError = (error: unknown) => {
   return status === 400 && candidate?.message?.includes('No active agent run found for signal target');
 };
 
+type DataChunk = Extract<ChunkType, DataChunkType>;
+
+const isDataChunk = (chunk: ChunkType): chunk is DataChunk =>
+  typeof chunk.type === 'string' && chunk.type.startsWith('data-');
+
 /**
  * Convert AI-SDK v5 UIMessages returned by the server (generate mode) into
  * `MastraDBMessage[]`, stamping the supplied metadata onto each message's
  * `content.metadata`. Private helper — `useChat` never exposes the AI-SDK
  * shape to consumers.
  */
-const dbFromServerUiMessages = (uiMessages: any[], metadata: MastraDBMessageMetadata): MastraDBMessage[] =>
+const dbFromServerUiMessages = (
+  uiMessages: AIV5Type.UIMessage[],
+  metadata: MastraDBMessageMetadata,
+): MastraDBMessage[] =>
   uiMessages.map(uiMsg => {
     const dbMsg = AIV5Adapter.fromUIMessage(uiMsg);
     return {
@@ -249,8 +257,8 @@ export const useChat = ({
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
       setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-      if (chunk.type === 'data-user-message' && 'data' in chunk && typeof (chunk as any).data?.id === 'string') {
-        onSignalEcho?.((chunk as any).data.id);
+      if (chunk.type === 'data-user-message' && isDataChunk(chunk) && typeof chunk.data?.id === 'string') {
+        onSignalEcho?.(chunk.data.id);
       }
 
       if (chunk.type === 'start') {
