@@ -38,7 +38,7 @@ async function main() {
   const teardown = await setup(mockProject as any);
 
   const fixturePath = await mkdtemp(join(tmpdir(), `mastra-${providedContext.tag}-`));
-  process.env.npm_config_registry = providedContext.registry;
+  process.env.pnpm_config_registry = providedContext.registry;
   await setupTemplate(fixturePath, 'pnpm');
 
   try {
@@ -47,7 +47,7 @@ async function main() {
       stdio: 'inherit',
       env: {
         ...process.env,
-        npm_config_registry: providedContext.registry,
+        pnpm_config_registry: providedContext.registry,
       },
     });
   } finally {

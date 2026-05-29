@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-d4f909c5",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle messages with only assistant role in network",
     "createdAt": "2026-05-18T10:51:25.243Z",
-    "updatedAt": "2026-05-20T14:05:45.029Z"
+    "updatedAt": "2026-05-28T17:34:29.565Z"
   },
   "recordings": [
     {
@@ -73,7 +73,7 @@
             ]
           }
         },
-        "timestamp": 1779285919508
+        "timestamp": 1779989664979
       },
       "response": {
         "status": 200,
@@ -81,9 +81,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:21 GMT",
+          "date": "Thu, 28 May 2026 17:34:26 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1618",
+          "server-timing": "gfet4t7; dur=1231",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -96,19 +96,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Hello, I am an agent in a network of specialized AI agents. I need to decide which agent should handle each step of a task. The user has given me the task: This is a system message. What should I do?\",\n  \"selectionReason\": \"The user has provided a system message and is asking for guidance on how to proceed. The helperAgent is the most appropriate choice to provide assistance and guidance on the next steps.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Hello! How can I assist you today?\",\n  \"selectionReason\": \"Since the user provided an empty input, I will start by engaging the helperAgent to understand the user's needs and goals for this interaction. This will help me determine the appropriate next steps and select the most suitable primitive to address their request.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.29522431202423877
+              "avgLogprobs": -0.2613334450670468
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 834,
-            "candidatesTokenCount": 117,
-            "totalTokenCount": 951,
+            "candidatesTokenCount": 93,
+            "totalTokenCount": 927,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -118,19 +118,19 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 117
+                "tokenCount": 93
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "n78NasGyJ_S0nsEPtNbA8QE"
+          "responseId": "oXwYapPtEdCcjMcPlOe3kAU"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "1a3b345c5df0d479",
+      "hash": "67d01240a46d00b7",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -157,7 +157,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "Hello, I am an agent in a network of specialized AI agents. I need to decide which agent should handle each step of a task. The user has given me the task: This is a system message. What should I do?"
+                  "text": "Hello! How can I assist you today?"
                 }
               ]
             }
@@ -170,7 +170,7 @@
             ]
           }
         },
-        "timestamp": 1779285921161
+        "timestamp": 1779989666337
       },
       "response": {
         "status": 200,
@@ -179,52 +179,24 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:05:22 GMT",
+          "date": "Thu, 28 May 2026 17:34:27 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=808",
+          "server-timing": "gfet4t7; dur=619",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Okay\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \", I understand\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \". You're a routing agent deciding which specialized agent in your network should handle the\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" task \\\"This is a system message.\\\"  Here's a breakdown of how\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" you should approach this and the possible agent choices, along with reasoning:\\n\\n**Understanding the Task:**\\n\\nThe task \\\"This is a system message\\\" is,\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" on its own, fairly meaningless. It's crucial to understand the **context** in which the user provided this message.  Why did they send it? What are\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" they trying to achieve?  Without knowing the context, you're operating with incomplete information.\\n\\n**Here's a breakdown of possible scenarios and the optimal agent to handle them:**\\n\\n**Scenario 1: The User is Testing the\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" System or Troubleshooting**\\n\\n*   **Meaning:** The user might be checking if the system is online, if the message is being properly received, or troubleshooting a communication issue.\\n*   **Optimal Agent:** **A Logging/Monitoring Agent** or a\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" **Diagnostic Agent**.\\n    *   **Reasoning:** This agent can record the message, timestamp it, check for any errors in transmission, and confirm that the system is functioning correctly. It can also trigger alerts if the message doesn't follow the expected format or if there are other system-level problems.\\n\\n**\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Scenario 2: The User is Providing Information within a Larger Conversation or Workflow**\\n\\n*   **Meaning:** The message is a signal or placeholder for something more.  It indicates a state or a transition in a pre-defined process.\\n*   **Optimal Agent:** **A Contextual Analyzer Agent** or a\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" **Workflow Orchestration Agent**.\\n    *   **Reasoning:** These agents are designed to interpret the message based on the ongoing conversation or the current stage of a pre-defined workflow. This agent would need to know what the \\\"system message\\\" signifies in the given context.\\n\\n**Scenario 3: The User Mist\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"akenly Sent the Message**\\n\\n*   **Meaning:** The user may have accidentally typed the message or sent it to the wrong system.\\n*   **Optimal Agent:** **A User Assistance Agent** or a **Politeness/Error Handling Agent**.\\n    *   **Reasoning:** This agent can gently inquire\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" about the user's intention or suggest that the message may have been sent in error.  It should avoid being accusatory or making assumptions.\\n\\n**Scenario 4: The User is Trying to Trigger a Specific System Response**\\n\\n*   **Meaning:** The message itself is a command or instruction.\\n*   \"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"**Optimal Agent:** **A Command Processing Agent** or a **Security/Authorization Agent**.\\n    *   **Reasoning:** If \\\"This is a system message\\\" is meant to trigger a specific action, the command processing agent will need to parse the message to identify the command and its parameters. The Security Agent would verify that\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the user has the necessary permissions to execute the command.\\n\\n**Scenario 5: The User is Intentionally Sending an Ambiguous Message**\\n\\n*   **Meaning:** The user is testing the intelligence or robustness of the system.\\n*   **Optimal Agent:** **A Reasoning/Inference Agent**.\\n    *   \"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"**Reasoning:** This agent can attempt to deduce the user's intent by considering the context, past interactions, and general knowledge. It could also flag the message as potentially ambiguous for further human review.\\n\\n**Your Action as the Routing Agent:**\\n\\n1.  **Gather Context:**  *This is the MOST important\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" step.*  Before routing the task, try to get more context from the user. You could ask:\\n    *   \\\"Could you please provide more information about the purpose of this message?\\\"\\n    *   \\\"What are you trying to achieve by sending this message?\\\"\\n    *   \\\"Is this message related to\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" a previous task or conversation?\\\"\\n\\n2.  **Analyze the Message (If No Further Context):** If you cannot get more context, do your best to analyze the message itself. Look for any clues, keywords, or patterns that might indicate the user's intention.\\n\\n3.  **Select the Appropriate Agent:** Based\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" on the context (or your best guess), choose the agent that is most likely to handle the task effectively.\\n\\n4.  **Route the Task:** Send the message to the selected agent, along with any available context or analysis.\\n\\n5.  **Monitor the Results:** Keep track of how the agent is handling the task.\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" If the agent is struggling or if the user provides more information later, you may need to re-route the task to a different agent.\\n\\n**Example Implementation (Python-like Pseudocode):**\\n\\n```python\\ndef route_task(message, context=None):\\n  \\\"\\\"\\\"\\n  Routes a task to the appropriate agent\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" based on the message and context.\\n\\n  Args:\\n    message: The task message (string).\\n    context: Any additional context about the task (optional).\\n\\n  Returns:\\n    The name of the agent the task was routed to.\\n  \\\"\\\"\\\"\\n\\n  if not context:\\n    # Attempt to get\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" more context from the user (this would require a User Interaction Agent)\\n    print(\\\"Could you please provide more information about the purpose of this message?\\\")\\n    return \\\"User Interaction Agent (Waiting for more information)\\\" #Or return a waiting state\\n\\n\\n  message = message.lower() #Standardize the message for\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" keyword analysis\\n\\n  if \\\"test\\\" in message or \\\"check\\\" in message or \\\"status\\\" in message:\\n    agent = \\\"Logging/Monitoring Agent\\\"\\n  elif \\\"error\\\" in message or \\\"problem\\\" in message:\\n    agent = \\\"Diagnostic Agent\\\"\\n  elif \\\"system message\\\" in message:\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n      agent = \\\"Contextual Analyzer Agent\\\"\\n  else:\\n    agent = \\\"Reasoning/Inference Agent\\\"  # Default to a reasoning agent if no other clues\\n\\n  print(f\\\"Routing task '{message}' to: {agent}\\\")\\n  # Code to actually send the task to the agent would\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" go here\\n\\n  return agent\\n```\\n\\n**Important Considerations:**\\n\\n*   **Agent Capabilities:** You need to know the specific capabilities of each agent in your network to make informed routing decisions.\\n*   **Collaboration:** Some tasks may require multiple agents to work together.  Consider how to orchestrate collaboration between agents.\\n\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"*   **Error Handling:**  Have a plan for what to do if an agent fails to handle a task or if the task is misrouted.\\n*   **Learning:**  Track the performance of your routing decisions and use that data to improve your routing logic over time.\\n\\nBy following these steps, you can\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 60,\"totalTokenCount\": 60,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 60}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" effectively route the task \\\"This is a system message\\\" to the most appropriate agent in your network and ensure that the user's needs are met.  Remember, **context is key!**\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 57,\"candidatesTokenCount\": 1417,\"totalTokenCount\": 1474,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 57}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1417}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"ob8Naq6mE8LLwOYP78rakQI\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"How\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 22,\"totalTokenCount\": 22,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 22}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"onwYavHALcWqjMoP49-ywAI\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" can you help me with writing?\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 19,\"candidatesTokenCount\": 9,\"totalTokenCount\": 28,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 19}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 9}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"onwYavHALcWqjMoP49-ywAI\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0, 0, 101, 88, 213, 280, 347, 392, 445, 475, 493, 503, 529, 457, 491, 522, 497, 513, 474, 476, 522, 525, 438,
-          431, 529, 417, 292
-        ],
+        "chunkTimings": [0, 69],
         "isStreaming": true
       }
     },
     {
-      "hash": "60bcce4597c90f65",
+      "hash": "32c0adfd77678e29",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -255,7 +227,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"Okay, I understand. You're a routing agent deciding which specialized agent in your network should handle the task \\\"This is a system message.\\\"  Here's a breakdown of how you should approach this and the possible agent choices, along with reasoning:\\n\\n**Understanding the Task:**\\n\\nThe task \\\"This is a system message\\\" is, on its own, fairly meaningless. It's crucial to understand the **context** in which the user provided this message.  Why did they send it? What are they trying to achieve?  Without knowing the context, you're operating with incomplete information.\\n\\n**Here's a breakdown of possible scenarios and the optimal agent to handle them:**\\n\\n**Scenario 1: The User is Testing the System or Troubleshooting**\\n\\n*   **Meaning:** The user might be checking if the system is online, if the message is being properly received, or troubleshooting a communication issue.\\n*   **Optimal Agent:** **A Logging/Monitoring Agent** or a **Diagnostic Agent**.\\n    *   **Reasoning:** This agent can record the message, timestamp it, check for any errors in transmission, and confirm that the system is functioning correctly. It can also trigger alerts if the message doesn't follow the expected format or if there are other system-level problems.\\n\\n**Scenario 2: The User is Providing Information within a Larger Conversation or Workflow**\\n\\n*   **Meaning:** The message is a signal or placeholder for something more.  It indicates a state or a transition in a pre-defined process.\\n*   **Optimal Agent:** **A Contextual Analyzer Agent** or a **Workflow Orchestration Agent**.\\n    *   **Reasoning:** These agents are designed to interpret the message based on the ongoing conversation or the current stage of a pre-defined workflow. This agent would need to know what the \\\"system message\\\" signifies in the given context.\\n\\n**Scenario 3: The User Mistakenly Sent the Message**\\n\\n*   **Meaning:** The user may have accidentally typed the message or sent it to the wrong system.\\n*   **Optimal Agent:** **A User Assistance Agent** or a **Politeness/Error Handling Agent**.\\n    *   **Reasoning:** This agent can gently inquire about the user's intention or suggest that the message may have been sent in error.  It should avoid being accusatory or making assumptions.\\n\\n**Scenario 4: The User is Trying to Trigger a Specific System Response**\\n\\n*   **Meaning:** The message itself is a command or instruction.\\n*   **Optimal Agent:** **A Command Processing Agent** or a **Security/Authorization Agent**.\\n    *   **Reasoning:** If \\\"This is a system message\\\" is meant to trigger a specific action, the command processing agent will need to parse the message to identify the command and its parameters. The Security Agent would verify that the user has the necessary permissions to execute the command.\\n\\n**Scenario 5: The User is Intentionally Sending an Ambiguous Message**\\n\\n*   **Meaning:** The user is testing the intelligence or robustness of the system.\\n*   **Optimal Agent:** **A Reasoning/Inference Agent**.\\n    *   **Reasoning:** This agent can attempt to deduce the user's intent by considering the context, past interactions, and general knowledge. It could also flag the message as potentially ambiguous for further human review.\\n\\n**Your Action as the Routing Agent:**\\n\\n1.  **Gather Context:**  *This is the MOST important step.*  Before routing the task, try to get more context from the user. You could ask:\\n    *   \\\"Could you please provide more information about the purpose of this message?\\\"\\n    *   \\\"What are you trying to achieve by sending this message?\\\"\\n    *   \\\"Is this message related to a previous task or conversation?\\\"\\n\\n2.  **Analyze the Message (If No Further Context):** If you cannot get more context, do your best to analyze the message itself. Look for any clues, keywords, or patterns that might indicate the user's intention.\\n\\n3.  **Select the Appropriate Agent:** Based on the context (or your best guess), choose the agent that is most likely to handle the task effectively.\\n\\n4.  **Route the Task:** Send the message to the selected agent, along with any available context or analysis.\\n\\n5.  **Monitor the Results:** Keep track of how the agent is handling the task. If the agent is struggling or if the user provides more information later, you may need to re-route the task to a different agent.\\n\\n**Example Implementation (Python-like Pseudocode):**\\n\\n```python\\ndef route_task(message, context=None):\\n  \\\"\\\"\\\"\\n  Routes a task to the appropriate agent based on the message and context.\\n\\n  Args:\\n    message: The task message (string).\\n    context: Any additional context about the task (optional).\\n\\n  Returns:\\n    The name of the agent the task was routed to.\\n  \\\"\\\"\\\"\\n\\n  if not context:\\n    # Attempt to get more context from the user (this would require a User Interaction Agent)\\n    print(\\\"Could you please provide more information about the purpose of this message?\\\")\\n    return \\\"User Interaction Agent (Waiting for more information)\\\" #Or return a waiting state\\n\\n\\n  message = message.lower() #Standardize the message for keyword analysis\\n\\n  if \\\"test\\\" in message or \\\"check\\\" in message or \\\"status\\\" in message:\\n    agent = \\\"Logging/Monitoring Agent\\\"\\n  elif \\\"error\\\" in message or \\\"problem\\\" in message:\\n    agent = \\\"Diagnostic Agent\\\"\\n  elif \\\"system message\\\" in message:\\n      agent = \\\"Contextual Analyzer Agent\\\"\\n  else:\\n    agent = \\\"Reasoning/Inference Agent\\\"  # Default to a reasoning agent if no other clues\\n\\n  print(f\\\"Routing task '{message}' to: {agent}\\\")\\n  # Code to actually send the task to the agent would go here\\n\\n  return agent\\n```\\n\\n**Important Considerations:**\\n\\n*   **Agent Capabilities:** You need to know the specific capabilities of each agent in your network to make informed routing decisions.\\n*   **Collaboration:** Some tasks may require multiple agents to work together.  Consider how to orchestrate collaboration between agents.\\n*   **Error Handling:**  Have a plan for what to do if an agent fails to handle a task or if the task is misrouted.\\n*   **Learning:**  Track the performance of your routing decisions and use that data to improve your routing logic over time.\\n\\nBy following these steps, you can effectively route the task \\\"This is a system message\\\" to the most appropriate agent in your network and ensure that the user's needs are met.  Remember, **context is key!**\\n\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: This is a system message\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"How can you help me with writing?\\n\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: This is a system message\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
                 }
               ]
             }
@@ -268,7 +240,7 @@
             ]
           }
         },
-        "timestamp": 1779285942970
+        "timestamp": 1779989667233
       },
       "response": {
         "status": 200,
@@ -277,24 +249,23 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:05:43 GMT",
+          "date": "Thu, 28 May 2026 17:34:27 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=495",
+          "server-timing": "gfet4t7; dur=504",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 2259,\"totalTokenCount\": 2259,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2259}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"t78NasboDLnh_NUPwPiQ2Qc\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 2259,\"totalTokenCount\": 2259,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2259}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"t78NasboDLnh_NUPwPiQ2Qc\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The agent helperAgent has provided\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 2259,\"totalTokenCount\": 2259,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2259}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"t78NasboDLnh_NUPwPiQ2Qc\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" a detailed analysis of the task, including potential scenarios and agent selections, making the task\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 2259,\"totalTokenCount\": 2259,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2259}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"t78NasboDLnh_NUPwPiQ2Qc\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" complete.\\\",\\n  \\\"finalResult\\\": \\\"The task 'This is a system message' has been analyzed, and potential scenarios along with optimal agent selections have been identified.\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 2259,\"totalTokenCount\": 2259,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2259}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"t78NasboDLnh_NUPwPiQ2Qc\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" Context gathering is the most important step. If no further context can be obtained, analysis of the message itself is crucial for effective routing. Based on the analysis, select\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 2259,\"totalTokenCount\": 2259,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2259}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"t78NasboDLnh_NUPwPiQ2Qc\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the most appropriate agent and route the task accordingly.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 2303,\"candidatesTokenCount\": 118,\"totalTokenCount\": 2421,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2303}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 118}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"t78NasboDLnh_NUPwPiQ2Qc\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The agent has provided an initial\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" response, but the task is a system message and does not require further action or\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" a specific final result.\\\",\\n  \\\"finalResult\\\": \\\"The agent acknowledged your request for help with writing. Please provide more details on what you need assistance with,\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" such as the type of writing (e.g., essay, email, story), the topic, and any specific requirements or challenges you are facing.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 797,\"candidatesTokenCount\": 103,\"totalTokenCount\": 900,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 797}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 103}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 37, 109, 206, 260, 106],
+        "chunkTimings": [0, 0, 84, 169, 333, 237],
         "isStreaming": true
       }
     }
