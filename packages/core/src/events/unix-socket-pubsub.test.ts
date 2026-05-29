@@ -69,6 +69,65 @@ describe('UnixSocketPubSub', () => {
     expect(secondCb.mock.calls[0]![0].type).toBe('hello');
   });
 
+  it('allows a temporarily backpressured remote client to catch up below the queue cap', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path, { maxRemoteClientQueuedBytes: 1024 * 1024 });
+    pubsubs.push(broker);
+
+    const brokerCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+
+    const frames: any[] = [];
+    const rawClient = net.createConnection(path);
+    rawClient.setEncoding('utf8');
+    let buffer = '';
+    rawClient.on('data', (chunk: string) => {
+      buffer += chunk;
+      while (true) {
+        const newlineIndex = buffer.indexOf('\n');
+        if (newlineIndex === -1) break;
+        const line = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+        if (line.trim()) frames.push(JSON.parse(line));
+      }
+    });
+
+    const waitForRawFrame = async (predicate: (frame: any) => boolean) => {
+      await waitFor(() => {
+        expect(frames.some(predicate)).toBe(true);
+      });
+    };
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        rawClient.once('connect', resolve);
+        rawClient.once('error', reject);
+      });
+      await new Promise<void>((resolve, reject) => {
+        rawClient.write(`${JSON.stringify({ type: 'subscribe', topic: 'topic-a' })}\n`, (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      await waitForRawFrame(frame => frame.type === 'subscribed' && frame.topic === 'topic-a');
+      rawClient.pause();
+
+      const payload = 'x'.repeat(16 * 1024);
+      for (let i = 0; i < 4; i++) {
+        await broker.publish('topic-a', makeEvent({ type: `recover-${i}`, data: { payload } }));
+      }
+
+      expect(broker.remoteClientCount).toBe(1);
+      expect(brokerCb).toHaveBeenCalledTimes(4);
+      rawClient.resume();
+
+      await waitForRawFrame(frame => frame.type === 'event' && frame.event?.type === 'recover-3');
+      expect(broker.remoteClientCount).toBe(1);
+    } finally {
+      rawClient.destroy();
+    }
+  });
+
   it('does not let a backpressured remote client block local or healthy subscribers', async () => {
     const path = await socketPath();
     const broker = new UnixSocketPubSub(path, { maxRemoteClientQueuedBytes: 256 * 1024 });
