@@ -35,29 +35,6 @@
     "typescript": "^5.9.3",
     "zod": "^4.3.6"
   },
-  "pnpm": {
-    "overrides": {
-      "@mastra/auth-auth0": "link:../../auth/auth0",
-      "@mastra/auth-better-auth": "link:../../auth/better-auth",
-      "@mastra/auth-okta": "link:../../auth/okta",
-      "@mastra/auth-workos": "link:../../auth/workos",
-      "@mastra/auth-cloud": "link:../../auth/cloud",
-      "@mastra/core": "link:../../packages/core",
-      "@mastra/duckdb": "link:../../stores/duckdb",
-      "@mastra/editor": "link:../../packages/editor",
-      "@mastra/loggers": "link:../../packages/loggers",
-      "@mastra/voice-openai": "link:../../voice/openai",
-      "@mastra/memory": "link:../../packages/memory",
-      "@mastra/client-js": "link:../../client-sdks/client-js",
-      "@mastra/mcp": "link:../../packages/mcp",
-      "@mastra/libsql": "link:../../stores/libsql",
-      "@mastra/observability": "link:../../observability/mastra",
-      "@mastra/slack": "link:../../channels/slack",
-      "@mastra/evals": "link:../../packages/evals",
-      "@mastra/auth-studio": "link:../../auth/studio",
-      "mastra": "link:../../packages/cli"
-    }
-  },
   "scripts": {
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts",
@@ -72,7 +49,7 @@
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
-  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc",
+  "packageManager": "pnpm@11.3.0+sha512.2c403d6594527287672b1f7056343a1f7c3634036a67ffabfcc2b3d7595d843768f8787148d1b57cf7956c90606bbd192857c363af19e96d2d0ec9ec5741d215",
   "devDependencies": {
     "concurrently": "^9.1.2",
     "msw": "^2.12.2",

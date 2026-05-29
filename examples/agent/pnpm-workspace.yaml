@@ -1,0 +1,31 @@
+packages:
+  - '.'
+
+# pnpm v11 reads these settings here, not from package.json's "pnpm" field.
+# Link the example to the local workspace packages instead of published versions.
+overrides:
+  '@mastra/auth-auth0': link:../../auth/auth0
+  '@mastra/auth-better-auth': link:../../auth/better-auth
+  '@mastra/auth-okta': link:../../auth/okta
+  '@mastra/auth-workos': link:../../auth/workos
+  '@mastra/auth-cloud': link:../../auth/cloud
+  '@mastra/auth-studio': link:../../auth/studio
+  '@mastra/core': link:../../packages/core
+  '@mastra/duckdb': link:../../stores/duckdb
+  '@mastra/editor': link:../../packages/editor
+  '@mastra/loggers': link:../../packages/loggers
+  '@mastra/voice-openai': link:../../voice/openai
+  '@mastra/memory': link:../../packages/memory
+  '@mastra/client-js': link:../../client-sdks/client-js
+  '@mastra/mcp': link:../../packages/mcp
+  '@mastra/libsql': link:../../stores/libsql
+  '@mastra/observability': link:../../observability/mastra
+  '@mastra/slack': link:../../channels/slack
+  '@mastra/evals': link:../../packages/evals
+  mastra: link:../../packages/cli
+
+# Resolve build-script approval so install doesn't abort with ERR_PNPM_IGNORED_BUILDS.
+# The example doesn't need these built (matches the kitchen-sink fixture).
+allowBuilds:
+  esbuild: false
+  msw: false
