@@ -8,7 +8,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import { EntityType, executeWithContext, getOrCreateSpan, SpanType } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, CostContext, IModelSpanTracker, Span, UsageStats } from '@mastra/core/observability';
-import { RequestContext } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, FullOutput, JSONValue, LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 import { ChunkFrom, MastraModelOutput } from '@mastra/core/stream';
 type MastraModelOutputOptions<OUTPUT = undefined> = ConstructorParameters<typeof MastraModelOutput<OUTPUT>>[0]['options'];
@@ -192,7 +192,13 @@ export type SDKAgentTelemetryOptions<OUTPUT = unknown> = {
   runId: string;
   streaming: boolean;
   method: 'generate' | 'stream';
-  options?: SDKAgentRunOptions<OUTPUT>;
+  requestContext: RequestContext;
+  instructions?: string;
+  maxSteps?: SDKAgentRunOptions<OUTPUT>['maxSteps'];
+  tracingOptions?: SDKAgentRunOptions<OUTPUT>['tracingOptions'];
+  tracingContext?: SDKAgentRunOptions<OUTPUT>['tracingContext'];
+  onFinish?: SDKAgentRunOptions<OUTPUT>['onFinish'];
+  onStepFinish?: SDKAgentRunOptions<OUTPUT>['onStepFinish'];
   mastra?: Mastra;
 };
 
@@ -228,11 +234,15 @@ export function createSDKAgentTelemetry<OUTPUT>({
   runId,
   streaming,
   method,
-  options,
+  requestContext,
+  instructions,
+  maxSteps,
+  tracingOptions,
+  tracingContext,
+  onFinish,
+  onStepFinish,
   mastra,
 }: SDKAgentTelemetryOptions<OUTPUT>): SDKAgentTelemetry<OUTPUT> {
-  const requestContext = options?.requestContext ?? new RequestContext();
-  const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
   const agentSpan = getOrCreateSpan({
     type: SpanType.AGENT_RUN,
     name: `agent run: '${agentId}'`,
@@ -243,7 +253,7 @@ export function createSDKAgentTelemetry<OUTPUT>({
     attributes: {
       prompt,
       instructions,
-      maxSteps: options?.maxSteps,
+      maxSteps,
     },
     metadata: {
       runId,
@@ -251,8 +261,8 @@ export function createSDKAgentTelemetry<OUTPUT>({
       sdkProvider: provider,
       sdkMethod: method,
     },
-    tracingOptions: options?.tracingOptions,
-    tracingContext: options?.tracingContext,
+    tracingOptions,
+    tracingContext,
     requestContext,
     mastra,
   });
@@ -482,10 +492,10 @@ export function createSDKAgentTelemetry<OUTPUT>({
     },
     outputOptions() {
       return {
-        onFinish: options?.onFinish,
-        onStepFinish: options?.onStepFinish,
+        onFinish,
+        onStepFinish,
         requestContext,
-        tracingContext: agentSpan ? { currentSpan: agentSpan } : options?.tracingContext,
+        tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
       };
     },
   };

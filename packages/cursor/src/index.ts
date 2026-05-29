@@ -19,6 +19,7 @@ import type {
 import { Agent } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, FullOutput, LanguageModelUsage, ProviderMetadata, MastraModelOutput } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import {
@@ -33,8 +34,8 @@ import {
   sumDefined,
   toFullOutput,
   toLanguageModelUsage,
-} from './shared';
-import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from './shared';
+} from './utils';
+import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from './utils';
 
 const PROVIDER = '@cursor/sdk';
 const MODEL_ID = 'cursor-agent-sdk';
@@ -157,6 +158,8 @@ export class CursorSDKAgent extends Agent {
     const runId = options?.runId ?? randomUUID();
     const sdkAgent = await this.resolveCursorAgent();
     const modelId = getCursorModelId(this.options, sdkAgent);
+    const requestContext = options?.requestContext ?? new RequestContext();
+    const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
     const telemetry = createSDKAgentTelemetry({
       agentId: this.id,
       agentName: this.name,
@@ -167,7 +170,13 @@ export class CursorSDKAgent extends Agent {
       runId,
       streaming: false,
       method: 'generate',
-      options,
+      requestContext,
+      instructions,
+      maxSteps: options?.maxSteps,
+      tracingOptions: options?.tracingOptions,
+      tracingContext: options?.tracingContext,
+      onFinish: options?.onFinish,
+      onStepFinish: options?.onStepFinish,
       mastra: this.#mastra,
     });
     let result: SDKModelGenerateResult;
@@ -196,6 +205,8 @@ export class CursorSDKAgent extends Agent {
     const prompt = promptToText(messages);
     const sdkAgent = await this.resolveCursorAgent();
     const modelId = getCursorModelId(this.options, sdkAgent);
+    const requestContext = options?.requestContext ?? new RequestContext();
+    const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
     const telemetry = createSDKAgentTelemetry({
       agentId: this.id,
       agentName: this.name,
@@ -206,7 +217,13 @@ export class CursorSDKAgent extends Agent {
       runId,
       streaming: true,
       method: 'stream',
-      options,
+      requestContext,
+      instructions,
+      maxSteps: options?.maxSteps,
+      tracingOptions: options?.tracingOptions,
+      tracingContext: options?.tracingContext,
+      onFinish: options?.onFinish,
+      onStepFinish: options?.onStepFinish,
       mastra: this.#mastra,
     });
 

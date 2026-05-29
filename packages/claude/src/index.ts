@@ -7,6 +7,7 @@ import { Agent } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { CostContext } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, FullOutput, LanguageModelUsage, ProviderMetadata, MastraModelOutput } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import {
@@ -21,8 +22,8 @@ import {
   sumDefined,
   toFullOutput,
   toLanguageModelUsage,
-} from './shared';
-import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from './shared';
+} from './utils';
+import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from './utils';
 
 const PROVIDER = '@anthropic-ai/claude-agent-sdk';
 const MODEL_ID = 'claude-agent-sdk';
@@ -63,7 +64,7 @@ export type ClaudeAgentInput =
   | ClaudeQueryFunctionWithOptions
   | { query: ClaudeQueryFunction | ClaudeQueryFunctionWithOptions };
 
-export type ClaudeAgentOptions = {
+export type ClaudeAgentOptions = ClaudeQueryOptions & {
   /**
    * Mastra agent id used when registering this wrapper with Mastra.
    */
@@ -83,48 +84,6 @@ export type ClaudeAgentOptions = {
    * instance used to type `@mastra/core`.
    */
   agent: ClaudeAgentInput;
-  /**
-   * Working directory passed to Claude Agent SDK query options.
-   */
-  cwd?: string;
-  /**
-   * Claude model id passed to Claude Agent SDK query options.
-   */
-  model?: string;
-  /**
-   * Maximum Claude Agent SDK turns for a run.
-   */
-  maxTurns?: number;
-  /**
-   * Claude Agent SDK permission mode for tool and edit approval behavior.
-   */
-  permissionMode?: ClaudePermissionMode;
-  /**
-   * Built-in Claude Agent SDK tools made available to the run.
-   */
-  tools?: string[] | { type: 'preset'; preset: 'claude_code' };
-  /**
-   * Tool names Claude Agent SDK is allowed to use.
-   */
-  allowedTools?: string[];
-  /**
-   * Tool names Claude Agent SDK is not allowed to use.
-   */
-  disallowedTools?: string[];
-  /**
-   * MCP servers made available to Claude Agent SDK, including SDK MCP servers
-   * created with `createSdkMcpServer`.
-   */
-  mcpServers?: Record<string, unknown>;
-  /**
-   * Environment variables passed to the Claude Agent SDK process.
-   */
-  env?: Record<string, string>;
-  /**
-   * Path to the Claude Code executable when the default binary resolution
-   * should not be used.
-   */
-  pathToClaudeCodeExecutable?: string;
 };
 
 export class ClaudeSDKAgent extends Agent {
@@ -156,6 +115,8 @@ export class ClaudeSDKAgent extends Agent {
   ): Promise<FullOutput<OUTPUT>> {
     const prompt = promptToText(messages);
     const runId = options?.runId ?? randomUUID();
+    const requestContext = options?.requestContext ?? new RequestContext();
+    const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
     const telemetry = createSDKAgentTelemetry({
       agentId: this.id,
       agentName: this.name,
@@ -166,7 +127,13 @@ export class ClaudeSDKAgent extends Agent {
       runId,
       streaming: false,
       method: 'generate',
-      options,
+      requestContext,
+      instructions,
+      maxSteps: options?.maxSteps,
+      tracingOptions: options?.tracingOptions,
+      tracingContext: options?.tracingContext,
+      onFinish: options?.onFinish,
+      onStepFinish: options?.onStepFinish,
       mastra: this.#mastra,
     });
     let result: SDKModelGenerateResult;
@@ -196,6 +163,8 @@ export class ClaudeSDKAgent extends Agent {
     const runId = options?.runId ?? randomUUID();
     const prompt = promptToText(messages);
     const modelId = getModelId(this.options);
+    const requestContext = options?.requestContext ?? new RequestContext();
+    const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
     const telemetry = createSDKAgentTelemetry({
       agentId: this.id,
       agentName: this.name,
@@ -206,7 +175,13 @@ export class ClaudeSDKAgent extends Agent {
       runId,
       streaming: true,
       method: 'stream',
-      options,
+      requestContext,
+      instructions,
+      maxSteps: options?.maxSteps,
+      tracingOptions: options?.tracingOptions,
+      tracingContext: options?.tracingContext,
+      onFinish: options?.onFinish,
+      onStepFinish: options?.onStepFinish,
       mastra: this.#mastra,
     });
 
@@ -232,9 +207,8 @@ async function runClaudeGenerate<OUTPUT>(
   let text = '';
   const usage = createClaudeUsageCollector();
 
-  for await (const message of runClaude(prompt, options, signal)) {
+  for await (const message of observeClaudeMessages(runClaude(prompt, options, signal), telemetry)) {
     usage.record(message);
-    recordClaudeToolTelemetry(message, telemetry);
     if (message.type === 'result') {
       if (message.subtype !== 'success') {
         throw new Error(message.errors.join('\n') || `Claude Agent SDK failed with ${message.subtype}`);
@@ -286,9 +260,8 @@ function runClaudeAsMastraStream<OUTPUT>(
           providerMetadata: getClaudeProviderMetadata(options, usage.totals()),
         });
 
-        for await (const message of runClaude(prompt, options, signal)) {
+        for await (const message of observeClaudeMessages(runClaude(prompt, options, signal), telemetry)) {
           usage.record(message);
-          recordClaudeToolTelemetry(message, telemetry);
           const delta = getTextDelta(message);
           if (delta) {
             sawDelta = true;
@@ -339,23 +312,25 @@ function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSi
   const abortController = createAbortController(signal);
   const agent = options.agent;
   const query = (typeof agent === 'function' ? agent : agent.query) as ClaudeQueryFunctionWithOptions;
+  const { id: _id, name: _name, description: _description, agent: _agent, ...queryOptions } = options;
 
   return query({
     prompt,
     options: {
-      cwd: options.cwd,
-      model: options.model,
-      maxTurns: options.maxTurns,
-      permissionMode: options.permissionMode,
-      tools: options.tools,
-      allowedTools: options.allowedTools,
-      disallowedTools: options.disallowedTools,
-      mcpServers: options.mcpServers,
-      env: options.env,
-      pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable,
+      ...queryOptions,
       abortController,
     },
   }) as AsyncIterable<SDKMessage>;
+}
+
+async function* observeClaudeMessages<OUTPUT>(
+  messages: AsyncIterable<SDKMessage>,
+  telemetry: SDKAgentTelemetry<OUTPUT>,
+): AsyncIterable<SDKMessage> {
+  for await (const message of messages) {
+    recordClaudeToolTelemetry(message, telemetry);
+    yield message;
+  }
 }
 
 function recordClaudeToolTelemetry<OUTPUT>(message: SDKMessage, telemetry: SDKAgentTelemetry<OUTPUT>): void {
