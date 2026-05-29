@@ -23,7 +23,7 @@ async function writeFileSynced(path: string, content: string): Promise<void> {
   }
 }
 
-describe('source-hash', () => {
+describe.sequential('source-hash', () => {
   let testDir: string;
   let mastraDir: string;
   let outputDir: string;
