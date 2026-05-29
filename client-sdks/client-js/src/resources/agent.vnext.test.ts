@@ -1336,6 +1336,95 @@ describe('Agent vNext', () => {
     expect(hasToolResult).toBe(true);
   });
 
+  // Key test for batched parallel tool invocations:
+  // One streamed assistant step emits TWO tool-call chunks, both tools execute,
+  // and the single recursive request includes both results in the same message.
+  it('stream: parallel client tool calls in one step are batched and produce a single recursive request', async () => {
+    // First cycle: assistant emits two tool calls in one step
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_a', toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_b', toolName: 'newsTool', args: { topic: 'tech' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 3 } } },
+    ];
+
+    // Second cycle: final text response after all tool results are received
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'NYC is sunny and tech is booming' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 8 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const weatherSpy = vi.fn(async () => ({ temperature: 72 }));
+    const newsSpy = vi.fn(async () => ({ headline: 'AI advances' }));
+
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Get weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number() }),
+      execute: weatherSpy,
+    });
+
+    const newsTool = createTool({
+      id: 'newsTool',
+      description: 'Get news',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ headline: z.string() }),
+      execute: newsSpy,
+    });
+
+    const resp = await agent.stream('Give me weather and news', {
+      clientTools: { weatherTool, newsTool },
+    });
+
+    const chunks: any[] = [];
+    await resp.processDataStream({
+      onChunk: async chunk => {
+        chunks.push(chunk);
+      },
+    });
+
+    // Both tools were executed
+    expect(weatherSpy).toHaveBeenCalledTimes(1);
+    expect(newsSpy).toHaveBeenCalledTimes(1);
+
+    // Exactly two fetch calls: initial stream + one batched recursive call
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // The recursive request should contain the assistant message with BOTH tool
+    // invocations marked as "result" — not two separate recursive requests.
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    const assistantMsg = secondCallBody.messages.find(
+      (m: any) =>
+        m.role === 'assistant' ||
+        (Array.isArray(m.parts) && m.parts.some((p: any) => p.type === 'tool-invocation')),
+    );
+    expect(assistantMsg).toBeDefined();
+
+    if (assistantMsg?.toolInvocations) {
+      const results = assistantMsg.toolInvocations.filter((inv: any) => inv.state === 'result');
+      expect(results.length).toBe(2);
+    } else if (assistantMsg?.parts) {
+      const resultParts = assistantMsg.parts.filter(
+        (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'result',
+      );
+      expect(resultParts.length).toBe(2);
+    }
+  });
+
   it('stream: should receive error chunks with serialized error properties', async () => {
     const testAPICallError = new APICallError({
       message: 'API Error',
