@@ -84,6 +84,55 @@ describe('useChat forwards clientTools', () => {
     vi.clearAllMocks();
   });
 
+  it('uses thread signals by default when threadId is provided', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        threadId: 'thread-1',
+      });
+    });
+
+    expect(subscribeToThreadMock).toHaveBeenCalledTimes(1);
+    expect(sendSignalMock).toHaveBeenCalledTimes(1);
+    expect(streamUntilIdleMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the legacy stream path when thread signals are explicitly disabled', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: false,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        threadId: 'thread-1',
+      });
+    });
+
+    expect(subscribeToThreadMock).not.toHaveBeenCalled();
+    expect(sendSignalMock).not.toHaveBeenCalled();
+    expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps hook-prop clientTools on sendSignal when threadId is provided', async () => {
     const { result } = renderHook(
       () =>
