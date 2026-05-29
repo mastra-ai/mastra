@@ -4620,7 +4620,7 @@ export interface PostAgentsAgentIdClone_RouteContract {
 // Route: GET /agents/:agentId/voice/speakers
 // ============================================================================
 export type GetAgentsAgentIdVoiceSpeakers_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -4647,22 +4647,26 @@ export interface GetAgentsAgentIdVoiceSpeakers_RouteContract {
 // ============================================================================
 // Route: GET /agents/:agentId/speakers
 // ============================================================================
+/** @deprecated */
 export type GetAgentsAgentIdSpeakers_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
+/** @deprecated */
 export type GetAgentsAgentIdSpeakers_Response = {
   voiceId: string;
   [x: string]: unknown;
 }[];
 
+/** @deprecated */
 export type GetAgentsAgentIdSpeakers_Request = Simplify<
   (GetAgentsAgentIdSpeakers_PathParams extends never ? {} : { params: GetAgentsAgentIdSpeakers_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
+/** @deprecated */
 export interface GetAgentsAgentIdSpeakers_RouteContract {
   pathParams: GetAgentsAgentIdSpeakers_PathParams;
   queryParams: never;
@@ -4722,6 +4726,7 @@ export type PostAgentsAgentIdGenerate_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -4888,6 +4893,7 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5056,6 +5062,7 @@ export type PostAgentsAgentIdStream_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5222,6 +5229,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5393,6 +5401,7 @@ export type PostAgentsAgentIdStreamVnext_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5732,6 +5741,7 @@ export type PostAgentsAgentIdSignals_Body =
                                   };
                             }
                           | undefined;
+                        defaultStatus?: ('draft' | 'published') | undefined;
                       }
                     | undefined;
                   maxSteps?: number | undefined;
@@ -6070,6 +6080,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -6403,6 +6414,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -6574,6 +6586,7 @@ export type PostAgentsAgentIdNetwork_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -6985,7 +6998,7 @@ export interface GetAgentsAgentIdSkillsSkillName_RouteContract {
 // Route: POST /agents/:agentId/voice/speak
 // ============================================================================
 export type PostAgentsAgentIdVoiceSpeak_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -7018,18 +7031,22 @@ export interface PostAgentsAgentIdVoiceSpeak_RouteContract {
 // ============================================================================
 // Route: POST /agents/:agentId/speak
 // ============================================================================
+/** @deprecated */
 export type PostAgentsAgentIdSpeak_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdSpeak_Body = {
   text: string;
   speakerId?: string | undefined;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdSpeak_Response = any;
 
+/** @deprecated */
 export type PostAgentsAgentIdSpeak_Request = Simplify<
   (PostAgentsAgentIdSpeak_PathParams extends never ? {} : { params: PostAgentsAgentIdSpeak_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
@@ -7040,6 +7057,7 @@ export type PostAgentsAgentIdSpeak_Request = Simplify<
         : { body: PostAgentsAgentIdSpeak_Body })
 >;
 
+/** @deprecated */
 export interface PostAgentsAgentIdSpeak_RouteContract {
   pathParams: PostAgentsAgentIdSpeak_PathParams;
   queryParams: never;
@@ -7053,7 +7071,7 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
 // Route: POST /agents/:agentId/voice/listen
 // ============================================================================
 export type PostAgentsAgentIdVoiceListen_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -7092,11 +7110,13 @@ export interface PostAgentsAgentIdVoiceListen_RouteContract {
 // ============================================================================
 // Route: POST /agents/:agentId/listen
 // ============================================================================
+/** @deprecated */
 export type PostAgentsAgentIdListen_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdListen_Body = {
   audio: any;
   options?:
@@ -7106,10 +7126,12 @@ export type PostAgentsAgentIdListen_Body = {
     | undefined;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdListen_Response = {
   text: string;
 };
 
+/** @deprecated */
 export type PostAgentsAgentIdListen_Request = Simplify<
   (PostAgentsAgentIdListen_PathParams extends never ? {} : { params: PostAgentsAgentIdListen_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
@@ -7120,6 +7142,7 @@ export type PostAgentsAgentIdListen_Request = Simplify<
         : { body: PostAgentsAgentIdListen_Body })
 >;
 
+/** @deprecated */
 export interface PostAgentsAgentIdListen_RouteContract {
   pathParams: PostAgentsAgentIdListen_PathParams;
   queryParams: never;
@@ -7133,7 +7156,7 @@ export interface PostAgentsAgentIdListen_RouteContract {
 // Route: GET /agents/:agentId/voice/listener
 // ============================================================================
 export type GetAgentsAgentIdVoiceListener_PathParams = {
-  /** Unique identifier for the agent */
+  /** Agent ID */
   agentId: string;
 };
 
@@ -7206,6 +7229,7 @@ export type PostAgentsAgentIdStreamVNext_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -7377,6 +7401,7 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -7550,6 +7575,7 @@ export type PostAgentsAgentIdStreamUi_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -8749,6 +8775,75 @@ export interface PostWorkflowsWorkflowIdResumeAsync_RouteContract {
   body: PostWorkflowsWorkflowIdResumeAsync_Body;
   request: PostWorkflowsWorkflowIdResumeAsync_Request;
   response: PostWorkflowsWorkflowIdResumeAsync_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /workflows/:workflowId/resume-no-wait
+// ============================================================================
+export type PostWorkflowsWorkflowIdResumeNoWait_PathParams = {
+  /** Unique identifier for the workflow */
+  workflowId: string;
+};
+
+export type PostWorkflowsWorkflowIdResumeNoWait_QueryParams = {
+  /** Unique identifier for the run */
+  runId: string;
+};
+
+export type PostWorkflowsWorkflowIdResumeNoWait_Body = {
+  step?: (string | string[]) | undefined;
+  resumeData?: unknown | undefined;
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  tracingOptions?:
+    | {
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContextKeys?: string[] | undefined;
+        traceId?: string | undefined;
+        parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
+      }
+    | undefined;
+  perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
+};
+
+export type PostWorkflowsWorkflowIdResumeNoWait_Response = {
+  runId: string;
+};
+
+export type PostWorkflowsWorkflowIdResumeNoWait_Request = Simplify<
+  (PostWorkflowsWorkflowIdResumeNoWait_PathParams extends never
+    ? {}
+    : { params: PostWorkflowsWorkflowIdResumeNoWait_PathParams }) &
+    (PostWorkflowsWorkflowIdResumeNoWait_QueryParams extends never
+      ? {}
+      : {} extends PostWorkflowsWorkflowIdResumeNoWait_QueryParams
+        ? { query?: PostWorkflowsWorkflowIdResumeNoWait_QueryParams }
+        : { query: PostWorkflowsWorkflowIdResumeNoWait_QueryParams }) &
+    (PostWorkflowsWorkflowIdResumeNoWait_Body extends never
+      ? {}
+      : {} extends PostWorkflowsWorkflowIdResumeNoWait_Body
+        ? { body?: PostWorkflowsWorkflowIdResumeNoWait_Body }
+        : { body: PostWorkflowsWorkflowIdResumeNoWait_Body })
+>;
+
+export interface PostWorkflowsWorkflowIdResumeNoWait_RouteContract {
+  pathParams: PostWorkflowsWorkflowIdResumeNoWait_PathParams;
+  queryParams: PostWorkflowsWorkflowIdResumeNoWait_QueryParams;
+  body: PostWorkflowsWorkflowIdResumeNoWait_Body;
+  request: PostWorkflowsWorkflowIdResumeNoWait_Request;
+  response: PostWorkflowsWorkflowIdResumeNoWait_Response;
   responseType: 'json';
 }
 
@@ -19283,6 +19378,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -19454,6 +19550,7 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -75636,6 +75733,7 @@ export type PostDatasetsDatasetIdExperiments_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
 };
@@ -77405,6 +77503,75 @@ export interface PostAgentBuilderActionIdResumeAsync_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agent-builder/:actionId/resume-no-wait
+// ============================================================================
+export type PostAgentBuilderActionIdResumeNoWait_PathParams = {
+  /** Unique identifier for the agent-builder action */
+  actionId: string;
+};
+
+export type PostAgentBuilderActionIdResumeNoWait_QueryParams = {
+  /** Unique identifier for the run */
+  runId: string;
+};
+
+export type PostAgentBuilderActionIdResumeNoWait_Body = {
+  step?: (string | string[]) | undefined;
+  resumeData?: unknown | undefined;
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  tracingOptions?:
+    | {
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContextKeys?: string[] | undefined;
+        traceId?: string | undefined;
+        parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
+      }
+    | undefined;
+  perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
+};
+
+export type PostAgentBuilderActionIdResumeNoWait_Response = {
+  runId: string;
+};
+
+export type PostAgentBuilderActionIdResumeNoWait_Request = Simplify<
+  (PostAgentBuilderActionIdResumeNoWait_PathParams extends never
+    ? {}
+    : { params: PostAgentBuilderActionIdResumeNoWait_PathParams }) &
+    (PostAgentBuilderActionIdResumeNoWait_QueryParams extends never
+      ? {}
+      : {} extends PostAgentBuilderActionIdResumeNoWait_QueryParams
+        ? { query?: PostAgentBuilderActionIdResumeNoWait_QueryParams }
+        : { query: PostAgentBuilderActionIdResumeNoWait_QueryParams }) &
+    (PostAgentBuilderActionIdResumeNoWait_Body extends never
+      ? {}
+      : {} extends PostAgentBuilderActionIdResumeNoWait_Body
+        ? { body?: PostAgentBuilderActionIdResumeNoWait_Body }
+        : { body: PostAgentBuilderActionIdResumeNoWait_Body })
+>;
+
+export interface PostAgentBuilderActionIdResumeNoWait_RouteContract {
+  pathParams: PostAgentBuilderActionIdResumeNoWait_PathParams;
+  queryParams: PostAgentBuilderActionIdResumeNoWait_QueryParams;
+  body: PostAgentBuilderActionIdResumeNoWait_Body;
+  request: PostAgentBuilderActionIdResumeNoWait_Request;
+  response: PostAgentBuilderActionIdResumeNoWait_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agent-builder/:actionId/resume
 // ============================================================================
 export type PostAgentBuilderActionIdResume_PathParams = {
@@ -78176,6 +78343,7 @@ export interface RouteTypes {
   'POST /workflows/:workflowId/start': PostWorkflowsWorkflowIdStart_RouteContract;
   'POST /workflows/:workflowId/observe': PostWorkflowsWorkflowIdObserve_RouteContract;
   'POST /workflows/:workflowId/resume-async': PostWorkflowsWorkflowIdResumeAsync_RouteContract;
+  'POST /workflows/:workflowId/resume-no-wait': PostWorkflowsWorkflowIdResumeNoWait_RouteContract;
   'POST /workflows/:workflowId/resume': PostWorkflowsWorkflowIdResume_RouteContract;
   'POST /workflows/:workflowId/runs/:runId/cancel': PostWorkflowsWorkflowIdRunsRunIdCancel_RouteContract;
   'POST /workflows/:workflowId/time-travel': PostWorkflowsWorkflowIdTimeTravel_RouteContract;
@@ -78435,6 +78603,7 @@ export interface RouteTypes {
   'POST /agent-builder/:actionId/observe': PostAgentBuilderActionIdObserve_RouteContract;
   'POST /agent-builder/:actionId/observe-stream-legacy': PostAgentBuilderActionIdObserveStreamLegacy_RouteContract;
   'POST /agent-builder/:actionId/resume-async': PostAgentBuilderActionIdResumeAsync_RouteContract;
+  'POST /agent-builder/:actionId/resume-no-wait': PostAgentBuilderActionIdResumeNoWait_RouteContract;
   'POST /agent-builder/:actionId/resume': PostAgentBuilderActionIdResume_RouteContract;
   'POST /agent-builder/:actionId/resume-stream': PostAgentBuilderActionIdResumeStream_RouteContract;
   'POST /agent-builder/:actionId/runs/:runId/cancel': PostAgentBuilderActionIdRunsRunIdCancel_RouteContract;
@@ -78487,6 +78656,9 @@ export interface Client {
   };
   '/agent-builder/:actionId/resume-async': {
     POST: PostAgentBuilderActionIdResumeAsync_RouteContract;
+  };
+  '/agent-builder/:actionId/resume-no-wait': {
+    POST: PostAgentBuilderActionIdResumeNoWait_RouteContract;
   };
   '/agent-builder/:actionId/resume-stream': {
     POST: PostAgentBuilderActionIdResumeStream_RouteContract;
@@ -79252,6 +79424,9 @@ export interface Client {
   };
   '/workflows/:workflowId/resume-async': {
     POST: PostWorkflowsWorkflowIdResumeAsync_RouteContract;
+  };
+  '/workflows/:workflowId/resume-no-wait': {
+    POST: PostWorkflowsWorkflowIdResumeNoWait_RouteContract;
   };
   '/workflows/:workflowId/resume-stream': {
     POST: PostWorkflowsWorkflowIdResumeStream_RouteContract;

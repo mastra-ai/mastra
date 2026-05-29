@@ -1,6 +1,6 @@
 {
   "name": "mastra-docs",
-  "version": "0.0.41",
+  "version": "0.0.43",
   "private": true,
   "repository": "https://github.com/mastra-ai/mastra",
   "homepage": "https://mastra.ai",
@@ -126,5 +126,5 @@
       "last 5 safari version"
     ]
   },
-  "packageManager": "pnpm@10.18.2"
+  "packageManager": "pnpm@11.3.0"
 }

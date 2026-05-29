@@ -102,6 +102,27 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('getInputProcessors', () => {
+    it('adds ChatChannelProcessor by default', () => {
+      const processors = agentChannels.getInputProcessors();
+      expect(processors).toHaveLength(1);
+      expect(processors[0]!.id).toBe('chat-channel-context');
+    });
+
+    it('skips ChatChannelProcessor entirely when threadContext.addSystemMessage is false', () => {
+      const disabled = new AgentChannels({
+        adapters: { test: createMockAdapter('test') },
+        threadContext: { addSystemMessage: false },
+      });
+      expect(disabled.getInputProcessors()).toEqual([]);
+    });
+
+    it('skips when the user already provided a ChatChannelProcessor', () => {
+      const userProcessor = { id: 'chat-channel-context', processInputStep: () => undefined } as any;
+      expect(agentChannels.getInputProcessors([userProcessor])).toEqual([]);
+    });
+  });
+
   describe('channelConfig', () => {
     it('exposes the original ChannelConfig (round-trippable)', () => {
       const discord = createMockAdapter('discord');

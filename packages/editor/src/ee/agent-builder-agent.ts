@@ -1,5 +1,21 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const workspacePath = path.join(__dirname, 'workspace');
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: workspacePath,
+  }),
+  skills: ['skills'],
+});
 
 /**
  * Agent Builder Agent
@@ -18,12 +34,12 @@ import { Memory } from '@mastra/memory';
  * - createSkillTool (gated by features.skills) — only when a needed capability does not exist
  */
 
-export function createBuilderAgent(): Agent {
+export function createBuilderAgent(
+  args?: Partial<ConstructorParameters<typeof Agent<'builder-agent'>>[0]>,
+): Agent<'builder-agent'> {
   const memory = new Memory();
-  return new Agent({
-    id: 'builder-agent',
-    name: 'Agent Builder Agent',
-    description: 'An agent that can build agents',
+
+  return new Agent<'builder-agent'>({
     instructions: `You are the Agent Builder.
 
 Your job: turn a non-technical user's plain-language request into a fully configured, production-quality agent in a single turn.
@@ -154,5 +170,10 @@ The system prompt written into \`set-agent-instructions\` MUST include all of th
 - The final message should make clear that the agent starts with initial parameters and can be adjusted later.`,
     model: 'openai/gpt-5.5',
     memory,
+    workspace,
+    ...(args || {}),
+    id: 'builder-agent',
+    name: 'Agent Builder Agent',
+    description: 'An agent that can build agents',
   });
 }

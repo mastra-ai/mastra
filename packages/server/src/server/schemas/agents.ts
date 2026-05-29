@@ -2,6 +2,15 @@ import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 
+export {
+  generateSpeechBodySchema,
+  getListenerResponseSchema,
+  speakResponseSchema,
+  transcribeSpeechBodySchema,
+  transcribeSpeechResponseSchema,
+  voiceSpeakersResponseSchema,
+} from '@internal/voice/routes';
+
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
@@ -291,6 +300,7 @@ export const agentExecutionBodySchema = z
             z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
           )
           .optional(),
+        defaultStatus: z.enum(['draft', 'published']).optional(),
       })
       .optional(),
 
@@ -386,18 +396,6 @@ export const executeToolBodySchema = executeToolDataBodySchema.extend({
 export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
   requestContext: z.record(z.string(), z.any()).optional(),
 });
-
-/**
- * Response schema for voice speakers endpoint
- * Flexible to accommodate provider-specific metadata
- */
-export const voiceSpeakersResponseSchema = z.array(
-  z
-    .object({
-      voiceId: z.string(),
-    })
-    .passthrough(), // Allow provider-specific fields like name, language, etc.
-);
 
 // ============================================================================
 // Tool Approval Schemas
@@ -500,44 +498,12 @@ export const updateAgentModelInModelListBodySchema = z.object({
 export const modelManagementResponseSchema = messageResponseSchema;
 
 // ============================================================================
-// Voice Schemas
+// Response schemas for agent generation endpoints
+// These return AI SDK types which have complex structures
 // ============================================================================
 
-/**
- * Body schema for generating speech
- */
-export const generateSpeechBodySchema = z.object({
-  text: z.string(),
-  speakerId: z.string().optional(),
-});
-
-/**
- * Body schema for transcribing speech
- */
-export const transcribeSpeechBodySchema = z.object({
-  audio: z.any(), // Buffer
-  options: z.record(z.string(), z.any()).optional(),
-});
-
-/**
- * Response schema for transcribe speech
- */
-export const transcribeSpeechResponseSchema = z.object({
-  text: z.string(),
-});
-
-/**
- * Response schema for get listener
- */
-export const getListenerResponseSchema = z.any(); // Listener info structure varies
-
-/**
- * Response schema for agent generation endpoints
- * These return AI SDK types which have complex structures
- */
 export const generateResponseSchema = z.any(); // AI SDK GenerateResult type
 export const streamResponseSchema = z.any(); // AI SDK StreamResult type
-export const speakResponseSchema = z.any(); // Voice synthesis result
 export const executeToolResponseSchema = z.any(); // Tool execution result varies by tool
 
 // ============================================================================
