@@ -3,7 +3,7 @@
 '@mastra/pg': minor
 ---
 
-Added `disableInit` option to `MastraVector` base class so vector stores can opt out of running DDL at app startup. This matches the existing `disableInit` behavior on storage adapters and supports deployments that run schema/index migrations with a privileged role while the application uses a least-privilege role.
+Added the `disableInit` option to the `MastraVector` base class. When set to `true`, vector stores skip creating schemas, extensions, tables, and indexes at application startup. This matches the existing `disableInit` behavior on storage adapters and is useful for deployments where schemas and indexes are created ahead of time by a privileged database role, while the application runs with a least-privilege role.
 
 **Usage**
 
@@ -15,4 +15,4 @@ const vector = new PgVector({
 });
 ```
 
-The `MASTRA_DISABLE_STORAGE_INIT` environment variable also gates vector init, so a single flag can disable both storage and vector DDL.
+The `MASTRA_DISABLE_STORAGE_INIT` environment variable also disables vector init, so a single flag prevents both storage and vector stores from creating schemas, tables, or indexes at startup.
