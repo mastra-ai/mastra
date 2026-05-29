@@ -4,6 +4,8 @@ import type { MastraMemory } from '../../memory';
 import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
+import { EventEmitter, sessionCreatedPayload } from './events';
+import type { HarnessEventListener, HarnessEventUnsubscribe } from './events';
 import type { HarnessConfig } from './harness.types';
 import type { HarnessMode } from './mode';
 import { Session } from './session';
@@ -31,6 +33,7 @@ export class Harness<MODES extends HarnessMode[]> {
   readonly #storage?: HarnessStorage;
   readonly #compositeStorage?: MastraCompositeStore;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
+  readonly #events: EventEmitter;
 
   constructor(config: HarnessConfig<MODES>) {
     if (!config.modes.length) {
@@ -42,6 +45,7 @@ export class Harness<MODES extends HarnessMode[]> {
     this.#storage = config.storage;
     this.#compositeStorage = config.mastra?.getStorage();
     this.#memory = config.memory;
+    this.#events = new EventEmitter({}, { onEvent: config.onEvent });
 
     const modes = config.modes ?? [];
     for (const mode of modes) {
@@ -58,6 +62,14 @@ export class Harness<MODES extends HarnessMode[]> {
 
   get ownerId(): string {
     return this.#ownerId;
+  }
+
+  subscribe(listener: HarnessEventListener): HarnessEventUnsubscribe {
+    return this.#events.subscribe(listener);
+  }
+
+  emit(event: Parameters<EventEmitter['emit']>[0]): ReturnType<EventEmitter['emit']> {
+    return this.#events.emit(event);
   }
 
   listModes(): HarnessMode[] {
@@ -117,6 +129,7 @@ export class Harness<MODES extends HarnessMode[]> {
     };
 
     await storage.saveSession(record);
+    this.#events.emit({ type: 'session_created', ...sessionCreatedPayload(record) });
     return this.#sessionFromRecord(record);
   }
 
@@ -146,6 +159,7 @@ export class Harness<MODES extends HarnessMode[]> {
     };
 
     await storage.saveSession(record);
+    this.#events.emit({ type: 'session_created', ...sessionCreatedPayload(record) });
     return this.#sessionFromRecord(record);
   }
 
@@ -188,6 +202,7 @@ export class Harness<MODES extends HarnessMode[]> {
       createdAt: record.createdAt,
       lastActivityAt: record.lastActivityAt,
       memory: this.#memory,
+      events: this.#events.scoped({ sessionId: record.id }),
     });
   }
 
