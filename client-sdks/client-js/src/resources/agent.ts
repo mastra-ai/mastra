@@ -458,6 +458,65 @@ export class Agent extends BaseResource {
     if (threadKey) deleteSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey);
   }
 
+  private prepareSignalRouteBody<
+    Params extends { resourceId?: string; threadId?: string; ifIdle?: { streamOptions?: unknown } },
+  >(params: Params): { body: Params; streamOptions?: SignalRuntimeOptions } {
+    const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
+    if (!streamOptions) return { body: params };
+
+    this.setSignalRuntimeOptions({
+      resourceId: params.resourceId,
+      threadId: params.threadId,
+      streamOptions,
+    });
+
+    return {
+      body: {
+        ...params,
+        ifIdle: {
+          ...params.ifIdle,
+          streamOptions: {
+            ...streamOptions,
+            requestContext: parseClientRequestContext(streamOptions.requestContext),
+            clientTools: processClientTools(streamOptions.clientTools),
+          },
+        },
+      } as Params,
+      streamOptions,
+    };
+  }
+
+  private async requestSignalRoute<
+    Params extends { resourceId?: string; threadId?: string; ifIdle?: { streamOptions?: unknown } },
+    Response extends { runId: string },
+  >(path: string, params: Params): Promise<Response> {
+    const { body, streamOptions } = this.prepareSignalRouteBody(params);
+
+    let response: Response;
+    try {
+      response = await this.request<Response>(path, {
+        method: 'POST',
+        body,
+      });
+    } catch (error) {
+      if (streamOptions) {
+        this.deleteLatestSignalRuntimeOptions({ resourceId: params.resourceId, threadId: params.threadId });
+      }
+      throw error;
+    }
+
+    if (streamOptions) {
+      this.setSignalRuntimeOptions({
+        runId: response.runId,
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+        streamOptions,
+      });
+    }
+
+    return response;
+  }
+
   /**
    * Retrieves details about the agent
    * @param requestContext - Optional request context to pass as query parameter
@@ -508,72 +567,21 @@ export class Agent extends BaseResource {
    * @experimental Agent message APIs are experimental and may change in a future release.
    */
   sendMessage(params: SendAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
-    return this.request(`/agents/${this.agentId}/send-message`, {
-      method: 'POST',
-      body: params,
-    });
+    return this.requestSignalRoute(`/agents/${this.agentId}/send-message`, params);
   }
 
   /**
    * @experimental Agent message APIs are experimental and may change in a future release.
    */
   queueMessage(params: QueueAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
-    return this.request(`/agents/${this.agentId}/queue-message`, {
-      method: 'POST',
-      body: params,
-    });
+    return this.requestSignalRoute(`/agents/${this.agentId}/queue-message`, params);
   }
 
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  async sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
-    const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
-    if (streamOptions) {
-      this.setSignalRuntimeOptions({
-        resourceId: params.resourceId,
-        threadId: params.threadId,
-        streamOptions,
-      });
-    }
-
-    const body = params.ifIdle?.streamOptions
-      ? {
-          ...params,
-          ifIdle: {
-            ...params.ifIdle,
-            streamOptions: {
-              ...params.ifIdle.streamOptions,
-              requestContext: parseClientRequestContext(params.ifIdle.streamOptions.requestContext),
-              clientTools: processClientTools(params.ifIdle.streamOptions.clientTools),
-            },
-          },
-        }
-      : params;
-
-    let response: { accepted: true; runId: string };
-    try {
-      response = await this.request<{ accepted: true; runId: string }>(`/agents/${this.agentId}/signals`, {
-        method: 'POST',
-        body,
-      });
-    } catch (error) {
-      if (streamOptions) {
-        this.deleteLatestSignalRuntimeOptions({ resourceId: params.resourceId, threadId: params.threadId });
-      }
-      throw error;
-    }
-
-    if (streamOptions) {
-      this.setSignalRuntimeOptions({
-        runId: response.runId,
-        resourceId: params.resourceId,
-        threadId: params.threadId,
-        streamOptions,
-      });
-    }
-
-    return response;
+  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
   }
 
   /**
