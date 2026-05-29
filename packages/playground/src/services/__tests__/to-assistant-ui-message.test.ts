@@ -37,6 +37,17 @@ type DynamicToolPart = {
 
 const dynamicToolPart = (part: DynamicToolPart): MastraMessagePart => part as MastraMessagePart;
 
+/**
+ * The converter attaches `metadata` to tool-call content parts (read by
+ * `ToolFallback` to drive network badges), but the public assistant-ui
+ * `tool-call` type does not surface it. Read it through a narrow structural
+ * accessor instead of casting the whole part.
+ */
+const partMetadata = (part: object): Record<string, unknown> | undefined => {
+  const metadata = (part as { metadata?: unknown }).metadata;
+  return metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>) : undefined;
+};
+
 const assistantMessage = (parts: MastraMessagePart[]): MastraDBMessage => ({
   id: 'msg-1',
   role: 'assistant',
@@ -134,5 +145,111 @@ describe('toAssistantUIMessage dynamic-tool conversion (via OM pipeline)', () =>
     expect(part.argsText).toBe(JSON.stringify({ query: 'value' }));
     expect(part.result).toBe('tool blew up');
     expect(part.isError).toBe(true);
+  });
+});
+
+describe('toAssistantUIMessage network routing JSON reconstruction', () => {
+  const textPart = (text: string): MastraMessagePart => ({ type: 'text', text });
+
+  it('reconstructs an agent routing decision into a network tool-call with child messages', () => {
+    const routingDecisionJson = JSON.stringify({
+      isNetwork: true,
+      selectionReason: 'The user asked for the weather agent.',
+      primitiveType: 'agent',
+      primitiveId: 'weatherAgent',
+      input: 'What is the weather in Toronto?',
+      finalResult: {
+        text: 'Weather in Toronto: 13.6°C, clear sky.',
+        messages: [
+          {
+            type: 'tool-call',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'getWeather',
+                args: { city: 'Toronto' },
+              },
+            ],
+          },
+          {
+            type: 'tool-result',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'call-1',
+                toolName: 'getWeather',
+                result: { result: { temperature: 13.6 } },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const { content } = toAssistantUIMessage(assistantMessage([textPart(routingDecisionJson)]));
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    expect(content).toHaveLength(1);
+    const part = content[0];
+    expect(part.type).toBe('tool-call');
+    if (part.type !== 'tool-call') throw new Error('expected tool-call');
+    expect(part.toolName).toBe('weatherAgent');
+    expect(part.toolCallId).toBe('weatherAgent');
+    expect(part.args).toBe('What is the weather in Toronto?');
+    expect(partMetadata(part)).toMatchObject({
+      mode: 'network',
+      from: 'AGENT',
+      selectionReason: 'The user asked for the weather agent.',
+      agentInput: 'What is the weather in Toronto?',
+    });
+    expect(part.result).toEqual({
+      childMessages: [
+        {
+          type: 'tool',
+          toolCallId: 'call-1',
+          toolName: 'getWeather',
+          args: { city: 'Toronto' },
+          toolOutput: { result: { temperature: 13.6 } },
+        },
+        { type: 'text', content: 'Weather in Toronto: 13.6°C, clear sky.' },
+      ],
+      result: 'Weather in Toronto: 13.6°C, clear sky.',
+    });
+  });
+
+  it('reconstructs a tool routing decision using finalResult.result and from=TOOL', () => {
+    const routingDecisionJson = JSON.stringify({
+      isNetwork: true,
+      selectionReason: 'Direct tool call.',
+      primitiveType: 'tool',
+      primitiveId: 'getWeatherTool',
+      input: { city: 'Toronto' },
+      finalResult: {
+        result: { temperature: 13.6, conditions: 'clear sky' },
+      },
+    });
+
+    const { content } = toAssistantUIMessage(assistantMessage([textPart(routingDecisionJson)]));
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('tool-call');
+    if (part.type !== 'tool-call') throw new Error('expected tool-call');
+    expect(part.toolName).toBe('getWeatherTool');
+    expect(partMetadata(part)).toMatchObject({ mode: 'network', from: 'TOOL' });
+    expect(part.result).toEqual({ temperature: 13.6, conditions: 'clear sky' });
+  });
+
+  it('leaves ordinary JSON and invalid JSON text unchanged', () => {
+    const ordinary = toAssistantUIMessage(assistantMessage([textPart(JSON.stringify({ hello: 'world' }))]));
+    const invalid = toAssistantUIMessage(assistantMessage([textPart('{"isNetwork": true')]));
+
+    if (typeof ordinary.content === 'string' || typeof invalid.content === 'string') {
+      throw new Error('expected structured content parts');
+    }
+
+    expect(ordinary.content[0]).toMatchObject({ type: 'text', text: '{"hello":"world"}' });
+    expect(invalid.content[0]).toMatchObject({ type: 'text', text: '{"isNetwork": true' });
   });
 });

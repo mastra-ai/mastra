@@ -32,6 +32,147 @@ const getToolArgs = (toolInvocation: MastraToolInvocationPart['toolInvocation'])
   return invocation.args ?? invocation.rawInput ?? {};
 };
 
+/**
+ * Render-time reconstruction for persisted network routing decisions.
+ *
+ * Network runs persist their routing decision as a plain assistant text part
+ * containing a JSON blob like `{ "isNetwork": true, ... }`. During streaming the
+ * accumulator builds a `dynamic-tool` part (with `childMessages`, network
+ * metadata, etc.) that renders the nested agent/tool/workflow badge. The server
+ * does not persist that part, so on reload only the raw routing JSON survives.
+ *
+ * To make reload render identically to streaming, we transform the persisted
+ * routing JSON back into the same `tool-call` shape the `dynamic-tool` branch
+ * produces. This mirrors `main`'s `resolveInitialMessages` reconstruction.
+ *
+ * Network mode is being deprecated soon, so this lives at render time in the
+ * playground converter rather than as a separate rehydration layer.
+ */
+interface NetworkToolCallContent {
+  type: 'tool-call';
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+}
+
+interface NetworkToolResultContent {
+  type: 'tool-result';
+  toolCallId: string;
+  toolName: string;
+  result?: { result?: { steps?: unknown } & Record<string, unknown> } & Record<string, unknown>;
+}
+
+interface NetworkNestedMessage {
+  type?: string;
+  content?: string | (NetworkToolCallContent | NetworkToolResultContent)[];
+}
+
+interface NetworkFinalResult {
+  result?: unknown;
+  text?: string;
+  messages?: NetworkNestedMessage[];
+}
+
+interface NetworkRoutingDecision {
+  isNetwork: true;
+  selectionReason?: string;
+  primitiveType?: string;
+  primitiveId?: string;
+  input?: unknown;
+  finalResult?: NetworkFinalResult;
+}
+
+interface NetworkChildMessage {
+  type: 'tool' | 'text';
+  toolCallId?: string;
+  toolName?: string;
+  args?: Record<string, unknown>;
+  toolOutput?: unknown;
+  content?: string;
+}
+
+const parseNetworkRoutingDecision = (text: string): NetworkRoutingDecision | null => {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{')) return null;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (typeof parsed === 'object' && parsed !== null && (parsed as { isNetwork?: unknown }).isNetwork === true) {
+      return parsed as NetworkRoutingDecision;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const buildNetworkChildMessages = (finalResult: NetworkFinalResult | undefined): NetworkChildMessage[] => {
+  const messages = finalResult?.messages ?? [];
+  const childMessages: NetworkChildMessage[] = [];
+
+  const toolResultMap = new Map<string, NetworkToolResultContent>();
+  for (const msg of messages) {
+    if (Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === 'tool-result') {
+          toolResultMap.set(part.toolCallId, part);
+        }
+      }
+    }
+  }
+
+  for (const msg of messages) {
+    if (msg.type === 'tool-call' && Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === 'tool-call') {
+          const toolResult = toolResultMap.get(part.toolCallId);
+          const isWorkflow = Boolean(toolResult?.result?.result?.steps);
+          childMessages.push({
+            type: 'tool',
+            toolCallId: part.toolCallId,
+            toolName: part.toolName,
+            args: part.args,
+            toolOutput: isWorkflow ? toolResult?.result?.result : toolResult?.result,
+          });
+        }
+      }
+    }
+  }
+
+  if (finalResult?.text) {
+    childMessages.push({ type: 'text', content: finalResult.text });
+  }
+
+  return childMessages;
+};
+
+const networkFromForPrimitive = (primitiveType: string | undefined): 'AGENT' | 'TOOL' | 'WORKFLOW' =>
+  primitiveType === 'tool' ? 'TOOL' : primitiveType === 'workflow' ? 'WORKFLOW' : 'AGENT';
+
+const toNetworkToolCallContent = (message: MastraDBMessage, decision: NetworkRoutingDecision): ContentPart => {
+  const primitiveId = decision.primitiveId ?? '';
+  const finalResult = decision.finalResult;
+  const result =
+    decision.primitiveType === 'tool'
+      ? finalResult?.result
+      : { childMessages: buildNetworkChildMessages(finalResult), result: finalResult?.text ?? '' };
+
+  return {
+    type: 'tool-call',
+    toolCallId: primitiveId,
+    toolName: primitiveId,
+    argsText: JSON.stringify(decision.input),
+    args: (decision.input ?? {}) as ReadonlyJSONObject,
+    result,
+    metadata: {
+      ...message.content.metadata,
+      mode: 'network',
+      selectionReason: decision.selectionReason ?? '',
+      agentInput: decision.input,
+      from: networkFromForPrimitive(decision.primitiveType),
+    },
+  };
+};
+
 const toToolCallContent = (message: MastraDBMessage, part: MastraToolInvocationPart): ContentPart => {
   const { toolInvocation } = part;
   const args = getToolArgs(toolInvocation) as ReadonlyJSONObject;
@@ -65,6 +206,10 @@ const toToolCallContent = (message: MastraDBMessage, part: MastraToolInvocationP
 
 const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): ContentPart => {
   if (part.type === 'text') {
+    const networkDecision = parseNetworkRoutingDecision(part.text);
+    if (networkDecision) {
+      return toNetworkToolCallContent(message, networkDecision);
+    }
     return { type: 'text', text: part.text, metadata: getPartMetadata(message, part) };
   }
 
