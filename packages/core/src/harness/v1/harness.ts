@@ -45,7 +45,7 @@ export class Harness<MODES extends HarnessMode[]> {
     this.#storage = config.storage;
     this.#compositeStorage = config.mastra?.getStorage();
     this.#memory = config.memory;
-    this.#events = new EventEmitter({}, { onEvent: config.onEvent });
+    this.#events = new EventEmitter();
 
     const modes = config.modes ?? [];
     for (const mode of modes) {
