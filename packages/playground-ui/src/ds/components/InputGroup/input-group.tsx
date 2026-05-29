@@ -4,7 +4,7 @@ import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { formElementSizes } from '@/ds/primitives/form-element';
+import { formElementSizes, inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -43,25 +43,28 @@ const inputGroupRoundedTextareaClassName = cn(
   'has-[textarea]:rounded-xl',
 );
 
+// `default` and `filled` are the same filled surface on purpose (the default look IS
+// the filled treatment; `filled` is an explicit alias). Share the string so they can't
+// drift. Focus brightens the border (inputFocusBorderWithin) for WCAG-visible focus.
+const inputGroupFilledVariant = cn(
+  'bg-surface-overlay-soft rounded-full',
+  'hover:bg-surface-overlay-strong',
+  inputHoverBorderWithin,
+  'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong',
+  inputFocusBorderWithin,
+  inputGroupRoundedTextareaClassName,
+);
+
 const inputGroupVariants = cva(inputGroupBaseClassName, {
   variants: {
     variant: {
-      default: cn(
-        'bg-surface-overlay-soft rounded-full',
-        'hover:bg-surface-overlay-strong hover:border-border2',
-        'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong focus-within:border-border2',
-        inputGroupRoundedTextareaClassName,
-      ),
-      filled: cn(
-        'bg-surface-overlay-soft rounded-full',
-        'hover:bg-surface-overlay-strong hover:border-border2',
-        'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong focus-within:border-border2',
-        inputGroupRoundedTextareaClassName,
-      ),
+      default: inputGroupFilledVariant,
+      filled: inputGroupFilledVariant,
       outline: cn(
         'bg-transparent rounded-full',
-        'hover:border-border2',
-        'outline-hidden focus-within:outline-hidden focus-within:border-border2',
+        inputHoverBorderWithin,
+        'outline-hidden focus-within:outline-hidden',
+        inputFocusBorderWithin,
         inputGroupRoundedTextareaClassName,
       ),
     },
@@ -182,9 +185,14 @@ const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
           // Hide native number-spinner arrows so consumers can compose their own
-          // stepper (see the NumberWithStepper story).
+          // stepper (see the NumberWithStepper story). WebKit uses the spin-button
+          // pseudo-elements; Firefox needs `appearance: textfield` on the input.
           '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0',
           '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0',
+          '[&[type=number]]:[appearance:textfield]',
+          // type="search": drop WebKit's native clear button so it doesn't double up with a
+          // custom clear control (e.g. the scorers toolbar's InputGroupButton).
+          '[&::-webkit-search-cancel-button]:appearance-none',
           className,
         )}
         {...props}

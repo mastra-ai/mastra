@@ -12,7 +12,8 @@ import {
   SelectValue,
 } from '@mastra/playground-ui';
 import { SearchIcon, XIcon } from 'lucide-react';
-import { useCallback, useEffect, useId, useState } from 'react';
+import type { ChangeEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { SCORER_SOURCE_OPTIONS } from './constants';
 
@@ -35,22 +36,43 @@ export function ScorersToolbar({
 }: ScorersToolbarProps) {
   const id = useId();
   const [value, setValue] = useState(search);
+  // Tracks the last value this toolbar committed upstream, so the sync effect can tell
+  // an external `search` change (e.g. a Reset button) from our own debounced echo.
+  const committedRef = useRef(search);
 
   const debouncedSearch = useDebouncedCallback((next: string) => {
+    committedRef.current = next;
     onSearchChange(next);
   }, 300);
 
+  // Mirror an EXTERNAL `search` change into the local input only. Guarding on
+  // committedRef avoids both rewinding the field mid-typing (which dropped a keystroke
+  // landing between the debounce firing and the parent re-render) and a redundant
+  // re-render on every commit, while still letting an external Reset clear the input.
   useEffect(() => {
-    debouncedSearch.cancel();
-    setValue(search);
+    if (search !== committedRef.current) {
+      committedRef.current = search;
+      debouncedSearch.cancel();
+      setValue(search);
+    }
   }, [search, debouncedSearch]);
 
+  // Cancel any pending commit on unmount.
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
+  const handleChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setValue(event.target.value);
+      debouncedSearch(event.target.value);
+    },
+    [debouncedSearch],
+  );
+
   const handleClear = useCallback(() => {
+    committedRef.current = '';
+    debouncedSearch.cancel();
     setValue('');
     onSearchChange('');
-    debouncedSearch.cancel();
   }, [onSearchChange, debouncedSearch]);
 
   return (
@@ -64,15 +86,12 @@ export function ScorersToolbar({
           </InputGroupAddon>
           <InputGroupInput
             id={id}
-            name={id}
+            name="scorer-search"
             type="search"
             aria-label="Search scorers"
             placeholder="Filter by scorer name"
             value={value}
-            onChange={event => {
-              setValue(event.target.value);
-              debouncedSearch(event.target.value);
-            }}
+            onChange={handleChange}
           />
           {value && (
             <InputGroupAddon align="inline-end">

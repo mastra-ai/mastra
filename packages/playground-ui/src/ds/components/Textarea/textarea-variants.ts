@@ -27,11 +27,13 @@ export const textareaVariants = cva(
         outline: cn(inputOutlineAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
         unstyled: unstyledFormElementStyle,
       },
+      // Text tokens mirror the Input size scale (sm→ui-sm, md/default→ui-md, lg→ui-lg)
+      // so a Textarea reads at the same size as a sibling Input.
       size: {
         sm: 'px-2 py-1.5 text-ui-sm',
-        md: 'px-3 py-2 text-ui-sm',
+        md: 'px-3 py-2 text-ui-md',
         default: 'px-3 py-2 text-ui-md',
-        lg: 'px-4 py-3 text-ui-sm',
+        lg: 'px-4 py-3 text-ui-lg',
       },
     },
     defaultVariants: {

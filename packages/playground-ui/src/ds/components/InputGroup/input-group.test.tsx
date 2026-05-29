@@ -141,4 +141,37 @@ describe('InputGroup', () => {
     expect(wrapperClass).toContain('rounded-full');
     expect(wrapperClass).not.toContain('bg-surface-overlay-soft');
   });
+
+  it('suppresses both native number spinners (WebKit + Firefox) and the WebKit search clear button', () => {
+    render(
+      <InputGroup>
+        <InputGroupInput placeholder="x" />
+      </InputGroup>,
+    );
+    const cls = getInput().className;
+    // WebKit number spinners + Firefox textfield appearance + WebKit search clear, so a
+    // type="number"/type="search" control composes cleanly with custom +/- or clear buttons.
+    expect(cls).toContain('[&::-webkit-inner-spin-button]:appearance-none');
+    expect(cls).toContain('[&[type=number]]:[appearance:textfield]');
+    expect(cls).toContain('[&::-webkit-search-cancel-button]:appearance-none');
+  });
+
+  it('prioritizes the focus border over hover like Input (the hover border is guarded so focus always wins)', () => {
+    render(
+      <InputGroup>
+        <InputGroupInput placeholder="x" />
+      </InputGroup>,
+    );
+    const cls = getWrapper().className;
+    // Focused border brightens to a neutral tone (no green accent).
+    expect(cls).toContain('focus-within:border-neutral5/50');
+    expect(cls).not.toContain('ring-accent1');
+    // Tailwind emits the `focus-within` variant BEFORE `hover`, so an unguarded
+    // `hover:border-border2` (equal specificity) would override the focus border on a field
+    // that is focused AND hovered — the InputGroup bug. The hover border is guarded with
+    // :not(:focus-within) so the focus border always wins, matching the bare <Input> (whose
+    // `focus-visible` is emitted after `hover`).
+    expect(cls).toContain('[&:hover:not(:focus-within)]:border-border2');
+    expect(cls).not.toContain('hover:border-border2');
+  });
 });

@@ -1,7 +1,7 @@
 import { SearchIcon } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { formElementSizes } from '@/ds/primitives/form-element';
+import { formElementSizes, inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -25,21 +25,25 @@ const searchbarSizeClasses = {
   default: formElementSizes.default,
 };
 
+// `default` and `filled` are the same filled surface on purpose: the default Searchbar
+// look IS the filled treatment, and `filled` is an explicit alias for consumers. Share
+// the class string so the two can't drift.
+const searchbarFilledSurface = cn(
+  'bg-surface-overlay-soft rounded-full',
+  'hover:bg-surface-overlay-strong',
+  inputHoverBorderWithin,
+  'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong',
+  inputFocusBorderWithin,
+);
+
 const searchbarVariantClasses: Record<SearchbarVariant, string> = {
-  default: cn(
-    'bg-surface-overlay-soft rounded-full',
-    'hover:bg-surface-overlay-strong hover:border-border2',
-    'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong focus-within:border-border2',
-  ),
-  filled: cn(
-    'bg-surface-overlay-soft rounded-full',
-    'hover:bg-surface-overlay-strong hover:border-border2',
-    'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong focus-within:border-border2',
-  ),
+  default: searchbarFilledSurface,
+  filled: searchbarFilledSurface,
   outline: cn(
     'bg-transparent rounded-full',
-    'hover:border-border2',
-    'outline-hidden focus-within:outline-hidden focus-within:border-border2',
+    inputHoverBorderWithin,
+    'outline-hidden focus-within:outline-hidden',
+    inputFocusBorderWithin,
   ),
 };
 
@@ -109,7 +113,7 @@ export const Searchbar = ({
           type="text"
           placeholder={placeholder}
           className={cn(
-            'bg-transparent text-ui-md placeholder:text-neutral3 block w-full px-2 outline-hidden',
+            'bg-transparent text-ui-md placeholder:text-neutral2 block w-full px-2 outline-hidden',
             searchbarSizeClasses[size],
           )}
           name={id}
