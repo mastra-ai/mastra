@@ -247,36 +247,9 @@ Existing stored signal rows and older clients continue to load through the compa
 Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
 :::
 
-## Use the HTTP API
+## Use HTTP routes
 
-Use the server message routes when you interact with Mastra over HTTP directly. They accept the same string, parts array, and object message shapes as `agent.sendMessage()` and `agent.queueMessage()`.
-
-```bash
-curl -X POST http://localhost:4111/api/agents/supportAgent/send-message \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "message": {
-      "contents": "Show the shorter version.",
-      "attributes": { "sentFrom": "web" }
-    },
-    "resourceId": "user_123",
-    "threadId": "thread_456"
-  }'
-```
-
-Use `/queue-message` when the active run should finish before the new message starts a follow-up run:
-
-```bash
-curl -X POST http://localhost:4111/api/agents/supportAgent/queue-message \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "message": "Also check whether the tests need updates.",
-    "resourceId": "user_123",
-    "threadId": "thread_456"
-  }'
-```
-
-The lower-level `/agents/:agentId/signals` route remains available for system-generated signals and older clients.
+If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-message` for immediate messages and `POST /api/agents/:agentId/queue-message` for next-turn messages. See [Server routes reference](/reference/server/routes#agent-message-routes) for request and response schemas.
 
 ## Use the client SDK
 
@@ -333,5 +306,6 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 - [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
 - [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
 - [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
+- [Server agent routes](/reference/server/routes#agent-message-routes)
 - [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)
