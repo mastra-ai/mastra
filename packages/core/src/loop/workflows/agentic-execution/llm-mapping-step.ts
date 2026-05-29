@@ -401,6 +401,23 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // No result yet — skip emitting a chunk. For deferred provider-executed tools
           // (e.g. Anthropic web_search), the result arrives in a later step and is handled
           // by processOutputStream's 'tool-result' case in llm-execution-step.
+          if (toolCall.approval?.approved === false) {
+            rest.messageList.updateToolInvocation({
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'output-denied' as const,
+                toolCallId: toolCall.toolCallId,
+                toolName: sanitizeToolName(toolCall.toolName),
+                args: toolCall.args,
+                approval: {
+                  id: toolCall.approval.id,
+                  approved: false,
+                  reason: toolCall.approval.reason,
+                },
+              },
+            });
+            continue;
+          }
           if (toolCall.result === undefined) continue;
 
           // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
@@ -443,6 +460,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
                 result: toolCall.result,
+                ...(toolCall.approval ? { approval: toolCall.approval } : {}),
               },
               ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
                 ? {

@@ -448,8 +448,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             if (!resumeData.approved) {
               return {
-                result: 'Tool call was not approved by the user',
                 ...inputData,
+                approval: {
+                  id: inputData.toolCallId,
+                  approved: false,
+                  reason: 'Tool call was not approved by the user',
+                },
               };
             }
           }
@@ -1121,7 +1125,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        return { result, ...inputData };
+        return {
+          result,
+          ...inputData,
+          ...(toolRequiresApproval && resumeData?.approved === true
+            ? { approval: { id: inputData.toolCallId, approved: true as const } }
+            : {}),
+        };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {

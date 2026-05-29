@@ -273,7 +273,11 @@ export function createDurableToolCallStep() {
         if (!(resumeData as { approved: boolean }).approved) {
           return {
             ...typedInput,
-            result: 'Tool call was not approved by the user',
+            approval: {
+              id: typedInput.toolCallId,
+              approved: false,
+              reason: 'Tool call was not approved by the user',
+            },
           };
         }
       }
