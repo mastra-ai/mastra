@@ -46,6 +46,7 @@ type WorkflowRunContextType = {
   setDebugMode: Dispatch<SetStateAction<boolean>>;
 } & Omit<WorkflowTriggerProps, 'paramsRunId' | 'setRunId' | 'observeWorkflowStream'>;
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const WorkflowRunContext = createContext<WorkflowRunContextType>({} as WorkflowRunContextType);
 
 export function WorkflowRunProvider({
@@ -122,9 +123,16 @@ export function WorkflowRunProvider({
     setPayload(null);
   };
 
+  // Reset run-scoped state when navigating to a different workflow or run.
+  // The provider stays mounted across same-pattern route changes (React Router
+  // reuses the component when only :workflowId/:runId differ), so without this
+  // result/payload from the previous run would leak into the next view and the
+  // graph would show stale state until the new fetch completed.
   useEffect(() => {
     setIsRunning(false);
-  }, [initialRunId]);
+    setResult(null);
+    setPayload(null);
+  }, [initialRunId, workflowId]);
 
   useEffect(() => {
     if (runSnapshot?.runId) {

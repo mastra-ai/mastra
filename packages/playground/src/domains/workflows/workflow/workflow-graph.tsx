@@ -3,6 +3,7 @@ import { Skeleton, lodashTitleCase } from '@mastra/playground-ui';
 import { ReactFlowProvider } from '@xyflow/react';
 import { AlertCircleIcon } from 'lucide-react';
 import { useContext } from 'react';
+import { useParams } from 'react-router';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import '../../../index.css';
@@ -15,6 +16,7 @@ export interface WorkflowGraphProps {
 
 export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraphProps) {
   const { snapshot } = useContext(WorkflowRunContext);
+  const { runId } = useParams();
 
   if (isLoading) {
     return (
@@ -35,8 +37,12 @@ export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraph
     );
   }
 
+  // Keying on workflowId+runId forces ReactFlowProvider and WorkflowGraphInner
+  // to remount on route change. Without this, useNodesState/useEdgesState only
+  // read their initial value once and hold stale nodes from the previous route
+  // when React Router reuses the component between same-pattern navigations.
   return (
-    <ReactFlowProvider>
+    <ReactFlowProvider key={`${workflowId}-${runId ?? 'no-run'}`}>
       <WorkflowGraphInner
         workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
       />
