@@ -13,7 +13,7 @@ import { InworldRealtimeVoice } from '@mastra/voice-inworld';
 
 const voice = new InworldRealtimeVoice({
   apiKey: process.env.INWORLD_API_KEY,
-  // Defaults: model 'inworld/models/gemma-4-26b-a4b-it-maas', speaker 'Sarah',
+  // Defaults: model 'inworld/models/gemma-4-26b-a4b-it', speaker 'Sarah',
   // STT 'inworld/inworld-stt-1', semantic-VAD turn detection.
 });
 

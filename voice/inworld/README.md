@@ -124,7 +124,7 @@ import { InworldRealtimeVoice } from '@mastra/voice-inworld';
 
 const voice = new InworldRealtimeVoice({
   apiKey: process.env.INWORLD_API_KEY,
-  model: 'inworld/models/gemma-4-26b-a4b-it-maas',
+  model: 'inworld/models/gemma-4-26b-a4b-it',
   speaker: 'Sarah',
   instructions: 'You are a helpful voice assistant.',
   // Typed first-class session knobs:
@@ -173,7 +173,7 @@ voice.close();
 | ------------------ | ------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apiKey`           | `string`                        | `process.env.INWORLD_API_KEY`                  | Inworld API key (Basic-encoded, passed verbatim).                                                                                                                               |
 | `url`              | `string`                        | `wss://api.inworld.ai/api/v1/realtime/session` | Realtime websocket endpoint.                                                                                                                                                    |
-| `model`            | `string`                        | `inworld/models/gemma-4-26b-a4b-it-maas`       | LLM Router model ID.                                                                                                                                                            |
+| `model`            | `string`                        | `inworld/models/gemma-4-26b-a4b-it`            | LLM Router model ID.                                                                                                                                                            |
 | `speaker`          | `string`                        | `Sarah`                                        | Default voice ID. Any catalog voice is accepted.                                                                                                                                |
 | `sessionId`        | `string`                        | `voice-{Date.now()}`                           | Client-generated session key surfaced as the URL `?key=` parameter.                                                                                                             |
 | `instructions`     | `string`                        | `undefined`                                    | System prompt sent with the initial `session.update`.                                                                                                                           |

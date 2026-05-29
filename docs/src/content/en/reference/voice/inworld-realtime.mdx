@@ -26,7 +26,7 @@ const voice = new InworldRealtimeVoice()
 // Or initialize with explicit configuration
 const voiceWithConfig = new InworldRealtimeVoice({
   apiKey: 'your-inworld-api-key',
-  model: 'inworld/models/gemma-4-26b-a4b-it-maas',
+  model: 'inworld/models/gemma-4-26b-a4b-it',
   speaker: 'Sarah',
   instructions: 'You are a helpful voice assistant.',
   session: {
@@ -89,7 +89,7 @@ voice.close()
     description:
       "LLM Router model ID. Sent via the initial session.update, not in the URL. Any model supported by Inworld's router is accepted.",
     isOptional: true,
-    defaultValue: "'inworld/models/gemma-4-26b-a4b-it-maas'",
+    defaultValue: "'inworld/models/gemma-4-26b-a4b-it'",
   },
   {
     name: 'speaker',

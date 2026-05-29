@@ -30,7 +30,7 @@ const DEFAULT_URL = 'wss://api.inworld.ai/api/v1/realtime/session';
  * Default realtime model. Inworld routes via an LLM Router; any model ID it
  * exposes is accepted (e.g. `inworld/...`, `anthropic/...`, `openai/...`).
  */
-const DEFAULT_MODEL = 'inworld/models/gemma-4-26b-a4b-it-maas';
+const DEFAULT_MODEL = 'inworld/models/gemma-4-26b-a4b-it';
 
 /**
  * Default turn-detection config. Semantic VAD is the conversational default —
@@ -73,7 +73,7 @@ export interface InworldRealtimeVoiceOptions {
   apiKey?: string;
   /** Override the realtime WebSocket endpoint. */
   url?: string;
-  /** Default LLM Router model. Defaults to `inworld/models/gemma-4-26b-a4b-it-maas`. */
+  /** Default LLM Router model. Defaults to `inworld/models/gemma-4-26b-a4b-it`. */
   model?: string;
   /** Default voice catalog ID. Defaults to `Sarah`. */
   speaker?: string;
@@ -124,7 +124,7 @@ export interface InworldRealtimeVoiceOptions {
  * ```typescript
  * const voice = new InworldRealtimeVoice({
  *   apiKey: process.env.INWORLD_API_KEY,
- *   // Defaults: model 'inworld/models/gemma-4-26b-a4b-it-maas', speaker 'Sarah',
+ *   // Defaults: model 'inworld/models/gemma-4-26b-a4b-it', speaker 'Sarah',
  *   // STT 'inworld/inworld-stt-1', semantic-VAD turn detection.
  *   session: {
  *     audio: {

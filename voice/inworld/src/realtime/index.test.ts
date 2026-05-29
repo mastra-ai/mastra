@@ -174,7 +174,7 @@ describe('InworldRealtimeVoice', () => {
       await connectStubbed(v);
       const { instance } = getLastInstance();
       const sessionUpdate = sentEvents(instance).find(e => e.type === 'session.update');
-      expect(sessionUpdate.session.model).toBe('inworld/models/gemma-4-26b-a4b-it-maas');
+      expect(sessionUpdate.session.model).toBe('inworld/models/gemma-4-26b-a4b-it');
       expect(sessionUpdate.session.audio.output.voice).toBe('Sarah');
       expect(sessionUpdate.session.audio.input.transcription).toEqual({ model: 'inworld/inworld-stt-1' });
     });
