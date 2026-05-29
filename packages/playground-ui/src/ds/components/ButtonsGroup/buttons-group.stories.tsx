@@ -178,7 +178,6 @@ export const SearchWithDropdown: Story = {
       <ButtonsGroup spacing="close" className="w-[420px]">
         <Input
           variant="outline"
-          size="md"
           type="search"
           aria-label="Search projects"
           placeholder="Search projects..."
@@ -199,7 +198,7 @@ export const SearchWithDropdown: Story = {
           onChange={e => setSearch(e.target.value)}
         />
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger size="md" aria-label="Sort by" className="rounded-full">
+          <SelectTrigger aria-label="Sort by" className="rounded-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
@@ -228,7 +227,7 @@ export const SearchWithDropdownUsingInputGroup: Story = {
     const [sort, setSort] = useState('recent');
     return (
       <ButtonsGroup spacing="close" className="w-[420px]">
-        <InputGroup variant="outline" size="md">
+        <InputGroup variant="outline" size="default">
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>
@@ -241,7 +240,7 @@ export const SearchWithDropdownUsingInputGroup: Story = {
           />
         </InputGroup>
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger size="md" aria-label="Sort by" className="rounded-full">
+          <SelectTrigger aria-label="Sort by" className="rounded-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
