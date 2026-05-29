@@ -415,6 +415,7 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.backgroundTasks);
       maybeInit(this.stores.schedules);
       maybeInit(this.stores.channels);
+      maybeInit(this.stores.harness);
     }
 
     await Promise.all(initTasks);

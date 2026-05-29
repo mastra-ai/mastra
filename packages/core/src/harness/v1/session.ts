@@ -63,7 +63,7 @@ export class Session {
       resourceId: opts.resourceId ?? this.#resourceId,
       title: opts.title,
       metadata: opts.metadata,
-      options: opts.messageLimit ? { messageLimit: opts.messageLimit } : undefined,
+      options: opts.messageLimit !== undefined ? { messageLimit: opts.messageLimit } : undefined,
     });
 
     return new Session({

@@ -71,8 +71,8 @@ const createHarness = (memory: MastraMemory, storage = new RecordingHarnessStora
     storage,
     memory,
     modes: [
-      { id: 'build', agentId: 'default' },
-      { id: 'plan', agentId: 'default' },
+      { id: 'build', agentId: 'default', defaultModelId: 'test-build-model' },
+      { id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model' },
     ],
     defaultModeId: 'build',
   }),
@@ -131,7 +131,7 @@ describe('Harness.session()', () => {
     const session = await harness.session({ sessionId: record!.id, resourceId: 'resource-1' });
 
     expect(session.getMode()).toMatchObject({ id: 'build' });
-    expect(session.getModelId()).toBe('zai-coding-plan/glm-5-turbo');
+    expect(session.getModelId()).toBe('test-build-model');
   });
 
   it('uses top-level storage', async () => {
@@ -140,7 +140,7 @@ describe('Harness.session()', () => {
       agents: {},
       storage,
       memory: createMemory(),
-      modes: [{ id: 'build', agentId: 'default' }],
+      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'test-build-model' }],
       defaultModeId: 'build',
     });
 
@@ -177,6 +177,29 @@ describe('Harness.session()', () => {
       options: undefined,
     });
     expect(storage.records).toHaveLength(1);
+  });
+
+  it('passes messageLimit 0 when cloning a session', async () => {
+    const memory = createMemory();
+    const { harness } = createHarness(memory);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    await session.clone({ messageLimit: 0 });
+
+    expect(memory.cloneThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: { messageLimit: 0 },
+      }),
+    );
+  });
+
+  it('rejects unknown modes before saving a fresh thread session record', async () => {
+    const { harness, storage } = createHarness(createMemory());
+
+    await expect(
+      harness.session({ threadId: 'thread-1', resourceId: 'resource-1', modeId: 'missing-mode' }),
+    ).rejects.toThrow('cannot use unknown mode "missing-mode"');
+    expect(storage.records).toHaveLength(0);
   });
 
   it('clones a session with overrides', async () => {

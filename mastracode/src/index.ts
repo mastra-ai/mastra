@@ -103,11 +103,11 @@ function legacyModeToV1(mode: HarnessMode<MastraCodeState>, fallbackAgent: Agent
   return {
     id: mode.id,
     agentId: (agent ?? fallbackAgent).id,
+    defaultModelId: mode.defaultModelId ?? 'openai/gpt-5.5',
     description: mode.name,
     ...(mode.id === 'plan' ? { transitionsTo: 'build' } : {}),
     metadata: {
       color: mode.color,
-      defaultModelId: mode.defaultModelId,
       default: mode.default,
       name: mode.name,
     },
@@ -125,7 +125,7 @@ function applyEffectiveDefaultsToV1Modes(
     }
     return {
       ...mode,
-      metadata: { ...mode.metadata, defaultModelId: savedModel },
+      defaultModelId: savedModel,
     };
   });
 }
@@ -540,6 +540,13 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     config?.modes ? config.modes.map(mode => legacyModeToV1(mode, codeAgent)) : defaultModesV1,
     effectiveDefaults,
   );
+  const defaultModeId =
+    modesV1.find(mode => mode.metadata?.default === true)?.id ??
+    modesV1.find(mode => mode.id === 'plan')?.id ??
+    modesV1[0]?.id;
+  if (!defaultModeId) {
+    throw new Error('MastraCode requires at least one mode');
+  }
   const modes = modesV1.map(mode => v1ModeToLegacy(mode, codeAgent));
 
   // Map subagent types to mode models: explore→fast, plan→plan, execute→build
@@ -618,14 +625,17 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     threads.map(thread => {
       const sessionHash = hash(`${thread.resourceId}\0${thread.id}`);
 
-      const meta = thread.metadata;
+      const meta = thread.metadata as Record<string, unknown> | undefined;
+      const modeId = typeof meta?.currentModeId === 'string' ? meta.currentModeId : defaultModeId;
+      const mode = modesV1.find(mode => mode.id === modeId) ?? modesV1.find(mode => mode.id === defaultModeId)!;
+      const modelId = typeof meta?.currentModelId === 'string' ? meta.currentModelId : mode.defaultModelId;
       return harnessStorage.saveSession({
         id: `sess-${sessionHash}`,
         ownerId,
         resourceId: thread.resourceId,
         threadId: thread.id,
-        modeId: meta.currentModeId,
-        modelId: meta.currentModelId,
+        modeId: mode.id,
+        modelId,
         origin: 'top-level',
         createdAt: thread.createdAt,
         lastActivityAt: thread.updatedAt,
@@ -638,7 +648,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     agents: { [CODE_AGENT_ID]: codeAgent },
     memory,
     modes: modesV1,
-    defaultModeId: 'plan',
+    defaultModeId,
     storage: harnessStorage,
   });
 

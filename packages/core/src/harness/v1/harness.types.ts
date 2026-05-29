@@ -2,6 +2,7 @@ import type { Agent } from '../../agent';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { HarnessStorage } from '../../storage/domains/harness';
+import type { DynamicArgument } from '../../types';
 import type { HarnessMode } from './mode';
 
 export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
@@ -61,7 +62,7 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
    * Memory backing thread state for Sessions. Sessions use this to read/write
    * messages and clone their backing thread content.
    */
-  memory: MastraMemory;
+  memory: DynamicArgument<MastraMemory>;
 
   //   /**
   //    * Maximum number of items allowed to wait in `pendingQueue` per session.

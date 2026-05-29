@@ -127,14 +127,20 @@ export class Harness<MODES extends HarnessMode[]> {
       return this.#sessionFromRecord(existing);
     }
 
+    const modeId = opts.modeId ?? this.#defaultMode;
+    const mode = this.#modesById.get(modeId);
+    if (!mode) {
+      throw new Error(`Harness session for thread "${opts.threadId}" cannot use unknown mode "${modeId}"`);
+    }
+
     const record: SessionRecord = {
       id,
       ownerId: this.#ownerId,
       threadId: opts.threadId,
       resourceId: opts.resourceId,
       origin: 'top-level',
-      modeId: opts.modeId ?? this.#defaultMode,
-      modelId: opts.modelId ?? 'zai-coding-plan/glm-5-turbo',
+      modeId,
+      modelId: opts.modelId ?? mode.defaultModelId,
       createdAt: new Date(),
       lastActivityAt: new Date(),
     };

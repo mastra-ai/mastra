@@ -1,6 +1,14 @@
 import { HarnessStorage } from './base';
 import type { SessionRecord } from './types';
 
+function cloneSessionRecord(record: SessionRecord): SessionRecord {
+  return {
+    ...record,
+    createdAt: new Date(record.createdAt),
+    lastActivityAt: new Date(record.lastActivityAt),
+  };
+}
+
 export class InMemoryHarness extends HarnessStorage {
   readonly #sessions = new Map<string, SessionRecord>();
 
@@ -9,14 +17,15 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   async loadSession(sessionId: string): Promise<SessionRecord | null> {
-    return this.#sessions.get(sessionId) ?? null;
+    const record = this.#sessions.get(sessionId);
+    return record ? cloneSessionRecord(record) : null;
   }
 
   async saveSession(record: SessionRecord): Promise<void> {
-    this.#sessions.set(record.id, record);
+    this.#sessions.set(record.id, cloneSessionRecord(record));
   }
 
   async listSessions(): Promise<SessionRecord[]> {
-    return [...this.#sessions.values()];
+    return [...this.#sessions.values()].map(cloneSessionRecord);
   }
 }

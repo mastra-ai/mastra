@@ -106,6 +106,9 @@ vi.mock('@mastra/core/harness', () => ({
     getCurrentThreadId() {
       return harnessGetCurrentThreadIdMock();
     }
+    getResourceId() {
+      return 'project-resource';
+    }
     getState() {
       return harnessStateMock;
     }
@@ -342,6 +345,39 @@ describe('createMastraCode', () => {
     expect(harnessConstructorMock).toHaveBeenCalled();
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof harnessConfig?.memory).toBe('function');
+  });
+
+  it('uses the configured default mode when constructing Harness V1', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({
+      modes: [
+        {
+          id: 'review',
+          name: 'Review',
+          default: true,
+          defaultModelId: '__GATEWAY_OPENAI_MODEL__',
+          agent: { id: 'code-agent' } as any,
+        },
+        {
+          id: 'ship',
+          name: 'Ship',
+          defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+          agent: { id: 'code-agent' } as any,
+        },
+      ],
+    });
+
+    const harnessConfig = harnessV1ConstructorMock.mock.calls[0]?.[0] as
+      | { defaultModeId?: string; modes?: { id: string; defaultModelId: string }[] }
+      | undefined;
+    expect(harnessConfig?.defaultModeId).toBe('review');
+    expect(harnessConfig?.modes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'review', defaultModelId: '__GATEWAY_OPENAI_MODEL__' }),
+        expect.objectContaining({ id: 'ship', defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_OPUS__' }),
+      ]),
+    );
   });
 
   it('configures Harness V1 ownerId from machine and project path', async () => {

@@ -55,32 +55,45 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
 
   async listThreads(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
     const [sessions, legacyThreads] = await Promise.all([this.#harnessV1.listSessions(), super.listThreads(options)]);
+    const resourceId = this.getResourceId();
 
-    const sessionThreads = sessions.map(session => {
-      const legacyThread = legacyThreads.find(
-        thread => thread.id === session.threadId && thread.resourceId === session.resourceId,
-      );
+    const sessionThreads = sessions
+      .filter(session => options?.allResources || session.resourceId === resourceId)
+      .map((session): HarnessThread | undefined => {
+        const legacyThread = legacyThreads.find(
+          thread => thread.id === session.threadId && (!thread.resourceId || thread.resourceId === session.resourceId),
+        );
+        const metadata = legacyThread?.metadata as Record<string, unknown> | undefined;
+        if (!options?.includeForkedSubagents && metadata?.forkedSubagent === true) {
+          return undefined;
+        }
 
-      return {
-        id: session.threadId,
-        resourceId: session.resourceId,
-        createdAt: session.createdAt,
-        updatedAt: session.lastActivityAt,
-        metadata: {
-          ...legacyThread?.metadata,
-          sessionId: session.id,
-          modeId: session.modeId,
-          modelId: session.modelId,
-          parentSessionId: session.parentSessionId,
-          origin: session.origin,
-        },
-      };
-    });
+        return {
+          id: session.threadId,
+          resourceId: session.resourceId,
+          createdAt: session.createdAt,
+          updatedAt: session.lastActivityAt,
+          metadata: {
+            ...metadata,
+            sessionId: session.id,
+            modeId: session.modeId,
+            modelId: session.modelId,
+            parentSessionId: session.parentSessionId,
+            origin: session.origin,
+          },
+        };
+      })
+      .filter((thread): thread is HarnessThread => thread !== undefined);
 
     const sessionKeys = new Set(sessionThreads.map(thread => `${thread.resourceId}:${thread.id}`));
+    const sessionThreadIds = new Set(sessionThreads.map(thread => thread.id));
     return [
       ...sessionThreads,
-      ...legacyThreads.filter(thread => !sessionKeys.has(`${thread.resourceId}:${thread.id}`)),
+      ...legacyThreads.filter(
+        thread =>
+          !sessionKeys.has(`${thread.resourceId}:${thread.id}`) &&
+          !(!thread.resourceId && sessionThreadIds.has(thread.id)),
+      ),
     ];
   }
 
@@ -90,7 +103,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       throw new Error('No active session to clone');
     }
 
-    return session.clone(opts);
+    return this.#harnessV1.cloneSession(session, opts);
   }
 
   async cloneThread({
@@ -117,7 +130,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
             resourceId: sourceResourceId,
           });
 
-    this.#session = await sourceSession.clone();
+    this.#session = await this.#harnessV1.cloneSession(sourceSession, { title });
 
     const thread = await this.#session.getThread();
     if (!thread) {
@@ -156,6 +169,10 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     const mode = this.#harnessV1.getMode(modeId);
     if (!mode) {
       throw new Error(`Mode not found: ${modeId}`);
+    }
+
+    if (!this.#session) {
+      throw new Error('No active session to switch mode');
     }
 
     this.#session.setMode(mode);
