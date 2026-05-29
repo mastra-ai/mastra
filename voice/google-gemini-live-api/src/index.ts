@@ -117,6 +117,7 @@ export class GeminiLiveVoice extends MastraVoice<
 
   // Audio chunk concatenation - optimized stream management
   private audioStreamManager: AudioStreamManager;
+  private currentAssistantTurnText = '';
 
   // Session management properties
   private sessionId?: string;
@@ -595,6 +596,7 @@ export class GeminiLiveVoice extends MastraVoice<
 
     // Add to context history
     this.addToContext('user', input);
+    this.emit('turn', { role: 'user', text: input });
 
     // Build text message to Gemini Live API
     const textMessage: any = {
@@ -1372,6 +1374,7 @@ export class GeminiLiveVoice extends MastraVoice<
         // Handle text content
         if (part.text) {
           assistantResponse += part.text;
+          this.currentAssistantTurnText += part.text;
           this.emit('writing', {
             text: part.text,
             role: 'assistant',
@@ -1483,6 +1486,12 @@ export class GeminiLiveVoice extends MastraVoice<
     // Check for turn completion
     if (data.turnComplete) {
       this.log('Turn completed');
+
+      const assistantTurnText = this.currentAssistantTurnText.trim();
+      if (assistantTurnText) {
+        this.emit('turn', { role: 'assistant', text: assistantTurnText });
+      }
+      this.currentAssistantTurnText = '';
 
       // End all active speaker streams for this turn
       this.audioStreamManager.cleanupSpeakerStreams();

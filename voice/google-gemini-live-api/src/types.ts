@@ -155,6 +155,8 @@ export interface GeminiLiveEventMap {
   sessionExpiring: { expiresIn: number; sessionId?: string };
   /** Turn completion event */
   turnComplete: { timestamp: number };
+  /** Completed conversational turn with transcript text */
+  turn: { role: 'user' | 'assistant'; text: string };
   /** Allow any additional string keys for extensibility */
   [key: string]: unknown;
 }

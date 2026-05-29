@@ -79,7 +79,7 @@ import type { CoreTool, ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
-import type { MastraVoice } from '../voice';
+import type { MastraVoice, VoiceTurnEvent } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult, WorkflowRunState } from '../workflows/types';
@@ -118,6 +118,7 @@ import type {
   AgentCreateOptions,
   AgentExecuteOnFinishOptions,
   AgentInstructions,
+  AgentMemoryOption,
   AgentMethodType,
   AgentSignal,
   AgentSubscribeToThreadOptions,
@@ -328,6 +329,10 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: MastraVoice;
+  #voiceMemoryPersistence?: {
+    voice: MastraVoice;
+    handler: (data: VoiceTurnEvent) => void;
+  };
   #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
@@ -1653,15 +1658,110 @@ export class Agent<
    * const audioStream = await voice.speak('Hello world');
    * ```
    */
-  public async getVoice({ requestContext }: { requestContext?: RequestContext } = {}) {
+  public async getVoice({
+    requestContext,
+    memory: memoryOption,
+  }: { requestContext?: RequestContext; memory?: AgentMemoryOption } = {}) {
     if (this.#voice) {
       const voice = this.#voice;
       voice?.addTools(await this.listTools({ requestContext }));
       const instructions = await this.getInstructions({ requestContext });
       voice?.addInstructions(this.#convertInstructionsToString(instructions));
+
+      if (memoryOption) {
+        this.#attachVoiceMemoryPersistence(voice, memoryOption, requestContext);
+      }
+
       return voice;
     } else {
       return new DefaultVoice();
+    }
+  }
+
+  #attachVoiceMemoryPersistence(
+    voice: MastraVoice,
+    memoryOption: AgentMemoryOption,
+    requestContext?: RequestContext,
+  ): void {
+    const resourceId = memoryOption.resource;
+    if (!resourceId) {
+      const error = new MastraError({
+        id: 'AGENT_VOICE_MEMORY_RESOURCE_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentName: this.name },
+        text: `[Agent:${this.name}] - memory.resource is required to persist voice turns`,
+      });
+      this.logger.trackException(error);
+      throw error;
+    }
+
+    const thread =
+      typeof memoryOption.thread === 'string' ? { id: memoryOption.thread } : memoryOption.thread;
+    const threadId = thread.id;
+    const memoryConfig = memoryOption.options;
+
+    if (this.#voiceMemoryPersistence?.voice !== voice) {
+      if (this.#voiceMemoryPersistence) {
+        this.#voiceMemoryPersistence.voice.off('turn', this.#voiceMemoryPersistence.handler);
+      }
+
+      let threadReady = false;
+
+      const handler = (turn: VoiceTurnEvent) => {
+        const text = turn.text.trim();
+        if (!text) {
+          return;
+        }
+
+        void (async () => {
+          const memory = await this.getMemory({ requestContext });
+          if (!memory) {
+            this.logger.warn(`[Agent:${this.name}] - voice memory scope provided but agent has no memory configured`);
+            return;
+          }
+
+          try {
+            if (!threadReady) {
+              const existingThread = await memory.getThreadById({ threadId });
+              if (!existingThread) {
+                await memory.createThread({
+                  threadId,
+                  resourceId,
+                  metadata: thread.metadata,
+                  title: thread.title,
+                  memoryConfig,
+                  saveThread: true,
+                });
+              }
+              threadReady = true;
+            }
+
+            const message: MastraDBMessage = {
+              id: this.#mastra?.generateId() || randomUUID(),
+              role: turn.role,
+              type: 'text',
+              createdAt: new Date(),
+              threadId,
+              resourceId,
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text }],
+              },
+            };
+
+            await memory.saveMessages({
+              messages: [message],
+              memoryConfig,
+            });
+          } catch (err) {
+            this.logger.error(`[Agent:${this.name}] - failed to persist voice turn`, { err, threadId });
+          }
+        })();
+      };
+
+      voice.on('turn', handler);
+      this.#voiceMemoryPersistence = { voice, handler };
     }
   }
 
