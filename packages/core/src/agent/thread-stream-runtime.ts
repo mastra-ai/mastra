@@ -821,11 +821,10 @@ export class AgentThreadStreamRuntime {
       return { accepted: true, runId: queuedRunId, signal };
     }
 
-    state.activeThreadRunIds.delete(key);
     return this.sendSignal(
       agent,
       signal,
-      { ...target, resourceId, threadId, ifIdle: { ...target.ifIdle, behavior: 'wake' } },
+      { ...target, runId, resourceId, threadId, ifIdle: { ...target.ifIdle, behavior: 'wake' } },
       pubsub,
     );
   }
