@@ -1014,6 +1014,27 @@ describe('Stored Agents Handlers', () => {
       expect(result.dependents).toEqual([]);
     });
 
+    it('does not treat prototype keys like "constructor" as references', async () => {
+      mockAgentsData.set('constructor', {
+        id: 'constructor',
+        name: 'Target',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+      mockAgentsData.set('parent', {
+        id: 'parent',
+        name: 'Parent with no sub-agents',
+        model: { name: 'gpt-4', provider: 'openai' },
+        agents: {},
+      });
+
+      const result = await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'constructor',
+      });
+
+      expect(result.dependents).toEqual([]);
+    });
+
     it('throws 404 when the target does not exist', async () => {
       try {
         await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
