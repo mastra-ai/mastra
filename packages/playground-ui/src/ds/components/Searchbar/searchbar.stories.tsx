@@ -8,6 +8,12 @@ const meta: Meta<typeof Searchbar> = {
   parameters: {
     layout: 'centered',
   },
+  argTypes: {
+    variant: {
+      control: { type: 'select' },
+      options: ['default', 'filled', 'outline'],
+    },
+  },
 };
 
 export default meta;
@@ -32,6 +38,31 @@ export const AgentSearch: Story = {
       <Searchbar
         label="Search agents"
         placeholder="Search agents..."
+        onSearch={value => console.log('Search:', value)}
+      />
+    </div>
+  ),
+};
+
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3 w-dropdown-max-height">
+      <Searchbar
+        variant="default"
+        label="Search"
+        placeholder="Default"
+        onSearch={value => console.log('Search:', value)}
+      />
+      <Searchbar
+        variant="filled"
+        label="Search"
+        placeholder="Filled"
+        onSearch={value => console.log('Search:', value)}
+      />
+      <Searchbar
+        variant="outline"
+        label="Search"
+        placeholder="Outline"
         onSearch={value => console.log('Search:', value)}
       />
     </div>

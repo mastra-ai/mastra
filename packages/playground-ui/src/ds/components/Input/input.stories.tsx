@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Fragment } from 'react';
+import { SearchIcon, XIcon } from 'lucide-react';
+import { Fragment, useState } from 'react';
 import { Button } from '../Button/Button';
 import { Input } from './input';
 
@@ -12,7 +13,7 @@ const meta: Meta<typeof Input> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'filled', 'unstyled'],
+      options: ['default', 'filled', 'outline', 'unstyled'],
     },
     size: {
       control: { type: 'select' },
@@ -42,7 +43,8 @@ export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3 w-64">
       <Input variant="default" placeholder="Default" />
-      {/* <Input variant="filled" placeholder="Filled" /> */}
+      <Input variant="filled" placeholder="Filled" />
+      <Input variant="outline" placeholder="Outline" />
       <Input variant="unstyled" placeholder="Unstyled" />
     </div>
   ),
@@ -59,12 +61,19 @@ export const Sizes: Story = {
   ),
 };
 
-// export const Filled: Story = {
-//   args: {
-//     placeholder: 'Filled variant',
-//     variant: 'filled',
-//   },
-// };
+export const Filled: Story = {
+  args: {
+    placeholder: 'Filled variant',
+    variant: 'filled',
+  },
+};
+
+export const Outline: Story = {
+  args: {
+    placeholder: 'Outline variant',
+    variant: 'outline',
+  },
+};
 
 // export const Unstyled: Story = {
 //   args: {
@@ -142,6 +151,46 @@ export const Error: Story = {
     placeholder: 'invalid@',
     defaultValue: 'invalid@',
     error: true,
+  },
+};
+
+/**
+ * `leadingIcon` / `trailingIcon` render nodes inside the input's box (a search glyph, a
+ * clear button, a unit…). The styled box moves to a flex wrapper and the input becomes a
+ * transparent fill, so the element stays composable inside a ButtonsGroup pill.
+ */
+export const WithIcons: Story = {
+  render: () => {
+    const [value, setValue] = useState('');
+    return (
+      <div className="flex w-72 flex-col gap-3">
+        <Input variant="outline" leadingIcon={<SearchIcon />} placeholder="Search..." />
+        <Input
+          variant="outline"
+          placeholder="Type to see the clear button"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          leadingIcon={<SearchIcon />}
+          trailingIcon={
+            value ? (
+              <button
+                type="button"
+                aria-label="Clear"
+                onClick={() => setValue('')}
+                className="flex items-center text-neutral3 hover:text-neutral6"
+              >
+                <XIcon className="size-4" />
+              </button>
+            ) : undefined
+          }
+        />
+        <Input
+          variant="default"
+          trailingIcon={<span className="text-ui-sm text-neutral3">USD</span>}
+          placeholder="0.00"
+        />
+      </div>
+    );
   },
 };
 

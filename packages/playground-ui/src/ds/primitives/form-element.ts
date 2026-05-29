@@ -27,6 +27,11 @@ export const inputSurfaceAndFocusStyle =
   'hover:text-neutral6 hover:bg-surface-overlay-strong hover:border-border2 ' +
   'outline-hidden focus-visible:outline-hidden focus-visible:bg-surface-overlay-strong focus-visible:border-border2';
 
+export const inputOutlineAndFocusStyle =
+  'bg-transparent border border-border1 text-neutral5 ' +
+  'hover:text-neutral6 hover:border-border2 ' +
+  'outline-hidden focus-visible:outline-hidden focus-visible:border-border2';
+
 // Unstyled variant baseline — strips all chrome but still suppresses the
 // browser default focus ring so the field sits cleanly inside a styled parent.
 export const unstyledFormElementStyle = 'border-0 bg-transparent outline-hidden focus-visible:outline-hidden';

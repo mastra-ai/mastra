@@ -10,7 +10,7 @@ const meta: Meta<typeof Textarea> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'filled', 'unstyled'],
+      options: ['default', 'filled', 'outline', 'unstyled'],
     },
     size: {
       control: { type: 'select' },
@@ -39,6 +39,8 @@ export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3 w-dropdown-max-height">
       <Textarea variant="default" placeholder="default" />
+      <Textarea variant="filled" placeholder="filled" />
+      <Textarea variant="outline" placeholder="outline" />
       <Textarea variant="unstyled" placeholder="unstyled" />
     </div>
   ),

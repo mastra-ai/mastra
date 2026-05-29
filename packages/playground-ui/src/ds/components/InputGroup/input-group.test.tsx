@@ -12,7 +12,7 @@ const getWrapper = () => document.querySelector<HTMLDivElement>('[data-slot="inp
 const getInput = () => document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]')!;
 
 describe('InputGroup', () => {
-  it('applies h-form-md to the control by default (md size)', () => {
+  it('puts an explicit height on the root box so the group matches a same-size sibling control', () => {
     render(
       <InputGroup>
         <InputGroupAddon>
@@ -21,18 +21,53 @@ describe('InputGroup', () => {
         <InputGroupInput placeholder="inline" />
       </InputGroup>,
     );
-    const input = getInput();
-    expect(input.className).toContain('h-form-md');
-    expect(input.className).toContain('flex-1');
+    // The root carries an explicit, border-box height. This is the fix for the group
+    // rendering ~2px taller than a same-size Select trigger (previously the height lived
+    // only on the inner control, so the root's own border was added on top).
+    expect(getWrapper().className).toContain('h-form-md');
+    expect(getInput().className).toContain('flex-1');
   });
 
-  it('applies h-form-lg to the control when wrapper size=lg', () => {
+  it('also gives the control a height per group size (so it never collapses in block mode)', () => {
     render(
       <InputGroup size="lg">
         <InputGroupInput placeholder="lg" />
       </InputGroup>,
     );
-    expect(getInput().className).toContain('h-form-lg');
+    // Root height for the size...
+    expect(getWrapper().className).toContain('h-form-lg');
+    // ...and the control mirrors it via the parent's data-size (no React context), which
+    // keeps it from shrinking to the line-height when the group goes vertical.
+    expect(getInput().className).toContain('group-data-[size=lg]/input-group:h-form-lg');
+  });
+
+  it('block-start mode: control keeps a form height (no collapse) and the root height goes auto', () => {
+    // Regression for the "Block Start Addon" story: with the label stacked above the
+    // input (flex-col + flex-none), the control must keep an explicit height or it shrinks
+    // to the text line-height. The control carries `group-data-[size]:h-form-*` for that,
+    // and the root releases its fixed height to auto so addon + control both fit.
+    render(
+      <InputGroup>
+        <InputGroupAddon align="block-start">
+          <InputGroupText>Recipient</InputGroupText>
+        </InputGroupAddon>
+        <InputGroupInput placeholder="name@example.com" />
+      </InputGroup>,
+    );
+    expect(getInput().className).toContain('group-data-[size=md]/input-group:h-form-md');
+    expect(getWrapper().className).toContain('has-[>[data-align=block-start]]:h-auto');
+  });
+
+  it('the root does NOT expose a zero min-width (would let it collapse to ~0 inside a flex group)', () => {
+    render(
+      <InputGroup variant="outline">
+        <InputGroupInput placeholder="x" />
+      </InputGroup>,
+    );
+    // Root fills via `flex-1` + `w-full` and keeps its `min-width:auto` content floor.
+    const cls = getWrapper().className;
+    expect(cls).toContain('flex-1');
+    expect(cls).not.toContain('min-w-0');
   });
 
   it('wrapper has the flex-col + flex-none + w-full overrides needed for block-start mode', () => {
@@ -51,8 +86,8 @@ describe('InputGroup', () => {
     expect(wrapperClass).toContain('has-[>[data-align=block-start]]:flex-col');
     expect(wrapperClass).toContain('has-[>[data-align=block-start]]:[&>[data-slot=input-group-control]]:flex-none');
     expect(wrapperClass).toContain('has-[>[data-align=block-start]]:[&>[data-slot=input-group-control]]:w-full');
-    // The control still carries the height utility — overrides target the flex shorthand only.
-    expect(getInput().className).toContain('h-form-md');
+    // In block mode the fixed root height is released to auto so the stacked addon + control fit.
+    expect(wrapperClass).toContain('has-[>[data-align=block-start]]:h-auto');
   });
 
   it('wrapper has block-end equivalents of the flex-col overrides', () => {
@@ -92,5 +127,18 @@ describe('InputGroup', () => {
     );
     expect(getInput().getAttribute('aria-invalid')).toBe('true');
     expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:border-error');
+  });
+
+  it('supports an outline variant without an initial filled background', () => {
+    render(
+      <InputGroup variant="outline">
+        <InputGroupInput placeholder="x" />
+      </InputGroup>,
+    );
+
+    const wrapperClass = getWrapper().className;
+    expect(wrapperClass).toContain('bg-transparent');
+    expect(wrapperClass).toContain('rounded-full');
+    expect(wrapperClass).not.toContain('bg-surface-overlay-soft');
   });
 });

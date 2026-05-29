@@ -11,8 +11,10 @@ type Orientation = 'horizontal' | 'vertical';
 const ButtonsGroupOrientationContext = React.createContext<Orientation>('horizontal');
 
 const buttonsGroupVariants = cva(
-  // Elevate the focused child's border above its siblings so it isn't clipped in close-spacing.
-  cn('flex', '[&>*:focus-visible]:relative [&>*:focus-visible]:z-10'),
+  // Lift the hovered/focused segment so its full border paints over the collapsed seam
+  // (else a neighbour clips a side / the seam ignores the hover colour). `:focus-within`
+  // also catches a nested focusable, e.g. the <input> inside an InputGroup.
+  cn('flex', '[&>*:hover]:relative [&>*:hover]:z-10', '[&>*:focus-within]:relative [&>*:focus-within]:z-10'),
   {
     variants: {
       orientation: {
@@ -28,24 +30,43 @@ const buttonsGroupVariants = cva(
       {
         orientation: 'horizontal',
         spacing: 'close',
-        // Skip separators when collapsing borders so they stay visible.
+        // Flatten inner corners. Round the right edge off ":has a visible next sibling"
+        // (not `:not(:last-child)`) so Base UI's trailing `<input aria-hidden>` (Select,
+        // Combobox) doesn't square off the trigger. Hidden inputs/separators are skipped.
         className: cn(
-          '[&>*:not(:last-child)]:rounded-r-none',
-          '[&>*:not(:first-child)]:rounded-l-none',
-          '[&>*:not([data-slot=buttons-group-separator]):not(:first-child)]:-ml-px',
+          '[&>*:has(+_*:not([aria-hidden=true]))]:rounded-r-none',
+          '[&>*:not(:first-child):not([aria-hidden=true])]:rounded-l-none',
+          // One-line seam: `-ml-px` overlaps adjacent borders onto the same pixel. Filled
+          // segments (opaque bg: default/primary buttons, the text chip) keep their own
+          // border — the bg hides the neighbour's. Transparent/outline segments null their
+          // left border at rest (so the neighbour's shows without doubling) and reveal it
+          // on hover/focus, where the z-10 lift paints the complete border on top.
+          '[&>*:not([data-slot=buttons-group-separator]):not([aria-hidden=true]):not(:first-child)]:-ml-px',
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([aria-hidden=true]):not(:first-child):not(:hover):not(:focus-within)]:border-l-transparent',
+          // `primary` is filled but borderless — give it (only) an inset-shadow divider.
+          '[&>[data-variant=primary]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset_1px_0_0_0_var(--color-border1)]',
+          // Animate only colour/bg so the seam + ring snap (no fade desynced from the z-10 drop).
+          '[&>*:not([data-slot=buttons-group-separator]):not([aria-hidden=true])]:transition-[color,background-color]',
+          // Group owns sizing (no consumer width classes): fill on flex/InputGroup/input,
+          // content-width on a Select trigger (descendant rule beats the trigger's `w-full`).
+          '[&>[data-slot=select-trigger]]:w-fit [&>[data-slot=select-trigger]]:flex-none',
+          '[&>input]:flex-1',
         ),
       },
       {
         orientation: 'vertical',
         spacing: 'close',
-        // Children carry `rounded-full` (capsule) which looks awkward when stacked vertically.
-        // Replace the outer corners with a regular `rounded-xl` and flatten the inner ones.
+        // Children are capsules (rounded-full); re-round the outer ends to rounded-xl and
+        // flatten the touching ones. Seam logic mirrors horizontal (see above).
         className: cn(
           '[&>*:not(:last-child)]:rounded-b-none',
           '[&>*:not(:first-child)]:rounded-t-none',
           '[&>:first-child]:rounded-t-xl',
           '[&>:last-child]:rounded-b-xl',
           '[&>*:not([data-slot=buttons-group-separator]):not(:first-child)]:-mt-px',
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not(:first-child):not(:hover):not(:focus-within)]:border-t-transparent',
+          '[&>[data-variant=primary]:not(:first-child)]:shadow-[inset_0_1px_0_0_var(--color-border1)]',
+          '[&>*:not([data-slot=buttons-group-separator])]:transition-[color,background-color]',
         ),
       },
     ],
