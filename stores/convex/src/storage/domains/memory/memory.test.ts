@@ -240,6 +240,36 @@ describe('MemoryConvex atomic memory writes', () => {
     expect(updated.updatedAt).toBeInstanceOf(Date);
   });
 
+  it('normalizes missing resource metadata to an empty object after updates', async () => {
+    const { calls, memory } = createMemoryDomain(request => {
+      expect(request.op).toBe('updateResource');
+      if (request.op !== 'updateResource') return null;
+      return {
+        id: request.resourceId,
+        workingMemory: 'existing memory',
+        metadata: null,
+        createdAt: request.createdAt,
+        updatedAt: request.updatedAt,
+      };
+    });
+
+    const updated = await memory.updateResource({
+      resourceId: 'resource-1',
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      op: 'updateResource',
+      resourceId: 'resource-1',
+    });
+    expect(calls[0]).not.toHaveProperty('metadata');
+    expect(updated).toMatchObject({
+      id: 'resource-1',
+      workingMemory: 'existing memory',
+      metadata: {},
+    });
+  });
+
   it('parses resources created by the updateResource storage mutation', async () => {
     const { calls, memory } = createMemoryDomain(request => {
       expect(request.op).toBe('updateResource');

@@ -47,9 +47,10 @@ function parseStoredThread(row: StoredThread): StorageThreadType {
 }
 
 function parseStoredResource(record: StoredResource): StorageResourceType {
+  const metadata = typeof record.metadata === 'string' ? safelyParseJSON(record.metadata) : record.metadata;
   return {
     ...record,
-    metadata: typeof record.metadata === 'string' ? safelyParseJSON(record.metadata) : record.metadata,
+    metadata: metadata ?? {},
     createdAt: new Date(record.createdAt),
     updatedAt: new Date(record.updatedAt),
   };
