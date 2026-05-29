@@ -110,30 +110,15 @@ describe('HeartbeatTriggersList', () => {
     expect(badges[0]?.textContent).toBe('manual');
   });
 
-  it('links rows to the agent thread chat when agentId + threadId + runId are present', () => {
-    const trigger = makeHeartbeatTrigger({ id: 'trg_linked', runId: 'agent_run_xyz' });
-    renderList(<HeartbeatTriggersList triggers={[trigger]} isLoading={false} agentId="chef" threadId="thread-1" />);
-
-    const link = screen.getByRole('link');
-    expect(link.getAttribute('href')).toBe('/agents/chef/chat/thread-1?messageId=agent_run_xyz');
-  });
-
-  it('does not link rows when threadId is missing (threadless heartbeats)', () => {
-    const trigger = makeHeartbeatTrigger({ id: 'trg_threadless', runId: 'agent_run_threadless' });
-    renderList(<HeartbeatTriggersList triggers={[trigger]} isLoading={false} agentId="chef" />);
+  // Trigger rows are intentionally static — every row for a threaded heartbeat
+  // would link to the same thread (already shown in the meta card), and the
+  // chat page does not deep-link by runId. Rendering them as plain rows keeps
+  // the column dense and avoids the redundant N identical links.
+  it('renders rows as static (no per-row link) even when the trigger has a runId', () => {
+    const trigger = makeHeartbeatTrigger({ id: 'trg_static', runId: 'agent_run_xyz' });
+    renderList(<HeartbeatTriggersList triggers={[trigger]} isLoading={false} />);
 
     expect(screen.queryByRole('link')).toBeNull();
-  });
-
-  it('does not link rows for failed publish even with thread context', () => {
-    const trigger = makeHeartbeatTrigger({
-      id: 'trg_failed',
-      outcome: 'failed',
-      error: 'pubsub timeout',
-      runId: 'agent_run_failed',
-    });
-    renderList(<HeartbeatTriggersList triggers={[trigger]} isLoading={false} agentId="chef" threadId="thread-1" />);
-
-    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByTestId('heartbeat-trigger-run-id').textContent).toBe('agent_run_xyz');
   });
 });

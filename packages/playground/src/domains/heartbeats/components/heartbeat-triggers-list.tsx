@@ -2,15 +2,10 @@ import type { HeartbeatTrigger } from '@mastra/client-js';
 import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, Txt } from '@mastra/playground-ui';
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react';
 import { formatRelativeTime, formatScheduleTimestamp } from '@/domains/schedules/utils/format';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface HeartbeatTriggersListProps {
   triggers: HeartbeatTrigger[];
   isLoading: boolean;
-  /** Owning agent id — used to link threaded heartbeat trigger rows to the agent thread chat. */
-  agentId?: string;
-  /** Thread id of the heartbeat (threaded only). When set, rows with a `runId` link to the chat. */
-  threadId?: string;
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   setEndOfListElement?: (el: HTMLDivElement | null) => void;
@@ -36,14 +31,10 @@ const DRIFT_WARN_MAX_MS = 5 * 60_000;
 export function HeartbeatTriggersList({
   triggers,
   isLoading,
-  agentId,
-  threadId,
   hasNextPage,
   isFetchingNextPage,
   setEndOfListElement,
 }: HeartbeatTriggersListProps) {
-  const { Link, paths } = useLinkComponent();
-
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
   }
@@ -72,17 +63,9 @@ export function HeartbeatTriggersList({
         const absDrift = Math.abs(driftMs);
         const showDriftWarning = !isPublishFailure && absDrift > DRIFT_WARN_MIN_MS && absDrift <= DRIFT_WARN_MAX_MS;
         const rowKey = `${t.scheduleId}-${t.actualFireAt}-${t.runId ?? 'none'}`;
-        const isLinked = Boolean(agentId && threadId && t.runId && !isPublishFailure);
 
         const runIdLabel = t.runId ? (
-          <span
-            className={
-              isLinked
-                ? 'text-accent1 font-mono text-ui-sm whitespace-nowrap'
-                : 'text-neutral3 font-mono text-ui-sm whitespace-nowrap'
-            }
-            data-testid="heartbeat-trigger-run-id"
-          >
+          <span className="text-neutral3 font-mono text-ui-sm whitespace-nowrap" data-testid="heartbeat-trigger-run-id">
             {t.runId}
           </span>
         ) : (
@@ -142,13 +125,7 @@ export function HeartbeatTriggersList({
           </>
         );
 
-        return isLinked ? (
-          <DataList.RowLink key={rowKey} to={paths.agentThreadLink(agentId!, threadId!, t.runId!)} LinkComponent={Link}>
-            {cells}
-          </DataList.RowLink>
-        ) : (
-          <DataList.RowStatic key={rowKey}>{cells}</DataList.RowStatic>
-        );
+        return <DataList.RowStatic key={rowKey}>{cells}</DataList.RowStatic>;
       })}
 
       <DataList.NextPageLoading

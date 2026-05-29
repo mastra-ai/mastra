@@ -154,8 +154,6 @@ export default function HeartbeatPage() {
               <HeartbeatTriggersList
                 triggers={triggers ?? []}
                 isLoading={triggersLoading}
-                agentId={heartbeat.agentId}
-                threadId={heartbeat.threadId}
                 hasNextPage={triggersHasNextPage}
                 isFetchingNextPage={triggersIsFetchingNextPage}
                 setEndOfListElement={triggersSetEndOfListElement}

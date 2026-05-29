@@ -1212,14 +1212,18 @@ export class AgentChannels {
 
     // Apply the heartbeat broadcast policy BEFORE the typing-status wrapper so
     // that suppressed/buffered runs don't trigger transient typing indicators
-    // for chunks the channel never renders.
-    const policed = this.withHeartbeatBroadcastPolicy(stream);
+    // for chunks the channel never renders. `nonLiveRuns` tracks runIds whose
+    // broadcast mode is `on-complete` or `never` so typing-status can skip
+    // them — otherwise the `on-complete` flush + finish can race past the
+    // status update and leave a stuck "is typing…".
+    const nonLiveRuns = new Set<string>();
+    const policed = this.withHeartbeatBroadcastPolicy(stream, nonLiveRuns);
 
     // The streaming driver flips `typingGate.active = true` while a
     // StreamingPlan post is in flight; the typing-status wrapper reads it
     // and skips `startTyping` during that window.
     const typingGate = { active: false };
-    const wrapped = this.withTypingStatus(policed, chatThread, platform, adapterConfig, typingGate);
+    const wrapped = this.withTypingStatus(policed, chatThread, platform, adapterConfig, typingGate, nonLiveRuns);
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
       this.pendingApprovalCards.set(toolCallId, record);
@@ -1297,6 +1301,7 @@ export class AgentChannels {
    */
   private async *withHeartbeatBroadcastPolicy(
     stream: AsyncIterable<AgentChunkType<any>>,
+    nonLiveRuns: Set<string>,
   ): AsyncGenerator<AgentChunkType<any>> {
     type State = { mode: HeartbeatBroadcastMode; buffered: string };
     const policies = new Map<string, State>();
@@ -1306,8 +1311,9 @@ export class AgentChannels {
       const heartbeatMode = extractHeartbeatBroadcast(chunk);
       if (heartbeatMode && chunk.runId) {
         policies.set(chunk.runId, { mode: heartbeatMode, buffered: '' });
-        // The signal data chunk itself is informational — pass it through so
-        // typing-status can fire `is checking in…` for live/on-complete modes.
+        if (heartbeatMode !== 'live') nonLiveRuns.add(chunk.runId);
+        // The signal data chunk itself is informational — pass it through for
+        // live/on-complete so consumers can render the signal in transcripts.
         if (heartbeatMode !== 'never') yield chunk;
         continue;
       }
@@ -1321,6 +1327,7 @@ export class AgentChannels {
       if (state.mode === 'never') {
         if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
           policies.delete(chunk.runId);
+          nonLiveRuns.delete(chunk.runId);
         }
         continue;
       }
@@ -1342,6 +1349,7 @@ export class AgentChannels {
           } as AgentChunkType<any>;
         }
         policies.delete(chunk.runId);
+        nonLiveRuns.delete(chunk.runId);
         yield chunk;
         continue;
       }
@@ -1369,6 +1377,7 @@ export class AgentChannels {
     platform: string,
     adapterConfig: ChannelAdapterConfig | undefined,
     typingGate: { active: boolean },
+    nonLiveRuns: Set<string>,
   ): AsyncGenerator<AgentChunkType<any>> {
     const typingStatusOption = adapterConfig?.typingStatus;
     const typingStatusFn: TypingStatusFn | null =
@@ -1381,7 +1390,11 @@ export class AgentChannels {
     let currentTypingStatus: string | undefined;
 
     for await (const chunk of stream) {
-      if (typingStatusFn && !typingGate.active) {
+      // Skip typing-status for heartbeat runs whose broadcast mode is
+      // `on-complete` or `never` — the burst flush + finish can race past
+      // the status update and leave a stuck indicator.
+      const isNonLiveRun = !!chunk.runId && nonLiveRuns.has(chunk.runId);
+      if (typingStatusFn && !typingGate.active && !isNonLiveRun) {
         let result: ReturnType<TypingStatusFn>;
         try {
           const ctx: TypingStatusContext = {

@@ -195,10 +195,53 @@ function PromptRow({ heartbeat }: { heartbeat: Heartbeat }) {
 }
 
 const BROADCAST_LABELS: Record<HeartbeatBroadcastMode, string> = {
-  live: 'Live — stream every chunk',
+  live: 'Live — stream every step',
   'on-complete': 'On complete — only final text',
   never: 'Never — silent run',
 };
+
+const SIGNAL_TYPE_OPTIONS = ['system-reminder', 'user-message'] as const;
+type KnownSignalType = (typeof SIGNAL_TYPE_OPTIONS)[number];
+
+const SIGNAL_TYPE_LABELS: Record<KnownSignalType, string> = {
+  'system-reminder': 'System reminder',
+  'user-message': 'User message',
+};
+
+function SignalTypeRow({ heartbeat }: { heartbeat: Heartbeat }) {
+  const update = useUpdateHeartbeat(heartbeat.agentId, heartbeat.id);
+  const current = heartbeat.signalType ?? 'system-reminder';
+  // If the stored value is a custom string (not one of the known options),
+  // surface it as a read-only fallback rather than silently snapping it to a
+  // dropdown choice on first save.
+  const isCustom = !SIGNAL_TYPE_OPTIONS.includes(current as KnownSignalType);
+
+  const handleChange = (next: string) => {
+    if (next === current) return;
+    update.mutate({ signalType: next });
+  };
+
+  if (isCustom) {
+    return <MetaItem label="Message type">{current}</MetaItem>;
+  }
+
+  return (
+    <MetaItem label="Message type">
+      <Select value={current} onValueChange={handleChange} disabled={update.isPending}>
+        <SelectTrigger size="sm" aria-label="Message type" data-testid="heartbeat-signal-type-trigger">
+          <SelectValue placeholder="Select message type" />
+        </SelectTrigger>
+        <SelectContent>
+          {SIGNAL_TYPE_OPTIONS.map(option => (
+            <SelectItem key={option} value={option} data-testid={`heartbeat-signal-type-option-${option}`}>
+              {SIGNAL_TYPE_LABELS[option]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </MetaItem>
+  );
+}
 
 function BroadcastRow({ heartbeat }: { heartbeat: Heartbeat }) {
   const update = useUpdateHeartbeat(heartbeat.agentId, heartbeat.id);
@@ -234,7 +277,6 @@ function BroadcastRow({ heartbeat }: { heartbeat: Heartbeat }) {
 
 export function HeartbeatMetaCard({ heartbeat }: { heartbeat: Heartbeat }) {
   const { paths } = useLinkComponent();
-  const mode = heartbeat.threadId ? 'Threaded' : 'Threadless';
 
   return (
     <div className="flex flex-col gap-4 border border-border1 rounded-md p-4 h-fit">
@@ -243,8 +285,6 @@ export function HeartbeatMetaCard({ heartbeat }: { heartbeat: Heartbeat }) {
           {heartbeat.agentId}
         </Link>
       </MetaItem>
-
-      <MetaItem label="Mode">{mode}</MetaItem>
 
       {heartbeat.threadId ? <ThreadRow agentId={heartbeat.agentId} threadId={heartbeat.threadId} /> : null}
 
@@ -274,7 +314,7 @@ export function HeartbeatMetaCard({ heartbeat }: { heartbeat: Heartbeat }) {
 
       {heartbeat.threadId ? (
         <>
-          {heartbeat.signalType ? <MetaItem label="Signal type">{heartbeat.signalType}</MetaItem> : null}
+          <SignalTypeRow heartbeat={heartbeat} />
           {heartbeat.ifActive ? <MetaItem label="If active">{heartbeat.ifActive}</MetaItem> : null}
           {heartbeat.ifIdle ? <MetaItem label="If idle">{heartbeat.ifIdle}</MetaItem> : null}
         </>

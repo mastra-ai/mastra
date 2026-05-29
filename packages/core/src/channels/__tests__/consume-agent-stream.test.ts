@@ -1626,6 +1626,51 @@ describe('consumeAgentStream', () => {
       expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: 'Hello, world' }]);
     });
 
+    it("does not emit typing-status for 'on-complete' heartbeats", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          heartbeatSignalChunk('run_oc', 'on-complete'),
+          { type: 'text-delta', runId: 'run_oc', from: 'AGENT', payload: { text: 'Hello' } },
+          { type: 'step-finish', runId: 'run_oc', from: 'AGENT', payload: {} },
+          { type: 'finish', runId: 'run_oc', from: 'AGENT', payload: {} },
+        ],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
+    });
+
+    it("does not emit typing-status for 'never' heartbeats", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          heartbeatSignalChunk('run_never', 'never'),
+          { type: 'text-delta', runId: 'run_never', from: 'AGENT', payload: { text: 'hidden' } },
+          { type: 'step-finish', runId: 'run_never', from: 'AGENT', payload: {} },
+          { type: 'finish', runId: 'run_never', from: 'AGENT', payload: {} },
+        ],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
+    });
+
+    it("still emits typing-status for 'live' heartbeats", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          heartbeatSignalChunk('run_live', 'live'),
+          { type: 'text-delta', runId: 'run_live', from: 'AGENT', payload: { text: 'hi' } },
+          { type: 'step-finish', runId: 'run_live', from: 'AGENT', payload: {} },
+          { type: 'finish', runId: 'run_live', from: 'AGENT', payload: {} },
+        ],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'startTyping').length).toBeGreaterThan(0);
+    });
+
     it('passes through chunks from non-heartbeat runs even alongside a policed run', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(

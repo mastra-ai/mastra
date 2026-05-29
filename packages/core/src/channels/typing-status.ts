@@ -62,7 +62,6 @@ export type TypingStatusFn = (chunk: AgentChunkType<any>, ctx: TypingStatusConte
  * | `tool-call-approval`  | `is requesting approval for ${toolName}…`  |
  * | `data-om-buffering-start` | `is saving to memory…`                 |
  * | `data-om-activation`  | `is recalling memory…`                     |
- * | `data-<signal-type>` (with `providerOptions.mastra.heartbeat`) | `is checking in…` |
  * | _everything else_     | _no change_                                |
  */
 export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatusContext): TypingStatusReturn {
@@ -75,9 +74,6 @@ export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatu
         case 'data-om-activation':
           return STATUS_TEXT.RECALLING_MEMORY;
       }
-    }
-    if (isHeartbeatSignalChunk(chunk)) {
-      return STATUS_TEXT.HEARTBEAT_CHECKING_IN;
     }
   }
 
@@ -99,16 +95,6 @@ export function defaultTypingStatus(chunk: AgentChunkType<any>, ctx: TypingStatu
     default:
       return undefined;
   }
-}
-
-/**
- * A signal data chunk carries `providerOptions.mastra.heartbeat` when the
- * signal was sent by the {@link HeartbeatWorker}. Detect that across any
- * `data-<signal-type>` chunk shape so typing status reacts as soon as the
- * heartbeat signal is broadcast.
- */
-function isHeartbeatSignalChunk(chunk: AgentChunkType<any>): boolean {
-  return extractHeartbeatBroadcast(chunk) !== undefined;
 }
 
 /**
@@ -136,7 +122,6 @@ const STATUS_TEXT = {
   THINKING: 'is thinking…',
   SAVING_MEMORY: 'is saving to memory…',
   RECALLING_MEMORY: 'is recalling memory…',
-  HEARTBEAT_CHECKING_IN: 'is checking in…',
   CALLING_TOOL: (name: string) => `is calling ${name}…`,
   REQUESTING_APPROVAL: (name: string) => `is requesting approval for ${name}…`,
 };
