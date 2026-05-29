@@ -35,9 +35,7 @@ const workspace = new Workspace({
  * - createSkillTool (gated by features.skills) — only when a needed capability does not exist
  */
 
-export function createBuilderAgent(
-  args?: Partial<Omit<AgentConfig<'builder-agent'>, 'editor'>>,
-): Agent<'builder-agent'> {
+export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>): Agent<'builder-agent'> {
   const memory = new Memory();
 
   const config: AgentConfig<'builder-agent'> = {

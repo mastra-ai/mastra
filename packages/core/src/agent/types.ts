@@ -555,55 +555,46 @@ interface AgentConfigBase<
   transform?: ToolPayloadTransformPolicy;
 }
 
-type AgentEditableFieldConfig<TTools extends ToolsInput, TRequestContext extends Record<string, any> | unknown> =
-  | {
-      editor?: undefined;
-      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
-      tools?: DynamicArgument<TTools, TRequestContext>;
-    }
-  | {
-      editor: false;
-      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
-      tools?: DynamicArgument<TTools, TRequestContext>;
-    }
-  | {
-      editor: { instructions?: false; tools?: false | { description?: false } };
-      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
-      tools?: DynamicArgument<TTools, TRequestContext>;
-    }
-  | {
-      editor: { instructions: true; tools?: false | { description?: false } };
-      instructions?: never;
-      tools?: DynamicArgument<TTools, TRequestContext>;
-    }
-  | {
-      editor: { instructions?: false; tools: true };
-      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
-      tools?: never;
-    }
-  | {
-      editor: { instructions: true; tools: true };
-      instructions?: never;
-      tools?: never;
-    }
-  | {
-      editor: { instructions?: false; tools: { description: true } };
-      instructions: DynamicArgument<AgentInstructions, TRequestContext>;
-      tools?: DynamicArgument<TTools, TRequestContext>;
-    }
-  | {
-      editor: { instructions: true; tools: { description: true } };
-      instructions?: never;
-      tools?: DynamicArgument<TTools, TRequestContext>;
-    };
+/**
+ * Whether a given `editor` config hands a field to Studio (`true`) so that
+ * field becomes owned by Studio and must NOT be provided in code.
+ *
+ * To add a new editable field, add an `Owns*` helper here and a corresponding
+ * clause to {@link AgentEditableFieldConfig} — no combinatorial union needed.
+ */
+type EditorOwnsInstructions<TEditor> = TEditor extends { instructions: true } ? true : false;
+type EditorOwnsToolMembership<TEditor> = TEditor extends { tools: true } ? true : false;
+
+/**
+ * Resolves the `instructions`/`tools` portion of an agent config from the
+ * `editor` config inferred at `new Agent({...})`.
+ *
+ * `instructions` and `tools` are owned by *either* code or Studio, never both.
+ * When `editor` hands a field to Studio (`instructions: true` / `tools: true`),
+ * that field is forbidden in code (`?: never`); otherwise it keeps its normal
+ * code-owned shape. Tool *descriptions* (`tools: { description: true }`) keep
+ * tool membership in code, so they fall under the code-owned case.
+ */
+type AgentEditableFieldConfig<
+  TTools extends ToolsInput,
+  TRequestContext extends Record<string, any> | unknown,
+  TEditor extends AgentEditorConfig | undefined,
+> = (EditorOwnsInstructions<TEditor> extends true
+  ? { instructions?: never }
+  : { instructions: DynamicArgument<AgentInstructions, TRequestContext> }) &
+  (EditorOwnsToolMembership<TEditor> extends true
+    ? { tools?: never }
+    : { tools?: DynamicArgument<TTools, TRequestContext> });
 
 export type AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
   TRequestContext extends Record<string, any> | unknown = unknown,
-> = Omit<AgentConfigBase<TAgentId, TTools, TOutput, TRequestContext>, 'instructions' | 'tools'> &
-  AgentEditableFieldConfig<TTools, TRequestContext>;
+  TEditor extends AgentEditorConfig | undefined = AgentEditorConfig | undefined,
+> = Omit<AgentConfigBase<TAgentId, TTools, TOutput, TRequestContext>, 'instructions' | 'tools' | 'editor'> & {
+  editor?: TEditor;
+} & AgentEditableFieldConfig<TTools, TRequestContext, TEditor>;
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
