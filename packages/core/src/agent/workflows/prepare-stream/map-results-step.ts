@@ -383,6 +383,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
+      initialSignalEchoes: memoryData.initialSignalEchoes,
       maxProcessorRetries: options.maxProcessorRetries,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,
