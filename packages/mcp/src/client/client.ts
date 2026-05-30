@@ -499,7 +499,15 @@ export class InternalMastraMCPClient extends MastraBase {
         const originalOnClose = this.client.onclose;
         this.client.onclose = () => {
           this.log('debug', `MCP server connection closed`);
+          // Close the stale transport before any reconnect so its EventSource/session
+          // can't keep retrying and leak server-side sessions (issue #16693). Clear
+          // synchronously first so a concurrent connect() sees a clean slate.
+          const staleTransport = this.transport;
+          this.transport = undefined;
           this.isConnected = null;
+          if (staleTransport) {
+            void staleTransport.close().catch(() => {});
+          }
           if (typeof originalOnClose === 'function') {
             originalOnClose();
           }
