@@ -1231,20 +1231,16 @@ export class MessageList {
   }
 
   /**
-   * Replace all system messages with new ones
-   * This clears both tagged and untagged system messages and replaces them with the provided array
-   * @param messages - Array of system messages to set
+   * Replace the untagged system message bucket with the provided array while
+   * leaving tagged system message buckets (owned by other processors) intact.
+   * @param messages - Array of system messages to set as untagged
    */
   public replaceAllSystemMessages(messages: CoreMessageV4[]): this {
-    // Clear existing system messages
     this.systemMessages = [];
-    this.taggedSystemMessages = {};
 
-    // Add all new messages as untagged (processors don't need to preserve tags)
     for (const message of messages) {
-      if (message.role === 'system') {
-        this.systemMessages.push(message);
-      }
+      if (message.role !== 'system') continue;
+      this.systemMessages.push(message);
     }
 
     return this;
