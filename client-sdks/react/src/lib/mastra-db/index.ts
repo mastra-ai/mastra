@@ -6,6 +6,7 @@ export {
 } from './accumulator';
 export type { AccumulateChunkArgs, AccumulateNetworkChunkArgs } from './accumulator';
 export { fromCoreUserMessageToMastraDBMessage } from './fromCoreUserMessage';
+export { normalizeReloadedMessages } from './reload';
 export type {
   AccumulatorPart,
   BackgroundTaskEntry,

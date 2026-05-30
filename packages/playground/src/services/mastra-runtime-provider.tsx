@@ -8,7 +8,13 @@ import { useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from './om-parts-converter';
+import {
+  buildGlobalOmPartsByCycleId,
+  convertOmPartsInMastraMessage,
+  injectBufferingEnds,
+  markOmMarkersAsDisconnected,
+  scanOmInitialState,
+} from './om-parts-converter';
 import {
   buildMaxStepsStreamErrorMessage,
   buildStreamErrorMessage,
@@ -235,118 +241,6 @@ export function MastraRuntimeProvider({
     }
   };
 
-  // Helper to mark in-progress OM markers as disconnected in messages.
-  // Preserves the original part type (keeps start markers as start markers)
-  // so the badge stays anchored at the correct position. Only adds disconnection
-  // metadata to the data payload.
-  const markOmMarkersAsDisconnected = (msgs: any[]) => {
-    return msgs.map(msg => {
-      if (msg.role !== 'assistant') return msg;
-
-      // Handle both 'parts' (v2/v3) and 'content' (legacy) message formats
-      const partsKey = msg.parts ? 'parts' : msg.content ? 'content' : null;
-      if (!partsKey || !Array.isArray(msg[partsKey])) return msg;
-
-      const updatedParts = msg[partsKey].map((part: any) => {
-        // Mark raw start markers as disconnected (keep original type for badge anchoring)
-        if (part.type === 'data-om-observation-start' || part.type === 'data-om-buffering-start') {
-          return {
-            ...part,
-            data: {
-              ...part.data,
-              disconnectedAt: new Date().toISOString(),
-              _state: 'disconnected',
-            },
-          };
-        }
-        // Also check for already-converted tool-call format
-        if (part.type === 'tool-call' && part.toolName === 'mastra-memory-om-observation') {
-          const omData = part.metadata?.omData || part.args;
-          // If it's in loading state (no completedAt, failedAt, or disconnectedAt), mark as disconnected
-          if (!omData?.completedAt && !omData?.failedAt && !omData?.disconnectedAt) {
-            return {
-              ...part,
-              metadata: {
-                ...part.metadata,
-                omData: {
-                  ...omData,
-                  disconnectedAt: new Date().toISOString(),
-                  _state: 'disconnected',
-                },
-              },
-            };
-          }
-        }
-        return part;
-      });
-
-      return { ...msg, [partsKey]: updatedParts };
-    });
-  };
-
-  // Mark in-progress buffering badges as complete after buffer-status resolves.
-  // Injects synthetic data-om-buffering-end parts so convertOmPartsInMastraMessage
-  // sees a matching end for each in-progress start. Uses the record from awaitBufferStatus
-  // to populate token counts and observations for the badge display.
-  const markBufferingBadgesAsComplete = (msgs: any[], record?: any) => {
-    // Build a lookup from cycleId to chunk data for observation buffering
-    const chunksByCycleId = new Map<string, any>();
-    if (record?.bufferedObservationChunks) {
-      for (const chunk of record.bufferedObservationChunks) {
-        if (chunk.cycleId) {
-          chunksByCycleId.set(chunk.cycleId, chunk);
-        }
-      }
-    }
-
-    return msgs.map(msg => {
-      if (msg.role !== 'assistant') return msg;
-
-      const partsKey = msg.parts ? 'parts' : msg.content ? 'content' : null;
-      if (!partsKey || !Array.isArray(msg[partsKey])) return msg;
-
-      const newParts: any[] = [];
-      let changed = false;
-
-      for (const part of msg[partsKey]) {
-        newParts.push(part);
-        // For each buffering-start that isn't already disconnected, inject a synthetic buffering-end
-        if (part.type === 'data-om-buffering-start' && part.data?.cycleId && !part.data?.disconnectedAt) {
-          const cycleId = part.data.cycleId;
-          const opType = part.data.operationType;
-
-          let endData: Record<string, any> = {
-            cycleId,
-            operationType: opType,
-            completedAt: new Date().toISOString(),
-          };
-
-          if (opType === 'observation') {
-            // Match chunk by cycleId for observation buffering
-            const chunk = chunksByCycleId.get(cycleId);
-            if (chunk) {
-              endData.tokensBuffered = chunk.messageTokens;
-              endData.bufferedTokens = chunk.tokenCount;
-              endData.observations = chunk.observations;
-            }
-          } else if (opType === 'reflection') {
-            // Use aggregate reflection data from the record
-            if (record) {
-              endData.tokensBuffered = record.bufferedReflectionInputTokens;
-              endData.bufferedTokens = record.bufferedReflectionTokens;
-              endData.observations = record.bufferedReflection;
-            }
-          }
-
-          newParts.push({ type: 'data-om-buffering-end', data: endData });
-          changed = true;
-        }
-      }
-
-      return changed ? { ...msg, [partsKey]: newParts } : msg;
-    });
-  };
-
   // Helper to reset OM streaming state when stream is interrupted
   // (user cancel, network error, process exit, etc.)
   const resetObservationalMemoryStreamState = () => {
@@ -367,19 +261,9 @@ export function MastraRuntimeProvider({
   // On initial load, scan messages for activation markers and the last progress part.
   // This ensures buffering badges show as activated and token counts are accurate on reload.
   useEffect(() => {
-    const allMessages = [...(initialMessages || [])];
-    let lastProgress: any = null;
-    for (const msg of allMessages) {
-      const parts = (msg as any).parts || (msg as any).content || [];
-      if (!Array.isArray(parts)) continue;
-      for (const part of parts) {
-        if (part?.type === 'data-om-activation' && part?.data?.cycleId) {
-          markCycleIdActivated(part.data.cycleId);
-        }
-        if (part?.type === 'data-om-status' && part?.data) {
-          lastProgress = part.data;
-        }
-      }
+    const { activatedCycleIds, lastProgress } = scanOmInitialState(initialMessages || []);
+    for (const cycleId of activatedCycleIds) {
+      markCycleIdActivated(cycleId);
     }
     // Restore the last known progress so sidebar shows accurate token counts on load
     if (lastProgress) {
@@ -580,7 +464,7 @@ export function MastraRuntimeProvider({
             baseClient
               .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
               .then(result => {
-                setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+                setMessages(prev => injectBufferingEnds(prev, result?.record));
                 void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
                 void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
               })
@@ -600,7 +484,7 @@ export function MastraRuntimeProvider({
         baseClient
           .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
           .then(result => {
-            setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+            setMessages(prev => injectBufferingEnds(prev, result?.record));
 
             void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
             void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
@@ -640,7 +524,7 @@ export function MastraRuntimeProvider({
       baseClient
         .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
         .then(result => {
-          setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+          setMessages(prev => injectBufferingEnds(prev, result?.record));
 
           void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });

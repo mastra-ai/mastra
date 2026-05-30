@@ -1002,8 +1002,11 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
               output = payloadResult;
             }
           } else if (isAgent) {
-            const existingOutput =
-              toolPart.toolInvocation.state === 'result' ? toolPart.toolInvocation.result : undefined;
+            // The parent agent tool part stays in state 'call' while the sub-agent
+            // streams (accumulateAgentChunk preserves the state), so read its
+            // accumulated result regardless of state — otherwise the streamed
+            // childMessages are dropped at finalization.
+            const existingOutput = toolPart.toolInvocation.result;
             const existingChild = (existingOutput as { childMessages?: unknown[] } | undefined)?.childMessages;
             output = existingOutput
               ? {
@@ -1687,6 +1690,51 @@ const handleAgentNetworkChunk = (
     }
 
     return replaceLast(conversation, withParts(lastMessage, parts));
+  }
+
+  if (chunk.type === 'agent-execution-approval') {
+    const lastMessage = lastAssistant(conversation);
+    if (!lastMessage) return conversation;
+    const existing = lastMessage.content.metadata?.requireApprovalMetadata ?? {};
+    return replaceLast(
+      conversation,
+      withMetadata(lastMessage, {
+        ...cloneMetadata(lastMessage.content.metadata),
+        mode: 'network',
+        requireApprovalMetadata: {
+          ...existing,
+          [(chunk.payload as any).toolName]: {
+            toolCallId: (chunk.payload as any).toolCallId,
+            toolName: (chunk.payload as any).toolName,
+            args: (chunk.payload as any).args,
+            runId: (chunk.payload as any).runId,
+          },
+        },
+      }),
+    );
+  }
+
+  if (chunk.type === 'agent-execution-suspended') {
+    const lastMessage = lastAssistant(conversation);
+    if (!lastMessage) return conversation;
+    const existing = lastMessage.content.metadata?.suspendedTools ?? {};
+    return replaceLast(
+      conversation,
+      withMetadata(lastMessage, {
+        ...cloneMetadata(lastMessage.content.metadata),
+        mode: 'network',
+        suspendedTools: {
+          ...existing,
+          [(chunk.payload as any).toolName]: {
+            toolCallId: (chunk.payload as any).toolCallId,
+            toolName: (chunk.payload as any).toolName,
+            args: (chunk.payload as any).args,
+            suspendPayload: (chunk.payload as any).suspendPayload,
+            runId: (chunk.payload as any).runId,
+          },
+        },
+      }),
+    );
   }
 
   if (chunk.type.startsWith('agent-execution-event-')) {

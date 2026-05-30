@@ -1138,3 +1138,45 @@ describe('accumulateChunk - workflow tool finish', () => {
     expect((toolPart.toolInvocation as { result: unknown }).result).toEqual({ hits: 3 });
   });
 });
+
+// =============================================================================
+// SUB-AGENT (agent-as-tool) CHILD MESSAGES — REGRESSION
+// =============================================================================
+//
+// When a child AGENT streams (nested tool-calls + text) into a parent
+// agent-as-tool part, `accumulateAgentChunk` accumulates them into
+// `result.childMessages` while the parent part stays `state: 'call'`. The
+// terminal `tool-result` must preserve those accumulated childMessages — but the
+// terminal `isAgent` branch only merges them when `state === 'result'`, which
+// never holds during sub-agent streaming, so they are dropped.
+
+describe('accumulateChunk - sub-agent child messages', () => {
+  const agentNestedChunk = (parentToolCallId: string, type: string, payload: Record<string, unknown>): ChunkType =>
+    toolOutputChunk(parentToolCallId, { type, runId: RUN_ID, from: 'AGENT', payload });
+
+  it('preserves accumulated sub-agent childMessages through the terminal tool-result', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('agent-1', 'weatherAgent', { city: 'sf' }),
+      // Child agent streams a nested tool-call and its text answer -> childMessages
+      agentNestedChunk('agent-1', 'tool-call', {
+        toolCallId: 'child-tc',
+        toolName: 'getWeather',
+        args: { city: 'sf' },
+      }),
+      agentNestedChunk('agent-1', 'text-delta', { text: 'It is sunny in SF.' }),
+      // Terminal agent tool-result
+      toolResultChunk('agent-1', { text: 'It is sunny in SF.' }),
+    ]);
+
+    const toolPart = out
+      .flatMap(m => m.content.parts)
+      .find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    expect(toolPart.toolInvocation.state).toBe('result');
+
+    const result = toolPart.toolInvocation.result as { childMessages?: Array<Record<string, unknown>> };
+    expect(result.childMessages).toBeDefined();
+    expect(result.childMessages?.some(c => c.type === 'tool' && c.toolName === 'getWeather')).toBe(true);
+    expect(result.childMessages?.some(c => c.type === 'text')).toBe(true);
+  });
+});

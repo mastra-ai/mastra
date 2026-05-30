@@ -253,3 +253,87 @@ describe('toAssistantUIMessage network routing JSON reconstruction', () => {
     expect(invalid.content[0]).toMatchObject({ type: 'text', text: '{"isNetwork": true' });
   });
 });
+
+describe('toAssistantUIMessage file and image parts', () => {
+  /**
+   * The stream accumulator emits file parts in the V5 shape `{ mediaType, url }`
+   * (see client-sdks/react/src/lib/mastra-db/accumulator.ts: it casts to
+   * `MastraMessagePart` because the V4-typed union describes `{ mimeType, data }`).
+   * User uploads via `fromCoreUserMessage` produce the same V5 shape. The converter
+   * receives exactly this at render time, so we build it with a single narrow
+   * boundary cast (mirroring the accumulator) to reflect the real runtime input.
+   */
+  const streamedFilePart = (part: { mediaType: string; url: string; filename?: string }): MastraMessagePart =>
+    ({ type: 'file', ...part }) as unknown as MastraMessagePart;
+
+  it('renders a streamed image file part (mediaType/url) as an image content part', () => {
+    const dataUrl =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+    const { content } = toAssistantUIMessage(
+      assistantMessage([streamedFilePart({ mediaType: 'image/png', url: dataUrl })]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('image');
+    if (part.type !== 'image') throw new Error('expected image');
+    expect(part.image).toBe(dataUrl);
+  });
+
+  it('renders a streamed non-image file part with its media type and data', () => {
+    const dataUrl = 'data:application/pdf;base64,JVBERi0xLjQ=';
+    const { content } = toAssistantUIMessage(
+      assistantMessage([streamedFilePart({ mediaType: 'application/pdf', url: dataUrl, filename: 'doc.pdf' })]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('file');
+    if (part.type !== 'file') throw new Error('expected file');
+    expect(part.mimeType).toBe('application/pdf');
+    expect(part.data).toBe(dataUrl);
+  });
+});
+
+describe('toAssistantUIMessage reasoning reload', () => {
+  /**
+   * Persisted reasoning parts arrive from the DB with an empty `reasoning` string
+   * and the actual thinking text inside `details` (AIV5Adapter writes
+   * `reasoning: '', details: [{ type: 'text', text }]`, and core's own reader
+   * falls back to `details` when `reasoning` is empty). On reload the converter
+   * receives this shape, so the visible reasoning text must come from `details`.
+   */
+  const persistedReasoningPart = (text: string): MastraMessagePart =>
+    ({ type: 'reasoning', reasoning: '', details: [{ type: 'text', text }] }) as MastraMessagePart;
+
+  it('renders persisted reasoning text from details when reasoning is empty', () => {
+    const { content } = toAssistantUIMessage(
+      assistantMessage([persistedReasoningPart('Let me think about this step by step.')]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('reasoning');
+    if (part.type !== 'reasoning') throw new Error('expected reasoning');
+    expect(part.text).toBe('Let me think about this step by step.');
+  });
+});
+
+describe('toAssistantUIMessage status from dynamic-tool errors', () => {
+  it('marks a message with a failed dynamic-tool as incomplete', () => {
+    const message = assistantMessage([
+      dynamicToolPart({
+        type: 'dynamic-tool',
+        toolCallId: 'call-dyn-err',
+        toolName: 'some-network-tool',
+        input: {},
+        state: 'output-error',
+        errorText: 'sub-agent failed',
+      }),
+    ]);
+
+    const { status } = toAssistantUIMessage(message);
+
+    expect(status).toEqual({ type: 'incomplete', reason: 'error' });
+  });
+});

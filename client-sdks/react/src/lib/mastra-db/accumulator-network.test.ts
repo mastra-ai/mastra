@@ -79,6 +79,24 @@ const toolExecutionApprovalChunk = (toolName: string, toolCallId: string, runId:
     payload: { toolName, toolCallId, args: { a: 1 }, runId },
   }) as unknown as NetworkChunkType;
 
+// Core emits these distinct top-level chunks when a child AGENT (agent-as-tool)
+// in a network suspends or requires approval (see packages/core/src/loop/network).
+const agentExecutionSuspendedChunk = (toolName: string, toolCallId: string, runId: string): NetworkChunkType =>
+  ({
+    type: 'agent-execution-suspended',
+    runId,
+    from: 'AGENT',
+    payload: { toolName, toolCallId, args: { a: 1 }, suspendPayload: { reason: 'await input' }, runId },
+  }) as unknown as NetworkChunkType;
+
+const agentExecutionApprovalChunk = (toolName: string, toolCallId: string, runId: string): NetworkChunkType =>
+  ({
+    type: 'agent-execution-approval',
+    runId,
+    from: 'AGENT',
+    payload: { toolName, toolCallId, args: { a: 1 }, runId },
+  }) as unknown as NetworkChunkType;
+
 const networkValidationEndChunk = (runId: string, passed: boolean): NetworkChunkType =>
   ({
     type: 'network-validation-end',
@@ -261,6 +279,21 @@ describe('accumulateNetworkChunk', () => {
     const approval = meta(lastMessage(result)).requireApprovalMetadata;
     expect(approval?.sendEmail?.toolCallId).toBe('tc-3');
     expect(approval?.sendEmail?.toolName).toBe('sendEmail');
+  });
+
+  it('writes suspendedTools metadata on agent-execution-suspended', () => {
+    const result = run([agentExecutionSuspendedChunk('subAgent', 'ac-sus', RUN_ID)], seedAssistant());
+    const suspended = meta(lastMessage(result)).suspendedTools;
+    expect(suspended?.subAgent?.toolCallId).toBe('ac-sus');
+    expect(suspended?.subAgent?.toolName).toBe('subAgent');
+    expect(suspended?.subAgent?.suspendPayload).toEqual({ reason: 'await input' });
+  });
+
+  it('writes requireApprovalMetadata on agent-execution-approval', () => {
+    const result = run([agentExecutionApprovalChunk('subAgent', 'ac-app', RUN_ID)], seedAssistant());
+    const approval = meta(lastMessage(result)).requireApprovalMetadata;
+    expect(approval?.subAgent?.toolCallId).toBe('ac-app');
+    expect(approval?.subAgent?.toolName).toBe('subAgent');
   });
 
   it('accumulates an approval continuation after requireApprovalMetadata', () => {

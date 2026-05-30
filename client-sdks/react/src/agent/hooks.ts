@@ -12,6 +12,7 @@ import {
   accumulateNetworkChunk,
   finishStreamingAssistantMessage,
   fromCoreUserMessageToMastraDBMessage,
+  normalizeReloadedMessages,
 } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import { useMastraClient } from '../mastra-client-context';
@@ -171,7 +172,7 @@ export const useChat = ({
   const [isRunning, setIsRunning] = useState(false);
 
   useEffect(() => {
-    const formattedMessages = initialMessages ?? [];
+    const formattedMessages = normalizeReloadedMessages(initialMessages ?? []);
     setMessages(formattedMessages);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
   }, [initialMessages]);

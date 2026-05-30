@@ -214,7 +214,20 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
   }
 
   if (part.type === 'reasoning') {
-    return { type: 'reasoning', text: part.reasoning, metadata: getPartMetadata(message, part) } as ContentPart;
+    // Persisted reasoning parts arrive with an empty `reasoning` string and the
+    // text in `details` (AIV5Adapter writes `reasoning: '', details: [...]`), so
+    // fall back to the joined `details` text on reload, mirroring core's reader.
+    const reasoningPart = part as typeof part & { details?: Array<{ type?: string; text?: string }> };
+    const text =
+      reasoningPart.reasoning ||
+      (reasoningPart.details ?? [])
+        .filter(
+          (detail): detail is { type: 'text'; text: string } =>
+            detail?.type === 'text' && typeof detail.text === 'string',
+        )
+        .map(detail => detail.text)
+        .join('');
+    return { type: 'reasoning', text, metadata: getPartMetadata(message, part) } as ContentPart;
   }
 
   if (part.type === 'source') {
@@ -239,14 +252,22 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
   }
 
   if (part.type === 'file') {
-    if (part.mimeType?.includes('image/')) {
-      return { type: 'image', image: part.data, metadata: getPartMetadata(message, part) } as ContentPart;
+    // The stream accumulator and `fromCoreUserMessage` emit V5-shaped file parts
+    // (`{ mediaType, url }`), while persisted/reloaded parts keep the V4 shape
+    // (`{ mimeType, data }`). The union is typed V4, so read both with a fallback
+    // to render streamed and persisted files/images consistently.
+    const filePart = part as typeof part & { mediaType?: string; url?: string };
+    const mediaType = filePart.mediaType ?? filePart.mimeType;
+    const fileData = filePart.url ?? filePart.data;
+
+    if (mediaType?.includes('image/')) {
+      return { type: 'image', image: fileData, metadata: getPartMetadata(message, part) } as ContentPart;
     }
 
     return {
       type: 'file',
-      mimeType: part.mimeType,
-      data: part.data,
+      mimeType: mediaType,
+      data: fileData,
       metadata: getPartMetadata(message, part),
     } as ContentPart;
   }
@@ -305,16 +326,23 @@ const toStatus = (message: MastraDBMessage): MessageStatus | undefined => {
   );
   if (hasStreamingText) return { type: 'running' };
 
-  const hasApprovalTool = message.content.parts.some(
-    part => part.type === 'tool-invocation' && part.toolInvocation.state === 'approval-requested',
-  );
+  // A tool part's state lives on `toolInvocation.state` for `tool-invocation`
+  // parts and directly on the part for runtime-only `dynamic-tool` parts (network
+  // sub-agents, OM badges). Read both so a failed/pending dynamic-tool drives the
+  // message status instead of being silently marked complete.
+  const toolState = (part: MastraMessagePart): string | undefined => {
+    if (part.type === 'tool-invocation') return part.toolInvocation.state;
+    if ((part.type as string) === 'dynamic-tool') return (part as { state?: string }).state;
+    return undefined;
+  };
+
+  const hasApprovalTool = message.content.parts.some(part => toolState(part) === 'approval-requested');
   if (hasApprovalTool) return { type: 'requires-action', reason: 'tool-calls' };
 
-  const hasErrorTool = message.content.parts.some(
-    part =>
-      part.type === 'tool-invocation' &&
-      (part.toolInvocation.state === 'output-error' || part.toolInvocation.state === 'output-denied'),
-  );
+  const hasErrorTool = message.content.parts.some(part => {
+    const state = toolState(part);
+    return state === 'output-error' || state === 'output-denied';
+  });
   if (hasErrorTool) return { type: 'incomplete', reason: 'error' };
 
   return { type: 'complete', reason: 'stop' };

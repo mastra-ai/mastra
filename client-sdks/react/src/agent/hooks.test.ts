@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
@@ -346,5 +347,90 @@ describe('useChat forwards clientTools', () => {
     const firstUserPart = userMessages[0]?.content.parts[0] as Record<string, unknown>;
     expect(firstUserPart.type).toBe('text');
     expect(firstUserPart.text).toBe('what is the weather');
+  });
+});
+
+// =============================================================================
+// INITIAL-MESSAGE RELOAD — REGRESSIONS
+// =============================================================================
+//
+// The deleted `resolveInitialMessages` normalized persisted (reloaded) messages
+// before they entered chat state. `useChat` now passes `initialMessages` through
+// untouched, dropping two behaviors that the playground render layer still
+// depends on.
+
+describe('useChat initial-message reload', () => {
+  it('exposes requireApprovalMetadata for a reloaded message with persisted pendingToolApprovals', async () => {
+    // The server persists a pending tool approval as content.metadata.pendingToolApprovals
+    // (no requireApprovalMetadata, no mode). The approval UI (tool-fallback) only reads
+    // requireApprovalMetadata, so the reload path must derive it — otherwise the
+    // Approve/Decline buttons vanish on refresh and the run cannot be resumed.
+    const initial: MastraDBMessage[] = [
+      {
+        id: 'm-approval',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'tc-1',
+                toolName: 'sendEmail',
+                state: 'approval-requested',
+                args: { to: 'x' },
+              },
+            } as unknown as MastraDBMessage['content']['parts'][number],
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              sendEmail: { toolCallId: 'tc-1', toolName: 'sendEmail', args: { to: 'x' }, runId: 'run-1' },
+            },
+          },
+        },
+      },
+    ];
+
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent', initialMessages: initial }), { wrapper });
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    const metadata = result.current.messages[0]?.content.metadata as Record<string, any> | undefined;
+    expect(metadata?.requireApprovalMetadata?.sendEmail?.toolCallId).toBe('tc-1');
+  });
+
+  it('drops a persisted assistant message flagged completionResult.suppressFeedback on reload', async () => {
+    const initial: MastraDBMessage[] = [
+      {
+        id: 'u-1',
+        role: 'user',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+      },
+      {
+        id: 'm-suppressed',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'internal completion feedback' }],
+          metadata: { completionResult: { passed: true, suppressFeedback: true } },
+        },
+      },
+    ];
+
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent', initialMessages: initial }), { wrapper });
+
+    await waitFor(() => expect(result.current.messages.length).toBeGreaterThan(0));
+    const texts = result.current.messages.flatMap(m =>
+      m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text as string),
+    );
+    expect(texts).not.toContain('internal completion feedback');
   });
 });
