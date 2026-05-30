@@ -1,7 +1,10 @@
 /**
  * @license Mastra Enterprise License - see ee/LICENSE
  */
+import { FGADeniedError } from '@mastra/core/auth/ee';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
 
 // Use globalThis to share mock between factory (hoisted) and test code
 vi.mock('@workos-inc/node', () => {
@@ -41,8 +44,6 @@ vi.mock('@mastra/core/auth/ee', () => ({
     }
   },
 }));
-
-import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
 
 // Access the shared mock (set during vi.mock factory execution)
 const mockAuthorization = (globalThis as any).__mockAuthorization;
@@ -85,6 +86,25 @@ describe('MastraFGAWorkos', () => {
       if (origKey) process.env.WORKOS_API_KEY = origKey;
       if (origClient) process.env.WORKOS_CLIENT_ID = origClient;
     });
+
+    it('should expose route policy options from the constructor', () => {
+      const resolveRouteFGA = vi.fn();
+      const validatePermissions = vi.fn();
+
+      const configuredFGA = new MastraFGAWorkos({
+        apiKey: 'sk_test_123',
+        clientId: 'client_test_123',
+        requireForProtectedRoutes: true,
+        auditProtectedRoutes: 'error',
+        resolveRouteFGA,
+        validatePermissions,
+      });
+
+      expect(configuredFGA.requireForProtectedRoutes).toBe(true);
+      expect(configuredFGA.auditProtectedRoutes).toBe('error');
+      expect(configuredFGA.resolveRouteFGA).toBe(resolveRouteFGA);
+      expect(configuredFGA.validatePermissions).toBe(validatePermissions);
+    });
   });
 
   describe('check()', () => {
@@ -107,6 +127,17 @@ describe('MastraFGAWorkos', () => {
 
     it('should return false when unauthorized', async () => {
       mockAuthorization.check.mockResolvedValue({ authorized: false });
+
+      const result = await fga.check(testUser, {
+        resource: { type: 'agent', id: 'agent-1' },
+        permission: 'agents:execute',
+      });
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false when WorkOS reports the resource is missing', async () => {
+      mockAuthorization.check.mockRejectedValue({ code: 'entity_not_found' });
 
       const result = await fga.check(testUser, {
         resource: { type: 'agent', id: 'agent-1' },
@@ -324,6 +355,17 @@ describe('MastraFGAWorkos', () => {
           permission: 'agents:execute',
         }),
       ).rejects.toThrow('FGA denied');
+    });
+
+    it('should throw FGADeniedError when WorkOS reports the resource is missing', async () => {
+      mockAuthorization.check.mockRejectedValue({ status: 404, code: 'entity_not_found' });
+
+      await expect(
+        fga.require(testUser, {
+          resource: { type: 'agent', id: 'agent-1' },
+          permission: 'agents:execute',
+        }),
+      ).rejects.toBeInstanceOf(FGADeniedError);
     });
   });
 

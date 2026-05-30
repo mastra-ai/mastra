@@ -9,10 +9,11 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { ToolPayloadTransformPolicy } from '../../../tools';
-import { createWorkflow } from '../../../workflows';
+import { createWorkflow } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
+import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
@@ -53,6 +54,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -80,6 +82,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentBackgroundConfig,
   toolPayloadTransform,
   skipBgTaskWait,
+  drainPendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -129,6 +132,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentBackgroundConfig,
     toolPayloadTransform,
     skipBgTaskWait,
+    drainPendingSignals,
   });
 
   const mapResultsStep = createMapResultsStep({

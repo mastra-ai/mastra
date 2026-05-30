@@ -104,6 +104,12 @@ program
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
+  )
   .action(createProject);
 
 program
@@ -125,6 +131,12 @@ program
     'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
     parseMcp,
   )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
+  )
   .action(initProject);
 
 registerApiCommand(program);
@@ -135,6 +147,12 @@ program
   .option('-d, --dir <path>', 'Path to your Mastra folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option('--preflight', 'Also run bundle preflight checks (builds if needed)')
+  .option('--skip-build', 'Skip build, reuse existing .mastra/output (requires --preflight)')
+  .option('--env-file <file>', 'Env file for preflight validation (requires --preflight)')
+  .option('--strict', 'Treat warnings as errors')
+  .option('--json', 'Emit machine-readable JSON output')
+  .option('--debug', 'Enable debug logs', false)
   .action(lintProject);
 
 program
@@ -247,11 +265,12 @@ const deployCommand = studioCommand
   .command('deploy [dir]')
   .description('Deploy studio')
   .option('--org <id>', 'Organization ID')
-  .option('--project <id>', 'Project ID')
+  .option('--project <id>', 'Project ID, slug, or name (creates new project if not found)')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(deployAction));
 
@@ -332,11 +351,12 @@ const serverDeployCommand = serverCommand
   .command('deploy [dir]')
   .description('Deploy to Mastra Server')
   .option('--org <id>', 'Organization ID')
-  .option('--project <id>', 'Project ID')
+  .option('--project <id>', 'Project ID, slug, or name (creates new project if not found)')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and deploy the existing .mastra/output directory')
+  .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(serverDeployAction));
 

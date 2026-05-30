@@ -26,7 +26,7 @@ import { DockerSandbox } from './index';
 // Mock Setup
 // =============================================================================
 
-const { mockContainer, mockExec, mockDocker, resetMockDefaults } = vi.hoisted(() => {
+const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = vi.hoisted(() => {
   const mockStream = {
     on: vi.fn(),
     write: vi.fn(),
@@ -261,6 +261,92 @@ describe('DockerSandbox', () => {
       expect(createCall.HostConfig.Privileged).toBe(true);
     });
 
+    it('should warn when privileged mode overlaps with capability or security options', async () => {
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+      const sandbox = new DockerSandbox({
+        privileged: true,
+        readonlyRootfs: true,
+        capDrop: ['ALL'],
+        capAdd: ['NET_BIND_SERVICE'],
+        securityOpt: ['no-new-privileges:true'],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('capDrop, capAdd, securityOpt'),
+        expect.objectContaining({
+          fields: expect.arrayContaining(['capDrop', 'capAdd', 'securityOpt']),
+          hostConfigFields: expect.arrayContaining(['CapDrop', 'CapAdd', 'SecurityOpt']),
+        }),
+      );
+      expect(logger.warn.mock.calls.some(call => String(call[0]).includes('ReadonlyRootfs'))).toBe(false);
+    });
+
+    it('should not warn about privileged mode for empty capability or security options', async () => {
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+      const sandbox = new DockerSandbox({
+        privileged: true,
+        capDrop: [],
+        capAdd: [],
+        securityOpt: [],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should pass container hardening options to HostConfig', async () => {
+      const sandbox = new DockerSandbox({
+        memory: 512 * 1024 * 1024,
+        memorySwap: 1024 * 1024 * 1024,
+        cpuShares: 512,
+        cpuQuota: 100_000,
+        cpuPeriod: 100_000,
+        pidsLimit: 256,
+        readonlyRootfs: true,
+        capDrop: ['ALL'],
+        capAdd: ['NET_BIND_SERVICE'],
+        securityOpt: ['no-new-privileges:true'],
+        ulimits: [{ name: 'nofile', soft: 1024, hard: 2048 }],
+        tmpfs: { '/tmp': 'rw,noexec,nosuid,size=64m' },
+      });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.HostConfig).toEqual(
+        expect.objectContaining({
+          Memory: 512 * 1024 * 1024,
+          MemorySwap: 1024 * 1024 * 1024,
+          CpuShares: 512,
+          CpuQuota: 100_000,
+          CpuPeriod: 100_000,
+          PidsLimit: 256,
+          ReadonlyRootfs: true,
+          CapDrop: ['ALL'],
+          CapAdd: ['NET_BIND_SERVICE'],
+          SecurityOpt: ['no-new-privileges:true'],
+          Ulimits: [{ Name: 'nofile', Soft: 1024, Hard: 2048 }],
+          Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=64m' },
+        }),
+      );
+    });
+
     it('should include labels with mastra metadata', async () => {
       const sandbox = new DockerSandbox({
         id: 'test-sandbox',
@@ -274,6 +360,38 @@ describe('DockerSandbox', () => {
         'mastra.sandbox.id': 'test-sandbox',
         team: 'platform',
       });
+    });
+
+    it('should pass the sandbox id as the container name by default', async () => {
+      const sandbox = new DockerSandbox({ id: 'test-sandbox' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('test-sandbox');
+    });
+
+    it('should prefer an explicit name over the id', async () => {
+      const sandbox = new DockerSandbox({ id: 'test-sandbox', name: 'custom-name' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('custom-name');
+    });
+
+    it('should sanitize a name with characters Docker disallows', async () => {
+      const sandbox = new DockerSandbox({ name: 'user/1001:dev' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('user-1001-dev');
+    });
+
+    it('should prefix the name when it does not start with an alphanumeric', async () => {
+      const sandbox = new DockerSandbox({ name: '-leading-dash' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('s--leading-dash');
     });
 
     it('should pull image if not available locally', async () => {
@@ -332,6 +450,282 @@ describe('DockerSandbox', () => {
       // Should get the existing container
       expect(mockDocker.getContainer).toHaveBeenCalledWith('existing-container-id');
       expect(sandbox.status).toBe('running');
+    });
+
+    it('should warn when requested hardening options differ on reconnect', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Privileged: false,
+          Memory: 256 * 1024 * 1024,
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        memory: 512 * 1024 * 1024,
+        readonlyRootfs: true,
+        capDrop: ['ALL'],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('requested Docker option(s) memory, readonlyRootfs, capDrop differ'),
+        {
+          containerId: 'existing-container-id',
+          fields: ['memory', 'readonlyRootfs', 'capDrop'],
+          hostConfigFields: ['Memory', 'ReadonlyRootfs', 'CapDrop'],
+        },
+      );
+    });
+
+    it('should warn about privileged capability options on reconnect', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Privileged: true,
+          CapDrop: ['ALL'],
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        privileged: true,
+        capDrop: ['ALL'],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Privileged containers can bypass'), {
+        fields: ['capDrop'],
+        hostConfigFields: ['CapDrop'],
+      });
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should warn when privileged is omitted but the reconnected container is privileged', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Privileged: true,
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({ id: 'existing-sandbox' });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'existing container is privileged, but this DockerSandbox did not request privileged mode',
+        ),
+        {
+          containerId: 'existing-container-id',
+          fields: ['privileged'],
+          hostConfigFields: ['Privileged'],
+        },
+      );
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should warn when privileged is disabled but the reconnected container is privileged', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Privileged: true,
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        privileged: false,
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('requested Docker option(s) privileged differ'),
+        {
+          containerId: 'existing-container-id',
+          fields: ['privileged'],
+          hostConfigFields: ['Privileged'],
+        },
+      );
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not warn when requested hardening options match on reconnect', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Privileged: false,
+          Memory: 512 * 1024 * 1024,
+          ReadonlyRootfs: true,
+          CapDrop: ['CAP_NET_RAW', 'ALL'],
+          Ulimits: [{ Name: 'nofile', Soft: 1024, Hard: 2048 }],
+          Tmpfs: { '/tmp': 'size=64m,rw' },
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        memory: 512 * 1024 * 1024,
+        readonlyRootfs: true,
+        capDrop: ['ALL', 'NET_RAW'],
+        ulimits: [{ name: 'nofile', soft: 1024, hard: 2048 }],
+        tmpfs: { '/tmp': 'rw,size=64m' },
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should warn when requested ulimits differ on reconnect', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Ulimits: [{ Name: 'nofile', Soft: 1024, Hard: 2048 }],
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        ulimits: [{ name: 'nproc', soft: 1024, hard: 2048 }],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('requested Docker option(s) ulimits differ'), {
+        containerId: 'existing-container-id',
+        fields: ['ulimits'],
+        hostConfigFields: ['Ulimits'],
+      });
+    });
+
+    it('should not warn when empty hardening collections reconnect to unset HostConfig fields', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          CapDrop: null,
+          CapAdd: null,
+          SecurityOpt: null,
+          Ulimits: null,
+          Tmpfs: null,
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        capDrop: [],
+        capAdd: [],
+        securityOpt: [],
+        ulimits: [],
+        tmpfs: {},
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('should not warn when Docker normalizes no-new-privileges separator on reconnect', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          SecurityOpt: ['no-new-privileges=true'],
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        securityOpt: ['no-new-privileges:true'],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('should start a stopped container on reconnect', async () => {
@@ -508,6 +902,24 @@ describe('DockerSandbox', () => {
       );
     });
 
+    it('should leave kill and timeout flags unset for natural exits', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('echo hello');
+      const waitPromise = handle.wait();
+
+      const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
+      await endHandler();
+
+      const result = await waitPromise;
+
+      expect(result.success).toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.killed).toBeUndefined();
+      expect(result.timedOut).toBeUndefined();
+    });
+
     it('should use process group kill (negative PID)', async () => {
       mockExec.inspect.mockResolvedValue({
         Running: true,
@@ -531,6 +943,56 @@ describe('DockerSandbox', () => {
       // The second exec call should be the kill command with negative PID
       const killCall = mockContainer.exec.mock.calls[1]?.[0];
       expect(killCall.Cmd).toEqual(['sh', '-c', 'kill -9 -42 2>/dev/null || kill -9 42']);
+    });
+
+    it('should mark explicit kill results as killed without timeout', async () => {
+      mockExec.inspect.mockResolvedValue({
+        Running: true,
+        ExitCode: null,
+        Pid: 42,
+      });
+
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const waitPromise = handle.wait();
+      await handle.kill();
+
+      const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => void;
+      closeHandler();
+
+      const result = await waitPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(true);
+      expect(result.timedOut).toBe(false);
+    });
+
+    it('should mark timeout results as killed and timed out', async () => {
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100', { timeout: 50 });
+        const waitPromise = handle.wait();
+
+        vi.advanceTimersByTime(50);
+
+        const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => void;
+        closeHandler();
+
+        const result = await waitPromise;
+
+        expect(result.success).toBe(false);
+        expect(result.exitCode).toBe(137);
+        expect(result.killed).toBe(true);
+        expect(result.timedOut).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should track spawned processes in list()', async () => {
@@ -645,6 +1107,10 @@ describe('DockerSandbox', () => {
 // =============================================================================
 
 describe('dockerSandboxProvider', () => {
+  beforeEach(() => {
+    resetMockDefaults();
+  });
+
   it('should have correct metadata', async () => {
     const { dockerSandboxProvider } = await import('../provider');
     expect(dockerSandboxProvider.id).toBe('docker');
@@ -660,11 +1126,40 @@ describe('dockerSandboxProvider', () => {
     expect(sandbox).toBeInstanceOf(DockerSandbox);
   });
 
+  it('should create a DockerSandbox instance with hardening config', async () => {
+    const { dockerSandboxProvider } = await import('../provider');
+    const sandbox = dockerSandboxProvider.createSandbox({
+      image: 'node:22-slim',
+      memory: 512 * 1024 * 1024,
+      pidsLimit: 256,
+      readonlyRootfs: true,
+      capDrop: ['ALL'],
+      securityOpt: ['no-new-privileges:true'],
+      tmpfs: { '/tmp': 'rw,noexec,nosuid,size=64m' },
+    });
+    await sandbox._start();
+
+    const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+    expect(createCall.HostConfig).toEqual(
+      expect.objectContaining({
+        Memory: 512 * 1024 * 1024,
+        PidsLimit: 256,
+        ReadonlyRootfs: true,
+        CapDrop: ['ALL'],
+        SecurityOpt: ['no-new-privileges:true'],
+        Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=64m' },
+      }),
+    );
+  });
+
   it('should have config schema', async () => {
     const { dockerSandboxProvider } = await import('../provider');
     expect(dockerSandboxProvider.configSchema).toBeDefined();
     expect((dockerSandboxProvider.configSchema as any)?.properties?.image).toBeDefined();
     expect((dockerSandboxProvider.configSchema as any)?.properties?.timeout).toBeDefined();
+    expect((dockerSandboxProvider.configSchema as any)?.properties?.memory).toBeDefined();
+    expect((dockerSandboxProvider.configSchema as any)?.properties?.pidsLimit).toBeDefined();
+    expect((dockerSandboxProvider.configSchema as any)?.properties?.capDrop).toBeDefined();
   });
 });
 

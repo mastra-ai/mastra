@@ -227,7 +227,7 @@ export const redisAgent = new Agent({
   name: 'Redis Agent',
   instructions:
     'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: 'openai/gpt-4o',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new RedisStore({
       id: 'redis-agent-storage',

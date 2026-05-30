@@ -15,7 +15,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
+import type { AgentInstructions, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
@@ -26,7 +26,7 @@ import { createWorkflowInput } from './utils/serialize-state';
 interface DurablePreparationAgent {
   id: string;
   name?: string;
-  getInstructions(opts: { requestContext: RequestContext }): string | string[] | Promise<string | string[]>;
+  getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
   getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
   getMemory(opts: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
@@ -160,6 +160,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       for (const inst of instructions) {
         messageList.addSystem(inst);
       }
+    } else {
+      messageList.addSystem(instructions);
     }
   }
 
@@ -323,6 +325,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     options: {
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
+      activeTools: execOptions?.activeTools,
       temperature: execOptions?.modelSettings?.temperature,
       requireToolApproval: execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
@@ -331,6 +334,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: (execOptions as any)?.returnScorerData,
       hasErrorProcessors: errorProcessors.length > 0,
+      providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
     },

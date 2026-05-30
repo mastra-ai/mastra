@@ -10,7 +10,7 @@ import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { ToolPayloadTransformPolicy } from '../tools';
-import type { OutputWriter } from '../workflows/types';
+import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
   AgentMemoryOption,
@@ -143,6 +143,14 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /** Aggregate token usage from the sub-agent's execution */
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      reasoningTokens?: number;
+      cachedInputTokens?: number;
+    };
   };
   /** Duration of the delegation in milliseconds */
   duration: number;
@@ -302,7 +310,6 @@ export interface DelegationConfig {
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
 }
-
 /**
  * Configuration for the routing agent's behavior.
  */
@@ -659,7 +666,7 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   /** Internal: Whether the execution is a resume */
   resumeContext?: {
     resumeData: any;
-    snapshot: any;
+    snapshot: WorkflowRunState;
   };
   toolCallId?: string;
 } & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });

@@ -123,12 +123,7 @@ export function SkillsPage() {
         )}
       </div>
 
-      <SkillEditDialog
-        isOpen={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onSkillCreated={handleSkillCreated}
-        readOnly={readOnly}
-      />
+      <SkillEditDialog isOpen={dialogOpen} onClose={() => setDialogOpen(false)} onSkillCreated={handleSkillCreated} />
     </ScrollArea>
   );
 }

@@ -252,7 +252,7 @@ describe('DurableAgent background tasks via stream()', () => {
     });
     // Wire the workflow event processor so the bg-task workflow can
     // actually run to completion (engine='workflow' is the default).
-    await localMastra.startEventEngine();
+    await localMastra.startWorkers();
 
     const chunks: any[] = [];
     const { cleanup, runId } = await durableAgent.stream('Research AI', {
@@ -315,7 +315,7 @@ describe('DurableAgent background tasks via stream()', () => {
       backgroundTasks: { enabled: true },
       agents: { 'bg-pubsub-agent': durableAgent as any },
     });
-    await localMastra.startEventEngine();
+    await localMastra.startWorkers();
 
     const chunks: any[] = [];
     const { cleanup } = await durableAgent.stream('Research ML', {
@@ -384,7 +384,7 @@ describe('DurableAgent background tasks via stream()', () => {
       backgroundTasks: { enabled: true },
       agents: { 'bg-suspend-da': durableAgent as any },
     });
-    await localMastra.startEventEngine();
+    await localMastra.startWorkers();
 
     const chunks: any[] = [];
     const { cleanup } = await durableAgent.stream('Research solana', {

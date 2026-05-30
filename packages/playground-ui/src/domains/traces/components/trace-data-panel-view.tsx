@@ -5,7 +5,7 @@ import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
-import { Button, ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
@@ -35,6 +35,12 @@ export interface TraceDataPanelViewProps {
   /** When both are provided, renders an "Open trace page" button. */
   LinkComponent?: LinkComponent;
   traceHref?: string;
+  /**
+   * Span treated as the displayed root of the timeline. Required for branch
+   * subtrees from `getBranch` where the anchor has a real parent that's outside
+   * `spans`. When omitted, the span with no parent is used (trace case).
+   */
+  anchorSpanId?: string;
 }
 
 export function TraceDataPanelView({
@@ -54,6 +60,7 @@ export function TraceDataPanelView({
   timelineChartWidth = 'default',
   LinkComponent,
   traceHref,
+  anchorSpanId,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -93,7 +100,7 @@ export function TraceDataPanelView({
     el?.scrollIntoView({ block: 'nearest' });
   }, [selectedSpanId]);
 
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? []), [spans]);
+  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? [], anchorSpanId), [spans, anchorSpanId]);
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
@@ -103,7 +110,10 @@ export function TraceDataPanelView({
     }
   }, [hierarchicalSpans]);
 
-  const rootSpan = useMemo(() => spans?.find(s => s.parentSpanId == null), [spans]);
+  const rootSpan = useMemo(
+    () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
+    [spans, anchorSpanId],
+  );
 
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
@@ -125,13 +135,13 @@ export function TraceDataPanelView({
             </DataPanel.Heading>
             <ButtonsGroup className="ml-auto shrink-0">
               {onCollapsedChange && (
-                <ButtonWithTooltip
+                <Button
                   size="md"
-                  tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
+                  tooltip={collapsed ? 'Expand panel' : 'Collapse panel'}
                   onClick={() => setCollapsed(!collapsed)}
                 >
                   {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-                </ButtonWithTooltip>
+                </Button>
               )}
               <DataPanel.NextPrevNav
                 onPrevious={onPrevious}
@@ -140,15 +150,15 @@ export function TraceDataPanelView({
                 nextLabel="Next trace"
               />
               {showOpenTracePageLink && (
-                <ButtonWithTooltip
+                <Button
                   as={LinkComponent}
                   href={traceHref}
                   size="md"
-                  tooltipContent="Open trace page"
+                  tooltip="Open trace page"
                   aria-label="Open trace page"
                 >
                   <Link2Icon />
-                </ButtonWithTooltip>
+                </Button>
               )}
               <DataPanel.CloseButton onClick={onClose} />
             </ButtonsGroup>

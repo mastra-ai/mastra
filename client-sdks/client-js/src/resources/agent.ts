@@ -14,13 +14,15 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
-import type { Tool } from '@mastra/core/tools';
+import type { ChunkType, FullOutput, MastraModelOutput } from '@mastra/core/stream';
+import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
+import { createObservabilityCollector } from '../observability/collector';
 import type {
   ZodSchema,
   GenerateLegacyParams,
+  GetAgentBrowserSessionResponse,
   GetAgentResponse,
   GetToolResponse,
   ClientOptions,
@@ -38,6 +40,9 @@ import type {
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
+  SendAgentSignalParams,
+  SubscribeAgentThreadParams,
+  ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
@@ -65,6 +70,112 @@ type ToolCallRespondFn<OUTPUT> = (
   },
 ) => Promise<FullOutput<OUTPUT>>;
 
+type ClientToolObservabilityContext = { traceparent: string; tracestate?: string; baggage?: string };
+
+type ClientToolObservabilityEnvelope = {
+  parentContext: ClientToolObservabilityContext;
+  payload?: Record<string, unknown>;
+};
+
+type SignalRuntimeOptions = StreamParamsBaseWithoutMessages<any>;
+type SignalRuntimeOptionsEntry = {
+  streamOptions: SignalRuntimeOptions;
+  timeout: ReturnType<typeof setTimeout>;
+};
+
+const SIGNAL_RUNTIME_OPTIONS_TTL_MS = 5 * 60 * 1000;
+const signalRuntimeOptionsByRunId = new Map<string, SignalRuntimeOptionsEntry>();
+const latestSignalRuntimeOptionsByThread = new Map<string, SignalRuntimeOptionsEntry>();
+
+const createSignalRuntimeOptionsEntry = (
+  store: Map<string, SignalRuntimeOptionsEntry>,
+  key: string,
+  streamOptions: SignalRuntimeOptions,
+): SignalRuntimeOptionsEntry => {
+  const timeout = setTimeout(() => store.delete(key), SIGNAL_RUNTIME_OPTIONS_TTL_MS);
+  (timeout as { unref?: () => void }).unref?.();
+  return { streamOptions, timeout };
+};
+
+const setSignalRuntimeOptionsEntry = (
+  store: Map<string, SignalRuntimeOptionsEntry>,
+  key: string,
+  streamOptions: SignalRuntimeOptions,
+): void => {
+  const existing = store.get(key);
+  if (existing) clearTimeout(existing.timeout);
+  store.set(key, createSignalRuntimeOptionsEntry(store, key, streamOptions));
+};
+
+const deleteSignalRuntimeOptionsEntry = (store: Map<string, SignalRuntimeOptionsEntry>, key: string): void => {
+  const existing = store.get(key);
+  if (existing) clearTimeout(existing.timeout);
+  store.delete(key);
+};
+
+const noopClientToolObserve: ToolObserve = {
+  async span<T>(_name: string, fn: () => Promise<T> | T): Promise<T> {
+    return fn();
+  },
+  log(): void {},
+};
+
+function getClientToolObservabilityContext(toolCall: unknown): ClientToolObservabilityContext | undefined {
+  const candidate = toolCall as
+    | {
+        payload?: { observability?: ClientToolObservabilityContext };
+        observability?: ClientToolObservabilityContext;
+      }
+    | undefined;
+  return candidate?.payload?.observability ?? candidate?.observability;
+}
+
+async function executeClientToolWithObservability({
+  clientTool,
+  args,
+  toolName,
+  parentContext,
+  executeContext,
+}: {
+  clientTool: Tool;
+  args: unknown;
+  toolName: string;
+  parentContext?: ClientToolObservabilityContext;
+  executeContext: Record<string, unknown>;
+}): Promise<{ result: unknown; observability?: ClientToolObservabilityEnvelope }> {
+  const collector = parentContext ? createObservabilityCollector(parentContext) : undefined;
+  const observe: ToolObserve = collector
+    ? {
+        span: collector.span.bind(collector),
+        log: collector.log.bind(collector),
+      }
+    : noopClientToolObserve;
+
+  const runExecute = () =>
+    clientTool.execute!(args, {
+      ...executeContext,
+      observe,
+    });
+
+  const result = collector ? await collector.withContext(runExecute) : await runExecute();
+  if (!parentContext) {
+    return { result };
+  }
+
+  const flushed = collector?.flush() as Record<string, unknown> | undefined;
+  if (flushed) {
+    flushed.toolName = toolName;
+  }
+
+  return {
+    result,
+    observability: {
+      parentContext,
+      ...(flushed ? { payload: flushed } : {}),
+    },
+  };
+}
+
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
@@ -85,7 +196,14 @@ async function executeToolCallAndRespond<OUTPUT>({
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
       response as unknown as {
-        toolCalls: { payload: { toolName: string; args: any; toolCallId: string } }[];
+        toolCalls: {
+          payload: {
+            toolName: string;
+            args: any;
+            toolCallId: string;
+            observability?: { traceparent: string; tracestate?: string; baggage?: string };
+          };
+        }[];
         messages: CoreMessage[];
       }
     ).toolCalls;
@@ -98,18 +216,39 @@ async function executeToolCallAndRespond<OUTPUT>({
       const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
-        const result = await clientTool.execute(toolCall?.payload.args, {
-          requestContext: requestContext as RequestContext,
-          tracingContext: { currentSpan: undefined },
-          agent: {
-            agentId,
-            messages: (response as unknown as { messages: CoreMessage[] }).messages,
-            toolCallId: toolCall?.payload.toolCallId,
-            suspend: async () => {},
-            threadId,
-            resourceId,
+        const { result, observability } = await executeClientToolWithObservability({
+          clientTool,
+          args: toolCall?.payload.args,
+          toolName: toolCall.payload.toolName,
+          parentContext: getClientToolObservabilityContext(toolCall),
+          executeContext: {
+            requestContext: requestContext as RequestContext,
+            tracingContext: { currentSpan: undefined },
+            agent: {
+              agentId,
+              messages: (response as unknown as { messages: CoreMessage[] }).messages,
+              toolCallId: toolCall?.payload.toolCallId,
+              suspend: async () => {},
+              threadId,
+              resourceId,
+            },
           },
         });
+
+        // Build the tool-result content block. If we have observability
+        // data (carrier + buffered spans/logs), attach it directly on
+        // the result so it travels with the specific tool call it
+        // belongs to, not on the top-level request body.
+        const toolResultContent: Record<string, unknown> = {
+          type: 'tool-result',
+          toolCallId: toolCall.payload.toolCallId,
+          toolName: toolCall.payload.toolName,
+          result,
+        };
+
+        if (observability) {
+          toolResultContent.__mastraObservability = observability;
+        }
 
         // Build updated messages from the response, adding the tool result
         // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
@@ -118,14 +257,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           ...(response.response.messages || []),
           {
             role: 'tool',
-            content: [
-              {
-                type: 'tool-result',
-                toolCallId: toolCall.payload.toolCallId,
-                toolName: toolCall.payload.toolName,
-                result,
-              },
-            ],
+            content: [toolResultContent],
           },
         ];
 
@@ -258,6 +390,72 @@ export class Agent extends BaseResource {
     return queryString ? `${delimiter}${queryString}` : '';
   }
 
+  private getSignalRuntimeRunKey(runId: string): string {
+    return `${this.options.baseUrl}|${this.apiPrefix}|${this.agentId}|${runId}`;
+  }
+
+  private getSignalRuntimeThreadKey({
+    resourceId,
+    threadId,
+  }: {
+    resourceId?: string;
+    threadId?: string;
+  }): string | undefined {
+    if (!threadId) return undefined;
+    return `${this.options.baseUrl}|${this.apiPrefix}|${this.agentId}|${resourceId ?? ''}|${threadId}`;
+  }
+
+  private setSignalRuntimeOptions({
+    runId,
+    resourceId,
+    threadId,
+    streamOptions,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    streamOptions: SignalRuntimeOptions;
+  }): void {
+    const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
+    if (runId) {
+      setSignalRuntimeOptionsEntry(signalRuntimeOptionsByRunId, this.getSignalRuntimeRunKey(runId), streamOptions);
+      if (threadKey) deleteSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey);
+      return;
+    }
+
+    if (threadKey) {
+      setSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey, streamOptions);
+    }
+  }
+
+  private getSignalRuntimeOptions({
+    runId,
+    resourceId,
+    threadId,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+  }): SignalRuntimeOptions | undefined {
+    if (runId) {
+      const runOptions = signalRuntimeOptionsByRunId.get(this.getSignalRuntimeRunKey(runId));
+      if (runOptions) return runOptions.streamOptions;
+    }
+
+    const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
+    return threadKey ? latestSignalRuntimeOptionsByThread.get(threadKey)?.streamOptions : undefined;
+  }
+
+  private deleteSignalRuntimeOptions(runId?: string): void {
+    if (!runId) return;
+    deleteSignalRuntimeOptionsEntry(signalRuntimeOptionsByRunId, this.getSignalRuntimeRunKey(runId));
+  }
+
+  private deleteLatestSignalRuntimeOptions({ resourceId, threadId }: { resourceId?: string; threadId?: string }): void {
+    const threadKey = this.getSignalRuntimeThreadKey({ resourceId, threadId });
+    if (threadKey) deleteSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey);
+  }
+
   /**
    * Retrieves details about the agent
    * @param requestContext - Optional request context to pass as query parameter
@@ -267,11 +465,345 @@ export class Agent extends BaseResource {
     return this.request(`/agents/${this.agentId}${this.getQueryString(requestContext)}`);
   }
 
+  /**
+   * Probe the agent's browser session state before opening a screencast WebSocket.
+   *
+   * Returns `{ hasSession, screencastAvailable }`. Use this to avoid opening a WS
+   * that would either fail (screencast packages not installed) or sit idle (no
+   * active browser session yet). See {@link GetAgentBrowserSessionResponse}.
+   *
+   * @param threadId - Optional thread ID for thread-scoped browser sessions
+   */
+  browserSession(threadId?: string): Promise<GetAgentBrowserSessionResponse> {
+    const query = threadId ? `?threadId=${encodeURIComponent(threadId)}` : '';
+    return this.request(`/agents/${this.agentId}/browser/session${query}`);
+  }
+
+  /**
+   * Close the agent's browser session.
+   *
+   * For thread-scoped browsers, pass `threadId` to close only that thread's
+   * session. Omit it to close the shared session (or all sessions for the agent
+   * depending on the toolset's scope).
+   *
+   * @param threadId - Optional thread ID for thread-scoped browser sessions
+   */
+  closeBrowser(threadId?: string): Promise<{ success: boolean }> {
+    return this.request(`/agents/${this.agentId}/browser/close`, {
+      method: 'POST',
+      body: { threadId },
+    });
+  }
+
   enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
     return this.request(`/agents/${this.agentId}/instructions/enhance`, {
       method: 'POST',
       body: { instructions, comment },
     });
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
+    if (streamOptions) {
+      this.setSignalRuntimeOptions({
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+        streamOptions,
+      });
+    }
+
+    const body = params.ifIdle?.streamOptions
+      ? {
+          ...params,
+          ifIdle: {
+            ...params.ifIdle,
+            streamOptions: {
+              ...params.ifIdle.streamOptions,
+              requestContext: parseClientRequestContext(params.ifIdle.streamOptions.requestContext),
+              clientTools: processClientTools(params.ifIdle.streamOptions.clientTools),
+            },
+          },
+        }
+      : params;
+
+    let response: { accepted: true; runId: string };
+    try {
+      response = await this.request<{ accepted: true; runId: string }>(`/agents/${this.agentId}/signals`, {
+        method: 'POST',
+        body,
+      });
+    } catch (error) {
+      if (streamOptions) {
+        this.deleteLatestSignalRuntimeOptions({ resourceId: params.resourceId, threadId: params.threadId });
+      }
+      throw error;
+    }
+
+    if (streamOptions) {
+      this.setSignalRuntimeOptions({
+        runId: response.runId,
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+        streamOptions,
+      });
+    }
+
+    return response;
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
+    Response & {
+      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+    }
+  > {
+    const { resourceId, threadId } = params;
+    const requestSubscription = () =>
+      this.request(`/agents/${this.agentId}/threads/subscribe`, {
+        method: 'POST',
+        body: { resourceId, threadId },
+        stream: true,
+      }) as Promise<Response>;
+
+    const streamResponse = (await requestSubscription()) as Response & {
+      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+    };
+
+    if (!streamResponse.body) {
+      throw new Error('No response body');
+    }
+
+    const agent = this;
+
+    streamResponse.processDataStream = async ({ onChunk, reconnect }: ProcessAgentThreadStreamOptions) => {
+      const pendingToolCallsByRunId = new Map<
+        string,
+        Array<{
+          toolCallId: string;
+          toolName: string;
+          args?: unknown;
+          observability?: ClientToolObservabilityContext;
+        }>
+      >();
+
+      const handleSubscribedChunk = async (chunk: ChunkType) => {
+        if (chunk.type === 'tool-call') {
+          const payload = (
+            chunk as {
+              payload?: {
+                toolCallId?: string;
+                toolName?: string;
+                args?: unknown;
+                observability?: ClientToolObservabilityContext;
+              };
+            }
+          ).payload;
+          const toolCallId = payload?.toolCallId;
+          const toolName = payload?.toolName;
+          const runId = (chunk as { runId?: string }).runId;
+          if (!toolCallId || !toolName || !runId) return;
+
+          const pendingToolCalls = pendingToolCallsByRunId.get(runId) ?? [];
+          pendingToolCalls.push({ toolCallId, toolName, args: payload.args, observability: payload.observability });
+          pendingToolCallsByRunId.set(runId, pendingToolCalls);
+          return;
+        }
+
+        if (chunk.type !== 'finish') return;
+
+        const runId = (chunk as { runId?: string }).runId;
+        const finishPayload = chunk as {
+          payload?: {
+            stepResult?: { reason?: string };
+            messages?: { nonUser?: CoreMessage[] };
+          };
+        };
+        if (!runId) return;
+        if (finishPayload.payload?.stepResult?.reason !== 'tool-calls') {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
+
+        const pendingToolCalls = pendingToolCallsByRunId.get(runId);
+        pendingToolCallsByRunId.delete(runId);
+        if (!pendingToolCalls?.length) {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
+
+        const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
+        const activeClientTools = activeRuntimeOptions?.clientTools;
+        if (!activeClientTools) {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
+
+        const activeRequestContext = activeRuntimeOptions.requestContext;
+        const processedClientTools = processClientTools(activeClientTools);
+        const processedRequestContext = parseClientRequestContext(activeRequestContext);
+
+        const toolResultMessages: CoreMessage[] = [];
+        for (const toolCall of pendingToolCalls) {
+          const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
+          if (!clientTool || typeof clientTool.execute !== 'function') continue;
+
+          let result: unknown;
+          let observability: ClientToolObservabilityEnvelope | undefined;
+          try {
+            const execution = await executeClientToolWithObservability({
+              clientTool,
+              args: toolCall.args,
+              toolName: toolCall.toolName,
+              parentContext: toolCall.observability,
+              executeContext: {
+                requestContext: activeRequestContext as RequestContext,
+                tracingContext: { currentSpan: undefined },
+                agent: {
+                  agentId: agent.agentId,
+                  messages: finishPayload.payload?.messages?.nonUser ?? [],
+                  toolCallId: toolCall.toolCallId,
+                  suspend: async () => {},
+                  threadId,
+                  resourceId,
+                },
+              },
+            });
+            result = execution.result;
+            observability = execution.observability;
+          } catch (error) {
+            result = { error: String(error) };
+          }
+
+          const toolResultContent: Record<string, unknown> = {
+            type: 'tool-result',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            result,
+          };
+
+          if (observability) {
+            toolResultContent.__mastraObservability = observability;
+          }
+
+          await onChunk({
+            type: 'tool-result',
+            runId,
+            payload: toolResultContent,
+          } as never);
+
+          toolResultMessages.push({
+            role: 'tool',
+            content: [toolResultContent],
+          } as unknown as CoreMessage);
+        }
+
+        if (toolResultMessages.length === 0) {
+          agent.deleteSignalRuntimeOptions(runId);
+          return;
+        }
+
+        try {
+          const continuation = await agent.streamUntilIdle(
+            [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
+            {
+              ...activeRuntimeOptions,
+              runId: uuid(),
+              requestContext: processedRequestContext,
+              memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+              clientTools: processedClientTools,
+            } as never,
+          );
+          try {
+            void continuation.body?.cancel?.();
+          } catch {
+            // ignore
+          }
+        } catch (error) {
+          console.error('Error running client-tool continuation:', error);
+        } finally {
+          agent.deleteSignalRuntimeOptions(runId);
+        }
+      };
+
+      const reconnectOptions =
+        reconnect === true
+          ? { maxRetries: Infinity, delayMs: 1000 }
+          : reconnect
+            ? { maxRetries: reconnect.maxRetries ?? Infinity, delayMs: reconnect.delayMs ?? 1000 }
+            : null;
+      let response: Response = streamResponse;
+      let attempts = 0;
+
+      // Sentinel used to distinguish errors thrown by the caller's `onChunk`
+      // callback from transport errors. Callback errors should not trigger a
+      // reconnect — we'd otherwise mask user bugs by resubscribing forever.
+      // The sentinel never escapes this method: we unwrap and rethrow the
+      // original error so consumers see exactly what they threw.
+      const onChunkErrorSentinel = Symbol('onChunkErrorSentinel');
+      const guardedOnChunk = async (chunk: ChunkType) => {
+        try {
+          await onChunk(chunk);
+          await handleSubscribedChunk(chunk);
+        } catch (cause) {
+          throw { [onChunkErrorSentinel]: true, cause };
+        }
+      };
+
+      while (true) {
+        if (!response.body) {
+          throw new Error('No response body');
+        }
+
+        try {
+          await processMastraStream({
+            stream: response.body as ReadableStream<Uint8Array>,
+            onChunk: guardedOnChunk,
+            signal: this.options.abortSignal,
+          });
+        } catch (error) {
+          if (typeof error === 'object' && error !== null && (error as any)[onChunkErrorSentinel]) {
+            throw (error as { cause: unknown }).cause;
+          }
+          if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+            throw error;
+          }
+        }
+
+        if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+          return;
+        }
+
+        while (attempts < reconnectOptions.maxRetries) {
+          attempts++;
+
+          if (this.options.abortSignal?.aborted) {
+            return;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, reconnectOptions.delayMs));
+
+          if (this.options.abortSignal?.aborted) {
+            return;
+          }
+
+          try {
+            response = await requestSubscription();
+            break;
+          } catch (error) {
+            if (this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+              throw error;
+            }
+          }
+        }
+      }
+    };
+
+    return streamResponse;
   }
 
   /**
@@ -476,16 +1008,22 @@ export class Agent extends BaseResource {
         const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
-          const result = await clientTool.execute(toolCall?.args, {
-            requestContext: requestContext as RequestContext,
-            tracingContext: { currentSpan: undefined },
-            agent: {
-              agentId: this.agentId,
-              messages: (response as unknown as { messages: CoreMessage[] }).messages,
-              toolCallId: toolCall?.toolCallId,
-              suspend: async () => {},
-              threadId,
-              resourceId,
+          const { result, observability } = await executeClientToolWithObservability({
+            clientTool,
+            args: toolCall?.args,
+            toolName: toolCall.toolName,
+            parentContext: getClientToolObservabilityContext(toolCall),
+            executeContext: {
+              requestContext: requestContext as RequestContext,
+              tracingContext: { currentSpan: undefined },
+              agent: {
+                agentId: this.agentId,
+                messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                toolCallId: toolCall?.toolCallId,
+                suspend: async () => {},
+                threadId,
+                resourceId,
+              },
             },
           });
 
@@ -501,6 +1039,7 @@ export class Agent extends BaseResource {
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   result,
+                  ...(observability ? { __mastraObservability: observability } : {}),
                 },
               ],
             },
@@ -636,7 +1175,16 @@ export class Agent extends BaseResource {
     let messageAnnotations: JSONValue[] | undefined = replaceLastMessage ? lastMessage?.annotations : undefined;
 
     // keep track of partial tool calls
-    const partialToolCalls: Record<string, { text: string; step: number; index: number; toolName: string }> = {};
+    const partialToolCalls: Record<
+      string,
+      {
+        text: string;
+        step: number;
+        index: number;
+        toolName: string;
+        observability?: ClientToolObservabilityContext;
+      }
+    > = {};
 
     let usage: any = {
       completionTokens: NaN,
@@ -767,14 +1315,17 @@ export class Agent extends BaseResource {
           step,
           toolName: value.toolName,
           index: message.toolInvocations.length,
+          observability: getClientToolObservabilityContext(value),
         };
 
+        const observability = getClientToolObservabilityContext(value);
         const invocation = {
           state: 'partial-call',
           step,
           toolCallId: value.toolCallId,
           toolName: value.toolName,
           args: undefined,
+          ...(observability ? { observability } : {}),
         } as const;
 
         message.toolInvocations.push(invocation);
@@ -796,6 +1347,7 @@ export class Agent extends BaseResource {
           toolCallId: value.toolCallId,
           toolName: partialToolCall!.toolName,
           args: partialArgs,
+          ...(partialToolCall!.observability ? { observability: partialToolCall!.observability } : {}),
         } as const;
 
         message.toolInvocations![partialToolCall!.index] = invocation;
@@ -972,6 +1524,7 @@ export class Agent extends BaseResource {
     update,
     onToolCall,
     onFinish,
+    onStreamChunk,
     getCurrentDate = () => new Date(),
     lastMessage,
   }: {
@@ -979,6 +1532,7 @@ export class Agent extends BaseResource {
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
     onToolCall?: UseChatOptions['onToolCall'];
     onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    onStreamChunk?: (chunk: any) => void;
     generateId?: () => string;
     getCurrentDate?: () => Date;
     lastMessage: UIMessage | undefined;
@@ -1027,7 +1581,16 @@ export class Agent extends BaseResource {
     let messageAnnotations: JSONValue[] | undefined = replaceLastMessage ? lastMessage?.annotations : undefined;
 
     // keep track of partial tool calls
-    const partialToolCalls: Record<string, { text: string; step: number; index: number; toolName: string }> = {};
+    const partialToolCalls: Record<
+      string,
+      {
+        text: string;
+        step: number;
+        index: number;
+        toolName: string;
+        observability?: ClientToolObservabilityContext;
+      }
+    > = {};
 
     let usage: any = {
       completionTokens: NaN,
@@ -1070,6 +1633,8 @@ export class Agent extends BaseResource {
       // TODO: casting as any here because the stream types were all typed as any before in core.
       // but this is completely wrong and this fn is probably broken. Remove ":any" and you'll see a bunch of type errors
       onChunk: async (chunk: any) => {
+        onStreamChunk?.(chunk);
+
         switch (chunk.type) {
           case 'tripwire': {
             message.parts.push({
@@ -1199,6 +1764,7 @@ export class Agent extends BaseResource {
                 execUpdate();
               }
             }
+            break;
           }
 
           case 'tool-call-input-streaming-start': {
@@ -1212,14 +1778,17 @@ export class Agent extends BaseResource {
               step,
               toolName: chunk.payload.toolName,
               index: message.toolInvocations.length,
+              observability: getClientToolObservabilityContext(chunk),
             };
 
+            const observability = getClientToolObservabilityContext(chunk);
             const invocation = {
               state: 'partial-call',
               step,
               toolCallId: chunk.payload.toolCallId,
               toolName: chunk.payload.toolName,
               args: chunk.payload.args,
+              ...(observability ? { observability } : {}),
             } as const;
 
             message.toolInvocations.push(invocation as ToolInvocation);
@@ -1243,6 +1812,7 @@ export class Agent extends BaseResource {
               toolCallId: chunk.payload.toolCallId,
               toolName: partialToolCall!.toolName,
               args: partialArgs,
+              ...(partialToolCall!.observability ? { observability: partialToolCall!.observability } : {}),
             } as const;
 
             message.toolInvocations![partialToolCall!.index] = invocation as ToolInvocation;
@@ -1354,6 +1924,7 @@ export class Agent extends BaseResource {
     try {
       let toolCalls: ToolInvocation[] = [];
       let messages: UIMessage[] = [];
+      let streamRunId: string | undefined = processedParams.runId;
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
@@ -1408,7 +1979,16 @@ export class Agent extends BaseResource {
               .reverse()
               .find(part => part.type === 'tool-invocation')?.toolInvocation;
             if (toolCall) {
-              toolCalls.push(toolCall);
+              const toolInvocationWithMetadata = message?.toolInvocations?.find(
+                invocation => invocation.toolCallId === toolCall.toolCallId,
+              );
+              toolCalls.push({
+                ...toolInvocationWithMetadata,
+                ...toolCall,
+                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
+                  ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
+                  : {}),
+              });
             }
 
             let shouldExecuteClientTool = false;
@@ -1417,19 +1997,122 @@ export class Agent extends BaseResource {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
-                const result = await clientTool.execute(toolCall?.args, {
-                  requestContext: processedParams.requestContext as RequestContext,
-                  // TODO: Pass proper tracing context when client-js supports tracing
-                  tracingContext: { currentSpan: undefined },
-                  agent: {
-                    agentId: this.agentId,
-                    messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                    toolCallId: toolCall?.toolCallId,
-                    suspend: async () => {},
-                    threadId,
-                    resourceId,
-                  },
-                });
+
+                // Synthesize a Mastra-shaped terminal chunk so React's toUIMessage
+                // reducer flips the matching `dynamic-tool` part from
+                // `input-available` to `output-available` / `output-error`.
+                // Without this, the React-side `dynamic-tool` part is stuck in
+                // `input-available` forever because the server stream never emits
+                // a terminal chunk for client-executed tools.
+                const runId: string = streamRunId ?? toolCall.toolCallId;
+                let result: unknown;
+                let observability: ClientToolObservabilityEnvelope | undefined;
+                let synthetic:
+                  | {
+                      type: 'tool-result';
+                      runId: string;
+                      from: 'AGENT';
+                      payload: {
+                        toolCallId: string;
+                        toolName: string;
+                        result: unknown;
+                        isError: boolean;
+                        providerExecuted: false;
+                      };
+                    }
+                  | {
+                      type: 'tool-error';
+                      runId: string;
+                      from: 'AGENT';
+                      payload: {
+                        toolCallId: string;
+                        toolName: string;
+                        error: unknown;
+                        args?: unknown;
+                        providerExecuted: false;
+                      };
+                    };
+
+                try {
+                  ({ result, observability } = await executeClientToolWithObservability({
+                    clientTool,
+                    args: toolCall?.args,
+                    toolName: toolCall.toolName,
+                    parentContext: getClientToolObservabilityContext(toolCall),
+                    executeContext: {
+                      requestContext: processedParams.requestContext as RequestContext,
+                      tracingContext: { currentSpan: undefined },
+                      agent: {
+                        agentId: this.agentId,
+                        messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                        toolCallId: toolCall?.toolCallId,
+                        suspend: async () => {},
+                        threadId,
+                        resourceId,
+                      },
+                    },
+                  }));
+
+                  synthetic = {
+                    type: 'tool-result',
+                    runId,
+                    from: 'AGENT',
+                    payload: {
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      result,
+                      isError: false,
+                      providerExecuted: false,
+                    },
+                  };
+                } catch (error) {
+                  synthetic = {
+                    type: 'tool-error',
+                    runId,
+                    from: 'AGENT',
+                    payload: {
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      error,
+                      args: toolCall?.args,
+                      providerExecuted: false,
+                    },
+                  };
+                  // Mirror the executed-result message-patching path so the
+                  // internal `messages[]` carries the error too (matches the
+                  // existing legacy reducer's expectations for the recursive
+                  // request body).
+                  result = { error: error instanceof Error ? error.message : String(error) };
+                }
+
+                // Wait for the server-side stream pipe to finish before
+                // enqueueing the synthetic chunk so the React reducer observes
+                // the server `finish` chunk first, then our terminal tool chunk.
+                try {
+                  await pipePromise;
+                } catch {
+                  // pipePromise already has its own .catch; ignore here.
+                }
+
+                try {
+                  const errorForSerialization = synthetic.type === 'tool-error' ? synthetic.payload.error : undefined;
+                  const serializedError =
+                    errorForSerialization instanceof Error
+                      ? {
+                          name: errorForSerialization.name,
+                          message: errorForSerialization.message,
+                          stack: errorForSerialization.stack,
+                        }
+                      : errorForSerialization;
+                  const payloadForWire =
+                    synthetic.type === 'tool-error'
+                      ? { ...synthetic, payload: { ...synthetic.payload, error: serializedError } }
+                      : synthetic;
+                  const sseLine = `data: ${JSON.stringify(payloadForWire)}\n\n`;
+                  controller.enqueue(new TextEncoder().encode(sseLine));
+                } catch (enqueueErr) {
+                  console.error('Failed to enqueue synthetic tool-result chunk:', enqueueErr);
+                }
 
                 const lastMessageRaw = messages[messages.length - 1];
                 const lastMessage: UIMessage | undefined =
@@ -1444,6 +2127,7 @@ export class Agent extends BaseResource {
                     ...toolInvocationPart.toolInvocation,
                     state: 'result',
                     result,
+                    ...(observability ? { __mastraObservability: observability } : {}),
                   };
                 }
 
@@ -1455,6 +2139,11 @@ export class Agent extends BaseResource {
                   toolInvocation.state = 'result';
                   // @ts-expect-error - result property exists when state is 'result'
                   toolInvocation.result = result;
+                  if (observability) {
+                    (
+                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
+                    ).__mastraObservability = observability;
+                  }
                 }
 
                 // Build updated messages for the recursive call
@@ -1469,8 +2158,16 @@ export class Agent extends BaseResource {
 
                 // Recursively call stream with updated messages
                 // This will wait for the recursive stream to complete before continuing.
-                // Forward `route` so stream-until-idle (and future non-default routes)
-                // stay on the same endpoint across client-tool continuations.
+                // Resume routes are one-shot (they consume server-side resumeData),
+                // so client-tool continuations must fall back to the corresponding
+                // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
+                // are idempotent continuations and stay on the same endpoint.
+                const recursionRoute =
+                  route === 'resume-stream'
+                    ? 'stream'
+                    : route === 'resume-stream-until-idle'
+                      ? 'stream-until-idle'
+                      : route;
                 try {
                   await this.processStreamResponse(
                     {
@@ -1478,7 +2175,7 @@ export class Agent extends BaseResource {
                       messages: updatedMessages,
                     },
                     controller,
-                    route,
+                    recursionRoute,
                   );
                 } catch (error) {
                   console.error('Error processing recursive stream response:', error);
@@ -1497,6 +2194,11 @@ export class Agent extends BaseResource {
             // No tool calls - wait for pipe to complete then close the stream
             await pipePromise;
             controller.close();
+          }
+        },
+        onStreamChunk: chunk => {
+          if (!streamRunId && typeof chunk.runId === 'string') {
+            streamRunId = chunk.runId;
           }
         },
         lastMessage: undefined,
@@ -2302,24 +3004,38 @@ export class Agent extends BaseResource {
               .reverse()
               .find(part => part.type === 'tool-invocation')?.toolInvocation;
             if (toolCall) {
-              toolCalls.push(toolCall);
+              const toolInvocationWithMetadata = message?.toolInvocations?.find(
+                invocation => invocation.toolCallId === toolCall.toolCallId,
+              );
+              toolCalls.push({
+                ...toolInvocationWithMetadata,
+                ...toolCall,
+                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
+                  ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
+                  : {}),
+              });
             }
 
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
-                const result = await clientTool.execute(toolCall?.args, {
-                  requestContext: processedParams.requestContext as RequestContext,
-                  // TODO: Pass proper tracing context when client-js supports tracing
-                  tracingContext: { currentSpan: undefined },
-                  agent: {
-                    agentId: this.agentId,
-                    messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                    toolCallId: toolCall?.toolCallId,
-                    suspend: async () => {},
-                    threadId,
-                    resourceId,
+                const { result, observability } = await executeClientToolWithObservability({
+                  clientTool,
+                  args: toolCall?.args,
+                  toolName: toolCall.toolName,
+                  parentContext: getClientToolObservabilityContext(toolCall),
+                  executeContext: {
+                    requestContext: processedParams.requestContext as RequestContext,
+                    tracingContext: { currentSpan: undefined },
+                    agent: {
+                      agentId: this.agentId,
+                      messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                      toolCallId: toolCall?.toolCallId,
+                      suspend: async () => {},
+                      threadId,
+                      resourceId,
+                    },
                   },
                 });
 
@@ -2334,6 +3050,7 @@ export class Agent extends BaseResource {
                     ...toolInvocationPart.toolInvocation,
                     state: 'result',
                     result,
+                    ...(observability ? { __mastraObservability: observability } : {}),
                   };
                 }
 
@@ -2345,6 +3062,11 @@ export class Agent extends BaseResource {
                   toolInvocation.state = 'result';
                   // @ts-expect-error - result property exists when state is 'result'
                   toolInvocation.result = result;
+                  if (observability) {
+                    (
+                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
+                    ).__mastraObservability = observability;
+                  }
                 }
 
                 // write the tool result part to the stream

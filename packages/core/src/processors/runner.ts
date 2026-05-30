@@ -2,6 +2,8 @@ import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
+import { createSignal } from '../agent/signals';
+import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
@@ -157,6 +159,20 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
     before.length === after.length &&
     before.every((message, index) => messagesAreEqual(message as MessageInput, after[index] as MessageInput))
   );
+}
+
+export function createProcessorSendSignal(args: {
+  messageList: MessageList;
+  writer?: ProcessorStreamWriter;
+  rotateResponseMessageId?: () => string;
+}): (signalInput: AgentSignalInput) => Promise<CreatedAgentSignal> {
+  return async signalInput => {
+    const signal = createSignal(signalInput);
+    args.rotateResponseMessageId?.();
+    args.messageList.add(signal.toDBMessage(), 'input');
+    await args.writer?.custom(signal.toDataPart());
+    return signal;
+  };
 }
 
 function buildProcessInputStepSpanInput(args: {
@@ -484,6 +500,7 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
+          sendSignal: createProcessorSendSignal({ messageList, writer }),
         });
 
         // Stop recording and get mutations for this processor
@@ -811,7 +828,7 @@ export class ProcessorRunner {
 
       // Handle workflow as processor
       if (isProcessorWorkflow(processorOrWorkflow)) {
-        const currentSystemMessages = messageList.getAllSystemMessages();
+        const currentSystemMessages = messageList.getSystemMessages();
         await this.executeWorkflowAsProcessor(
           processorOrWorkflow,
           {
@@ -841,7 +858,7 @@ export class ProcessorRunner {
         continue;
       }
 
-      const currentSystemMessages = messageList.getAllSystemMessages();
+      const currentSystemMessages = messageList.getSystemMessages();
       const inputMessagesBefore = processableMessages;
       const inputSystemMessagesBefore = currentSystemMessages;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
@@ -878,6 +895,7 @@ export class ProcessorRunner {
           messageList,
           requestContext,
           retryCount,
+          sendSignal: createProcessorSendSignal({ messageList }),
         });
 
         // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
@@ -911,7 +929,6 @@ export class ProcessorRunner {
           // Processor returned { messages, systemMessages } - handle both
           mutations = messageList.stopRecording();
 
-          // Replace system messages with the modified ones
           messageList.replaceAllSystemMessages(result.systemMessages);
 
           // Handle regular messages
@@ -987,8 +1004,8 @@ export class ProcessorRunner {
             ...(!areProcessorMessageArraysEqual(inputMessagesBefore, processableMessages)
               ? { messages: processableMessages }
               : {}),
-            ...(!areProcessorMessageArraysEqual(inputSystemMessagesBefore, messageList.getAllSystemMessages())
-              ? { systemMessages: messageList.getAllSystemMessages() }
+            ...(!areProcessorMessageArraysEqual(inputSystemMessagesBefore, messageList.getSystemMessages())
+              ? { systemMessages: messageList.getSystemMessages() }
               : {}),
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
@@ -1069,7 +1086,7 @@ export class ProcessorRunner {
 
       // Handle workflow as processor with inputStep phase
       if (isProcessorWorkflow(processorOrWorkflow)) {
-        const currentSystemMessages = messageList.getAllSystemMessages();
+        const currentSystemMessages = messageList.getSystemMessages();
         const result = await this.executeWorkflowAsProcessor(
           processorOrWorkflow,
           {
@@ -1109,8 +1126,9 @@ export class ProcessorRunner {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
-      // Get all system messages to pass to the processor
-      const currentSystemMessages = messageList.getAllSystemMessages();
+      // Pass only the untagged system messages — tagged buckets belong to
+      // their owning processors and are merged back in at final model assembly.
+      const currentSystemMessages = messageList.getSystemMessages();
 
       const inputData = {
         messages: processableMessages,
@@ -1167,24 +1185,25 @@ export class ProcessorRunner {
           activeTools: inputData.activeTools,
         };
 
+        const rotateResponseMessageId = args.rotateResponseMessageId
+          ? () => {
+              const nextMessageId = args.rotateResponseMessageId!();
+              stepInput.messageId = nextMessageId;
+              return nextMessageId;
+            }
+          : undefined;
+
         const processMethodArgs = {
           messageList,
           ...inputData,
           state: processorState.customState,
           abort,
-          ...(args.rotateResponseMessageId
-            ? {
-                rotateResponseMessageId: () => {
-                  const nextMessageId = args.rotateResponseMessageId!();
-                  stepInput.messageId = nextMessageId;
-                  return nextMessageId;
-                },
-              }
-            : {}),
+          ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
           ...createObservabilityContext({ currentSpan: processorSpan }),
           retryCount: args.retryCount ?? 0,
           writer,
           abortSignal: args.abortSignal,
+          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
         };
 
         const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(
@@ -1215,7 +1234,7 @@ export class ProcessorRunner {
             beforeMessages: inputData.messages,
             beforeSystemMessages: inputData.systemMessages,
             messages: messageList.get.all.db(),
-            systemMessages: messageList.getAllSystemMessages(),
+            systemMessages: messageList.getSystemMessages(),
           }),
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
@@ -1468,7 +1487,7 @@ export class ProcessorRunner {
 
       // Handle workflow as processor with outputStep phase
       if (isProcessorWorkflow(processorOrWorkflow)) {
-        const currentSystemMessages = messageList.getAllSystemMessages();
+        const currentSystemMessages = messageList.getSystemMessages();
         await this.executeWorkflowAsProcessor(
           processorOrWorkflow,
           {
@@ -1504,7 +1523,7 @@ export class ProcessorRunner {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
-      const currentSystemMessages = messageList.getAllSystemMessages();
+      const currentSystemMessages = messageList.getSystemMessages();
       const defaultUsage: LanguageModelUsage = {
         inputTokens: undefined,
         outputTokens: undefined,
@@ -1555,6 +1574,7 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
+          sendSignal: createProcessorSendSignal({ messageList, writer }),
         });
 
         // Stop recording and get mutations for this processor
@@ -1600,8 +1620,8 @@ export class ProcessorRunner {
             ...(!areProcessorMessageArraysEqual(processableMessages, messageList.get.all.db())
               ? { messages: messageList.get.all.db() }
               : {}),
-            ...(!areProcessorMessageArraysEqual(currentSystemMessages, messageList.getAllSystemMessages())
-              ? { systemMessages: messageList.getAllSystemMessages() }
+            ...(!areProcessorMessageArraysEqual(currentSystemMessages, messageList.getSystemMessages())
+              ? { systemMessages: messageList.getSystemMessages() }
               : {}),
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
@@ -1713,6 +1733,14 @@ export class ProcessorRunner {
       const processorState = this.getProcessorState(processor.id);
 
       try {
+        const rotateResponseMessageId = args.rotateResponseMessageId
+          ? () => {
+              const nextMessageId = args.rotateResponseMessageId!();
+              messageIdAfter = nextMessageId;
+              return nextMessageId;
+            }
+          : undefined;
+
         const result = await processMethod({
           messages: processableMessages,
           messageList,
@@ -1727,15 +1755,8 @@ export class ProcessorRunner {
           writer,
           abortSignal,
           messageId: args.messageId,
-          ...(args.rotateResponseMessageId
-            ? {
-                rotateResponseMessageId: () => {
-                  const nextMessageId = args.rotateResponseMessageId!();
-                  messageIdAfter = nextMessageId;
-                  return nextMessageId;
-                },
-              }
-            : {}),
+          ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
+          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
         });
 
         // Stop recording and get mutations for this processor

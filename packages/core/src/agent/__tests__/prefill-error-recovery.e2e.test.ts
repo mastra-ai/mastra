@@ -17,6 +17,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrefillErrorHandler } from '../../processors/prefill-error-handler';
 import { Agent } from '../agent';
 
+process.env.ANTHROPIC_API_KEY = '';
+
 const mock = createGatewayMock();
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());

@@ -1,4 +1,3 @@
-import { METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
 import type {
   BatchCreateMetricsArgs,
   ListMetricsArgs,
@@ -21,10 +20,18 @@ import type {
   AggregationInterval,
   MetricDistinctColumn,
 } from '@mastra/core/storage';
+import { METRIC_DISTINCT_COLUMNS, listMetricsArgsSchema } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildJsonPath, buildOrderByClause, buildPaginationClause, buildWhereClause } from './filters';
 import { parseJson, parseJsonArray, toDate, v, jsonV } from './helpers';
+import {
+  assertDeltaPollingEnabled,
+  deltaPollingFeatureEnabled,
+  encodeDeltaCursor,
+  extendWhereClause,
+  validateCursorId,
+} from './polling';
 
 // ============================================================================
 // Helpers
@@ -97,6 +104,7 @@ function buildMetricNameFilter(name: string | string[]): { clause: string; param
 const METRIC_COLUMNS = [
   'metricId',
   'timestamp',
+  'cursorId',
   'name',
   'value',
   'traceId',
@@ -280,6 +288,7 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
     return `(${[
       v(m.metricId),
       v(m.timestamp),
+      "nextval('metric_events_cursor_id_seq')",
       v(m.name),
       v(m.value),
       v(m.traceId ?? null),
@@ -326,14 +335,50 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
 
 /** Query metric events with filtering, ordering, and pagination. */
 export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): Promise<ListMetricsResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
+  const { mode, filters, pagination, orderBy, after, limit } = listMetricsArgsSchema.parse(args);
+  const filterRecord = filters as Record<string, unknown> | undefined;
+  const page = Number(pagination.page);
+  const perPage = Number(pagination.perPage);
 
-  const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>);
+  const { clause: filterClause, params: filterParams } = buildWhereClause(filterRecord);
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const streamHeadCursor = await getStreamHeadCursor(db);
+    if (after === undefined) {
+      return {
+        metrics: [],
+        delta: { limit, hasMore: false },
+        deltaCursor: streamHeadCursor,
+      };
+    }
+
+    const afterCursorId = validateCursorId(after);
+    const deltaWhereClause = extendWhereClause(filterClause, ['cursorId IS NOT NULL', `cursorId > CAST(? AS BIGINT)`]);
+    const rows = await db.query<Record<string, unknown>>(
+      `SELECT * FROM metric_events ${deltaWhereClause} ORDER BY cursorId ASC LIMIT ?`,
+      [...filterParams, afterCursorId, limit + 1],
+    );
+
+    const visibleRows = rows.slice(0, limit).map(row => ({
+      cursorId: row.cursorId,
+      metric: rowToMetricRecord(row),
+    }));
+
+    return {
+      metrics: visibleRows.map(row => row.metric) as ListMetricsResponse['metrics'],
+      delta: { limit, hasMore: rows.length > limit },
+      deltaCursor:
+        visibleRows.length > 0 ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId) : streamHeadCursor,
+    };
+  }
+
   const orderByClause = buildOrderByClause(orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+  const currentDeltaCursor = deltaPollingFeatureEnabled()
+    ? await getDeltaCursor(db, filterClause, filterParams)
+    : undefined;
 
   const countResult = await db.query<{ total: number }>(
     `SELECT COUNT(*) AS total FROM metric_events ${filterClause}`,
@@ -349,7 +394,28 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     metrics: rows.map(row => rowToMetricRecord(row)) as ListMetricsResponse['metrics'],
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
+}
+
+async function getDeltaCursor(db: DuckDBConnection, filterClause: string, filterParams: unknown[]): Promise<string> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT max(cursorId) AS cursorId FROM metric_events ${filterClause}`,
+    filterParams,
+  );
+
+  const cursorId = rows[0]?.cursorId;
+  if (cursorId !== null && cursorId !== undefined) {
+    return encodeDeltaCursor(cursorId);
+  }
+
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM metric_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
+}
+
+async function getStreamHeadCursor(db: DuckDBConnection): Promise<string> {
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM metric_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
 }
 
 // ============================================================================

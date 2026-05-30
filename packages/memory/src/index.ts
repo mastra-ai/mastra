@@ -162,11 +162,23 @@ export function extractWorkingMemoryContent(text: string): string | null {
 }
 
 function isSystemReminderMessage(message: MastraDBMessage): boolean {
-  if (message.role !== 'user' || !isRecord(message.content)) {
+  if (!isRecord(message.content)) {
     return false;
   }
 
   const metadata = message.content.metadata;
+  if (message.role === 'signal') {
+    return (
+      isRecord(metadata) &&
+      isRecord(metadata.signal) &&
+      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
+    );
+  }
+
+  if (message.role !== 'user') {
+    return false;
+  }
+
   if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
     return true;
   }
@@ -649,7 +661,11 @@ export class Memory extends MastraMemory {
 
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
+    const thread = await memoryStore.getThreadById({ threadId });
     await memoryStore.deleteThread({ threadId });
+    if (thread?.resourceId && memoryStore.supportsObservationalMemory) {
+      await memoryStore.clearObservationalMemory(threadId, thread.resourceId);
+    }
     if (this.vector) {
       void this.deleteThreadVectors(threadId);
     }
@@ -1608,11 +1624,13 @@ ${workingMemory}`;
             maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
             providerOptions: omConfig.observation.providerOptions,
             bufferTokens: omConfig.observation.bufferTokens,
+            bufferOnIdle: omConfig.observation.bufferOnIdle,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
             instruction: omConfig.observation.instruction,
             threadTitle: omConfig.observation.threadTitle,
+            observeAttachments: omConfig.observation.observeAttachments,
           }
         : undefined,
       reflection: omConfig.reflection

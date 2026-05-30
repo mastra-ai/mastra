@@ -1,3 +1,4 @@
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
@@ -19,6 +20,17 @@ function makeMockModel(responseText: string) {
       text: responseText,
       content: [{ type: 'text' as const, text: responseText }],
       warnings: [],
+    }),
+  });
+}
+
+function makeMockModelV1(responseText: string) {
+  return new MockLanguageModelV1({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 5, completionTokens: 10 },
+      text: responseText,
     }),
   });
 }
@@ -57,6 +69,37 @@ function makeSupervisorModel(subAgentKey: string, prompt: string) {
   });
 }
 
+function makeSupervisorModelV1(subAgentKey: string, prompt: string) {
+  let callCount = 0;
+  return new MockLanguageModelV1({
+    doGenerate: async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: undefined,
+          toolCalls: [
+            {
+              toolCallType: 'function' as const,
+              toolCallId: 'call-1',
+              toolName: `agent-${subAgentKey}`,
+              args: JSON.stringify({ prompt }),
+            },
+          ],
+        };
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'Done',
+      };
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -90,6 +133,20 @@ describe('mergeVersionOverrides', () => {
   it('returns base when overrides is undefined', () => {
     const base: VersionOverrides = { agents: { a: { versionId: '1' } } };
     expect(mergeVersionOverrides(base, undefined)).toEqual(base);
+  });
+
+  it('preserves defaultStatus from base when overrides has none', () => {
+    const base: VersionOverrides = { agents: { a: { versionId: '1' } }, defaultStatus: 'draft' };
+    const overrides: VersionOverrides = { agents: { b: { status: 'published' } } };
+    const result = mergeVersionOverrides(base, overrides);
+    expect(result?.defaultStatus).toBe('draft');
+  });
+
+  it('overrides defaultStatus from overrides', () => {
+    const base: VersionOverrides = { defaultStatus: 'draft' };
+    const overrides: VersionOverrides = { defaultStatus: 'published' };
+    const result = mergeVersionOverrides(base, overrides);
+    expect(result?.defaultStatus).toBe('published');
   });
 });
 
@@ -275,6 +332,35 @@ describe('Sub-agent version resolution', () => {
     expect(originalGenerateSpy).not.toHaveBeenCalled();
   });
 
+  it('uses generateLegacy for v1 sub-agents when parent is called with generateLegacy', async () => {
+    const sub = new Agent({
+      id: 'sub-agent',
+      name: 'sub',
+      instructions: 'sub',
+      model: makeMockModelV1('legacy sub response'),
+    });
+
+    const generateLegacySpy = vi.spyOn(sub, 'generateLegacy');
+    const streamLegacySpy = vi.spyOn(sub, 'streamLegacy');
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You delegate.',
+      model: makeSupervisorModelV1('sub', 'hello'),
+      agents: { sub },
+    });
+
+    new Mastra({
+      agents: { supervisor, sub },
+    });
+
+    await supervisor.generateLegacy('Do something', { maxSteps: 3 });
+
+    expect(generateLegacySpy).toHaveBeenCalled();
+    expect(streamLegacySpy).not.toHaveBeenCalled();
+  });
+
   it('propagates versions through requestContext to sub-agents', async () => {
     const versions: VersionOverrides = { agents: { 'sub-agent': { status: 'draft' } } };
 
@@ -303,6 +389,100 @@ describe('Sub-agent version resolution', () => {
     await supervisor.generate('Do something', { maxSteps: 3 });
 
     expect(resolveSpy).toHaveBeenCalledWith(sub, { status: 'draft' });
+  });
+
+  it('uses defaultStatus as fallback when no explicit override exists for sub-agent', async () => {
+    const versions: VersionOverrides = { defaultStatus: 'draft' };
+
+    const sub = new Agent({
+      id: 'sub-agent',
+      name: 'sub',
+      instructions: 'sub',
+      model: makeMockModel('sub response'),
+    });
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You delegate.',
+      model: makeSupervisorModel('sub', 'hello'),
+      agents: { sub },
+    });
+
+    const mastra = new Mastra({
+      agents: { supervisor, sub },
+      versions,
+    });
+
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
+
+    await supervisor.generate('Do something', { maxSteps: 3 });
+
+    expect(resolveSpy).toHaveBeenCalledWith(sub, { status: 'draft' });
+  });
+
+  it('explicit per-agent override takes precedence over defaultStatus', async () => {
+    const versions: VersionOverrides = {
+      agents: { 'sub-agent': { versionId: 'v42' } },
+      defaultStatus: 'published',
+    };
+
+    const sub = new Agent({
+      id: 'sub-agent',
+      name: 'sub',
+      instructions: 'sub',
+      model: makeMockModel('sub response'),
+    });
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You delegate.',
+      model: makeSupervisorModel('sub', 'hello'),
+      agents: { sub },
+    });
+
+    const mastra = new Mastra({
+      agents: { supervisor, sub },
+      versions,
+    });
+
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
+
+    await supervisor.generate('Do something', { maxSteps: 3 });
+
+    // Explicit per-agent override wins over defaultStatus
+    expect(resolveSpy).toHaveBeenCalledWith(sub, { versionId: 'v42' });
+  });
+
+  it('defaultStatus published resolves sub-agents to published version', async () => {
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_VERSIONS_KEY, { defaultStatus: 'published' } as VersionOverrides);
+
+    const sub = new Agent({
+      id: 'sub-agent',
+      name: 'sub',
+      instructions: 'sub',
+      model: makeMockModel('sub response'),
+    });
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You delegate.',
+      model: makeSupervisorModel('sub', 'hello'),
+      agents: { sub },
+    });
+
+    const mastra = new Mastra({
+      agents: { supervisor, sub },
+    });
+
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
+
+    await supervisor.generate('Do something', { maxSteps: 3, requestContext: ctx });
+
+    expect(resolveSpy).toHaveBeenCalledWith(sub, { status: 'published' });
   });
 
   it('requestContext with existing versions is not overwritten by Mastra defaults', async () => {

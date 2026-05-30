@@ -419,6 +419,97 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.observation.metadata.operationName']).toBeUndefined();
     });
 
+    it('scopes trace name and metadata to the agent on root AGENT_RUN spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          entityName: 'Weather Agent',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('Weather Agent');
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+      expect(attrs['langfuse.trace.metadata.agentName']).toBe('Weather Agent');
+    });
+
+    it('falls back to entityId for trace name when entityName is missing', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          entityName: undefined,
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('weather-agent');
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+      expect(attrs['langfuse.trace.metadata.agentName']).toBeUndefined();
+    });
+
+    it('preserves user-provided traceName over the agent default', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          entityName: 'Weather Agent',
+          metadata: { traceName: 'custom-trace-name' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('custom-trace-name');
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+      expect(attrs['langfuse.trace.metadata.agentName']).toBe('Weather Agent');
+    });
+
+    it('does not set trace identity on non-root agent spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: false,
+          entityId: 'weather-agent',
+          entityName: 'Weather Agent',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.agentId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.agentName']).toBeUndefined();
+    });
+
+    it('scopes trace name and metadata to the workflow on root WORKFLOW_RUN spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.WORKFLOW_RUN,
+          isRootSpan: true,
+          entityId: 'order-workflow',
+          entityName: 'Order Workflow',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('Order Workflow');
+      expect(attrs['langfuse.trace.metadata.workflowId']).toBe('order-workflow');
+      expect(attrs['langfuse.trace.metadata.workflowName']).toBe('Order Workflow');
+    });
+
     it('sets langfuse.environment and langfuse.release on spans', async () => {
       exporter = new LangfuseExporter({
         publicKey: 'pk-test',

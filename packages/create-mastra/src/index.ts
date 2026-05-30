@@ -1,7 +1,7 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 
-import { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
+import { PosthogAnalytics, setAnalytics } from 'mastra/dist/analytics/index.js';
 import { create } from 'mastra/dist/commands/create/create.js';
 
 import { getPackageVersion, getCreateVersionTag } from './utils.js';
@@ -14,6 +14,7 @@ const analytics = new PosthogAnalytics({
   host: 'https://us.posthog.com',
   version: version!,
 });
+setAnalytics(analytics);
 
 const program = new Command();
 
@@ -52,40 +53,65 @@ program
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
-  .action(async (projectNameArg, args) => {
-    // TODO(major): Remove args.projectName in favor of projectNameArg
-    const projectName = projectNameArg || args.projectName;
-    const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
-
-    if (args.default) {
-      await create({
-        components: ['agents', 'tools', 'workflows', 'scorers'],
-        llmProvider: 'openai',
-        addExample: true,
-        createVersionTag,
-        timeout,
-        projectName,
-        mcpServer: args.mcp,
-        directory: 'src/',
+  .option('--observe', 'Enable Mastra Observe (writes MASTRA_CLOUD_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observe', 'Do not enable Mastra Observe')
+  .action(async (projectNameArg, args) =>
+    analytics.trackCommandExecution({
+      command: 'create',
+      args: {
+        projectName: projectNameArg || args.projectName,
+        components: args.components,
+        llmProvider: args.llm,
+        addExample: args.example,
+        default: args.default,
         template: args.template,
-        analytics,
-      });
-      return;
-    }
+        observability: args.observe,
+      },
+      execution: async () => {
+        // TODO(major): Remove args.projectName in favor of projectNameArg
+        const projectName = projectNameArg || args.projectName;
+        const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
 
-    await create({
-      components: args.components ? args.components.split(',') : [],
-      llmProvider: args.llm,
-      addExample: args.example,
-      llmApiKey: args.llmApiKey,
-      createVersionTag,
-      timeout,
-      projectName,
-      directory: args.dir,
-      mcpServer: args.mcp,
-      template: args.template,
-      analytics,
-    });
-  });
+        if (args.default) {
+          await create({
+            components: ['agents', 'tools', 'workflows', 'scorers'],
+            llmProvider: 'openai',
+            addExample: true,
+            createVersionTag,
+            timeout,
+            projectName,
+            mcpServer: args.mcp,
+            directory: 'src/',
+            template: args.template,
+            analytics,
+            observability: args.observe,
+          });
+          return;
+        }
 
-program.parse(process.argv);
+        await create({
+          components: args.components ? args.components.split(',') : [],
+          llmProvider: args.llm,
+          addExample: args.example,
+          llmApiKey: args.llmApiKey,
+          createVersionTag,
+          timeout,
+          projectName,
+          directory: args.dir,
+          mcpServer: args.mcp,
+          template: args.template,
+          analytics,
+          observability: args.observe,
+        });
+      },
+    }),
+  );
+
+try {
+  await program.parseAsync(process.argv);
+} catch (err) {
+  console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+  process.exitCode = 1;
+} finally {
+  await analytics.shutdown(1000);
+}

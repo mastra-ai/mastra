@@ -89,7 +89,7 @@ export function MultiCombobox({
                 {(option: ComboboxOption) => {
                   const isSelected = value.includes(option.value);
                   return (
-                    <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.item}>
+                    <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.itemMulti}>
                       <span
                         className={cn(
                           comboboxStyles.checkbox,

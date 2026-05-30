@@ -1,13 +1,13 @@
 import { coreFeatures } from '@mastra/core/features';
 import { MainContentLayout } from '@mastra/playground-ui';
 import { useParams, useLocation } from 'react-router';
-import { AgentHeader } from './agent-header';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-controls';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
@@ -19,6 +19,8 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { hasObservability } = useHasObservability();
+  const { data: channelPlatforms } = useChannelPlatforms();
+  const hasChannels = Boolean(channelPlatforms?.length);
 
   const isExperimentalFeatures = coreFeatures.has('datasets');
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
@@ -38,20 +40,22 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         ? 'review'
         : location.pathname.includes('/traces')
           ? 'traces'
-          : 'chat';
+          : location.pathname.includes('/channels')
+            ? 'channels'
+            : 'chat';
 
   const showTopBarControls =
     (activeTab === 'versions' || activeTab === 'evaluate' || activeTab === 'review') &&
     (showPlayground || showObservability);
 
   const content = (
-    <MainContentLayout className="grid-rows-[auto_auto_1fr]">
-      <AgentHeader agentId={agentId!} />
+    <MainContentLayout>
       <AgentPageTabs
         agentId={agentId!}
         activeTab={activeTab}
         showPlayground={showPlayground}
         showObservability={showObservability}
+        showChannels={hasChannels}
         rightSlot={showTopBarControls ? <AgentTopBarControls requestContextSchema={requestContextSchema} /> : undefined}
       />
       {children}
