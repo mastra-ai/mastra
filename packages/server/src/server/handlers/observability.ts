@@ -21,6 +21,7 @@ import {
 // (see ./observability-storage-schemas.ts for full rationale).
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
+import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 import { paginationArgsSchema } from './observability-list-query-schemas';
@@ -121,7 +122,7 @@ const listTracesQueryParamSchema = wrapSchemaForQueryParams(
 );
 
 /** Route: GET /observability/traces - paginated trace listing with filtering and sorting. */
-export const LIST_TRACES_ROUTE = createRoute({
+export const LIST_TRACES_ROUTE: ServerRoute = createRoute({
   method: 'GET',
   path: '/observability/traces',
   responseType: 'json',
@@ -268,7 +269,7 @@ export const GET_BRANCH_ROUTE = createRoute({
   },
 });
 /** Route: GET /observability/traces/:traceId - retrieve a single trace with all spans. */
-export const GET_TRACE_ROUTE = createRoute({
+export const GET_TRACE_ROUTE: ServerRoute = createRoute({
   method: 'GET',
   path: '/observability/traces/:traceId',
   responseType: 'json',
@@ -295,7 +296,7 @@ export const GET_TRACE_ROUTE = createRoute({
 });
 
 /** Route: GET /observability/traces/:traceId/light - lightweight trace for timeline rendering. */
-export const GET_TRACE_LIGHT_ROUTE = createRoute({
+export const GET_TRACE_LIGHT_ROUTE: ServerRoute = createRoute({
   method: 'GET',
   path: '/observability/traces/:traceId/light',
   responseType: 'json',
@@ -323,7 +324,7 @@ export const GET_TRACE_LIGHT_ROUTE = createRoute({
 });
 
 /** Route: GET /observability/traces/:traceId/spans/:spanId - get a single span with full details. */
-export const GET_SPAN_ROUTE = createRoute({
+export const GET_SPAN_ROUTE: ServerRoute = createRoute({
   method: 'GET',
   path: '/observability/traces/:traceId/spans/:spanId',
   responseType: 'json',

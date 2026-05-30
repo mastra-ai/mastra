@@ -1496,6 +1496,80 @@ describe('mastraStorage bulk mutations', () => {
     expect(clearCtx.maxConcurrentDeletes).toBe(3);
   });
 
+  it('queryTable paginates vector table reads when a page size is provided', async () => {
+    const docs = [{ _id: asConvexId('vector-doc-0'), id: 'vector-0', indexName: 'embeddings' }];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const paginate = vi.fn(async () => ({
+      page: docs,
+      isDone: false,
+      continueCursor: 'next-cursor',
+    }));
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { paginate };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_vector_embeddings',
+      pageSize: 256,
+      cursor: 'current-cursor',
+    });
+
+    expect(result).toEqual({ ok: true, result: docs, hasMore: true, continuationCursor: 'next-cursor' });
+    expect(query).toHaveBeenCalledWith('mastra_vectors');
+    expect(withIndex).toHaveBeenCalledWith('by_index', expect.any(Function));
+    expect(builder.eq).toHaveBeenCalledWith('indexName', 'embeddings');
+    expect(paginate).toHaveBeenCalledWith({ cursor: 'current-cursor', numItems: 256 });
+  });
+
+  it('queryTable rejects invalid vector pagination page sizes', async () => {
+    const query = vi.fn();
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_vector_embeddings',
+      pageSize: 0,
+    });
+
+    expect(result).toEqual({ ok: false, error: 'queryTable pageSize must be a positive integer' });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('queryTable rejects vector pagination requests that also provide a limit', async () => {
+    const query = vi.fn();
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_vector_embeddings',
+      pageSize: 256,
+      limit: 10,
+    });
+
+    expect(result).toEqual({ ok: false, error: 'queryTable limit cannot be combined with pageSize' });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('queryTable rejects vector pagination cursors without a page size', async () => {
+    const query = vi.fn();
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(ctx, {
+      op: 'queryTable',
+      tableName: 'mastra_vector_embeddings',
+      cursor: 'current-cursor',
+    });
+
+    expect(result).toEqual({ ok: false, error: 'queryTable cursor requires pageSize' });
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it('deleteMany applies the same concurrent lookup behavior to generic fallback tables', async () => {
     const deleteCtx = createIndexedDeleteCtx(
       new Map([

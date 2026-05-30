@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { MastraVoice } from '@internal/voice';
 import type { ToolsInput, VoiceEventType, VoiceConfig } from '@internal/voice';
-import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
+import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import type { WebSocket as WSType } from 'ws';
 import { WebSocket } from 'ws';
 import { AudioStreamManager, ConnectionManager, ContextManager, AuthManager, EventManager } from './managers';
@@ -2035,14 +2035,19 @@ export class GeminiLiveVoice extends MastraVoice<
   }
 
   /**
-   * Convert Zod schema to JSON Schema for tool parameters
+   * Convert a schema to Gemini-compatible JSON Schema using GoogleSchemaCompatLayer.
+   * This ensures the output conforms to the OpenAPI 3.0 Schema Object subset
+   * that Gemini's wire validator expects.
    * @private
    */
   private convertZodSchemaToJsonSchema(schema: unknown): unknown {
     try {
-      return this.sanitizeToolParameters(
-        standardSchemaToJSONSchema(toStandardSchema(schema as never), { io: 'input' }),
-      );
+      const compat = new GoogleSchemaCompatLayer({
+        provider: 'google',
+        modelId: 'gemini-live',
+        supportsStructuredOutputs: false,
+      });
+      return compat.processToJSONSchema(schema as any);
     } catch (error) {
       this.log('Failed to convert Zod schema to JSON schema', { error, schema });
       return {
@@ -2051,28 +2056,6 @@ export class GeminiLiveVoice extends MastraVoice<
         description: 'Schema conversion failed',
       };
     }
-  }
-
-  private sanitizeToolParameters(schema: unknown): unknown {
-    if (Array.isArray(schema)) {
-      return schema.map(item => this.sanitizeToolParameters(item));
-    }
-
-    if (!schema || typeof schema !== 'object') {
-      return schema;
-    }
-
-    const sanitized: Record<string, unknown> = {};
-
-    for (const [key, value] of Object.entries(schema)) {
-      if (key === '$schema' || key === 'additionalProperties') {
-        continue;
-      }
-
-      sanitized[key] = this.sanitizeToolParameters(value);
-    }
-
-    return sanitized;
   }
 
   /**

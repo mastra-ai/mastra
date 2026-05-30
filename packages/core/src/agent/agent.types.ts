@@ -10,7 +10,7 @@ import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { ToolPayloadTransformPolicy } from '../tools';
-import type { OutputWriter } from '../workflows/types';
+import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
   AgentMemoryOption,
@@ -666,7 +666,7 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   /** Internal: Whether the execution is a resume */
   resumeContext?: {
     resumeData: any;
-    snapshot: any;
+    snapshot: WorkflowRunState;
   };
   toolCallId?: string;
 } & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });

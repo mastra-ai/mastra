@@ -1,4 +1,4 @@
-import { Spinner } from '@mastra/playground-ui';
+import { Button, Spinner } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -111,6 +111,7 @@ const EditPageBody = () => {
 const EditPageLayout = () => {
   const { step } = useWizard();
   const features = useBuilderAgentFeatures();
+  const isRunning = useStreamRunning();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const { dirtyFields } = useFormState({ control });
   const name = useWatch({ control, name: 'name' }) ?? '';
@@ -143,14 +144,42 @@ const EditPageLayout = () => {
   }, [shouldBeCentered, variant]);
 
   const isCentered = variant === 'centered';
+  const showMobileInitialCtas = step === 'initial' && hasMandatoryFields && !isRunning;
 
   return (
     <AgentBuilderEditLayout
       topBar={<EditTopBarSlot />}
       chat={<ConversationPanelChat />}
+      chatFooter={showMobileInitialCtas ? <MobileInitialCtas /> : undefined}
       profile={isCentered ? null : <ProfileSlot />}
       variant={variant}
+      hideMobileChat={step === 'end'}
     />
+  );
+};
+
+const MobileInitialCtas = () => {
+  const { next } = useWizard();
+  const navigate = useNavigate();
+  const { agentId } = useEditPage();
+
+  return (
+    <div className="flex flex-col gap-2 lg:hidden" data-testid="agent-builder-mobile-initial-ctas">
+      <Button
+        variant="primary"
+        onClick={() => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })}
+        data-testid="agent-builder-mobile-initial-cta-chat"
+      >
+        Chat with my agent
+      </Button>
+      <Button
+        variant="outline"
+        onClick={() => startViewTransition(() => next())}
+        data-testid="agent-builder-mobile-initial-cta-config"
+      >
+        See configuration
+      </Button>
+    </div>
   );
 };
 
@@ -184,6 +213,7 @@ const MobileMenuSlot = () => {
       agentId={agentId}
       showSetVisibility={!!capabilities?.enabled}
       showDelete
+      showViewAgent
       agentName={name}
       disabled={isRunning}
     />
@@ -198,15 +228,17 @@ const ProfileSlot = () => {
   const name = useWatch({ control, name: 'name' }) ?? '';
   const { step } = useWizard();
 
+  // Both buttons are already accessible from the mobile 3-dots menu, so we
+  // hide them in the profile panel on mobile to avoid duplication.
   const heroActions = (
-    <>
+    <div className="hidden lg:flex items-center gap-2" data-testid="agent-builder-hero-actions-desktop">
       {capabilities?.enabled && (
         <span style={{ viewTransitionName: 'agent-visibility-select' }}>
           <VisibilitySelect agentId={agentId} />
         </span>
       )}
       {isOwner && <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />}
-    </>
+    </div>
   );
 
   // When the wizard is on the 'initial' step, `EditPageLayout` guarantees that

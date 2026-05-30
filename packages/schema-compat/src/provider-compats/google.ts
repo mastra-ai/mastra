@@ -102,6 +102,84 @@ function fixAISDKNullableUnionTypes(schema: Record<string, any>): Record<string,
   return result;
 }
 
+/**
+ * Inline `$ref` pointers one level and drop `definitions`/`$defs`.
+ * Gemini can't follow JSON Schema `$ref`s — they cause silent mis-fills.
+ * Self-references (recursive schemas) are collapsed to `{ type: 'object' }`
+ * to avoid infinite expansion.
+ */
+function inlineRefsAndDropDefinitions(schema: Record<string, unknown>): void {
+  // Check for any $ref in the schema tree (may be nested, e.g. { properties: { x: { $ref: "#" } } })
+  const json = JSON.stringify(schema);
+  if (!json.includes('"$ref"')) return;
+
+  const defs =
+    (schema['definitions'] as Record<string, Record<string, unknown>> | undefined) ??
+    (schema['$defs'] as Record<string, Record<string, unknown>> | undefined);
+
+  // Snapshot the original schema before any mutations so $ref: "#" resolves correctly
+  const snapshot = JSON.parse(json) as Record<string, unknown>;
+  const snapshotDefs =
+    (snapshot['definitions'] as Record<string, Record<string, unknown>> | undefined) ??
+    (snapshot['$defs'] as Record<string, Record<string, unknown>> | undefined);
+  resolveRefs(schema, snapshot, snapshotDefs ?? defs ?? {}, new Set());
+
+  delete schema['definitions'];
+  delete schema['$defs'];
+}
+
+function resolveRefs(
+  node: Record<string, unknown>,
+  rootSnapshot: Record<string, unknown>,
+  defs: Record<string, Record<string, unknown>>,
+  visiting: Set<string>,
+): void {
+  if (typeof node !== 'object' || node === null) return;
+
+  for (const [key, value] of Object.entries(node)) {
+    if (key === '$ref' && typeof value === 'string') {
+      const resolved = resolveRef(value, rootSnapshot, defs);
+      if (!resolved || visiting.has(value)) {
+        // Self-reference or unresolvable — collapse to plain object
+        delete node['$ref'];
+        node['type'] = 'object';
+      } else {
+        delete node['$ref'];
+        visiting.add(value);
+        // Deep-clone from the immutable snapshot, resolve nested refs, then merge
+        const clone = JSON.parse(JSON.stringify(resolved)) as Record<string, unknown>;
+        resolveRefs(clone, rootSnapshot, defs, visiting);
+        visiting.delete(value);
+        Object.assign(node, clone);
+      }
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === 'object' && item !== null) {
+          resolveRefs(item as Record<string, unknown>, rootSnapshot, defs, visiting);
+        }
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      resolveRefs(value as Record<string, unknown>, rootSnapshot, defs, visiting);
+    }
+  }
+}
+
+function resolveRef(
+  ref: string,
+  rootSnapshot: Record<string, unknown>,
+  defs: Record<string, Record<string, unknown>>,
+): Record<string, unknown> | undefined {
+  if (ref === '#') return rootSnapshot;
+
+  // Handle #/definitions/Foo or #/$defs/Foo
+  const match = ref.match(/^#\/(?:definitions|\$defs)\/(.+)$/);
+  if (match) {
+    return defs[match[1]!];
+  }
+
+  return undefined;
+}
+
 export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
     super(model);
@@ -159,7 +237,9 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   }
 
   public processToJSONSchema(schema: PublicSchema<any>, io?: 'input' | 'output'): JSONSchema7 {
-    return super.processToJSONSchema(schema, io);
+    const result = super.processToJSONSchema(schema, io);
+    inlineRefsAndDropDefinitions(result as Record<string, unknown>);
+    return result;
   }
 
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
@@ -220,6 +300,70 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
     // Handle union schemas in post-processing (after children are processed)
     if (isUnionSchema(schema)) {
       this.defaultUnionHandler(schema);
+    }
+
+    const s = schema as Record<string, unknown>;
+
+    // Strip keywords Gemini rejects (OpenAPI 3.0 Schema Object subset)
+    delete s['$schema'];
+    delete s['additionalProperties'];
+    delete s['propertyNames'];
+
+    // Rewrite type arrays: `type: ['string', 'null']` → `type: 'string', nullable: true`
+    if (Array.isArray(s['type'])) {
+      const types = s['type'] as string[];
+      const nonNull = types.filter(t => t !== 'null');
+      const hasNull = types.includes('null');
+      if (nonNull.length === 1) {
+        s['type'] = nonNull[0];
+        if (hasNull) s['nullable'] = true;
+      } else if (nonNull.length === 0 && hasNull) {
+        s['type'] = 'object';
+        s['nullable'] = true;
+      } else {
+        // Multiple non-null types — can't represent as single OpenAPI 3.0 type.
+        // Drop `type` entirely; don't emit a bare `nullable` (it's meaningless
+        // without an accompanying type and Gemini may reject it).
+        delete s['type'];
+        delete s['nullable'];
+      }
+    }
+
+    // Rewrite `oneOf` → `anyOf` (Gemini accepts anyOf but rejects oneOf)
+    if (Array.isArray(s['oneOf'])) {
+      s['anyOf'] = s['oneOf'];
+      delete s['oneOf'];
+    }
+
+    // Rewrite `const: value` → `enum: [value]`
+    if ('const' in s) {
+      s['enum'] = [s['const']];
+      delete s['const'];
+    }
+
+    // Fix tuple items: `items: [schema, ...]` (array form) → `items: { anyOf: [...] }` (single-schema)
+    if (Array.isArray(s['items'])) {
+      s['items'] = { anyOf: s['items'] };
+      // Drop tuple-specific keywords that aren't in OpenAPI 3.0
+      delete s['minItems'];
+      delete s['maxItems'];
+    }
+
+    // Collapse nullable anyOf: `{ anyOf: [{ type: T }, { type: 'null' }] }` → `{ type: T, nullable: true }`
+    if (Array.isArray(s['anyOf'])) {
+      const variants = s['anyOf'] as Record<string, unknown>[];
+      const nonNull = variants.filter(v => v && typeof v === 'object' && v['type'] !== 'null');
+      const hasNull = variants.some(v => v && typeof v === 'object' && v['type'] === 'null');
+
+      if (hasNull && nonNull.length === 1) {
+        const base = nonNull[0]!;
+        delete s['anyOf'];
+        Object.assign(s, base);
+        s['nullable'] = true;
+      } else if (hasNull && nonNull.length > 1) {
+        s['anyOf'] = nonNull;
+        s['nullable'] = true;
+      }
     }
   }
 
