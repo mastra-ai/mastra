@@ -20,13 +20,18 @@ const streamUntilIdleMock = vi.fn(async () => ({
 // producer that simulates the server pushing chunks over the open subscription.
 let nextSubscribeChunks: Array<any> = [];
 let keepSubscriptionOpen = false;
+let omitThreadSubscriptionUnsubscribe = false;
+const constructedClientOptions: any[] = [];
 const threadSubscriptionAbortMock = vi.fn(async () => true);
 const threadSubscriptionUnsubscribeMock = vi.fn();
 const subscribeToThreadMock = vi.fn(async (_params: any) => {
   const chunks = nextSubscribeChunks;
-  return {
+  const subscription: {
+    abort: typeof threadSubscriptionAbortMock;
+    unsubscribe?: typeof threadSubscriptionUnsubscribeMock;
+    processDataStream: ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => Promise<void>;
+  } = {
     abort: threadSubscriptionAbortMock,
-    unsubscribe: threadSubscriptionUnsubscribeMock,
     processDataStream: async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
       for (const chunk of chunks) {
         await onChunk(chunk);
@@ -36,6 +41,10 @@ const subscribeToThreadMock = vi.fn(async (_params: any) => {
       }
     },
   };
+  if (!omitThreadSubscriptionUnsubscribe) {
+    subscription.unsubscribe = threadSubscriptionUnsubscribeMock;
+  }
+  return subscription;
 });
 const generateMock = vi.fn(async () => ({
   response: { uiMessages: [] },
@@ -47,6 +56,7 @@ vi.mock('@mastra/client-js', () => ({
     options: any;
     constructor(options: any) {
       this.options = options;
+      constructedClientOptions.push(options);
     }
     getAgent() {
       return {
@@ -84,6 +94,8 @@ describe('useChat forwards clientTools', () => {
     generateMock.mockClear();
     nextSubscribeChunks = [];
     keepSubscriptionOpen = false;
+    omitThreadSubscriptionUnsubscribe = false;
+    constructedClientOptions.length = 0;
   });
 
   afterEach(() => {
@@ -134,6 +146,34 @@ describe('useChat forwards clientTools', () => {
     });
 
     await waitFor(() => expect(threadSubscriptionUnsubscribeMock).toHaveBeenCalledTimes(1));
+    expect(threadSubscriptionAbortMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the subscription AbortController when unsubscribe is unavailable', async () => {
+    keepSubscriptionOpen = true;
+    omitThreadSubscriptionUnsubscribe = true;
+    const { rerender } = renderHook(
+      ({ enableThreadSignals }: { enableThreadSignals: boolean }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals,
+        }),
+      { wrapper, initialProps: { enableThreadSignals: true } },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+    const subscriptionSignal = constructedClientOptions.find(options => options.abortSignal)
+      ?.abortSignal as AbortSignal;
+    expect(subscriptionSignal.aborted).toBe(false);
+
+    act(() => {
+      rerender({ enableThreadSignals: false });
+    });
+
+    await waitFor(() => expect(subscriptionSignal.aborted).toBe(true));
+    expect(threadSubscriptionUnsubscribeMock).not.toHaveBeenCalled();
     expect(threadSubscriptionAbortMock).not.toHaveBeenCalled();
   });
 

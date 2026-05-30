@@ -219,8 +219,9 @@ export const useChat = ({
 
   const closeThreadSubscription = useCallback(() => {
     const subscription = _threadSubscriptionRef.current;
-    subscription?.unsubscribe?.();
-    if (!subscription) {
+    if (subscription?.unsubscribe) {
+      subscription.unsubscribe();
+    } else {
       _threadSubscriptionAbortRef.current?.abort();
     }
     _threadSubscriptionRef.current = null;
@@ -277,7 +278,11 @@ export const useChat = ({
         .then(response => {
           const subscription = response as typeof response & { unsubscribe?: () => void };
           if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
-            subscription.unsubscribe?.();
+            if (subscription.unsubscribe) {
+              subscription.unsubscribe();
+            } else {
+              subscriptionAbort.abort();
+            }
             return;
           }
 
