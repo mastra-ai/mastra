@@ -9,11 +9,13 @@
  * and loaded by different engine instances.
  */
 export const PENDING_MARKER_KEY = '__mastra_pending__' as const;
+export const FOREACH_STEP_RESULT_KEY = '__mastra_foreach__' as const;
 
 /**
  * Type for the pending marker object used in forEach iteration tracking.
  */
 export type PendingMarker = { [PENDING_MARKER_KEY]: true };
+export type ForeachStepResultMarker = { [FOREACH_STEP_RESULT_KEY]: true };
 
 /**
  * Creates a new pending marker object.
@@ -21,6 +23,10 @@ export type PendingMarker = { [PENDING_MARKER_KEY]: true };
  */
 export function createPendingMarker(): PendingMarker {
   return { [PENDING_MARKER_KEY]: true };
+}
+
+export function markForeachStepResult<T extends Record<string, any>>(result: T): T & ForeachStepResultMarker {
+  return { ...result, [FOREACH_STEP_RESULT_KEY]: true };
 }
 
 /**

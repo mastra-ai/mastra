@@ -116,6 +116,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       runId: 'run-1',
       stepId: 'foreach',
       result: JSON.stringify({
+        __mastra_foreach__: true,
         status: 'success',
         output: [null, { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } }, null],
         payload: ['a', 'b', 'c'],
@@ -196,6 +197,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       runId: 'run-1',
       stepId: 'foreach',
       result: JSON.stringify({
+        __mastra_foreach__: true,
         status: 'running',
         startedAt: 3,
         output: [
@@ -262,6 +264,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       runId: 'run-1',
       stepId: 'foreach',
       result: JSON.stringify({
+        __mastra_foreach__: true,
         status: 'running',
         startedAt: 3,
         output: [{ __mastra_pending__: true }, { status: 'success', output: 'stale-new-value' }],
@@ -301,6 +304,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       runId: 'run-1',
       stepId: 'foreach',
       result: JSON.stringify({
+        __mastra_foreach__: true,
         status: 'success',
         output: [{ __mastra_pending__: true, value: 'user-data' }],
       }),
@@ -340,6 +344,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       runId: 'run-1',
       stepId: 'foreach',
       result: JSON.stringify({
+        __mastra_foreach__: true,
         status: 'success',
         output,
         payload: ['a', 'b', 'c'],
@@ -439,6 +444,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       runId: 'run-1',
       stepId: 'foreach',
       result: JSON.stringify({
+        __mastra_foreach__: true,
         status: 'success',
         output: [{ status: 'suspended', reason: 'new-user-domain-status' }],
         payload: ['a', 'b'],

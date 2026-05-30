@@ -4,9 +4,10 @@ import type { UpdateWorkflowStateOptions } from './types';
 
 export { serializeWorkflowSnapshotValue };
 
-// NOTE: This merge logic is duplicated in stores/convex/src/server/workflow-snapshot.ts
-// for the Convex server runtime. Keep both copies in sync.
+// NOTE: This merge logic is mirrored by Convex, MongoDB, and Upstash storage.
+// Keep all copies in sync when changing foreach marker or merge semantics.
 const PENDING_MARKER_KEY = '__mastra_pending__';
+const FOREACH_STEP_RESULT_KEY = '__mastra_foreach__';
 
 function isPendingMarker(val: unknown): boolean {
   return (
@@ -51,8 +52,17 @@ function hasPartialForeachValue(output: unknown[]): boolean {
   return false;
 }
 
-function hasForeachPayload(result: unknown): boolean {
-  return Array.isArray((result as { payload?: unknown })?.payload);
+function hasForeachStepResultMarker(result: unknown): boolean {
+  return (result as Record<string, unknown> | null)?.[FOREACH_STEP_RESULT_KEY] === true;
+}
+
+function stripForeachStepResultMarker<T>(result: T): T {
+  if (!hasForeachStepResultMarker(result)) {
+    return result;
+  }
+
+  const { [FOREACH_STEP_RESULT_KEY]: _marker, ...rest } = result as Record<string, unknown>;
+  return rest as T;
 }
 
 export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
@@ -87,6 +97,8 @@ export function mergeWorkflowStepResult({
   }
 
   const serializedResult = serializeWorkflowSnapshotValue(result);
+  const hasForeachMarker = hasForeachStepResultMarker(serializedResult);
+  const resultToStore = stripForeachStepResultMarker(serializedResult);
   const existingResult = snapshot.context[stepId];
   const existingOutput =
     existingResult && 'output' in existingResult && Array.isArray(existingResult.output)
@@ -106,9 +118,8 @@ export function mergeWorkflowStepResult({
     serializedResult &&
     typeof serializedResult === 'object' &&
     newOutput &&
-    (hasPendingMarker ||
-      ((hasForeachPayload(existingResult) || hasForeachPayload(serializedResult)) &&
-        (hasPartialForeachValue(existingOutput) || hasPartialForeachValue(newOutput))))
+    hasForeachMarker &&
+    (hasPendingMarker || hasPartialForeachValue(existingOutput) || hasPartialForeachValue(newOutput))
   ) {
     const mergedOutput = [...existingOutput];
     for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
@@ -129,11 +140,11 @@ export function mergeWorkflowStepResult({
       ...existingResult,
       // Pending-marker writes are reset commands built from an earlier snapshot,
       // so keep existing step-level fields and ignore sibling values they carry.
-      ...(hasPendingMarker ? {} : (serializedResult as any)),
+      ...(hasPendingMarker ? {} : (resultToStore as any)),
       output: mergedOutput,
     };
   } else {
-    snapshot.context[stepId] = serializedResult;
+    snapshot.context[stepId] = resultToStore;
   }
 
   snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
@@ -147,5 +158,8 @@ export function mergeWorkflowState({
   snapshot: WorkflowRunState;
   opts: UpdateWorkflowStateOptions;
 }): WorkflowRunState {
-  return serializeWorkflowSnapshotValue({ ...snapshot, ...opts }) as WorkflowRunState;
+  return {
+    ...snapshot,
+    ...(serializeWorkflowSnapshotValue(opts) as UpdateWorkflowStateOptions),
+  } as WorkflowRunState;
 }

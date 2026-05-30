@@ -19,6 +19,7 @@ import { serializeWorkflowSnapshotValue } from '../../snapshot-serialization';
 import { createRestartExecutionParams, createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import { StepExecutor } from '../step-executor';
+import { markForeachStepResult } from '../types';
 import { EventedWorkflow } from '../workflow';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
@@ -1767,7 +1768,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowName: workflow.id,
             runId,
             stepId: step.step.id,
-            result: bailedResult as any,
+            result: markForeachStepResult(bailedResult) as any,
             requestContext,
           });
 
@@ -1828,7 +1829,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowName: workflow.id,
         runId,
         stepId: step.step.id,
-        result: newResult,
+        result: markForeachStepResult(newResult as any),
         requestContext,
       });
 
@@ -2012,7 +2013,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowName: workflow.id,
             runId,
             stepId: step.step.id,
-            result: foreachSuspendResult as any,
+            result: markForeachStepResult(foreachSuspendResult) as any,
             requestContext,
           });
 

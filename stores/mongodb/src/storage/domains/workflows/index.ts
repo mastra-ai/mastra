@@ -44,6 +44,229 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     return this.#connector.getCollection(name);
   }
 
+  // MongoDB keeps this merge in an aggregation pipeline so foreach updates
+  // remain atomic without a client-side load/merge/save race.
+  private buildWorkflowStepMergeExpression(stepId: string, serializedResult: unknown) {
+    const getField = (input: unknown, field: string) => ({ $getField: { input, field } });
+    const isObject = (value: unknown) => ({ $eq: [{ $type: value }, 'object'] });
+    const isMissingOrNull = (value: unknown) => ({ $in: [{ $type: value }, ['missing', 'null']] });
+    const hasForeachStepResultMarker = (value: unknown) => ({ $eq: [getField(value, '__mastra_foreach__'), true] });
+    const stripForeachStepResultMarker = (value: unknown) => ({
+      $arrayToObject: {
+        $filter: {
+          input: { $objectToArray: value },
+          as: 'field',
+          cond: { $ne: ['$$field.k', '__mastra_foreach__'] },
+        },
+      },
+    });
+    const isPendingMarker = (value: unknown) => ({
+      $cond: [
+        isObject(value),
+        {
+          $and: [
+            { $eq: [getField(value, '__mastra_pending__'), true] },
+            { $eq: [{ $size: { $objectToArray: value } }, 1] },
+          ],
+        },
+        false,
+      ],
+    });
+    const isSuspendedStepResult = (value: unknown) => ({
+      $cond: [
+        isObject(value),
+        {
+          $and: [
+            { $eq: [getField(value, 'status'), 'suspended'] },
+            {
+              $or: [
+                { $ne: [{ $type: getField(value, 'suspendedAt') }, 'missing'] },
+                { $ne: [{ $type: getField(value, 'suspendPayload') }, 'missing'] },
+              ],
+            },
+          ],
+        },
+        false,
+      ],
+    });
+    const canResetWithPendingMarker = (value: unknown) => ({
+      $or: [isMissingOrNull(value), isPendingMarker(value), isSuspendedStepResult(value)],
+    });
+    const hasPartialForeachValue = (output: unknown) => ({
+      $cond: [
+        { $isArray: output },
+        {
+          $anyElementTrue: {
+            $map: {
+              input: output,
+              as: 'value',
+              in: {
+                $or: [isMissingOrNull('$$value'), isPendingMarker('$$value'), isSuspendedStepResult('$$value')],
+              },
+            },
+          },
+        },
+        false,
+      ],
+    });
+    const hasPendingMarker = (output: unknown) => ({
+      $cond: [
+        { $isArray: output },
+        {
+          $anyElementTrue: {
+            $map: {
+              input: output,
+              as: 'value',
+              in: isPendingMarker('$$value'),
+            },
+          },
+        },
+        false,
+      ],
+    });
+
+    return {
+      $let: {
+        vars: {
+          context: { $ifNull: ['$snapshot.context', {}] },
+          stepResult: { $literal: serializedResult },
+        },
+        in: {
+          $let: {
+            vars: {
+              existingStepResult: { $getField: { input: '$$context', field: stepId } },
+            },
+            in: {
+              $let: {
+                vars: {
+                  existingOutput: getField('$$existingStepResult', 'output'),
+                  newOutput: getField('$$stepResult', 'output'),
+                  hasForeachMarker: hasForeachStepResultMarker('$$stepResult'),
+                  stepResultToStore: stripForeachStepResultMarker('$$stepResult'),
+                },
+                in: {
+                  $mergeObjects: [
+                    '$$context',
+                    {
+                      $arrayToObject: [
+                        [
+                          {
+                            k: stepId,
+                            v: {
+                              $let: {
+                                vars: {
+                                  hasPendingMarker: hasPendingMarker('$$newOutput'),
+                                  shouldMerge: {
+                                    $and: [
+                                      { $isArray: '$$existingOutput' },
+                                      { $isArray: '$$newOutput' },
+                                      {
+                                        $and: [
+                                          '$$hasForeachMarker',
+                                          {
+                                            $or: [
+                                              hasPendingMarker('$$newOutput'),
+                                              hasPartialForeachValue('$$existingOutput'),
+                                              hasPartialForeachValue('$$newOutput'),
+                                            ],
+                                          },
+                                        ],
+                                      },
+                                    ],
+                                  },
+                                },
+                                in: {
+                                  $cond: [
+                                    '$$shouldMerge',
+                                    {
+                                      $mergeObjects: [
+                                        '$$existingStepResult',
+                                        { $cond: ['$$hasPendingMarker', {}, '$$stepResultToStore'] },
+                                        {
+                                          output: {
+                                            $map: {
+                                              input: {
+                                                $range: [
+                                                  0,
+                                                  {
+                                                    $max: [{ $size: '$$existingOutput' }, { $size: '$$newOutput' }],
+                                                  },
+                                                ],
+                                              },
+                                              as: 'idx',
+                                              in: {
+                                                $let: {
+                                                  vars: {
+                                                    existingValue: { $arrayElemAt: ['$$existingOutput', '$$idx'] },
+                                                    newValue: { $arrayElemAt: ['$$newOutput', '$$idx'] },
+                                                  },
+                                                  in: {
+                                                    $cond: [
+                                                      { $lt: ['$$idx', { $size: '$$newOutput' }] },
+                                                      {
+                                                        $cond: [
+                                                          isPendingMarker('$$newValue'),
+                                                          {
+                                                            $cond: [
+                                                              {
+                                                                $or: [
+                                                                  { $gte: ['$$idx', { $size: '$$existingOutput' }] },
+                                                                  canResetWithPendingMarker('$$existingValue'),
+                                                                ],
+                                                              },
+                                                              null,
+                                                              '$$existingValue',
+                                                            ],
+                                                          },
+                                                          {
+                                                            $cond: [
+                                                              {
+                                                                $and: [
+                                                                  { $not: [isMissingOrNull('$$newValue')] },
+                                                                  { $not: ['$$hasPendingMarker'] },
+                                                                ],
+                                                              },
+                                                              '$$newValue',
+                                                              {
+                                                                $cond: [
+                                                                  { $gte: ['$$idx', { $size: '$$existingOutput' }] },
+                                                                  null,
+                                                                  '$$existingValue',
+                                                                ],
+                                                              },
+                                                            ],
+                                                          },
+                                                        ],
+                                                      },
+                                                      '$$existingValue',
+                                                    ],
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      ],
+                                    },
+                                    '$$stepResultToStore',
+                                  ],
+                                },
+                              },
+                            },
+                          },
+                        ],
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
   async init(): Promise<void> {
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -140,6 +363,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       };
       const serializedResult = serializeWorkflowSnapshotValue(result);
 
+      const mergedContext = this.buildWorkflowStepMergeExpression(stepId, serializedResult);
+
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
       // This ensures concurrent updates don't overwrite each other
       const updatedDoc = await collection.findOneAndUpdate(
@@ -154,15 +379,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
                 $mergeObjects: [
                   // Start with default snapshot if document is new
                   { $ifNull: ['$snapshot', defaultSnapshot] },
-                  // Merge the new context entry
-                  {
-                    context: {
-                      $mergeObjects: [
-                        { $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] },
-                        { [stepId]: serializedResult },
-                      ],
-                    },
-                  },
+                  // Merge the new context entry without replacing partial foreach arrays wholesale.
+                  { context: mergedContext },
                   // Merge the new request context
                   {
                     requestContext: {

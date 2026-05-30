@@ -22,6 +22,7 @@ describe('mergeWorkflowStepResult', () => {
       snapshot,
       stepId: 'foreach',
       result: {
+        __mastra_foreach__: true,
         status: 'success',
         output: [null, 'resumed', null],
         payload: ['a', 'b', 'c'],
@@ -55,6 +56,7 @@ describe('mergeWorkflowStepResult', () => {
       snapshot,
       stepId: 'foreach',
       result: {
+        __mastra_foreach__: true,
         status: 'success',
         output,
         payload: ['a', 'b', 'c'],
@@ -106,6 +108,28 @@ describe('mergeWorkflowStepResult', () => {
     expect(snapshot.context['array-step']?.output).toEqual([null]);
   });
 
+  it('replaces normal array outputs even when the step input payload is an array', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    snapshot.context['array-input-step'] = {
+      status: 'success',
+      output: [1, 2, 3],
+      payload: ['input-a', 'input-b'],
+    } as any;
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'array-input-step',
+      result: {
+        status: 'success',
+        output: [null],
+        payload: ['input-a', 'input-b'],
+      } as any,
+      requestContext: {},
+    });
+
+    expect(snapshot.context['array-input-step']?.output).toEqual([null]);
+  });
+
   it('applies pending marker resets without trusting stale sibling values or status', () => {
     const snapshot = createEmptyWorkflowSnapshot('run-1');
     snapshot.context.foreach = {
@@ -138,6 +162,7 @@ describe('mergeWorkflowStepResult', () => {
       snapshot,
       stepId: 'foreach',
       result: {
+        __mastra_foreach__: true,
         status: 'running',
         startedAt: 3,
         output: [
@@ -192,6 +217,7 @@ describe('mergeWorkflowStepResult', () => {
       snapshot,
       stepId: 'foreach',
       result: {
+        __mastra_foreach__: true,
         status: 'running',
         startedAt: 3,
         output: [{ __mastra_pending__: true }, { status: 'success', output: 'stale-new-value' }],
@@ -239,6 +265,7 @@ describe('mergeWorkflowStepResult', () => {
       snapshot,
       stepId: 'foreach',
       result: {
+        __mastra_foreach__: true,
         status: 'success',
         output: [{ status: 'suspended', reason: 'new-user-domain-status' }],
         payload: ['a', 'b'],

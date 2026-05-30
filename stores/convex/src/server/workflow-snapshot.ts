@@ -1,6 +1,8 @@
 // NOTE: This mirrors packages/core/src/storage/workflow-snapshot.ts. The Convex
-// server runtime can't import @mastra/core, so keep both copies in sync.
+// server runtime can't import @mastra/core, so keep both copies in sync. Convex
+// receives JSON-parsed payloads from the adapter, so serialization happens first.
 const PENDING_MARKER_KEY = '__mastra_pending__';
+const FOREACH_STEP_RESULT_KEY = '__mastra_foreach__';
 
 function isPendingMarker(val: unknown): boolean {
   return (
@@ -45,8 +47,17 @@ function hasPartialForeachValue(output: unknown[]): boolean {
   return false;
 }
 
-function hasForeachPayload(result: unknown): boolean {
-  return Array.isArray((result as { payload?: unknown })?.payload);
+function hasForeachStepResultMarker(result: unknown): boolean {
+  return (result as Record<string, unknown> | null)?.[FOREACH_STEP_RESULT_KEY] === true;
+}
+
+function stripForeachStepResultMarker<T>(result: T): T {
+  if (!hasForeachStepResultMarker(result)) {
+    return result;
+  }
+
+  const { [FOREACH_STEP_RESULT_KEY]: _marker, ...rest } = result as Record<string, unknown>;
+  return rest as T;
 }
 
 export function createEmptyWorkflowSnapshot(runId: string): Record<string, any> {
@@ -81,6 +92,8 @@ export function mergeWorkflowStepResult({
   }
 
   const existingResult = snapshot.context[stepId];
+  const hasForeachMarker = hasForeachStepResultMarker(result);
+  const resultToStore = stripForeachStepResultMarker(result);
   const existingOutput =
     existingResult && 'output' in existingResult && Array.isArray(existingResult.output)
       ? (existingResult.output as unknown[])
@@ -96,9 +109,8 @@ export function mergeWorkflowStepResult({
     result &&
     typeof result === 'object' &&
     newOutput &&
-    (hasPendingMarker ||
-      ((hasForeachPayload(existingResult) || hasForeachPayload(result)) &&
-        (hasPartialForeachValue(existingOutput) || hasPartialForeachValue(newOutput))))
+    hasForeachMarker &&
+    (hasPendingMarker || hasPartialForeachValue(existingOutput) || hasPartialForeachValue(newOutput))
   ) {
     const mergedOutput = [...existingOutput];
     for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
@@ -119,11 +131,11 @@ export function mergeWorkflowStepResult({
       ...existingResult,
       // Pending-marker writes are reset commands built from an earlier snapshot,
       // so keep existing step-level fields and ignore sibling values they carry.
-      ...(hasPendingMarker ? {} : result),
+      ...(hasPendingMarker ? {} : resultToStore),
       output: mergedOutput,
     };
   } else {
-    snapshot.context[stepId] = result;
+    snapshot.context[stepId] = resultToStore;
   }
 
   snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };

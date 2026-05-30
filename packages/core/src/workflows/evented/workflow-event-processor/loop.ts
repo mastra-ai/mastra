@@ -4,7 +4,7 @@ import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
-import { createPendingMarker } from '../types';
+import { createPendingMarker, markForeachStepResult } from '../types';
 import type { ProcessorArgs } from '.';
 
 export async function processWorkflowLoop(
@@ -318,10 +318,10 @@ export async function processWorkflowForEach(
         workflowName: workflowId,
         runId,
         stepId: step.step.id,
-        result: {
+        result: markForeachStepResult({
           ...currentResult,
           output: updatedOutput,
-        } as any,
+        } as any),
         requestContext,
       });
 
@@ -389,7 +389,7 @@ export async function processWorkflowForEach(
         workflowName: workflowId,
         runId,
         stepId: step.step.id,
-        result,
+        result: markForeachStepResult(result as any),
         requestContext,
       });
       stepResults[step.step.id] = result as any;
@@ -432,12 +432,12 @@ export async function processWorkflowForEach(
       workflowName: workflowId,
       runId,
       stepId: step.step.id,
-      result: {
+      result: markForeachStepResult({
         status: 'success',
         output: dummyResult as any,
         startedAt: Date.now(),
         payload: (prevResult as any)?.output,
-      } as any,
+      } as any),
       requestContext,
     });
 
@@ -484,12 +484,12 @@ export async function processWorkflowForEach(
     workflowName: workflowId,
     runId,
     stepId: step.step.id,
-    result: {
+    result: markForeachStepResult({
       status: 'success',
       output: (currentResult as any).output,
       startedAt: Date.now(),
       payload: (prevResult as any)?.output,
-    } as any,
+    } as any),
     requestContext,
   });
 
