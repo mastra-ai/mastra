@@ -702,17 +702,9 @@ export const useChat = ({
       requestContext: _requestContext.current,
     });
 
-    if (_threadSubscriptionKeyRef.current) {
-      return;
-    }
-
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
-        void (onChunk ?? _onChunk.current)?.(chunk);
+        await processStreamChunk(chunk, onChunk);
       },
     });
     setIsRunning(false);
@@ -734,17 +726,9 @@ export const useChat = ({
       requestContext: _requestContext.current,
     });
 
-    if (_threadSubscriptionKeyRef.current) {
-      return;
-    }
-
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
-        void (onChunk ?? _onChunk.current)?.(chunk);
+        await processStreamChunk(chunk, onChunk);
       },
     });
     setIsRunning(false);

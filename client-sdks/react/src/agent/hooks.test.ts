@@ -9,6 +9,24 @@ import { z } from 'zod/v3';
 // getAgent(). This lets us assert what the React hook actually forwards to the
 // underlying client-js Agent methods.
 const sendSignalMock = vi.fn(async () => ({ accepted: true, runId: 'run-mock' }));
+let nextApproveToolCallChunks: Array<any> = [];
+const approveToolCallProcessDataStreamMock = vi.fn(
+  async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
+    for (const chunk of nextApproveToolCallChunks) {
+      await onChunk(chunk);
+    }
+  },
+);
+const approveToolCallMock = vi.fn(async () => ({
+  body: { cancel: vi.fn() },
+  processDataStream: approveToolCallProcessDataStreamMock,
+}));
+const declineToolCallMock = vi.fn(async () => ({
+  body: { cancel: vi.fn() },
+  processDataStream: async () => {
+    /* no chunks */
+  },
+}));
 const streamUntilIdleMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: async () => {
@@ -61,6 +79,8 @@ vi.mock('@mastra/client-js', () => ({
     getAgent() {
       return {
         sendSignal: sendSignalMock,
+        approveToolCall: approveToolCallMock,
+        declineToolCall: declineToolCallMock,
         streamUntilIdle: streamUntilIdleMock,
         subscribeToThread: subscribeToThreadMock,
         generate: generateMock,
@@ -87,12 +107,16 @@ describe('useChat forwards clientTools', () => {
 
   beforeEach(() => {
     sendSignalMock.mockClear();
+    approveToolCallMock.mockClear();
+    declineToolCallMock.mockClear();
+    approveToolCallProcessDataStreamMock.mockClear();
     streamUntilIdleMock.mockClear();
     subscribeToThreadMock.mockClear();
     threadSubscriptionAbortMock.mockClear();
     threadSubscriptionUnsubscribeMock.mockClear();
     generateMock.mockClear();
     nextSubscribeChunks = [];
+    nextApproveToolCallChunks = [];
     keepSubscriptionOpen = false;
     omitThreadSubscriptionUnsubscribe = false;
     constructedClientOptions.length = 0;
@@ -171,6 +195,82 @@ describe('useChat forwards clientTools', () => {
       });
     });
     expect(result.current.isRunning).toBe(false);
+  });
+
+  it('processes approval response streams while subscribed to the thread', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { messageId: 'msg-approval' },
+      },
+      {
+        type: 'tool-call',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+    ];
+    nextApproveToolCallChunks = [
+      {
+        type: 'tool-result',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: {
+          toolName: 'weatherTool',
+          toolCallId: 'tool-call-approval-1',
+          result: { temperature: 58 },
+        },
+      },
+      {
+        type: 'finish',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { finishReason: 'stop' },
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      expect(lastMessage?.metadata?.mode).toBe('stream');
+      if (lastMessage?.metadata?.mode !== 'stream') throw new Error('expected stream metadata');
+      expect(lastMessage.metadata.requireApprovalMetadata?.weatherTool).toBeDefined();
+    });
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(approveToolCallMock).toHaveBeenCalledWith({
+      runId: 'run-approval',
+      toolCallId: 'tool-call-approval-1',
+      requestContext: undefined,
+    });
+    expect(approveToolCallProcessDataStreamMock).toHaveBeenCalledTimes(1);
+    expect(result.current.isRunning).toBe(false);
+    const toolPart = result.current.messages.at(-1)?.parts.find(part => part.type === 'dynamic-tool') as
+      | { output?: unknown; state?: string }
+      | undefined;
+    expect(toolPart?.state).toBe('output-available');
+    expect(toolPart?.output).toEqual({ temperature: 58 });
   });
 
   it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
