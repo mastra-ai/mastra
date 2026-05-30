@@ -13,7 +13,9 @@ This feature is experimental. Breaking changes may occur without a major version
 
 :::
 
-Code mode gives an agent one tool, `execute_typescript`, that runs a short TypeScript program in a sandbox. Instead of calling tools one at a time, the model writes a program that orchestrates your existing tools as `external_*` functions, batching calls with `Promise.all`, aggregating with `reduce`, branching, and doing math in a real runtime, then returns a single result.
+Code mode gives an agent a single tool that runs a short TypeScript program in a sandbox. Instead of calling tools one at a time, the model writes a program that orchestrates your existing tools as `external_*` functions, batching calls with `Promise.all`, aggregating with `reduce`, branching, and doing math in a real runtime, then returns a single result.
+
+`createCodeMode` returns this tool with the default id `execute_typescript`. The id is configurable, so an agent can have several code mode tools at once, each scoped to a different set of tools (see [Scoping tools across multiple code tools](#scoping-tools-across-multiple-code-tools)).
 
 ## When to use code mode
 
@@ -31,7 +33,7 @@ The program runs in a [Workspace sandbox](/docs/workspace/overview). A sandbox i
 
 ## Quickstart
 
-`createCodeMode` returns the `execute_typescript` tool plus generated instructions. Add both to your agent:
+`createCodeMode` returns the tool plus generated instructions. With no `id`, the tool is named `execute_typescript`. Add both to your agent:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -110,7 +112,7 @@ const { tool, instructions } = createCodeMode({
 
 ## Result
 
-`execute_typescript` returns a `CodeModeToolResult`:
+The tool returns a `CodeModeToolResult`:
 
 ```typescript
 type CodeModeToolResult = {
