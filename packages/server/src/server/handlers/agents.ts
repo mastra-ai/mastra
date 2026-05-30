@@ -2281,11 +2281,8 @@ export const APPROVE_TOOL_CALL_SUBSCRIPTION_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const { requestContext: bodyRequestContext, ...rest } = params;
-      const versionOptions = extractVersionOptions(
-        serverRequestContext,
-        bodyRequestContext as Record<string, unknown> | undefined,
-      );
+      const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
+      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
       const agent = await getAgentFromSystem({
         mastra,
@@ -2294,19 +2291,19 @@ export const APPROVE_TOOL_CALL_SUBSCRIPTION_ROUTE = createRoute({
         requestContext: serverRequestContext,
       });
 
-      if (!rest.runId) {
+      if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      if (!rest.toolCallId) {
+      if (!params.toolCallId) {
         throw new HTTPException(400, { message: 'Tool call id is required' });
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      sanitizeBody(rest, ['tools']);
+      sanitizeBody(params, ['tools']);
 
       return await agent.approveToolCallAndSubscribe({
-        ...rest,
+        ...params,
         requestContext: serverRequestContext,
         abortSignal,
       });
@@ -2375,11 +2372,8 @@ export const DECLINE_TOOL_CALL_SUBSCRIPTION_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const { requestContext: bodyRequestContext, ...rest } = params;
-      const versionOptions = extractVersionOptions(
-        serverRequestContext,
-        bodyRequestContext as Record<string, unknown> | undefined,
-      );
+      const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
+      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
       const agent = await getAgentFromSystem({
         mastra,
@@ -2388,19 +2382,19 @@ export const DECLINE_TOOL_CALL_SUBSCRIPTION_ROUTE = createRoute({
         requestContext: serverRequestContext,
       });
 
-      if (!rest.runId) {
+      if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      if (!rest.toolCallId) {
+      if (!params.toolCallId) {
         throw new HTTPException(400, { message: 'Tool call id is required' });
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      sanitizeBody(rest, ['tools']);
+      sanitizeBody(params, ['tools']);
 
       return await agent.declineToolCallAndSubscribe({
-        ...rest,
+        ...params,
         requestContext: serverRequestContext,
         abortSignal,
       });
