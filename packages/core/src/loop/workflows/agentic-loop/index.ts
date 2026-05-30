@@ -64,10 +64,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: params => {
-        // We need a persisted snapshot record to support `resumeStream()`.
-        // - Create the initial record early ("pending")
-        // - Update it when execution is suspended ("paused"/"suspended")
-        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        // Skip when no storage is configured to avoid debug spam on every generate() call.
+        if (!rest.mastra?.getStorage()) return false;
+        // Persist pending/suspended snapshots to support resumeStream(); skip "running"
+        // to avoid overwriting an existing suspended snapshot.
         return (
           params.workflowStatus === 'pending' ||
           params.workflowStatus === 'paused' ||
