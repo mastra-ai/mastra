@@ -227,7 +227,15 @@ export class VercelMicroVMSandbox extends MastraSandbox {
 
     // Race the command against the optional timeout so we can return a partial
     // result with a 124 exit code (matching other providers) instead of hanging.
+    // On timeout we abort the in-flight command so it stops running in the VM.
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const abortController = new AbortController();
+    const forwardAbort = () => abortController.abort();
+    if (options?.abortSignal) {
+      if (options.abortSignal.aborted) abortController.abort();
+      else options.abortSignal.addEventListener('abort', forwardAbort, { once: true });
+    }
+    const signal = abortController.signal;
     const timeoutPromise = options?.timeout
       ? new Promise<'timeout'>(resolve => {
           timeoutId = setTimeout(() => resolve('timeout'), options.timeout);
@@ -240,12 +248,13 @@ export class VercelMicroVMSandbox extends MastraSandbox {
         args: args ?? [],
         ...(options?.cwd ? { cwd: options.cwd } : {}),
         ...(Object.keys(env).length ? { env } : {}),
-        ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
+        signal,
       });
 
       const finished = timeoutPromise ? await Promise.race([commandPromise, timeoutPromise]) : await commandPromise;
 
       if (finished === 'timeout') {
+        abortController.abort();
         return {
           command: fullCommand,
           args,
@@ -274,6 +283,7 @@ export class VercelMicroVMSandbox extends MastraSandbox {
       };
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
+      options?.abortSignal?.removeEventListener('abort', forwardAbort);
     }
   }
 

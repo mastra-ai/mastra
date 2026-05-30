@@ -33,6 +33,7 @@ function makeFinished(exitCode: number, stdout: string, stderr = '') {
 describe('VercelMicroVMSandbox', () => {
   beforeEach(() => {
     createMock.mockReset();
+    delete process.env.VERCEL_OIDC_TOKEN;
     delete process.env.VERCEL_TOKEN;
     delete process.env.VERCEL_TEAM_ID;
     delete process.env.VERCEL_PROJECT_ID;

@@ -89,7 +89,7 @@ describe('VercelMicroVMProcessManager', () => {
   });
 
   it('kills a running process', async () => {
-    const { command, kill } = makeFakeCommand({ cmdId: 'cmd-3', waitDelayMs: 10_000 });
+    const { command, kill } = makeFakeCommand({ cmdId: 'cmd-3' });
     const runCommand = vi.fn().mockResolvedValue(command);
 
     const pm = new VercelMicroVMProcessManager();
@@ -127,7 +127,7 @@ describe('VercelMicroVMProcessManager', () => {
   });
 
   it('throws when sending stdin', async () => {
-    const { command } = makeFakeCommand({ cmdId: 'cmd-6', exitCode: 0, waitDelayMs: 10_000 });
+    const { command } = makeFakeCommand({ cmdId: 'cmd-6', exitCode: 0 });
     const runCommand = vi.fn().mockResolvedValue(command);
 
     const pm = new VercelMicroVMProcessManager();
