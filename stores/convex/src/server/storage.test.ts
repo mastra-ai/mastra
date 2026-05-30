@@ -100,7 +100,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       context: {
         foreach: {
           status: 'success',
-          output: ['kept', { status: 'suspended' }, 'old-tail'],
+          output: ['kept', null, 'old-tail'],
           payload: ['a', 'b', 'c'],
           startedAt: 1,
         },
@@ -117,11 +117,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       stepId: 'foreach',
       result: JSON.stringify({
         status: 'success',
-        output: [
-          null,
-          { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } },
-          { __mastra_pending__: true },
-        ],
+        output: [null, { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } }, null],
         payload: ['a', 'b', 'c'],
         startedAt: 2,
         endedAt: 3,
@@ -135,7 +131,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(JSON.parse(result.result)).toEqual({
       foreach: {
         status: 'success',
-        output: ['kept', { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } }, null],
+        output: ['kept', { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } }, 'old-tail'],
         payload: ['a', 'b', 'c'],
         startedAt: 2,
         endedAt: 3,
@@ -152,11 +148,173 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(patchedSnapshot.context.foreach.output).toEqual([
       'kept',
       { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } },
-      null,
+      'old-tail',
     ]);
     expect(patchedSnapshot.requestContext).toEqual({ existing: true, incoming: true });
     expect(patchedSnapshot.updatedAt).toBeUndefined();
     expect(typeof testCtx.patches[0]?.data.updatedAt).toBe('string');
+  });
+
+  it('applies pending marker resets without trusting stale sibling values or status', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      requestContext: { existing: true, shared: 'old' },
+      context: {
+        foreach: {
+          status: 'success',
+          startedAt: 1,
+          endedAt: 2,
+          output: [
+            { status: 'suspended', startedAt: 1, suspendedAt: 2, suspendPayload: { __workflow_meta: {} } },
+            {
+              status: 'suspended',
+              payload: 'payload',
+              suspendedAt: 3,
+              suspendPayload: { token: 'tok', __workflow_meta: {} },
+            },
+            { status: 'suspended', suspendPayload: { token: 'tok' }, suspendedAt: 4 },
+            { status: 'suspended', startedAt: 5, suspendedAt: 6 },
+            { status: 'success', output: 'done-4' },
+            { status: 'failed', error: 'failed-5' },
+            { status: 'waiting' },
+            { status: 'suspended', output: 'user-data' },
+            { __mastra_pending__: true },
+            { status: 'success', output: 'newer-tail' },
+            { status: 'suspended', payload: { type: 'user-status' } },
+            { status: 'suspended', startedAt: 10 },
+          ],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'foreach',
+      result: JSON.stringify({
+        status: 'running',
+        startedAt: 3,
+        output: [
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { status: 'suspended', startedAt: 8, suspendedAt: 9 },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+        ],
+      }),
+      requestContext: JSON.stringify({ incoming: true, shared: 'new' }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
+    expect(patchedSnapshot.context.foreach).toEqual({
+      status: 'success',
+      startedAt: 1,
+      endedAt: 2,
+      output: [
+        null,
+        null,
+        null,
+        null,
+        { status: 'success', output: 'done-4' },
+        { status: 'failed', error: 'failed-5' },
+        { status: 'waiting' },
+        { status: 'suspended', output: 'user-data' },
+        null,
+        { status: 'success', output: 'newer-tail' },
+        { status: 'suspended', payload: { type: 'user-status' } },
+        { status: 'suspended', startedAt: 10 },
+      ],
+    });
+    expect(patchedSnapshot.requestContext).toEqual({ existing: true, incoming: true, shared: 'new' });
+  });
+
+  it('ignores fresh-looking sibling values in pending marker reset writes', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        foreach: {
+          status: 'success',
+          startedAt: 1,
+          endedAt: 2,
+          output: [{ status: 'suspended', startedAt: 1, suspendedAt: 2, suspendPayload: { __workflow_meta: {} } }],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'foreach',
+      result: JSON.stringify({
+        status: 'running',
+        startedAt: 3,
+        output: [{ __mastra_pending__: true }, { status: 'success', output: 'stale-new-value' }],
+      }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(JSON.parse(result.result)).toEqual({
+      foreach: {
+        status: 'success',
+        startedAt: 1,
+        endedAt: 2,
+        output: [null, null],
+      },
+    });
+  });
+
+  it('does not treat user values with pending-like fields as internal markers', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        foreach: {
+          status: 'success',
+          output: [null],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'foreach',
+      result: JSON.stringify({
+        status: 'success',
+        output: [{ __mastra_pending__: true, value: 'user-data' }],
+      }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(JSON.parse(result.result)).toEqual({
+      foreach: {
+        status: 'success',
+        output: [{ __mastra_pending__: true, value: 'user-data' }],
+      },
+    });
   });
 
   it('merges longer forEach arrays without creating sparse trailing null entries', async () => {
@@ -171,6 +329,8 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       },
     };
     const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+    const output = Array(3);
+    output[1] = 3;
 
     const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
       op: 'mergeWorkflowStepResult',
@@ -180,7 +340,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       stepId: 'foreach',
       result: JSON.stringify({
         status: 'success',
-        output: [null, 3, null],
+        output,
       }),
       requestContext: JSON.stringify({}),
     });
