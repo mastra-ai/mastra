@@ -1,3 +1,4 @@
+import type { BuilderModelPolicy } from '@mastra/client-js';
 import { FALLBACK_MODEL } from './constants';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
@@ -12,8 +13,19 @@ export type StarterModel = {
  * user reaches the configure panel), but we deliberately reuse the same
  * filtered list the picker shows so we never propose a model the admin policy
  * blocks. Users override this immediately on the next screen.
+ *
+ * Preference order:
+ *   1. The admin-configured `modelPolicy.default` (so the picker default the
+ *      admin explicitly set wins — see PLTFRM-1017).
+ *   2. The first entry in the filtered model list (so we still commit to a
+ *      model the policy accepts when no explicit default is set).
+ *   3. `FALLBACK_MODEL` (so we always have *something* to persist with).
  */
-export const resolveStarterModel = (allowedModels: ModelInfo[]): StarterModel => {
+export const resolveStarterModel = (allowedModels: ModelInfo[], policy?: BuilderModelPolicy): StarterModel => {
+  if (policy?.active && policy.default) {
+    return { provider: policy.default.provider, name: policy.default.modelId };
+  }
+
   const first = allowedModels[0];
 
   if (first) return { provider: first.provider, name: first.model };
