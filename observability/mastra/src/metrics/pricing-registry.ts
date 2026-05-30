@@ -214,7 +214,9 @@ function getModelVariants(model: string): string[] {
 
   const slashIndex = model.indexOf('/');
   if (slashIndex !== -1) {
-    add(model.substring(slashIndex + 1));
+    const afterSlash = model.substring(slashIndex + 1);
+    add(afterSlash);
+    add(afterSlash.replace(/\./g, '-'));
   }
 
   return [...variants];
