@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } from '../../constants/default-request-context-schema';
 import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allowed-models';
+import { useBuilderModelPolicy } from '../../hooks/use-builder-settings';
 import { ExampleList } from './example-list';
 import { resolveStarterModel, truncateName } from './utils';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
@@ -17,6 +18,7 @@ export const AgentBuilderStarter = () => {
   const { createStoredAgent } = useStoredAgentMutations(undefined);
   const defaultVisibility = useDefaultVisibility();
   const { models: allowedModels } = useAgentBuilderAllowedModels();
+  const modelPolicy = useBuilderModelPolicy();
 
   const trimmed = message.trim();
   const isCreating = createStoredAgent.isPending;
@@ -37,7 +39,7 @@ export const AgentBuilderStarter = () => {
         workflows: {},
         skills: {},
         visibility: defaultVisibility,
-        model: resolveStarterModel(allowedModels),
+        model: resolveStarterModel(allowedModels, modelPolicy),
         requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA,
       });
 
