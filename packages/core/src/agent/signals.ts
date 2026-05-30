@@ -43,9 +43,15 @@ export type AgentMessageInput =
 export type AgentSignalInput = {
   id?: string;
   createdAt?: Date | string;
-  acceptedAt?: Date | string;
-  type: AgentSignalType;
-  tagName?: AgentSignalTagName;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
+  metadata?: Record<string, unknown>;
+};
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type UserMessageAgentSignalInput = AgentSignalInputBase & {
+  type: 'user-message';
   contents: AgentSignalContents;
   attributes?: AgentSignalAttributes;
   metadata?: Record<string, unknown>;
@@ -68,8 +74,7 @@ export type AgentSignalDataPart = {
     tagName?: AgentSignalTagName;
     contents: AgentSignalContents;
     createdAt: string;
-    acceptedAt?: string;
-    attributes?: AgentSignalAttributes;
+    attributes?: Record<string, string | number | boolean | null | undefined>;
     metadata?: Record<string, unknown>;
   };
   transient: true;
@@ -82,7 +87,6 @@ export type CreatedAgentSignal = AgentSignalInput & {
   __isCreatedSignal: true;
   id: string;
   createdAt: Date;
-  acceptedAt?: Date;
   toDBMessage: (options?: { threadId?: string; resourceId?: string }) => MastraDBMessage;
   toLLMMessage: () => UserModelMessage;
   toDataPart: () => AgentSignalDataPart;
@@ -126,12 +130,6 @@ function normalizeSignal(signal: AgentSignalInput | CreatedAgentSignal) {
     id: signal.id ?? crypto.randomUUID(),
     createdAt:
       signal.createdAt instanceof Date ? signal.createdAt : signal.createdAt ? new Date(signal.createdAt) : new Date(),
-    acceptedAt:
-      signal.acceptedAt instanceof Date
-        ? signal.acceptedAt
-        : signal.acceptedAt
-          ? new Date(signal.acceptedAt)
-          : undefined,
   };
 }
 
@@ -422,7 +420,6 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       tagName: signal.tagName,
       contents: partsToSignalContents(parts),
       createdAt: signal.createdAt.toISOString(),
-      ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
     },
@@ -470,7 +467,7 @@ function signalToDBMessage(
           type: signal.type,
           tagName: signal.tagName,
           createdAt: signal.createdAt.toISOString(),
-          ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
+          contents: signal.contents,
           ...(signal.attributes ? { attributes: signal.attributes } : {}),
           ...(signal.metadata ? { metadata: signal.metadata } : {}),
         },
@@ -556,7 +553,6 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
   const base = {
     id: typeof signalMetadata?.id === 'string' ? signalMetadata.id : message.id,
     createdAt: typeof signalMetadata?.createdAt === 'string' ? signalMetadata.createdAt : message.createdAt,
-    acceptedAt: typeof signalMetadata?.acceptedAt === 'string' ? signalMetadata.acceptedAt : undefined,
     attributes:
       signalMetadata?.attributes &&
       typeof signalMetadata.attributes === 'object' &&

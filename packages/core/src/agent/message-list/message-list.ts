@@ -7,8 +7,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
-import { createSignal, isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
-import type { CreatedAgentSignal } from '../signals';
+import { isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
@@ -173,26 +172,6 @@ export class MessageList {
     return events;
   }
 
-  public addSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
-    const source = options?.source ?? 'input';
-    const createdAt = this.generateCreatedAt(source, new Date());
-    const acceptedAt = signal.acceptedAt ?? signal.createdAt;
-    const signalForTranscript = createSignal({
-      id: signal.id,
-      type: signal.type,
-      tagName: signal.tagName,
-      contents: signal.contents,
-      attributes: signal.attributes,
-      metadata: signal.metadata,
-      providerOptions: signal.providerOptions,
-      createdAt,
-      acceptedAt,
-    });
-
-    this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
-    return signalForTranscript;
-  }
-
   public add(messages: MessageListInput, messageSource: MessageSource) {
     if (messageSource === `user`) messageSource = `input`;
 
@@ -209,11 +188,6 @@ export class MessageList {
     }
 
     for (const message of messageArray) {
-      if (isCreatedAgentSignal(message) && messageSource === 'input') {
-        this.addSignal(message, { source: messageSource });
-        continue;
-      }
-
       const messageInput = isCreatedAgentSignal(message)
         ? message.toDBMessage(this.memoryInfo ?? undefined)
         : typeof message === `string`
@@ -298,9 +272,6 @@ export class MessageList {
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
     this._agentNetworkAppend = data.agentNetworkAppend;
-    for (const message of this.messages) {
-      this.updateLastCreatedAt(message);
-    }
     return this;
   }
 
@@ -310,34 +281,24 @@ export class MessageList {
         return [message];
       }
 
-      return this.convertSignalForModelPrompt(message);
+      // Signals are persisted losslessly as DB signal messages, but model providers
+      // only understand normal prompt messages. Project the signal into its
+      // LLM-facing message content here so the existing MessageList converters
+      // keep handling strings, arrays, files/images, and provider-specific shapes.
+      const signalMessages = mastraDBMessageToSignal(message).toLLMMessage();
+      return (Array.isArray(signalMessages) ? signalMessages : [signalMessages]).map(signalMessage =>
+        convertInputToMastraDBMessage(
+          typeof signalMessage === `string`
+            ? {
+                role: 'user' as const,
+                content: signalMessage,
+              }
+            : signalMessage,
+          'input',
+          this.createAdapterContext(),
+        ),
+      );
     });
-  }
-
-  private convertSignalForModelPrompt(message: MastraDBMessage): MastraDBMessage[] {
-    // Model providers only understand normal prompt messages, so project the signal into
-    // its LLM-facing UserModelMessage. Preserve the original id/createdAt so MessageList's
-    // timestamp/ordering bookkeeping stays anchored to the persisted signal row.
-    const signalMessage = mastraDBMessageToSignal(message).toLLMMessage();
-    const createdAt = message.createdAt;
-    const promptMessage = {
-      ...signalMessage,
-      id: message.id,
-      metadata: { createdAt },
-    };
-
-    return [
-      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
-        memoryInfo: this.memoryInfo,
-        newMessageId: () => message.id,
-        generateCreatedAt: (_messageSource, start) => {
-          if (start instanceof Date) return start;
-          if (typeof start === 'string' || typeof start === 'number') return new Date(start);
-          return createdAt;
-        },
-        dbMessages: this.messages,
-      }),
-    ];
   }
 
   public makeMessageSourceChecker(): {
@@ -1068,8 +1029,6 @@ export class MessageList {
               : {}),
             ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
           };
-          this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
-          this.updateLastCreatedAt(msg);
 
           // `backgroundTasks` is a per-toolCallId record — merge instead of
           // overwrite so multiple concurrent background dispatches on the
@@ -1389,21 +1348,8 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
-    const signalMetadata =
-      messageV2.role === 'signal'
-        ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
-        : undefined;
-    if (messageSource === 'input' && messageV2.role === 'signal' && !signalMetadata?.acceptedAt) {
-      const acceptedAt = signalMetadata?.createdAt ?? messageV2.createdAt.toISOString();
+    if (messageSource === 'input' && messageV2.role === 'signal') {
       messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
-      messageV2.content.metadata = {
-        ...messageV2.content.metadata,
-        signal: {
-          ...signalMetadata,
-          createdAt: messageV2.createdAt.toISOString(),
-          acceptedAt,
-        },
-      };
     }
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
@@ -1437,7 +1383,6 @@ export class MessageList {
     if (shouldMerge && latestMessage) {
       // Delegate merge logic to MessageMerger
       MessageMerger.merge(latestMessage, messageV2);
-      this.updateLastCreatedAt(latestMessage);
 
       // If latest message gets appended to, it should be added to the proper source
       this.pushMessageToSource(latestMessage, messageSource);
@@ -1525,7 +1470,6 @@ export class MessageList {
           );
           if (shouldMergeIntoExisting) {
             MessageMerger.merge(existingMessage, messageV2);
-            this.updateLastCreatedAt(existingMessage);
             this.pushMessageToSource(existingMessage, messageSource);
             // Sort messages and return early — existingMessage stays in messages[] and its Sets
             this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -1540,10 +1484,6 @@ export class MessageList {
       this.pushMessageToSource(messageV2, messageSource);
     }
 
-    for (const storedMessage of this.messages) {
-      this.updateLastCreatedAt(storedMessage);
-    }
-
     // make sure messages are always stored in order of when they were created!
     this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
@@ -1555,21 +1495,6 @@ export class MessageList {
   }
 
   private lastCreatedAt?: number;
-
-  private updateLastCreatedAt(message: MastraDBMessage): void {
-    const latestMessageTime = message.createdAt.getTime();
-    const latestPartTime = Array.isArray(message.content.parts)
-      ? message.content.parts.reduce((latest, part) => {
-          if (typeof part.createdAt === 'number' && part.createdAt > latest) {
-            return part.createdAt;
-          }
-          return latest;
-        }, latestMessageTime)
-      : latestMessageTime;
-
-    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, latestPartTime);
-  }
-
   // this makes sure messages added in order will always have a date atleast 1ms apart.
   private generateCreatedAt(messageSource: MessageSource, start?: unknown): Date {
     // Normalize timestamp
@@ -1593,8 +1518,11 @@ export class MessageList {
 
     const now = new Date();
     const nowTime = startDate?.getTime() || now.getTime();
-    // find the latest createdAt in stored messages and parts
-    const lastTime = this.lastCreatedAt || 0;
+    // find the latest createdAt in all stored messages
+    const lastTime = this.messages.reduce((p, m) => {
+      if (m.createdAt.getTime() > p) return m.createdAt.getTime();
+      return p;
+    }, this.lastCreatedAt || 0);
 
     // make sure our new message is created later than the latest known message time
     // it's expected that messages are added to the list in order if they don't have a createdAt date on them

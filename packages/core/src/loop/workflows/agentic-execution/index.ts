@@ -8,7 +8,6 @@ import { createBackgroundTaskCheckStep } from './background-task-check-step';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
-import { createSignalDrainStep } from './signal-drain-step';
 import { resolveConfiguredToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
@@ -58,12 +57,6 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     ...rest,
   });
 
-  const signalDrainStep = createSignalDrainStep({
-    models,
-    _internal,
-    ...rest,
-  });
-
   const isTaskCompleteStep = createIsTaskCompleteStep({
     models,
     _internal,
@@ -95,7 +88,6 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     .foreach(toolCallStep, toolCallForeachOptions)
     .then(llmMappingStep)
     .then(backgroundTaskCheckStep)
-    .then(signalDrainStep)
     .then(isTaskCompleteStep)
     .commit();
 }

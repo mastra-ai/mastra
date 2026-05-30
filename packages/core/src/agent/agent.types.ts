@@ -12,6 +12,7 @@ import type { RequestContext } from '../request-context';
 import type { ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { CreatedAgentSignal } from './signals';
 import type {
   AgentMemoryOption,
   ToolsetsInput,
@@ -641,6 +642,14 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * `agent.streamUntilIdle`, which drives continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
+
+  /**
+   * @internal
+   * Signal inputs that are already present in the initial message list and still
+   * need to be echoed as data parts to stream subscribers. Public callers should
+   * pass the signal as `agent.stream(signal, options)` instead of setting this.
+   */
+  _initialSignalEchoes?: CreatedAgentSignal[];
 } & Partial<ObservabilityContext>;
 
 /**

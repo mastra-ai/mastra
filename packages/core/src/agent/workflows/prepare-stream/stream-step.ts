@@ -46,6 +46,7 @@ interface StreamStepOptions {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  initialSignalEchoes?: CreatedAgentSignal[];
 }
 
 export function createStreamStep<OUTPUT = undefined>({
@@ -70,6 +71,7 @@ export function createStreamStep<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
+  initialSignalEchoes,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -77,9 +79,7 @@ export function createStreamStep<OUTPUT = undefined>({
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
     execute: async ({ inputData, ...observabilityContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
-      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT> & {
-        initialSignalEchoes?: CreatedAgentSignal[];
-      };
+      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
 
       const processors =
         validatedInputData.outputProcessors ||
@@ -114,7 +114,7 @@ export function createStreamStep<OUTPUT = undefined>({
           toolPayloadTransform,
           skipBgTaskWait,
           drainPendingSignals,
-          initialSignalEchoes: validatedInputData.initialSignalEchoes,
+          initialSignalEchoes,
         },
         agentId,
         agentName,
