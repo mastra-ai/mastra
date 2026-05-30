@@ -52,9 +52,13 @@ test.describe('composer model settings', () => {
 
     await expect(generateRadio).toBeVisible();
     await expect(generateRadio).toHaveAttribute('aria-checked', 'false');
-    const streamRadio = page.getByRole('radio', { name: 'Stream' });
+    const streamSubscriptionRadio = page.getByRole('radio', { name: 'Stream subscription (default)' });
+    await expect(streamSubscriptionRadio).toBeVisible();
+    await expect(streamSubscriptionRadio).toHaveAttribute('aria-checked', 'true');
+
+    const streamRadio = page.getByRole('radio', { name: 'Stream', exact: true });
     await expect(streamRadio).toBeVisible();
-    await expect(streamRadio).toHaveAttribute('aria-checked', 'true');
+    await expect(streamRadio).toHaveAttribute('aria-checked', 'false');
 
     const networkRadio = page.getByRole('radio', { name: 'Network' });
     await expect(networkRadio).toBeVisible();
