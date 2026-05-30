@@ -383,6 +383,57 @@ describe('Workflow (Evented Engine Specific)', () => {
     }
   });
 
+  it('treats null foreach iteration outputs as completed values', async () => {
+    const foreachStep = createStep({
+      id: 'foreach-null-output-step',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.null(),
+      execute: async () => null,
+    });
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-null-output',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.array(z.null()),
+      steps: [foreachStep],
+      options: { validateInputs: false },
+    })
+      .foreach(foreachStep, { concurrency: 2 })
+      .commit();
+
+    const mastra = new Mastra({
+      workflows: { 'evented-foreach-null-output': workflow },
+      logger: false,
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    try {
+      await mastra.startWorkers();
+
+      const run = await workflow.createRun({ runId: 'evented-foreach-null-output-run' });
+      const result = await run.start({ inputData: [{ value: 0 }, { value: 1 }] });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        result: [null, null],
+      });
+
+      const workflowsStore = await testStorage.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'evented-foreach-null-output',
+        runId: 'evented-foreach-null-output-run',
+      });
+
+      expect(snapshot?.context?.['foreach-null-output-step']?.output).toEqual([null, null]);
+      expect(snapshot?.context?.['foreach-null-output-step']).not.toHaveProperty(
+        '__mastra_foreach_completed_indexes__',
+      );
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it('does not treat successful foreach output with failed status text as a step failure', async () => {
     const foreachStep = createStep({
       id: 'foreach-domain-status-step',

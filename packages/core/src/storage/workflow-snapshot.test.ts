@@ -275,6 +275,48 @@ describe('mergeWorkflowStepResult', () => {
 
     expect(snapshot.context.foreach?.output).toEqual([{ status: 'suspended', reason: 'new-user-domain-status' }]);
   });
+
+  it('allows a completed forEach iteration to overwrite an older value with null output', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    snapshot.context.foreach = {
+      status: 'success',
+      output: ['old-value', null],
+      payload: ['a', 'b'],
+    } as any;
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'foreach',
+      result: {
+        __mastra_foreach__: true,
+        __mastra_foreach_completed_indexes__: [0],
+        status: 'success',
+        output: [null, null],
+        payload: ['a', 'b'],
+      } as any,
+      requestContext: {},
+    });
+
+    expect(snapshot.context.foreach?.output).toEqual([null, null]);
+    expect(snapshot.context.foreach).not.toHaveProperty('__mastra_foreach__');
+    expect(snapshot.context.foreach?.__mastra_foreach_completed_indexes__).toEqual([0]);
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'foreach',
+      result: {
+        __mastra_foreach__: true,
+        __mastra_foreach_completed_indexes__: [1],
+        status: 'success',
+        output: ['stale-old-value', 'done'],
+        payload: ['a', 'b'],
+      } as any,
+      requestContext: {},
+    });
+
+    expect(snapshot.context.foreach?.output).toEqual([null, 'done']);
+    expect(snapshot.context.foreach?.__mastra_foreach_completed_indexes__).toEqual([0, 1]);
+  });
 });
 
 describe('mergeWorkflowState', () => {

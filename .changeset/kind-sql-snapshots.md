@@ -5,4 +5,4 @@
 '@mastra/pg': patch
 ---
 
-Workflow foreach loops now correctly preserve completed iterations during concurrent runs.
+Foreach loops now retain completed iteration results, preventing data loss during concurrent workflow execution.

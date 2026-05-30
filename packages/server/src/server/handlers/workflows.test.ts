@@ -892,7 +892,9 @@ describe('vNext Workflow Handlers', () => {
         resumePayload: resumeData,
         output: { approved: resumeData },
       });
-      expect(result).not.toHaveProperty('suspendPayload.__workflow_meta');
+      expect(JSON.stringify({ output: result.output, resumePayload: result.resumePayload })).not.toContain(
+        '__workflow_meta',
+      );
     });
   });
 

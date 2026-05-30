@@ -391,6 +391,67 @@ describe('WorkflowsUpstash workflow snapshot merge operations', () => {
       await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
     }
   });
+
+  it('stores null as a completed foreach iteration output', async () => {
+    const workflowDomain = new WorkflowsUpstash({ client: createTestClient() });
+    const workflowName = `workflow-null-foreach-output-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            foreach: {
+              status: 'success',
+              output: ['old-value', null],
+              payload: ['a', 'b'],
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          __mastra_foreach__: true,
+          __mastra_foreach_completed_indexes__: [0],
+          status: 'success',
+          output: [null, null],
+          payload: ['a', 'b'],
+        } as any,
+        requestContext: {},
+      });
+
+      expect(context.foreach?.output).toEqual([null, null]);
+      expect(context.foreach).not.toHaveProperty('__mastra_foreach__');
+      expect(context.foreach?.__mastra_foreach_completed_indexes__).toEqual([0]);
+
+      const staleSiblingContext = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          __mastra_foreach__: true,
+          __mastra_foreach_completed_indexes__: [1],
+          status: 'success',
+          output: ['stale-old-value', 'done'],
+          payload: ['a', 'b'],
+        } as any,
+        requestContext: {},
+      });
+
+      expect(staleSiblingContext.foreach?.output).toEqual([null, 'done']);
+      expect(staleSiblingContext.foreach?.__mastra_foreach_completed_indexes__).toEqual([0, 1]);
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
 });
 
 describe('saveMessages uses msg-idx index instead of scanning', () => {

@@ -3,6 +3,7 @@
 // receives JSON-parsed payloads from the adapter, so serialization happens first.
 const PENDING_MARKER_KEY = '__mastra_pending__';
 const FOREACH_STEP_RESULT_KEY = '__mastra_foreach__';
+const FOREACH_COMPLETED_INDEXES_KEY = '__mastra_foreach_completed_indexes__';
 
 function isPendingMarker(val: unknown): boolean {
   return (
@@ -51,6 +52,15 @@ function hasForeachStepResultMarker(result: unknown): boolean {
   return (result as Record<string, unknown> | null)?.[FOREACH_STEP_RESULT_KEY] === true;
 }
 
+function getForeachCompletedIndexes(result: unknown): Set<number> {
+  const indexes = (result as Record<string, unknown> | null)?.[FOREACH_COMPLETED_INDEXES_KEY];
+  if (!Array.isArray(indexes)) {
+    return new Set();
+  }
+
+  return new Set(indexes.filter(index => Number.isInteger(index) && index >= 0));
+}
+
 function stripForeachStepResultMarker<T>(result: T): T {
   if (!hasForeachStepResultMarker(result)) {
     return result;
@@ -58,6 +68,11 @@ function stripForeachStepResultMarker<T>(result: T): T {
 
   const { [FOREACH_STEP_RESULT_KEY]: _marker, ...rest } = result as Record<string, unknown>;
   return rest as T;
+}
+
+function mergeForeachCompletedIndexes(existingResult: unknown, incomingIndexes: Set<number>): number[] | undefined {
+  const indexes = new Set([...getForeachCompletedIndexes(existingResult), ...incomingIndexes]);
+  return indexes.size > 0 ? [...indexes].sort((a, b) => a - b) : undefined;
 }
 
 export function createEmptyWorkflowSnapshot(runId: string): Record<string, any> {
@@ -93,7 +108,14 @@ export function mergeWorkflowStepResult({
 
   const existingResult = snapshot.context[stepId];
   const hasForeachMarker = hasForeachStepResultMarker(result);
+  const completedIndexes = getForeachCompletedIndexes(result);
   const resultToStore = stripForeachStepResultMarker(result);
+  const existingCompletedIndexes = getForeachCompletedIndexes(existingResult);
+  const mergedCompletedIndexes = mergeForeachCompletedIndexes(existingResult, completedIndexes);
+  const completedIndexesToStore =
+    mergedCompletedIndexes && hasForeachMarker
+      ? { [FOREACH_COMPLETED_INDEXES_KEY]: mergedCompletedIndexes }
+      : undefined;
   const existingOutput =
     existingResult && 'output' in existingResult && Array.isArray(existingResult.output)
       ? (existingResult.output as unknown[])
@@ -120,6 +142,10 @@ export function mergeWorkflowStepResult({
           if (i >= existingOutput.length || canResetWithPendingMarker(existingOutput[i])) {
             mergedOutput[i] = null;
           }
+        } else if (completedIndexes.has(i) && !hasPendingMarker) {
+          mergedOutput[i] = newVal;
+        } else if (existingCompletedIndexes.has(i) && !hasPendingMarker) {
+          continue;
         } else if (newVal !== null && newVal !== undefined && !hasPendingMarker) {
           mergedOutput[i] = newVal;
         } else if (i >= existingOutput.length) {
@@ -132,6 +158,7 @@ export function mergeWorkflowStepResult({
       // Pending-marker writes are reset commands built from an earlier snapshot,
       // so keep existing step-level fields and ignore sibling values they carry.
       ...(hasPendingMarker ? {} : resultToStore),
+      ...(hasPendingMarker ? {} : completedIndexesToStore),
       output: mergedOutput,
     };
   } else {

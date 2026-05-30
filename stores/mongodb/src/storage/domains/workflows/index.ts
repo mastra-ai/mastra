@@ -51,6 +51,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     const isObject = (value: unknown) => ({ $eq: [{ $type: value }, 'object'] });
     const isMissingOrNull = (value: unknown) => ({ $in: [{ $type: value }, ['missing', 'null']] });
     const hasForeachStepResultMarker = (value: unknown) => ({ $eq: [getField(value, '__mastra_foreach__'), true] });
+    const arrayOrEmpty = (value: unknown) => ({ $cond: [{ $isArray: value }, value, []] });
+    const hasCompletedIndex = (indexes: unknown, idx: unknown) => ({
+      $cond: [{ $isArray: indexes }, { $in: [idx, indexes] }, false],
+    });
     const stripForeachStepResultMarker = (value: unknown) => ({
       $arrayToObject: {
         $filter: {
@@ -142,6 +146,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
                   existingOutput: getField('$$existingStepResult', 'output'),
                   newOutput: getField('$$stepResult', 'output'),
                   hasForeachMarker: hasForeachStepResultMarker('$$stepResult'),
+                  completedIndexes: getField('$$stepResult', '__mastra_foreach_completed_indexes__'),
+                  existingCompletedIndexes: getField('$$existingStepResult', '__mastra_foreach_completed_indexes__'),
                   stepResultToStore: stripForeachStepResultMarker('$$stepResult'),
                 },
                 in: {
@@ -183,6 +189,33 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
                                         '$$existingStepResult',
                                         { $cond: ['$$hasPendingMarker', {}, '$$stepResultToStore'] },
                                         {
+                                          $cond: [
+                                            '$$hasPendingMarker',
+                                            {},
+                                            {
+                                              $let: {
+                                                vars: {
+                                                  mergedCompletedIndexes: {
+                                                    $setUnion: [
+                                                      arrayOrEmpty('$$existingCompletedIndexes'),
+                                                      arrayOrEmpty('$$completedIndexes'),
+                                                    ],
+                                                  },
+                                                },
+                                                in: {
+                                                  $cond: [
+                                                    { $gt: [{ $size: '$$mergedCompletedIndexes' }, 0] },
+                                                    {
+                                                      __mastra_foreach_completed_indexes__: '$$mergedCompletedIndexes',
+                                                    },
+                                                    {},
+                                                  ],
+                                                },
+                                              },
+                                            },
+                                          ],
+                                        },
+                                        {
                                           output: {
                                             $map: {
                                               input: {
@@ -222,16 +255,46 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
                                                             $cond: [
                                                               {
                                                                 $and: [
-                                                                  { $not: [isMissingOrNull('$$newValue')] },
+                                                                  hasCompletedIndex('$$completedIndexes', '$$idx'),
                                                                   { $not: ['$$hasPendingMarker'] },
                                                                 ],
                                                               },
                                                               '$$newValue',
                                                               {
                                                                 $cond: [
-                                                                  { $gte: ['$$idx', { $size: '$$existingOutput' }] },
-                                                                  null,
+                                                                  {
+                                                                    $and: [
+                                                                      hasCompletedIndex(
+                                                                        '$$existingCompletedIndexes',
+                                                                        '$$idx',
+                                                                      ),
+                                                                      { $not: ['$$hasPendingMarker'] },
+                                                                    ],
+                                                                  },
                                                                   '$$existingValue',
+                                                                  {
+                                                                    $cond: [
+                                                                      {
+                                                                        $and: [
+                                                                          { $not: [isMissingOrNull('$$newValue')] },
+                                                                          { $not: ['$$hasPendingMarker'] },
+                                                                        ],
+                                                                      },
+                                                                      '$$newValue',
+                                                                      {
+                                                                        $cond: [
+                                                                          {
+                                                                            $gte: [
+                                                                              '$$idx',
+                                                                              { $size: '$$existingOutput' },
+                                                                            ],
+                                                                          },
+                                                                          null,
+                                                                          '$$existingValue',
+                                                                        ],
+                                                                      },
+                                                                    ],
+                                                                  },
                                                                 ],
                                                               },
                                                             ],

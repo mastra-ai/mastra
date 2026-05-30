@@ -137,6 +137,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
         local pendingMarkerKey = '__mastra_pending__'
         local foreachStepResultKey = '__mastra_foreach__'
+        local foreachCompletedIndexesKey = '__mastra_foreach_completed_indexes__'
 
         local function is_array(value)
           if type(value) ~= 'table' then
@@ -212,6 +213,44 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           return false
         end
 
+        local function has_completed_index(indexes, zeroBasedIndex)
+          if type(indexes) ~= 'table' then
+            return false
+          end
+
+          for _, value in ipairs(indexes) do
+            if value == zeroBasedIndex then
+              return true
+            end
+          end
+
+          return false
+        end
+
+        local function merge_completed_indexes(existingIndexes, incomingIndexes)
+          local seen = {}
+          local merged = {}
+
+          local function add_indexes(indexes)
+            if type(indexes) ~= 'table' then
+              return
+            end
+
+            for _, value in ipairs(indexes) do
+              if type(value) == 'number' and value >= 0 and not seen[value] then
+                seen[value] = true
+                table.insert(merged, value)
+              end
+            end
+          end
+
+          add_indexes(existingIndexes)
+          add_indexes(incomingIndexes)
+          table.sort(merged)
+
+          return merged
+        end
+
         local function copy_array(values)
           local copy = {}
           if type(values) ~= 'table' then
@@ -229,6 +268,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local stepResult = cjson.decode(resultJson)
         local existingStepResult = snapshot.context[stepId]
         local hasForeachMarker = type(stepResult) == 'table' and stepResult[foreachStepResultKey] == true
+        local completedIndexes = type(stepResult) == 'table' and stepResult[foreachCompletedIndexesKey] or nil
         if type(stepResult) == 'table' then
           stepResult[foreachStepResultKey] = nil
         end
@@ -240,6 +280,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         then
           local existingOutput = existingStepResult.output
           local newOutput = stepResult.output
+          local existingCompletedIndexes = existingStepResult[foreachCompletedIndexesKey]
+          local mergedCompletedIndexes = merge_completed_indexes(existingStepResult[foreachCompletedIndexesKey], completedIndexes)
           local hasPendingMarker = has_pending_marker(newOutput)
           local shouldMerge = hasForeachMarker
             and (hasPendingMarker or has_partial_foreach_value(existingOutput) or has_partial_foreach_value(newOutput))
@@ -255,6 +297,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
                   if i > #existingOutput or can_reset_with_pending_marker(existingOutput[i]) then
                     mergedOutput[i] = cjson.null
                   end
+                elseif has_completed_index(completedIndexes, i - 1) and not hasPendingMarker then
+                  mergedOutput[i] = newValue
+                elseif has_completed_index(existingCompletedIndexes, i - 1) and not hasPendingMarker then
+                  -- Keep already completed slots authoritative against stale sibling writes.
                 elseif newValue ~= nil and newValue ~= cjson.null and not hasPendingMarker then
                   mergedOutput[i] = newValue
                 elseif i > #existingOutput then
@@ -266,6 +312,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
             if not hasPendingMarker then
               for k, v in pairs(stepResult) do
                 existingStepResult[k] = v
+              end
+              if #mergedCompletedIndexes > 0 then
+                existingStepResult[foreachCompletedIndexesKey] = mergedCompletedIndexes
               end
             end
             existingStepResult.output = mergedOutput

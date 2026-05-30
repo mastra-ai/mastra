@@ -19,7 +19,7 @@ import { serializeWorkflowSnapshotValue } from '../../snapshot-serialization';
 import { createRestartExecutionParams, createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import { StepExecutor } from '../step-executor';
-import { markForeachStepResult } from '../types';
+import { FOREACH_COMPLETED_INDEXES_KEY, markForeachStepResult } from '../types';
 import { EventedWorkflow } from '../workflow';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
@@ -89,6 +89,15 @@ function isSuspendedStepResult(value: any): boolean {
     typeof value.suspendPayload === 'object' &&
     '__workflow_meta' in value.suspendPayload
   );
+}
+
+function getForeachCompletedIndexes(result: unknown): Set<number> {
+  const indexes = (result as Record<string, unknown> | null)?.[FOREACH_COMPLETED_INDEXES_KEY];
+  if (!Array.isArray(indexes)) {
+    return new Set();
+  }
+
+  return new Set(indexes.filter(index => Number.isInteger(index) && index >= 0));
 }
 
 export class WorkflowEventProcessor extends EventProcessor {
@@ -1829,7 +1838,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowName: workflow.id,
         runId,
         stepId: step.step.id,
-        result: markForeachStepResult(newResult as any),
+        result: markForeachStepResult(newResult as any, prevResult.status === 'success' ? currentIdx : undefined),
         requestContext,
       });
 
@@ -1868,13 +1877,18 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         // Count iterations by status - pending iterations appear as null in stepResults after
         // storage merge (pending markers are converted to null by the storage layer).
-        const pendingCount = iterationResults.filter((r: any) => r === null).length;
+        const completedIndexes = getForeachCompletedIndexes(foreachResult);
+        const pendingCount = iterationResults.filter(
+          (r: any, index: number) => r === null && !completedIndexes.has(index),
+        ).length;
         const suspendedCount = iterationResults.filter((r: any) => isSuspendedStepResult(r)).length;
         const failedResult = foreachResult?.status === 'failed' ? foreachResult : undefined;
         const iterationsStarted = iterationResults.length;
 
         // Emit per-iteration progress event
-        const completedCount = iterationResults.filter((r: any) => r !== null && !isSuspendedStepResult(r)).length;
+        const completedCount = iterationResults.filter(
+          (r: any, index: number) => (r !== null || completedIndexes.has(index)) && !isSuspendedStepResult(r),
+        ).length;
         const iterationStatus =
           prevResult.status === 'suspended'
             ? ('suspended' as const)
@@ -2135,6 +2149,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
 
       stepResults = newStepResults;
+    } else if (isTerminalSnapshot) {
+      return;
     }
 
     // Update stepResults with current state
@@ -2474,10 +2490,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId: workflowData.runId,
     });
 
+    const isTerminalWorkflowFail = type === 'workflow.fail' && currentState?.status === 'failed';
     if (
       currentState?.status &&
       TERMINAL_WORKFLOW_STATUSES.has(currentState.status) &&
-      !['workflow.end', 'workflow.cancel', 'workflow.fail', 'workflow.step.end'].includes(type)
+      !isTerminalWorkflowFail &&
+      !['workflow.end', 'workflow.cancel', 'workflow.step.end'].includes(type)
     ) {
       return;
     }
