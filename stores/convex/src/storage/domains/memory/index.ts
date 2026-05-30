@@ -34,6 +34,37 @@ type StoredMessage = {
   resourceId: string | null;
 };
 
+type StoredMetadata = Record<string, unknown> | string | null | undefined;
+type StoredThread = Omit<StorageThreadType, 'createdAt' | 'updatedAt' | 'metadata'> & {
+  createdAt: string;
+  updatedAt: string;
+  metadata?: StoredMetadata;
+};
+type StoredResource = Omit<StorageResourceType, 'createdAt' | 'updatedAt' | 'metadata'> & {
+  createdAt: string;
+  updatedAt: string;
+  metadata?: StoredMetadata;
+};
+
+function parseStoredThread(row: StoredThread): StorageThreadType {
+  return {
+    ...row,
+    metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
+  };
+}
+
+function parseStoredResource(record: StoredResource): StorageResourceType {
+  const metadata = typeof record.metadata === 'string' ? safelyParseJSON(record.metadata) : record.metadata;
+  return {
+    ...record,
+    metadata: metadata ?? {},
+    createdAt: new Date(record.createdAt),
+    updatedAt: new Date(record.updatedAt),
+  };
+}
+
 export class MemoryConvex extends MemoryStorage {
   #db: ConvexDB;
   constructor(config: ConvexDomainConfig) {
@@ -59,21 +90,14 @@ export class MemoryConvex extends MemoryStorage {
     threadId: string;
     resourceId?: string;
   }): Promise<StorageThreadType | null> {
-    const row = await this.#db.load<
-      (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null
-    >({
+    const row = await this.#db.load<StoredThread | null>({
       tableName: TABLE_THREADS,
       keys: { id: threadId },
     });
 
     if (!row || (resourceId !== undefined && row.resourceId !== resourceId)) return null;
 
-    return {
-      ...row,
-      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-    };
+    return parseStoredThread(row);
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -96,8 +120,14 @@ export class MemoryConvex extends MemoryStorage {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    const existing = await this.getThreadById({ threadId: id });
-    if (!existing) {
+    const updated = await this.#db.updateThread({
+      id,
+      title,
+      metadata,
+      updatedAt: new Date(),
+    });
+
+    if (!updated) {
       throw new MastraError({
         id: createStorageErrorId('CONVEX', 'UPDATE_THREAD', 'THREAD_NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
@@ -106,18 +136,7 @@ export class MemoryConvex extends MemoryStorage {
       });
     }
 
-    const updated: StorageThreadType = {
-      ...existing,
-      title,
-      metadata: {
-        ...existing.metadata,
-        ...metadata,
-      },
-      updatedAt: new Date(),
-    };
-
-    await this.saveThread({ thread: updated });
-    return updated;
+    return parseStoredThread(updated);
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
@@ -152,6 +171,20 @@ export class MemoryConvex extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 100);
 
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CONVEX', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
     const { field, direction } = this.parseOrderBy(orderBy);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
@@ -162,21 +195,14 @@ export class MemoryConvex extends MemoryStorage {
       queryFilters.push({ field: 'resourceId', value: filter.resourceId });
     }
 
-    const rows = await this.#db.queryTable<
-      Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
-    >(TABLE_THREADS, queryFilters);
+    const rows = await this.#db.queryTable<StoredThread>(TABLE_THREADS, queryFilters);
 
-    let threads = rows.map(row => ({
-      ...row,
-      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-    }));
+    let threads = rows.map(row => parseStoredThread(row));
 
     // Apply metadata filters if provided (AND logic)
     if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
       threads = threads.filter(thread => {
-        if (!thread.metadata) return false;
+        if (!thread.metadata || typeof thread.metadata !== 'object' || Array.isArray(thread.metadata)) return false;
         return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
       });
     }
@@ -360,19 +386,11 @@ export class MemoryConvex extends MemoryStorage {
     const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean) as string[])];
     const now = new Date();
     for (const threadId of threadIds) {
-      const thread = await this.getThreadById({ threadId });
-      if (thread) {
-        await this.#db.insert({
-          tableName: TABLE_THREADS,
-          record: {
-            ...thread,
-            id: thread.id,
-            updatedAt: now.toISOString(),
-            createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
-            metadata: thread.metadata ?? {},
-          },
-        });
-      }
+      await this.#db.patch({
+        tableName: TABLE_THREADS,
+        id: threadId,
+        record: { updatedAt: now.toISOString() },
+      });
     }
 
     const list = new MessageList().add(messages, 'memory');
@@ -436,19 +454,11 @@ export class MemoryConvex extends MemoryStorage {
     // Update thread updatedAt timestamps for all affected threads
     const now = new Date();
     for (const threadId of affectedThreadIds) {
-      const thread = await this.getThreadById({ threadId });
-      if (thread) {
-        await this.#db.insert({
-          tableName: TABLE_THREADS,
-          record: {
-            ...thread,
-            id: thread.id,
-            updatedAt: now.toISOString(),
-            createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
-            metadata: thread.metadata ?? {},
-          },
-        });
-      }
+      await this.#db.patch({
+        tableName: TABLE_THREADS,
+        id: threadId,
+        record: { updatedAt: now.toISOString() },
+      });
     }
 
     return updated;
@@ -476,20 +486,13 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    const record = await this.#db.load<
-      (Omit<StorageResourceType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null
-    >({
+    const record = await this.#db.load<StoredResource | null>({
       tableName: TABLE_RESOURCES,
       keys: { id: resourceId },
     });
     if (!record) return null;
 
-    return {
-      ...record,
-      metadata: typeof record.metadata === 'string' ? safelyParseJSON(record.metadata) : record.metadata,
-      createdAt: new Date(record.createdAt),
-      updatedAt: new Date(record.updatedAt),
-    };
+    return parseStoredResource(record);
   }
 
   async updateResource({
@@ -501,31 +504,16 @@ export class MemoryConvex extends MemoryStorage {
     workingMemory?: string;
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
-    const existing = await this.getResourceById({ resourceId });
     const now = new Date();
-    if (!existing) {
-      const created: StorageResourceType = {
-        id: resourceId,
-        workingMemory,
-        metadata: metadata ?? {},
-        createdAt: now,
-        updatedAt: now,
-      };
-      return this.saveResource({ resource: created });
-    }
-
-    const updated: StorageResourceType = {
-      ...existing,
-      workingMemory: workingMemory ?? existing.workingMemory,
-      metadata: {
-        ...existing.metadata,
-        ...metadata,
-      },
+    const updated = await this.#db.updateResource({
+      resourceId,
+      workingMemory,
+      metadata,
+      createdAt: now,
       updatedAt: now,
-    };
+    });
 
-    await this.saveResource({ resource: updated });
-    return updated;
+    return parseStoredResource(updated);
   }
 
   private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {

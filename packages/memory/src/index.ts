@@ -168,7 +168,11 @@ function isSystemReminderMessage(message: MastraDBMessage): boolean {
 
   const metadata = message.content.metadata;
   if (message.role === 'signal') {
-    return isRecord(metadata) && isRecord(metadata.signal) && metadata.signal.type === 'system-reminder';
+    return (
+      isRecord(metadata) &&
+      isRecord(metadata.signal) &&
+      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
+    );
   }
 
   if (message.role !== 'user') {
@@ -1616,6 +1620,7 @@ ${workingMemory}`;
             maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
             providerOptions: omConfig.observation.providerOptions,
             bufferTokens: omConfig.observation.bufferTokens,
+            bufferOnIdle: omConfig.observation.bufferOnIdle,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,

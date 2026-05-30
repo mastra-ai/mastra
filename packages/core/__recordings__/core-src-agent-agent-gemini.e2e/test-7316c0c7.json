@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-7316c0c7",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle empty user message with system context in network",
     "createdAt": "2026-05-18T10:51:06.809Z",
-    "updatedAt": "2026-05-20T14:05:05.010Z"
+    "updatedAt": "2026-05-28T17:34:08.466Z"
   },
   "recordings": [
     {
@@ -65,7 +65,7 @@
             ]
           }
         },
-        "timestamp": 1779285898972
+        "timestamp": 1779989641818
       },
       "response": {
         "status": 200,
@@ -73,9 +73,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:00 GMT",
+          "date": "Thu, 28 May 2026 17:34:03 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1077",
+          "server-timing": "gfet4t7; dur=1170",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -88,19 +88,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Hello, how can I assist you today?\",\n  \"selectionReason\": \"The user provided an empty input. I will use the helperAgent to ask the user how I can assist them.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Hello, how can I assist you today?\",\n  \"selectionReason\": \"The user provided an empty request. The best course of action is to call helperAgent to inquire about how I can assist the user.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.1964760253678507
+              "avgLogprobs": -0.3036045558016065
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 830,
-            "candidatesTokenCount": 67,
-            "totalTokenCount": 897,
+            "candidatesTokenCount": 71,
+            "totalTokenCount": 901,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -110,13 +110,13 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 67
+                "tokenCount": 71
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "i78NaoOLBtvrkdUPuvSm6AM"
+          "responseId": "inwYaoaYCITLjMcPpoSG8AU"
         },
         "isStreaming": false
       }
@@ -146,7 +146,7 @@
             ]
           }
         },
-        "timestamp": 1779285900084
+        "timestamp": 1779989643158
       },
       "response": {
         "status": 200,
@@ -155,29 +155,29 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:05:00 GMT",
+          "date": "Thu, 28 May 2026 17:34:03 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=444",
+          "server-timing": "gfet4t7; dur=478",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Hello\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jL8Nau7DDrW0jMoP5c_JoQg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"! How can I help you today? I can assist with a variety of tasks, including\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jL8Nau7DDrW0jMoP5c_JoQg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \":\\n\\n*   **Answering questions:** I can provide information on a wide range of\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jL8Nau7DDrW0jMoP5c_JoQg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" topics.\\n*   **Generating text:** I can write stories, poems, articles, code, scripts, musical pieces, email, letters, etc.\\n*   **\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jL8Nau7DDrW0jMoP5c_JoQg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Translating languages:** I can translate text between many different languages.\\n*   **Summarizing text:** I can condense long pieces of text into shorter, more manageable summaries.\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jL8Nau7DDrW0jMoP5c_JoQg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n*   **Generating code:** I can generate code in various programming languages.\\n*   **Brainstorming ideas:** I can help you come up with new ideas for projects or solutions to problems.\\n*   **Writing different kinds of creative\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jL8Nau7DDrW0jMoP5c_JoQg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" content:** I can write different creative text formats, like poems, code, scripts, musical pieces, email, letters, etc.\\n\\nJust let me know what you need!\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 13,\"candidatesTokenCount\": 193,\"totalTokenCount\": 206,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 13}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 193}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jL8Nau7DDrW0jMoP5c_JoQg\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Great\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"i3wYavSkHs-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"! I'm ready to assist you. Here are some examples of things I can help with\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"i3wYavSkHs-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \":\\n\\n*   **Answering questions:** I can provide information on a wide\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"i3wYavSkHs-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" variety of topics. Just ask me anything!\\n*   **Generating creative content:** I can write stories, poems, code, scripts, musical pieces, email,\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"i3wYavSkHs-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" letters, etc. Just tell me what you need.\\n*   **Summarizing text:** I can provide concise summaries of long articles or documents.\\n*   **\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"i3wYavSkHs-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Translating languages:** I can translate text between many different languages.\\n*   **Brainstorming ideas:** If you're stuck on a problem, I can help you come up with potential solutions.\\n*   **Writing different kinds of creative content\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"i3wYavSkHs-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"** I can generate new ideas and contents for marketing and sales purposes\\n\\nSo, what can I do for you today? Just let me know what you have in mind.\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 13,\"candidatesTokenCount\": 189,\"totalTokenCount\": 202,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 13}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 189}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"i3wYavSkHs-V1dkPydbdWQ\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 78, 102, 223, 253, 292, 276],
+        "chunkTimings": [1, 150, 115, 174, 210, 351, 305],
         "isStreaming": true
       }
     },
     {
-      "hash": "6d2c824b7a997733",
+      "hash": "d0b6353b75fb4a3e",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -208,7 +208,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"Hello! How can I help you today? I can assist with a variety of tasks, including:\\n\\n*   **Answering questions:** I can provide information on a wide range of topics.\\n*   **Generating text:** I can write stories, poems, articles, code, scripts, musical pieces, email, letters, etc.\\n*   **Translating languages:** I can translate text between many different languages.\\n*   **Summarizing text:** I can condense long pieces of text into shorter, more manageable summaries.\\n*   **Generating code:** I can generate code in various programming languages.\\n*   **Brainstorming ideas:** I can help you come up with new ideas for projects or solutions to problems.\\n*   **Writing different kinds of creative content:** I can write different creative text formats, like poems, code, scripts, musical pieces, email, letters, etc.\\n\\nJust let me know what you need!\\n\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: \n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"Great! I'm ready to assist you. Here are some examples of things I can help with:\\n\\n*   **Answering questions:** I can provide information on a wide variety of topics. Just ask me anything!\\n*   **Generating creative content:** I can write stories, poems, code, scripts, musical pieces, email, letters, etc. Just tell me what you need.\\n*   **Summarizing text:** I can provide concise summaries of long articles or documents.\\n*   **Translating languages:** I can translate text between many different languages.\\n*   **Brainstorming ideas:** If you're stuck on a problem, I can help you come up with potential solutions.\\n*   **Writing different kinds of creative content** I can generate new ideas and contents for marketing and sales purposes\\n\\nSo, what can I do for you today? Just let me know what you have in mind.\\n\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: \n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
                 }
               ]
             }
@@ -221,7 +221,7 @@
             ]
           }
         },
-        "timestamp": 1779285903115
+        "timestamp": 1779989646426
       },
       "response": {
         "status": 200,
@@ -230,23 +230,23 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:05:03 GMT",
+          "date": "Thu, 28 May 2026 17:34:07 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=788",
+          "server-timing": "gfet4t7; dur=651",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 943,\"totalTokenCount\": 943,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 943}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"j78NarHKEIHyzeYPzPXwsAg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 943,\"totalTokenCount\": 943,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 943}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"j78NarHKEIHyzeYPzPXwsAg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The agent has responded and\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 943,\"totalTokenCount\": 943,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 943}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"j78NarHKEIHyzeYPzPXwsAg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" is waiting for further instructions. Since there are no further instructions provided and no other primitives to\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 943,\"totalTokenCount\": 943,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 943}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"j78NarHKEIHyzeYPzPXwsAg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" call, the task is complete.\\\",\\n  \\\"finalResult\\\": \\\"I am ready to assist with a variety of tasks, including answering questions, generating text,\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 943,\"totalTokenCount\": 943,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 943}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"j78NarHKEIHyzeYPzPXwsAg\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" translating languages, summarizing text, generating code, brainstorming ideas, and writing different kinds of creative content. Please let me know how I can help you.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 987,\"candidatesTokenCount\": 103,\"totalTokenCount\": 1090,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 987}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 103}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"j78NarHKEIHyzeYPzPXwsAg\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 940,\"totalTokenCount\": 940,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 940}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jnwYarSHMYOC6dgPopetiQc\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 940,\"totalTokenCount\": 940,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 940}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jnwYarSHMYOC6dgPopetiQc\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The agent helperAgent has started\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 940,\"totalTokenCount\": 940,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 940}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jnwYarSHMYOC6dgPopetiQc\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the conversation and is waiting for further instructions from the user. Since no specific task was\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 940,\"totalTokenCount\": 940,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 940}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jnwYarSHMYOC6dgPopetiQc\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" initially requested, the agent is now ready to assist with various tasks. Task complete.\\\",\\n  \\\"finalResult\\\": \\\"I'm ready to assist you.\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 940,\"totalTokenCount\": 940,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 940}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jnwYarSHMYOC6dgPopetiQc\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" What can I do for you today?\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 984,\"candidatesTokenCount\": 81,\"totalTokenCount\": 1065,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 984}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 81}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"jnwYarSHMYOC6dgPopetiQc\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 41, 161, 125, 188],
+        "chunkTimings": [1, 0, 97, 146, 272, 91],
         "isStreaming": true
       }
     }

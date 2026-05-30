@@ -152,6 +152,7 @@ interface RouteConfig<
   path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream'
+  sseFlushOnConnect?: boolean;
   handler: ServerRouteHandler<
     InferParams<TPathSchema, TQuerySchema, TBodySchema>,
     TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,

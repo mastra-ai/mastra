@@ -109,7 +109,8 @@ export async function insertTemporalGapMarkers({
 
   await sendSignal?.({
     id: `__temporal_gap_${crypto.randomUUID()}`,
-    type: 'system-reminder',
+    type: 'reactive',
+    tagName: 'system-reminder',
     contents: getTemporalGapReminderText(gapText, timestamp),
     createdAt: new Date(timestamp - 1),
     acceptedAt: new Date(timestamp),

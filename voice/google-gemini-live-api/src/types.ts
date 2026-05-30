@@ -6,6 +6,7 @@
  * Available Gemini Live API models
  */
 export type GeminiVoiceModel =
+  | 'gemini-3.1-flash-live-preview'
   /** @deprecated Shut down on 2025-12-09. */
   | 'gemini-2.0-flash-exp'
   /** @deprecated Shut down on 2025-11-14. */
