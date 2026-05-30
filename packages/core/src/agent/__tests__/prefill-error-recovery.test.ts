@@ -202,7 +202,8 @@ describe('PrefillErrorHandler Recovery', () => {
       );
       expect(retryReminderMessage?.content.metadata).toEqual({
         signal: expect.objectContaining({
-          type: 'system-reminder',
+          type: 'reactive',
+          tagName: 'system-reminder',
           attributes: {
             type: ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE,
           },

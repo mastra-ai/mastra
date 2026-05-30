@@ -828,7 +828,7 @@ export class ProcessorRunner {
 
       // Handle workflow as processor
       if (isProcessorWorkflow(processorOrWorkflow)) {
-        const currentSystemMessages = messageList.getAllSystemMessages();
+        const currentSystemMessages = messageList.getSystemMessages();
         await this.executeWorkflowAsProcessor(
           processorOrWorkflow,
           {
@@ -858,7 +858,7 @@ export class ProcessorRunner {
         continue;
       }
 
-      const currentSystemMessages = messageList.getAllSystemMessages();
+      const currentSystemMessages = messageList.getSystemMessages();
       const inputMessagesBefore = processableMessages;
       const inputSystemMessagesBefore = currentSystemMessages;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
@@ -929,7 +929,6 @@ export class ProcessorRunner {
           // Processor returned { messages, systemMessages } - handle both
           mutations = messageList.stopRecording();
 
-          // Replace system messages with the modified ones
           messageList.replaceAllSystemMessages(result.systemMessages);
 
           // Handle regular messages
@@ -1005,8 +1004,8 @@ export class ProcessorRunner {
             ...(!areProcessorMessageArraysEqual(inputMessagesBefore, processableMessages)
               ? { messages: processableMessages }
               : {}),
-            ...(!areProcessorMessageArraysEqual(inputSystemMessagesBefore, messageList.getAllSystemMessages())
-              ? { systemMessages: messageList.getAllSystemMessages() }
+            ...(!areProcessorMessageArraysEqual(inputSystemMessagesBefore, messageList.getSystemMessages())
+              ? { systemMessages: messageList.getSystemMessages() }
               : {}),
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
@@ -1087,7 +1086,7 @@ export class ProcessorRunner {
 
       // Handle workflow as processor with inputStep phase
       if (isProcessorWorkflow(processorOrWorkflow)) {
-        const currentSystemMessages = messageList.getAllSystemMessages();
+        const currentSystemMessages = messageList.getSystemMessages();
         const result = await this.executeWorkflowAsProcessor(
           processorOrWorkflow,
           {
@@ -1127,8 +1126,9 @@ export class ProcessorRunner {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
-      // Get all system messages to pass to the processor
-      const currentSystemMessages = messageList.getAllSystemMessages();
+      // Pass only the untagged system messages — tagged buckets belong to
+      // their owning processors and are merged back in at final model assembly.
+      const currentSystemMessages = messageList.getSystemMessages();
 
       const inputData = {
         messages: processableMessages,
@@ -1234,7 +1234,7 @@ export class ProcessorRunner {
             beforeMessages: inputData.messages,
             beforeSystemMessages: inputData.systemMessages,
             messages: messageList.get.all.db(),
-            systemMessages: messageList.getAllSystemMessages(),
+            systemMessages: messageList.getSystemMessages(),
           }),
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
@@ -1487,7 +1487,7 @@ export class ProcessorRunner {
 
       // Handle workflow as processor with outputStep phase
       if (isProcessorWorkflow(processorOrWorkflow)) {
-        const currentSystemMessages = messageList.getAllSystemMessages();
+        const currentSystemMessages = messageList.getSystemMessages();
         await this.executeWorkflowAsProcessor(
           processorOrWorkflow,
           {
@@ -1523,7 +1523,7 @@ export class ProcessorRunner {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
-      const currentSystemMessages = messageList.getAllSystemMessages();
+      const currentSystemMessages = messageList.getSystemMessages();
       const defaultUsage: LanguageModelUsage = {
         inputTokens: undefined,
         outputTokens: undefined,
@@ -1620,8 +1620,8 @@ export class ProcessorRunner {
             ...(!areProcessorMessageArraysEqual(processableMessages, messageList.get.all.db())
               ? { messages: messageList.get.all.db() }
               : {}),
-            ...(!areProcessorMessageArraysEqual(currentSystemMessages, messageList.getAllSystemMessages())
-              ? { systemMessages: messageList.getAllSystemMessages() }
+            ...(!areProcessorMessageArraysEqual(currentSystemMessages, messageList.getSystemMessages())
+              ? { systemMessages: messageList.getSystemMessages() }
               : {}),
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,

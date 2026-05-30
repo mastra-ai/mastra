@@ -19,6 +19,7 @@ import type {
   BackgroundTasksStorage,
   SchedulesStorage,
   ChannelsStorage,
+  ToolProviderConnectionsStorage,
 } from './domains';
 
 /** Map of all storage domain interfaces available in a composite store. */
@@ -41,6 +42,7 @@ export type StorageDomains = {
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
+  toolProviderConnections?: ToolProviderConnectionsStorage;
 };
 
 /**
@@ -57,6 +59,7 @@ export const EDITOR_DOMAINS = [
   'workspaces',
   'skills',
   'favorites',
+  'toolProviderConnections',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 /**
@@ -324,6 +327,7 @@ export class MastraCompositeStore extends MastraBase {
         backgroundTasks: resolve('backgroundTasks'),
         schedules: resolve('schedules'),
         channels: resolve('channels'),
+        toolProviderConnections: resolve('toolProviderConnections'),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -450,6 +454,7 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.backgroundTasks);
       maybeInit(this.stores.schedules);
       maybeInit(this.stores.channels);
+      maybeInit(this.stores.toolProviderConnections);
     }
 
     await Promise.all(initTasks);

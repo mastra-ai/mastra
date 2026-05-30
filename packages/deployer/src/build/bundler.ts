@@ -10,6 +10,7 @@ import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import type { analyzeBundle } from './analyze';
 import { esbuild } from './plugins/esbuild';
 import { esmShim } from './plugins/esm-shim';
+import { localStorageDetector } from './plugins/local-storage-detector';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { protocolExternalResolver } from './plugins/protocol-external-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
@@ -143,6 +144,7 @@ export async function getInputOptions(
       // },
       // },
       json(),
+      localStorageDetector(),
       removeDeployer(entryFile, { sourcemap }),
       // treeshake unused imports
       esbuild({
