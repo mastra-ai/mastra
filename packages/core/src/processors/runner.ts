@@ -2,8 +2,9 @@ import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
-import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
-import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
+import { createSignal } from '../agent/signals';
+import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
+import { applyStateSignal, getStateSignalsMetadata, resolveStateSignalHistory } from '../agent/state-signals';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
@@ -62,63 +63,6 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
   } catch {
     // onViolation errors are silently caught
   }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function stableStringify(value: unknown): string {
-  return JSON.stringify(value, (_key, val) => {
-    if (val && typeof val === 'object' && !Array.isArray(val)) {
-      const sorted: Record<string, unknown> = {};
-      for (const k of Object.keys(val as Record<string, unknown>).sort()) {
-        sorted[k] = (val as Record<string, unknown>)[k];
-      }
-      return sorted;
-    }
-    return val;
-  });
-}
-
-function getStateSignalHash(
-  signal: Pick<AgentSignalInput, 'contents' | 'attributes' | 'metadata' | 'providerOptions'>,
-): string {
-  return stableStringify({
-    contents: signal.contents,
-    attributes: signal.attributes,
-    metadata: signal.metadata,
-    providerOptions: signal.providerOptions,
-  });
-}
-
-function getStateSignalsMetadata(threadMetadata?: Record<string, unknown>): Record<string, Record<string, unknown>> {
-  if (!threadMetadata) return {};
-  const mastra = threadMetadata.mastra;
-  if (!isPlainObject(mastra)) return {};
-  const stateSignals = mastra.stateSignals;
-  return isPlainObject(stateSignals) ? (stateSignals as Record<string, Record<string, unknown>>) : {};
-}
-
-function setStateSignalMetadata(
-  threadMetadata: Record<string, unknown> | undefined,
-  processorId: string,
-  tracking: Record<string, unknown>,
-): Record<string, unknown> {
-  const existing = threadMetadata ?? {};
-  const existingMastra = isPlainObject(existing.mastra) ? existing.mastra : {};
-  const existingStateSignals = isPlainObject(existingMastra.stateSignals) ? existingMastra.stateSignals : {};
-
-  return {
-    ...existing,
-    mastra: {
-      ...existingMastra,
-      stateSignals: {
-        ...existingStateSignals,
-        [processorId]: tracking,
-      },
-    },
-  };
 }
 
 /**
@@ -423,30 +367,30 @@ export class ProcessorRunner {
       );
     }
 
-    const thread = (await resolvedMemory.getThreadById({ threadId: resolvedThreadId })) ?? memoryContext?.thread;
-    if (!thread) {
+    const loadedThread = (await resolvedMemory.getThreadById({ threadId: resolvedThreadId })) ?? memoryContext?.thread;
+    if (!loadedThread) {
       throw new Error(`[Processor:${processor.id}] computeStateSignal could not load thread ${resolvedThreadId}`);
     }
+    const thread = {
+      ...loadedThread,
+      id: resolvedThreadId,
+      resourceId: loadedThread.resourceId ?? resolvedResourceId,
+      createdAt: loadedThread.createdAt ?? new Date(),
+      updatedAt: loadedThread.updatedAt ?? new Date(),
+      metadata: loadedThread.metadata,
+    };
 
-    const activeStateSignals = messageList.get.all
-      .db()
-      .filter(message => message.role === 'signal')
-      .map(message => {
-        try {
-          return mastraDBMessageToSignal(message);
-        } catch {
-          return undefined;
-        }
-      })
-      .filter(
-        (signal): signal is CreatedAgentSignal & { type: 'state' } =>
-          signal?.type === 'state' &&
-          isPlainObject(signal.metadata?.state) &&
-          signal.metadata.state.processorId === processor.id &&
-          signal.metadata.state.threadId === resolvedThreadId,
-      );
-
-    const tracking = getStateSignalsMetadata(thread.metadata)[processor.id];
+    const stateId = processor.stateId ?? processor.id;
+    const trackingById = getStateSignalsMetadata(thread.metadata);
+    const tracking = trackingById[stateId];
+    const { activeStateSignals, contextWindow, lastSnapshot, deltasSinceSnapshot } = await resolveStateSignalHistory({
+      messageList,
+      memory: resolvedMemory,
+      threadId: resolvedThreadId,
+      resourceId: resolvedResourceId,
+      stateId,
+      tracking,
+    });
     const result = (await computeStateSignal({
       messages: messageList.get.all.db(),
       messageList,
@@ -461,64 +405,87 @@ export class ProcessorRunner {
       resourceId: resolvedResourceId,
       threadId: resolvedThreadId,
       activeStateSignals,
+      contextWindow,
+      lastSnapshot,
+      deltasSinceSnapshot,
       tracking,
+      sendStateSignal: async stateSignal => {
+        const sendResult = await applyStateSignal({
+          input: stateSignal,
+          memory: resolvedMemory,
+          thread,
+          resourceId: resolvedResourceId,
+          threadId: resolvedThreadId,
+          memoryConfig: memoryContext?.memoryConfig,
+          messageList,
+          defaultId: stateId,
+          writeSignal: signal => writer?.custom(signal.toDataPart()),
+        });
+        return sendResult.skipped ? sendResult : sendResult.signal;
+      },
     })) as ComputeStateSignalResult;
 
     if (!result) return;
 
-    const signalInput: AgentSignalInput = {
-      ...result,
-      type: 'state',
-      tagName: result.tagName ?? 'state',
-      contents: result.contents,
-    };
-    const hash = getStateSignalHash(signalInput);
-    if (tracking?.currentHash === hash && activeStateSignals.length > 0) return;
-
-    const previousVersion = typeof tracking?.version === 'number' ? tracking.version : 0;
-    const version = tracking?.currentHash === hash ? previousVersion || 1 : previousVersion + 1;
-    const stateMetadata = isPlainObject(signalInput.metadata?.state) ? signalInput.metadata.state : {};
-    const signal = createSignal({
-      ...signalInput,
-      metadata: {
-        ...signalInput.metadata,
-        state: {
-          ...stateMetadata,
-          processorId: processor.id,
-          threadId: resolvedThreadId,
-          hash,
-          version,
-        },
-      },
-    });
-    const addedSignal = messageList.addSignal(signal);
-    await writer?.custom(addedSignal.toDataPart());
-
-    const updatedAt = new Date().toISOString();
-    await resolvedMemory.saveThread({
-      thread: {
-        ...thread,
-        id: resolvedThreadId,
-        resourceId: thread.resourceId ?? resolvedResourceId,
-        createdAt: thread.createdAt ?? new Date(),
-        updatedAt: new Date(updatedAt),
-        metadata: setStateSignalMetadata(thread.metadata, processor.id, {
-          currentHash: hash,
-          version,
-          lastSignalId: addedSignal.id,
-          updatedAt,
-          activeCopies: [...activeStateSignals, addedSignal].map(activeSignal => {
-            const activeStateMetadata = isPlainObject(activeSignal.metadata?.state) ? activeSignal.metadata.state : {};
-            return {
-              id: activeSignal.id,
-              ...(typeof activeStateMetadata.hash === 'string' ? { hash: activeStateMetadata.hash } : {}),
-              ...(typeof activeStateMetadata.version === 'number' ? { version: activeStateMetadata.version } : {}),
-            };
-          }),
-        }),
-      },
+    await applyStateSignal({
+      input: result,
+      memory: resolvedMemory,
+      thread,
+      resourceId: resolvedResourceId,
+      threadId: resolvedThreadId,
       memoryConfig: memoryContext?.memoryConfig,
+      messageList,
+      defaultId: stateId,
+      writeSignal: signal => writer?.custom(signal.toDataPart()),
     });
+  }
+
+  private async runWorkflowComputeStateSignals({
+    workflow,
+    messageList,
+    stepNumber,
+    steps,
+    requestContext,
+    writer,
+    memory,
+    resourceId,
+    threadId,
+    abortSignal,
+    retryCount,
+  }: {
+    workflow: ProcessorWorkflow;
+    messageList: MessageList;
+    stepNumber: number;
+    steps: Array<StepResult<any>>;
+    requestContext?: RequestContext;
+    writer?: ProcessorStreamWriter;
+    memory?: MastraMemory;
+    resourceId?: string;
+    threadId?: string;
+    abortSignal?: AbortSignal;
+    retryCount: number;
+  }): Promise<void> {
+    for (const processor of workflow.__stateSignalProcessors ?? []) {
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      await this.runComputeStateSignal({
+        processor,
+        messageList,
+        stepNumber,
+        steps,
+        requestContext,
+        writer,
+        abort,
+        processorState: this.getProcessorState(processor.id),
+        memory,
+        resourceId,
+        threadId,
+        abortSignal,
+        retryCount,
+      });
+    }
   }
 
   /**
@@ -1313,6 +1280,19 @@ export class ProcessorRunner {
           args.abortSignal,
         );
         Object.assign(stepInput, result);
+        await this.runWorkflowComputeStateSignals({
+          workflow: processorOrWorkflow,
+          messageList,
+          stepNumber,
+          steps,
+          requestContext,
+          writer,
+          memory: args.memory,
+          resourceId: args.resourceId,
+          threadId: args.threadId,
+          abortSignal: args.abortSignal,
+          retryCount: args.retryCount ?? 0,
+        });
         continue;
       }
 
@@ -1406,6 +1386,44 @@ export class ProcessorRunner {
           writer,
           abortSignal: args.abortSignal,
           sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
+          sendStateSignal: async (
+            stateSignal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
+          ) => {
+            const memoryContext = parseMemoryRequestContext(requestContext);
+            const resolvedMemory = args.memory;
+            const resolvedThreadId = args.threadId ?? memoryContext?.thread?.id;
+            const resolvedResourceId = args.resourceId ?? memoryContext?.resourceId;
+            if (!resolvedMemory || !resolvedThreadId || !resolvedResourceId) {
+              throw new Error(
+                `[Processor:${processor.id}] sendStateSignal requires Mastra memory with an active resourceId and threadId`,
+              );
+            }
+            const loadedThread =
+              (await resolvedMemory.getThreadById({ threadId: resolvedThreadId })) ?? memoryContext?.thread;
+            if (!loadedThread) {
+              throw new Error(`[Processor:${processor.id}] sendStateSignal could not load thread ${resolvedThreadId}`);
+            }
+            const thread = {
+              ...loadedThread,
+              id: resolvedThreadId,
+              resourceId: loadedThread.resourceId ?? resolvedResourceId,
+              createdAt: loadedThread.createdAt ?? new Date(),
+              updatedAt: loadedThread.updatedAt ?? new Date(),
+              metadata: loadedThread.metadata,
+            };
+            const result = await applyStateSignal({
+              input: stateSignal,
+              memory: resolvedMemory,
+              thread,
+              resourceId: resolvedResourceId,
+              threadId: resolvedThreadId,
+              memoryConfig: memoryContext?.memoryConfig,
+              messageList,
+              defaultId: processor.id,
+              writeSignal: signal => writer?.custom(signal.toDataPart()),
+            });
+            return result.skipped ? result : result.signal;
+          },
         };
 
         const result = processMethod

@@ -941,6 +941,59 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('persists external state signals with cache-key tracking', async () => {
+    const memory = new MockMemory();
+    await memory.createThread({ threadId: 'state-thread', resourceId: 'state-user' });
+    const agent = new Agent({
+      id: 'state-agent',
+      name: 'State Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('state response'),
+      memory,
+    });
+
+    const result = await agent.sendStateSignal(
+      {
+        id: 'browser',
+        cacheKey: 'browser:v1',
+        mode: 'snapshot',
+        contents: 'Browser is open on https://example.com',
+        value: { activeUrl: 'https://example.com' },
+      },
+      { resourceId: 'state-user', threadId: 'state-thread', ifIdle: { behavior: 'persist' } },
+    );
+    expect(result.accepted).toBe(true);
+    expect(result.skipped).not.toBe(true);
+    expect(result.signal).toBeDefined();
+
+    expect(result.signal).toMatchObject({
+      type: 'state',
+      tagName: 'state',
+      metadata: expect.objectContaining({
+        state: expect.objectContaining({ id: 'browser', cacheKey: 'browser:v1', mode: 'snapshot', version: 1 }),
+        value: { activeUrl: 'https://example.com' },
+      }),
+    });
+    await expect(
+      agent.sendStateSignal(
+        { id: 'browser', cacheKey: 'browser:v1', contents: 'unchanged' },
+        { resourceId: 'state-user', threadId: 'state-thread', ifIdle: { behavior: 'persist' } },
+      ),
+    ).resolves.toEqual({ accepted: true, skipped: true, reason: 'unchanged' });
+    const thread = await memory.getThreadById({ threadId: 'state-thread' });
+    expect(thread?.metadata?.mastra).toEqual(
+      expect.objectContaining({
+        stateSignals: expect.objectContaining({
+          browser: expect.objectContaining({
+            currentCacheKey: 'browser:v1',
+            version: 1,
+            lastSnapshotSignalId: result.signal.id,
+          }),
+        }),
+      }),
+    );
+  });
+
   it('delivers sendMessage into an active same-agent run', async () => {
     let releaseFirst!: () => void;
     const firstFinished = new Promise<void>(resolve => {

@@ -19,16 +19,12 @@
  * ```
  */
 
-import type { MastraDBMessage } from '../agent/message-list';
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
   ProcessInputArgs,
   ProcessInputResult,
-  ProcessInputStepArgs,
 } from '../processors/index';
-
-const REMINDER_TYPE = 'browser-context';
 
 /**
  * Browser context stored in RequestContext.
@@ -68,6 +64,9 @@ export interface BrowserContext {
    * to connect them to the browser managed by Mastra.
    */
   cdpUrl?: string;
+
+  /** Internal provider hook used to refresh browser state between agentic loop steps. */
+  getState?: () => Promise<Partial<BrowserContext> | undefined>;
 }
 
 /**
@@ -75,6 +74,7 @@ export interface BrowserContext {
  */
 export class BrowserContextProcessor {
   readonly id = 'browser-context';
+  readonly stateId = 'browser';
 
   processInput(args: ProcessInputArgs): ProcessInputResult {
     const ctx = args.requestContext?.get('browser') as BrowserContext | undefined;
@@ -100,72 +100,32 @@ export class BrowserContextProcessor {
     return { messages: args.messages, systemMessages };
   }
 
-  async processInputStep(args: ProcessInputStepArgs) {
-    // Only inject per-request context at the first step
-    if (args.stepNumber !== 0) return;
-
+  async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
     const ctx = args.requestContext?.get('browser') as BrowserContext | undefined;
     if (!ctx) return;
 
-    const parts: string[] = [];
-
-    if (ctx.currentUrl) {
-      parts.push(`Current URL: ${ctx.currentUrl}`);
-    }
-
-    if (ctx.pageTitle) {
-      parts.push(`Page title: ${ctx.pageTitle}`);
-    }
-
-    if (parts.length === 0) return;
-
-    const reminderText = parts.join(' | ');
-
-    // Only suppress if the trailing message is already the same browser reminder
-    const existingMessages = args.messageList.get.all.db();
-    if (hasTrailingBrowserReminder(existingMessages, ctx.currentUrl, ctx.pageTitle)) {
-      return;
-    }
-
-    await args.sendSignal?.({
-      type: 'reactive',
-      tagName: 'system-reminder',
-      contents: reminderText,
-      attributes: {
-        type: REMINDER_TYPE,
-      },
-      metadata: {
-        url: ctx.currentUrl,
-        title: ctx.pageTitle,
-      },
-    });
-
-    return args.messageList;
-  }
-
-  computeStateSignal(args: ComputeStateSignalArgs): ComputeStateSignalResult {
-    const ctx = args.requestContext?.get('browser') as BrowserContext | undefined;
-    if (!ctx) return;
-
-    const browserState = getBrowserState(ctx);
+    const refreshedState = await ctx.getState?.();
+    const browserState = getBrowserState(refreshedState ? { ...ctx, ...refreshedState } : ctx);
+    const shouldRefreshSnapshot = Boolean(args.lastSnapshot && !args.contextWindow.hasSnapshot);
     const previousState = getMostRecentBrowserState(args.activeStateSignals);
     const changed = getChangedBrowserState(previousState, browserState);
-    if (previousState && Object.keys(changed).length === 0) return;
+    if (previousState && Object.keys(changed).length === 0 && !shouldRefreshSnapshot) return;
 
-    const isDelta = Boolean(previousState);
+    const isDelta = Boolean(previousState && !shouldRefreshSnapshot);
     return {
+      id: 'browser',
+      cacheKey: stableBrowserStateCacheKey(browserState),
+      mode: isDelta ? 'delta' : 'snapshot',
       tagName: 'state',
       contents: isDelta ? formatBrowserStateDelta(changed) : formatBrowserStateSnapshot(browserState),
+      value: browserState,
+      ...(isDelta ? { delta: changed } : {}),
       attributes: {
         type: 'browser',
         updated: new Date().toISOString(),
       },
       metadata: {
-        state: {
-          delta: isDelta,
-        },
         browser: browserState,
-        ...(isDelta ? { delta: changed } : {}),
       },
     };
   }
@@ -199,6 +159,19 @@ function getMostRecentBrowserState(
     }
   }
   return undefined;
+}
+
+function stableBrowserStateCacheKey(state: BrowserState): string {
+  return JSON.stringify(state, (_key, value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const sorted: Record<string, unknown> = {};
+      for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+        sorted[key] = (value as Record<string, unknown>)[key];
+      }
+      return sorted;
+    }
+    return value;
+  });
 }
 
 function getChangedBrowserState(previous: BrowserState | undefined, current: BrowserState): Partial<BrowserState> {
@@ -235,43 +208,4 @@ function formatBrowserStateDelta(delta: Partial<BrowserState>): string {
     parts.push(`page metadata changed to ${JSON.stringify(delta.pageMetadata)}`);
   }
   return `changed: ${parts.join('; ')}`;
-}
-
-interface BrowserReminderMetadata {
-  type: typeof REMINDER_TYPE;
-  url?: string;
-  title?: string;
-}
-
-/**
- * Check if the trailing message is already a browser reminder with the same URL/title.
- * Only checks the last message to avoid suppressing reminders when the browser context
- * is no longer at the tail (e.g., user → reminder(A) → assistant → user should get a fresh reminder).
- */
-function hasTrailingBrowserReminder(
-  messages: MastraDBMessage[],
-  url: string | undefined,
-  title: string | undefined,
-): boolean {
-  const msg = messages[messages.length - 1];
-  if (!msg || (msg.role !== 'user' && msg.role !== 'signal')) return false;
-
-  const metadata = msg.content.metadata;
-  if (typeof metadata !== 'object' || metadata === null) {
-    return false;
-  }
-
-  const signal = (
-    metadata as { signal?: { type?: string; attributes?: { type?: string }; metadata?: BrowserReminderMetadata } }
-  ).signal;
-  const reminder = signal
-    ? {
-        type: signal.attributes?.type,
-        url: signal.metadata?.url,
-        title: signal.metadata?.title,
-      }
-    : 'systemReminder' in metadata
-      ? (metadata as { systemReminder?: BrowserReminderMetadata }).systemReminder
-      : (metadata as unknown as BrowserReminderMetadata);
-  return reminder?.type === REMINDER_TYPE && reminder.url === url && reminder.title === title;
 }

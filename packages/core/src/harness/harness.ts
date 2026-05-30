@@ -183,6 +183,33 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
   };
 }
 
+function toStateSignalContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'state_signal' }> | undefined {
+  const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
+  const stateId = getStringValue(stateMetadata?.id) ?? getStringValue(payload.tagName) ?? 'state';
+  const contents = payload.contents;
+  const text =
+    typeof contents === 'string'
+      ? contents
+      : Array.isArray(contents)
+        ? contents
+            .filter((part): part is { type: 'text'; text: string } => getRecordValue(part)?.type === 'text')
+            .map(part => part.text)
+            .join('\n')
+        : '';
+
+  return {
+    type: 'state_signal',
+    id: getStringValue(payload.id),
+    stateId,
+    mode: stateMetadata?.mode === 'delta' ? 'delta' : 'snapshot',
+    cacheKey: getStringValue(stateMetadata?.cacheKey),
+    version: typeof stateMetadata?.version === 'number' ? stateMetadata.version : undefined,
+    message: text,
+  };
+}
+
 /**
  * The Harness orchestrates multiple agent modes, shared state, memory, and storage.
  * It's the core abstraction that a TUI (or other UI) controls.
@@ -2073,6 +2100,26 @@ export class Harness<TState = {}> {
         }
       }
 
+      if (signal.type === 'state') {
+        const stateSignal = toStateSignalContent({
+          id: signal.id,
+          type: signal.type,
+          tagName: signal.tagName,
+          contents: signal.contents,
+          metadata: signal.metadata,
+        });
+        if (stateSignal) {
+          content.push(stateSignal);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
       if (signal.type === 'reactive' && signal.tagName === 'system-reminder') {
         const reminder = toSystemReminderContent({
           type: signal.type,
@@ -2179,6 +2226,17 @@ export class Harness<TState = {}> {
             tokensAttempted: (data.tokensAttempted as number) ?? 0,
             operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
           });
+          break;
+        }
+        case 'data-signal': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          if (data.type === 'state') {
+            const stateSignal = toStateSignalContent(data);
+            if (stateSignal) content.push(stateSignal);
+          } else if (data.type === 'reactive' && data.tagName === 'system-reminder') {
+            const reminder = toSystemReminderContent(data);
+            if (reminder) content.push(reminder);
+          }
           break;
         }
         case 'data-user-message': {
@@ -2735,6 +2793,23 @@ export class Harness<TState = {}> {
 
           this.abortForOmFailure({ operationType, stage: 'buffering', error });
           return { message: state.currentMessage };
+        }
+        break;
+      }
+      case 'data-signal': {
+        const payload = (chunk as any).data as Record<string, unknown> | undefined;
+        if (payload?.type === 'state') {
+          const stateSignal = toStateSignalContent(payload);
+          if (stateSignal) {
+            state.currentMessage.content.push(stateSignal);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'reactive' && payload.tagName === 'system-reminder') {
+          const reminder = toSystemReminderContent(payload);
+          if (reminder) {
+            state.currentMessage.content.push(reminder);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
         }
         break;
       }

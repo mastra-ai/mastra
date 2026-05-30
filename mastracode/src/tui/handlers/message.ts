@@ -11,6 +11,7 @@ import {
   reconcileChatBoundarySpacers,
 } from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { StateSignalComponent } from '../components/state-signal.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
@@ -59,14 +60,29 @@ type StreamedSystemReminderPart = {
   judgeModelId?: string;
 };
 
+type StreamedStateSignalPart = {
+  type: 'state_signal';
+  stateId: string;
+  mode: 'snapshot' | 'delta';
+  version?: number;
+  message?: string;
+};
+
 function isInlineBoundary(part: HarnessMessageContent): boolean {
   return (
-    part.type === 'tool_call' || part.type === 'tool_result' || (part as { type?: string }).type === 'system_reminder'
+    part.type === 'tool_call' ||
+    part.type === 'tool_result' ||
+    (part as { type?: string }).type === 'system_reminder' ||
+    (part as { type?: string }).type === 'state_signal'
   );
 }
 
 function isSystemReminderPart(part: HarnessMessageContent): boolean {
   return (part as { type?: string }).type === 'system_reminder';
+}
+
+function isStateSignalPart(part: HarnessMessageContent): boolean {
+  return (part as { type?: string }).type === 'state_signal';
 }
 
 function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSystemReminderPart | undefined {
@@ -85,6 +101,20 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
   };
 }
 
+function toStreamedStateSignalPart(part: HarnessMessageContent): StreamedStateSignalPart | undefined {
+  if (!isStateSignalPart(part)) return undefined;
+  const stateSignal = part as unknown as Partial<StreamedStateSignalPart>;
+  if (typeof stateSignal.stateId !== 'string') return undefined;
+
+  return {
+    type: 'state_signal',
+    stateId: stateSignal.stateId,
+    mode: stateSignal.mode === 'delta' ? 'delta' : 'snapshot',
+    version: typeof stateSignal.version === 'number' ? stateSignal.version : undefined,
+    message: typeof stateSignal.message === 'string' ? stateSignal.message : undefined,
+  };
+}
+
 function createReminderComponent(reminder: StreamedSystemReminderPart): SystemReminderComponent | TemporalGapComponent {
   if (reminder.reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
@@ -100,6 +130,16 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
     goalMaxTurns: reminder.goalMaxTurns,
     judgeModelId: reminder.judgeModelId,
   });
+}
+
+function addInlineStateSignal(ctx: EventHandlerContext, stateSignal: StreamedStateSignalPart): void {
+  const component = new StateSignalComponent({
+    stateId: stateSignal.stateId,
+    mode: stateSignal.mode,
+    version: stateSignal.version,
+    message: stateSignal.message,
+  });
+  ctx.addChildBeforeFollowUps(component);
 }
 
 function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemReminderPart): void {
@@ -186,6 +226,17 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   const systemReminderParts = message.content
     .map(toStreamedSystemReminderPart)
     .filter((part): part is StreamedSystemReminderPart => part !== undefined);
+  const stateSignalParts = message.content
+    .map(toStreamedStateSignalPart)
+    .filter((part): part is StreamedStateSignalPart => part !== undefined);
+
+  for (const stateSignal of stateSignalParts) {
+    const stateSignalKey = `${message.id}:${stateSignal.stateId}:${stateSignal.version ?? ''}:${stateSignal.message ?? ''}`;
+    if (!state.currentRunSystemReminderKeys.has(stateSignalKey)) {
+      state.currentRunSystemReminderKeys.add(stateSignalKey);
+      addInlineStateSignal(ctx, stateSignal);
+    }
+  }
 
   for (const reminder of systemReminderParts) {
     if (reminder.reminderType === 'goal-judge') continue;
@@ -201,7 +252,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     const trailingParts = getTrailingContentParts(message);
     const hasToolCalls = message.content.some(content => content.type === 'tool_call');
     if (trailingParts.length === 0 && !hasToolCalls) {
-      if (systemReminderParts.length > 0) {
+      if (systemReminderParts.length > 0 || stateSignalParts.length > 0) {
         state.ui.requestRender();
       }
       return;

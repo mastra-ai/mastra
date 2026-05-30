@@ -226,7 +226,12 @@ export const useChat = ({
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
       setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-      if (chunk.type === 'data-user-message' && 'data' in chunk && typeof chunk.data?.id === 'string') {
+      if (
+        chunk.type === 'data-user-message' &&
+        'data' in chunk &&
+        (chunk.data?.type === 'user-message' || chunk.data?.type === 'user') &&
+        typeof chunk.data?.id === 'string'
+      ) {
         onSignalEcho?.(chunk.data.id);
       }
 
