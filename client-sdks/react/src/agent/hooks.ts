@@ -245,6 +245,10 @@ export const useChat = ({
         }
       }
 
+      if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+        setIsRunning(false);
+      }
+
       if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
         setIsRunning(false);
       }

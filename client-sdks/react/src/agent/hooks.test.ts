@@ -126,6 +126,53 @@ describe('useChat forwards clientTools', () => {
     expect(streamUntilIdleMock).not.toHaveBeenCalled();
   });
 
+  it('marks subscription streams idle while waiting for tool approval', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { messageId: 'msg-approval' },
+      },
+      {
+        type: 'tool-call',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      expect(lastMessage?.metadata?.mode).toBe('stream');
+      if (lastMessage?.metadata?.mode !== 'stream') throw new Error('expected stream metadata');
+      expect(lastMessage.metadata.requireApprovalMetadata?.weatherTool).toEqual({
+        toolCallId: 'tool-call-approval-1',
+        toolName: 'weatherTool',
+        args: { city: 'London' },
+      });
+    });
+    expect(result.current.isRunning).toBe(false);
+  });
+
   it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
     keepSubscriptionOpen = true;
     const { rerender } = renderHook(
