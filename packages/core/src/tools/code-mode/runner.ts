@@ -47,10 +47,21 @@ export function buildRunner({ programModule, externals }: BuildRunnerOptions): s
   // External names become global property suffixes, so reject anything that
   // isn't a legal identifier instead of producing an unusable global.
   const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-  for (const { externalName } of externals) {
+  const seen = new Map<string, string>();
+  for (const { externalName, toolId } of externals) {
     if (!SAFE_IDENT.test(externalName)) {
       throw new Error(`Invalid Code Mode external identifier: ${externalName}`);
     }
+    // Two tool ids can sanitize to the same external name (e.g. `a-b` and
+    // `a_b` both become `a_b`). The install loop below would silently overwrite
+    // the earlier global, leaving one tool unreachable. Fail fast instead.
+    const existing = seen.get(externalName);
+    if (existing) {
+      throw new Error(
+        `Code Mode external identifier collision: tools "${existing}" and "${toolId}" both map to external_${externalName}`,
+      );
+    }
+    seen.set(externalName, toolId);
   }
 
   // Externals are emitted as JSON data, not interpolated identifiers. The

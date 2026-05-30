@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../tool';
+import { buildRunner } from './runner';
 import { createCodeModeInstructions, generateStubs, jsonSchemaToTsString } from './stub-generator';
 
 describe('jsonSchemaToTsString', () => {
@@ -99,5 +100,34 @@ describe('createCodeModeInstructions', () => {
     expect(instructions).toContain('external_a');
     expect(instructions).toContain('external_b');
     expect(instructions).toContain('Promise.all');
+  });
+});
+
+describe('buildRunner', () => {
+  it('rejects non-identifier external names', () => {
+    expect(() =>
+      buildRunner({ programModule: 'file:///p.ts', externals: [{ externalName: 'bad-name', toolId: 'bad-name' }] }),
+    ).toThrow(/Invalid Code Mode external identifier/);
+  });
+
+  it('rejects duplicate external names that would overwrite globals', () => {
+    expect(() =>
+      buildRunner({
+        programModule: 'file:///p.ts',
+        externals: [
+          { externalName: 'a_b', toolId: 'a-b' },
+          { externalName: 'a_b', toolId: 'a_b' },
+        ],
+      }),
+    ).toThrow(/collision.*external_a_b/);
+  });
+
+  it('builds runner source for valid externals', () => {
+    const source = buildRunner({
+      programModule: 'file:///p.ts',
+      externals: [{ externalName: 'get_thing', toolId: 'get-thing' }],
+    });
+    expect(source).toContain('get_thing');
+    expect(source).toContain('file:///p.ts');
   });
 });

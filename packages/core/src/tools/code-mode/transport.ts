@@ -100,12 +100,30 @@ export class StdioCodeModeTransport implements CodeModeTransport {
         }
       }
 
+      // Observer hooks are caller-supplied and best-effort: a throwing hook must
+      // never prevent `respond()` from running, or the matching in-sandbox promise
+      // would hang until the timeout.
+      function notifyCall(tool: string, args: unknown): void {
+        try {
+          onExternalCall?.(tool, args);
+        } catch {
+          /* observer errors are non-fatal */
+        }
+      }
+      function notifyResult(tool: string, durationMs: number, error?: Error): void {
+        try {
+          onExternalResult?.(tool, durationMs, error);
+        } catch {
+          /* observer errors are non-fatal */
+        }
+      }
+
       async function serveRpc(id: number, tool: string, args: unknown): Promise<void> {
         const started = Date.now();
-        onExternalCall?.(tool, args);
+        notifyCall(tool, args);
         // Allow-list enforcement: never invoke a tool that wasn't exposed.
         if (!allowList.has(tool)) {
-          onExternalResult?.(tool, Date.now() - started, new Error('not allowed'));
+          notifyResult(tool, Date.now() - started, new Error('not allowed'));
           await respond(id, false, undefined, {
             message: `Tool "${tool}" is not available in Code Mode`,
             name: 'NotAllowedError',
@@ -114,10 +132,10 @@ export class StdioCodeModeTransport implements CodeModeTransport {
         }
         try {
           const result = await dispatch(tool, args);
-          onExternalResult?.(tool, Date.now() - started);
+          notifyResult(tool, Date.now() - started);
           await respond(id, true, result);
         } catch (error: any) {
-          onExternalResult?.(tool, Date.now() - started, error);
+          notifyResult(tool, Date.now() - started, error);
           await respond(id, false, undefined, {
             message: error?.message ?? String(error),
             name: error?.name,
