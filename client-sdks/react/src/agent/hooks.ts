@@ -696,6 +696,15 @@ export const useChat = ({
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
+    if (_threadSubscriptionKeyRef.current) {
+      await agent.approveToolCallSubscription({
+        runId: currentRunId,
+        toolCallId,
+        requestContext: _requestContext.current,
+      });
+      return;
+    }
+
     const response = await agent.approveToolCall({
       runId: currentRunId,
       toolCallId,
@@ -720,6 +729,15 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
     const agent = baseClient.getAgent(agentId);
+    if (_threadSubscriptionKeyRef.current) {
+      await agent.declineToolCallSubscription({
+        runId: currentRunId,
+        toolCallId,
+        requestContext: _requestContext.current,
+      });
+      return;
+    }
+
     const response = await agent.declineToolCall({
       runId: currentRunId,
       toolCallId,

@@ -21,11 +21,21 @@ const approveToolCallMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: approveToolCallProcessDataStreamMock,
 }));
+const approveToolCallSubscriptionMock = vi.fn(async () => ({
+  accepted: true,
+  runId: 'run-approval',
+  toolCallId: 'tool-call-approval-1',
+}));
 const declineToolCallMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: async () => {
     /* no chunks */
   },
+}));
+const declineToolCallSubscriptionMock = vi.fn(async () => ({
+  accepted: true,
+  runId: 'run-approval',
+  toolCallId: 'tool-call-approval-1',
 }));
 const streamUntilIdleMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
@@ -80,7 +90,9 @@ vi.mock('@mastra/client-js', () => ({
       return {
         sendSignal: sendSignalMock,
         approveToolCall: approveToolCallMock,
+        approveToolCallSubscription: approveToolCallSubscriptionMock,
         declineToolCall: declineToolCallMock,
+        declineToolCallSubscription: declineToolCallSubscriptionMock,
         streamUntilIdle: streamUntilIdleMock,
         subscribeToThread: subscribeToThreadMock,
         generate: generateMock,
@@ -108,7 +120,9 @@ describe('useChat forwards clientTools', () => {
   beforeEach(() => {
     sendSignalMock.mockClear();
     approveToolCallMock.mockClear();
+    approveToolCallSubscriptionMock.mockClear();
     declineToolCallMock.mockClear();
+    declineToolCallSubscriptionMock.mockClear();
     approveToolCallProcessDataStreamMock.mockClear();
     streamUntilIdleMock.mockClear();
     subscribeToThreadMock.mockClear();
@@ -197,7 +211,7 @@ describe('useChat forwards clientTools', () => {
     expect(result.current.isRunning).toBe(false);
   });
 
-  it('processes approval response streams while subscribed to the thread', async () => {
+  it('uses subscription-native approval while subscribed to the thread', async () => {
     nextSubscribeChunks = [
       {
         type: 'start',
@@ -218,26 +232,9 @@ describe('useChat forwards clientTools', () => {
         payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
       },
     ];
-    nextApproveToolCallChunks = [
-      {
-        type: 'tool-result',
-        runId: 'run-approval',
-        from: 'AGENT',
-        payload: {
-          toolName: 'weatherTool',
-          toolCallId: 'tool-call-approval-1',
-          result: { temperature: 58 },
-        },
-      },
-      {
-        type: 'finish',
-        runId: 'run-approval',
-        from: 'AGENT',
-        payload: { finishReason: 'stop' },
-      },
-    ];
+    keepSubscriptionOpen = true;
 
-    const { result } = renderHook(
+    const { result, unmount } = renderHook(
       () =>
         useChat({
           agentId: 'test-agent',
@@ -259,18 +256,15 @@ describe('useChat forwards clientTools', () => {
       await result.current.approveToolCall('tool-call-approval-1');
     });
 
-    expect(approveToolCallMock).toHaveBeenCalledWith({
+    expect(approveToolCallSubscriptionMock).toHaveBeenCalledWith({
       runId: 'run-approval',
       toolCallId: 'tool-call-approval-1',
       requestContext: undefined,
     });
-    expect(approveToolCallProcessDataStreamMock).toHaveBeenCalledTimes(1);
-    expect(result.current.isRunning).toBe(false);
-    const toolPart = result.current.messages.at(-1)?.parts.find(part => part.type === 'dynamic-tool') as
-      | { output?: unknown; state?: string }
-      | undefined;
-    expect(toolPart?.state).toBe('output-available');
-    expect(toolPart?.output).toEqual({ temperature: 58 });
+    expect(approveToolCallMock).not.toHaveBeenCalled();
+    expect(approveToolCallProcessDataStreamMock).not.toHaveBeenCalled();
+
+    unmount();
   });
 
   it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {

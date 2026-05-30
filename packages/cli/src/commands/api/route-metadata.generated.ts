@@ -231,6 +231,44 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/approve-tool-call-subscription": {
+    "method": "POST",
+    "path": "/agents/:agentId/approve-tool-call-subscription",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "format",
+      "requestContext",
+      "runId",
+      "toolCallId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/decline-tool-call-subscription": {
+    "method": "POST",
+    "path": "/agents/:agentId/decline-tool-call-subscription",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "format",
+      "requestContext",
+      "runId",
+      "toolCallId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/approve-tool-call-generate": {
     "method": "POST",
     "path": "/agents/:agentId/approve-tool-call-generate",

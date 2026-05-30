@@ -43,6 +43,7 @@ import {
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   toolCallResponseSchema,
+  toolCallSubscriptionResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
   updateAgentModelInModelListBodySchema,
@@ -2266,6 +2267,46 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   },
 });
 
+export const APPROVE_TOOL_CALL_SUBSCRIPTION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/approve-tool-call-subscription',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: approveToolCallBodySchema,
+  responseSchema: toolCallSubscriptionResponseSchema,
+  summary: 'Approve tool call for subscription stream',
+  description: 'Approves a pending tool call and publishes resumed chunks to thread subscribers',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      sanitizeBody(params, ['tools']);
+
+      return await agent.approveToolCallAndSubscribe({
+        ...params,
+        requestContext,
+        abortSignal,
+      });
+    } catch (error) {
+      return handleError(error, 'error approving tool call for subscription stream');
+    }
+  },
+});
+
 export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/decline-tool-call',
@@ -2307,6 +2348,46 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error declining tool call');
+    }
+  },
+});
+
+export const DECLINE_TOOL_CALL_SUBSCRIPTION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/decline-tool-call-subscription',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: declineToolCallBodySchema,
+  responseSchema: toolCallSubscriptionResponseSchema,
+  summary: 'Decline tool call for subscription stream',
+  description: 'Declines a pending tool call and publishes resumed chunks to thread subscribers',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      sanitizeBody(params, ['tools']);
+
+      return await agent.declineToolCallAndSubscribe({
+        ...params,
+        requestContext,
+        abortSignal,
+      });
+    } catch (error) {
+      return handleError(error, 'error declining tool call for subscription stream');
     }
   },
 });

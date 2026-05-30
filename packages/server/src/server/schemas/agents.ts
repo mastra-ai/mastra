@@ -453,6 +453,12 @@ export const toolCallResponseSchema = z.object({
   fullStream: z.any(), // ReadableStream
 });
 
+export const toolCallSubscriptionResponseSchema = z.object({
+  accepted: z.literal(true),
+  runId: z.string(),
+  toolCallId: z.string().optional(),
+});
+
 // ============================================================================
 // Resume Stream Schema
 // ============================================================================

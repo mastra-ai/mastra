@@ -89,6 +89,42 @@ describe('Agent signal routes', () => {
     });
   });
 
+  it('approves tool calls through the subscription-native route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const result = await agent.approveToolCallSubscription({
+      runId: 'run-123',
+      toolCallId: 'tool-call-123',
+      requestContext: { userId: 'user-123' },
+    });
+
+    expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/approve-tool-call-subscription', {
+      method: 'POST',
+      body: { runId: 'run-123', toolCallId: 'tool-call-123', requestContext: { userId: 'user-123' } },
+    });
+  });
+
+  it('declines tool calls through the subscription-native route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const result = await agent.declineToolCallSubscription({
+      runId: 'run-123',
+      toolCallId: 'tool-call-123',
+      requestContext: { userId: 'user-123' },
+    });
+
+    expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/decline-tool-call-subscription', {
+      method: 'POST',
+      body: { runId: 'run-123', toolCallId: 'tool-call-123', requestContext: { userId: 'user-123' } },
+    });
+  });
+
   it('sends thread-targeted signals with active and idle behavior unchanged', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });

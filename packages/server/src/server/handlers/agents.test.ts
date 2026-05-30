@@ -13,6 +13,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
+  approveToolCallBodySchema,
+  declineToolCallBodySchema,
   queueAgentMessageBodySchema,
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
@@ -25,6 +27,8 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  APPROVE_TOOL_CALL_SUBSCRIPTION_ROUTE,
+  DECLINE_TOOL_CALL_SUBSCRIPTION_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
@@ -1308,14 +1312,64 @@ describe('Agent Routes Authorization', () => {
       ).toBe(false);
     });
 
-    it('should accept subscribe and abort thread bodies', () => {
+    it('should accept subscribe, abort, and tool approval bodies', () => {
       const body = {
         resourceId: 'resource-123',
         threadId: 'thread-123',
       };
+      const toolCallBody = {
+        runId: 'run-123',
+        toolCallId: 'tool-call-123',
+      };
 
       expect(subscribeAgentThreadBodySchema.safeParse(body).success).toBe(true);
       expect(abortAgentThreadBodySchema.safeParse(body).success).toBe(true);
+      expect(approveToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
+      expect(declineToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
+    });
+
+    it('should approve a tool call for subscription streams with a JSON ack', async () => {
+      (mockAgent as any).approveToolCallAndSubscribe = vi.fn(async params => ({
+        accepted: true,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+      }));
+
+      const result = await APPROVE_TOOL_CALL_SUBSCRIPTION_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        runId: 'run-123',
+        toolCallId: 'tool-call-123',
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+      expect((mockAgent as any).approveToolCallAndSubscribe).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'run-123', toolCallId: 'tool-call-123' }),
+      );
+    });
+
+    it('should decline a tool call for subscription streams with a JSON ack', async () => {
+      (mockAgent as any).declineToolCallAndSubscribe = vi.fn(async params => ({
+        accepted: true,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+      }));
+
+      const result = await DECLINE_TOOL_CALL_SUBSCRIPTION_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        runId: 'run-123',
+        toolCallId: 'tool-call-123',
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+      expect((mockAgent as any).declineToolCallAndSubscribe).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'run-123', toolCallId: 'tool-call-123' }),
+      );
     });
 
     it('should send a signal using context resource and thread values', async () => {
