@@ -726,4 +726,55 @@ describe('Harness signal messages', () => {
       },
     ]);
   });
+
+  it('emits state signal data parts as renderable message updates', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const state = (harness as any).createStreamState();
+
+    await (harness as any).processStreamChunk(
+      state,
+      {
+        type: 'data-signal',
+        data: {
+          id: 'state-signal-1',
+          type: 'state',
+          tagName: 'state',
+          contents: 'changed: active tab URL changed to https://example.com',
+          createdAt: '2026-05-04T00:00:00.000Z',
+          metadata: {
+            state: {
+              id: 'browser',
+              mode: 'delta',
+              cacheKey: 'browser:https://example.com',
+              version: 2,
+            },
+          },
+        },
+      },
+      new RequestContext(),
+    );
+
+    expect(events).toContainEqual({
+      type: 'message_update',
+      message: expect.objectContaining({
+        role: 'assistant',
+        content: [
+          {
+            type: 'state_signal',
+            id: 'state-signal-1',
+            stateId: 'browser',
+            mode: 'delta',
+            cacheKey: 'browser:https://example.com',
+            version: 2,
+            message: 'changed: active tab URL changed to https://example.com',
+          },
+        ],
+      }),
+    });
+  });
 });

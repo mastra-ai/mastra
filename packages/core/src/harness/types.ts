@@ -974,6 +974,15 @@ export type HarnessMessageContent =
       goalMaxTurns?: number;
       judgeModelId?: string;
     }
+  | {
+      type: 'state_signal';
+      id?: string;
+      stateId: string;
+      mode: 'snapshot' | 'delta';
+      cacheKey?: string;
+      version?: number;
+      message: string;
+    }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
+import { StateSignalComponent } from '../components/state-signal.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
@@ -56,6 +57,28 @@ function createReminderMessage(
 }
 
 describe('addUserMessage', () => {
+  it('renders state signals as inline state components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'browser',
+          mode: 'delta',
+          version: 2,
+          message: 'changed: active tab URL changed to https://example.com',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(true);
+    expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
+  });
+
   it('dedupes echoed slash command messages against the optimistic slash component', () => {
     const state = createState();
     const slashComp = new SlashCommandComponent('deploy', 'custom output');

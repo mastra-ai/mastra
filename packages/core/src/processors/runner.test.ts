@@ -1,13 +1,16 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
+import { createSignal } from '../agent/signals';
 import { TripWire } from '../agent/trip-wire';
 import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import { ChunkFrom } from '../stream/types';
+import { createStep, createWorkflow } from '../workflows';
 import { ProcessorRunner } from './runner';
-import type { Processor } from './index';
+import { ProcessorStepSchema } from './step-schema';
+import type { Processor, ProcessorWorkflow } from './index';
 
 // Helper to create a message
 const createMessage = (content: string, role: 'user' | 'assistant' = 'user') => ({
@@ -2581,6 +2584,34 @@ describe('ProcessorRunner', () => {
   });
 
   describe('processor state signals', () => {
+    const createStateSignal = ({
+      id,
+      stateId = 'state-processor',
+      mode,
+      cacheKey,
+      version,
+      contents,
+      createdAt,
+    }: {
+      id?: string;
+      stateId?: string;
+      mode: 'snapshot' | 'delta';
+      cacheKey: string;
+      version: number;
+      contents: string;
+      createdAt?: Date;
+    }) =>
+      createSignal({
+        ...(id ? { id } : {}),
+        ...(createdAt ? { createdAt } : {}),
+        type: 'state',
+        contents,
+        metadata: {
+          state: { id: stateId, threadId: 'thread-1', mode, cacheKey, version },
+          ...(mode === 'snapshot' ? { value: { contents } } : { delta: { contents } }),
+        },
+      });
+
     it('adds state signals and stores tracking on thread metadata', async () => {
       const requestContext = new RequestContext();
       requestContext.set('MastraMemory', {
@@ -2614,6 +2645,7 @@ describe('ProcessorRunner', () => {
           {
             id: 'state-processor',
             computeStateSignal: ({ threadId, resourceId, activeStateSignals, tracking }) => ({
+              cacheKey: `state:${resourceId}:${threadId}`,
               contents: `state for ${resourceId}/${threadId} (${activeStateSignals.length})`,
               metadata: { seenTracking: Boolean(tracking) },
             }),
@@ -2647,13 +2679,19 @@ describe('ProcessorRunner', () => {
           type: 'state',
           tagName: 'state',
           metadata: expect.objectContaining({
-            state: expect.objectContaining({ processorId: 'state-processor', threadId: 'thread-1', version: 1 }),
+            state: expect.objectContaining({
+              id: 'state-processor',
+              threadId: 'thread-1',
+              cacheKey: 'state:resource-1:thread-1',
+              mode: 'snapshot',
+              version: 1,
+            }),
           }),
         }),
       );
       expect(chunks).toEqual([
         expect.objectContaining({
-          type: 'data-state',
+          type: 'data-signal',
           data: expect.objectContaining({ type: 'state', contents: 'state for resource-1/thread-1 (0)' }),
         }),
       ]);
@@ -2663,7 +2701,529 @@ describe('ProcessorRunner', () => {
           metadata: expect.objectContaining({
             mastra: expect.objectContaining({
               stateSignals: expect.objectContaining({
-                'state-processor': expect.objectContaining({ version: 1, lastSignalId: expect.any(String) }),
+                'state-processor': expect.objectContaining({
+                  currentCacheKey: 'state:resource-1:thread-1',
+                  version: 1,
+                  lastSignalId: expect.any(String),
+                  lastSnapshotSignalId: expect.any(String),
+                }),
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('computes state signals for processors carried by combined workflows', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: {
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+        resourceId: 'resource-1',
+      });
+      const memory = {
+        getThreadById: vi.fn(async () => ({
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        })),
+        saveThread: vi.fn(async ({ thread }) => thread),
+      };
+      const computeStateSignal = vi.fn(() => ({
+        cacheKey: 'workflow-state-cache-key',
+        contents: 'workflow state',
+      }));
+      const processor: Processor = {
+        id: 'workflow-state-processor',
+        processInputStep: () => undefined,
+        computeStateSignal,
+      };
+      const workflow = createWorkflow({
+        id: 'workflow-state-test',
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep(processor as any))
+        .commit() as ProcessorWorkflow;
+      workflow.__stateSignalProcessors = [processor];
+      const chunks: unknown[] = [];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [workflow],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+        writer: {
+          custom: async chunk => {
+            chunks.push(chunk);
+          },
+        },
+      });
+
+      expect(computeStateSignal).toHaveBeenCalledTimes(1);
+      expect(messageList.get.all.db().at(-1)?.content.metadata?.signal).toEqual(
+        expect.objectContaining({
+          type: 'state',
+          metadata: expect.objectContaining({
+            state: expect.objectContaining({ id: 'workflow-state-processor', cacheKey: 'workflow-state-cache-key' }),
+          }),
+        }),
+      );
+      expect(chunks).toHaveLength(1);
+      expect(memory.saveThread).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes empty state history to computeStateSignal before any state exists', async () => {
+      messageList = new MessageList({ threadId: 'thread-1' });
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      };
+      requestContext.set('MastraMemory', { thread, resourceId: 'resource-1' });
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread }) => thread),
+      };
+      const computeStateSignal = vi.fn((_args: any) => undefined);
+
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'state-processor', computeStateSignal }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+      });
+
+      const computeArgs = computeStateSignal.mock.calls[0]?.[0];
+      expect(computeArgs.activeStateSignals).toEqual([]);
+      expect(computeArgs.lastSnapshot).toBeUndefined();
+      expect(computeArgs.deltasSinceSnapshot).toEqual([]);
+      expect(memory.saveThread).not.toHaveBeenCalled();
+    });
+
+    it('does not write a duplicate state signal when the returned cacheKey matches tracking', async () => {
+      messageList = new MessageList({ threadId: 'thread-1' });
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          mastra: {
+            stateSignals: {
+              'state-processor': {
+                currentCacheKey: 'state:same',
+                version: 1,
+                lastSignalId: 'existing-signal',
+                lastSnapshotSignalId: 'existing-snapshot',
+              },
+            },
+          },
+        },
+      };
+      requestContext.set('MastraMemory', { thread, resourceId: 'resource-1' });
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread }) => thread),
+        storage: { getStore: vi.fn(async () => null) },
+      };
+      const existingSignal = createStateSignal({
+        id: 'existing-signal',
+        mode: 'snapshot',
+        cacheKey: 'state:same',
+        version: 1,
+        contents: 'same state',
+      });
+      messageList.addSignal(existingSignal);
+      const writer = { custom: vi.fn(async () => undefined) };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          { id: 'state-processor', computeStateSignal: () => ({ cacheKey: 'state:same', contents: 'same state' }) },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+        writer,
+      });
+
+      expect(messageList.get.all.db()).toHaveLength(1);
+      expect(writer.custom).not.toHaveBeenCalled();
+      expect(memory.saveThread).not.toHaveBeenCalled();
+    });
+
+    it('writes a fresh state signal when matching cacheKey is no longer active', async () => {
+      messageList = new MessageList({ threadId: 'thread-1' });
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          mastra: {
+            stateSignals: {
+              'state-processor': {
+                currentCacheKey: 'state:same',
+                version: 1,
+                lastSignalId: 'evicted-signal',
+                lastSnapshotSignalId: 'evicted-snapshot',
+              },
+            },
+          },
+        },
+      };
+      requestContext.set('MastraMemory', { thread, resourceId: 'resource-1' });
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread }) => thread),
+        storage: { getStore: vi.fn(async () => null) },
+      };
+      const writer = { custom: vi.fn(async () => undefined) };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          { id: 'state-processor', computeStateSignal: () => ({ cacheKey: 'state:same', contents: 'same state' }) },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+        writer,
+      });
+
+      expect(messageList.get.all.db()).toHaveLength(1);
+      expect(writer.custom).toHaveBeenCalledTimes(1);
+      expect(memory.saveThread).toHaveBeenCalledTimes(1);
+      expect(writer.custom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            metadata: expect.objectContaining({
+              state: expect.objectContaining({ cacheKey: 'state:same', version: 1 }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('passes the latest snapshot and deltas since that snapshot to computeStateSignal', async () => {
+      messageList = new MessageList({ threadId: 'thread-1' });
+      const firstSnapshot = createStateSignal({
+        id: 'snapshot-1',
+        mode: 'snapshot',
+        cacheKey: 'snapshot:1',
+        version: 1,
+        contents: 'snapshot 1',
+      });
+      const oldDelta = createStateSignal({
+        id: 'delta-1',
+        mode: 'delta',
+        cacheKey: 'delta:1',
+        version: 2,
+        contents: 'delta 1',
+      });
+      const latestSnapshot = createStateSignal({
+        id: 'snapshot-2',
+        mode: 'snapshot',
+        cacheKey: 'snapshot:2',
+        version: 3,
+        contents: 'snapshot 2',
+      });
+      const latestDelta = createStateSignal({
+        id: 'delta-2',
+        mode: 'delta',
+        cacheKey: 'delta:2',
+        version: 4,
+        contents: 'delta 2',
+      });
+      messageList.addSignal(firstSnapshot);
+      messageList.addSignal(oldDelta);
+      messageList.addSignal(latestSnapshot);
+      messageList.addSignal(latestDelta);
+
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          mastra: {
+            stateSignals: {
+              'state-processor': {
+                currentCacheKey: 'delta:2',
+                version: 4,
+                lastSignalId: 'delta-2',
+                lastSnapshotSignalId: 'snapshot-2',
+              },
+            },
+          },
+        },
+      };
+      requestContext.set('MastraMemory', { thread, resourceId: 'resource-1' });
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread }) => thread),
+      };
+      const computeStateSignal = vi.fn((_args: any) => undefined);
+
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'state-processor', computeStateSignal }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+      });
+
+      const computeArgs = computeStateSignal.mock.calls[0]?.[0];
+      expect(computeArgs.activeStateSignals.map(signal => signal.id)).toEqual([
+        firstSnapshot.id,
+        oldDelta.id,
+        latestSnapshot.id,
+        latestDelta.id,
+      ]);
+      expect(computeArgs.lastSnapshot?.id).toBe(latestSnapshot.id);
+      expect(computeArgs.deltasSinceSnapshot.map(signal => signal.id)).toEqual([latestDelta.id]);
+      expect(memory.saveThread).not.toHaveBeenCalled();
+    });
+
+    it('resolves snapshot and deltas from memory storage when the snapshot is outside the active message list', async () => {
+      messageList = new MessageList({ threadId: 'thread-1' });
+      const snapshot = createStateSignal({
+        id: 'stored-snapshot',
+        mode: 'snapshot',
+        cacheKey: 'snapshot:stored',
+        version: 1,
+        contents: 'stored snapshot',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      const delta = createStateSignal({
+        id: 'stored-delta',
+        mode: 'delta',
+        cacheKey: 'delta:stored',
+        version: 2,
+        contents: 'stored delta',
+        createdAt: new Date('2026-01-01T00:00:01.000Z'),
+      });
+      const localDelta = createStateSignal({
+        id: 'local-delta',
+        mode: 'delta',
+        cacheKey: 'delta:local',
+        version: 3,
+        contents: 'local delta',
+        createdAt: new Date('2026-01-01T00:00:02.000Z'),
+      });
+      messageList.addSignal(localDelta);
+      const storedMessages = new MessageList({ threadId: 'thread-1' });
+      storedMessages.addSignal(snapshot);
+      storedMessages.addSignal(delta);
+
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          mastra: {
+            stateSignals: {
+              'state-processor': {
+                currentCacheKey: 'delta:local',
+                version: 3,
+                lastSignalId: 'local-delta',
+                lastSnapshotSignalId: 'stored-snapshot',
+              },
+            },
+          },
+        },
+      };
+      requestContext.set('MastraMemory', { thread, resourceId: 'resource-1' });
+      const listMessages = vi.fn(async () => ({
+        messages: storedMessages.get.all.db(),
+        total: 2,
+        page: 0,
+        perPage: false,
+        hasMore: false,
+      }));
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread }) => thread),
+        storage: { getStore: vi.fn(async () => ({ listMessages })) },
+      };
+      const computeStateSignal = vi.fn((_args: any) => undefined);
+
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'state-processor', computeStateSignal }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+      });
+
+      expect(listMessages).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId: 'thread-1', resourceId: 'resource-1', perPage: false }),
+      );
+      const computeArgs = computeStateSignal.mock.calls[0]?.[0];
+      expect(computeArgs.activeStateSignals.map(signal => signal.id)).toEqual(
+        expect.arrayContaining([snapshot.id, delta.id, localDelta.id]),
+      );
+      expect(computeArgs.activeStateSignals).toHaveLength(3);
+      expect(computeArgs.lastSnapshot?.id).toBe(snapshot.id);
+      expect(computeArgs.deltasSinceSnapshot.map(signal => signal.id)).toEqual(
+        expect.arrayContaining([delta.id, localDelta.id]),
+      );
+      expect(computeArgs.deltasSinceSnapshot).toHaveLength(2);
+    });
+
+    it('lets processInputStep send state signals without computeStateSignal', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: {
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+        resourceId: 'resource-1',
+      });
+      const savedThreads: unknown[] = [];
+      const memory = {
+        getThreadById: vi.fn(async () => ({
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        })),
+        saveThread: vi.fn(async ({ thread }) => {
+          savedThreads.push(thread);
+          return thread;
+        }),
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'state-processor',
+            processInputStep: async ({ sendStateSignal }) => {
+              await sendStateSignal?.({
+                id: 'external-browser',
+                cacheKey: 'browser:v1',
+                mode: 'snapshot',
+                contents: 'browser state',
+                value: { activeUrl: 'https://example.com' },
+              });
+            },
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+      });
+
+      expect(messageList.get.all.db().at(-1)?.content.metadata?.signal).toEqual(
+        expect.objectContaining({
+          type: 'state',
+          metadata: expect.objectContaining({
+            state: expect.objectContaining({ id: 'external-browser', cacheKey: 'browser:v1', version: 1 }),
+            value: { activeUrl: 'https://example.com' },
+          }),
+        }),
+      );
+      expect(savedThreads[0]).toEqual(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            mastra: expect.objectContaining({
+              stateSignals: expect.objectContaining({
+                'external-browser': expect.objectContaining({ currentCacheKey: 'browser:v1', version: 1 }),
               }),
             }),
           }),
@@ -2673,7 +3233,9 @@ describe('ProcessorRunner', () => {
 
     it('requires memory for computeStateSignal processors', async () => {
       runner = new ProcessorRunner({
-        inputProcessors: [{ id: 'state-processor', computeStateSignal: () => ({ contents: 'state' }) }],
+        inputProcessors: [
+          { id: 'state-processor', computeStateSignal: () => ({ cacheKey: 'state', contents: 'state' }) },
+        ],
         outputProcessors: [],
         logger: mockLogger,
         agentName: 'test-agent',
@@ -2737,7 +3299,7 @@ describe('ProcessorRunner', () => {
       expect(signalMessage?.content.parts[0]).toEqual(expect.objectContaining({ type: 'text', text: 'remember this' }));
       expect(chunks).toEqual([
         expect.objectContaining({
-          type: 'data-system-reminder',
+          type: 'data-signal',
           data: expect.objectContaining({
             type: 'reactive',
             tagName: 'system-reminder',

@@ -123,6 +123,7 @@ import type {
   AgentMessageInput,
   AgentMethodType,
   AgentSignal,
+  AgentStateSignalInput,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
   PublicStructuredOutputOptions,
@@ -132,6 +133,8 @@ import type {
   SendAgentMessageResult,
   SendAgentSignalOptions,
   SendAgentSignalResult,
+  SendAgentStateSignalOptions,
+  SendAgentStateSignalResult,
   StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
@@ -1062,15 +1065,17 @@ export class Agent<
     });
     workflow.__setLogger(this.logger);
 
+    const stateSignalProcessors: Processor[] = [];
+
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
       let step: Step<string, unknown, any, any, any, any>;
       if (isProcessorWorkflow(processorOrWorkflow)) {
         step = processorOrWorkflow;
+        stateSignalProcessors.push(...(processorOrWorkflow.__stateSignalProcessors ?? []));
       } else {
         // Set processorIndex on the processor for span attributes
-        const processor = processorOrWorkflow;
-        // @ts-expect-error - processorIndex is set at runtime for span attributes
+        const processor = processorOrWorkflow as Processor;
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
         step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
@@ -1079,12 +1084,20 @@ export class Agent<
           (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
             toolProvider.getLoadedToolsForRequestContext.bind(processor);
         }
+        if (processor.computeStateSignal) {
+          stateSignalProcessors.push(processor);
+        }
       }
       workflow = workflow.then(step);
     }
 
+    const committedWorkflow = workflow.commit() as T;
+    if (stateSignalProcessors.length > 0 && isProcessorWorkflow(committedWorkflow)) {
+      committedWorkflow.__stateSignalProcessors = stateSignalProcessors;
+    }
+
     // The resulting workflow is compatible with both Input and Output processor types
-    return [workflow.commit() as T];
+    return [committedWorkflow];
   }
 
   /**
@@ -5739,12 +5752,29 @@ export class Agent<
         ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning(browserThreadId)
         : browser.isBrowserRunning();
 
+      const getBrowserContextState = async (): Promise<Partial<BrowserContext> | undefined> => {
+        const running = browserThreadId
+          ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning(browserThreadId)
+          : browser.isBrowserRunning();
+        if (!running) return { isOpen: false };
+
+        const state = await browser.getBrowserState(browserThreadId);
+        const activeTab = state?.tabs[state.activeTabIndex];
+        return {
+          isOpen: true,
+          currentUrl: activeTab?.url ?? (await browser.getCurrentUrl(browserThreadId)) ?? undefined,
+          pageTitle: activeTab?.title,
+          tabCount: state?.tabs.length,
+        };
+      };
+      const currentBrowserState = await getBrowserContextState();
       const browserCtx: BrowserContext = {
         provider: browser.provider,
         providerType: browser.providerType,
         sessionId: browser.getSessionId(browserThreadId),
         headless: browser.headless,
-        currentUrl: isThreadRunning ? ((await browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
+        ...currentBrowserState,
+        getState: getBrowserContextState,
         // For CLI providers, include CDP URL so agent can pass it to CLI commands
         // Only expose CDP URL if the thread is actually running to avoid stale endpoints
         cdpUrl:
@@ -6580,6 +6610,16 @@ export class Agent<
     target: QueueAgentMessageOptions<OUTPUT>,
   ): QueueAgentMessageResult {
     return agentThreadStreamRuntime.queueMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent state signal APIs are experimental and may change in a future release.
+   */
+  sendStateSignal<OUTPUT = TOutput>(
+    state: AgentStateSignalInput,
+    target: SendAgentStateSignalOptions<OUTPUT>,
+  ): Promise<SendAgentStateSignalResult> {
+    return agentThreadStreamRuntime.sendStateSignal(this as Agent<any, any, any, any>, state, target, this.getPubSub());
   }
 
   /**
