@@ -1,3 +1,4 @@
+import type { StandardSchemaV1 } from '@standard-schema/spec';
 import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
@@ -13,6 +14,28 @@ type RouteFGAConfig = FGARouteConfig;
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
 
+/**
+ * Per-target Standard Schema validators for a route. When present, the server
+ * automatically validates the corresponding part of the request before invoking
+ * the route handler, returning a structured 400 error on failure.
+ *
+ * Use any Standard Schema-compatible library (Zod, Valibot, ArkType, etc.).
+ *
+ * @example
+ * ```ts
+ * import { z } from 'zod';
+ * registerApiRoute('/items', {
+ *   method: 'POST',
+ *   validators: { json: z.object({ name: z.string() }) },
+ *   handler: async (c) => {
+ *     const body = c.req.valid('json');
+ *     return c.json({ id: 1, ...body });
+ *   },
+ * });
+ * ```
+ */
+export type RouteValidators = Partial<Record<'json' | 'query' | 'param' | 'header' | 'form', StandardSchemaV1>>;
+
 export type ApiRoute =
   | {
       path: string;
@@ -20,6 +43,7 @@ export type ApiRoute =
       handler: Handler;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      validators?: RouteValidators;
       cors?: CorsOptions;
       requiresAuth?: boolean;
       requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
@@ -33,6 +57,7 @@ export type ApiRoute =
       createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      validators?: RouteValidators;
       cors?: CorsOptions;
       requiresAuth?: boolean;
       requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
