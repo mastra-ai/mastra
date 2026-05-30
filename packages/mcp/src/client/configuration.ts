@@ -32,6 +32,18 @@ export interface MCPClientOptions {
   servers: Record<string, MastraMCPServerDefinition>;
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
+  /**
+   * Optional schema representation for MCP-sourced tool input schemas.
+   *
+   * Use `zod` in workerd/edge runtimes to avoid AJV code generation during Mastra's
+   * pre-call tool input validation. Defaults to `json-schema` for current behavior.
+   *
+   * This does not change MCP tool output validation. Tool outputs are validated by
+   * the MCP SDK during `Client.callTool()` using the server's `jsonSchemaValidator`.
+   * In edge runtimes, pass a Worker-safe `jsonSchemaValidator` on each server that
+   * advertises an `outputSchema`.
+   */
+  coerceSchemasTo?: 'json-schema' | 'zod';
 }
 
 /**
@@ -72,6 +84,7 @@ export class MCPClient extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
+  private coerceSchemasTo: MCPClientOptions['coerceSchemasTo'];
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
 
@@ -107,13 +120,14 @@ export class MCPClient extends MastraBase {
     super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.serverConfigs = args.servers;
+    this.coerceSchemasTo = args.coerceSchemasTo;
     this.id = args.id ?? this.makeId();
 
     if (args.id) {
       this.id = args.id;
       const cached = mcpClientInstances.get(this.id);
 
-      if (cached && !equal(cached.serverConfigs, args.servers)) {
+      if (cached && !equal(cached.getInstanceIdentity(), this.getInstanceIdentity())) {
         const existingInstance = mcpClientInstances.get(this.id);
         if (existingInstance) {
           void existingInstance.disconnect();
@@ -668,8 +682,15 @@ To fix this you have three different options:
   }
 
   private makeId() {
-    const text = JSON.stringify(this.serverConfigs).normalize('NFKC');
+    const text = JSON.stringify(this.getInstanceIdentity()).normalize('NFKC');
     return createHash('sha256').update('MCPClient').update(text).digest('hex');
+  }
+
+  private getInstanceIdentity() {
+    return {
+      serverConfigs: this.serverConfigs,
+      coerceSchemasTo: this.coerceSchemasTo ?? 'json-schema',
+    };
   }
 
   /**
@@ -965,6 +986,7 @@ To fix this you have three different options:
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
       capabilities: config.capabilities,
+      coerceSchemasTo: this.coerceSchemasTo,
     });
 
     mcpClient.__setLogger(this.logger);

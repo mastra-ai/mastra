@@ -6,7 +6,7 @@ import type { RequestContext } from '@mastra/core/di';
 import { createTool } from '@mastra/core/tools';
 import type { Tool } from '@mastra/core/tools';
 
-import type { JSONSchema7 } from '@mastra/schema-compat';
+import type { JSONSchema7, PublicSchema } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -40,6 +40,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
@@ -74,7 +75,7 @@ export type {
 } from './types';
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
-const require = createRequire(import.meta.url);
+const convertMcpJsonSchemaToZod = convertJsonSchemaToZod as unknown as (schema: unknown) => PublicSchema;
 
 // Per MCP spec, only fallback to SSE for these status codes
 const SSE_FALLBACK_STATUS_CODES = [400, 404, 405];
@@ -118,7 +119,11 @@ function loadDatadogTracer(): DatadogTracerLike | null {
   }
 
   try {
-    return require('dd-trace') as DatadogTracerLike;
+    if (!import.meta.url) {
+      return null;
+    }
+
+    return createRequire(import.meta.url)('dd-trace') as DatadogTracerLike;
   } catch {
     return null;
   }
@@ -200,6 +205,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigHupHandler?: () => void;
   private _roots: Root[];
   private readonly requireToolApproval: RequireToolApproval | undefined;
+  private readonly coerceSchemasTo: InternalMastraMCPClientOptions['coerceSchemasTo'];
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -219,6 +225,7 @@ export class InternalMastraMCPClient extends MastraBase {
     server,
     capabilities = {},
     timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+    coerceSchemasTo,
   }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
     this.name = name;
@@ -228,6 +235,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.serverConfig = server;
     this.enableProgressTracking = !!server.enableProgressTracking;
     this.requireToolApproval = server.requireToolApproval;
+    this.coerceSchemasTo = coerceSchemasTo ?? 'json-schema';
 
     // Initialize roots from server config
     this._roots = server.roots ?? [];
@@ -734,8 +742,14 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
-  ): Promise<JSONSchema7> {
-    return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+  ): Promise<PublicSchema> {
+    const jsonSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+
+    if (this.coerceSchemasTo === 'zod') {
+      return convertMcpJsonSchemaToZod(jsonSchema);
+    }
+
+    return jsonSchema;
   }
 
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
@@ -799,7 +813,8 @@ export class InternalMastraMCPClient extends MastraBase {
           // can read them via `tool.mcp.annotations`.
           ...mcpToolProps,
           // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
-          // already validates structuredContent against the tool's outputSchema using AJV.
+          // already validates structuredContent against the tool's outputSchema using its
+          // configured jsonSchemaValidator.
           // Passing it here causes Zod to strip unrecognized keys from the CallToolResult
           // envelope, returning {} for tools without structuredContent.
           requireApproval,

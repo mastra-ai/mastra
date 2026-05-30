@@ -19,6 +19,7 @@ constructor({
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number;
+  coerceSchemasTo?: 'json-schema' | 'zod';
 }: MCPClientOptions)
 ```
 
@@ -48,8 +49,49 @@ constructor({
     defaultValue: '60000',
     description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
   },
+  {
+    name: 'coerceSchemasTo',
+    type: "'json-schema' | 'zod'",
+    isOptional: true,
+    defaultValue: "'json-schema'",
+    description:
+      'Controls how MCP-sourced tool input schemas are exposed to Mastra tools. Use `zod` in edge runtimes such as Cloudflare Workers to avoid AJV code generation during Mastra tool input validation.',
+  },
 ]}
 />
+
+## Edge runtime schema validation
+
+MCP servers publish tool input schemas as JSON Schema. By default, Mastra keeps those schemas as JSON Schema and validates them through the JSON Schema compatibility path.
+
+Some edge runtimes, such as Cloudflare Workers, disallow runtime code generation. Set `coerceSchemasTo` to `zod` to convert MCP tool input schemas to Zod when the toolsets are loaded:
+
+```typescript
+const mcp = new MCPClient({
+  coerceSchemasTo: 'zod',
+  servers: {
+    deepwiki: {
+      url: new URL('https://mcp.deepwiki.com/mcp'),
+    },
+  },
+})
+```
+
+`coerceSchemasTo` only changes how Mastra exposes MCP tool input schemas. MCP tool output schemas are validated by the MCP SDK during `Client.callTool()` using the server definition's `jsonSchemaValidator`. In Cloudflare Workers or other V8 isolates, pass a Worker-safe validator for servers that advertise `outputSchema`:
+
+```typescript
+import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker'
+
+const mcp = new MCPClient({
+  coerceSchemasTo: 'zod',
+  servers: {
+    deepwiki: {
+      url: new URL('https://mcp.deepwiki.com/mcp'),
+      jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
+    },
+  },
+})
+```
 
 ### `MastraMCPServerDefinition`
 
