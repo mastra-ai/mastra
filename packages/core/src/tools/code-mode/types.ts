@@ -55,7 +55,7 @@ export interface CodeModeToolResult {
 }
 
 /**
- * A single JSON-RPC request emitted by the sandboxed harness when it calls an
+ * A single JSON-RPC request emitted by the sandboxed runner when it calls an
  * `external_*` function. `id` correlates the response so concurrent calls
  * (e.g. `Promise.all`) can resolve out of order.
  */
@@ -68,7 +68,7 @@ export interface CodeModeRpcRequest {
   args: unknown;
 }
 
-/** Host -> harness response to a {@link CodeModeRpcRequest}. */
+/** Host -> runner response to a {@link CodeModeRpcRequest}. */
 export interface CodeModeRpcResponse {
   type: 'rpc-result';
   id: number;
@@ -77,14 +77,14 @@ export interface CodeModeRpcResponse {
   error?: { message: string; name?: string };
 }
 
-/** A captured console line emitted by the harness. */
+/** A captured console line emitted by the runner. */
 export interface CodeModeLogEvent {
   type: 'log';
   level: 'log' | 'info' | 'warn' | 'error';
   message: string;
 }
 
-/** Terminal frame emitted by the harness when the program finishes. */
+/** Terminal frame emitted by the runner when the program finishes. */
 export interface CodeModeDoneEvent {
   type: 'done';
   ok: boolean;
@@ -92,8 +92,8 @@ export interface CodeModeDoneEvent {
   error?: { message: string; name?: string; line?: number };
 }
 
-/** Any frame the harness can emit on its protocol channel. */
-export type CodeModeHarnessFrame = CodeModeRpcRequest | CodeModeLogEvent | CodeModeDoneEvent;
+/** Any frame the runner can emit on its protocol channel. */
+export type CodeModeRunnerFrame = CodeModeRpcRequest | CodeModeLogEvent | CodeModeDoneEvent;
 
 /**
  * Host-side handler that executes a single allow-listed tool call on behalf of
@@ -108,7 +108,7 @@ export type CodeModeToolDispatcher = (tool: string, args: unknown) => Promise<un
  */
 export interface CodeModeTransport {
   /**
-   * Run the harness (with the already-stripped JS program) in the sandbox,
+   * Run the runner (with the already-stripped JS program) in the sandbox,
    * dispatching `external_*` calls through `dispatch`, and resolve once the
    * program finishes.
    */

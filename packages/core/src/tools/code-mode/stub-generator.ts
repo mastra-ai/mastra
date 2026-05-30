@@ -159,7 +159,7 @@ export interface CodeModeStub {
 export function generateStubs(tools: ToolsInput): CodeModeStub[] {
   // Two distinct tool ids can sanitize to the same `external_*` name (e.g.
   // `a-b` and `a_b`). Without this check the later binding would silently
-  // overwrite the earlier one in the harness, so fail fast instead.
+  // overwrite the earlier one in the runner, so fail fast instead.
   const seen = new Map<string, string>();
   return Object.entries(tools).map(([key, tool]) => {
     const toolId = (tool as { id?: string }).id ?? key;

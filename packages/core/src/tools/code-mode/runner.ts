@@ -1,25 +1,25 @@
 /**
- * Code Mode — Sandbox harness
+ * Code Mode — Sandbox runner
  *
- * Builds the JavaScript program that runs *inside* the sandbox. The harness:
+ * Builds the JavaScript program that runs *inside* the sandbox. The runner:
  *  - defines an `external_<name>` function per allow-listed tool, each of which
  *    emits a JSON-RPC request on the protocol channel and awaits its response
  *    (matched by `id`, so `Promise.all` calls resolve independently);
  *  - wraps the model's program in an async function, captures `console.*`, and
  *    emits a terminal `done` frame.
  *
- * Protocol (host <-> harness), newline-delimited JSON on stdout/stdin:
- *  - Frames the harness emits are prefixed with FRAME_PREFIX so the host can
+ * Protocol (host <-> runner), newline-delimited JSON on stdout/stdin:
+ *  - Frames the runner emits are prefixed with FRAME_PREFIX so the host can
  *    tell them apart from any stray output. Forms: `rpc`, `log`, `done`.
- *  - The host writes `rpc-result` frames to the harness stdin (no prefix).
+ *  - The host writes `rpc-result` frames to the runner stdin (no prefix).
  */
 
 /** Marks a line on stdout as a Code Mode protocol frame. */
 export const FRAME_PREFIX = '\u0000CODEMODE\u0000';
 
-export interface BuildHarnessOptions {
+export interface BuildRunnerOptions {
   /**
-   * Module specifier the harness imports to obtain the user program. The
+   * Module specifier the runner imports to obtain the user program. The
    * referenced module must `export default` an async function (the wrapped
    * model code). Written as a sibling `.ts` file so the sandbox's `node`
    * strips the TypeScript types natively at import time.
@@ -40,10 +40,10 @@ export function buildProgramModule(program: string): string {
 }
 
 /**
- * Produce the full harness source to write into the sandbox and run with node.
+ * Produce the full runner source to write into the sandbox and run with node.
  */
-export function buildHarness({ programModule, externals }: BuildHarnessOptions): string {
-  // `buildHarness` is exported, so a caller could pass a non-sanitized name.
+export function buildRunner({ programModule, externals }: BuildRunnerOptions): string {
+  // `buildRunner` is exported, so a caller could pass a non-sanitized name.
   // External names become global property suffixes, so reject anything that
   // isn't a legal identifier instead of producing an unusable global.
   const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -54,7 +54,7 @@ export function buildHarness({ programModule, externals }: BuildHarnessOptions):
   }
 
   // Externals are emitted as JSON data, not interpolated identifiers. The
-  // harness installs each `external_<name>` global in a loop using bracket
+  // runner installs each `external_<name>` global in a loop using bracket
   // assignment, so no caller-derived string is ever spliced into the generated
   // source as code. This keeps tool ids strictly data, even if `sanitize`
   // changes.

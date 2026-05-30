@@ -1,9 +1,9 @@
 /**
  * Code Mode — stdio JSON-RPC transport (v1)
  *
- * Runs the harness inside the sandbox via `sandbox.processes.spawn`, parses
+ * Runs the runner inside the sandbox via `sandbox.processes.spawn`, parses
  * protocol frames off stdout, dispatches `external_*` calls back to the host,
- * and writes results to the harness stdin. Abstracted behind
+ * and writes results to the runner stdin. Abstracted behind
  * {@link CodeModeTransport} so socket/file-queue transports can be added for
  * remote sandboxes later.
  */
@@ -15,12 +15,12 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { SandboxFeatureNotSupportedError } from '../../workspace/errors';
-import { buildHarness, buildProgramModule, FRAME_PREFIX } from './harness';
-import type { CodeModeHarnessFrame, CodeModeToolResult, CodeModeTransport } from './types';
+import { buildRunner, buildProgramModule, FRAME_PREFIX } from './runner';
+import type { CodeModeRunnerFrame, CodeModeToolResult, CodeModeTransport } from './types';
 
 /**
- * Default transport: writes the harness to a temp dir, spawns
- * `node <harness>`, and bridges RPC over stdio.
+ * Default transport: writes the runner to a temp dir, spawns
+ * `node <runner>`, and bridges RPC over stdio.
  */
 export class StdioCodeModeTransport implements CodeModeTransport {
   async run(opts: Parameters<CodeModeTransport['run']>[0]): Promise<CodeModeToolResult> {
@@ -36,13 +36,13 @@ export class StdioCodeModeTransport implements CodeModeTransport {
     const dir = await mkdtemp(join(tmpdir(), 'mastra-code-mode-'));
     const suffix = randomBytes(4).toString('hex');
     // The model's TypeScript program is written to its own .ts module; node
-    // strips the type annotations when the harness imports it (see the
+    // strips the type annotations when the runner imports it (see the
     // --experimental-strip-types flag on the spawn below).
     const programPath = join(dir, `program-${suffix}.ts`);
     await writeFile(programPath, buildProgramModule(program), 'utf8');
-    const harnessSource = buildHarness({ programModule: pathToFileURL(programPath).href, externals });
-    const harnessPath = join(dir, `harness-${suffix}.mjs`);
-    await writeFile(harnessPath, harnessSource, 'utf8');
+    const runnerSource = buildRunner({ programModule: pathToFileURL(programPath).href, externals });
+    const runnerPath = join(dir, `runner-${suffix}.mjs`);
+    await writeFile(runnerPath, runnerSource, 'utf8');
 
     const logs: string[] = [];
     let done: CodeModeToolResult | undefined;
@@ -59,7 +59,7 @@ export class StdioCodeModeTransport implements CodeModeTransport {
       // module on Node 22.6–22.17 (where type-stripping is still flagged). On
       // Node 22.18+/24, where stripping is the default, the flag is accepted as
       // a harmless no-op, so this works across the versions CI and users run.
-      const handle = await sandbox.processes.spawn(`node --experimental-strip-types ${harnessPath}`, {
+      const handle = await sandbox.processes.spawn(`node --experimental-strip-types ${runnerPath}`, {
         cwd: dir,
         abortSignal,
         onStdout: (chunk: string) => {
@@ -69,7 +69,7 @@ export class StdioCodeModeTransport implements CodeModeTransport {
             const line = stdoutBuffer.slice(0, idx);
             stdoutBuffer = stdoutBuffer.slice(idx + 1);
             if (!line.startsWith(FRAME_PREFIX)) continue;
-            let frame: CodeModeHarnessFrame;
+            let frame: CodeModeRunnerFrame;
             try {
               frame = JSON.parse(line.slice(FRAME_PREFIX.length));
             } catch {
@@ -80,7 +80,7 @@ export class StdioCodeModeTransport implements CodeModeTransport {
         },
       });
 
-      function handleFrame(frame: CodeModeHarnessFrame): void {
+      function handleFrame(frame: CodeModeRunnerFrame): void {
         switch (frame.type) {
           case 'log':
             logs.push(frame.message);
@@ -135,7 +135,7 @@ export class StdioCodeModeTransport implements CodeModeTransport {
       }
 
       // Race completion against process exit and the timeout. Including process
-      // exit means a harness that dies without emitting `done` resolves
+      // exit means a runner that dies without emitting `done` resolves
       // immediately instead of waiting out the full timeout.
       let timer: NodeJS.Timeout | undefined;
       const timeoutPromise = new Promise<'timeout'>(resolve => {
