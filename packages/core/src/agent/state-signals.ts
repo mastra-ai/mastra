@@ -11,11 +11,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 export type StateSignalTracking = {
   currentCacheKey?: string;
+  currentMode?: 'snapshot' | 'delta';
   version?: number;
   lastSignalId?: string;
   lastSnapshotSignalId?: string;
   updatedAt?: string;
-  activeCopies?: Array<{ id: string; cacheKey?: string; version?: number }>;
+  activeCopies?: Array<{ id: string; cacheKey?: string; mode?: 'snapshot' | 'delta'; version?: number }>;
 };
 
 export type ActiveStateSignal = CreatedAgentSignal & {
@@ -164,10 +165,7 @@ export async function resolveStateSignalHistory({
   const localHistory = deriveStateSignalHistory(localStateSignals);
   const contextWindow = localHistory.contextWindow;
 
-  if (
-    !tracking?.lastSnapshotSignalId ||
-    localStateSignals.some(signal => signal.id === tracking.lastSnapshotSignalId)
-  ) {
+  if (localHistory.contextWindow.hasSnapshot || !tracking?.lastSnapshotSignalId) {
     return { ...localHistory, contextWindow };
   }
 
@@ -255,13 +253,18 @@ export async function applyStateSignal({
   const tracking = getStateSignalsMetadata(thread.metadata)[stateId];
 
   const usesActiveWindow = Boolean(messageList || activeStateSignals);
-  const hasActiveCopy = activeSignals.some(signal => signal.metadata?.state?.cacheKey === cacheKey);
-  if (tracking?.currentCacheKey === cacheKey && (!usesActiveWindow || hasActiveCopy)) {
+  const hasActiveCopy = activeSignals.some(
+    signal => signal.metadata?.state?.cacheKey === cacheKey && signal.metadata?.state?.mode === mode,
+  );
+  const matchesCurrentState =
+    tracking?.currentCacheKey === cacheKey &&
+    (tracking.currentMode === mode || (!tracking.currentMode && hasActiveCopy));
+  if (matchesCurrentState && (!usesActiveWindow || hasActiveCopy)) {
     return { skipped: true, reason: 'unchanged', stateId, tracking };
   }
 
   const previousVersion = typeof tracking?.version === 'number' ? tracking.version : 0;
-  const version = tracking?.currentCacheKey === cacheKey ? previousVersion || 1 : previousVersion + 1;
+  const version = matchesCurrentState ? previousVersion || 1 : previousVersion + 1;
   const updatedSignal = createSignal({
     ...signal,
     metadata: {
@@ -286,6 +289,7 @@ export async function applyStateSignal({
   const updatedActiveSignals = [...activeSignals, updatedSignal];
   const nextTracking: StateSignalTracking = {
     currentCacheKey: cacheKey,
+    currentMode: mode,
     version,
     lastSignalId: updatedSignal.id,
     lastSnapshotSignalId: mode === 'snapshot' ? updatedSignal.id : tracking?.lastSnapshotSignalId,
@@ -295,6 +299,9 @@ export async function applyStateSignal({
       return {
         id: activeSignal.id,
         ...(typeof activeStateMetadata.cacheKey === 'string' ? { cacheKey: activeStateMetadata.cacheKey } : {}),
+        ...(activeStateMetadata.mode === 'snapshot' || activeStateMetadata.mode === 'delta'
+          ? { mode: activeStateMetadata.mode }
+          : {}),
         ...(typeof activeStateMetadata.version === 'number' ? { version: activeStateMetadata.version } : {}),
       };
     }),

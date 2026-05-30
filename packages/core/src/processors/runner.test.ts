@@ -2745,6 +2745,83 @@ describe('ProcessorRunner', () => {
       expect(memory.saveThread).not.toHaveBeenCalled();
     });
 
+    it('writes a fresh state signal when matching cacheKey has a different mode', async () => {
+      messageList = new MessageList({ threadId: 'thread-1' });
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          mastra: {
+            stateSignals: {
+              'state-processor': {
+                currentCacheKey: 'state:same',
+                currentMode: 'delta',
+                version: 1,
+                lastSignalId: 'existing-delta',
+                lastSnapshotSignalId: 'existing-snapshot',
+              },
+            },
+          },
+        },
+      };
+      requestContext.set('MastraMemory', { thread, resourceId: 'resource-1' });
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread }) => thread),
+        storage: { getStore: vi.fn(async () => null) },
+      };
+      messageList.addSignal(
+        createStateSignal({
+          id: 'existing-delta',
+          mode: 'delta',
+          cacheKey: 'state:same',
+          version: 1,
+          contents: 'same state delta',
+        }),
+      );
+      const writer = { custom: vi.fn(async () => undefined) };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'state-processor',
+            computeStateSignal: () => ({ mode: 'snapshot', cacheKey: 'state:same', contents: 'same state snapshot' }),
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+        writer,
+      });
+
+      expect(messageList.get.all.db()).toHaveLength(2);
+      expect(writer.custom).toHaveBeenCalledTimes(1);
+      expect(memory.saveThread).toHaveBeenCalledTimes(1);
+      expect(writer.custom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            metadata: expect.objectContaining({
+              state: expect.objectContaining({ cacheKey: 'state:same', mode: 'snapshot', version: 2 }),
+            }),
+          }),
+        }),
+      );
+    });
+
     it('writes a fresh state signal when matching cacheKey is no longer active', async () => {
       messageList = new MessageList({ threadId: 'thread-1' });
       const requestContext = new RequestContext();
@@ -2758,6 +2835,7 @@ describe('ProcessorRunner', () => {
             stateSignals: {
               'state-processor': {
                 currentCacheKey: 'state:same',
+                currentMode: 'snapshot',
                 version: 1,
                 lastSignalId: 'evicted-signal',
                 lastSnapshotSignalId: 'evicted-snapshot',
@@ -2896,8 +2974,88 @@ describe('ProcessorRunner', () => {
         latestDelta.id,
       ]);
       expect(computeArgs.lastSnapshot?.id).toBe(latestSnapshot.id);
-      expect(computeArgs.deltasSinceSnapshot.map(signal => signal.id)).toEqual([latestDelta.id]);
+      expect(computeArgs.deltasSinceSnapshot.map((signal: any) => signal.id)).toEqual([latestDelta.id]);
       expect(memory.saveThread).not.toHaveBeenCalled();
+    });
+
+    it('does not query memory storage when the active message list already has a snapshot', async () => {
+      messageList = new MessageList({ threadId: 'thread-1' });
+      const localSnapshot = createStateSignal({
+        id: 'local-snapshot',
+        mode: 'snapshot',
+        cacheKey: 'snapshot:local',
+        version: 3,
+        contents: 'local snapshot',
+      });
+      const localDelta = createStateSignal({
+        id: 'local-delta',
+        mode: 'delta',
+        cacheKey: 'delta:local',
+        version: 4,
+        contents: 'local delta',
+      });
+      messageList.addSignal(localSnapshot);
+      messageList.addSignal(localDelta);
+
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          mastra: {
+            stateSignals: {
+              'state-processor': {
+                currentCacheKey: 'delta:latest',
+                currentMode: 'delta',
+                version: 5,
+                lastSignalId: 'latest-delta-outside-window',
+                lastSnapshotSignalId: 'snapshot-outside-window',
+              },
+            },
+          },
+        },
+      };
+      requestContext.set('MastraMemory', { thread, resourceId: 'resource-1' });
+      const listMessages = vi.fn(async () => ({
+        messages: [],
+        total: 0,
+        page: 0,
+        perPage: false,
+        hasMore: false,
+      }));
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread }) => thread),
+        storage: { getStore: vi.fn(async () => ({ listMessages })) },
+      };
+      const computeStateSignal = vi.fn((_args: any) => undefined);
+
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'state-processor', computeStateSignal }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+      });
+
+      expect(memory.storage.getStore).not.toHaveBeenCalled();
+      expect(listMessages).not.toHaveBeenCalled();
+      const computeArgs = computeStateSignal.mock.calls[0]?.[0];
+      expect(computeArgs.contextWindow.hasSnapshot).toBe(true);
+      expect(computeArgs.lastSnapshot?.id).toBe(localSnapshot.id);
+      expect(computeArgs.deltasSinceSnapshot.map((signal: any) => signal.id)).toEqual([localDelta.id]);
     });
 
     it('resolves snapshot and deltas from memory storage when the snapshot is outside the active message list', async () => {
