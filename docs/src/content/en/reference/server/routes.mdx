@@ -151,7 +151,7 @@ Both routes return:
 
 ### Subscription tool approval routes
 
-Use `POST /api/agents/:agentId/approve-tool-call-subscription` or `POST /api/agents/:agentId/decline-tool-call-subscription` when the client already has an active thread subscription. The route resumes the run and returns a JSON acknowledgement. Resumed stream chunks are delivered through `POST /api/agents/:agentId/subscribe-thread`.
+Use `POST /api/agents/:agentId/approve-tool-call-subscription` or `POST /api/agents/:agentId/decline-tool-call-subscription` when the client already has an active thread subscription. The route resumes the run and returns a JSON acknowledgement. Resumed stream chunks are delivered through `POST /api/agents/:agentId/threads/subscribe`.
 
 Both routes accept the same request body:
 
