@@ -663,7 +663,9 @@ export const useChat = ({
     _streamAbortRef.current?.abort();
     _streamAbortRef.current = null;
     const threadSubscription = _threadSubscriptionRef.current;
-    void threadSubscription?.abort?.();
+    void Promise.resolve(threadSubscription?.abort?.()).catch(error => {
+      console.error('[useChat] Failed to abort thread subscription', error);
+    });
     closeThreadSubscription();
     setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
