@@ -611,6 +611,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/google', label: 'Google' },
         { type: 'doc', id: 'voice/google-gemini-live', label: 'Google Gemini Live' },
         { type: 'doc', id: 'voice/inworld', label: 'Inworld' },
+        { type: 'doc', id: 'voice/inworld-realtime', label: 'Inworld Realtime' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
         { type: 'doc', id: 'voice/murf', label: 'Murf' },
         { type: 'doc', id: 'voice/openai', label: 'OpenAI' },
