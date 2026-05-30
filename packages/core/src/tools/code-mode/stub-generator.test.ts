@@ -82,6 +82,12 @@ describe('generateStubs', () => {
     expect(stub.externalName).toBe('do_the_thing');
     expect(stub.declaration).toContain('external_do_the_thing');
   });
+
+  it('throws when two ids sanitize to the same external name', () => {
+    const dash = createTool({ id: 'a-b', description: 'x', execute: async () => ({}) });
+    const underscore = createTool({ id: 'a_b', description: 'x', execute: async () => ({}) });
+    expect(() => generateStubs({ dash, underscore })).toThrow(/collision.*external_a_b/);
+  });
 });
 
 describe('createCodeModeInstructions', () => {

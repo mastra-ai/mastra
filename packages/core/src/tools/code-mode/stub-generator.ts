@@ -157,12 +157,22 @@ export interface CodeModeStub {
 
 /** Generate stubs for every tool in the config. */
 export function generateStubs(tools: ToolsInput): CodeModeStub[] {
+  // Two distinct tool ids can sanitize to the same `external_*` name (e.g.
+  // `a-b` and `a_b`). Without this check the later binding would silently
+  // overwrite the earlier one in the harness, so fail fast instead.
+  const seen = new Map<string, string>();
   return Object.entries(tools).map(([key, tool]) => {
     const toolId = (tool as { id?: string }).id ?? key;
     const description = (tool as { description?: string }).description;
     const inputType = schemaToTs((tool as { inputSchema?: unknown }).inputSchema, 'input');
     const outputType = schemaToTs((tool as { outputSchema?: unknown }).outputSchema, 'output');
     const externalName = sanitizeId(toolId);
+
+    const prior = seen.get(externalName);
+    if (prior !== undefined && prior !== toolId) {
+      throw new Error(`Code Mode tool id collision: "${prior}" and "${toolId}" both map to external_${externalName}`);
+    }
+    seen.set(externalName, toolId);
 
     const doc = description ? `/** ${description.replace(/\*\//g, '* /')} */\n` : '';
     const declaration = `${doc}declare function external_${externalName}(input: ${inputType}): Promise<${outputType}>;`;

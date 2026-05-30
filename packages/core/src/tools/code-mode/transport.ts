@@ -92,7 +92,10 @@ export class StdioCodeModeTransport implements CodeModeTransport {
             resolveDone();
             return;
           case 'rpc':
-            void serveRpc(frame.id, frame.tool, frame.args);
+            // `serveRpc` awaits `respond`, which writes to the child's stdin and
+            // can reject if the process already exited/was killed. Swallow that
+            // so it never surfaces as an unhandled rejection.
+            void serveRpc(frame.id, frame.tool, frame.args).catch(() => {});
             return;
         }
       }
@@ -131,13 +134,20 @@ export class StdioCodeModeTransport implements CodeModeTransport {
         await handle.sendStdin(JSON.stringify({ type: 'rpc-result', id, ok, result, error }) + '\n');
       }
 
-      // Race completion against the timeout.
+      // Race completion against process exit and the timeout. Including process
+      // exit means a harness that dies without emitting `done` resolves
+      // immediately instead of waiting out the full timeout.
       let timer: NodeJS.Timeout | undefined;
       const timeoutPromise = new Promise<'timeout'>(resolve => {
         timer = setTimeout(() => resolve('timeout'), timeout);
       });
+      const exitPromise = handle.wait().then(() => 'exited' as const);
 
-      const outcome = await Promise.race([donePromise.then(() => 'done' as const), timeoutPromise]);
+      const outcome = await Promise.race([
+        donePromise.then(() => 'done' as const),
+        exitPromise.catch(() => 'exited' as const),
+        timeoutPromise,
+      ]);
       if (timer) clearTimeout(timer);
 
       if (outcome === 'timeout') {
@@ -149,7 +159,11 @@ export class StdioCodeModeTransport implements CodeModeTransport {
         };
       }
 
-      await handle.wait().catch(() => {});
+      // Either `done` arrived or the process exited. If we raced ahead of a
+      // `done` frame still in flight, give it a brief beat to land.
+      if (!done) {
+        await exitPromise.catch(() => {});
+      }
 
       return (
         done ?? {

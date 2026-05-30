@@ -123,7 +123,9 @@ describe('Code Mode e2e (LocalSandbox)', () => {
       timeout: 15_000,
     });
     // external_secret is undefined inside the harness -> ReferenceError surfaces as failure.
+    // Assert the specific reason so this protects allow-list behavior, not just any failure.
     expect(result.success).toBe(false);
+    expect(result.error?.message).toMatch(/external_secret/);
   }, 30_000);
 
   it('times out a runaway program', async () => {

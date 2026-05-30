@@ -43,6 +43,16 @@ export function buildProgramModule(program: string): string {
  * Produce the full harness source to write into the sandbox and run with node.
  */
 export function buildHarness({ programModule, externals }: BuildHarnessOptions): string {
+  // `buildHarness` is exported, so a caller could pass a non-sanitized name.
+  // External names become global property suffixes, so reject anything that
+  // isn't a legal identifier instead of producing an unusable global.
+  const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+  for (const { externalName } of externals) {
+    if (!SAFE_IDENT.test(externalName)) {
+      throw new Error(`Invalid Code Mode external identifier: ${externalName}`);
+    }
+  }
+
   // Externals are emitted as JSON data, not interpolated identifiers. The
   // harness installs each `external_<name>` global in a loop using bracket
   // assignment, so no caller-derived string is ever spliced into the generated
