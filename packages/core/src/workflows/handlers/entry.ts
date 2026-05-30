@@ -129,6 +129,12 @@ export interface PersistStepUpdateParams {
     spanId?: string;
     parentSpanId?: string;
   };
+  /**
+   * Optional phase suffix appended to the durable operation ID to prevent
+   * duplicate step IDs when persistStepUpdate is called multiple times for
+   * the same execution path (e.g. 'start' before execution, 'end' after).
+   */
+  phase?: string;
 }
 
 export async function persistStepUpdate(
@@ -147,9 +153,10 @@ export async function persistStepUpdate(
     error,
     requestContext,
     tracingContext,
+    phase,
   } = params;
 
-  const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`;
+  const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
 
   await engine.wrapDurableOperation(operationId, async () => {
     const shouldPersistSnapshot = engine.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
