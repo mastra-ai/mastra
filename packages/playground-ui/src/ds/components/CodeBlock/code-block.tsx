@@ -109,6 +109,23 @@ interface HighlightedCodeProps {
   lang?: string;
 }
 
+// Shiki runs with dual themes (`defaultColor: false`), so each token's colors
+// arrive as `--shiki-light` / `--shiki-dark` CSS variables on `htmlStyle` rather
+// than as a concrete `color`. Nothing in the app reads those variables, so we
+// resolve them into a real `color`/`backgroundColor` here. The variable itself is
+// used as the value so a light-mode override can still swap it via `--shiki-light`.
+function tokenStyle(token: ThemedToken): React.CSSProperties | undefined {
+  if (token.htmlStyle && typeof token.htmlStyle === 'object') {
+    const vars = token.htmlStyle as Record<string, string>;
+    const style: React.CSSProperties = { ...(token.htmlStyle as React.CSSProperties) };
+    if (vars['--shiki-dark']) style.color = 'var(--shiki-dark, var(--shiki-light))';
+    if (vars['--shiki-dark-bg']) style.backgroundColor = 'var(--shiki-dark-bg, var(--shiki-light-bg))';
+    return style;
+  }
+  // Single-theme fallback: Shiki put the color directly on the token.
+  return token.color ? { color: token.color } : undefined;
+}
+
 function HighlightedCode({ code, lang }: HighlightedCodeProps) {
   const [tokens, setTokens] = React.useState<ThemedToken[][] | null>(null);
 
@@ -144,10 +161,7 @@ function HighlightedCode({ code, lang }: HighlightedCodeProps) {
           <React.Fragment key={lineIndex}>
             <span>
               {line.map((token, tokenIndex) => (
-                <span
-                  key={tokenIndex}
-                  className="text-shiki-light bg-shiki-light-bg dark:text-shiki-dark dark:bg-shiki-dark-bg"
-                >
+                <span key={tokenIndex} style={tokenStyle(token)}>
                   {token.content}
                 </span>
               ))}
