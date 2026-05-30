@@ -274,18 +274,22 @@ export class E2BSandbox extends MastraSandbox {
     }
 
     // Create a new sandbox with our logical ID in metadata
-    // Using betaCreate with autoPause so sandbox pauses on timeout instead of being destroyed
+    // Using lifecycle: { onTimeout: 'pause' } so sandbox pauses on timeout instead of being destroyed
     this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
+    const sandboxCreateOpts = {
+      lifecycle: { onTimeout: 'pause' as const },
+      metadata: {
+        ...this.metadata,
+        'mastra-sandbox-id': this.id,
+      },
+      timeoutMs: this.timeout,
+    };
+
     try {
-      this._sandbox = await Sandbox.betaCreate(resolvedTemplateId, {
+      this._sandbox = await Sandbox.create(resolvedTemplateId, {
         ...this.connectionOpts,
-        autoPause: true,
-        metadata: {
-          ...this.metadata,
-          'mastra-sandbox-id': this.id,
-        },
-        timeoutMs: this.timeout,
+        ...sandboxCreateOpts,
       });
     } catch (createError) {
       // If template not found (404), rebuild it and retry
@@ -296,14 +300,9 @@ export class E2BSandbox extends MastraSandbox {
         const rebuiltTemplateId = await this.buildDefaultTemplate();
 
         this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
-        this._sandbox = await Sandbox.betaCreate(rebuiltTemplateId, {
+        this._sandbox = await Sandbox.create(rebuiltTemplateId, {
           ...this.connectionOpts,
-          autoPause: true,
-          metadata: {
-            ...this.metadata,
-            'mastra-sandbox-id': this.id,
-          },
-          timeoutMs: this.timeout,
+          ...sandboxCreateOpts,
         });
       } else {
         throw createError;
