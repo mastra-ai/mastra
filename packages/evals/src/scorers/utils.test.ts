@@ -15,6 +15,7 @@ import {
   getReasoningFromRunOutput,
   createTestMessage,
   createToolInvocation,
+  extractToolCalls,
   extractToolResults,
   extractTrajectory,
   compareTrajectories,
@@ -452,6 +453,188 @@ describe('Scorer Utils', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0]?.toolName).toBe('hasResultTool');
+    });
+
+    it('should extract tool results from V2 content.parts when toolInvocations is absent', () => {
+      const output = [
+        {
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'weatherTool',
+                  args: { city: 'Seoul' },
+                  result: { temperature: 22 },
+                },
+              },
+            ],
+          },
+        },
+      ] as any;
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        toolName: 'weatherTool',
+        toolCallId: 'call-1',
+        args: { city: 'Seoul' },
+        result: { temperature: 22 },
+      });
+    });
+
+    it('should prefer content.toolInvocations over content.parts when both are present', () => {
+      const output = [
+        {
+          role: 'assistant',
+          content: {
+            toolInvocations: [
+              { state: 'result', toolCallId: 'legacy-1', toolName: 'legacyTool', args: { x: 1 }, result: { ok: true } },
+            ],
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'parts-1',
+                  toolName: 'partsTool',
+                  args: { y: 2 },
+                  result: { ok: false },
+                },
+              },
+            ],
+          },
+        },
+      ] as any;
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.toolName).toBe('legacyTool');
+    });
+  });
+
+  describe('extractToolCalls', () => {
+    it('should extract tool calls from legacy toolInvocations', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Calling a tool.',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'call-1',
+              toolName: 'searchTool',
+              args: { query: 'test' },
+              result: { hits: [] },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['searchTool']);
+      expect(toolCallInfos).toHaveLength(1);
+      expect(toolCallInfos[0]?.toolName).toBe('searchTool');
+      expect(toolCallInfos[0]?.toolCallId).toBe('call-1');
+    });
+
+    it('should extract tool calls from V2 content.parts when toolInvocations is absent', () => {
+      const output = [
+        {
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'c1',
+                  toolName: 'weatherTool',
+                  args: { city: 'Seoul' },
+                  result: { temperature: 22 },
+                },
+              },
+            ],
+          },
+        },
+      ] as any;
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['weatherTool']);
+      expect(toolCallInfos).toHaveLength(1);
+      expect(toolCallInfos[0]?.toolName).toBe('weatherTool');
+      expect(toolCallInfos[0]?.toolCallId).toBe('c1');
+    });
+
+    it('should extract multiple tool calls from V2 parts in a single message', () => {
+      const output = [
+        {
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'toolA', args: { a: 1 }, result: 'ok' },
+              },
+              { type: 'text', text: 'some text' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'c2', toolName: 'toolB', args: { b: 2 } },
+              },
+            ],
+          },
+        },
+      ] as any;
+
+      const { tools } = extractToolCalls(output);
+
+      expect(tools).toEqual(['toolA', 'toolB']);
+    });
+
+    it('should prefer content.toolInvocations over content.parts when both are present', () => {
+      const output = [
+        {
+          role: 'assistant',
+          content: {
+            toolInvocations: [
+              { state: 'result', toolCallId: 'top-1', toolName: 'legacyTool', args: {}, result: {} },
+            ],
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'result', toolCallId: 'p-1', toolName: 'partsTool', args: {}, result: {} },
+              },
+            ],
+          },
+        },
+      ] as any;
+
+      const { tools } = extractToolCalls(output);
+
+      expect(tools).toEqual(['legacyTool']);
+    });
+
+    it('should return empty arrays when no tool calls are present', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({ content: 'No tools used.', role: 'assistant' }),
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual([]);
+      expect(toolCallInfos).toEqual([]);
     });
   });
 
