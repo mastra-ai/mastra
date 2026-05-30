@@ -323,11 +323,12 @@ export interface ComputeStateSignalArgs<
  */
 export type ProcessorStateSignalTracking = {
   currentCacheKey?: string;
+  currentMode?: 'snapshot' | 'delta';
   version?: number;
   lastSignalId?: string;
   lastSnapshotSignalId?: string;
   updatedAt?: string;
-  activeCopies?: Array<{ id: string; cacheKey?: string; version?: number }>;
+  activeCopies?: Array<{ id: string; cacheKey?: string; mode?: 'snapshot' | 'delta'; version?: number }>;
 };
 
 export type ComputeStateSignalResult = ProcessorStateSignal | undefined | void;

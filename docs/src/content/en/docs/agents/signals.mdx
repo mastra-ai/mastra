@@ -266,7 +266,7 @@ await agent.sendStateSignal(
 )
 ```
 
-When Mastra accepts a state signal, it stores compact tracking metadata on the thread. The metadata records the lane's current `cacheKey`, version, last signal id, and last snapshot signal id. If a producer sends the same `cacheKey` again while that state is still current, Mastra skips the duplicate.
+When Mastra accepts a state signal, it stores compact tracking metadata on the thread. The metadata records the lane's current `cacheKey`, current mode, version, last signal id, and last snapshot signal id. If a producer sends the same `cacheKey` and mode again while that state is still current, Mastra skips the duplicate.
 
 State signal fields have separate roles:
 
