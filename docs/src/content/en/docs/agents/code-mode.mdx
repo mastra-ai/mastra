@@ -110,10 +110,10 @@ const { tool, instructions } = createCodeMode({
 
 ## Result
 
-`execute_typescript` returns:
+`execute_typescript` returns a `CodeModeToolResult`:
 
 ```typescript
-type CodeModeResult = {
+type CodeModeToolResult = {
   success: boolean
   result?: unknown // value returned by the program
   logs?: string[] // captured console output
