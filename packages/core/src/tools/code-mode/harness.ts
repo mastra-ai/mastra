@@ -43,16 +43,13 @@ export function buildProgramModule(program: string): string {
  * Produce the full harness source to write into the sandbox and run with node.
  */
 export function buildHarness({ programModule, externals }: BuildHarnessOptions): string {
-  const externalDefs = externals
-    .map(
-      ({ externalName, toolId }) =>
-        `globalThis.external_${externalName} = (input) => __rpc(${JSON.stringify(toolId)}, input);`,
-    )
-    .join('\n');
+  // Externals are emitted as JSON data, not interpolated identifiers. The
+  // harness installs each `external_<name>` global in a loop using bracket
+  // assignment, so no caller-derived string is ever spliced into the generated
+  // source as code. This keeps tool ids strictly data, even if `sanitize`
+  // changes.
+  const externalsJson = JSON.stringify(externals.map(({ externalName, toolId }) => ({ externalName, toolId })));
 
-  // The program is embedded as a function body so top-level `return`, `await`,
-  // and `const` work as the model expects. It is JSON-stringified and recreated
-  // via the async function constructor to avoid any quoting hazards.
   return `'use strict';
 const FRAME_PREFIX = ${JSON.stringify(FRAME_PREFIX)};
 
@@ -111,7 +108,9 @@ process.stdin.on('data', (chunk) => {
 });
 
 // ---- externals -------------------------------------------------------------
-${externalDefs}
+for (const { externalName, toolId } of ${externalsJson}) {
+  globalThis['external_' + externalName] = (input) => __rpc(toolId, input);
+}
 
 // ---- user program ----------------------------------------------------------
 // The program lives in a sibling .ts module exporting a default async function;
