@@ -20,7 +20,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `POST` | `/api/agents/:agentId/send-message` | Send a user message to an active or idle thread |
 | `POST` | `/api/agents/:agentId/queue-message` | Queue a user message for the next thread turn |
 | `POST` | `/api/agents/:agentId/signals` | Send a lower-level signal to an active or idle thread |
-| `POST` | `/api/agents/:agentId/subscribe-thread` | Subscribe to a thread stream |
+| `POST` | `/api/agents/:agentId/threads/subscribe` | Subscribe to a thread stream |
 | `POST` | `/api/agents/:agentId/approve-tool-call-subscription` | Approve a tool call and resume through a thread subscription |
 | `POST` | `/api/agents/:agentId/decline-tool-call-subscription` | Decline a tool call and resume through a thread subscription |
 | `POST` | `/api/agents/:agentId/resume-stream` | Resume a suspended agent stream with custom data |

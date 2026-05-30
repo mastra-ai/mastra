@@ -2278,6 +2278,7 @@ export const APPROVE_TOOL_CALL_SUBSCRIPTION_ROUTE = createRoute({
   description: 'Approves a pending tool call and publishes resumed chunks to thread subscribers',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -2363,6 +2364,7 @@ export const DECLINE_TOOL_CALL_SUBSCRIPTION_ROUTE = createRoute({
   description: 'Declines a pending tool call and publishes resumed chunks to thread subscribers',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({

@@ -20,6 +20,7 @@ import {
   sendAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
 } from '../schemas/agents';
+import { AGENTS_ROUTES } from '../server-adapter/routes/agents';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
@@ -1100,6 +1101,29 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('SIGNAL_ROUTES', () => {
+    it('should register subscription approval routes with execute permissions', () => {
+      const routeMetadata = AGENTS_ROUTES.map(route => ({
+        path: route.path,
+        method: route.method,
+        requiresPermission: route.requiresPermission,
+      }));
+
+      expect(routeMetadata).toEqual(
+        expect.arrayContaining([
+          {
+            path: '/agents/:agentId/approve-tool-call-subscription',
+            method: 'POST',
+            requiresPermission: 'agents:execute',
+          },
+          {
+            path: '/agents/:agentId/decline-tool-call-subscription',
+            method: 'POST',
+            requiresPermission: 'agents:execute',
+          },
+        ]),
+      );
+    });
+
     it('should validate typed user-message signal contents and attributes', () => {
       const body = {
         signal: {
