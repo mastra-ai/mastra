@@ -3,7 +3,7 @@ import type { DescribeRouteOptions } from 'hono-openapi';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { ApiRoute, MastraAuthConfig, Methods } from './types';
+import type { ApiRoute, MastraAuthConfig, Methods, RouteValidators } from './types';
 
 export type {
   MastraAuthConfig,
@@ -12,6 +12,7 @@ export type {
   ContextWithMastra,
   CorsOptions,
   ApiRoute,
+  RouteValidators,
   HttpLoggingConfig,
   ValidationErrorContext,
   ValidationErrorResponse,
@@ -41,6 +42,13 @@ type CustomRouteVariables = {
 type RegisterApiRouteOptions<P extends string> = {
   method: Methods;
   openapi?: DescribeRouteOptions;
+  /**
+   * Per-target Standard Schema validators (Zod, Valibot, ArkType, etc.).
+   * The server automatically validates the matching request part and returns
+   * a 400 with structured errors on failure. Access validated data in the
+   * handler via `c.req.valid('json')`, `c.req.valid('query')`, etc.
+   */
+  validators?: RouteValidators;
   handler?: Handler<
     {
       Variables: CustomRouteVariables;
@@ -114,6 +122,7 @@ export function registerApiRoute<P extends string>(path: P, options: RegisterApi
     handler: options.handler,
     createHandler: options.createHandler,
     openapi: options.openapi,
+    validators: options.validators,
     middleware: options.middleware,
     cors: options.cors,
     requiresAuth: options.requiresAuth,

@@ -12,12 +12,13 @@ import { MastraServer, setupBrowserStream } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
+import { sValidator } from '@hono/standard-validator';
 import { describeRoute } from 'hono-openapi';
 import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
@@ -127,18 +128,30 @@ export async function createHonoServer(
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
-  // Pre-process routes: bake hono-openapi describeRoute into route middleware
-  // so the adapter handles it as normal middleware without needing to know about hono-openapi
+  // Pre-process routes: bake hono-openapi describeRoute and sValidator middleware into the
+  // route's middleware array so the adapter handles them as normal middleware.
+  type ValidatorTarget = 'json' | 'query' | 'param' | 'header' | 'form';
+
+  function toArray<T>(v: T | T[] | undefined): T[] {
+    if (!v) return [];
+    return Array.isArray(v) ? v : [v];
+  }
+
   const processedRoutes = routes?.map(route => {
+    const injected: MiddlewareHandler[] = [];
+
     if ('openapi' in route && route.openapi) {
-      const existingMiddleware = route.middleware
-        ? Array.isArray(route.middleware)
-          ? route.middleware
-          : [route.middleware]
-        : [];
-      return { ...route, middleware: [describeRoute(route.openapi), ...existingMiddleware] };
+      injected.push(describeRoute(route.openapi));
     }
-    return route;
+
+    if ('validators' in route && route.validators) {
+      for (const [target, schema] of Object.entries(route.validators) as [ValidatorTarget, NonNullable<(typeof route.validators)[ValidatorTarget]>][]) {
+        injected.push(sValidator(target, schema));
+      }
+    }
+
+    if (injected.length === 0) return route;
+    return { ...route, middleware: [...injected, ...toArray(route.middleware)] };
   });
 
   // Store custom route auth configurations
