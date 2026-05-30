@@ -1766,6 +1766,94 @@ describe('Memory', () => {
     });
   });
 
+  describe('vector metadata completeness (issue #16380)', () => {
+    const embeddingDim = 384;
+    const fakeEmbedding = new Array(embeddingDim).fill(0.1);
+
+    function setup() {
+      const mockVector: MastraVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        listIndexes: vi.fn().mockResolvedValue([]),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: embeddingDim }),
+        id: 'mock-vector',
+      } as any;
+      const mockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({ embeddings: [fakeEmbedding] }),
+        modelId: 'mock-384-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any;
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        embedder: mockEmbedder,
+        options: { semanticRecall: { scope: 'thread' }, lastMessages: 10, generateTitle: false },
+      });
+      return { memory, mockVector };
+    }
+
+    it('saveMessages writes role, content, and created_at to vector metadata', async () => {
+      const { memory, mockVector } = setup();
+      await memory.createThread({ threadId: 'meta-thread', resourceId: 'meta-resource' });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'meta-msg-1',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'hello world' }], content: 'hello world' },
+            createdAt: new Date('2024-01-01T00:00:00.000Z'),
+            threadId: 'meta-thread',
+            resourceId: 'meta-resource',
+          } as MastraDBMessage,
+        ],
+      });
+
+      expect(mockVector.upsert).toHaveBeenCalled();
+      const metadata = vi.mocked(mockVector.upsert).mock.calls[0]![0].metadata[0] as Record<string, unknown>;
+      expect(metadata.message_id).toBe('meta-msg-1');
+      expect(metadata.thread_id).toBe('meta-thread');
+      expect(metadata.resource_id).toBe('meta-resource');
+      expect(metadata.role).toBe('user');
+      expect(metadata.content).toBe('hello world');
+      expect(metadata.created_at).toBe('2024-01-01T00:00:00.000Z');
+    });
+
+    it('updateMessages writes role, content, and created_at from the stored message', async () => {
+      const { memory, mockVector } = setup();
+      await memory.createThread({ threadId: 'meta-thread-2', resourceId: 'meta-resource-2' });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'meta-msg-2',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'original' }], content: 'original' },
+            createdAt: new Date('2024-02-02T00:00:00.000Z'),
+            threadId: 'meta-thread-2',
+            resourceId: 'meta-resource-2',
+          } as MastraDBMessage,
+        ],
+      });
+      vi.mocked(mockVector.upsert).mockClear();
+
+      await memory.updateMessages({
+        messages: [
+          { id: 'meta-msg-2', content: { format: 2, parts: [{ type: 'text', text: 'updated text' }] } } as any,
+        ],
+      });
+
+      expect(mockVector.upsert).toHaveBeenCalled();
+      const metadata = vi.mocked(mockVector.upsert).mock.calls[0]![0].metadata[0] as Record<string, unknown>;
+      expect(metadata.message_id).toBe('meta-msg-2');
+      expect(metadata.role).toBe('user');
+      expect(metadata.content).toBe('updated text');
+      expect(metadata.created_at).toBe('2024-02-02T00:00:00.000Z');
+    });
+  });
+
   describe('toModelOutput persistence', () => {
     it('should preserve raw tool result and stored modelOutput through save/load cycle', async () => {
       const memory = new Memory({

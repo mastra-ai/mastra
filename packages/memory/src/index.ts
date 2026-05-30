@@ -214,6 +214,26 @@ const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
 
 /**
+ * Builds the metadata stored alongside a message's vector embedding. Includes
+ * role/content/created_at (not just the lookup keys) so consumers can build a
+ * search result directly from vector metadata, matching the semantic-recall processor.
+ */
+function buildVectorMessageMetadata(
+  id: string,
+  source: { threadId?: string; resourceId?: string; role?: string; createdAt?: Date | string },
+  content: string,
+): Record<string, unknown> & { message_id: string; thread_id: string | undefined; resource_id: string | undefined } {
+  return {
+    message_id: id,
+    thread_id: source.threadId,
+    resource_id: source.resourceId,
+    role: source.role,
+    content,
+    created_at: source.createdAt instanceof Date ? source.createdAt.toISOString() : String(source.createdAt ?? ''),
+  };
+}
+
+/**
  * Concrete implementation of MastraMemory that adds support for thread configuration
  * and message injection.
  */
@@ -1150,9 +1170,7 @@ ${workingMemory}`;
               embeddings: result.embeddings,
               metadata: result.chunks.map(() => ({
                 ...threadMetadata,
-                message_id: message.id,
-                thread_id: message.threadId,
-                resource_id: message.resourceId,
+                ...buildVectorMessageMetadata(message.id, message, textForEmbedding),
               })),
             });
           }),
@@ -2023,11 +2041,7 @@ Notes:
 
         embeddingData.push({
           embeddings: embedResult.embeddings,
-          metadata: embedResult.chunks.map(() => ({
-            message_id: message.id,
-            thread_id: message.threadId,
-            resource_id: message.resourceId,
-          })),
+          metadata: embedResult.chunks.map(() => buildVectorMessageMetadata(message.id, message, textForEmbedding)),
         });
       }),
     );
@@ -2168,11 +2182,9 @@ Notes:
 
               embeddingData.push({
                 embeddings: result.embeddings,
-                metadata: result.chunks.map(() => ({
-                  message_id: message.id,
-                  thread_id: existingMessage.threadId,
-                  resource_id: existingMessage.resourceId,
-                })),
+                metadata: result.chunks.map(() =>
+                  buildVectorMessageMetadata(message.id, existingMessage, textForEmbedding),
+                ),
               });
               messageIdsWithNewEmbeddings.add(message.id);
             } else {
@@ -2616,11 +2628,7 @@ Notes:
 
         embeddingData.push({
           embeddings: result.embeddings,
-          metadata: result.chunks.map(() => ({
-            message_id: message.id,
-            thread_id: message.threadId,
-            resource_id: message.resourceId,
-          })),
+          metadata: result.chunks.map(() => buildVectorMessageMetadata(message.id, message, textForEmbedding)),
         });
       }),
     );
