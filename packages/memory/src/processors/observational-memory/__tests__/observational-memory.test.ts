@@ -13636,7 +13636,7 @@ describe('Single-thread replay red tests', () => {
     const observedUserAt = new Date('2025-01-01T10:00:00.000Z');
     const observedResponseAt = new Date('2025-01-01T10:00:01.000Z');
     const lastObservedAt = new Date('2025-01-01T10:00:02.000Z');
-    const futureWatermarkAt = new Date('2025-01-02T10:00:00.000Z');
+    const futurePartTimestamp = new Date('2025-01-02T10:00:00.000Z').getTime();
 
     messageList.add(
       {
@@ -13656,8 +13656,12 @@ describe('Single-thread replay red tests', () => {
         threadId,
         resourceId,
         role: 'user',
-        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-watermark' }] },
-        createdAt: futureWatermarkAt,
+        content: {
+          format: 2,
+          content: 'already-observed-watermark',
+          parts: [{ type: 'text', text: 'already-observed-watermark', createdAt: futurePartTimestamp }],
+        },
+        createdAt: lastObservedAt,
       } as any,
       'memory',
     );
@@ -13668,7 +13672,11 @@ describe('Single-thread replay red tests', () => {
         threadId,
         resourceId,
         role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-response' }] },
+        content: {
+          format: 2,
+          content: 'already-observed-response',
+          parts: [{ type: 'text', text: 'already-observed-response' }],
+        },
         createdAt: observedResponseAt,
       } as any,
       'response',
