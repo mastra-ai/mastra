@@ -7,7 +7,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "mastra": "./dist/index.js"
+    "mastra": "./bin/mastra.mjs"
   },
   "exports": {
     ".": "./dist/index.js",
@@ -19,6 +19,7 @@
     ]
   },
   "files": [
+    "bin",
     "dist",
     "CHANGELOG.md"
   ],
@@ -73,6 +74,7 @@
     "shell-quote": "^1.8.3",
     "strip-json-comments": "^5.0.3",
     "tinyglobby": "^0.2.16",
+    "tsx": "^4.21.0",
     "yocto-spinner": "^1.1.0"
   },
   "devDependencies": {

@@ -23,6 +23,12 @@ vi.mock('../auth/credentials.js', () => ({
   getToken: vi.fn(),
   loadCredentials: vi.fn(),
 }));
+vi.mock('../auth/credentials.ts', () => ({
+  getToken: vi.fn(),
+  loadCredentials: vi.fn(),
+}));
+
+vi.resetModules();
 
 vi.mock('../auth/orgs.js', () => ({
   resolveCurrentOrg: vi.fn(),

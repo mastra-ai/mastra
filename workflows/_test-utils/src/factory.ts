@@ -8,6 +8,7 @@ import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
+import { cloneStep, cloneWorkflow, mapVariable } from '@mastra/core/workflows';
 import type {
   DurableAgentTestConfig,
   DurableAgentTestContext,
@@ -400,7 +401,6 @@ export function createWorkflowTestSuite(config: WorkflowTestConfig) {
   describe(name, () => {
     // Create workflow factory - this runs at test collection time
     const factory = getWorkflowFactory();
-    const { mapVariable, cloneStep, cloneWorkflow } = require('@mastra/core/workflows');
 
     // Create all workflows upfront
     // Domains that support the new pattern will have workflow creators

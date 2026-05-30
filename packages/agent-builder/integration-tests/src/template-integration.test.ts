@@ -202,7 +202,7 @@ describe('Template Workflow Integration Tests', () => {
     console.log('Starting Mastra server...');
 
     // Start the Mastra server
-    mastraServer = spawn('pnpm', ['dev'], {
+    mastraServer = spawn('pnpm', [process.env.MASTRA_SOURCE_MODE === '1' ? 'dev:source-mode' : 'dev'], {
       stdio: 'pipe',
       cwd: targetRepo,
       detached: true,
@@ -305,6 +305,11 @@ describe('Template Workflow Integration Tests', () => {
   }, 600000); // 10 minute timeout for server startup and testing
 
   it('should validate git history shows proper template integration', async () => {
+    if (!process.env.OPENAI_API_KEY) {
+      console.log('Skipping test: OPENAI_API_KEY not set');
+      return;
+    }
+
     // Check git log for template commits
     const gitLog = exec('git log --oneline', targetRepo);
     // The copy step always creates this commit (file count varies based on conflicts)

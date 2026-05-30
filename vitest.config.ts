@@ -4,6 +4,8 @@ import { loadConfigFromFile } from 'vite';
 import type { TestProjectConfiguration, UserWorkspaceConfig } from 'vitest/config';
 import { defineConfig } from 'vitest/config';
 
+import { SOURCE_MODE, sourceModeConfigFor, withSourceModeConfig } from './scripts/vitest-source-mode-config';
+
 // Directories to exclude from project discovery
 const EXCLUDED_DIRS = new Set([
   'packages/_config',
@@ -13,20 +15,49 @@ const EXCLUDED_DIRS = new Set([
   'packages/playground-ui',
   'server-adapters/_test-utils',
   'observability/_examples',
+  ...(SOURCE_MODE
+    ? ['observability/_test-utils', 'packages/_changeset-cli', 'packages/_external-types', 'packages/_internal-core']
+    : []),
 ]);
+
+const REQUESTED_PROJECTS = new Set(
+  process.argv.flatMap((arg, index, args) => {
+    if (arg === '--project') return args[index + 1] ? [args[index + 1]] : [];
+    if (arg.startsWith('--project=')) return [arg.slice('--project='.length)];
+    return [];
+  }),
+);
+
+function shouldScanProjectGroup(projectGroup: string) {
+  if (!SOURCE_MODE || REQUESTED_PROJECTS.size === 0) return true;
+  return [...REQUESTED_PROJECTS].some(
+    project =>
+      project === `unit:${projectGroup}/*` ||
+      project === `e2e:${projectGroup}/*` ||
+      project.startsWith(`unit:${projectGroup}/`) ||
+      project.startsWith(`e2e:${projectGroup}/`),
+  );
+}
 
 // Directories to scan for vitest configs
 const PROJECT_GLOBS = [
-  'packages/*/vitest.config.ts',
-  'stores/*/vitest.config.ts',
-  'deployers/*/vitest.config.ts',
-  'voice/*/vitest.config.ts',
-  'server-adapters/*/vitest.config.ts',
-  'client-sdks/*/vitest.config.ts',
-  'auth/*/vitest.config.ts',
-  'observability/*/vitest.config.ts',
-  'pubsub/*/vitest.config.ts',
-  'workflows/*/vitest.config.ts',
+  ...(shouldScanProjectGroup('packages')
+    ? ['packages/*/vitest.config.ts', ...(SOURCE_MODE ? ['packages/_internals/*/vitest.config.ts'] : [])]
+    : []),
+  ...(shouldScanProjectGroup('stores') ? ['stores/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('deployers') ? ['deployers/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('voice') ? ['voice/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('speech') ? ['speech/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('server-adapters') ? ['server-adapters/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('client-sdks') ? ['client-sdks/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('auth') ? ['auth/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('observability') ? ['observability/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('pubsub') ? ['pubsub/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('workflows') ? ['workflows/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('workspaces') ? ['workspaces/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('integrations') ? ['integrations/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('channels') ? ['channels/*/vitest.config.ts'] : []),
+  ...(shouldScanProjectGroup('browser') ? ['browser/*/vitest.config.ts'] : []),
 ];
 
 /**
@@ -52,13 +83,6 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
     const configContent = readFileSync(configPath, 'utf-8');
     const hasNestedProjects = /test:\s*\{[\s\S]*?projects:\s*\[/.test(configContent);
 
-    if (!hasNestedProjects) {
-      // Simple config - use directory path
-      projects.push(projectDir);
-      continue;
-    }
-
-    // Config has nested projects - load it using Vite's config loader
     try {
       const absolutePath = resolve(process.cwd(), configPath);
       const loaded = await loadConfigFromFile({} as any, absolutePath);
@@ -67,6 +91,25 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
         continue;
       }
       const config = loaded.config as UserWorkspaceConfig;
+
+      if (!hasNestedProjects) {
+        if (!SOURCE_MODE) {
+          projects.push(projectDir);
+          continue;
+        }
+
+        projects.push(
+          withSourceModeConfig({
+            ...config,
+            test: {
+              ...config.test,
+              name: config.test?.name ?? `unit:${projectDir}`,
+              root: `./${projectDir}`,
+            },
+          }),
+        );
+        continue;
+      }
 
       if (!config.test?.projects) {
         // Fallback if config parsing didn't work as expected
@@ -82,13 +125,17 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
         } else {
           // Inline project config - add root path
           const projectConfig = nestedProject as UserWorkspaceConfig;
-          projects.push({
-            ...projectConfig,
-            test: {
-              ...projectConfig.test,
-              root: `./${projectDir}`,
-            },
-          });
+          projects.push(
+            withSourceModeConfig({
+              ...projectConfig,
+              test: {
+                ...projectConfig.test,
+                ...(SOURCE_MODE && !projectConfig.test?.name ? { name: `unit:${projectDir}` } : {}),
+                root: `./${projectDir}`,
+                ...(projectConfig.test?.exclude ? { exclude: projectConfig.test.exclude } : {}),
+              },
+            }),
+          );
         }
       }
     } catch (error) {
@@ -101,8 +148,14 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
   return projects;
 }
 
-export default defineConfig(async () => ({
-  test: {
-    projects: await discoverProjects(),
-  },
-}));
+export default defineConfig(async () => {
+  const sourceConfig = sourceModeConfigFor();
+
+  return {
+    ...sourceConfig,
+    test: {
+      ...sourceConfig.test,
+      projects: await discoverProjects(),
+    },
+  };
+});

@@ -632,13 +632,20 @@ describe('GatewayRegistry Auto-Refresh', () => {
 
     expect(mastraFetchProvidersSpy).not.toHaveBeenCalled();
 
-    // Verify files were written to dist/ via atomic rename
-    expect(renamedFiles.some(f => f.dest.includes('dist/provider-registry.json'))).toBe(true);
-    expect(renamedFiles.some(f => f.dest.includes('dist/llm/model/provider-types.generated.d.ts'))).toBe(true);
+    if (process.env.MASTRA_SOURCE_MODE === '1') {
+      // Source mode writes directly to src/ so no dist artifacts are created.
+      expect(renamedFiles.some(f => f.dest.includes('src/llm/model/provider-registry.json'))).toBe(true);
+      expect(renamedFiles.some(f => f.dest.includes('src/llm/model/provider-types.generated.d.ts'))).toBe(true);
+      expect(renamedFiles.some(f => f.dest.includes('dist/'))).toBe(false);
+    } else {
+      // Verify files were written to dist/ via atomic rename
+      expect(renamedFiles.some(f => f.dest.includes('dist/provider-registry.json'))).toBe(true);
+      expect(renamedFiles.some(f => f.dest.includes('dist/llm/model/provider-types.generated.d.ts'))).toBe(true);
 
-    // Verify files were copied to src/
-    expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-registry.json'))).toBe(true);
-    expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-types.generated.d.ts'))).toBe(true);
+      // Verify files were copied to src/
+      expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-registry.json'))).toBe(true);
+      expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-types.generated.d.ts'))).toBe(true);
+    }
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -735,10 +742,14 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const globalTypesFile = typesFiles.find(f => f.dest.includes('.cache/mastra/provider-types.generated.d.ts'));
     expect(globalTypesFile).toBeDefined();
 
-    // Should also write to local dist/llm/model/ (not dist/ root)
-    const localTypesFile = typesFiles.find(f => f.dest.includes('dist/llm/model/provider-types.generated.d.ts'));
-    expect(localTypesFile).toBeDefined();
-    expect(localTypesFile?.dest).not.toContain('dist/provider-types.generated.d.ts');
+    if (process.env.MASTRA_SOURCE_MODE === '1') {
+      expect(typesFiles.some(f => f.dest.includes('dist/'))).toBe(false);
+    } else {
+      // Should also write to local dist/llm/model/ (not dist/ root)
+      const localTypesFile = typesFiles.find(f => f.dest.includes('dist/llm/model/provider-types.generated.d.ts'));
+      expect(localTypesFile).toBeDefined();
+      expect(localTypesFile?.dest).not.toContain('dist/provider-types.generated.d.ts');
+    }
 
     // Cleanup
     writeFileSpy.mockRestore();

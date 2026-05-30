@@ -1,5 +1,5 @@
-import { writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
@@ -8,7 +8,9 @@ import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
+import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { shouldSkipDotenvLoading } from '../utils.js';
+import { isSourceModeRuntimeEnabled, sourceModeWatcherPlugin } from './source-mode-watch';
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
@@ -43,6 +45,26 @@ export class DevBundler extends Bundler {
     return Promise.resolve([]);
   }
 
+  private async getSourceModeStudioPath(packagedStudioPath: string): Promise<string | null> {
+    try {
+      const playgroundPackageJsonPath = fileURLToPath(import.meta.resolve('@internal/playground/package.json'));
+      const playgroundRoot = dirname(playgroundPackageJsonPath);
+      const playgroundDist = join(playgroundRoot, 'dist');
+
+      if (await fsExtra.pathExists(join(playgroundDist, 'index.html'))) {
+        return playgroundDist;
+      }
+    } catch {
+      // ignore and fall back to packaged assets below
+    }
+
+    if (await fsExtra.pathExists(join(packagedStudioPath, 'index.html'))) {
+      return packagedStudioPath;
+    }
+
+    return null;
+  }
+
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
 
@@ -50,22 +72,43 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const studioServePath = join(outputDirectory, this.outputDir, 'studio');
-    await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
-      overwrite: true,
-    });
+    const packagedStudioPath = join(dirname(__dirname), 'dist', 'studio');
+    const studioSourcePath = isSourceModeRuntimeEnabled()
+      ? await this.getSourceModeStudioPath(packagedStudioPath)
+      : packagedStudioPath;
+
+    if (studioSourcePath) {
+      await fsExtra.copy(studioSourcePath, studioServePath, {
+        overwrite: true,
+      });
+      return;
+    }
+
+    await mkdir(studioServePath, { recursive: true });
+    await writeFile(
+      join(studioServePath, 'index.html'),
+      '<!doctype html><html><head><title>Mastra</title></head><body><main>Mastra dev server running in source mode. Studio assets are unavailable because packages/playground/dist has not been built.</main></body></html>',
+    );
   }
 
   async watch(
     entryFile: string,
     outputDirectory: string,
     toolsPaths: (string | string[])[],
+    mastraPackages: MastraPackageInfo[] = [],
   ): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
+    const packageRoot = __dirname.endsWith(`${sep}dist`) ? dirname(__dirname) : dirname(dirname(dirname(__dirname)));
 
     const envFiles = await this.getEnvFiles();
     const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
     const sourcemapEnabled = !!bundlerOptions?.sourcemap;
+    const sourceModeTemplatePath = join(packageRoot, 'src', 'public', 'templates', 'dev.entry.js');
+    const templatePath =
+      isSourceModeRuntimeEnabled() && (await fsExtra.pathExists(sourceModeTemplatePath))
+        ? sourceModeTemplatePath
+        : join(__dirname, 'templates', 'dev.entry.js');
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
@@ -76,6 +119,7 @@ export class DevBundler extends Bundler {
       { sourcemap: sourcemapEnabled },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
+    const sourceModePlugins = await sourceModeWatcherPlugin(mastraPackages);
 
     const outputDir = join(outputDirectory, this.outputDir);
 
@@ -106,6 +150,7 @@ export class DevBundler extends Bundler {
               }
             },
           },
+          ...sourceModePlugins,
           {
             name: 'tools-watcher',
             async buildEnd() {
@@ -129,7 +174,7 @@ export class DevBundler extends Bundler {
           },
         ],
         input: {
-          index: join(__dirname, 'templates', 'dev.entry.js'),
+          index: templatePath,
           ...toolsInputOptions,
         },
       },

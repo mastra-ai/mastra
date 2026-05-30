@@ -1,5 +1,7 @@
+import process from 'node:process';
+
 import { getPackageInfo } from 'local-pkg';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { checkMastraPeerDeps, logPeerDepWarnings } from './check-peer-deps.js';
 import type { MastraPackageInfo } from './mastra-packages.js';
@@ -10,6 +12,11 @@ vi.mock('local-pkg', () => ({
 }));
 
 const mockGetPackageInfo = vi.mocked(getPackageInfo);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  delete process.env.MASTRA_SKIP_PEERDEP_CHECK;
+});
 
 describe('checkMastraPeerDeps', () => {
   it('should return empty array when no packages have peer deps', async () => {

@@ -9,6 +9,7 @@
   ],
   "exports": {
     "./storage": {
+      "mastra-source": "./src/storage/index.ts",
       "import": {
         "types": "./dist/storage/index.d.ts",
         "default": "./dist/storage/index.js"
@@ -19,6 +20,7 @@
       }
     },
     "./base": {
+      "mastra-source": "./src/base/index.ts",
       "import": {
         "types": "./dist/base/index.d.ts",
         "default": "./dist/base/index.js"
@@ -29,6 +31,7 @@
       }
     },
     "./error": {
+      "mastra-source": "./src/error/index.ts",
       "import": {
         "types": "./dist/error/index.d.ts",
         "default": "./dist/error/index.js"
@@ -39,6 +42,7 @@
       }
     },
     "./logger": {
+      "mastra-source": "./src/logger/index.ts",
       "import": {
         "types": "./dist/logger/index.d.ts",
         "default": "./dist/logger/index.js"
@@ -49,6 +53,7 @@
       }
     },
     "./types": {
+      "mastra-source": "./src/types/index.ts",
       "import": {
         "types": "./dist/types/index.d.ts",
         "default": "./dist/types/index.js"
@@ -59,6 +64,7 @@
       }
     },
     "./request-context": {
+      "mastra-source": "./src/request-context/index.ts",
       "import": {
         "types": "./dist/request-context/index.d.ts",
         "default": "./dist/request-context/index.js"
@@ -69,6 +75,7 @@
       }
     },
     "./routes": {
+      "mastra-source": "./src/routes/index.ts",
       "import": {
         "types": "./dist/routes/index.d.ts",
         "default": "./dist/routes/index.js"

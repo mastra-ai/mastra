@@ -3179,6 +3179,9 @@ importers:
       tinyglobby:
         specifier: ^0.2.16
         version: 0.2.16
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       yocto-spinner:
         specifier: ^1.1.0
         version: 1.2.0
@@ -55711,7 +55714,7 @@ snapshots:
 
   tsx@4.21.0:
     dependencies:
-      esbuild: 0.27.2
+      esbuild: 0.27.7
       get-tsconfig: 4.13.0
     optionalDependencies:
       fsevents: 2.3.3

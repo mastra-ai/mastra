@@ -1,9 +1,12 @@
 import { defineConfig } from 'vitest/config';
+import { withSourceModeConfig } from '../../scripts/vitest-source-mode-config';
 
-export default defineConfig({
-  test: {
-    globals: true,
-    environment: 'node',
-    testTimeout: 30000,
-  },
-});
+export default defineConfig(
+  withSourceModeConfig({
+    test: {
+      globals: true,
+      environment: 'node',
+      testTimeout: 30000,
+    },
+  }),
+);

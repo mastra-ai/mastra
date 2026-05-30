@@ -33,6 +33,10 @@ export function isOfflineMode(): boolean {
   return value === 'true' || value === '1';
 }
 
+function isSourceModeEnabled(): boolean {
+  return process.env.MASTRA_SOURCE_MODE === '1';
+}
+
 function getEnabledGatewayIds(gateways: MastraModelGateway[]): Set<string> {
   const enabledGatewayIds = new Set<string>();
 
@@ -248,8 +252,12 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
     return sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
   }
 
-  // Dynamic loading mode: sync global cache to local before loading
-  syncGlobalCacheToLocal();
+  // Dynamic loading mode: sync global cache to local before loading.
+  // Source-mode test runs must not create build artifacts.
+  const sourceMode = isSourceModeEnabled();
+  if (!sourceMode) {
+    syncGlobalCacheToLocal();
+  }
 
   // Dynamic loading mode: check in-memory cache first
   if (registryData) {
@@ -258,15 +266,13 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
 
   // Dynamic loading mode: load from file system for live updates
   const packageRoot = getPackageRoot();
-  const possiblePaths: string[] = [
-    // Built: in dist/ relative to package root (first priority - what gets distributed)
-    path.join(packageRoot, 'dist', 'provider-registry.json'),
-    // Development: in src/ relative to package root
+  const sourcePaths = [
     path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json'),
-    // Fallback: relative to cwd (for monorepo setups)
     path.join(process.cwd(), 'packages/core/src/llm/model/provider-registry.json'),
     path.join(process.cwd(), 'src/llm/model/provider-registry.json'),
   ];
+  const builtPath = path.join(packageRoot, 'dist', 'provider-registry.json');
+  const possiblePaths: string[] = sourceMode ? [...sourcePaths, builtPath] : [builtPath, ...sourcePaths];
 
   const errors: string[] = [];
 
@@ -666,40 +672,53 @@ export class GatewayRegistry {
         console.warn('[GatewayRegistry] Failed to write to global cache:', error);
       }
 
-      // Write to dist/ (the bundled location that gets distributed)
-      const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
-      const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
+      const sourceMode = isSourceModeEnabled();
+      const registry = { providers, models, version: '1.0.0' };
 
-      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models, attachmentCapabilities);
-      // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
-
-      // Copy to src/ only when explicitly requested (e.g., running the generation script)
-      const shouldWriteToSrc = writeToSrc;
-      if (shouldWriteToSrc) {
-        const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
-        const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
-
-        // Copy the already-generated files
-        await fs.promises.copyFile(distJsonPath, srcJsonPath);
-        await fs.promises.copyFile(distTypesPath, srcTypesPath);
-
-        const distCapDir = path.join(packageRoot, 'dist', 'capabilities');
-        const srcCapDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
-        if (fs.existsSync(distCapDir)) {
-          await fs.promises.mkdir(srcCapDir, { recursive: true });
-          const capFiles = fs.readdirSync(distCapDir).filter(f => f.endsWith('.json'));
-          for (const file of capFiles) {
-            await fs.promises.copyFile(path.join(distCapDir, file), path.join(srcCapDir, file));
-          }
+      if (sourceMode) {
+        if (writeToSrc) {
+          const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
+          const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
+          await writeRegistryFiles(srcJsonPath, srcTypesPath, providers, models, attachmentCapabilities);
         }
-        // console.debug(`[GatewayRegistry] ✅ Copied registry files to src/ (${writeToSrc ? 'manual' : 'dynamic loading'})`);
-      }
-
-      // Clear the in-memory cache to force reload (dynamic loading only)
-      if (this.useDynamicLoading) {
-        registryData = null;
+        registryData = registry;
         providerCapCache.clear();
         capabilitiesDirCache = undefined;
+      } else {
+        // Write to dist/ (the bundled location that gets distributed)
+        const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
+        const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
+
+        await writeRegistryFiles(distJsonPath, distTypesPath, providers, models, attachmentCapabilities);
+        // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
+
+        // Copy to src/ only when explicitly requested (e.g., running the generation script)
+        if (writeToSrc) {
+          const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
+          const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
+
+          // Copy the already-generated files
+          await fs.promises.copyFile(distJsonPath, srcJsonPath);
+          await fs.promises.copyFile(distTypesPath, srcTypesPath);
+
+          const distCapDir = path.join(packageRoot, 'dist', 'capabilities');
+          const srcCapDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
+          if (fs.existsSync(distCapDir)) {
+            await fs.promises.mkdir(srcCapDir, { recursive: true });
+            const capFiles = fs.readdirSync(distCapDir).filter(f => f.endsWith('.json'));
+            for (const file of capFiles) {
+              await fs.promises.copyFile(path.join(distCapDir, file), path.join(srcCapDir, file));
+            }
+          }
+          // console.debug(`[GatewayRegistry] ✅ Copied registry files to src/ (${writeToSrc ? 'manual' : 'dynamic loading'})`);
+        }
+
+        // Clear the in-memory cache to force reload (dynamic loading only)
+        if (this.useDynamicLoading) {
+          registryData = null;
+          providerCapCache.clear();
+          capabilitiesDirCache = undefined;
+        }
       }
 
       this.lastRefreshTime = new Date();

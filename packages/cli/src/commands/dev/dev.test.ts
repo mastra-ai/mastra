@@ -3,6 +3,12 @@ import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('node:fs', () => ({
+  existsSync: vi.fn(
+    (path: string) =>
+      path.includes('pnpm-workspace.yaml') ||
+      path.includes('packages/cli/src/index.ts') ||
+      path.includes('packages/core/src'),
+  ),
   writeFileSync: vi.fn(),
 }));
 
@@ -420,6 +426,105 @@ describe('dev command - inspect flag behavior', () => {
       const commands = callArgs[1] as string[];
 
       expect(commands).toContain('--inspect-brk=0.0.0.0:9229');
+    });
+  });
+
+  describe('source mode', () => {
+    it('should enable mastra-source conditions for the dev server process', async () => {
+      const originalSourceMode = process.env.MASTRA_SOURCE_MODE;
+      const originalNodeOptions = process.env.NODE_OPTIONS;
+      process.env.MASTRA_SOURCE_MODE = 'true';
+      process.env.NODE_OPTIONS = '--max-old-space-size=4096';
+
+      try {
+        const { dev } = await import('./dev');
+
+        await dev({
+          dir: undefined,
+          root: process.cwd(),
+          tools: undefined,
+          env: undefined,
+          inspect: false,
+          inspectBrk: false,
+          customArgs: undefined,
+          https: false,
+          debug: false,
+        });
+
+        expect(process.env.MASTRA_SOURCE_MODE).toBe('1');
+        expect(process.env.NODE_OPTIONS).toBe('--max-old-space-size=4096 --conditions=mastra-source');
+        expect(execaMock).toHaveBeenCalled();
+        expect(execaMock.mock.calls[0][1]).toContain('--import');
+        expect(execaMock.mock.calls[0][1]).toContainEqual(expect.stringContaining('tsx/dist/loader.mjs'));
+        expect(execaMock.mock.calls[0][2].env).toMatchObject({
+          MASTRA_SOURCE_MODE: '1',
+          NODE_OPTIONS: '--max-old-space-size=4096 --conditions=mastra-source',
+        });
+      } finally {
+        if (originalSourceMode === undefined) {
+          delete process.env.MASTRA_SOURCE_MODE;
+        } else {
+          process.env.MASTRA_SOURCE_MODE = originalSourceMode;
+        }
+
+        if (originalNodeOptions === undefined) {
+          delete process.env.NODE_OPTIONS;
+        } else {
+          process.env.NODE_OPTIONS = originalNodeOptions;
+        }
+      }
+    });
+
+    it('should ignore repo source mode when the installed CLI is not linked to a source checkout', async () => {
+      const originalSourceMode = process.env.MASTRA_SOURCE_MODE;
+      const originalNodeOptions = process.env.NODE_OPTIONS;
+      const { existsSync } = await import('node:fs');
+      vi.mocked(existsSync).mockReturnValue(false);
+      process.env.MASTRA_SOURCE_MODE = 'true';
+      process.env.NODE_OPTIONS = '--max-old-space-size=4096';
+
+      try {
+        const { dev } = await import('./dev');
+
+        await dev({
+          dir: undefined,
+          root: process.cwd(),
+          tools: undefined,
+          env: undefined,
+          inspect: false,
+          inspectBrk: false,
+          customArgs: undefined,
+          https: false,
+          debug: false,
+        });
+
+        expect(process.env.MASTRA_SOURCE_MODE).toBe('true');
+        expect(process.env.NODE_OPTIONS).toBe('--max-old-space-size=4096');
+        expect(execaMock).toHaveBeenCalled();
+        expect(execaMock.mock.calls[0][1]).not.toContain('--import');
+        expect(execaMock.mock.calls[0][2].env).not.toHaveProperty('MASTRA_SOURCE_MODE');
+      } finally {
+        vi.mocked(existsSync).mockImplementation((path: Parameters<typeof existsSync>[0]) => {
+          const pathString = String(path);
+          return (
+            pathString.includes('pnpm-workspace.yaml') ||
+            pathString.includes('packages/cli/src/index.ts') ||
+            pathString.includes('packages/core/src')
+          );
+        });
+
+        if (originalSourceMode === undefined) {
+          delete process.env.MASTRA_SOURCE_MODE;
+        } else {
+          process.env.MASTRA_SOURCE_MODE = originalSourceMode;
+        }
+
+        if (originalNodeOptions === undefined) {
+          delete process.env.NODE_OPTIONS;
+        } else {
+          process.env.NODE_OPTIONS = originalNodeOptions;
+        }
+      }
     });
   });
 

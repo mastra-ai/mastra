@@ -290,7 +290,11 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
-      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
+      stubbedExternals: [
+        ...GLOBAL_EXTERNALS,
+        ...DEPS_TO_IGNORE,
+        ...(process.env.MASTRA_SOURCE_MODE ? [...workspaceMap.keys()] : []),
+      ],
     });
   }
 

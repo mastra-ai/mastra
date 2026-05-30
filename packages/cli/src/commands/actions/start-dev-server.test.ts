@@ -17,9 +17,13 @@ const devMock = vi.fn().mockResolvedValue(undefined);
 vi.mock('../dev/dev', () => ({
   dev: devMock,
 }));
+vi.mock('../dev/dev.ts', () => ({
+  dev: devMock,
+}));
 
 describe('startDevServer - inspect flag integration', () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
   });
 

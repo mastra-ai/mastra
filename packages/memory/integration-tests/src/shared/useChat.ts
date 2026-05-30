@@ -21,6 +21,39 @@ import { createWeatherAgent as createWeatherAgentV5 } from '../v5/mastra/agents/
 // These tests spawn a child Mastra server process, so MSW can't intercept
 // the LLM requests. They require real API keys.
 const skipUseChatTests = !hasRealApiKey('openai');
+const SOURCE_MODE_CONDITION = '--conditions=mastra-source';
+
+function withSourceModeCondition(nodeOptions?: string) {
+  if (nodeOptions?.split(/\s+/).includes(SOURCE_MODE_CONDITION)) {
+    return nodeOptions;
+  }
+
+  return [nodeOptions, SOURCE_MODE_CONDITION].filter(Boolean).join(' ');
+}
+
+function getMastraDevCommand(mastraDir: string) {
+  if (process.env.MASTRA_SOURCE_MODE === '1') {
+    return {
+      command: process.execPath,
+      args: [
+        path.resolve(import.meta.dirname, `..`, `..`, `..`, `..`, `cli`, `bin`, `mastra.mjs`),
+        'dev',
+        '--dir',
+        mastraDir,
+      ],
+    };
+  }
+
+  return {
+    command: process.execPath,
+    args: [
+      path.resolve(import.meta.dirname, `..`, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
+      'dev',
+      '--dir',
+      mastraDir,
+    ],
+  };
+}
 
 // Set up JSDOM environment for React testing
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
@@ -65,24 +98,20 @@ export function setupUseChatV4() {
       agent = createWeatherAgent({ dbPath });
 
       const mastraDir = path.resolve(import.meta.dirname, `..`, `v4`, `mastra`);
-      mastraServer = spawn(
-        process.execPath,
-        [
-          path.resolve(import.meta.dirname, `..`, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-          'dev',
-          '--dir',
-          mastraDir,
-        ],
-        {
-          stdio: 'pipe',
-          detached: true, // Run in a new process group so we can kill it and children
-          env: {
-            ...process.env,
-            PORT: port.toString(),
-            MEMORY_TEST_DB_PATH: dbPath,
-          },
+      const { command, args } = getMastraDevCommand(mastraDir);
+      mastraServer = spawn(command, args, {
+        stdio: 'pipe',
+        detached: true, // Run in a new process group so we can kill it and children
+        env: {
+          ...process.env,
+          NODE_OPTIONS:
+            process.env.MASTRA_SOURCE_MODE === '1'
+              ? withSourceModeCondition(process.env.NODE_OPTIONS)
+              : process.env.NODE_OPTIONS,
+          PORT: port.toString(),
+          MEMORY_TEST_DB_PATH: dbPath,
         },
-      );
+      });
 
       // Wait for server to be ready
       await new Promise<void>((resolve, reject) => {
@@ -295,24 +324,20 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
       agent = createWeatherAgentV5({ dbPath });
 
       const mastraDir = path.resolve(import.meta.dirname, `..`, version, `mastra`);
-      mastraServer = spawn(
-        process.execPath,
-        [
-          path.resolve(import.meta.dirname, `..`, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-          'dev',
-          '--dir',
-          mastraDir,
-        ],
-        {
-          stdio: 'pipe',
-          detached: true,
-          env: {
-            ...process.env,
-            PORT: port.toString(),
-            MEMORY_TEST_DB_PATH: dbPath,
-          },
+      const { command, args } = getMastraDevCommand(mastraDir);
+      mastraServer = spawn(command, args, {
+        stdio: 'pipe',
+        detached: true,
+        env: {
+          ...process.env,
+          NODE_OPTIONS:
+            process.env.MASTRA_SOURCE_MODE === '1'
+              ? withSourceModeCondition(process.env.NODE_OPTIONS)
+              : process.env.NODE_OPTIONS,
+          PORT: port.toString(),
+          MEMORY_TEST_DB_PATH: dbPath,
         },
-      );
+      });
 
       await new Promise<void>((resolve, reject) => {
         let output = '';

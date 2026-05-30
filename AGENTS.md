@@ -12,6 +12,8 @@ when package splits unit integration or E2E coverage run narrowest suite first
 From root prefer specific scripts like pnpm build:core or pnpm --filter ./packages/name script
 Do not pnpm run setup pnpm build pnpm build:packages or repo wide test runs when package local is enough
 Building whole monorepo is slow and should be last resort
+Source mode / no-build local validation
+Use `MASTRA_SOURCE_MODE=true` with focused tests/dev when workspace packages should resolve from source, e.g. `MASTRA_SOURCE_MODE=true pnpm test:cli` or linked-project `MASTRA_SOURCE_MODE=true mastra dev`. Published CLI installs ignore it.
 Before pushing commits or opening PRs run the narrowest relevant local checks; if CodeRabbit CLI is installed and configured, run a local CodeRabbit review too
 some integration tests need pnpm i --ignore-workspace
 
@@ -21,27 +23,8 @@ Follow docs/AGENTS.md and docs/styleguides when editing docs
 After code changes follow @.mastracode/commands/changeset.md
 
 Architecture
-modular agent framework with central orchestration and pluggable components
-packages/core/src
-mastra/ central config hub dependency injection
-agent/ abstraction with tools memory voice
-tools/ agent tools
-memory/ semantic recall working memory observational memory history persistence
-workflows/ step based execution suspend resume
-storage/ pluggable db backends with shared interfaces
+modular agent framework; packages/core/src has mastra config hub, agents/tools, memory, workflows, storage.
 
-Read relevant @.claude/commands/
-changeset
-commit
-gh-new-pr
-gh-pr-comments
-make-moves
+Read relevant @.claude/commands/ before changesets, commits, PRs, or comments.
 
-Read relevant @.claude/skills/
-playground-msw-tests PRIMARY test approach for packages/playground packages/playground-ui
-e2e-tests-studio SECONDARY test approach for packages/playground-ui packages/playground
-mastra-docs
-react-best-practices
-tailwind-best-practices
-mastra-smoke-test
-smoke-test create Mastra project and smoke test studio
+Read relevant @.claude/skills/: playground-msw-tests primary for playground; e2e-tests-studio secondary; mastra-docs; react/tailwind best practices; mastra-smoke-test/smoke-test.

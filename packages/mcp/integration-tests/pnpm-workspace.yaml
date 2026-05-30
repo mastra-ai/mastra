@@ -3,8 +3,11 @@ packages:
 
 overrides:
   '@mastra/core': link:../../core
+  '@mastra/hono': link:../../../server-adapters/hono
   '@mastra/mcp': link:../../mcp
+  '@mastra/client-js': link:../../../client-sdks/client-js
   '@internal/test-utils': link:../../_test-utils
+  mastra: link:../../cli
 
 allowBuilds:
   esbuild: false

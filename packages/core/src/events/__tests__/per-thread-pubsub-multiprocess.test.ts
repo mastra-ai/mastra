@@ -20,6 +20,28 @@ import { Worker } from 'node:worker_threads';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+const sourceMode = process.env.MASTRA_SOURCE_MODE === '1' || process.env.MASTRA_SOURCE_MODE === 'true';
+
+async function bundleSourceModeEventsEntry(tempDir: string): Promise<string> {
+  const { build } = await import('tsup');
+  await build({
+    config: false,
+    entry: [join(__dirname, '../unix-socket-pubsub.ts')],
+    format: ['esm'],
+    platform: 'node',
+    bundle: true,
+    splitting: false,
+    sourcemap: false,
+    clean: false,
+    dts: false,
+    silent: true,
+    outDir: tempDir,
+    outExtension: () => ({ js: '.mjs' }),
+  });
+
+  return join(tempDir, 'unix-socket-pubsub.mjs').replace(/\\/g, '/');
+}
+
 interface WorkerMessage {
   type: 'ready' | 'event-received' | 'status' | 'error';
   data?: any;
@@ -71,11 +93,13 @@ describe('UnixSocketPubSub - multi-process per-thread isolation', () => {
     // Write a worker script that uses UnixSocketPubSub directly with a given socket path.
     // This mirrors how mastracode routes each thread to its own socket.
     workerScript = join(tempDir, 'worker.mjs');
-    const distEventsPath = join(__dirname, '../../../dist/events/index.js').replace(/\\/g, '/');
+    const eventsEntryPath = sourceMode
+      ? await bundleSourceModeEventsEntry(tempDir)
+      : join(__dirname, '../../../dist/events/index.js').replace(/\\/g, '/');
     await writeFile(
       workerScript,
       `
-import { UnixSocketPubSub } from '${distEventsPath}';
+import { UnixSocketPubSub } from '${eventsEntryPath}';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
@@ -135,7 +159,7 @@ process.send({ type: 'ready', data: { started: true } });
 import { parentPort, workerData } from 'node:worker_threads';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { UnixSocketPubSub } from '${distEventsPath}';
+import { UnixSocketPubSub } from '${eventsEntryPath}';
 
 const { socketPath, topic } = workerData;
 await mkdir(dirname(socketPath), { recursive: true });

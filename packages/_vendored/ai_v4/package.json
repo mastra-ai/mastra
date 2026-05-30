@@ -12,6 +12,7 @@
   "sideEffects": false,
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -22,6 +23,7 @@
       }
     },
     "./*": {
+      "mastra-source": "./src/*.ts",
       "import": {
         "types": "./dist/*.d.ts",
         "default": "./dist/*.js"

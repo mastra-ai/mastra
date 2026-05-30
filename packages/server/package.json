@@ -12,6 +12,7 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -22,6 +23,7 @@
       }
     },
     "./handlers": {
+      "mastra-source": "./src/server/handlers.ts",
       "import": {
         "types": "./dist/server/handlers.d.ts",
         "default": "./dist/server/handlers.js"
@@ -32,6 +34,7 @@
       }
     },
     "./handlers/*": {
+      "mastra-source": "./src/server/handlers/*.ts",
       "import": {
         "types": "./dist/server/handlers/*.d.ts",
         "default": "./dist/server/handlers/*.js"
@@ -42,6 +45,7 @@
       }
     },
     "./server-adapter": {
+      "mastra-source": "./src/server/server-adapter/index.ts",
       "import": {
         "types": "./dist/server/server-adapter/index.d.ts",
         "default": "./dist/server/server-adapter/index.js"
@@ -52,6 +56,7 @@
       }
     },
     "./a2a/store": {
+      "mastra-source": "./src/server/a2a/store.ts",
       "import": {
         "types": "./dist/server/a2a/store.d.ts",
         "default": "./dist/server/a2a/store.js"
@@ -62,6 +67,7 @@
       }
     },
     "./auth": {
+      "mastra-source": "./src/server/auth/index.ts",
       "import": {
         "types": "./dist/server/auth/index.d.ts",
         "default": "./dist/server/auth/index.js"
@@ -72,6 +78,7 @@
       }
     },
     "./schemas": {
+      "mastra-source": "./src/server/schemas/index.ts",
       "import": {
         "types": "./dist/server/schemas/index.d.ts",
         "default": "./dist/server/schemas/index.js"
@@ -82,6 +89,7 @@
       }
     },
     "./browser-stream": {
+      "mastra-source": "./src/server/browser-stream/index.ts",
       "import": {
         "types": "./dist/server/browser-stream/index.d.ts",
         "default": "./dist/server/browser-stream/index.js"

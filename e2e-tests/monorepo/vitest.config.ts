@@ -1,9 +1,12 @@
 import { defineConfig } from 'vitest/config';
+import { withSourceModeConfig } from '../../scripts/vitest-source-mode-config';
 
-export default defineConfig({
-  test: {
-    environment: 'node',
-    include: ['monorepo.test.ts'],
-    globalSetup: './setup.ts',
-  },
-});
+export default defineConfig(
+  withSourceModeConfig({
+    test: {
+      environment: 'node',
+      include: ['monorepo.test.ts'],
+      globalSetup: './setup.ts',
+    },
+  }),
+);

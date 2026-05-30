@@ -5,6 +5,7 @@ import type { RollupOutput } from 'rollup';
 import { rollup } from 'rollup';
 import { expect, beforeAll, it } from 'vitest';
 
+const sourceMode = process.env.MASTRA_SOURCE_MODE === '1' || process.env.MASTRA_SOURCE_MODE === 'true';
 const _dirname = dirname(fileURLToPath(import.meta.url));
 const spawn = (cmd: string, args: ReadonlyArray<string>) =>
   new Promise((resolve, reject) => {
@@ -32,36 +33,41 @@ const spawn = (cmd: string, args: ReadonlyArray<string>) =>
   });
 
 let output: RollupOutput['output'] | null = null;
-beforeAll(async () => {
-  await spawn('pnpm', ['build']);
 
-  const bundler = await rollup({
-    logLevel: 'silent',
-    input: join(_dirname, '..', '..', 'dist', 'storage', 'index.js'),
-    preserveSymlinks: true,
-  });
-  const { output: bundlerOutput } = await bundler.generate({
-    format: 'esm',
-  });
+if (sourceMode) {
+  it.skip('skips /storage bundle artifact validation in source mode', () => {});
+} else {
+  beforeAll(async () => {
+    await spawn('pnpm', ['build']);
 
-  output = bundlerOutput;
-}, 0);
+    const bundler = await rollup({
+      logLevel: 'silent',
+      input: join(_dirname, '..', '..', 'dist', 'storage', 'index.js'),
+      preserveSymlinks: true,
+    });
+    const { output: bundlerOutput } = await bundler.generate({
+      format: 'esm',
+    });
 
-it.for([['DefaultStorage'], ['DefaultVectorDB'], ['LibSQLStore'], ['MastraVector'], ['DefaultVectorDBMongo']])(
-  'should not include %s when importing /storage',
-  ([exportName]) => {
-    const renderedExports: string[] = [];
-    const removedExports: string[] = [];
-    for (const chunk of output!) {
-      if (chunk.type === 'chunk') {
-        for (const module of Object.values(chunk.modules)) {
-          renderedExports.push(...module.renderedExports);
-          removedExports.push(...module.removedExports);
+    output = bundlerOutput;
+  }, 0);
+
+  it.for([['DefaultStorage'], ['DefaultVectorDB'], ['LibSQLStore'], ['MastraVector'], ['DefaultVectorDBMongo']])(
+    'should not include %s when importing /storage',
+    ([exportName]) => {
+      const renderedExports: string[] = [];
+      const removedExports: string[] = [];
+      for (const chunk of output!) {
+        if (chunk.type === 'chunk') {
+          for (const module of Object.values(chunk.modules)) {
+            renderedExports.push(...module.renderedExports);
+            removedExports.push(...module.removedExports);
+          }
         }
       }
-    }
 
-    expect(renderedExports).not.toContain(exportName);
-    expect(removedExports).not.toContain(exportName);
-  },
-);
+      expect(renderedExports).not.toContain(exportName);
+      expect(removedExports).not.toContain(exportName);
+    },
+  );
+}

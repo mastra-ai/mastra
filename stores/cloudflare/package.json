@@ -11,6 +11,7 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -21,6 +22,7 @@
       }
     },
     "./kv": {
+      "mastra-source": "./src/kv/index.ts",
       "import": {
         "types": "./dist/kv/index.d.ts",
         "default": "./dist/kv/index.js"
@@ -31,6 +33,7 @@
       }
     },
     "./do": {
+      "mastra-source": "./src/do/index.ts",
       "import": {
         "types": "./dist/do/index.d.ts",
         "default": "./dist/do/index.js"

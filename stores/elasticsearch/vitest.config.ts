@@ -1,11 +1,14 @@
 import { defineConfig } from 'vitest/config';
+import { withSourceModeConfig } from '../../scripts/vitest-source-mode-config';
 
-export default defineConfig({
-  test: {
-    name: 'e2e:stores/elasticsearch',
-    testTimeout: 30000,
-    hookTimeout: 30000,
-    globals: true,
-    include: ['src/**/*.test.ts'],
-  },
-});
+export default defineConfig(
+  withSourceModeConfig({
+    test: {
+      name: 'e2e:stores/elasticsearch',
+      testTimeout: 30000,
+      hookTimeout: 30000,
+      globals: true,
+      include: ['src/**/*.test.ts'],
+    },
+  }),
+);

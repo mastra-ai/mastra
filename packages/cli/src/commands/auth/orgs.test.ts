@@ -6,7 +6,13 @@ const setCurrentOrgIdMock = vi.fn();
 const selectMock = vi.fn();
 
 vi.mock('./api.js', () => ({ fetchOrgs: fetchOrgsMock }));
+vi.mock('./api.ts', () => ({ fetchOrgs: fetchOrgsMock }));
 vi.mock('./credentials.js', () => ({
+  getToken: vi.fn(),
+  getCurrentOrgId: getCurrentOrgIdMock,
+  setCurrentOrgId: setCurrentOrgIdMock,
+}));
+vi.mock('./credentials.ts', () => ({
   getToken: vi.fn(),
   getCurrentOrgId: getCurrentOrgIdMock,
   setCurrentOrgId: setCurrentOrgIdMock,
@@ -16,6 +22,8 @@ vi.mock('@clack/prompts', () => ({
   isCancel: (v: unknown) => v === Symbol.for('clack:cancel'),
   cancel: vi.fn(),
 }));
+
+vi.resetModules();
 
 const { resolveCurrentOrg } = await import('./orgs.js');
 

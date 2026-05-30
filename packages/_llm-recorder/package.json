@@ -11,6 +11,7 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "mastra-source": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -21,6 +22,7 @@
       }
     },
     "./vite-plugin": {
+      "mastra-source": "./src/vite-plugin.ts",
       "import": {
         "types": "./dist/vite-plugin.d.ts",
         "default": "./dist/vite-plugin.js"

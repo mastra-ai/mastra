@@ -89,7 +89,7 @@ export type LLMTestMode = 'auto' | 'update' | 'replay' | 'live' | 'record';
  */
 function isUpdateMode(): boolean {
   if (process.env.UPDATE_RECORDINGS === 'true') return true;
-  return process.argv.includes('--update-recordings');
+  return process.argv.includes('--update-recordings') || process.argv.includes('-U');
 }
 
 /**

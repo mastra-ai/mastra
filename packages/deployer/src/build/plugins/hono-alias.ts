@@ -6,7 +6,13 @@ export function aliasHono(): Plugin {
   return {
     name: 'hono-alias',
     resolveId(id: string) {
-      if (!id.startsWith('@hono/') && !id.startsWith('hono/') && id !== 'hono' && id !== 'hono-openapi') {
+      if (
+        !id.startsWith('@hono/') &&
+        !id.startsWith('hono/') &&
+        id !== 'hono' &&
+        id !== 'hono-openapi' &&
+        id !== '@mastra/hono'
+      ) {
         return;
       }
 

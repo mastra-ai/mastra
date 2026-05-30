@@ -4,6 +4,8 @@ E2E from root: pnpm --filter ./packages/playground test:e2e
 If E2E setup is needed first, run pnpm --filter ./packages/playground test:e2e:setup
 Typecheck: pnpm --filter ./packages/playground typecheck
 
+Source mode: prefix focused local tests/dev with `MASTRA_SOURCE_MODE=true` to resolve workspace packages from source instead of building dist.
+
 PRIMARY testing strategy: Vitest + MSW + typed @mastra/client-js fixtures.
 This is the #1 way to validate changes here — ABOVE Playwright E2E.
 Use the `playground-msw-tests` skill whenever you add or modify hooks, pages,

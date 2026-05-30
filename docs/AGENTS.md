@@ -1,5 +1,7 @@
 Use @styleguides/STYLEGUIDE.md first. @styleguides/ also includes guides for docs and reference docs
 
+Source mode: prefix focused local tests/dev with `MASTRA_SOURCE_MODE=true` to resolve workspace packages from source instead of building dist.
+
 When working check src/content/en/docs/ and src/content/en/reference/ update existing docs or create new docs
 @CONTRIBUTING.md for setup, local development, and components / frontmatter
 
