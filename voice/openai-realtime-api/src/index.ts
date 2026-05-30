@@ -386,7 +386,6 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.ws = new WebSocket(url, undefined, {
       headers: {
         Authorization: 'Bearer ' + apiKey,
-        'OpenAI-Beta': 'realtime=v1',
       },
     });
 
