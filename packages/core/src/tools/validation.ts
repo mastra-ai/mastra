@@ -201,6 +201,34 @@ function normalizeNullishInput(schema: StandardSchemaWithJSON<any>, input: unkno
 }
 
 /**
+ * Auto-injects const-constrained field values into input before validation (GitHub #16444).
+ * JSON Schema `const` and single-value `enum` properties have a fixed predetermined value
+ * that LLMs cannot know to supply (e.g. discriminator fields like `"@type": {"const": "..."}`).
+ * Injecting them here lets the tool schema validate successfully without requiring the LLM
+ * to guess opaque constant values.
+ */
+function injectConstValues(schema: StandardSchemaWithJSON<unknown>, input: unknown): unknown {
+  if (!isPlainObject(input)) return input;
+  const jsonSchema = standardSchemaToJSONSchema(schema, { io: 'input' });
+  if (jsonSchema.type !== 'object' || !jsonSchema.properties) return input;
+
+  let injected = false;
+  const result: Record<string, unknown> = { ...(input as Record<string, unknown>) };
+  for (const [key, rawProp] of Object.entries(jsonSchema.properties)) {
+    if (result[key] !== undefined) continue;
+    const prop = rawProp as Record<string, unknown>;
+    if ('const' in prop) {
+      result[key] = prop['const'];
+      injected = true;
+    } else if (Array.isArray(prop['enum']) && prop['enum'].length === 1) {
+      result[key] = prop['enum'][0];
+      injected = true;
+    }
+  }
+  return injected ? result : input;
+}
+
+/**
  * Checks if a value is a plain object (created by {} or new Object()).
  * This excludes class instances, built-in objects like Date/Map/URL, etc.
  *
@@ -462,6 +490,10 @@ export function validateToolInput<T = unknown>(
   //    strict mode compliance. The schema's transform converts null back to undefined.
   //    (GitHub #11457)
   //
+  // 2.5. injectConstValues: Auto-inject JSON Schema `const` / single-value `enum` fields
+  //    whose fixed value an LLM cannot know to supply (e.g. MCP discriminator fields).
+  //    (GitHub #16444)
+  //
   // 3. First validation attempt with null values preserved. This handles .nullable()
   //    schemas correctly (where null is a valid value).
   //
@@ -478,6 +510,11 @@ export function validateToolInput<T = unknown>(
 
   // Step 2: Convert undefined values to null recursively (GitHub #11457)
   normalizedInput = convertUndefinedToNull(normalizedInput);
+
+  // Step 2.5: Auto-inject const-constrained field values (GitHub #16444)
+  // Fields with a JSON Schema `const` or single-value `enum` have a fixed value the LLM
+  // cannot know to supply (e.g. MCP discriminator fields). Inject them before validation.
+  normalizedInput = injectConstValues(schema, normalizedInput);
 
   // Step 3: Validate the normalized input
   const validation = safeValidate(schema, normalizedInput);
