@@ -36,7 +36,8 @@ export class StdioCodeModeTransport implements CodeModeTransport {
     const dir = await mkdtemp(join(tmpdir(), 'mastra-code-mode-'));
     const suffix = randomBytes(4).toString('hex');
     // The model's TypeScript program is written to its own .ts module; node
-    // strips the type annotations natively when the harness imports it.
+    // strips the type annotations when the harness imports it (see the
+    // --experimental-strip-types flag on the spawn below).
     const programPath = join(dir, `program-${suffix}.ts`);
     await writeFile(programPath, buildProgramModule(program), 'utf8');
     const harnessSource = buildHarness({ programModule: pathToFileURL(programPath).href, externals });
@@ -54,7 +55,11 @@ export class StdioCodeModeTransport implements CodeModeTransport {
     });
 
     try {
-      const handle = await sandbox.processes.spawn(`node ${harnessPath}`, {
+      // `--experimental-strip-types` lets node import the program's `.ts`
+      // module on Node 22.6–22.17 (where type-stripping is still flagged). On
+      // Node 22.18+/24, where stripping is the default, the flag is accepted as
+      // a harmless no-op, so this works across the versions CI and users run.
+      const handle = await sandbox.processes.spawn(`node --experimental-strip-types ${harnessPath}`, {
         cwd: dir,
         abortSignal,
         onStdout: (chunk: string) => {
