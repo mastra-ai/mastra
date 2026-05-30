@@ -1,36 +1,48 @@
+// NOTE: This mirrors packages/core/src/storage/workflow-snapshot.ts. The Convex
+// server runtime can't import @mastra/core, so keep both copies in sync.
 const PENDING_MARKER_KEY = '__mastra_pending__';
 
 function isPendingMarker(val: unknown): boolean {
   return (
     val !== null &&
     typeof val === 'object' &&
-    PENDING_MARKER_KEY in val &&
-    (val as Record<string, unknown>)[PENDING_MARKER_KEY] === true
+    Object.prototype.hasOwnProperty.call(val, PENDING_MARKER_KEY) &&
+    (val as Record<string, unknown>)[PENDING_MARKER_KEY] === true &&
+    Object.keys(val).length === 1
   );
 }
 
-function isSuspendedStepResult(value: unknown): boolean {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-
-  const result = value as {
-    status?: unknown;
-    suspendedAt?: unknown;
-    suspendPayload?: unknown;
-  };
+// Suspended forEach iteration results may come from multiple engines. Treat
+// StepResult-shaped suspended entries as resettable without relying only on
+// evented __workflow_meta, but avoid matching plain user outputs with only
+// status/payload fields.
+function isSuspendedStepResult(val: unknown): boolean {
+  const result = val as Record<string, unknown> | null;
 
   return (
-    result.status === 'suspended' &&
-    typeof result.suspendedAt === 'number' &&
-    result.suspendPayload !== null &&
-    typeof result.suspendPayload === 'object' &&
-    '__workflow_meta' in result.suspendPayload
+    val !== null &&
+    typeof val === 'object' &&
+    'status' in val &&
+    result?.status === 'suspended' &&
+    ('suspendPayload' in val || 'suspendedAt' in val)
   );
+}
+
+function canResetWithPendingMarker(val: unknown): boolean {
+  if (val == null || isPendingMarker(val)) {
+    return true;
+  }
+
+  return isSuspendedStepResult(val);
 }
 
 function hasPartialForeachValue(output: unknown[]): boolean {
-  return output.some(value => value === null || isPendingMarker(value) || isSuspendedStepResult(value));
+  for (let i = 0; i < output.length; i++) {
+    if (!(i in output)) return true;
+    const value = output[i];
+    if (value === null || value === undefined || isPendingMarker(value) || isSuspendedStepResult(value)) return true;
+  }
+  return false;
 }
 
 function hasForeachPayload(result: unknown): boolean {
@@ -69,26 +81,34 @@ export function mergeWorkflowStepResult({
   }
 
   const existingResult = snapshot.context[stepId];
+  const existingOutput =
+    existingResult && 'output' in existingResult && Array.isArray(existingResult.output)
+      ? (existingResult.output as unknown[])
+      : undefined;
+  const newOutput =
+    result && typeof result === 'object' && 'output' in result && Array.isArray(result.output)
+      ? (result.output as unknown[])
+      : undefined;
+  const hasPendingMarker = newOutput?.some(isPendingMarker) ?? false;
   if (
     existingResult &&
-    'output' in existingResult &&
-    Array.isArray(existingResult.output) &&
+    existingOutput &&
     result &&
     typeof result === 'object' &&
-    'output' in result &&
-    Array.isArray(result.output) &&
-    (hasForeachPayload(existingResult) || hasForeachPayload(result)) &&
-    (hasPartialForeachValue(existingResult.output) || hasPartialForeachValue(result.output))
+    newOutput &&
+    (hasPendingMarker ||
+      ((hasForeachPayload(existingResult) || hasForeachPayload(result)) &&
+        (hasPartialForeachValue(existingOutput) || hasPartialForeachValue(newOutput))))
   ) {
-    const existingOutput = existingResult.output as unknown[];
-    const newOutput = result.output as unknown[];
     const mergedOutput = [...existingOutput];
     for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
       if (i < newOutput.length) {
         const newVal = newOutput[i];
         if (isPendingMarker(newVal)) {
-          mergedOutput[i] = null;
-        } else if (newVal !== null) {
+          if (i >= existingOutput.length || canResetWithPendingMarker(existingOutput[i])) {
+            mergedOutput[i] = null;
+          }
+        } else if (newVal !== null && newVal !== undefined && !hasPendingMarker) {
           mergedOutput[i] = newVal;
         } else if (i >= existingOutput.length) {
           mergedOutput[i] = null;
@@ -97,7 +117,9 @@ export function mergeWorkflowStepResult({
     }
     snapshot.context[stepId] = {
       ...existingResult,
-      ...result,
+      // Pending-marker writes are reset commands built from an earlier snapshot,
+      // so keep existing step-level fields and ignore sibling values they carry.
+      ...(hasPendingMarker ? {} : result),
       output: mergedOutput,
     };
   } else {

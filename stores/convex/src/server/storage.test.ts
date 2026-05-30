@@ -1,4 +1,9 @@
-import { TABLE_SCHEDULES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage/constants';
+import {
+  TABLE_RESOURCES,
+  TABLE_SCHEDULES,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage/constants';
 import type { GenericId } from 'convex/values';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -95,11 +100,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       context: {
         foreach: {
           status: 'success',
-          output: [
-            'kept',
-            { status: 'suspended', suspendedAt: 1, suspendPayload: { __workflow_meta: { path: ['foreach'] } } },
-            'old-tail',
-          ],
+          output: ['kept', null, 'old-tail'],
           payload: ['a', 'b', 'c'],
           startedAt: 1,
         },
@@ -116,11 +117,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       stepId: 'foreach',
       result: JSON.stringify({
         status: 'success',
-        output: [
-          null,
-          { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } },
-          { __mastra_pending__: true },
-        ],
+        output: [null, { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } }, null],
         payload: ['a', 'b', 'c'],
         startedAt: 2,
         endedAt: 3,
@@ -134,7 +131,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(JSON.parse(result.result)).toEqual({
       foreach: {
         status: 'success',
-        output: ['kept', { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } }, null],
+        output: ['kept', { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } }, 'old-tail'],
         payload: ['a', 'b', 'c'],
         startedAt: 2,
         endedAt: 3,
@@ -151,11 +148,173 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(patchedSnapshot.context.foreach.output).toEqual([
       'kept',
       { inputSchema: { $schema: 'https://json-schema.org/draft-07/schema#' } },
-      null,
+      'old-tail',
     ]);
     expect(patchedSnapshot.requestContext).toEqual({ existing: true, incoming: true });
     expect(patchedSnapshot.updatedAt).toBeUndefined();
     expect(typeof testCtx.patches[0]?.data.updatedAt).toBe('string');
+  });
+
+  it('applies pending marker resets without trusting stale sibling values or status', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      requestContext: { existing: true, shared: 'old' },
+      context: {
+        foreach: {
+          status: 'success',
+          startedAt: 1,
+          endedAt: 2,
+          output: [
+            { status: 'suspended', startedAt: 1, suspendedAt: 2, suspendPayload: { __workflow_meta: {} } },
+            {
+              status: 'suspended',
+              payload: 'payload',
+              suspendedAt: 3,
+              suspendPayload: { token: 'tok', __workflow_meta: {} },
+            },
+            { status: 'suspended', suspendPayload: { token: 'tok' }, suspendedAt: 4 },
+            { status: 'suspended', startedAt: 5, suspendedAt: 6 },
+            { status: 'success', output: 'done-4' },
+            { status: 'failed', error: 'failed-5' },
+            { status: 'waiting' },
+            { status: 'suspended', output: 'user-data' },
+            { __mastra_pending__: true },
+            { status: 'success', output: 'newer-tail' },
+            { status: 'suspended', payload: { type: 'user-status' } },
+            { status: 'suspended', startedAt: 10 },
+          ],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'foreach',
+      result: JSON.stringify({
+        status: 'running',
+        startedAt: 3,
+        output: [
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { status: 'suspended', startedAt: 8, suspendedAt: 9 },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+          { __mastra_pending__: true },
+        ],
+      }),
+      requestContext: JSON.stringify({ incoming: true, shared: 'new' }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
+    expect(patchedSnapshot.context.foreach).toEqual({
+      status: 'success',
+      startedAt: 1,
+      endedAt: 2,
+      output: [
+        null,
+        null,
+        null,
+        null,
+        { status: 'success', output: 'done-4' },
+        { status: 'failed', error: 'failed-5' },
+        { status: 'waiting' },
+        { status: 'suspended', output: 'user-data' },
+        null,
+        { status: 'success', output: 'newer-tail' },
+        { status: 'suspended', payload: { type: 'user-status' } },
+        { status: 'suspended', startedAt: 10 },
+      ],
+    });
+    expect(patchedSnapshot.requestContext).toEqual({ existing: true, incoming: true, shared: 'new' });
+  });
+
+  it('ignores fresh-looking sibling values in pending marker reset writes', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        foreach: {
+          status: 'success',
+          startedAt: 1,
+          endedAt: 2,
+          output: [{ status: 'suspended', startedAt: 1, suspendedAt: 2, suspendPayload: { __workflow_meta: {} } }],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'foreach',
+      result: JSON.stringify({
+        status: 'running',
+        startedAt: 3,
+        output: [{ __mastra_pending__: true }, { status: 'success', output: 'stale-new-value' }],
+      }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(JSON.parse(result.result)).toEqual({
+      foreach: {
+        status: 'success',
+        startedAt: 1,
+        endedAt: 2,
+        output: [null, null],
+      },
+    });
+  });
+
+  it('does not treat user values with pending-like fields as internal markers', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        foreach: {
+          status: 'success',
+          output: [null],
+        },
+      },
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'foreach',
+      result: JSON.stringify({
+        status: 'success',
+        output: [{ __mastra_pending__: true, value: 'user-data' }],
+      }),
+      requestContext: JSON.stringify({}),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(JSON.parse(result.result)).toEqual({
+      foreach: {
+        status: 'success',
+        output: [{ __mastra_pending__: true, value: 'user-data' }],
+      },
+    });
   });
 
   it('merges longer forEach arrays without creating sparse trailing null entries', async () => {
@@ -171,6 +330,8 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       },
     };
     const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+    const output = Array(3);
+    output[1] = 3;
 
     const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
       op: 'mergeWorkflowStepResult',
@@ -180,7 +341,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       stepId: 'foreach',
       result: JSON.stringify({
         status: 'success',
-        output: [null, 3, null],
+        output,
         payload: ['a', 'b', 'c'],
       }),
       requestContext: JSON.stringify({}),
@@ -413,6 +574,309 @@ describe('mastraStorage workflow snapshot merge operations', () => {
 
     expect(result).toEqual({ ok: false, error: 'Snapshot for runId run-1 is missing or has invalid context' });
     expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+});
+
+describe('mastraStorage memory atomic updates', () => {
+  function createMemoryCtx(existing: Record<string, unknown> | null) {
+    const patches: Array<{ id: GenericId<string>; data: Record<string, unknown> }> = [];
+    const inserts: Array<{ table: string; record: Record<string, unknown> }> = [];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const unique = vi.fn(async () => existing);
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { unique };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const patch = vi.fn(async (id: GenericId<string>, data: Record<string, unknown>) => {
+      patches.push({ id, data });
+    });
+    const insert = vi.fn(async (table: string, record: Record<string, unknown>) => {
+      inserts.push({ table, record });
+    });
+    const ctx = { db: { query, patch, insert } } as unknown as TypedOperationCtx;
+
+    return { ctx, builder, withIndex, patch, insert, patches, inserts };
+  }
+
+  function createStatefulMemoryCtx(records: Record<string, Record<string, unknown>>) {
+    const patches: Array<{ id: GenericId<string>; data: Record<string, unknown> }> = [];
+    let lookupId: string | undefined;
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, value: string) => {
+        lookupId = value;
+        return builder;
+      }),
+    };
+    const unique = vi.fn(async () => {
+      return lookupId ? records[lookupId] : null;
+    });
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { unique };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const patch = vi.fn(async (id: GenericId<string>, data: Record<string, unknown>) => {
+      patches.push({ id, data });
+      const record = Object.values(records).find(row => row._id === id);
+      if (record) Object.assign(record, data);
+    });
+    const insert = vi.fn(async () => undefined);
+    const ctx = { db: { query, patch, insert } } as unknown as TypedOperationCtx;
+
+    return { ctx, builder, records, patches };
+  }
+
+  it('merges thread metadata inside the storage mutation and patches only changed fields', async () => {
+    const memoryCtx = createMemoryCtx({
+      _id: asConvexId('thread-doc'),
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      title: 'old title',
+      metadata: { keep: true, overwritten: 'old' },
+      createdAt: '2026-05-29T00:00:00.000Z',
+      updatedAt: '2026-05-29T00:00:00.000Z',
+    });
+
+    const result = await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      title: 'new title',
+      metadata: { added: true, overwritten: 'new' },
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(memoryCtx.withIndex).toHaveBeenCalledWith('by_record_id', expect.any(Function));
+    expect(memoryCtx.builder.eq).toHaveBeenCalledWith('id', 'thread-1');
+    expect(memoryCtx.patches).toEqual([
+      {
+        id: asConvexId('thread-doc'),
+        data: {
+          title: 'new title',
+          metadata: { keep: true, overwritten: 'new', added: true },
+          updatedAt: '2026-05-29T00:01:00.000Z',
+        },
+      },
+    ]);
+    expect(memoryCtx.inserts).toEqual([]);
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'new title',
+        metadata: { keep: true, overwritten: 'new', added: true },
+        createdAt: '2026-05-29T00:00:00.000Z',
+        updatedAt: '2026-05-29T00:01:00.000Z',
+      },
+    });
+  });
+
+  it('returns null for missing thread updates without inserting a replacement row', async () => {
+    const memoryCtx = createMemoryCtx(null);
+
+    const result = await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id: 'missing-thread',
+      title: 'new title',
+      metadata: { added: true },
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    });
+
+    expect(result).toEqual({ ok: true, result: null });
+    expect(memoryCtx.patch).not.toHaveBeenCalled();
+    expect(memoryCtx.insert).not.toHaveBeenCalled();
+  });
+
+  it('merges resource metadata inside the storage mutation', async () => {
+    const memoryCtx = createMemoryCtx({
+      _id: asConvexId('resource-doc'),
+      id: 'resource-1',
+      workingMemory: 'old memory',
+      metadata: '{"keep":true,"overwritten":"old"}',
+      createdAt: '2026-05-29T00:00:00.000Z',
+      updatedAt: '2026-05-29T00:00:00.000Z',
+    });
+
+    const result = await handleTypedOperation(memoryCtx.ctx, 'mastra_resources', {
+      op: 'updateResource',
+      tableName: TABLE_RESOURCES,
+      resourceId: 'resource-1',
+      workingMemory: 'new memory',
+      metadata: { added: true, overwritten: 'new' },
+      createdAt: '2026-05-29T00:01:00.000Z',
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(memoryCtx.builder.eq).toHaveBeenCalledWith('id', 'resource-1');
+    expect(memoryCtx.patches).toEqual([
+      {
+        id: asConvexId('resource-doc'),
+        data: {
+          workingMemory: 'new memory',
+          metadata: { keep: true, overwritten: 'new', added: true },
+          updatedAt: '2026-05-29T00:01:00.000Z',
+        },
+      },
+    ]);
+    expect(memoryCtx.inserts).toEqual([]);
+  });
+
+  it('preserves sequential metadata updates through evolving storage state', async () => {
+    const memoryCtx = createStatefulMemoryCtx({
+      'thread-1': {
+        _id: asConvexId('thread-doc'),
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'old title',
+        metadata: { keep: true },
+        createdAt: '2026-05-29T00:00:00.000Z',
+        updatedAt: '2026-05-29T00:00:00.000Z',
+      },
+    });
+
+    await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      title: 'first title',
+      metadata: { first: true },
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    });
+    await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      title: 'second title',
+      metadata: { second: true },
+      updatedAt: '2026-05-29T00:02:00.000Z',
+    });
+
+    expect(memoryCtx.records['thread-1']?.metadata).toEqual({ keep: true, first: true, second: true });
+    expect(memoryCtx.patches).toHaveLength(2);
+  });
+
+  it('preserves the adapter shallow-merge contract for nested metadata objects', async () => {
+    const memoryCtx = createMemoryCtx({
+      _id: asConvexId('thread-doc'),
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      title: 'old title',
+      metadata: {
+        mastra: {
+          keep: 'provider-metadata',
+          om: {
+            currentTask: 'existing task',
+            lastObservedAt: '2026-05-29T00:00:00.000Z',
+          },
+        },
+        user: { tier: 'pro' },
+      },
+      createdAt: '2026-05-29T00:00:00.000Z',
+      updatedAt: '2026-05-29T00:00:00.000Z',
+    });
+
+    const result = await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      title: 'new title',
+      metadata: {
+        mastra: {
+          om: {
+            suggestedResponse: 'continue here',
+          },
+        },
+      },
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    });
+
+    const metadata = {
+      mastra: {
+        om: {
+          suggestedResponse: 'continue here',
+        },
+      },
+      user: { tier: 'pro' },
+    };
+    expect(memoryCtx.patches[0]?.data.metadata).toEqual(metadata);
+    expect(result).toMatchObject({
+      ok: true,
+      result: { metadata },
+    });
+  });
+
+  it('drops malformed or non-object stored metadata before applying memory updates', async () => {
+    const invalidJsonCtx = createMemoryCtx({
+      _id: asConvexId('thread-doc'),
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      title: 'old title',
+      metadata: '{not-json',
+      createdAt: '2026-05-29T00:00:00.000Z',
+      updatedAt: '2026-05-29T00:00:00.000Z',
+    });
+    const arrayJsonCtx = createMemoryCtx({
+      _id: asConvexId('resource-doc'),
+      id: 'resource-1',
+      workingMemory: 'old memory',
+      metadata: '["not","an","object"]',
+      createdAt: '2026-05-29T00:00:00.000Z',
+      updatedAt: '2026-05-29T00:00:00.000Z',
+    });
+
+    await handleTypedOperation(invalidJsonCtx.ctx, 'mastra_threads', {
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      title: 'new title',
+      metadata: { added: true },
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    });
+    await handleTypedOperation(arrayJsonCtx.ctx, 'mastra_resources', {
+      op: 'updateResource',
+      tableName: TABLE_RESOURCES,
+      resourceId: 'resource-1',
+      metadata: { added: true },
+      createdAt: '2026-05-29T00:01:00.000Z',
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    });
+
+    expect(invalidJsonCtx.patches[0]?.data.metadata).toEqual({ added: true });
+    expect(arrayJsonCtx.builder.eq).toHaveBeenCalledWith('id', 'resource-1');
+    expect(arrayJsonCtx.patches[0]?.data).toEqual({
+      metadata: { added: true },
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    });
+  });
+
+  it('creates missing resources in the same storage mutation', async () => {
+    const memoryCtx = createMemoryCtx(null);
+
+    const result = await handleTypedOperation(memoryCtx.ctx, 'mastra_resources', {
+      op: 'updateResource',
+      tableName: TABLE_RESOURCES,
+      resourceId: 'resource-1',
+      metadata: { created: true },
+      createdAt: '2026-05-29T00:01:00.000Z',
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    });
+
+    const record = {
+      id: 'resource-1',
+      metadata: { created: true },
+      createdAt: '2026-05-29T00:01:00.000Z',
+      updatedAt: '2026-05-29T00:01:00.000Z',
+    };
+    expect(result).toEqual({ ok: true, result: record });
+    expect(memoryCtx.inserts).toEqual([{ table: 'mastra_resources', record }]);
+    expect(memoryCtx.patch).not.toHaveBeenCalled();
   });
 });
 
