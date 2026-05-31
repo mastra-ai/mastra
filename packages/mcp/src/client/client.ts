@@ -74,6 +74,7 @@ export type {
 } from './types';
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
+const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const require = createRequire(import.meta.url);
 
 // Per MCP spec, only fallback to SSE for these status codes
@@ -198,6 +199,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
+  private serverInstructions?: string;
   private _roots: Root[];
   private readonly requireToolApproval: RequireToolApproval | undefined;
 
@@ -493,6 +495,8 @@ export class InternalMastraMCPClient extends MastraBase {
           throw new Error('Server configuration must include either a command or a url.');
         }
 
+        this.refreshServerInstructions();
+
         resolve(true);
 
         // Set up disconnect handler to reset state.
@@ -505,6 +509,7 @@ export class InternalMastraMCPClient extends MastraBase {
           const staleTransport = this.transport;
           this.transport = undefined;
           this.isConnected = null;
+          this.serverInstructions = undefined;
           if (staleTransport) {
             void staleTransport.close().catch(() => {});
           }
@@ -573,6 +578,22 @@ export class InternalMastraMCPClient extends MastraBase {
     return null;
   }
 
+  get instructions(): string | undefined {
+    return this.serverInstructions;
+  }
+
+  get forwardInstructions(): boolean {
+    return this.serverConfig.forwardInstructions ?? false;
+  }
+
+  get instructionsMaxLength(): number {
+    return this.serverConfig.instructionsMaxLength ?? DEFAULT_INSTRUCTIONS_MAX_LENGTH;
+  }
+
+  private refreshServerInstructions(): void {
+    this.serverInstructions = this.client.getInstructions();
+  }
+
   async disconnect() {
     if (!this.transport) {
       this.log('debug', 'Disconnect called but no transport was connected.');
@@ -590,6 +611,7 @@ export class InternalMastraMCPClient extends MastraBase {
     } finally {
       this.transport = undefined;
       this.isConnected = null;
+      this.serverInstructions = undefined;
 
       // Clean up exit hooks to prevent memory leaks
       if (this.exitHookUnsubscribe) {
@@ -635,6 +657,7 @@ export class InternalMastraMCPClient extends MastraBase {
     // Reset connection state
     this.transport = undefined;
     this.isConnected = null;
+    this.serverInstructions = undefined;
 
     // Reconnect
     await this.connect();
@@ -814,6 +837,9 @@ export class InternalMastraMCPClient extends MastraBase {
           mcpMetadata: {
             serverName: this.name,
             serverVersion: this.client.getServerVersion()?.version,
+            serverInstructions: this.serverInstructions,
+            forwardInstructions: this.forwardInstructions,
+            instructionsMaxLength: this.instructionsMaxLength,
           },
           execute: async (
             input: any,

@@ -31,6 +31,8 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
+  /** MCP server guidance to include as a separate system message. */
+  mcpServerGuidance?: string;
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   returnScorerData?: boolean;
@@ -67,6 +69,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentSpan,
   methodType,
   instructions,
+  mcpServerGuidance,
   memoryConfig,
   memory,
   returnScorerData,
@@ -106,6 +109,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     requestContext,
     methodType,
     instructions,
+    mcpServerGuidance,
     memoryConfig,
     memory,
     isResume: !!resumeContext,

@@ -75,7 +75,7 @@ import { createTool } from '../tools';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
-import type { CoreTool, ToolPayloadTransformPolicy } from '../tools/types';
+import type { CoreTool, McpMetadata, ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
@@ -138,6 +138,7 @@ import type {
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
+import { buildMcpServerGuidance } from './mcp-guidance';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -1742,6 +1743,33 @@ export class Agent<
     }
 
     return this.#instructions;
+  }
+
+  private async getMcpServerGuidance({
+    requestContext,
+    toolsets,
+    clientTools,
+  }: {
+    requestContext: RequestContext;
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+  }): Promise<string | undefined> {
+    const tools: Array<{ mcpMetadata?: McpMetadata } | undefined> = [];
+
+    const assignedTools = await this.listTools({ requestContext });
+    tools.push(...(Object.values(assignedTools || {}) as { mcpMetadata?: McpMetadata }[]));
+
+    for (const toolset of Object.values(toolsets || {})) {
+      tools.push(...(Object.values(toolset || {}) as { mcpMetadata?: McpMetadata }[]));
+    }
+
+    tools.push(...(Object.values(clientTools || {}) as { mcpMetadata?: McpMetadata }[]));
+
+    if (tools.length === 0) {
+      return undefined;
+    }
+
+    return buildMcpServerGuidance(tools);
   }
 
   /**
@@ -5780,6 +5808,11 @@ export class Agent<
       }) ||
       randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
+    const mcpServerGuidance = await this.getMcpServerGuidance({
+      requestContext,
+      toolsets: options.toolsets,
+      clientTools: options.clientTools,
+    });
 
     // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
@@ -5929,6 +5962,7 @@ export class Agent<
       agentSpan: agentSpan!,
       methodType,
       instructions,
+      mcpServerGuidance,
       memoryConfig,
       memory,
       saveQueueManager,
