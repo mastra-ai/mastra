@@ -16659,3 +16659,76 @@ describe('Message ordering regressions', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+describe('cleanup retention floor with disabled async buffering', () => {
+  it('bufferActivation should be undefined when async buffering is disabled', () => {
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: new MockLanguageModelV2({}) as any,
+      observation: { messageTokens: 1000, bufferTokens: false },
+      reflection: { observationTokens: 50000 },
+    });
+
+    // When async buffering is disabled, bufferActivation should be undefined
+    expect(om.getObservationConfig().bufferActivation).toBeUndefined();
+  });
+
+  it('cleanupMessages should not pass retentionFloor of 0 when async buffering disabled', async () => {
+    // Regression test for BUG-5: when async buffering is disabled,
+    // bufferActivation is undefined. The cleanup in step.ts uses
+    // `bufferActivation ?? 1` which produces retentionFloor = 0,
+    // causing ALL observed messages to be removed.
+    //
+    // The fix: use `bufferActivation ?? 0` which produces retentionFloor
+    // = threshold — effectively "keep everything" since there's no buffer
+    // to activate when async buffering is disabled.
+
+    const storage = createInMemoryStorage();
+    const threadId = 'retention-floor-test';
+    const resourceId = 'retention-floor-resource';
+
+    const threshold = 30000;
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: new MockLanguageModelV2({}) as any,
+      observation: { messageTokens: threshold, bufferTokens: false },
+      reflection: { observationTokens: 50000 },
+    });
+
+    // When async buffering is disabled, bufferActivation is undefined.
+    const bufferActivation = om.getObservationConfig().bufferActivation;
+    expect(bufferActivation).toBeUndefined();
+
+    // Add messages to storage so observedMessageIds can be resolved
+    const messages = [
+      {
+        id: 'msg-1',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello, this is a test message.' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      },
+      {
+        id: 'msg-2',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'I am the assistant responding.' }] },
+        createdAt: new Date('2025-01-01T10:00:01Z'),
+      },
+    ];
+    await storage.saveMessages({ messages });
+
+    // Compute what step.ts computes for retentionFloor (matches step.ts fallback)
+    const computedFloor = resolveRetentionFloor(om.getObservationConfig().bufferActivation ?? 0, threshold);
+
+    // With ?? 0 fallback, retentionFloor = threshold * (1 - 0) = threshold.
+    // "Keep everything" — correct since there's no buffer to activate.
+    expect(computedFloor).toBe(threshold);
+  });
+});

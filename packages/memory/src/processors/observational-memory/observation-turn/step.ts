@@ -209,7 +209,7 @@ export class ObservationStep {
           // Cleanup after observation
           const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
           const minRemaining = resolveRetentionFloor(
-            om.getObservationConfig().bufferActivation ?? 1,
+            om.getObservationConfig().bufferActivation ?? 0,
             statusSnapshot.threshold,
           );
 
