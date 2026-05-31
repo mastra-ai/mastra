@@ -652,7 +652,7 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
  * Use this type for public method signatures.
  */
 export type PublicAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends undefined | null
+  ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}
       ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> }
@@ -663,7 +663,7 @@ export type PublicAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOption
  * Use this type internally after converting from PublicSchema.
  */
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends undefined | null
+  ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}
       ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
@@ -681,7 +681,7 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     snapshot: WorkflowRunState;
   };
   toolCallId?: string;
-} & (OUTPUT extends undefined | null
+} & ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}
       ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
