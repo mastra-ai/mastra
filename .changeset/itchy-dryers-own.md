@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fix working memory crashing on Cloudflare Workers when using a Zod schema. The working-memory tool now validates input with the schema's own validator instead of re-wrapping it through AJV, which compiles validators with `new Function`/`eval` and is blocked on runtimes that forbid dynamic code generation.
+Fixed a crash in Cloudflare Workers when using a Zod schema for working memory. Working-memory input is now validated directly by the provided schema validator, which avoids runtime restrictions in Cloudflare Workers.
