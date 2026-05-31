@@ -26,7 +26,7 @@ The simplest way to get started is to set API key environment variables for the 
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
-export GOOGLE_GENERATIVE_AI_API_KEY=...
+export GOOGLE_API_KEY=...
 export DEEPSEEK_API_KEY=...
 export CEREBRAS_API_KEY=...
 ```
@@ -77,6 +77,112 @@ To switch from OAuth to API key usage, log out with `/logout` and set your `ANTH
 ### Anthropic OAuth warning
 
 Authenticating with a Claude Max subscription through OAuth is a grey area. Anthropic has reportedly banned users for using Claude max credentials outside of Claude Code, so it may violate Anthropic Terms of Service.
+
+## Direct shell passthrough
+
+In the interactive TUI, input that starts with `!` runs as a direct shell passthrough command:
+
+```sh
+!pwd
+!git status --short
+```
+
+This direct passthrough is separate from the agent's `execute_command` tool. Tool permissions and agent command execution are not changed by this setting.
+
+By default, Mastra Code keeps the compatibility behavior from earlier versions:
+
+- macOS and Linux: `execa(command, { shell: true })`, which behaves like `/bin/sh -c`.
+- Windows: `execa(command, { shell: true })`, which behaves like `cmd.exe` through the platform shell.
+
+Mastra Code does not use `$SHELL` automatically and does not switch Windows users to PowerShell automatically. Configure a shell only when you want direct `!` commands to use a specific command language.
+
+### Shell passthrough settings
+
+Set the shell in global `settings.json` with the `shellPassthrough` block:
+
+```json title="settings.json"
+{
+  "shellPassthrough": {
+    "mode": "path",
+    "executable": "/bin/zsh",
+    "family": "posix"
+  }
+}
+```
+
+The `mode` field accepts:
+
+| Mode | Behavior |
+| - | - |
+| `default` | Keep the built-in `shell: true` behavior. |
+| `path` | Run the configured executable without loading login or profile files. |
+| `login` | Run the configured executable and allow shell startup or profile files when supported. |
+
+If `executable` is set and `mode` is omitted, Mastra Code treats the shell as `path` mode.
+
+The `family` field accepts:
+
+| Family | Behavior |
+| - | - |
+| `posix` | Run the executable with `-c`. In `login` mode, run it with `-l -c`. |
+| `cmd` | Run `cmd.exe` with `/d /s /c`. |
+| `powershell` | Run PowerShell or PowerShell Core with an encoded command. |
+
+For common executables, Mastra Code infers `family` from the executable name. `pwsh`, `pwsh.exe`, `powershell`, and `powershell.exe` use `powershell`. `cmd` and `cmd.exe` use `cmd`. Other explicit shells use `posix` on macOS and Linux. On Windows, set `family` when the executable is not `cmd.exe`, `powershell.exe`, or `pwsh.exe`.
+
+### Environment overrides
+
+Use environment variables to override the persisted shell for the current process:
+
+```sh
+export MASTRACODE_SHELL=/bin/zsh
+export MASTRACODE_SHELL_MODE=path
+```
+
+`MASTRACODE_SHELL` sets the executable. `MASTRACODE_SHELL_MODE` accepts `default`, `path`, or `login`. Empty values are ignored.
+
+### macOS and Linux examples
+
+Run direct `!` commands through `zsh` without loading startup files:
+
+```sh
+export MASTRACODE_SHELL=/bin/zsh
+export MASTRACODE_SHELL_MODE=path
+```
+
+Opt into a login shell when you need shell startup files:
+
+```sh
+export MASTRACODE_SHELL=/bin/zsh
+export MASTRACODE_SHELL_MODE=login
+```
+
+Login mode can be slower or noisy because startup files can print output, prompt for input, change directories, or run long setup commands.
+
+### Windows examples
+
+Use `cmd.exe` explicitly:
+
+```powershell
+$env:MASTRACODE_SHELL = "cmd.exe"
+$env:MASTRACODE_SHELL_MODE = "path"
+```
+
+Use PowerShell Core without loading profiles:
+
+```powershell
+$env:MASTRACODE_SHELL = "pwsh"
+$env:MASTRACODE_SHELL_MODE = "path"
+```
+
+Use Windows PowerShell and load profiles:
+
+```powershell
+$env:MASTRACODE_SHELL = "powershell.exe"
+$env:MASTRACODE_SHELL_MODE = "login"
+```
+
+PowerShell passthrough uses `-EncodedCommand` and preserves native command exit codes where practical. It treats cmdlet errors as failures so direct shell commands return a non-zero exit code. In `path` mode, it also uses `-NoProfile`. In `login` mode, it omits `-NoProfile` so PowerShell profiles can load.
 
 ## MCP servers
 
@@ -435,6 +541,8 @@ Running `/theme` with no arguments shows the current theme. The choice is persis
 | `DEFAULT_OM_MODEL_ID` | Default model for OM observer and reflector |
 | `MASTRA_PLANS_DIR` | Override the directory where approved plans are saved (default: app data directory) |
 | `MASTRA_THEME` | Color theme override (`dark` or `light`) |
+| `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
+| `MASTRACODE_SHELL_MODE` | Direct TUI `!` shell mode (`default`, `path`, or `login`) |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
 
 ## Resource ID override

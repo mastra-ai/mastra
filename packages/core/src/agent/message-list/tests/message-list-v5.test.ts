@@ -367,6 +367,53 @@ describe('MessageList V5 Support', () => {
         });
       });
 
+      // Regression for #15569: a tool that failed must round-trip from storage as an
+      // error, not silently reappear as a successful result.
+      it('should round-trip a persisted output-error tool invocation as a v5 error (not a success)', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const v2Message: MastraDBMessage = {
+          id: 'msg-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: 'call-1',
+                  toolName: 'test-tool',
+                  step: 1,
+                  state: 'output-error',
+                  args: { param: 'value' },
+                  errorText: 'boom: tool exploded',
+                },
+              },
+            ],
+          },
+        };
+
+        list.add(v2Message, 'response');
+        const v5Messages = list.get.all.aiV5.ui();
+
+        const toolPart = v5Messages[0].parts.find(
+          p => p.type && typeof p.type === 'string' && p.type.startsWith('tool-'),
+        ) as { state?: string; errorText?: string; output?: unknown } | undefined;
+
+        expect(toolPart).toMatchObject({
+          type: 'tool-test-tool',
+          toolCallId: 'call-1',
+          input: { param: 'value' },
+          state: 'output-error',
+          errorText: 'boom: tool exploded',
+        });
+        // Must not be exposed as a successful output.
+        expect(toolPart?.state).not.toBe('output-available');
+        expect(toolPart?.output).toBeUndefined();
+      });
+
       it('should convert reasoning parts', () => {
         const list = new MessageList({ threadId, resourceId });
         const v2Message: MastraDBMessage = {
@@ -1839,6 +1886,151 @@ describe('MessageList V5 Support', () => {
       const toolDbMsg = dbMessages.find(m => m.content.parts?.some((p: any) => p.type === 'tool-invocation'));
       const toolPart = toolDbMsg?.content.parts?.find((p: any) => p.type === 'tool-invocation') as any;
       expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
+    });
+
+    it('should convert MCP content-array tool results to multimodal model output without providerMetadata duplication', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Take a screenshot', 'input');
+
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-mcp-image-tool',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-mcp-image',
+                toolName: 'screenshot',
+                state: 'result',
+                args: {},
+                result: {
+                  content: [
+                    { type: 'text', text: 'Screenshot captured' },
+                    { type: 'image', data: 'base64data', mimeType: 'image/png' },
+                    { type: 'audio', mimeType: 'audio/wav' },
+                    { type: 'resource', resource: { uri: 'file:///tmp/output.txt', text: 'details' } },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const dbMessages = list.get.all.db();
+      const toolDbMsg = dbMessages.find(m => m.id === 'msg-mcp-image-tool');
+      const toolPart = toolDbMsg?.content.parts?.[0] as any;
+      expect(toolPart.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+      expect(toolPart.toolInvocation.result.content[1].data).toBe('base64data');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [
+          { type: 'text', text: 'Screenshot captured' },
+          { type: 'image-data', data: 'base64data', mediaType: 'image/png' },
+          { type: 'text', text: JSON.stringify({ type: 'audio', mimeType: 'audio/wav' }) },
+          {
+            type: 'text',
+            text: JSON.stringify({ type: 'resource', resource: { uri: 'file:///tmp/output.txt', text: 'details' } }),
+          },
+        ],
+      });
+    });
+
+    it('should preserve explicit modelOutput over MCP-style raw content in llmPrompt', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Summarize tool output', 'input');
+      list.add(
+        {
+          id: 'msg-explicit-model-output-mcp-shape',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: 'call-explicit-model-output-mcp-shape',
+                  toolName: 'customTool',
+                  state: 'result',
+                  args: {},
+                  result: {
+                    content: [
+                      { type: 'text', text: 'raw text' },
+                      { type: 'image', data: 'raw-base64', mimeType: 'image/png' },
+                    ],
+                  },
+                },
+                providerMetadata: {
+                  mastra: {
+                    modelOutput: { type: 'text', value: 'Explicit summary wins' },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        'response',
+      );
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({ type: 'text', value: 'Explicit summary wins' });
+    });
+
+    it('should leave malformed MCP multimodal content as a regular tool result', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Take a screenshot', 'input');
+      list.add(
+        {
+          id: 'msg-mcp-invalid-image-tool',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: 'call-mcp-invalid-image',
+                  toolName: 'screenshot',
+                  state: 'result',
+                  args: {},
+                  result: { content: [{ type: 'image', mimeType: 'image/png' }] },
+                },
+              },
+            ],
+          },
+        },
+        'response',
+      );
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'json',
+        value: { content: [{ type: 'image', mimeType: 'image/png' }] },
+      });
     });
 
     it('should apply payload transforms to UI and drained transcript without mutating model messages', () => {

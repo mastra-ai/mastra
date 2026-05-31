@@ -21,10 +21,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
 
   if (isLoading) {
     return (
-      <div
-        className="flex h-full min-h-0 items-center justify-center px-6 py-8"
-        data-testid="integrations-detail-picker-loading"
-      >
+      <div className="flex justify-center px-6 py-8" data-testid="integrations-detail-picker-loading">
         <div className="flex w-full max-w-[48rem] flex-col items-center gap-6 text-center">
           <div className="flex flex-col items-center gap-2">
             <Skeleton className="h-6 w-48" />
@@ -56,7 +53,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
 
   if (platforms.length === 0) {
     return (
-      <div className="flex h-full min-h-0 items-center justify-center px-6" data-testid="integrations-detail-picker">
+      <div className="flex justify-center px-6 py-8" data-testid="integrations-detail-picker">
         <Txt variant="ui-md" className="text-neutral3">
           No integrations configured for this project
         </Txt>
@@ -65,7 +62,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
   }
 
   return (
-    <div className="flex h-full min-h-0 items-center justify-center px-6 py-8" data-testid="integrations-detail-picker">
+    <div className="flex justify-center px-6 py-8" data-testid="integrations-detail-picker">
       <div className="flex w-full max-w-[48rem] flex-col items-center gap-6 text-center">
         <div className="flex flex-col gap-2">
           <Txt variant="header-sm" className="font-semibold text-neutral6">

@@ -75,14 +75,14 @@ import { createTool } from '../tools';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
-import type { CoreTool, ToolPayloadTransformPolicy } from '../tools/types';
+import type { CoreTool, McpMetadata, ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Step } from '../workflows/step';
-import type { OutputWriter, WorkflowResult } from '../workflows/types';
+import type { OutputWriter, WorkflowResult, WorkflowRunState } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
@@ -101,6 +101,7 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -118,11 +119,16 @@ import type {
   AgentCreateOptions,
   AgentExecuteOnFinishOptions,
   AgentInstructions,
+  AgentMessageInput,
   AgentMethodType,
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
   PublicStructuredOutputOptions,
+  QueueAgentMessageOptions,
+  QueueAgentMessageResult,
+  SendAgentMessageOptions,
+  SendAgentMessageResult,
   SendAgentSignalOptions,
   SendAgentSignalResult,
   StructuredOutputOptions,
@@ -327,7 +333,7 @@ export class Agent<
   #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
-  #voice: MastraVoice;
+  #voice: DynamicArgument<MastraVoice, TRequestContext>;
   #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
@@ -463,11 +469,15 @@ export class Agent<
 
     if (config.voice) {
       this.#voice = config.voice;
-      if (typeof config.tools !== 'function') {
-        this.#voice?.addTools(this.#tools as TTools);
-      }
-      if (typeof config.instructions === 'string') {
-        this.#voice?.addInstructions(config.instructions);
+      // Only seed a static voice instance. A resolver is invoked per request in getVoice(),
+      // where its session-owned instance is configured, so we must not touch it here.
+      if (typeof this.#voice !== 'function') {
+        if (typeof config.tools !== 'function') {
+          this.#voice.addTools(this.#tools as TTools);
+        }
+        if (typeof config.instructions === 'string') {
+          this.#voice.addInstructions(config.instructions);
+        }
       }
     } else {
       this.#voice = new DefaultVoice();
@@ -1557,6 +1567,20 @@ export class Agent<
   }
 
   get voice() {
+    if (typeof this.#voice === 'function') {
+      const mastraError = new MastraError({
+        id: 'AGENT_VOICE_INCOMPATIBLE_WITH_FUNCTION_VOICE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Voice is not compatible when voice is a function. Please use getVoice() instead.',
+      });
+      this.logger.trackException(mastraError);
+      throw mastraError;
+    }
+
     if (typeof this.#instructions === 'function') {
       const mastraError = new MastraError({
         id: 'AGENT_VOICE_INCOMPATIBLE_WITH_FUNCTION_INSTRUCTIONS',
@@ -1647,6 +1671,14 @@ export class Agent<
    * Gets the voice instance for this agent with tools and instructions configured.
    * The voice instance enables text-to-speech and speech-to-text capabilities.
    *
+   * When `voice` is configured as a resolver (`({ requestContext }) => new SomeVoice(...)`),
+   * each call resolves a fresh, session-owned instance. The resolver is responsible for
+   * configuring its own tools/instructions/request context, so this method does not mutate
+   * the resolved instance. The caller owns the lifecycle (e.g. `disconnect()`) of that instance.
+   *
+   * A static `MastraVoice` is shared across calls and is configured with the current
+   * tools/instructions on each call (appropriate for one-shot TTS).
+   *
    * @example
    * ```typescript
    * const voice = await agent.getVoice();
@@ -1654,15 +1686,23 @@ export class Agent<
    * ```
    */
   public async getVoice({ requestContext }: { requestContext?: RequestContext } = {}) {
-    if (this.#voice) {
-      const voice = this.#voice;
-      voice?.addTools(await this.listTools({ requestContext }));
-      const instructions = await this.getInstructions({ requestContext });
-      voice?.addInstructions(this.#convertInstructionsToString(instructions));
-      return voice;
-    } else {
+    if (!this.#voice) {
       return new DefaultVoice();
     }
+
+    if (typeof this.#voice === 'function') {
+      const resolved = await this.#voice({
+        requestContext: (requestContext ?? new RequestContext()) as RequestContext<TRequestContext>,
+        mastra: this.#mastra,
+      });
+      return resolved ?? new DefaultVoice();
+    }
+
+    const voice = this.#voice;
+    voice?.addTools(await this.listTools({ requestContext }));
+    const instructions = await this.getInstructions({ requestContext });
+    voice?.addInstructions(this.#convertInstructionsToString(instructions));
+    return voice;
   }
 
   /**
@@ -1703,6 +1743,33 @@ export class Agent<
     }
 
     return this.#instructions;
+  }
+
+  private async getMcpServerGuidance({
+    requestContext,
+    toolsets,
+    clientTools,
+  }: {
+    requestContext: RequestContext;
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+  }): Promise<string | undefined> {
+    const tools: Array<{ mcpMetadata?: McpMetadata } | undefined> = [];
+
+    const assignedTools = await this.listTools({ requestContext });
+    tools.push(...(Object.values(assignedTools || {}) as { mcpMetadata?: McpMetadata }[]));
+
+    for (const toolset of Object.values(toolsets || {})) {
+      tools.push(...(Object.values(toolset || {}) as { mcpMetadata?: McpMetadata }[]));
+    }
+
+    tools.push(...(Object.values(clientTools || {}) as { mcpMetadata?: McpMetadata }[]));
+
+    if (tools.length === 0) {
+      return undefined;
+    }
+
+    return buildMcpServerGuidance(tools);
   }
 
   /**
@@ -3959,7 +4026,9 @@ export class Agent<
             // use the correct model version and memory config from the resolved agent.
             let resolvedAgent = agent;
             const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-            const agentVersionSelector = versionOverrides?.agents?.[agent.id];
+            const agentVersionSelector =
+              versionOverrides?.agents?.[agent.id] ??
+              (versionOverrides?.defaultStatus ? { status: versionOverrides.defaultStatus } : undefined);
             if (agentVersionSelector && this.#mastra && agent instanceof Agent) {
               try {
                 resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
@@ -5485,7 +5554,7 @@ export class Agent<
     return existingSnapshot;
   }
 
-  #getSnapshotMemoryInfo(existingSnapshot: any): AgentSnapshotMemoryInfo | undefined {
+  #getSnapshotMemoryInfo(existingSnapshot: WorkflowRunState | null | undefined): AgentSnapshotMemoryInfo | undefined {
     for (const key in existingSnapshot?.context) {
       const step = existingSnapshot?.context[key];
       if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
@@ -5494,6 +5563,64 @@ export class Agent<
     }
 
     return undefined;
+  }
+
+  #getSuspendedToolInfo(
+    existingSnapshot: WorkflowRunState | null | undefined,
+  ): { toolCallId?: string; toolName?: string } | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step?.status !== 'suspended') continue;
+      const payload = step.suspendPayload;
+      if (!payload) continue;
+
+      if (payload.requireToolApproval) {
+        return {
+          toolCallId: payload.requireToolApproval.toolCallId,
+          toolName: payload.requireToolApproval.toolName,
+        };
+      }
+      if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
+        return {
+          toolCallId: payload.toolCallId,
+          toolName: payload.toolName,
+        };
+      }
+    }
+
+    return undefined;
+  }
+
+  #getResumeSpanInput(resumeData: unknown, suspendedToolInfo?: { toolCallId?: string; toolName?: string }): unknown {
+    if (!suspendedToolInfo?.toolName && !suspendedToolInfo?.toolCallId) {
+      return resumeData;
+    }
+
+    const resumeInput: Record<string, unknown> =
+      resumeData && typeof resumeData === 'object' && !Array.isArray(resumeData)
+        ? { ...(resumeData as Record<string, unknown>) }
+        : { resumeData };
+
+    const hasConflictingToolName =
+      suspendedToolInfo.toolName &&
+      resumeInput.toolName !== undefined &&
+      resumeInput.toolName !== suspendedToolInfo.toolName;
+    const hasConflictingToolCallId =
+      suspendedToolInfo.toolCallId &&
+      resumeInput.toolCallId !== undefined &&
+      resumeInput.toolCallId !== suspendedToolInfo.toolCallId;
+    const spanInput: Record<string, unknown> =
+      hasConflictingToolName || hasConflictingToolCallId ? { resumeData: resumeInput } : { ...resumeInput };
+
+    if (suspendedToolInfo.toolName) {
+      spanInput.toolName = suspendedToolInfo.toolName;
+    }
+
+    if (suspendedToolInfo.toolCallId) {
+      spanInput.toolCallId = suspendedToolInfo.toolCallId;
+    }
+
+    return spanInput;
   }
 
   #getAgentExecutionResourceId({
@@ -5681,16 +5808,53 @@ export class Agent<
       }) ||
       randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
+    const mcpServerGuidance = await this.getMcpServerGuidance({
+      requestContext,
+      toolsets: options.toolsets,
+      clientTools: options.clientTools,
+    });
 
     // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
+    // For resumed runs, surface resumeData as the span input and link the resumed
+    // span back to the original suspended trace. Mirrors Workflow.resume tracing.
+    const isResume = !!resumeContext;
+    const suspendedToolInfo = isResume ? this.#getSuspendedToolInfo(resumeContext?.snapshot) : undefined;
+    const persistedTracingContext = isResume
+      ? (resumeContext?.snapshot?.tracingContext as
+          | { traceId?: string; spanId?: string; parentSpanId?: string }
+          | undefined)
+      : undefined;
+
+    // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
+    // their own. This prevents cross-trace parentage if the caller is explicit.
+    const userProvidedTraceId = options.tracingOptions?.traceId;
+    const userProvidedParentSpanId = options.tracingOptions?.parentSpanId;
+    const effectiveTraceId =
+      userProvidedTraceId ?? (!userProvidedParentSpanId ? persistedTracingContext?.traceId : undefined);
+    const shouldUsePersistedParentSpan =
+      !userProvidedParentSpanId && (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
+
+    const resumeTracingOptions =
+      isResume && persistedTracingContext?.traceId
+        ? {
+            ...options.tracingOptions,
+            traceId: effectiveTraceId,
+            parentSpanId: shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : userProvidedParentSpanId,
+          }
+        : options.tracingOptions;
+
+    const spanInput = isResume
+      ? this.#getResumeSpanInput(resumeContext!.resumeData, suspendedToolInfo)
+      : options.messages;
+
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
-      name: `agent run: '${this.id}'`,
+      name: `agent run: '${this.id}'${isResume ? ' (resumed)' : ''}`,
       entityType: EntityType.AGENT,
       entityId: this.id,
       entityName: this.name,
-      input: options.messages,
+      input: spanInput,
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
@@ -5704,12 +5868,13 @@ export class Agent<
         runId,
         resourceId,
         threadId: threadFromArgs?.id,
+        ...(isResume ? { resumed: true, resumedFromSpanId: persistedTracingContext?.spanId } : {}),
         ...(this.toRawConfig()?.resolvedVersionId
           ? { entityVersionId: this.toRawConfig()!.resolvedVersionId as string }
           : {}),
       },
       tracingPolicy: this.#options?.tracingPolicy,
-      tracingOptions: options.tracingOptions,
+      tracingOptions: resumeTracingOptions,
       tracingContext: options.tracingContext,
       requestContext,
       mastra: this.#mastra,
@@ -5797,6 +5962,7 @@ export class Agent<
       agentSpan: agentSpan!,
       methodType,
       instructions,
+      mcpServerGuidance,
       memoryConfig,
       memory,
       saveQueueManager,
@@ -5818,6 +5984,14 @@ export class Agent<
       skipBgTaskWait: options._skipBgTaskWait,
       drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub),
     });
+
+    // Register the parent Mastra instance on the internal execution workflow so it can read
+    // configured storage instead of logging "Mastra storage is not initialized" on every run.
+    // The workflow opts out of snapshot persistence (shouldPersistSnapshot returns false), so
+    // this does not write any execution-workflow rows to storage.
+    if (this.#mastra) {
+      executionWorkflow.__registerMastra(this.#mastra);
+    }
 
     const run = await executionWorkflow.createRun();
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
@@ -6366,6 +6540,26 @@ export class Agent<
 
   abortRunStream(runId: string): boolean {
     return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  sendMessage<OUTPUT = TOutput>(
+    message: AgentMessageInput,
+    target: SendAgentMessageOptions<OUTPUT>,
+  ): SendAgentMessageResult {
+    return agentThreadStreamRuntime.sendMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  queueMessage<OUTPUT = TOutput>(
+    message: AgentMessageInput,
+    target: QueueAgentMessageOptions<OUTPUT>,
+  ): QueueAgentMessageResult {
+    return agentThreadStreamRuntime.queueMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
   }
 
   /**
