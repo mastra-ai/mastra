@@ -820,6 +820,7 @@ export type WorkflowConfig<
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   inputSchema: PublicSchema<TInput>;
   outputSchema: PublicSchema<TOutput>;
   stateSchema?: PublicSchema<TState>;
