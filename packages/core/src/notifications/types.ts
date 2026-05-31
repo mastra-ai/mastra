@@ -1,6 +1,8 @@
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 
-export type NotificationStatus = 'pending' | 'delivered' | 'seen' | 'dismissed' | 'archived';
+export type NotificationStatus = 'pending' | 'delivered' | 'seen' | 'dismissed' | 'archived' | 'discarded';
+
+export type NotificationSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 
 export type NotificationRecord = {
   id: string;
@@ -17,29 +19,46 @@ export type NotificationRecord = {
   dedupeKey?: string;
   coalesceKey?: string;
   coalescedCount?: number;
+  attributes?: NotificationSignalAttributes;
   createdAt: Date;
   updatedAt: Date;
   deliveredAt?: Date;
   seenAt?: Date;
   dismissedAt?: Date;
   archivedAt?: Date;
+  discardedAt?: Date;
+  deliverAt?: Date;
+  summaryAt?: Date;
+  deliveryReason?: string;
+  deliveryAttempts?: number;
+  lastDeliveryAttemptAt?: Date;
+  lastDeliveryError?: string;
+  deliveredSignalId?: string;
+  summarySignalId?: string;
   metadata?: Record<string, unknown>;
 };
 
-export type CreateNotificationInput = {
-  id?: string;
-  threadId: string;
+export type SendNotificationSignalInput = {
   source: string;
   kind: string;
-  priority?: NotificationPriority;
   summary: string;
+  priority?: NotificationPriority;
   payload?: unknown;
-  resourceId?: string;
-  agentId?: string;
   sourceId?: string;
   dedupeKey?: string;
   coalesceKey?: string;
+  attributes?: NotificationSignalAttributes;
   metadata?: Record<string, unknown>;
+};
+
+export type CreateNotificationInput = SendNotificationSignalInput & {
+  id?: string;
+  threadId: string;
+  resourceId?: string;
+  agentId?: string;
+  deliverAt?: Date;
+  summaryAt?: Date;
+  deliveryReason?: string;
   createdAt?: Date;
 };
 
@@ -54,19 +73,48 @@ export type ListNotificationsInput = {
   limit?: number;
 };
 
+export type ListDueNotificationsInput = {
+  now: Date;
+  limit?: number;
+  agentId?: string;
+  resourceId?: string;
+};
+
 export type UpdateNotificationInput = {
   id: string;
   threadId: string;
   status?: NotificationStatus;
   summary?: string;
   payload?: unknown;
+  attributes?: NotificationSignalAttributes;
   metadata?: Record<string, unknown>;
+  deliverAt?: Date;
+  summaryAt?: Date;
+  deliveryReason?: string;
+  deliveryAttempts?: number;
+  lastDeliveryAttemptAt?: Date;
+  lastDeliveryError?: string;
+  deliveredSignalId?: string;
+  summarySignalId?: string;
 };
 
 export type NotificationSummary = {
   threadId: string;
+  resourceId?: string;
+  agentId?: string;
   pending: number;
   bySource: Record<string, number>;
   byPriority: Partial<Record<NotificationPriority, number>>;
   notificationIds: string[];
+};
+
+export type NotificationDeliveryThreadState = 'active' | 'idle';
+
+export type NotificationDeliveryAction = 'deliver' | 'queue' | 'defer' | 'summarize' | 'persist' | 'discard';
+
+export type NotificationDeliveryDecision = {
+  action: NotificationDeliveryAction;
+  deliverAt?: Date;
+  summaryAt?: Date;
+  reason?: string;
 };

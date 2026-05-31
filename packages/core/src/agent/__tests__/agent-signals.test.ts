@@ -9,6 +9,8 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { InMemoryNotificationsStorage } from '../../notifications/storage';
+import { MastraCompositeStore } from '../../storage/base';
 import { Agent } from '../agent';
 import {
   createMessageSignal,
@@ -1065,6 +1067,289 @@ describe('Agent signals', () => {
         }),
       }),
     );
+  });
+
+  it('delivers medium-priority notification records while idle', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'notification-agent',
+      name: 'Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+    });
+    new Mastra({ agents: { notificationAgent: agent }, storage, logger: false });
+
+    const subscription = await agent.subscribeToThread({
+      threadId: 'notification-thread',
+      resourceId: 'notification-user',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+
+    const result = await agent.sendNotificationSignal(
+      {
+        source: 'github',
+        kind: 'ci-status',
+        priority: 'medium',
+        summary: 'CI failed on main',
+        dedupeKey: 'main-ci',
+      },
+      {
+        resourceId: 'notification-user',
+        threadId: 'notification-thread',
+        ifIdle: { streamOptions: { memory: { resource: 'notification-user', thread: 'notification-thread' } } },
+      },
+    );
+
+    const subscribedRun = await nextRun;
+    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    expect(result.decision).toMatchObject({ action: 'deliver' });
+    expect(result.record).toMatchObject({
+      agentId: 'notification-agent',
+      resourceId: 'notification-user',
+      threadId: 'notification-thread',
+      status: 'delivered',
+      deliveredSignalId: result.signal?.id,
+    });
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-signal');
+    expect(signalPart?.data).toMatchObject({
+      id: result.signal?.id,
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'CI failed on main',
+      attributes: { source: 'github', kind: 'ci-status', priority: 'medium' },
+    });
+    await expect(
+      notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
+    ).resolves.toMatchObject({ status: 'delivered', deliveredSignalId: result.signal?.id });
+
+    subscription.unsubscribe();
+  });
+
+  it('batches active high notifications for full delivery and active medium or low notifications for summaries', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({
+      id: 'active-priority-notification-storage',
+      domains: { notifications },
+    });
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        streamCount += 1;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'active response' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              await firstFinished;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'active-priority-notification-agent',
+      name: 'Active Priority Notification Agent',
+      instructions: 'Test',
+      model,
+    });
+    new Mastra({ agents: { activePriorityNotificationAgent: agent }, storage, logger: false });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'active-priority-notification-thread',
+      resourceId: 'active-priority-notification-user',
+    });
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'active-priority-notification-thread', resource: 'active-priority-notification-user' },
+    });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+
+    const high = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', priority: 'high', summary: 'CI failed' },
+      { resourceId: 'active-priority-notification-user', threadId: 'active-priority-notification-thread' },
+    );
+    const medium = await agent.sendNotificationSignal(
+      { source: 'slack', kind: 'mention', priority: 'medium', summary: 'Jane mentioned you' },
+      { resourceId: 'active-priority-notification-user', threadId: 'active-priority-notification-thread' },
+    );
+    const low = await agent.sendNotificationSignal(
+      { source: 'calendar', kind: 'event-reminder', priority: 'low', summary: 'Standup starts soon' },
+      { resourceId: 'active-priority-notification-user', threadId: 'active-priority-notification-thread' },
+    );
+
+    await nextTick();
+    expect(streamCount).toBe(1);
+    expect(high.signal).toBeUndefined();
+    expect(high.decision).toMatchObject({ action: 'defer', reason: 'active-batch-full' });
+    expect(high.record).toMatchObject({ status: 'pending', deliveryReason: 'active-batch-full' });
+    expect(high.record.deliverAt).toBeInstanceOf(Date);
+    expect(medium.signal).toBeUndefined();
+    expect(medium.decision).toMatchObject({ action: 'summarize', reason: 'active-batch-summary' });
+    expect(medium.record).toMatchObject({ status: 'pending', deliveryReason: 'active-batch-summary' });
+    expect(medium.record.summaryAt).toBeInstanceOf(Date);
+    expect(low.signal).toBeUndefined();
+    expect(low.decision).toMatchObject({ action: 'summarize', reason: 'active-batch-summary' });
+    expect(low.record).toMatchObject({ status: 'pending', deliveryReason: 'active-batch-summary' });
+    expect(low.record.summaryAt).toBeInstanceOf(Date);
+
+    releaseFirst();
+    await expect(stream.text).resolves.toBe('active response');
+    subscription.unsubscribe();
+  });
+
+  it('persists low-priority idle notifications without starting a run', async () => {
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'low-priority-notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'low-priority-notification-agent',
+      name: 'Low Priority Notification Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+          };
+        },
+      }),
+    });
+    new Mastra({ agents: { lowPriorityNotificationAgent: agent }, storage, logger: false });
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'mastracode', kind: 'manual', priority: 'low', summary: 'Read when you have time' },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+
+    await nextTick();
+    expect(streamCount).toBe(0);
+    expect(result.signal).toBeUndefined();
+    expect(result).toMatchObject({
+      accepted: true,
+      decision: { action: 'persist', reason: 'low-priority-inbox' },
+      record: { status: 'pending', deliveryReason: 'low-priority-inbox' },
+    });
+    expect(result.record.deliverAt).toBeUndefined();
+    expect(result.record.summaryAt).toBeUndefined();
+  });
+
+  it('defers notification records without starting an idle run', async () => {
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'deferred-notification-storage', domains: { notifications } });
+    const deliverAt = new Date('2026-05-30T12:00:00Z');
+    const agent = new Agent({
+      id: 'deferred-notification-agent',
+      name: 'Deferred Notification Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+          };
+        },
+      }),
+      notifications: {
+        deliveryPolicy: {
+          decide: () => ({ action: 'defer', deliverAt, reason: 'after-hours' }),
+        },
+      },
+    });
+    new Mastra({ agents: { deferredNotificationAgent: agent }, storage, logger: false });
+
+    const result = await agent.sendNotificationSignal(
+      {
+        source: 'calendar',
+        kind: 'event-reminder',
+        summary: 'Planning starts tomorrow',
+      },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+
+    await nextTick();
+    expect(streamCount).toBe(0);
+    expect(result).toMatchObject({
+      accepted: true,
+      decision: { action: 'defer', reason: 'after-hours' },
+      record: { status: 'pending', deliveryReason: 'after-hours' },
+    });
+    expect(result.signal).toBeUndefined();
+    expect(result.record.deliverAt?.toISOString()).toBe(deliverAt.toISOString());
+  });
+
+  it('coalesces pending notification records through sendNotificationSignal', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'coalesced-notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'coalesced-notification-agent',
+      name: 'Coalesced Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+      notifications: {
+        deliveryPolicy: {
+          default: { action: 'summarize', summaryAt: new Date('2026-05-30T12:00:00Z') },
+        },
+      },
+    });
+    new Mastra({ agents: { coalescedNotificationAgent: agent }, storage, logger: false });
+
+    const first = await agent.sendNotificationSignal(
+      {
+        source: 'github',
+        kind: 'ci-status',
+        summary: 'CI failed: one test',
+        dedupeKey: 'main-ci',
+      },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+    const second = await agent.sendNotificationSignal(
+      {
+        source: 'github',
+        kind: 'ci-status',
+        summary: 'CI failed: three tests',
+        dedupeKey: 'main-ci',
+      },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+
+    expect(second.record.id).toBe(first.record.id);
+    expect(second.record).toMatchObject({ status: 'pending', summary: 'CI failed: three tests', coalescedCount: 2 });
+    await expect(notifications.listNotifications({ threadId: 'notification-thread' })).resolves.toHaveLength(1);
+  });
+
+  it('throws a clear error when notification storage is missing', async () => {
+    const agent = new Agent({
+      id: 'missing-notification-storage-agent',
+      name: 'Missing Notification Storage Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+    });
+
+    await expect(
+      agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', summary: 'CI failed' },
+        { resourceId: 'notification-user', threadId: 'notification-thread' },
+      ),
+    ).rejects.toThrow('sendNotificationSignal requires a notifications storage domain');
   });
 
   it('delivers sendMessage into an active same-agent run', async () => {

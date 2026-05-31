@@ -52,6 +52,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },
+    { key: '/notify', description: 'Send an agent notification' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
     { key: '/judge', description: 'Set goal judge defaults' },
   ];
