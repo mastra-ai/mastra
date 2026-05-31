@@ -548,6 +548,67 @@ describe('OM Persistence', () => {
     expect(hasOmParts).toBe(true);
   });
 
+  it('should persist the assistant text response that follows a tool call (issue #15078)', async () => {
+    const threadId = 'test-coordinator-text-thread';
+    const resourceId = 'test-resource';
+
+    const quietStore = new InMemoryStore();
+    const quietMemory = new Memory({
+      storage: quietStore,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          observation: {
+            model: createMockObserverModel() as any,
+            messageTokens: 1_000_000,
+            bufferTokens: false,
+          },
+          reflection: {
+            model: createMockReflectorModel() as any,
+            observationTokens: 50_000,
+          },
+        },
+      },
+    });
+    const quietAgent = new Agent({
+      id: 'test-quiet-coordinator',
+      name: 'Test Quiet Coordinator',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: createMockOmModel(longResponseText) as any,
+      tools: { test: omTriggerTool },
+      memory: quietMemory,
+    });
+
+    const response = await quietAgent.stream('Please use the test tool and then answer.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    const reader = response.fullStream.getReader();
+    try {
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const memoryStore = await quietStore.getStore('memory');
+    const result = await memoryStore!.listMessages({ threadId });
+    const assistantMessages = result.messages.filter((m: any) => m.role === 'assistant');
+
+    const persistedText = assistantMessages
+      .flatMap((m: any) => m.content?.parts ?? [])
+      .filter((p: any) => p.type === 'text')
+      .map((p: any) => p.text)
+      .join('');
+
+    expect(persistedText).toContain('I understand your request completely');
+  });
+
   it('should persist OM messages when a workflow processor runs before memory processors', async () => {
     const threadId = 'test-workflow-processor-thread';
     const resourceId = 'test-resource';
