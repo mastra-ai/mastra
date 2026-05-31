@@ -72,7 +72,7 @@ export function WorkflowStepsStatus({ steps, workflowResult }: WorkflowStepsStat
               key={stepId}
               stepId={stepId}
               status={displayStatus}
-              result={(output ?? suspendOutput ?? error ?? {}) as Record<string, unknown>}
+              result={output ?? suspendOutput ?? error ?? {}}
               tripwire={tripwireInfo}
             />
           );
