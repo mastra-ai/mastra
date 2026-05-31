@@ -5917,6 +5917,14 @@ export class Agent<
       drainPendingSignals: runId => agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub),
     });
 
+    // Register the parent Mastra instance on the internal execution workflow so it can read
+    // configured storage instead of logging "Mastra storage is not initialized" on every run.
+    // The workflow opts out of snapshot persistence (shouldPersistSnapshot returns false), so
+    // this does not write any execution-workflow rows to storage.
+    if (this.#mastra) {
+      executionWorkflow.__registerMastra(this.#mastra);
+    }
+
     const run = await executionWorkflow.createRun();
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
     const result = await run.start({ ...observabilityContext });
