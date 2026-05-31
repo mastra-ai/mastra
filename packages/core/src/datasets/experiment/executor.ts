@@ -424,7 +424,7 @@ function handleWorkflowResult(result: any): ExecutionResult {
       output: result.suspendPayload ?? null,
       error: {
         message:
-          'Workflow suspended — provide resume data via item metadata (resumeSteps or resumeData) to auto-resume',
+          'Workflow suspended — provide resume data via item.resumeSteps/item.resumeData (or metadata.resumeSteps/metadata.resumeData) to auto-resume',
       },
       traceId,
       spanId,
