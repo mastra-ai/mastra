@@ -300,7 +300,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.7.0
-        version: 13.9.0(encoding@0.1.13)
+        version: 13.9.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -598,9 +598,9 @@ importers:
 
   browser/firecrawl:
     dependencies:
-      '@mendable/firecrawl-js':
+      firecrawl:
         specifier: ^4.18.4
-        version: 4.19.0
+        version: 4.25.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -619,28 +619,28 @@ importers:
         version: 22.19.15
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.1.4(vitest@4.1.4)
+        version: 4.1.5(vitest@4.1.5)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.1.4(vitest@4.1.4)
+        version: 4.1.5(vitest@4.1.5)
       agent-browser:
         specifier: 0.19.0
         version: 0.19.0(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0))
       eslint:
         specifier: ^10.2.1
-        version: 10.2.1(jiti@2.6.1)
+        version: 10.3.0(jiti@2.6.1)
       playwright-core:
         specifier: ^1.57.0
-        version: 1.58.2
+        version: 1.59.1
       tsup:
         specifier: ^8.5.1
-        version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.14)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.9.0)
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.3
+        version: 6.0.3
       vitest:
         specifier: 'catalog:'
-        version: 4.1.4(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.4)(@vitest/ui@4.1.4)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(vite@7.3.2(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
 
   browser/stagehand:
     dependencies:
@@ -1483,16 +1483,16 @@ importers:
     dependencies:
       '@ai-sdk/google':
         specifier: ^2.0.62
-        version: 2.0.72(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
+        version: 2.0.72(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^2.0.99
-        version: 2.0.106(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
+        version: 2.0.106(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: ^2.0.1
         version: 2.0.3
       '@ai-sdk/provider-utils':
         specifier: ^3.0.22
-        version: 3.0.25(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
+        version: 3.0.25(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
       '@huggingface/hub':
         specifier: ^0.15.2
         version: 0.15.2
@@ -1565,7 +1565,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 'catalog:'
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.1.5(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
 
   integrations/brightdata:
     dependencies:
@@ -5407,7 +5407,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.106
-        version: 2.0.106(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
+        version: 2.0.106(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5(vitest@4.1.5))(@vitest/ui@4.1.5(vitest@4.1.5))(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -12983,10 +12983,6 @@ packages:
     resolution: {integrity: sha512-+uvDktesJmVtiwxMtimq+3f5bKlsan4T7TokxOI7DbxFkApwrRNss5GYEXbInveMTz8LpGth/9Ch5BTwCqrpfA==}
     engines: {node: '>=22.0.0'}
 
-  '@mendable/firecrawl-js@4.19.0':
-    resolution: {integrity: sha512-We9dUJW6viK2zo/LHYkFCeOX6SiAxedFO4KtnPJ2ebO/G9QBybBgSfc+1FBc85qIetYjm39V4/ZNIrTZtO9rNQ==}
-    engines: {node: '>=22.0.0'}
-
   '@microsoft/api-extractor-model@7.33.4':
     resolution: {integrity: sha512-u1LTaNTikZAQ9uK6KG1Ms7nvNedsnODnspq/gH2dcyETWvH4hVNGNDvRAEutH66kAmxA4/necElqGNs1FggC8w==}
 
@@ -19613,6 +19609,9 @@ packages:
   axios@1.13.5:
     resolution: {integrity: sha512-cz4ur7Vb0xS4/KUN0tPWe44eqxrIu31me+fbang3ijiNscE129POzipJJA6zniq2C/Z6sJCjMimjS8Lc/GAs8Q==}
 
+  axios@1.15.2:
+    resolution: {integrity: sha512-wLrXxPtcrPTsNlJmKjkPnNPK2Ihe0hn0wGSaTEiHRPxwjvJwT3hKmXF4dpqxmPO9SoNb2FsYXj/xEo0gHN+D5A==}
+
   axios@1.16.0:
     resolution: {integrity: sha512-6hp5CwvTPlN2A31g5dxnwAX0orzM7pmCRDLnZSX772mv8WDqICwFjowHuPs04Mc8deIld1+ejhtaMn5vp6b+1w==}
 
@@ -22018,8 +22017,8 @@ packages:
     resolution: {integrity: sha512-qiCVBBFH+kfLiCXuuE9eAbBQSckPuA43fbQ/MNvQfd9nZcHFQExmQICD/N0sZrNZDNy8FSywhjFzJJGVQzG5UA==}
     engines: {node: '>=18'}
 
-  firecrawl@4.16.0:
-    resolution: {integrity: sha512-7SJ/FWhZBtW2gTCE/BsvU+gbfIpfTq+D9IH82l9MacauLVptaY6EdYAhrK3YSMC9yr5NxvxRcpZKcXG/nqjiiQ==}
+  firecrawl@4.25.1:
+    resolution: {integrity: sha512-arS8oCGoV+MfBF+HL/eeilBef3mJGpiVwd6VqOT6c6x3SXN4wGoNRApGiuzJH79ifjZN8DKYvIJ5d01XXn3NMw==}
     engines: {node: '>=22.0.0'}
 
   fix-dts-default-cjs-exports@1.0.1:
@@ -29668,10 +29667,10 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/google@2.0.72(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)':
+  '@ai-sdk/google@2.0.72(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.25(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
+      '@ai-sdk/provider-utils': 3.0.25(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
       zod: 3.25.76
     transitivePeerDependencies:
       - '@edge-runtime/vm'
@@ -29843,7 +29842,27 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/openai@2.0.106(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)':
+  '@ai-sdk/openai@2.0.106(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.25(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - '@edge-runtime/vm'
+      - '@opentelemetry/api'
+      - '@types/node'
+      - '@vitest/browser-playwright'
+      - '@vitest/browser-preview'
+      - '@vitest/browser-webdriverio'
+      - '@vitest/coverage-istanbul'
+      - '@vitest/coverage-v8'
+      - '@vitest/ui'
+      - happy-dom
+      - jsdom
+      - typescript
+      - vite
+
+  '@ai-sdk/openai@2.0.106(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5(vitest@4.1.5))(@vitest/ui@4.1.5(vitest@4.1.5))(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
       '@ai-sdk/provider-utils': 3.0.25(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@3.25.76)
@@ -32946,7 +32965,7 @@ snapshots:
       ollama-ai-provider-v2: 1.5.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))(zod@4.4.3)
       patchright-core: 1.59.4
       playwright: 1.57.0
-      playwright-core: 1.57.0
+      playwright-core: 1.59.1
       puppeteer-core: 22.15.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -35683,7 +35702,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
+  '@google-cloud/firestore@7.11.6':
     dependencies:
       '@opentelemetry/api': 1.9.1
       fast-deep-equal: 3.1.3
@@ -36821,16 +36840,6 @@ snapshots:
   '@mendable/firecrawl-js@1.29.3':
     dependencies:
       axios: 1.13.5
-      typescript-event-target: 1.1.1
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.1(zod@3.25.76)
-    transitivePeerDependencies:
-      - debug
-
-  '@mendable/firecrawl-js@4.19.0':
-    dependencies:
-      axios: 1.15.0
-      firecrawl: 4.16.0
       typescript-event-target: 1.1.1
       zod: 3.25.76
       zod-to-json-schema: 3.25.1(zod@3.25.76)
@@ -45253,6 +45262,14 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
+  axios@1.15.2:
+    dependencies:
+      follow-redirects: 1.16.0
+      form-data: 4.0.5
+      proxy-from-env: 2.1.0
+    transitivePeerDependencies:
+      - debug
+
   axios@1.16.0:
     dependencies:
       follow-redirects: 1.16.0
@@ -48105,7 +48122,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.8.1
 
-  firebase-admin@13.9.0(encoding@0.1.13):
+  firebase-admin@13.9.0:
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -48118,15 +48135,15 @@ snapshots:
       node-forge: 1.4.0
       uuid: 11.1.0
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
+      '@google-cloud/firestore': 7.11.6
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding
       - supports-color
 
-  firecrawl@4.16.0:
+  firecrawl@4.25.1:
     dependencies:
-      axios: 1.15.0
+      axios: 1.15.2
       typescript-event-target: 1.1.1
       zod: 3.25.76
       zod-to-json-schema: 3.25.1(zod@3.25.76)

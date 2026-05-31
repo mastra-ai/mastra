@@ -7,11 +7,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   treeshake: 'smallest',
-  external: [
-    '@mastra/agent-browser',
-    '@mastra/core',
-    '@mastra/core/browser',
-    'agent-browser',
-    'firecrawl',
-  ],
+  external: ['@mastra/agent-browser', '@mastra/core', '@mastra/core/browser', 'agent-browser', 'firecrawl'],
 });

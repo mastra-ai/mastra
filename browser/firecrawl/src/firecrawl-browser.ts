@@ -1,8 +1,8 @@
 import type { AgentBrowserConfig } from '@mastra/agent-browser';
 import { AgentBrowser } from '@mastra/agent-browser';
-import { Firecrawl } from 'firecrawl';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import { BrowserManager } from 'agent-browser';
+import { Firecrawl } from 'firecrawl';
 import { FirecrawlAgentBrowserThreadManager } from './firecrawl-thread-manager';
 import { resolveCdpWebSocketUrl } from './resolve-cdp';
 import type { FirecrawlBrowserConfig, FirecrawlBrowserSessionOptions } from './types';
