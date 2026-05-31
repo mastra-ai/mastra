@@ -238,6 +238,66 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should merge tool-call + errored tool-result into an output-error part', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'myTool', args: { q: 'test' } },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          result: 'rate limit exceeded',
+          isError: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'rate limit exceeded',
+      },
+    });
+  });
+
+  it('should merge errored tool-result without output', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'myTool', args: { q: 'test' } },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          result: undefined,
+          isError: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'Tool execution failed',
+      },
+    });
+  });
+
   // ── Source and file parts ───────────────────────────────────
 
   it('should produce a source part', () => {

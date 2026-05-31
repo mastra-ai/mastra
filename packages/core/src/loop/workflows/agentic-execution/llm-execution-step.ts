@@ -44,7 +44,7 @@ import {
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
-import { makeCoreTool } from '../../../utils';
+import { makeCoreTool, safeStringify } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
@@ -684,17 +684,30 @@ async function processOutputStream<OUTPUT = undefined>({
         // so the messageList is up-to-date as early as possible.
         // For same-stream results (call + result in one step), no matching part exists yet
         // so updateToolInvocation returns false — buildMessagesFromChunks handles the merge.
-        if (chunk.payload.result != null) {
+        if (chunk.payload.isError || chunk.payload.result != null) {
           const resultToolDef = resolveDirectOrProviderTool(chunk.payload.toolName);
           messageList.updateToolInvocation({
             type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: chunk.payload.toolCallId,
-              toolName: chunk.payload.toolName,
-              args: chunk.payload.args,
-              result: chunk.payload.result,
-            },
+            toolInvocation: chunk.payload.isError
+              ? {
+                  state: 'output-error',
+                  toolCallId: chunk.payload.toolCallId,
+                  toolName: chunk.payload.toolName,
+                  args: chunk.payload.args,
+                  errorText:
+                    typeof chunk.payload.result === 'string'
+                      ? chunk.payload.result
+                      : chunk.payload.result == null
+                        ? 'Tool execution failed'
+                        : safeStringify(chunk.payload.result),
+                }
+              : {
+                  state: 'result',
+                  toolCallId: chunk.payload.toolCallId,
+                  toolName: chunk.payload.toolName,
+                  args: chunk.payload.args,
+                  result: chunk.payload.result,
+                },
             providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
