@@ -25,6 +25,7 @@ import {
   summarizeToolChoiceForSpan,
 } from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
+import { EMIT_BEFORE_PART_KEY } from './stream-emit';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
 import type {
@@ -584,6 +585,7 @@ export class ProcessorRunner {
     messageList?: MessageList,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
+    startIndex: number = 0,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -600,6 +602,7 @@ export class ProcessorRunner {
       const isFinishChunk = part.type === 'finish';
 
       for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+        if (index < startIndex) continue;
         // Handle workflows for stream processing
         if (isProcessorWorkflow(processorOrWorkflow)) {
           if (!processedPart) continue;
@@ -687,6 +690,34 @@ export class ProcessorRunner {
             // Track output chunk and update processedPart
             processedPart = result as ChunkType<OUTPUT> | null | undefined;
             state.addOutputPart(processedPart);
+
+            // A processor may ask to emit an extra part immediately before the
+            // part it returned (e.g. BatchPartsProcessor flushing buffered text
+            // alongside the non-text part that triggered the flush). Feed that
+            // buffered part through the remaining downstream processors so it
+            // still gets their processing, then emit it before the current part.
+            const emitBefore = (state.customState as Record<string, unknown>)[EMIT_BEFORE_PART_KEY] as
+              | ChunkType<OUTPUT>
+              | undefined;
+            if (emitBefore) {
+              delete (state.customState as Record<string, unknown>)[EMIT_BEFORE_PART_KEY];
+              const downstream = await this.processPart(
+                emitBefore,
+                processorStates,
+                observabilityContext,
+                requestContext,
+                messageList,
+                retryCount,
+                writer,
+                index + 1,
+              );
+              if (downstream.blocked) {
+                return downstream;
+              }
+              if (downstream.part != null && writer) {
+                await writer.custom(downstream.part as ChunkType);
+              }
+            }
           }
         } catch (error) {
           if (error instanceof TripWire) {
