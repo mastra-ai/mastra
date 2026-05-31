@@ -327,7 +327,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
       temperature: execOptions?.modelSettings?.temperature,
-      requireToolApproval: execOptions?.requireToolApproval,
+      // Durable runs serialize their options, so a function-valued global approval policy
+      // can't be persisted. Degrade safely by requiring approval for every tool call.
+      requireToolApproval:
+        typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,

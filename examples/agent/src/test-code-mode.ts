@@ -119,10 +119,7 @@ async function runInventorySubset() {
 
   // Prove the allow-list isolates the two tools: the inventory program cannot
   // reach a sales tool — the function simply isn't defined in its sandbox.
-  const leak = await (tool.execute as any)(
-    { code: `return await external_listRecentOrders({ limit: 1 });` },
-    ctx(),
-  );
+  const leak = await (tool.execute as any)({ code: `return await external_listRecentOrders({ limit: 1 });` }, ctx());
   console.log('\n--- attempting to call a sales tool from inventory_code ---');
   console.log('blocked:', !leak.success, '| error:', leak.error?.message);
   if (leak.success) {

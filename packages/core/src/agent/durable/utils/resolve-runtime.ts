@@ -5,6 +5,7 @@ import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { RequestContext } from '../../../request-context';
+import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { CoreTool } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
 import { MessageList } from '../../message-list';
@@ -246,8 +247,9 @@ export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undef
  * Check if a tool requires human approval.
  *
  * If the tool has a `needsApprovalFn`, it takes precedence over both the
- * global `requireToolApproval` flag and the tool-level `requireApproval` flag.
- * This matches the behavior of the non-durable agent's tool-call-step.
+ * global `requireToolApproval` flag and the tool-level `requireApproval` flag
+ * (e.g. skill tools return `false` to suppress approval). On error the call
+ * defaults to requiring approval (safe default).
  */
 export async function toolRequiresApproval(
   tool: CoreTool,
@@ -257,9 +259,10 @@ export async function toolRequiresApproval(
   let requires = !!(globalRequireApproval || (tool as any).requireApproval);
 
   // needsApprovalFn overrides all other flags (e.g., skill tools return false)
-  if ((tool as any).needsApprovalFn) {
+  const needsApprovalFn = getNeedsApprovalFn(tool);
+  if (needsApprovalFn) {
     try {
-      requires = await (tool as any).needsApprovalFn(args ?? {});
+      requires = !!(await needsApprovalFn(args ?? {}));
     } catch {
       // On error, default to requiring approval (safe default)
       requires = true;

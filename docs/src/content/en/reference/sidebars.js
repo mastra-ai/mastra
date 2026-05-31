@@ -679,6 +679,7 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'workspace/agentcore-runtime-sandbox', label: 'AgentCoreRuntimeSandbox' },
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
         { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
@@ -693,6 +694,7 @@ const sidebars = {
         { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
+        { type: 'doc', id: 'workspace/vercel-microvm-sandbox', label: 'VercelMicroVMSandbox' },
         { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },
         { type: 'doc', id: 'workspace/workspace-class', label: 'Workspace Class' },
         { type: 'doc', id: 'workspace/filesystem', label: 'WorkspaceFilesystem' },

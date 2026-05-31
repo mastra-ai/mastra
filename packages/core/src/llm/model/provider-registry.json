@@ -3921,7 +3921,7 @@
       "gateway": "models.dev"
     },
     "google": {
-      "apiKeyEnvVar": "GOOGLE_API_KEY",
+      "apiKeyEnvVar": ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"],
       "name": "Google",
       "models": [
         "gemini-2.0-flash",

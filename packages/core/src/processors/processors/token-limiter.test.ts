@@ -692,7 +692,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'memory',
+        'response',
       );
 
       await expect(
@@ -745,7 +745,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {
@@ -771,7 +771,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:03:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {
@@ -836,7 +836,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi there', parts: [{ type: 'text', text: 'Hi there' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {
@@ -894,7 +894,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi how can I help', parts: [{ type: 'text', text: 'Hi how can I help' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {
@@ -1106,7 +1106,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'memory',
+        'response',
       );
 
       // Add tool result
@@ -1132,7 +1132,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
 
       // Add user follow-up
@@ -1195,7 +1195,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {
