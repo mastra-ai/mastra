@@ -1224,16 +1224,19 @@ export class MemoryPG extends MemoryStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
-          await t.none(
-            `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (id) DO UPDATE SET
-              thread_id = EXCLUDED.thread_id,
-              content = EXCLUDED.content,
-              role = EXCLUDED.role,
-              type = EXCLUDED.type,
-              "resourceId" = EXCLUDED."resourceId"`,
-            [
+          const BATCH_SIZE = 8192;
+          const batches: { placeholders: string[]; values: any[] }[] = [];
+          let currentBatch: { placeholders: string[]; values: any[] } | null = null;
+
+          for (let j = 0; j < messages.length; j++) {
+            const message = messages[j];
+            if (!currentBatch || currentBatch.placeholders.length >= BATCH_SIZE) {
+              currentBatch = { placeholders: [], values: [] };
+              batches.push(currentBatch);
+            }
+            const base = currentBatch.values.length;
+            currentBatch.placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`);
+            currentBatch.values.push(
               message.id,
               message.threadId,
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
@@ -1242,11 +1245,24 @@ export class MemoryPG extends MemoryStorage {
               message.role,
               message.type || 'v2',
               message.resourceId,
-            ],
-          );
-        }
+            );
+          }
 
-        // Update thread timestamp
+          for (const batch of batches) {
+            await t.none(
+              `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
+               VALUES ${batch.placeholders.join(", ")}
+               ON CONFLICT (id) DO UPDATE SET
+                thread_id = EXCLUDED.thread_id,
+                content = EXCLUDED.content,
+                role = EXCLUDED.role,
+                type = EXCLUDED.type,
+                "resourceId" = EXCLUDED."resourceId"`,
+              batch.values,
+            );
+          }
+
+          // Update thread timestamp
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
         const now = new Date();
         await t.none(
