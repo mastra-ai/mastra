@@ -1,12 +1,8 @@
 ---
-'@mastra/client-js': patch
-'@mastra/clickhouse': patch
-'@mastra/cloudflare': patch
+'@mastra/core': patch
 '@mastra/editor': patch
 '@mastra/server': patch
-'@mastra/core': patch
-'@mastra/libsql': patch
-'mastra': patch
+'@mastra/client-js': patch
 ---
 
 Improved observability and error isolation in the v1 ToolProvider runtime.
