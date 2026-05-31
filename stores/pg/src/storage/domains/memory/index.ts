@@ -1212,7 +1212,6 @@ export class MemoryPG extends MemoryStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.tx(async t => {
-        // Insert messages sequentially to avoid concurrent queries on the same pg client
         for (const message of messages) {
           if (!message.threadId) {
             throw new Error(
@@ -1224,25 +1223,39 @@ export class MemoryPG extends MemoryStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
+        }
+
+        const PARAMS_PER_ROW = 8;
+        const CHUNK_SIZE = Math.floor(65535 / PARAMS_PER_ROW);
+
+        for (let i = 0; i < messages.length; i += CHUNK_SIZE) {
+          const chunk = messages.slice(i, i + CHUNK_SIZE);
+          const placeholders = chunk
+            .map((_, idx) => {
+              const base = idx * PARAMS_PER_ROW;
+              return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`;
+            })
+            .join(', ');
+          const values = chunk.flatMap(message => [
+            message.id,
+            message.threadId,
+            typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+            message.createdAt || new Date(),
+            message.createdAt || new Date(),
+            message.role,
+            message.type || 'v2',
+            message.resourceId,
+          ]);
           await t.none(
             `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             VALUES ${placeholders}
              ON CONFLICT (id) DO UPDATE SET
               thread_id = EXCLUDED.thread_id,
               content = EXCLUDED.content,
               role = EXCLUDED.role,
               type = EXCLUDED.type,
               "resourceId" = EXCLUDED."resourceId"`,
-            [
-              message.id,
-              message.threadId,
-              typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-              message.createdAt || new Date(),
-              message.createdAt || new Date(),
-              message.role,
-              message.type || 'v2',
-              message.resourceId,
-            ],
+            values,
           );
         }
 
