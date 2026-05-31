@@ -3146,3 +3146,50 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
     tokenWaiters.forEach(cancel => cancel());
   }, 20000);
 });
+
+describe('InternalMastraMCPClient - transport cleanup on close (issue #16693)', () => {
+  let testServer: Awaited<ReturnType<typeof setupTestServer>>;
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'test-close-cleanup-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('closes and clears the stale transport when the connection closes', async () => {
+    const staleTransport = (client as any).transport;
+    expect(staleTransport).toBeDefined();
+    const closeSpy = vi.spyOn(staleTransport, 'close');
+
+    // Simulate a server-initiated close firing the SDK client's onclose handler.
+    (client as any).client.onclose?.();
+
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+
+    // Let the fire-and-forget close settle.
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  it('does not throw when the stale transport close rejects', async () => {
+    const staleTransport = (client as any).transport;
+    vi.spyOn(staleTransport, 'close').mockRejectedValueOnce(new Error('already closed'));
+
+    expect(() => (client as any).client.onclose?.()).not.toThrow();
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+});

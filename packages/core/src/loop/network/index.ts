@@ -20,6 +20,7 @@ import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/output-format-handlers';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
+import { getNeedsApprovalFn } from '../../tools/toolchecks';
 import type { IdGeneratorContext } from '../../types';
 import type { Step, SuspendOptions } from '../../workflows/step';
 import { createStep, createWorkflow } from '../../workflows/workflow';
@@ -1578,10 +1579,11 @@ export async function createNetworkLoop({
       // - undefined (no approval needed)
       // If needsApprovalFn exists, evaluate it with the tool args
       let toolRequiresApproval = (tool as any).requireApproval;
-      if ((tool as any).needsApprovalFn) {
+      const needsApprovalFn = getNeedsApprovalFn(tool);
+      if (needsApprovalFn) {
         // Evaluate the function with the parsed args
         try {
-          const needsApprovalResult = await (tool as any).needsApprovalFn(inputDataToUse);
+          const needsApprovalResult = await needsApprovalFn(inputDataToUse);
           toolRequiresApproval = needsApprovalResult;
         } catch (error) {
           // Log error to help developers debug faulty needsApprovalFn implementations

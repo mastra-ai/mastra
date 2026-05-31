@@ -761,7 +761,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   outputWriter,
   mastra,
 }: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
-  const initialSystemMessages = messageList.getAllSystemMessages();
+  const initialUntaggedSystemMessages = messageList.getSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
@@ -823,11 +823,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               },
             });
           }
-          // Reset system messages to original before each step execution
-          // This ensures that system message modifications in prepareStep/processInputStep/processors
-          // don't persist across steps - each step starts fresh with original system messages
-          if (initialSystemMessages) {
-            messageList.replaceAllSystemMessages(initialSystemMessages);
+          // Reset the mutable untagged bucket before each step execution. Tagged
+          // processor-owned buckets remain on messageList and are assembled later.
+          if (initialUntaggedSystemMessages) {
+            messageList.replaceAllSystemMessages(initialUntaggedSystemMessages);
           }
 
           if (inputData.processorRetryFeedback) {
@@ -853,7 +852,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           const currentStep: {
             messageId: string;
-            createdAt: Date;
             model: MastraLanguageModel;
             tools?: TOOLS | undefined;
             toolChoice?: ToolChoice<TOOLS> | undefined;
@@ -864,7 +862,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             workspace?: Workspace;
           } = {
             messageId: currentMessageId,
-            createdAt: new Date(),
             model,
             tools,
             toolChoice,
@@ -1377,7 +1374,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageId: currentStep.messageId,
               responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
               tools: currentStep.tools,
-              createdAt: currentStep.createdAt,
             });
             for (const msg of builtMessages) {
               messageList.add(msg, 'response');

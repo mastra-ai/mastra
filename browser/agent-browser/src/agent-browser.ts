@@ -9,6 +9,7 @@ import type {
   CdpSessionLike,
   MouseEventParams,
   KeyboardEventParams,
+  ThreadSession,
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 
@@ -32,9 +33,15 @@ import type {
   ScreenshotInput,
 } from './schemas';
 import { AgentBrowserThreadManager } from './thread-manager';
+import type { CreateAgentBrowserThreadManager } from './thread-manager';
 import { createAgentBrowserTools } from './tools';
 import type { BrowserConfig } from './types';
 import { getBrowserPid } from './utils';
+
+/** AgentBrowser accepts an optional thread-manager factory (see {@link CreateAgentBrowserThreadManager}). */
+export type AgentBrowserConfig = BrowserConfig & {
+  createThreadManager?: CreateAgentBrowserThreadManager;
+};
 
 /**
  * AgentBrowser - Browser automation using agent-browser (vercel-labs/agent-browser)
@@ -43,8 +50,8 @@ import { getBrowserPid } from './utils';
  */
 export class AgentBrowser extends MastraBrowser {
   override readonly id: string;
-  override readonly name = 'AgentBrowser';
-  override readonly provider = 'vercel-labs/agent-browser';
+  override readonly name: string = 'AgentBrowser';
+  override readonly provider: string = 'vercel-labs/agent-browser';
 
   /** Shared browser manager instance (for 'shared' scope) - narrowed type from base class */
   declare protected sharedManager: BrowserManager | null;
@@ -56,7 +63,7 @@ export class AgentBrowser extends MastraBrowser {
   declare protected threadManager: AgentBrowserThreadManager;
   private browserConfig: BrowserConfig;
 
-  constructor(config: BrowserConfig = {}) {
+  constructor(config: AgentBrowserConfig = {}) {
     super(config);
     this.browserConfig = config;
     this.id = `agent-browser-${Date.now()}`;
@@ -68,23 +75,27 @@ export class AgentBrowser extends MastraBrowser {
     // Default to 'thread' otherwise (launching new browsers per thread)
     const effectiveScope = config.cdpUrl ? (config.scope ?? 'shared') : (config.scope ?? 'thread');
 
-    // Initialize thread manager
-    this.threadManager = new AgentBrowserThreadManager({
+    // Initialize thread manager (optional factory for extensions like Firecrawl per-thread sessions)
+    const threadManagerConfig = {
       scope: effectiveScope,
       browserConfig: { ...config, headless: this.headless },
       resolveCdpUrl: this.resolveCdpUrl.bind(this),
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
-      onSessionCreated: session => {
+      onSessionCreated: (session: ThreadSession) => {
         // Trigger onBrowserReady callbacks for this specific thread
         // This allows ViewerRegistry to start screencast for just this thread
         this.notifyBrowserReady(session.threadId);
       },
       // When a new browser is created for a thread, set up close listener
-      onBrowserCreated: (manager, threadId) => {
+      onBrowserCreated: (manager: BrowserManager, threadId: string) => {
         this.setupCloseListenerForThread(manager, threadId);
       },
-    });
+    };
+    const createTm =
+      config.createThreadManager ??
+      ((opts: ConstructorParameters<typeof AgentBrowserThreadManager>[0]) => new AgentBrowserThreadManager(opts));
+    this.threadManager = createTm(threadManagerConfig);
   }
 
   // ---------------------------------------------------------------------------
@@ -188,7 +199,7 @@ export class AgentBrowser extends MastraBrowser {
    * Set up close event listeners for 'shared' scope browser.
    * This handles the case where the shared browser is closed externally.
    */
-  private setupCloseListenerForSharedScope(manager: BrowserManager): void {
+  protected setupCloseListenerForSharedScope(manager: BrowserManager): void {
     try {
       // Capture the Chrome process PID via CDP while the browser is alive.
       // The base class uses this to kill orphaned child processes on disconnect.

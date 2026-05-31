@@ -65,6 +65,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       viewport: { width: 1280, height: 720 },
       stagehand: { env: 'LOCAL' },
     },
+    shellPassthrough: { mode: 'default' },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };
@@ -109,6 +110,55 @@ describe('customProviders parsing/persistence', () => {
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
       expect(settings.preferences.quietModeMaxToolPreviewLines).toBe(2);
+      expect(settings.shellPassthrough).toEqual({ mode: 'default' });
+    });
+  });
+
+  it('trims shell passthrough settings while preserving invalid values for runtime warnings', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          shellPassthrough: {
+            mode: ' profile ',
+            executable: ' /bin/zsh ',
+            family: ' zsh ',
+          },
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).shellPassthrough).toEqual({
+        mode: 'profile',
+        executable: '/bin/zsh',
+        family: 'zsh',
+      });
+    });
+  });
+
+  it('preserves omitted shell passthrough mode when an executable is configured', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          shellPassthrough: {
+            executable: ' /bin/zsh ',
+          },
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).shellPassthrough).toEqual({
+        executable: '/bin/zsh',
+      });
     });
   });
 
