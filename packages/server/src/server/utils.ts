@@ -193,6 +193,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
       inputSchema: undefined,
       outputSchema: undefined,
       stateSchema: undefined,
+      requestContextSchema: undefined,
     } as WorkflowInfo;
   }
 

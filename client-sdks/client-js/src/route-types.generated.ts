@@ -8789,6 +8789,11 @@ export type GetWorkflows_Response = {
     };
     name?: string | undefined;
     description?: string | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
     stepGraph: {
       type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
     }[];
@@ -8866,6 +8871,11 @@ export type GetWorkflowsWorkflowId_Response = {
   };
   name?: string | undefined;
   description?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   stepGraph: {
     type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
   }[];
@@ -77519,6 +77529,11 @@ export type GetAgentBuilder_Response = {
     };
     name?: string | undefined;
     description?: string | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
     stepGraph: {
       type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
     }[];
@@ -77592,6 +77607,11 @@ export type GetAgentBuilderActionId_Response = {
   };
   name?: string | undefined;
   description?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   stepGraph: {
     type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
   }[];

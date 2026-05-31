@@ -31,9 +31,7 @@ describe('buildMcpServerGuidance', () => {
   });
 
   it('does not forward when forwardInstructions is omitted (opt-in)', () => {
-    expect(
-      buildMcpServerGuidance([tool({ serverName: 'db', serverInstructions: 'Validate first.' })]),
-    ).toBeUndefined();
+    expect(buildMcpServerGuidance([tool({ serverName: 'db', serverInstructions: 'Validate first.' })])).toBeUndefined();
   });
 
   it('does not forward when forwardInstructions is false', () => {
