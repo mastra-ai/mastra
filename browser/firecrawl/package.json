@@ -1,6 +1,6 @@
 {
   "name": "@mastra/browser-firecrawl",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Mastra browser automation using Firecrawl Browser Sandbox (hosted CDP + agent-browser tools)",
   "type": "module",
   "files": [
@@ -48,7 +48,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/agent-browser": ">=0.2.0 <1.0.0",
+    "@mastra/agent-browser": ">=0.3.0 <1.0.0",
     "@mastra/core": ">=1.22.0-0 <2.0.0-0",
     "agent-browser": ">=0.19.0"
   },
