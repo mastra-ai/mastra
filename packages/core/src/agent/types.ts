@@ -456,9 +456,16 @@ export interface AgentConfig<
    */
   browser?: MastraBrowser;
   /**
-   * Voice settings for speech input and output.
+   * Voice settings for speech input and output. Can be provided statically or resolved dynamically per request.
+   *
+   * Provide a resolver (`({ requestContext }) => new SomeVoice(...)`) to give each request/session its own
+   * voice instance. This is required for realtime / speech-to-speech providers, where concurrent live sessions
+   * must not share a single mutable instance (ws, tools, instructions, request context). The caller owns the
+   * lifecycle (e.g. `disconnect()`) of a resolver-produced instance.
+   *
+   * A static `MastraVoice` remains shared across requests, which is appropriate for one-shot TTS.
    */
-  voice?: MastraVoice;
+  voice?: DynamicArgument<MastraVoice, TRequestContext>;
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *

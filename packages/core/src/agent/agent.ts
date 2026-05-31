@@ -332,7 +332,7 @@ export class Agent<
   #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
-  #voice: MastraVoice;
+  #voice: DynamicArgument<MastraVoice, TRequestContext>;
   #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
@@ -468,11 +468,15 @@ export class Agent<
 
     if (config.voice) {
       this.#voice = config.voice;
-      if (typeof config.tools !== 'function') {
-        this.#voice?.addTools(this.#tools as TTools);
-      }
-      if (typeof config.instructions === 'string') {
-        this.#voice?.addInstructions(config.instructions);
+      // Only seed a static voice instance. A resolver is invoked per request in getVoice(),
+      // where its session-owned instance is configured, so we must not touch it here.
+      if (typeof this.#voice !== 'function') {
+        if (typeof config.tools !== 'function') {
+          this.#voice.addTools(this.#tools as TTools);
+        }
+        if (typeof config.instructions === 'string') {
+          this.#voice.addInstructions(config.instructions);
+        }
       }
     } else {
       this.#voice = new DefaultVoice();
@@ -1562,6 +1566,20 @@ export class Agent<
   }
 
   get voice() {
+    if (typeof this.#voice === 'function') {
+      const mastraError = new MastraError({
+        id: 'AGENT_VOICE_INCOMPATIBLE_WITH_FUNCTION_VOICE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Voice is not compatible when voice is a function. Please use getVoice() instead.',
+      });
+      this.logger.trackException(mastraError);
+      throw mastraError;
+    }
+
     if (typeof this.#instructions === 'function') {
       const mastraError = new MastraError({
         id: 'AGENT_VOICE_INCOMPATIBLE_WITH_FUNCTION_INSTRUCTIONS',
@@ -1652,6 +1670,14 @@ export class Agent<
    * Gets the voice instance for this agent with tools and instructions configured.
    * The voice instance enables text-to-speech and speech-to-text capabilities.
    *
+   * When `voice` is configured as a resolver (`({ requestContext }) => new SomeVoice(...)`),
+   * each call resolves a fresh, session-owned instance. The resolver is responsible for
+   * configuring its own tools/instructions/request context, so this method does not mutate
+   * the resolved instance. The caller owns the lifecycle (e.g. `disconnect()`) of that instance.
+   *
+   * A static `MastraVoice` is shared across calls and is configured with the current
+   * tools/instructions on each call (appropriate for one-shot TTS).
+   *
    * @example
    * ```typescript
    * const voice = await agent.getVoice();
@@ -1659,15 +1685,23 @@ export class Agent<
    * ```
    */
   public async getVoice({ requestContext }: { requestContext?: RequestContext } = {}) {
-    if (this.#voice) {
-      const voice = this.#voice;
-      voice?.addTools(await this.listTools({ requestContext }));
-      const instructions = await this.getInstructions({ requestContext });
-      voice?.addInstructions(this.#convertInstructionsToString(instructions));
-      return voice;
-    } else {
+    if (!this.#voice) {
       return new DefaultVoice();
     }
+
+    if (typeof this.#voice === 'function') {
+      const resolved = await this.#voice({
+        requestContext: (requestContext ?? new RequestContext()) as RequestContext<TRequestContext>,
+        mastra: this.#mastra,
+      });
+      return resolved ?? new DefaultVoice();
+    }
+
+    const voice = this.#voice;
+    voice?.addTools(await this.listTools({ requestContext }));
+    const instructions = await this.getInstructions({ requestContext });
+    voice?.addInstructions(this.#convertInstructionsToString(instructions));
+    return voice;
   }
 
   /**
