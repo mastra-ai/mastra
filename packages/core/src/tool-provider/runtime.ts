@@ -32,12 +32,17 @@ export interface ResolveStoredToolProvidersOpts {
  * - The returned suffix is added to `usedSuffixes` in place.
  */
 export function buildConnectionSuffix(label: string | undefined, usedSuffixes: Set<string>): string {
+  // Each step is linear-time and avoids regex alternation with quantifiers
+  // (CodeQL js/polynomial-redos) so a pathological `label` cannot trigger
+  // backtracking. The four passes are intentionally separate so each regex
+  // has a single, monomorphic shape.
   const base =
     (label ?? '')
       .toUpperCase()
       .replace(/[^A-Z0-9_]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_+|_+$/g, '') || 'CONN';
+      .replace(/_{2,}/g, '_')
+      .replace(/^_+/, '')
+      .replace(/_+$/, '') || 'CONN';
 
   let candidate = base;
   let n = 2;
