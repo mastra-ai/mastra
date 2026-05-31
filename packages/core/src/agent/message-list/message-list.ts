@@ -1605,7 +1605,7 @@ export class MessageList {
     }
 
     this.lastCreatedAt = nowTime;
-    return now;
+    return startDate ?? now;
   }
 
   private newMessageId(role?: string): string {
