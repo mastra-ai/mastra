@@ -3,7 +3,7 @@ import * as p from '@clack/prompts';
 import { withPollingRetries } from '../../utils/polling.js';
 import { getCurrentOrgId, getToken, validateOrgAccess } from '../auth/credentials.js';
 import { pollForDiagnosis, printDeploySuggestions } from '../deploy-suggestions.js';
-import { fetchDeployDiagnosis, fetchProjects, startDeployDiagnosis } from './platform-api.js';
+import { fetchDeployDiagnosis, fetchDeployStatus, fetchProjects, startDeployDiagnosis } from './platform-api.js';
 import type { Project } from './platform-api.js';
 import { loadProjectConfig } from './project-config.js';
 
@@ -65,6 +65,9 @@ async function resolveDeployId(
   return { deployId: latestDeploy.deployId, projectId: latestDeploy.projectId };
 }
 
+const STUDIO_SUCCESS_STATUSES = new Set(['running']);
+const STUDIO_FAILED_STATUSES = new Set(['failed', 'stopped']);
+
 export async function suggestionsAction(deployId?: string) {
   p.intro('mastra studio deploy suggestions');
 
@@ -80,11 +83,21 @@ export async function suggestionsAction(deployId?: string) {
 
     const resolved = await resolveDeployId(token, orgId, deployId);
     const targetDeployId = resolved.deployId;
-    const initialDiagnosis = await withPollingRetries(() => fetchDeployDiagnosis(targetDeployId, token, orgId));
+    let initialDiagnosis = await withPollingRetries(() => fetchDeployDiagnosis(targetDeployId, token, orgId));
 
     if (initialDiagnosis.state === 'healthy') {
-      p.outro('Deploy is running successfully. No suggestions required.');
-      return;
+      const deploy = await withPollingRetries(() => fetchDeployStatus(targetDeployId, token, orgId));
+      if (STUDIO_SUCCESS_STATUSES.has(deploy.status)) {
+        p.outro('Deploy is running successfully. No suggestions required.');
+        return;
+      }
+
+      if (!STUDIO_FAILED_STATUSES.has(deploy.status)) {
+        p.outro(`Deploy is ${deploy.status}. Suggestions are available after a deploy fails.`);
+        return;
+      }
+
+      initialDiagnosis = { state: 'missing' };
     }
 
     if (initialDiagnosis.state === 'missing') {

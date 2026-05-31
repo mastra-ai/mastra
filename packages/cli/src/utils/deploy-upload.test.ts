@@ -11,7 +11,7 @@ vi.mock('../commands/auth/client.js', async importOriginal => {
 vi.mock('../commands/auth/credentials.js', () => ({
   getToken: vi.fn().mockResolvedValue('refreshed-token'),
 }));
-import { bestEffortCancel, confirmUploadWithRetry } from './deploy-upload.js';
+import { bestEffortCancel, confirmUploadWithRetry, uploadArtifactWithRetry } from './deploy-upload.js';
 
 const ok = () => Promise.resolve({ error: undefined, response: { status: 200 } });
 const fail = (status: number) => Promise.resolve({ error: { detail: 'err' }, response: { status } });
@@ -155,5 +155,123 @@ describe('confirmUploadWithRetry', () => {
 
     expect(cancelDeploy).toHaveBeenCalledTimes(1);
     expect(post).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── uploadArtifactWithRetry ───────────────────────────────────────
+
+describe('uploadArtifactWithRetry', () => {
+  it('uploads zip data with content length', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await uploadArtifactWithRetry({
+      uploadUrl: 'https://signed.example/upload',
+      zipBuffer: Buffer.from('zip'),
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://signed.example/upload',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/zip',
+          'Content-Length': '3',
+        }),
+      }),
+    );
+  });
+
+  it('retries transient upload failures and recovers', async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const upload = uploadArtifactWithRetry({
+      uploadUrl: 'https://signed.example/upload',
+      zipBuffer: Buffer.from('zip'),
+      fetchImpl,
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await upload;
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces non-200 response diagnostics without retrying non-retryable status', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response('signature mismatch', {
+        status: 403,
+        statusText: 'Forbidden',
+        headers: { 'x-request-id': 'req-123' },
+      }),
+    );
+
+    await expect(
+      uploadArtifactWithRetry({
+        uploadUrl: 'https://signed.example/upload',
+        zipBuffer: Buffer.from('zip'),
+        fetchImpl,
+      }),
+    ).rejects.toThrow(
+      /endpoint=https:\/\/signed.example\/upload; status=403 Forbidden; body=signature mismatch; requestId=req-123/,
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries retryable upload responses before failing with response body', async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response('try again later', {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'x-amz-request-id': 'amz-123' },
+      }),
+    );
+
+    const upload = uploadArtifactWithRetry({
+      uploadUrl: 'https://signed.example/upload',
+      zipBuffer: Buffer.from('zip'),
+      fetchImpl,
+      maxRetries: 1,
+    });
+    const rejection = expect(upload).rejects.toThrow(
+      /status=503 Service Unavailable; body=try again later; requestId=amz-123/,
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await rejection;
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('aborts timed-out uploads and includes timeout diagnostics', async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn((_url: string, init: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => {
+          const abortError = new Error('This operation was aborted');
+          abortError.name = 'AbortError';
+          reject(abortError);
+        });
+      });
+    });
+
+    const upload = uploadArtifactWithRetry({
+      uploadUrl: 'https://signed.example/upload',
+      zipBuffer: Buffer.from('zip'),
+      fetchImpl,
+      timeoutMs: 25,
+      maxRetries: 0,
+    });
+
+    await vi.advanceTimersByTimeAsync(25);
+    await expect(upload).rejects.toMatchObject({
+      endpoint: 'https://signed.example/upload',
+      timedOut: true,
+      timeoutMs: 25,
+    });
   });
 });

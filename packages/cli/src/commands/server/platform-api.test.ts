@@ -559,6 +559,36 @@ describe('pollServerDeploy', () => {
     const statusCalls = mockGET.mock.calls.filter(([path]) => path === '/v1/server/deploys/{id}');
     expect(statusCalls).toHaveLength(1);
   });
+
+  it('throws when deploy status response is invalid', async () => {
+    vi.useFakeTimers();
+
+    mockGET.mockImplementation((path: string) => {
+      if (path === '/v1/server/deploys/{id}/logs') {
+        return Promise.resolve({
+          data: { buildLogs: [], deployLogs: [] },
+          response: { status: 200 },
+        });
+      }
+
+      if (path === '/v1/server/deploys/{id}') {
+        return Promise.resolve({
+          data: { id: 'd1', status: '' },
+          error: undefined,
+          response: { status: 200 },
+        });
+      }
+
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const resultPromise = pollServerDeploy('d1', 'tok', 'org-1', 10000);
+    const rejection = expect(resultPromise).rejects.toThrow('Invalid server deploy status response for d1');
+
+    await vi.advanceTimersByTimeAsync(100);
+    await rejection;
+  });
 });
 
 describe('uploadServerDeploy', () => {
@@ -604,6 +634,85 @@ describe('uploadServerDeploy', () => {
       },
     });
     expect(mockFetch).toHaveBeenCalledWith('https://signed.example/put', expect.objectContaining({ method: 'PUT' }));
+  });
+
+  it('surfaces artifact upload response body and request id on failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('signature mismatch', {
+          status: 403,
+          statusText: 'Forbidden',
+          headers: { 'x-request-id': 'req-123' },
+        }),
+      ),
+    );
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { id: 'dep-1', uploadUrl: 'https://signed.example/put', status: 'queued' },
+        error: undefined,
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({ error: undefined, response: { status: 200 } });
+
+    const { uploadServerDeploy } = await import('./platform-api.js');
+    await expect(uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow(
+      /endpoint=https:\/\/signed.example\/put; status=403 Forbidden; body=signature mismatch; requestId=req-123/,
+    );
+    expect(mockPOST).toHaveBeenCalledWith('/v1/server/deploys/{id}/cancel', {
+      params: { path: { id: 'dep-1' } },
+    });
+  });
+
+  it('recovers from a transient artifact upload network interruption', async () => {
+    vi.useFakeTimers();
+    const networkError = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } });
+    const mockFetch = vi
+      .fn()
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { id: 'dep-1', uploadUrl: 'https://signed.example/put', status: 'queued' },
+        error: undefined,
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({ error: undefined, response: { status: 200 } });
+
+    const { uploadServerDeploy } = await import('./platform-api.js');
+    const deploy = uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'));
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(deploy).resolves.toEqual({ id: 'dep-1', status: 'queued' });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockPOST).toHaveBeenCalledWith('/v1/server/deploys/{id}/upload-complete', {
+      params: { path: { id: 'dep-1' } },
+    });
+  });
+
+  it('cancels deploy when upload completion cannot be verified', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { id: 'dep-1', uploadUrl: 'https://signed.example/put', status: 'queued' },
+        error: undefined,
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({
+        error: { detail: 'Object was not found after upload' },
+        response: { status: 404 },
+      })
+      .mockResolvedValueOnce({ error: undefined, response: { status: 200 } });
+
+    const { uploadServerDeploy } = await import('./platform-api.js');
+    await expect(uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow(
+      'Object was not found after upload',
+    );
+    expect(mockPOST).toHaveBeenCalledWith('/v1/server/deploys/{id}/cancel', {
+      params: { path: { id: 'dep-1' } },
+    });
   });
 
   it('omits disablePlatformObservability from deploy body when not provided', async () => {

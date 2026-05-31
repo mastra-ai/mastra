@@ -218,8 +218,38 @@ describe('uploadDeploy', () => {
 
     const { uploadDeploy } = await import('./platform-api.js');
     await expect(uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow(
-      'Artifact upload failed: 403',
+      'Artifact upload failed: endpoint=https://storage.example.com/signed-url; status=403 Forbidden',
     );
+  });
+
+  it('retries transient artifact upload failures before confirming', async () => {
+    vi.useFakeTimers();
+    const networkError = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } });
+    const mockFetch = vi
+      .fn()
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { deploy: { id: 'dep-1', status: 'starting', uploadUrl: 'https://storage.example.com/signed-url' } },
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({
+        data: { status: 'ok' },
+        response: { status: 200 },
+      });
+
+    const { uploadDeploy } = await import('./platform-api.js');
+    const deploy = uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'));
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(deploy).resolves.toEqual({ id: 'dep-1', status: 'starting' });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockPOST).toHaveBeenCalledWith('/v1/studio/deploys/{id}/upload-complete', {
+      params: { path: { id: 'dep-1' } },
+    });
   });
 });
 
@@ -279,5 +309,19 @@ describe('pollDeploy', () => {
 
     await rejection;
     expect(mockGET).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws when deploy status response is invalid', async () => {
+    vi.useFakeTimers();
+
+    mockGET.mockResolvedValue({ data: { deploy: { id: 'd1', status: '' } }, response: { status: 200 } });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+
+    const { pollDeploy } = await import('./platform-api.js');
+    const resultPromise = pollDeploy('d1', 'tok', 'org-1', 10000);
+    const rejection = expect(resultPromise).rejects.toThrow('Invalid deploy status response for d1');
+
+    await vi.advanceTimersByTimeAsync(100);
+    await rejection;
   });
 });

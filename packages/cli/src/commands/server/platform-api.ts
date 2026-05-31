@@ -1,5 +1,5 @@
 import { writeBarLine } from '../../utils/clack-bar.js';
-import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
+import { bestEffortCancel, confirmUploadWithRetry, uploadArtifactWithRetry } from '../../utils/deploy-upload.js';
 import { withPollingRetries } from '../../utils/polling.js';
 import {
   authHeaders,
@@ -166,14 +166,7 @@ export async function uploadServerDeploy(
       const { fileURLToPath } = await import('node:url');
       await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
     } else {
-      const uploadResp = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/zip' },
-        body: new Uint8Array(zipBuffer),
-      });
-      if (!uploadResp.ok) {
-        throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
-      }
+      await uploadArtifactWithRetry({ uploadUrl, zipBuffer });
     }
   } catch (uploadError) {
     await cancel(client);
@@ -224,6 +217,10 @@ export async function pollServerDeploy(
           continue;
         }
         throwApiError('Poll failed', response.status);
+      }
+
+      if (!data || typeof data.status !== 'string' || !data.status) {
+        throw new Error(`Invalid server deploy status response for ${deployId}`);
       }
 
       if (data.status !== lastStatus) {

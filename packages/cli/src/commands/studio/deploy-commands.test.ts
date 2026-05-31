@@ -245,11 +245,23 @@ describe('suggestionsAction', () => {
 
   it('reports when a deploy is already running', async () => {
     mockFetchDeployDiagnosis.mockResolvedValue({ state: 'healthy' });
+    mockFetchDeployStatus.mockResolvedValue({ id: 'd1', status: 'running', instanceUrl: 'https://x', error: null });
 
     const { suggestionsAction } = await import('./deploy-suggestions.js');
     await suggestionsAction('d1');
 
     expect(mockClackOutro).toHaveBeenCalledWith('Deploy is running successfully. No suggestions required.');
+  });
+
+  it('does not report a healthy diagnosis as successful when deploy status is still starting', async () => {
+    mockFetchDeployDiagnosis.mockResolvedValue({ state: 'healthy' });
+    mockFetchDeployStatus.mockResolvedValue({ id: 'd1', status: 'starting', instanceUrl: null, error: null });
+
+    const { suggestionsAction } = await import('./deploy-suggestions.js');
+    await suggestionsAction('d1');
+
+    expect(mockClackOutro).toHaveBeenCalledWith('Deploy is starting. Suggestions are available after a deploy fails.');
+    expect(mockStartDeployDiagnosis).not.toHaveBeenCalled();
   });
 
   it('starts a diagnosis when none exists and then prints suggestions', async () => {

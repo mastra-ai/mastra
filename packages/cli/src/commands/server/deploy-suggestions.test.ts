@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockResolveAuth = vi.fn();
 const mockResolveProjectId = vi.fn();
 const mockFetchServerDeployDiagnosis = vi.fn();
+const mockFetchServerDeployStatus = vi.fn();
 const mockStartServerDeployDiagnosis = vi.fn();
 const mockFetchServerProjectDetail = vi.fn();
 const mockIntro = vi.fn();
@@ -24,6 +25,7 @@ vi.mock('./env.js', () => ({
 
 vi.mock('./platform-api.js', () => ({
   fetchServerDeployDiagnosis: (...args: unknown[]) => mockFetchServerDeployDiagnosis(...args),
+  fetchServerDeployStatus: (...args: unknown[]) => mockFetchServerDeployStatus(...args),
   startServerDeployDiagnosis: (...args: unknown[]) => mockStartServerDeployDiagnosis(...args),
   fetchServerProjectDetail: (...args: unknown[]) => mockFetchServerProjectDetail(...args),
 }));
@@ -93,11 +95,48 @@ describe('serverSuggestionsAction', () => {
 
   it('reports when deploy is already running successfully', async () => {
     mockFetchServerDeployDiagnosis.mockResolvedValue({ state: 'healthy' });
+    mockFetchServerDeployStatus.mockResolvedValue({ id: 'dep-1', status: 'running', instanceUrl: 'https://x' });
 
     const { serverSuggestionsAction } = await import('./deploy-suggestions.js');
     await serverSuggestionsAction('dep-1', {});
 
     expect(mockOutro).toHaveBeenCalledWith('Deploy is running successfully. No suggestions required.');
+  });
+
+  it('does not report a healthy diagnosis as successful when deploy status is queued', async () => {
+    mockFetchServerDeployDiagnosis.mockResolvedValue({ state: 'healthy' });
+    mockFetchServerDeployStatus.mockResolvedValue({ id: 'dep-1', status: 'queued', instanceUrl: null });
+
+    const { serverSuggestionsAction } = await import('./deploy-suggestions.js');
+    await serverSuggestionsAction('dep-1', {});
+
+    expect(mockOutro).toHaveBeenCalledWith('Deploy is queued. Suggestions are available after a deploy fails.');
+    expect(mockStartServerDeployDiagnosis).not.toHaveBeenCalled();
+  });
+
+  it('starts diagnosis when a healthy diagnosis conflicts with failed deploy status', async () => {
+    mockFetchServerDeployDiagnosis
+      .mockResolvedValueOnce({ state: 'healthy' })
+      .mockResolvedValueOnce({
+        state: 'ready',
+        diagnosis: {
+          id: 'diag-2',
+          deployId: 'dep-1',
+          status: 'COMPLETE',
+          summary: 'Upload did not complete.',
+          recommendations: [],
+          error: null,
+          createdAt: '2025-06-01T00:00:00Z',
+          completedAt: '2025-06-01T00:00:05Z',
+        },
+      });
+    mockFetchServerDeployStatus.mockResolvedValue({ id: 'dep-1', status: 'failed', instanceUrl: null });
+
+    const { serverSuggestionsAction } = await import('./deploy-suggestions.js');
+    await serverSuggestionsAction('dep-1', {});
+
+    expect(mockStartServerDeployDiagnosis).toHaveBeenCalledWith('dep-1', 't', 'o');
+    expect(mockLogWarn).toHaveBeenCalled();
   });
 
   it('starts a diagnosis when none exists and then prints suggestions', async () => {

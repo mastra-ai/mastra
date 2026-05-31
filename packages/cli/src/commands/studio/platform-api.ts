@@ -1,5 +1,5 @@
 import { writeBarLine } from '../../utils/clack-bar.js';
-import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
+import { bestEffortCancel, confirmUploadWithRetry, uploadArtifactWithRetry } from '../../utils/deploy-upload.js';
 import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
@@ -181,14 +181,7 @@ export async function uploadDeploy(
       const { fileURLToPath } = await import('node:url');
       await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
     } else {
-      const uploadResp = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/zip' },
-        body: new Uint8Array(zipBuffer),
-      });
-      if (!uploadResp.ok) {
-        throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
-      }
+      await uploadArtifactWithRetry({ uploadUrl, zipBuffer });
     }
   } catch (uploadError) {
     await cancel(client);
@@ -289,6 +282,9 @@ export async function pollDeploy(
       }
 
       const { deploy } = data;
+      if (!deploy || typeof deploy.status !== 'string' || !deploy.status) {
+        throw new Error(`Invalid deploy status response for ${deployId}`);
+      }
 
       if (deploy.status !== lastStatus) {
         lastStatus = deploy.status;

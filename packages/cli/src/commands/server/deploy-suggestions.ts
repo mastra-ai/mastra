@@ -3,7 +3,12 @@ import * as p from '@clack/prompts';
 import { withPollingRetries } from '../../utils/polling.js';
 import { pollForDiagnosis, printDeploySuggestions } from '../deploy-suggestions.js';
 import { resolveAuth, resolveProjectId } from './env.js';
-import { fetchServerDeployDiagnosis, fetchServerProjectDetail, startServerDeployDiagnosis } from './platform-api.js';
+import {
+  fetchServerDeployDiagnosis,
+  fetchServerDeployStatus,
+  fetchServerProjectDetail,
+  startServerDeployDiagnosis,
+} from './platform-api.js';
 
 async function resolveDeployId(
   token: string,
@@ -31,6 +36,9 @@ function buildLogsUrl(orgId: string, projectId: string | undefined, deployId: st
   return `https://projects.mastra.ai/orgs/${orgId}/server/projects/${projectId}/deploys/${deployId}`;
 }
 
+const SERVER_SUCCESS_STATUSES = new Set(['running']);
+const SERVER_FAILED_STATUSES = new Set(['failed', 'crashed', 'cancelled', 'stopped']);
+
 export async function serverSuggestionsAction(deployId: string | undefined, opts: { org?: string }) {
   p.intro('mastra server deploy suggestions');
   try {
@@ -38,10 +46,20 @@ export async function serverSuggestionsAction(deployId: string | undefined, opts
     const resolved = await resolveDeployId(token, orgId, deployId);
     const targetDeployId = resolved.deployId;
 
-    const initialDiagnosis = await withPollingRetries(() => fetchServerDeployDiagnosis(targetDeployId, token, orgId));
+    let initialDiagnosis = await withPollingRetries(() => fetchServerDeployDiagnosis(targetDeployId, token, orgId));
     if (initialDiagnosis.state === 'healthy') {
-      p.outro('Deploy is running successfully. No suggestions required.');
-      return;
+      const deploy = await withPollingRetries(() => fetchServerDeployStatus(targetDeployId, token, orgId));
+      if (SERVER_SUCCESS_STATUSES.has(deploy.status)) {
+        p.outro('Deploy is running successfully. No suggestions required.');
+        return;
+      }
+
+      if (!SERVER_FAILED_STATUSES.has(deploy.status)) {
+        p.outro(`Deploy is ${deploy.status}. Suggestions are available after a deploy fails.`);
+        return;
+      }
+
+      initialDiagnosis = { state: 'missing' };
     }
 
     if (initialDiagnosis.state === 'missing') {
