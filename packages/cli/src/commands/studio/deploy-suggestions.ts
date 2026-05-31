@@ -87,6 +87,9 @@ export async function suggestionsAction(deployId?: string) {
 
     if (initialDiagnosis.state === 'healthy') {
       const deploy = await withPollingRetries(() => fetchDeployStatus(targetDeployId, token, orgId));
+      if (typeof deploy.status !== 'string' || !deploy.status) {
+        throw new Error(`Invalid deploy status response for ${targetDeployId}`);
+      }
       if (STUDIO_SUCCESS_STATUSES.has(deploy.status)) {
         p.outro('Deploy is running successfully. No suggestions required.');
         return;

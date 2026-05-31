@@ -49,6 +49,11 @@ export async function serverSuggestionsAction(deployId: string | undefined, opts
     let initialDiagnosis = await withPollingRetries(() => fetchServerDeployDiagnosis(targetDeployId, token, orgId));
     if (initialDiagnosis.state === 'healthy') {
       const deploy = await withPollingRetries(() => fetchServerDeployStatus(targetDeployId, token, orgId));
+      
+      if (typeof deploy.status !== 'string' || !deploy.status) {
+        throw new Error(`Invalid server deploy status response for ${targetDeployId}`);
+      }
+
       if (SERVER_SUCCESS_STATUSES.has(deploy.status)) {
         p.outro('Deploy is running successfully. No suggestions required.');
         return;

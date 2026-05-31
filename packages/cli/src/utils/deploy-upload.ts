@@ -57,6 +57,15 @@ async function readResponseBody(response: Response): Promise<string | undefined>
   }
 }
 
+function sanitizeEndpoint(endpoint: string): string {
+  try {
+    const url = new URL(endpoint);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return endpoint;
+  }
+}
+
 export class ArtifactUploadError extends Error {
   readonly endpoint: string;
   readonly status?: number;
@@ -80,7 +89,7 @@ export class ArtifactUploadError extends Error {
   }) {
     const cause = formatCause(opts.cause);
     const details = [
-      `endpoint=${opts.endpoint}`,
+      `endpoint=${sanitizeEndpoint(opts.endpoint)}`,
       opts.status !== undefined ? `status=${opts.status}${opts.statusText ? ` ${opts.statusText}` : ''}` : undefined,
       opts.responseBody ? `body=${opts.responseBody}` : undefined,
       opts.requestId ? `requestId=${opts.requestId}` : undefined,
@@ -165,9 +174,7 @@ export async function uploadArtifactWithRetry(opts: {
     }
 
     const retryDelayMs = 1000 * Math.pow(2, attempt);
-    console.warn(
-      `${lastError.message}; retrying in ${retryDelayMs / 1000}s... (attempt ${attempt + 1}/${maxRetries})`,
-    );
+    console.warn(`${lastError.message}; retrying in ${retryDelayMs / 1000}s... (attempt ${attempt + 1}/${maxRetries})`);
     await delay(retryDelayMs);
   }
 }
