@@ -10,6 +10,12 @@ const STALE_DAYS = Number(process.env.STALE_DAYS ?? '14');
 
 const NEEDS_ISSUE_LABEL = 'needs-issue';
 const NEEDS_ISSUE_LABEL_COLOR = 'e4e669';
+const ISSUE_LINK_EXCLUDED_LOGINS = new Set([
+  'dane-ai-mastra',
+  'dane-ai-mastra[bot]',
+  'devin-ai-integration',
+  'devin-ai-integration[bot]',
+]);
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 const coreContributorCache = new Map<string, Promise<boolean>>();
@@ -53,6 +59,14 @@ async function nudge(prNumber: number) {
   const { data: pr } = await octokit.rest.pulls.get({ owner: OWNER, repo: REPO, pull_number: prNumber });
   const author = pr.user?.login;
 
+  if (isIssueLinkExcluded(author)) {
+    console.log(`Skipping #${prNumber}: ${author} is excluded from linked issue enforcement`);
+    await removeLabelIfPresent(prNumber, NEEDS_ISSUE_LABEL);
+    setOutput('needs_issue', 'false');
+    setOutput('summary', buildIssueLinkExcludedSummary(author));
+    return;
+  }
+
   if (await isCoreContributor(author)) {
     console.log(`Skipping #${prNumber}: ${author} is a core contributor`);
     await removeLabelIfPresent(prNumber, NEEDS_ISSUE_LABEL);
@@ -89,6 +103,12 @@ async function closeStale() {
 
   for (const pr of prs) {
     const author = pr.user?.login;
+
+    if (isIssueLinkExcluded(author)) {
+      console.log(`Skipping #${pr.number}: ${author} is excluded from linked issue enforcement`);
+      await removeLabelIfPresent(pr.number, NEEDS_ISSUE_LABEL);
+      continue;
+    }
 
     if (await isCoreContributor(author)) {
       console.log(`Skipping #${pr.number}: ${author} is a core contributor`);
@@ -261,6 +281,12 @@ function buildCoreContributorSummary(author: string | undefined) {
 Linked issue check skipped${author ? ` for core contributor @${author}` : ''}.`;
 }
 
+function buildIssueLinkExcludedSummary(author: string | undefined) {
+  return `## PR triage
+
+Linked issue check skipped${author ? ` for excluded profile @${author}` : ''}.`;
+}
+
 function setOutput(name: string, value: string) {
   const outputPath = process.env.GITHUB_OUTPUT;
   if (!outputPath) {
@@ -275,6 +301,10 @@ function setOutput(name: string, value: string) {
   }
 
   appendFileSync(outputPath, `${name}=${value}\n`);
+}
+
+function isIssueLinkExcluded(login: string | undefined) {
+  return login ? ISSUE_LINK_EXCLUDED_LOGINS.has(login.toLowerCase()) : false;
 }
 
 async function isCoreContributor(login: string | undefined) {

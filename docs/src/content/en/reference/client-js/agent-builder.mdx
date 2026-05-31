@@ -1,0 +1,169 @@
+---
+title: "Reference: Agent Builder API | Client SDK"
+description: Learn how to interact with Agent Builder actions, including starting runs, streaming progress, resuming suspended steps, and observing runs using the client-js SDK.
+packages:
+  - "@mastra/client-js"
+  - "@mastra/editor"
+---
+
+# Agent Builder API
+
+The Agent Builder API provides methods to interact with [Agent Builder](/docs/agent-builder/overview) actions on the server. Each action is a workflow exposed under `/agent-builder/:actionId/*`. The Builder must be enabled on the server via `MastraEditor.builder.enabled`, with a valid `MASTRA_EE_LICENSE` in production.
+
+## Getting all actions
+
+Retrieve a record of available Agent Builder actions:
+
+```typescript
+const actions = await mastraClient.getAgentBuilderActions()
+```
+
+Returns a `Record<string, WorkflowInfo>` keyed by action ID.
+
+## Working with a specific action
+
+Get an instance of a specific action by its ID:
+
+```typescript
+const action = mastraClient.getAgentBuilderAction('create-agent')
+```
+
+## Action methods
+
+### `details()`
+
+Retrieve metadata about an Agent Builder action:
+
+```typescript
+const info = await action.details()
+```
+
+### `createRun()`
+
+Create a new run for this action and receive a `runId`. Use the returned id with `startActionRun()`, `stream()`, `resume()`, or `observeStream()`.
+
+```typescript
+const { runId } = await action.createRun()
+```
+
+You can also pass an explicit `runId`:
+
+```typescript
+const { runId } = await action.createRun({ runId: 'my-run-id' })
+```
+
+### `startAsync()`
+
+Start the action and wait for completion. Returns the final `AgentBuilderActionResult` with `success`, `applied`, `branchName`, `message`, `validationResults`, `error`, `errors`, and `stepResults`.
+
+```typescript
+const result = await action.startAsync({
+  inputData: { agentName: 'support-bot' },
+})
+```
+
+Pass an existing `runId` as the second argument to start a previously created run:
+
+```typescript
+const { runId } = await action.createRun()
+const result = await action.startAsync({ inputData }, runId)
+```
+
+### `startActionRun()`
+
+Start an existing run without waiting for completion. Returns `{ message }`.
+
+```typescript
+const { runId } = await action.createRun()
+await action.startActionRun({ inputData }, runId)
+```
+
+### `stream()`
+
+Start an existing run and stream progress events as a `ReadableStream<{ type, payload }>`.
+
+```typescript
+const { runId } = await action.createRun()
+const stream = await action.stream({ inputData }, runId)
+
+for await (const event of stream) {
+  console.log(event.type, event.payload)
+}
+```
+
+### `resume()`
+
+Resume a suspended step on a run. Returns `{ message }`.
+
+```typescript
+await action.resume({ step: 'review', resumeData: { approved: true } }, runId)
+```
+
+### `resumeAsync()`
+
+Resume a suspended step and wait for completion. Returns an `AgentBuilderActionResult`.
+
+```typescript
+const result = await action.resumeAsync({ step: 'review', resumeData: { approved: true } }, runId)
+```
+
+### `resumeStream()`
+
+Resume a suspended step and stream subsequent events.
+
+```typescript
+const stream = await action.resumeStream({
+  runId,
+  step: 'review',
+  resumeData: { approved: true },
+})
+```
+
+### `observeStream()`
+
+Attach to an existing run, replaying cached events from the beginning, then continuing with live events. Use this to recover after a page refresh or hot reload.
+
+```typescript
+const stream = await action.observeStream({ runId })
+```
+
+### `observeStreamLegacy()`
+
+Same as `observeStream()` but uses the legacy streaming endpoint. Prefer `observeStream()` for new code.
+
+```typescript
+const stream = await action.observeStreamLegacy({ runId })
+```
+
+### `runs()`
+
+List runs for this action with optional filters.
+
+```typescript
+const runs = await action.runs({ page: 0, perPage: 20 })
+```
+
+Accepts `fromDate`, `toDate`, `page`, `perPage`, `resourceId`, and legacy `limit`/`offset`.
+
+### `runById()`
+
+Fetch a specific run by ID. Use `fields` to limit the returned payload and `withNestedWorkflows` to skip nested workflow data.
+
+```typescript
+const run = await action.runById(runId, {
+  fields: ['result', 'steps'],
+  withNestedWorkflows: false,
+})
+```
+
+### `cancelRun()`
+
+Cancel an in-flight run.
+
+```typescript
+await action.cancelRun(runId)
+```
+
+## Access control
+
+The `/agent-builder/*` routes are gated by the `agent-builder` permission resource. Calling clients need at minimum `agent-builder:read` and `agent-builder:execute`, plus any picker resources the action touches (`stored-agents`, `stored-skills`, `tools`, `workflows`, `memory`). See [Access control](/docs/agent-builder/access-control) for the full grant list.

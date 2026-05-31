@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-ec76f34b",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle messages starting with assistant-with-tool-call in network",
     "createdAt": "2026-05-18T10:51:14.719Z",
-    "updatedAt": "2026-05-20T14:05:12.559Z"
+    "updatedAt": "2026-05-28T17:34:17.480Z"
   },
   "recordings": [
     {
@@ -100,7 +100,7 @@
             ]
           }
         },
-        "timestamp": 1779285911278
+        "timestamp": 1779989656050
       },
       "response": {
         "status": 200,
@@ -108,9 +108,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:12 GMT",
+          "date": "Thu, 28 May 2026 17:34:17 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1247",
+          "server-timing": "gfet4t7; dur=1312",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -123,19 +123,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"agent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"The test tool returned the following result: `{\\\"test_tool_response\\\": {\\\"content\\\": \\\"previous result\\\", \\\"name\\\": \\\"test-tool\\\"}}`. Can you explain what this means?\",\n  \"selectionReason\": \"The user wants to understand the output of the test tool. An agent is best suited to explain the result in a user-friendly way.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"The tool returned a response with content 'previous result' and name 'test-tool'. Can you explain what this response means in the context of the user's request to 'Explain what this result means.'?\",\n  \"selectionReason\": \"The user wants an explanation of the tool's response. An agent is best suited for this task as it can provide a natural language explanation.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.1675449482445578
+              "avgLogprobs": -0.304161899494675
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 909,
-            "candidatesTokenCount": 103,
-            "totalTokenCount": 1012,
+            "candidatesTokenCount": 106,
+            "totalTokenCount": 1015,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -145,13 +145,13 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 103
+                "tokenCount": 106
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "l78Nap20GNXmnsEPyJukOA"
+          "responseId": "mHwYareiFoLmjMcPg5Sy4QY"
         },
         "isStreaming": false
       }

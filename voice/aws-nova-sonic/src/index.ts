@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { PassThrough } from 'node:stream';
 import { BedrockRuntimeClient, InvokeModelWithBidirectionalStreamCommand } from '@aws-sdk/client-bedrock-runtime';
-import type { ToolsInput } from '@mastra/core/agent';
-import type { RequestContext } from '@mastra/core/request-context';
-import { MastraVoice } from '@mastra/core/voice';
-import type { VoiceConfig, VoiceEventType } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
+import type { ToolsInput, RequestContext, VoiceConfig, VoiceEventType } from '@internal/voice';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
 import type { AwsCredentialIdentity } from '@smithy/types';
 import type {

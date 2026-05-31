@@ -61,7 +61,7 @@ jobs:
 
       - name: Setup pnpm
         if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         with:
           run_install: false
           cache: true
@@ -83,7 +83,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
-      - name: Run changed tests
+      - name: Run changed tests against base
         if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
         shell: bash
         env:
@@ -91,4 +91,52 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t test_files < /tmp/changed-test-files
-          pnpm vitest run --passWithNoTests "${test_files[@]}"
+
+          root_test_files=()
+          test_status=0
+
+          for file in "${test_files[@]}"; do
+            test_dir=""
+            search_dir="$(dirname "$file")"
+
+            while [ "$search_dir" != "." ] && [ "$search_dir" != "/" ]; do
+              if [ -f "$search_dir/vitest.config.ts" ] || [ -f "$search_dir/vitest.config.mts" ]; then
+                test_dir="$search_dir"
+                break
+              fi
+
+              search_dir="$(dirname "$search_dir")"
+            done
+
+            if [ -n "$test_dir" ]; then
+              relative_file="${file#"$test_dir"/}"
+
+              set +e
+              pnpm --dir "$test_dir" exec vitest run --passWithNoTests "$relative_file"
+              status=$?
+              set -e
+
+              if [ "$status" -ne 0 ]; then
+                test_status="$status"
+              fi
+            else
+              root_test_files+=("$file")
+            fi
+          done
+
+          set +e
+          if [ "${#root_test_files[@]}" -gt 0 ]; then
+            pnpm vitest run --passWithNoTests "${root_test_files[@]}"
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              test_status="$status"
+            fi
+          fi
+          set -e
+
+          if [ "$test_status" -eq 0 ]; then
+            echo "::error::Changed tests passed against the base branch. They should fail before the PR code is applied."
+            exit 1
+          fi
+
+          echo "Changed tests failed against the base branch as expected."

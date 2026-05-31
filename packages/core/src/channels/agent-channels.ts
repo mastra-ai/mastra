@@ -671,9 +671,12 @@ export class AgentChannels {
 
   /**
    * Returns channel input processors (e.g. system prompt injection).
-   * Skips if the user already added a processor with the same id.
+   *
+   * - Skipped entirely when `channels.threadContext.addSystemMessage` is `false`.
+   * - Skipped if the user already added a processor with the same id.
    */
   getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
+    if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
     if (hasProcessor) return [];
     return [new ChatChannelProcessor()];
@@ -732,8 +735,8 @@ export class AgentChannels {
    *
    *   - `channelContext` — goes on `requestContext` under the 'channel' key, consumed by
    *     `ChatChannelProcessor` and other input processors.
-   *   - `attributes` — serialized as XML on the signal element the LLM sees (e.g. on
-   *     `<user-message messageId=... authorId=... />`). Strings only.
+   *   - `attributes` — serialized as XML on the user message element the LLM sees (e.g. on
+   *     `<user messageId=... authorId=... />`). Strings only.
    *   - `providerOptions` — written to the stored message's `content.providerMetadata`
    *     under `mastra.channels.<platform>` so UI/query callers can read author/channel
    *     facts off the message (e.g. show a Slack icon + author name) without unpacking
@@ -1047,9 +1050,8 @@ export class AgentChannels {
     // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
     const signalContents: AgentSignalContents = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
 
-    this.agent.sendSignal(
+    this.agent.sendMessage(
       {
-        type: 'user-message',
         contents: signalContents,
         attributes,
         providerOptions,
