@@ -6,9 +6,10 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../eval
 import type { ScoringData } from '../../llm/model/base.types';
 import type { VersionOverrides } from '../../mastra/types';
 import { resolveObservabilityContext } from '../../observability';
+import type { TracingProperties } from '../../observability';
 import { RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
-import type { StepResult, Workflow } from '../../workflows';
+import type { StepResult, StepTripwireInfo, Workflow } from '../../workflows';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -26,6 +27,22 @@ interface AgentGenerateResult {
   traceId?: string;
   error?: Error;
   scoringData?: ScoringData;
+}
+
+/**
+ * Minimal shape of a WorkflowResult used by the experiment executor.
+ * Captures only the fields `handleWorkflowResult` actually reads, avoiding the
+ * heavily generic `WorkflowResult<TState, TInput, TOutput, TSteps>` signature.
+ */
+interface WorkflowResultLike extends TracingProperties {
+  status: string;
+  result?: unknown;
+  error?: Error;
+  tripwire?: StepTripwireInfo;
+  suspendPayload?: unknown;
+  suspended?: string[][];
+  steps?: Record<string, StepResult<any, any, any, any>>;
+  stepExecutionPath?: string[];
 }
 
 /**
@@ -351,22 +368,36 @@ async function executeWorkflow(
       const suspendedPaths: string[][] = result.suspended ?? [];
       if (suspendedPaths.length === 0) break;
 
-      // For each suspended step, look up resume data
-      const firstSuspendedStep = suspendedPaths[0]?.[0];
-      if (!firstSuspendedStep) break;
+      // Resume all suspended steps that have resume data available.
+      // Each suspended path is an array of step IDs; the first element
+      // is the step that actually suspended.
+      let resumedAny = false;
+      for (const path of suspendedPaths) {
+        const stepId = path[0];
+        if (!stepId) continue;
 
-      // Resolve resume data: per-step map takes precedence, then flat fallback.
-      // Use explicit undefined check so falsy values (null, false, 0) are forwarded.
-      const perStepValue = perStep?.[firstSuspendedStep];
-      const stepResumeData = perStepValue !== undefined ? perStepValue : flat;
-      if (stepResumeData === undefined) break; // No data for this step, stop resuming
+        // Resolve resume data: per-step map takes precedence, then flat fallback.
+        // Use explicit undefined check so falsy values (null, false, 0) are forwarded.
+        const perStepValue = perStep?.[stepId];
+        const stepResumeData = perStepValue !== undefined ? perStepValue : flat;
+        if (stepResumeData === undefined) continue;
 
-      result = await run.resume({
-        resumeData: stepResumeData,
-        step: firstSuspendedStep,
-        ...(reqCtx ? { requestContext: reqCtx } : {}),
-        ...observabilityContext,
-      });
+        result = await run.resume({
+          resumeData: stepResumeData,
+          step: stepId,
+          ...(reqCtx ? { requestContext: reqCtx } : {}),
+          ...observabilityContext,
+        });
+        resumedAny = true;
+
+        // After a resume the workflow may have reached a terminal state
+        // or re-suspended with a different set of paths. Break out of the
+        // inner loop so the outer while re-evaluates the new status.
+        if (result.status !== 'suspended') break;
+      }
+
+      // If none of the suspended steps had resume data, stop the loop.
+      if (!resumedAny) break;
     }
   }
 
@@ -375,11 +406,8 @@ async function executeWorkflow(
 
 /**
  * Map a terminal WorkflowResult to an ExecutionResult.
- * Uses a loose `result: any` parameter because WorkflowResult is heavily generic;
- * status-narrowing guards below keep accesses safe.
  */
-
-function handleWorkflowResult(result: any): ExecutionResult {
+function handleWorkflowResult(result: WorkflowResultLike): ExecutionResult {
   // TracingProperties is intersected on every WorkflowResult variant
   const traceId = result.traceId ?? null;
   const spanId = result.spanId ?? null;

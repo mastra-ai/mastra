@@ -172,6 +172,87 @@ while (experiment.status === 'pending' || experiment.status === 'running') {
 console.log(experiment.status) // 'completed' | 'failed'
 ```
 
+## Suspended workflow experiments
+
+When a workflow suspends during an experiment (for example, waiting for human approval), the executor can automatically resume it using data provided on each dataset item.
+
+### Providing resume data
+
+Add `resumeSteps` (keyed by step ID) or `resumeData` (flat value for single-step workflows) to your dataset items:
+
+```typescript title="src/mastra/experiments/suspended-workflow.ts"
+import { mastra } from '../index'
+
+const dataset = await mastra.datasets.get({ id: 'approval-dataset-id' })
+
+const summary = await dataset.startExperiment({
+  name: 'approval-workflow-eval',
+  targetType: 'workflow',
+  targetId: 'approval-workflow',
+  scorers: ['accuracy'],
+  data: [
+    {
+      input: { request: 'Deploy to production' },
+      // Per-step resume data (keyed by step ID)
+      resumeSteps: { 'approval-step': { approved: true } },
+    },
+    {
+      input: { request: 'Delete database' },
+      // Flat resume data (for single-step workflows)
+      resumeData: { approved: false },
+    },
+  ],
+})
+```
+
+For storage-backed datasets, resume data can also be stored in the item's `metadata`:
+
+```typescript
+const item = {
+  input: { request: 'Deploy to staging' },
+  metadata: {
+    resumeSteps: { 'approval-step': { approved: true } },
+  },
+}
+```
+
+Top-level `resumeSteps`/`resumeData` take precedence over metadata values.
+
+### Multi-branch workflows
+
+When a workflow suspends on multiple parallel branches, the executor resumes all branches that have matching resume data. Provide per-step data for each suspended step:
+
+```typescript
+const item = {
+  input: { request: 'Complex pipeline' },
+  resumeSteps: {
+    'security-review': { approved: true },
+    'manager-approval': { approved: true, notes: 'LGTM' },
+  },
+}
+```
+
+The executor loops through suspend/resume cycles (capped at 10) until the workflow reaches a terminal state.
+
+## Custom headers with requestContext
+
+Pass custom headers or context to agent and workflow targets using `requestContext`. This is useful when your targets need authentication tokens, tenant IDs, or other per-request metadata:
+
+```typescript title="src/mastra/experiments/with-context.ts"
+const summary = await dataset.startExperiment({
+  name: 'with-auth-context',
+  targetType: 'agent',
+  targetId: 'my-agent',
+  // Global context applied to all items
+  requestContext: {
+    'x-tenant-id': 'tenant-123',
+    authorization: 'Bearer token',
+  },
+})
+```
+
+Per-item context can also be set via the `requestContext` field on each data item. Item-level values take precedence over the global `requestContext` when both are provided.
+
 ## Configuration options
 
 ### Concurrency

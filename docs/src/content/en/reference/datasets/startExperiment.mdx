@@ -131,6 +131,13 @@ console.log(`Status: ${summary2.status}`)
     isOptional: true,
     description: 'Maximum retries per item on failure. Defaults to `0` (no retries). Abort errors are never retried.',
   },
+  {
+    name: 'requestContext',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description:
+      'Global request context passed to `agent.generate()` or `workflow.start()`/`workflow.resume()` for all items. Per-item `requestContext` values take precedence. Use this for custom headers, tenant IDs, or authentication tokens.',
+  },
 ]}
 />
 

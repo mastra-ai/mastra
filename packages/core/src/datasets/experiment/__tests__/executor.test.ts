@@ -894,7 +894,7 @@ describe('executeTarget', () => {
       }
     });
 
-    it('resumes only the first suspended step when multiple paths are suspended', async () => {
+    it('resumes all suspended branches when multiple paths are suspended', async () => {
       const mockWorkflow = createMockWorkflow(
         {
           status: 'suspended',
@@ -905,6 +905,16 @@ describe('executeTarget', () => {
           spanId: 'span-multi',
         },
         [
+          // After resuming step-a, workflow is still suspended on step-b
+          {
+            status: 'suspended',
+            suspended: [['step-b']],
+            suspendPayload: {},
+            steps: {},
+            traceId: 'trace-multi',
+            spanId: 'span-multi',
+          },
+          // After resuming step-b, workflow completes
           {
             status: 'success',
             result: { done: true },
@@ -927,15 +937,97 @@ describe('executeTarget', () => {
       });
 
       expect(result.error).toBeNull();
+      expect(result.output).toEqual({ done: true });
       const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
-      // Only the first suspended path's first step should be resumed
-      expect(run.resume).toHaveBeenCalledTimes(1);
-      expect(run.resume).toHaveBeenCalledWith(
-        expect.objectContaining({
-          resumeData: { value: 'a' },
-          step: 'step-a',
-        }),
+      expect(run.resume).toHaveBeenCalledTimes(2);
+      expect(run.resume).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ resumeData: { value: 'a' }, step: 'step-a' }),
       );
+      expect(run.resume).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ resumeData: { value: 'b' }, step: 'step-b' }),
+      );
+    });
+
+    it('resumes first branch and succeeds without touching remaining branches', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['step-a'], ['step-b']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-multi-success',
+          spanId: 'span-multi-success',
+        },
+        [
+          // step-a resume completes the workflow immediately
+          {
+            status: 'success',
+            result: { done: true },
+            steps: {},
+            traceId: 'trace-multi-success',
+            spanId: 'span-multi-success',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-multi-success',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeSteps: { 'step-a': { value: 'a' }, 'step-b': { value: 'b' } },
+      });
+
+      expect(result.error).toBeNull();
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      // Only step-a should be resumed since the workflow succeeded after that
+      expect(run.resume).toHaveBeenCalledTimes(1);
+      expect(run.resume).toHaveBeenCalledWith(expect.objectContaining({ resumeData: { value: 'a' }, step: 'step-a' }));
+    });
+
+    it('skips branches with no resume data and resumes others', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['step-x'], ['step-y']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-partial',
+          spanId: 'span-partial',
+        },
+        [
+          {
+            status: 'success',
+            result: { partial: true },
+            steps: {},
+            traceId: 'trace-partial',
+            spanId: 'span-partial',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-partial-branch',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        // Only provide data for step-y, not step-x
+        resumeSteps: { 'step-y': { value: 'y' } },
+      });
+
+      expect(result.error).toBeNull();
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      // step-x is skipped (no resume data), step-y is resumed
+      expect(run.resume).toHaveBeenCalledTimes(1);
+      expect(run.resume).toHaveBeenCalledWith(expect.objectContaining({ resumeData: { value: 'y' }, step: 'step-y' }));
     });
 
     it('forwards requestContext through resume calls', async () => {
