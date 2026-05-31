@@ -420,4 +420,21 @@ describe('ModelsDevGateway', () => {
       expect(providers.perplexity).toBeDefined();
     });
   });
+
+  describe('getApiKey', () => {
+    it('should fall back to legacy Google Generative AI API key env var', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'legacy-google-key');
+
+      gateway = new ModelsDevGateway({
+        google: {
+          apiKeyEnvVar: ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
+          name: 'Google',
+          models: ['gemini-3.1-flash-lite'],
+          gateway: 'models.dev',
+        },
+      });
+
+      await expect(gateway.getApiKey('google/gemini-3.1-flash-lite')).resolves.toBe('legacy-google-key');
+    });
+  });
 });
