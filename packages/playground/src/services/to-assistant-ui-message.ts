@@ -214,7 +214,7 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
   }
 
   if (part.type === 'reasoning') {
-    return { type: 'reasoning', text: part.reasoning, metadata: getPartMetadata(message, part) } as ContentPart;
+    return { type: 'reasoning', text: part.reasoning, metadata: getPartMetadata(message, part) };
   }
 
   if (part.type === 'source') {
@@ -225,7 +225,7 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
       url: part.source.url,
       title: part.source.title,
       metadata: getPartMetadata(message, part),
-    } as ContentPart;
+    };
   }
 
   if (part.type === 'source-document') {
@@ -240,7 +240,7 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
 
   if (part.type === 'file') {
     if (part.mimeType?.includes('image/')) {
-      return { type: 'image', image: part.data, metadata: getPartMetadata(message, part) } as ContentPart;
+      return { type: 'image', image: part.data, metadata: getPartMetadata(message, part) };
     }
 
     return {
@@ -248,7 +248,7 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
       mimeType: part.mimeType,
       data: part.data,
       metadata: getPartMetadata(message, part),
-    } as ContentPart;
+    };
   }
 
   if (part.type === 'tool-invocation') {
@@ -291,7 +291,7 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
       name: part.type.substring(5),
       data: 'data' in part ? part.data : undefined,
       metadata: getPartMetadata(message, part),
-    } as ContentPart;
+    };
   }
 
   return { type: 'text', text: '', metadata: getPartMetadata(message, part) };
