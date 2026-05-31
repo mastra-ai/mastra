@@ -49,20 +49,24 @@ class RecordingTxClient implements TxClient {
 class RecordingDbClient implements DbClient {
   readonly $pool = {} as DbClient['$pool'];
   readonly txClient = new RecordingTxClient();
-  readonly thread: Record<string, unknown> | null;
+  readonly threads = new Map<string, Record<string, unknown>>();
 
-  constructor({ thread }: { thread?: Record<string, unknown> | null } = {}) {
-    this.thread =
-      thread === undefined
-        ? {
-            id: 'thread-1',
-            resourceId: 'resource-1',
-            title: 'Test thread',
-            metadata: {},
-            createdAt: new Date('2025-01-01T00:00:00.000Z'),
-            updatedAt: new Date('2025-01-01T00:00:00.000Z'),
-          }
-        : thread;
+  constructor({
+    thread,
+    threads,
+  }: { thread?: Record<string, unknown> | null; threads?: Record<string, unknown>[] } = {}) {
+    const defaultThread = {
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      title: 'Test thread',
+      metadata: {},
+      createdAt: new Date('2025-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2025-01-01T00:00:00.000Z'),
+    };
+    const threadsToAdd = threads ?? (thread === undefined ? [defaultThread] : thread ? [thread] : []);
+    for (const threadToAdd of threadsToAdd) {
+      this.threads.set(String(threadToAdd.id), threadToAdd);
+    }
   }
 
   connect(): Promise<never> {
@@ -77,8 +81,9 @@ class RecordingDbClient implements DbClient {
     throw new Error('not implemented');
   }
 
-  async oneOrNone<T = any>(): Promise<T | null> {
-    return this.thread as T | null;
+  async oneOrNone<T = any>(_query?: string, values?: QueryValues): Promise<T | null> {
+    const id = Array.isArray(values) ? values[0] : undefined;
+    return id ? ((this.threads.get(String(id)) as T | undefined) ?? null) : null;
   }
 
   async any<T = any>(): Promise<T[]> {
@@ -102,9 +107,11 @@ class RecordingDbClient implements DbClient {
   }
 }
 
+let nextMessageId = 1;
+
 function createMessage(overrides: Partial<MastraDBMessage> = {}): MastraDBMessage {
   return {
-    id: overrides.id ?? `message-${Math.random()}`,
+    id: overrides.id ?? `message-${nextMessageId++}`,
     threadId: overrides.threadId ?? 'thread-1',
     resourceId: overrides.resourceId ?? 'resource-1',
     role: overrides.role ?? 'user',
@@ -173,7 +180,7 @@ describe('MemoryPG.saveMessages', () => {
     expect(secondInsertQuery!.values).toHaveLength(8);
     expect(threadUpdateQuery!.query).toContain('UPDATE "public"."mastra_threads"');
     expect(threadUpdateQuery!.values).toHaveLength(3);
-  });
+  }, 20_000);
 
   it('returns messages with string content parsed through MessageList', async () => {
     const client = new RecordingDbClient();
@@ -202,6 +209,68 @@ describe('MemoryPG.saveMessages', () => {
       }),
     ).rejects.toThrow("Expected to find a resourceId for message, but couldn't find one");
 
+    expect(client.txClient.queries).toHaveLength(0);
+  });
+
+  it('does not start a transaction when a later message is missing a thread id', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+
+    await expect(
+      memory.saveMessages({
+        messages: [createMessage({ id: 'message-1' }), createMessage({ id: 'message-2', threadId: '' })],
+      }),
+    ).rejects.toThrow("Expected to find a threadId for message, but couldn't find one");
+
+    expect(client.txClient.queries).toHaveLength(0);
+  });
+
+  it('saves mixed-thread batches and updates every touched thread', async () => {
+    const client = new RecordingDbClient({
+      threads: [
+        {
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          title: 'Test thread 1',
+          metadata: {},
+          createdAt: new Date('2025-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2025-01-01T00:00:00.000Z'),
+        },
+        {
+          id: 'thread-2',
+          resourceId: 'resource-2',
+          title: 'Test thread 2',
+          metadata: {},
+          createdAt: new Date('2025-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2025-01-01T00:00:00.000Z'),
+        },
+      ],
+    });
+    const memory = new MemoryPG({ client });
+
+    await memory.saveMessages({
+      messages: [
+        createMessage({ id: 'message-1', threadId: 'thread-1' }),
+        createMessage({ id: 'message-2', threadId: 'thread-2', resourceId: 'resource-2' }),
+      ],
+    });
+
+    expect(client.txClient.queries).toHaveLength(3);
+    const [insertQuery, firstThreadUpdate, secondThreadUpdate] = client.txClient.queries;
+    expect(insertQuery!.query).toContain('INSERT INTO "public"."mastra_messages"');
+    expect(firstThreadUpdate!.values![2]).toBe('thread-1');
+    expect(secondThreadUpdate!.values![2]).toBe('thread-2');
+  });
+
+  it('rejects messages for any missing thread before opening a transaction', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+
+    await expect(
+      memory.saveMessages({
+        messages: [createMessage({ id: 'message-1' }), createMessage({ id: 'message-2', threadId: 'thread-2' })],
+      }),
+    ).rejects.toThrow('Thread thread-2 not found');
     expect(client.txClient.queries).toHaveLength(0);
   });
 

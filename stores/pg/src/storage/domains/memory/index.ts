@@ -1219,21 +1219,9 @@ export class MemoryPG extends MemoryStorage {
       });
     }
 
-    const thread = await this.getThreadById({ threadId });
-    if (!thread) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.THIRD_PARTY,
-        text: `Thread ${threadId} not found`,
-        details: {
-          threadId,
-        },
-      });
-    }
-
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+      const threadIds = new Set<string>();
       for (const message of messages) {
         if (!message.threadId) {
           throw new Error(
@@ -1244,6 +1232,22 @@ export class MemoryPG extends MemoryStorage {
           throw new Error(
             `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
           );
+        }
+        threadIds.add(message.threadId);
+      }
+
+      for (const threadIdToCheck of threadIds) {
+        const thread = await this.getThreadById({ threadId: threadIdToCheck });
+        if (!thread) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `Thread ${threadIdToCheck} not found`,
+            details: {
+              threadId: threadIdToCheck,
+            },
+          });
         }
       }
 
@@ -1287,17 +1291,18 @@ export class MemoryPG extends MemoryStorage {
           );
         }
 
-        // Update thread timestamp
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
         const now = new Date();
-        await t.none(
-          `UPDATE ${threadTableName}
-            SET
-              "updatedAt" = $1,
-              "updatedAtZ" = $2
-            WHERE id = $3`,
-          [now, now, threadId],
-        );
+        for (const threadIdToUpdate of threadIds) {
+          await t.none(
+            `UPDATE ${threadTableName}
+              SET
+                "updatedAt" = $1,
+                "updatedAtZ" = $2
+              WHERE id = $3`,
+            [now, now, threadIdToUpdate],
+          );
+        }
       });
 
       const messagesWithParsedContent = messages.map(message => {
@@ -1314,6 +1319,9 @@ export class MemoryPG extends MemoryStorage {
       const list = new MessageList().add(messagesWithParsedContent as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
