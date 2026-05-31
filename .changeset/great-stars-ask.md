@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Fixed observational memory reprocessing previously observed context by letting MessageList assign timestamps to generated assistant responses without rewriting stored response timestamps.
+Fixed observational memory replaying previously observed assistant responses during reprocessing, so past assistant messages no longer reappear in later turns.
