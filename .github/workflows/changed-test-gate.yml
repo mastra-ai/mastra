@@ -91,25 +91,51 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t test_files < /tmp/changed-test-files
+
           root_test_files=()
           mastracode_test_files=()
+          test_status=0
 
           for file in "${test_files[@]}"; do
             if [[ "$file" == mastracode/* ]]; then
               mastracode_test_files+=("${file#mastracode/}")
+              continue
+            fi
+
+            test_dir=""
+            search_dir="$(dirname "$file")"
+
+            while [ "$search_dir" != "." ] && [ "$search_dir" != "/" ]; do
+              if [ -f "$search_dir/vitest.config.ts" ] || [ -f "$search_dir/vitest.config.mts" ]; then
+                test_dir="$search_dir"
+                break
+              fi
+
+              search_dir="$(dirname "$search_dir")"
+            done
+
+            if [ -n "$test_dir" ]; then
+              relative_file="${file#"$test_dir"/}"
+
+              set +e
+              pnpm --dir "$test_dir" exec vitest run --passWithNoTests "$relative_file"
+              status=$?
+              set -e
+
+              if [ "$status" -ne 0 ]; then
+                test_status="$status"
+              fi
             else
               root_test_files+=("$file")
             fi
           done
 
           set +e
-          test_status=0
-
           if [ "${#root_test_files[@]}" -gt 0 ]; then
             pnpm vitest run --passWithNoTests "${root_test_files[@]}"
             root_status=$?
             if [ "$root_status" -ne 0 ]; then
-              test_status=$root_status
+              test_status="$root_status"
             fi
           fi
 
@@ -117,7 +143,7 @@ jobs:
             pnpm --filter ./mastracode exec vitest run "${mastracode_test_files[@]}"
             mastracode_status=$?
             if [ "$mastracode_status" -ne 0 ]; then
-              test_status=$mastracode_status
+              test_status="$mastracode_status"
             fi
           fi
           set -e
