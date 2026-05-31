@@ -83,6 +83,11 @@ const sidebars = {
           label: 'Tools',
         },
         {
+          type: 'doc',
+          id: 'agents/code-mode',
+          label: 'Code Mode',
+        },
+        {
           type: 'html',
           value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
         },
@@ -712,6 +717,11 @@ const sidebars = {
               type: 'doc',
               id: 'observability/metrics/overview',
               label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/metrics/querying',
+              label: 'Querying metrics',
             },
           ],
         },

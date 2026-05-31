@@ -168,10 +168,11 @@ export class ComposioToolProvider implements ToolProvider {
       if (!tool) continue;
       const slug = tool.id ?? key;
       const descOverride = toolConfigs?.[slug]?.description;
+      // Composio ships tools typed against its bundled Mastra schema version; runtime shape matches ToolAction.
       if (descOverride) {
-        result[slug] = { ...tool, description: descOverride };
+        result[slug] = { ...tool, description: descOverride } as unknown as ToolAction<unknown, unknown>;
       } else {
-        result[slug] = tool;
+        result[slug] = tool as unknown as ToolAction<unknown, unknown>;
       }
     }
 

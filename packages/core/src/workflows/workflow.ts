@@ -1116,7 +1116,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1142,7 +1142,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: checkedMessageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1212,6 +1212,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                systemMessages: checkedMessageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1332,7 +1333,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1358,7 +1359,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1415,7 +1416,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1441,7 +1442,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: checkedMessageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -3925,6 +3926,52 @@ export class Run<
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._resume(params);
+  }
+
+  /**
+   * Resumes a suspended workflow without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId after dispatching the resume.
+   *
+   * The resume executes in the background and the result is never awaited. Engines that
+   * poll for results (e.g. Inngest) override this with an implementation that skips polling
+   * entirely, which avoids the `getRunOutput()` polling race.
+   *
+   * NOTE: this is exposed over HTTP / the client SDK as `resume-no-wait` / `resumeNoWait()`,
+   * not `resumeAsync`, because the existing `resumeAsync()` client/server surface awaits the
+   * full workflow result. TODO(v2): consolidate so `resumeAsync` consistently means
+   * fire-and-forget (mirroring `start`/`startAsync` semantics) across core, client SDK and
+   * HTTP routes; that consolidation is a breaking change deferred to Mastra v2.
+   * @returns A promise that resolves to the runId
+   */
+  async resumeAsync<TResume>(
+    params: {
+      resumeData?: TResume;
+      step?:
+        | Step<string, any, any, any, TResume, any, TEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TEngineType, any>[],
+            Step<string, any, any, any, TResume, any, TEngineType, any>,
+          ]
+        | string
+        | string[];
+      label?: string;
+      requestContext?: RequestContext<TRequestContext>;
+      retryCount?: number;
+      tracingOptions?: TracingOptions;
+      outputWriter?: OutputWriter;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      forEachIndex?: number;
+      perStep?: boolean;
+    } & Partial<ObservabilityContext>,
+  ): Promise<{ runId: string }> {
+    // Fire resume in background, don't await completion
+    this._resume(params).catch(err => {
+      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background resume failed:`, err);
+    });
+    return { runId: this.runId };
   }
 
   /**
