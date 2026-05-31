@@ -291,9 +291,14 @@ function extractResumeData(item: {
   perStep?: Record<string, unknown>;
   flat?: unknown;
 } {
-  // Top-level fields (from inline DataItem) take precedence
-  const perStep = item.resumeSteps ?? (item.metadata?.resumeSteps as Record<string, unknown> | undefined);
-  const flat = item.resumeData ?? item.metadata?.resumeData;
+  // Top-level fields (from inline DataItem) take precedence.
+  // Use explicit `undefined` checks rather than `??` so that falsy values
+  // like `null`, `false`, `0`, `""` are treated as valid resume payloads.
+  const perStep =
+    item.resumeSteps !== undefined
+      ? item.resumeSteps
+      : (item.metadata?.resumeSteps as Record<string, unknown> | undefined);
+  const flat = item.resumeData !== undefined ? item.resumeData : item.metadata?.resumeData;
   return { perStep, flat };
 }
 
@@ -350,8 +355,10 @@ async function executeWorkflow(
       const firstSuspendedStep = suspendedPaths[0]?.[0];
       if (!firstSuspendedStep) break;
 
-      // Resolve resume data: per-step map takes precedence, then flat fallback
-      const stepResumeData = perStep?.[firstSuspendedStep] ?? flat;
+      // Resolve resume data: per-step map takes precedence, then flat fallback.
+      // Use explicit undefined check so falsy values (null, false, 0) are forwarded.
+      const perStepValue = perStep?.[firstSuspendedStep];
+      const stepResumeData = perStepValue !== undefined ? perStepValue : flat;
       if (stepResumeData === undefined) break; // No data for this step, stop resuming
 
       result = await run.resume({

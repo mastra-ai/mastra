@@ -490,6 +490,562 @@ describe('executeTarget', () => {
       expect(result.output).toEqual({ ok: true });
     });
 
+    it('reads resume data from metadata.resumeSteps fallback', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['review-step']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-meta-steps',
+          spanId: 'span-meta-steps',
+        },
+        [
+          {
+            status: 'success',
+            result: { reviewed: true },
+            steps: {},
+            traceId: 'trace-meta-steps',
+            spanId: 'span-meta-steps',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-meta-steps',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: { resumeSteps: { 'review-step': { decision: 'approve' } } },
+      });
+
+      expect(result.error).toBeNull();
+      expect(result.output).toEqual({ reviewed: true });
+
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeData: { decision: 'approve' },
+          step: 'review-step',
+        }),
+      );
+    });
+
+    it('top-level resumeSteps takes precedence over metadata.resumeSteps', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['step-1']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-prec',
+          spanId: 'span-prec',
+        },
+        [
+          {
+            status: 'success',
+            result: { source: 'top-level' },
+            steps: {},
+            traceId: 'trace-prec',
+            spanId: 'span-prec',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-prec',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeSteps: { 'step-1': { from: 'top-level' } },
+        metadata: { resumeSteps: { 'step-1': { from: 'metadata' } } },
+      });
+
+      expect(result.error).toBeNull();
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeData: { from: 'top-level' },
+        }),
+      );
+    });
+
+    it('top-level resumeData takes precedence over metadata.resumeData', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['step-1']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-flat-prec',
+          spanId: 'span-flat-prec',
+        },
+        [
+          {
+            status: 'success',
+            result: { ok: true },
+            steps: {},
+            traceId: 'trace-flat-prec',
+            spanId: 'span-flat-prec',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-flat-prec',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeData: { from: 'top-level' },
+        metadata: { resumeData: { from: 'metadata' } },
+      });
+
+      expect(result.error).toBeNull();
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeData: { from: 'top-level' },
+        }),
+      );
+    });
+
+    it('per-step resumeSteps takes precedence over flat resumeData for matching step', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['approval-step']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-step-vs-flat',
+          spanId: 'span-step-vs-flat',
+        },
+        [
+          {
+            status: 'success',
+            result: { used: 'per-step' },
+            steps: {},
+            traceId: 'trace-step-vs-flat',
+            spanId: 'span-step-vs-flat',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-step-vs-flat',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeSteps: { 'approval-step': { from: 'per-step' } },
+        resumeData: { from: 'flat' },
+      });
+
+      expect(result.error).toBeNull();
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeData: { from: 'per-step' },
+        }),
+      );
+    });
+
+    it('falls back to flat resumeData when resumeSteps has no entry for suspended step', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['step-x']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-fallback',
+          spanId: 'span-fallback',
+        },
+        [
+          {
+            status: 'success',
+            result: { used: 'flat' },
+            steps: {},
+            traceId: 'trace-fallback',
+            spanId: 'span-fallback',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-fallback',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeSteps: { 'other-step': { value: 'irrelevant' } },
+        resumeData: { from: 'flat-fallback' },
+      });
+
+      expect(result.error).toBeNull();
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeData: { from: 'flat-fallback' },
+          step: 'step-x',
+        }),
+      );
+    });
+
+    it('caps resume cycles at MAX_RESUME_CYCLES to prevent infinite loops', async () => {
+      // Create a workflow that always re-suspends on resume
+      const alwaysSuspend = {
+        status: 'suspended',
+        suspended: [['loop-step']],
+        suspendPayload: {},
+        steps: {},
+        traceId: 'trace-cap',
+        spanId: 'span-cap',
+      };
+      // Generate 11 resume results that all re-suspend
+      const resumeResults = Array.from({ length: 11 }, () => ({ ...alwaysSuspend }));
+      const mockWorkflow = createMockWorkflow(alwaysSuspend, resumeResults);
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-cap',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeData: { value: 'keep-going' },
+      });
+
+      // After 10 cycles, should stop and return suspended status
+      expect(result.output).toEqual({});
+      expect(result.error).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('provide resume data'),
+        }),
+      );
+
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).toHaveBeenCalledTimes(10);
+    });
+
+    it('handles resume returning failed status', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['step-1']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-fail',
+          spanId: 'span-fail',
+        },
+        [
+          {
+            status: 'failed',
+            error: { message: 'Resume failed', stack: 'stack trace' },
+            steps: { 'step-1': { status: 'failed' } },
+            traceId: 'trace-fail',
+            spanId: 'span-fail',
+            stepExecutionPath: ['step-1'],
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-resume-fail',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeData: { approved: true },
+      });
+
+      expect(result.output).toBeNull();
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Resume failed' }));
+      expect(result.stepResults).toEqual({ 'step-1': { status: 'failed' } });
+    });
+
+    it('handles resume returning tripwire status', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['step-1']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-trip',
+          spanId: 'span-trip',
+        },
+        [
+          {
+            status: 'tripwire',
+            tripwire: { reason: 'Token limit exceeded' },
+            steps: {},
+            traceId: 'trace-trip',
+            spanId: 'span-trip',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-resume-trip',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeData: { approved: true },
+      });
+
+      expect(result.output).toBeNull();
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Workflow tripwire: Token limit exceeded' }));
+    });
+
+    it('handles empty suspended array by stopping resume loop', async () => {
+      const mockWorkflow = createMockWorkflow({
+        status: 'suspended',
+        suspended: [],
+        suspendPayload: { prompt: 'Waiting' },
+        steps: {},
+        traceId: 'trace-empty',
+        spanId: 'span-empty',
+      });
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-empty-suspended',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeData: { value: 'should-not-use' },
+      });
+
+      // Should return suspended because suspended array is empty — can't determine step to resume
+      expect(result.output).toEqual({ prompt: 'Waiting' });
+      expect(result.error).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('provide resume data'),
+        }),
+      );
+
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).not.toHaveBeenCalled();
+    });
+
+    it('handles falsy but defined resume data values (null, false, 0, empty string)', async () => {
+      // Falsy values like `false`, `0`, `null`, `""` should still be forwarded as valid resume payloads
+      const falsyValues = [false, 0, null, ''];
+
+      for (const falsyValue of falsyValues) {
+        const mockWorkflow = createMockWorkflow(
+          {
+            status: 'suspended',
+            suspended: [['confirm-step']],
+            suspendPayload: {},
+            steps: {},
+            traceId: 'trace-falsy',
+            spanId: 'span-falsy',
+          },
+          [
+            {
+              status: 'success',
+              result: { received: falsyValue },
+              steps: {},
+              traceId: 'trace-falsy',
+              spanId: 'span-falsy',
+            },
+          ],
+        );
+
+        const result = await executeTarget(mockWorkflow, 'workflow', {
+          id: `item-falsy-${String(falsyValue)}`,
+          datasetId: 'ds-1',
+          input: { data: 'test' },
+          groundTruth: null,
+          version: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          resumeData: falsyValue,
+        });
+
+        expect(result.error).toBeNull();
+        const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+        expect(run.resume).toHaveBeenCalledWith(
+          expect.objectContaining({
+            resumeData: falsyValue,
+            step: 'confirm-step',
+          }),
+        );
+      }
+    });
+
+    it('resumes only the first suspended step when multiple paths are suspended', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['step-a', 'nested'], ['step-b']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-multi',
+          spanId: 'span-multi',
+        },
+        [
+          {
+            status: 'success',
+            result: { done: true },
+            steps: {},
+            traceId: 'trace-multi',
+            spanId: 'span-multi',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-multi-path',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeSteps: { 'step-a': { value: 'a' }, 'step-b': { value: 'b' } },
+      });
+
+      expect(result.error).toBeNull();
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      // Only the first suspended path's first step should be resumed
+      expect(run.resume).toHaveBeenCalledTimes(1);
+      expect(run.resume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeData: { value: 'a' },
+          step: 'step-a',
+        }),
+      );
+    });
+
+    it('forwards requestContext through resume calls', async () => {
+      const resumeMock = vi.fn().mockResolvedValue({
+        status: 'success',
+        result: { done: true },
+        steps: {},
+        traceId: 'trace-ctx',
+        spanId: 'span-ctx',
+      });
+      const startMock = vi.fn().mockResolvedValue({
+        status: 'suspended',
+        suspended: [['step-1']],
+        suspendPayload: {},
+        steps: {},
+        traceId: 'trace-ctx',
+        spanId: 'span-ctx',
+      });
+      const mockWorkflow = {
+        id: 'test-workflow',
+        name: 'Test Workflow',
+        createRun: vi.fn().mockResolvedValue({
+          start: startMock,
+          resume: resumeMock,
+        }),
+      } as unknown as Workflow;
+
+      await executeTarget(
+        mockWorkflow,
+        'workflow',
+        {
+          id: 'item-ctx',
+          datasetId: 'ds-1',
+          input: { data: 'test' },
+          groundTruth: null,
+          version: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          resumeData: { approved: true },
+        },
+        { requestContext: { tenantId: 'tenant-1' } },
+      );
+
+      expect(resumeMock).toHaveBeenCalledTimes(1);
+      const resumeArgs = resumeMock.mock.calls[0][0];
+      expect(resumeArgs.requestContext).toBeInstanceOf(RequestContext);
+      expect(resumeArgs.requestContext.all).toEqual({ tenantId: 'tenant-1' });
+      expect(resumeArgs).toHaveProperty('tracing');
+      expect(resumeArgs).toHaveProperty('tracingContext');
+    });
+
+    it('handles run.resume() throwing an error', async () => {
+      const resumeMock = vi.fn().mockRejectedValue(new Error('Resume network error'));
+      const startMock = vi.fn().mockResolvedValue({
+        status: 'suspended',
+        suspended: [['step-1']],
+        suspendPayload: {},
+        steps: {},
+      });
+      const mockWorkflow = {
+        id: 'test-workflow',
+        name: 'Test Workflow',
+        createRun: vi.fn().mockResolvedValue({
+          start: startMock,
+          resume: resumeMock,
+        }),
+      } as unknown as Workflow;
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-resume-error',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeData: { approved: true },
+      });
+
+      expect(result.output).toBeNull();
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Resume network error' }));
+    });
+
+    it('returns null output when suspended with no suspendPayload', async () => {
+      const mockWorkflow = createMockWorkflow({
+        status: 'suspended',
+        suspended: [['step-1']],
+        steps: {},
+        traceId: 'trace-null-payload',
+        spanId: 'span-null-payload',
+      });
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-null-payload',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      expect(result.output).toBeNull();
+      expect(result.error).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('provide resume data'),
+        }),
+      );
+    });
+
     it('returns not-yet-supported error on paused status', async () => {
       const mockWorkflow = createMockWorkflow({
         status: 'paused',
