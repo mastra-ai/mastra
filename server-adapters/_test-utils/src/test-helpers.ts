@@ -10,6 +10,7 @@ import { MockMemory } from '@mastra/core/memory';
 import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
@@ -592,6 +593,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     getToolProvider: vi
       .fn()
       .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
+    getToolProviderOrThrow: vi.fn().mockImplementation((id: string) => {
+      if (id === 'test-provider') return mockToolProvider;
+      throw new UnknownToolProviderError(id, ['test-provider']);
+    }),
     getProcessorProviders: vi.fn().mockReturnValue({ 'test-provider': mockProcessorProvider }),
     getProcessorProvider: vi
       .fn()
