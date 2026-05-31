@@ -5,6 +5,7 @@ import type { MastraUIMessage } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
@@ -227,6 +228,25 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolName={toolName}
         args={args}
         result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
+      />
+    );
+  }
+
+  // Code Mode (`execute_typescript`) calls carry a `code` string arg and a
+  // `CodeModeResult` shape. Detect by shape since the tool id is configurable.
+  const codeModeCall = getCodeModeCall(args, result);
+
+  if (codeModeCall) {
+    return (
+      <CodeModeBadge
+        toolName={toolName}
+        code={codeModeCall.code}
+        result={codeModeCall.result}
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
