@@ -4296,8 +4296,8 @@ export class Mastra<
     await this.stopWorkers();
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
-    if (this.#storage && typeof (this.#storage as any).close === 'function') {
-      await (this.#storage as any).close();
+    if (this.#storage?.close) {
+      await this.#storage.close();
     }
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
