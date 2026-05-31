@@ -215,14 +215,18 @@ function injectConstValues(schema: StandardSchemaWithJSON<unknown>, input: unkno
   let injected = false;
   const result: Record<string, unknown> = { ...(input as Record<string, unknown>) };
   for (const [key, rawProp] of Object.entries(jsonSchema.properties)) {
-    if (result[key] !== undefined) continue;
     const prop = rawProp as Record<string, unknown>;
     if ('const' in prop) {
-      result[key] = prop['const'];
-      injected = true;
+      if (result[key] !== prop['const']) {
+        result[key] = prop['const'];
+        injected = true;
+      }
     } else if (Array.isArray(prop['enum']) && prop['enum'].length === 1) {
-      result[key] = prop['enum'][0];
-      injected = true;
+      const onlyValue = prop['enum'][0];
+      if (result[key] !== onlyValue) {
+        result[key] = onlyValue;
+        injected = true;
+      }
     }
   }
   return injected ? result : input;

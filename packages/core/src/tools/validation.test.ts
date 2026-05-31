@@ -2207,6 +2207,38 @@ describe('validateToolInput - Stringified JSON Coercion (GitHub #12757)', () => 
   });
 });
 
+describe('validateToolInput - const/enum auto-injection (GitHub #16444)', () => {
+  it('should inject missing const field value', () => {
+    const schema = z.object({
+      '@type': z.literal('MyType'),
+      name: z.string(),
+    });
+    const result = validateToolInput(schema, { name: 'foo' });
+    expect(result.error).toBeUndefined();
+    expect((result.data as any)['@type']).toBe('MyType');
+  });
+
+  it('should overwrite incorrect const field value', () => {
+    const schema = z.object({
+      '@type': z.literal('MyType'),
+      name: z.string(),
+    });
+    const result = validateToolInput(schema, { '@type': 'wrong', name: 'foo' });
+    expect(result.error).toBeUndefined();
+    expect((result.data as any)['@type']).toBe('MyType');
+  });
+
+  it('should overwrite incorrect single-enum field value', () => {
+    const schema = z.object({
+      version: z.enum(['v2']),
+      query: z.string(),
+    });
+    const result = validateToolInput(schema, { version: 'v1', query: 'hello' });
+    expect(result.error).toBeUndefined();
+    expect((result.data as any)['version']).toBe('v2');
+  });
+});
+
 describe('prompt alias normalization (GitHub #14154)', () => {
   const promptSchema = z.object({
     prompt: z.string(),
