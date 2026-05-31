@@ -56,14 +56,17 @@ const stubNodeBuiltinsPlugin: Plugin = {
   },
 };
 
-// Server-only / type-only packages that @mastra/core dist top-level-imports from browser-reachable
-// subpaths but only uses on lazy paths the browser never runs (posthog-node's `new PostHog()` is in
-// `getClient()`; dotenv/ws are Node-only; @standard-schema/spec is a 0-byte type-only runtime).
-// Stub them to empty so the Studio dev server starts. Dev serves these as native ESM, which (unlike
-// the Rollup build) ignores `syntheticNamedExports` — so we must declare the exact named exports the
-// graph imports (e.g. `import { PostHog }`). Map each package to its imported names ([] = default-only).
-// Pair with optimizeDeps.exclude below so esbuild never pre-bundles the real (crashing) module.
-// Root cause is in @mastra/core dist; this stub holds until those imports are made lazy there.
+// @mastra/core dist top-level-imports server-only npm packages AND Node builtins from
+// browser-reachable subpaths (telemetry, storage, fs). Vite externalizes Node builtins to a throwing
+// proxy and can't browser-resolve the npm packages, so these imports crash at module eval before
+// React renders. Every such usage is dead in the browser — the production build stubs them all to
+// empty (stubNodeBuiltinsPlugin, apply:'build') and the app works — so empty no-op exports are safe.
+// Dev serves native ESM, which ignores Rollup's syntheticNamedExports, so the stub must declare the
+// exact named exports each module's importers use. Names below are the union imported across the
+// linked @mastra dist; add to them if a new one surfaces. The real fix is in @mastra/core (make
+// these server-only imports lazy / split them off any browser-reachable entry).
+
+// npm package -> named exports the dev graph imports ([] = default only).
 const browserStubPackages: Record<string, string[]> = {
   '@standard-schema/spec': [],
   'posthog-node': ['PostHog'],
@@ -71,20 +74,49 @@ const browserStubPackages: Record<string, string[]> = {
   ws: ['WebSocket'],
 };
 
+// Node builtin -> named exports the dev graph imports (default + namespace are always covered).
+const nodeBuiltinStubExports: Record<string, string[]> = {
+  crypto: ['createHash', 'randomUUID', 'randomBytes'],
+  fs: ['existsSync', 'mkdirSync', 'readFileSync', 'writeFileSync', 'renameSync', 'statSync', 'readdirSync', 'rmSync', 'realpathSync', 'constants'],
+  os: ['tmpdir'],
+  path: ['join', 'dirname', 'resolve', 'sep', 'extname', 'relative', 'normalize', 'isAbsolute', 'basename', 'parse'],
+  stream: ['Readable', 'Writable', 'Transform', 'PassThrough'],
+  events: ['EventEmitter'],
+  async_hooks: ['AsyncLocalStorage'],
+  module: ['createRequire'],
+  child_process: ['execFile', 'execFileSync'],
+  url: ['fileURLToPath', 'pathToFileURL'],
+};
+
+// A stub module: a chainable no-op (callable, constructable, every property returns itself) exported
+// as the default and under each requested name, so even a dead code path that runs cannot throw
+// (e.g. createHash(x).update(y).digest(z)).
+const stubModuleCode = (names: string[]) =>
+  [
+    'const s = new Proxy(function () {}, { get: () => s, apply: () => s, construct: () => s });',
+    ...names.map(name => `export const ${name} = s;`),
+    'export default s;',
+  ].join('\n');
+
 const stubBrowserPackagesPlugin: Plugin = {
   name: 'stub-browser-packages',
   enforce: 'pre',
+  apply: 'serve',
   resolveId(source) {
     if (source in browserStubPackages) {
       return { id: `\0browser-stub:${source}`, moduleSideEffects: false };
     }
+    const builtin = (source.startsWith('node:') ? source.slice(5) : source).split('/')[0];
+    if (builtinModules.includes(builtin)) {
+      return { id: `\0builtin-stub:${builtin}`, moduleSideEffects: false };
+    }
   },
   load(id) {
     if (id.startsWith('\0browser-stub:')) {
-      const names = browserStubPackages[id.slice('\0browser-stub:'.length)] ?? [];
-      // Functions are both callable and constructable, covering any lazy usage shape.
-      const named = names.map(name => `export const ${name} = function () {};`).join('\n');
-      return `${named}\nexport default {};`;
+      return stubModuleCode(browserStubPackages[id.slice('\0browser-stub:'.length)] ?? []);
+    }
+    if (id.startsWith('\0builtin-stub:')) {
+      return stubModuleCode(nodeBuiltinStubExports[id.slice('\0builtin-stub:'.length)] ?? []);
     }
   },
 };
