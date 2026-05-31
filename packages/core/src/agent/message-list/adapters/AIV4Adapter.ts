@@ -13,6 +13,7 @@ import type {
   MastraDBMessage,
   MastraMessageContentV2,
   MastraMessagePart,
+  MastraToolInvocation,
   UIMessageV4Part,
   MessageSource,
   UIMessageWithMetadata,
@@ -33,10 +34,19 @@ function getDisplayTransform(
 }
 
 function transformV4ToolInvocationForDisplay(
-  invocation: NonNullable<MastraMessageContentV2['toolInvocations']>[number],
+  invocation: MastraToolInvocation,
   providerMetadata: unknown,
   enabled: boolean,
-) {
+): ToolInvocationV4 {
+  if (invocation.state === 'output-error') {
+    return {
+      ...invocation,
+      state: 'result' as const,
+      args: getDisplayTransform(providerMetadata, 'input-available', invocation.args, enabled),
+      result: getDisplayTransform(providerMetadata, 'error', invocation.errorText || '', enabled),
+    };
+  }
+
   return {
     ...invocation,
     args: getDisplayTransform(providerMetadata, 'input-available', invocation.args, enabled),
@@ -50,7 +60,7 @@ function transformV4ToolInvocationForDisplay(
           ),
         }
       : {}),
-  };
+  } as ToolInvocationV4;
 }
 
 /**
@@ -90,6 +100,23 @@ function getSignalType(message: MastraDBMessage): string | undefined {
   return message.type;
 }
 
+function getSignalTagName(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const tagName = (signal as Record<string, unknown>).tagName;
+    if (typeof tagName === 'string') return tagName;
+  }
+
+  const type = getSignalType(message);
+  if (type === 'user') return 'user';
+  if (type === 'reactive') return message.type;
+  return type;
+}
+
+function isUserSignalType(type: string | undefined): boolean {
+  return type === 'user' || type === 'user-message';
+}
+
 function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMessagePart {
   const signal =
     message.content.metadata?.signal && typeof message.content.metadata.signal === 'object'
@@ -100,11 +127,15 @@ function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMes
       ? (signal.metadata as Record<string, unknown>)
       : {};
 
+  const type = getSignalType(message) ?? 'signal';
+  const tagName = getSignalTagName(message) ?? type;
+  const dataPartTagName = type === 'user' && tagName === 'user' ? 'user-message' : tagName;
   return {
-    type: `data-${getSignalType(message) ?? 'signal'}`,
+    type: `data-${dataPartTagName}`,
     data: {
       id: typeof signal.id === 'string' ? signal.id : message.id,
-      type: getSignalType(message) ?? 'signal',
+      type,
+      tagName,
       contents: 'contents' in signal ? signal.contents : contents,
       createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
       ...(Object.keys(metadata).length ? { metadata } : {}),
@@ -183,30 +214,49 @@ export class AIV4Adapter {
           continue;
         } else if (part.type === 'tool-invocation') {
           // Handle tool invocations with step number logic
-          const toolInvocation = {
-            ...part.toolInvocation,
-            args: getDisplayTransform(
-              part.providerMetadata,
-              'input-available',
-              part.toolInvocation.args,
-              transformToolPayloads,
-            ),
-            ...(part.toolInvocation.state === 'result'
+          const sourceInvocation = part.toolInvocation as MastraToolInvocation;
+          const toolInvocation =
+            sourceInvocation.state === 'output-error'
               ? {
+                  ...sourceInvocation,
+                  state: 'result' as const,
+                  args: getDisplayTransform(
+                    part.providerMetadata,
+                    'input-available',
+                    sourceInvocation.args,
+                    transformToolPayloads,
+                  ),
                   result: getDisplayTransform(
                     part.providerMetadata,
-                    'output-available',
-                    getDisplayTransform(
-                      part.providerMetadata,
-                      'error',
-                      part.toolInvocation.result,
-                      transformToolPayloads,
-                    ),
+                    'error',
+                    sourceInvocation.errorText || '',
                     transformToolPayloads,
                   ),
                 }
-              : {}),
-          };
+              : {
+                  ...sourceInvocation,
+                  args: getDisplayTransform(
+                    part.providerMetadata,
+                    'input-available',
+                    sourceInvocation.args,
+                    transformToolPayloads,
+                  ),
+                  ...(sourceInvocation.state === 'result'
+                    ? {
+                        result: getDisplayTransform(
+                          part.providerMetadata,
+                          'output-available',
+                          getDisplayTransform(
+                            part.providerMetadata,
+                            'error',
+                            sourceInvocation.result,
+                            transformToolPayloads,
+                          ),
+                          transformToolPayloads,
+                        ),
+                      }
+                    : {}),
+                };
 
           // Find the step number for this tool invocation
           let currentStep = -1;
@@ -249,7 +299,7 @@ export class AIV4Adapter {
     }
 
     const signalType = m.role === 'signal' ? getSignalType(m) : undefined;
-    const isUserMessageSignal = signalType === 'user-message';
+    const isUserMessageSignal = isUserSignalType(signalType);
     const v4Parts = preserveExtendedParts(
       m.role === 'signal' && !isUserMessageSignal ? [toSignalDataPart(m, m.content.content || contentString)] : parts,
     );
@@ -281,8 +331,8 @@ export class AIV4Adapter {
         reasoning: undefined,
         toolInvocations:
           `toolInvocations` in m.content
-            ? m.content.toolInvocations
-                ?.filter(t => t.state === 'result')
+            ? (m.content.toolInvocations as MastraToolInvocation[] | undefined)
+                ?.filter(t => t.state === 'result' || t.state === 'output-error')
                 .map(toolInvocation => {
                   const partProviderMetadata = m.content.parts?.find(
                     part =>

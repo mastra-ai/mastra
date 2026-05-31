@@ -602,6 +602,7 @@ export type GetWorkflowRunByIdResponse = WorkflowState;
 export interface GetWorkflowResponse {
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   steps: {
     [key: string]: {
       id: string;

@@ -460,6 +460,13 @@ export class MastraCompositeStore extends MastraBase {
     await Promise.all(initTasks);
     return true;
   }
+  /**
+   * Optional lifecycle hook: release underlying client/connection handles.
+   * Implementations (e.g. LibSQLStore) override this to checkpoint WAL files
+   * and close the database client so OS handles are freed synchronously.
+   * Called automatically by Mastra.shutdown().
+   */
+  close?(): Promise<void>;
 }
 
 /**

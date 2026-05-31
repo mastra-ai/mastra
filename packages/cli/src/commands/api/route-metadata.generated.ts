@@ -154,6 +154,34 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/send-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/send-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/queue-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/queue-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/signals": {
     "method": "POST",
     "path": "/agents/:agentId/signals",

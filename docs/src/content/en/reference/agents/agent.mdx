@@ -110,9 +110,9 @@ export const agent = new Agent({
 
 ## Thread signals
 
-Use Agent signals to send real-time context into a memory thread. Signals are useful when a user adds input while an agent is already streaming, or when another process needs to add structured context to the thread.
+Use Agent signals to send real-time input and context into a memory thread. Message APIs are for user-authored input. `sendSignal()` is the lower-level API for system-generated context.
 
-A `user-message` signal represents user input. When the target thread is running, Mastra delivers the signal into the active agent loop. When the thread is idle, Mastra starts a stream with the signal as the first input by default.
+When the target thread is running, `sendMessage()` delivers the message into the active agent loop. When the thread is idle, Mastra starts a stream with the message as the first input by default.
 
 ```typescript title="src/mastra/signals.ts"
 const subscription = await agent.subscribeToThread({
@@ -126,26 +126,22 @@ void (async () => {
   }
 })()
 
-agent.sendSignal(
-  { type: 'user-message', contents: 'Use the latest customer note too.' },
-  {
-    resourceId: 'user-123',
-    threadId: 'thread-abc',
-    ifIdle: {
-      streamOptions: {
-        maxSteps: 3,
-      },
+agent.sendMessage('Use the latest customer note too.', {
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  ifIdle: {
+    streamOptions: {
+      maxSteps: 3,
     },
   },
-)
+})
 ```
 
-Use `attributes` to identify different users in a shared thread. The signal type and attributes are rendered as XML so the model can distinguish who said what:
+Use `attributes` to identify different users in a shared thread. The attributes are rendered as XML so the model can distinguish who said what:
 
 ```typescript
-agent.sendSignal(
+agent.sendMessage(
   {
-    type: 'user',
     contents: 'Can we simplify the API surface?',
     attributes: { name: 'Devin', from: 'slack' },
   },
@@ -161,6 +157,73 @@ The model receives this as:
 
 The UI sees just the message contents but can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
 
+### `sendMessage(message, options)`
+
+Sends a user message to an active run or memory thread. Use this when the active agent should receive the message immediately.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'message',
+    type: 'string | Array<TextPart | FilePart> | { contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }',
+    description:
+      'User-authored input. Bare strings and parts without attributes are sent to the model as normal user input. When `attributes` are present, Mastra renders the message as a `<user>` XML element with the attributes included.',
+  },
+  {
+    name: 'options.runId',
+    type: 'string',
+    isOptional: true,
+    description: 'Run ID to target directly. Use this when you already know the active run ID.',
+  },
+  {
+    name: 'options.resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted messages.',
+  },
+  {
+    name: 'options.threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID to target. Required with `resourceId` for thread-targeted messages.',
+  },
+  {
+    name: 'options.ifActive.behavior',
+    type: "'deliver' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+  },
+  {
+    name: 'options.ifIdle.behavior',
+    type: "'wake' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+  },
+  {
+    name: 'options.ifIdle.streamOptions',
+    type: 'AgentExecutionOptions',
+    isOptional: true,
+    description:
+      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+  },
+]}
+/>
+
+Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory.
+
+### `queueMessage(message, options)`
+
+Queues a user message for the next turn on a thread. If the thread is active, Mastra waits for the active run to finish, then starts a new run with the queued message. If the thread is idle, Mastra starts a run immediately.
+
+```typescript
+agent.queueMessage('Also check whether the tests need updates.', {
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+```
+
+`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`.
+
 ### `sendSignal(signal, options)`
 
 Sends a signal to an active run or memory thread.
@@ -169,9 +232,9 @@ Sends a signal to an active run or memory thread.
   content={[
   {
     name: 'signal',
-    type: "{ type: 'user-message' | 'system-reminder' | string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
+    type: "{ type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
     description:
-      '`user-message` signals without attributes are treated as plain user input. All other signals — including `user-message` with `attributes`, `system-reminder`, and custom types — are wrapped in an XML element named after the signal type with `attributes` rendered as XML attributes (e.g. `<user name="Devin" from="slack">message</user>`). The model sees the XML; the UI sees the raw contents and can read `attributes` for custom rendering. `providerOptions` is attached to the resulting prompt turn and persisted on the stored signal message.',
+      "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
   },
   {
     name: 'options.runId',
@@ -217,7 +280,7 @@ Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?
 
 ### `subscribeToThread(options)`
 
-Subscribes to raw stream chunks for a memory thread. Use this before calling `sendSignal()` when you need to render stream output, observe signal echoes, or abort the active run.
+Subscribes to raw stream chunks for a memory thread. Use this before calling `sendMessage()`, `queueMessage()`, or `sendSignal()` when you need to render stream output, observe signal echoes, or abort the active run.
 
 <PropertiesTable
   content={[
