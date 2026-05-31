@@ -213,7 +213,7 @@ For **Anthropic** models, mastracode supports two authentication methods:
 
 When both are available, Claude Max OAuth takes priority.
 
-For **other providers** (OpenAI, Google, etc.), set the corresponding environment variable (e.g., `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) or use OAuth where supported.
+For **other providers** (OpenAI, Google, etc.), set the corresponding environment variable (e.g., `OPENAI_API_KEY`, `GOOGLE_API_KEY`) or use OAuth where supported.
 
 Credentials are stored alongside the database in `auth.json`.
 
