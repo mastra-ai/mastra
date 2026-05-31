@@ -8,12 +8,12 @@ const inputSchema = z.object({
   query: z.string().describe('The search query'),
   country: z
     .string()
-    .length(2)
+    .regex(/^[a-z]{2}$/i, 'Country must be a 2-letter code')
     .optional()
     .describe('2-letter country code for geo-targeted results (e.g., "us", "gb")'),
   language: z
     .string()
-    .length(2)
+    .regex(/^[a-z]{2}$/i, 'Language must be a 2-letter code')
     .optional()
     .describe('Language code for localized Google results (e.g., "en", "es", "fr")'),
   start: z

@@ -97,7 +97,9 @@ async function requestBrightData(
 function buildGoogleSearchUrl(query: string, options: SearchOptions = {}) {
   const url = new URL('https://www.google.com/search');
   url.searchParams.set('q', query.trim());
-  url.searchParams.set('brd_json', '1');
+  if ((options.format ?? 'json') === 'json') {
+    url.searchParams.set('brd_json', '1');
+  }
   url.searchParams.set('hl', options.language ?? 'en');
 
   if (options.country) {
@@ -146,15 +148,23 @@ export function getBrightDataClient(config?: BrightDataClientOptions): BrightDat
   return {
     search: {
       google: async (query: string, options: SearchOptions = {}) => {
-        const url = buildGoogleSearchUrl(query, options);
+        if (options.language && !/^[a-z]{2}$/i.test(options.language)) {
+          throw new Error('language must be a two-letter code (e.g. "en", "es")');
+        }
+
+        const normalizedOptions = options.language
+          ? { ...options, language: options.language.toLowerCase() }
+          : options;
+
+        const url = buildGoogleSearchUrl(query, normalizedOptions);
         return requestBrightData(
           apiKey,
-          toRequestBody(url, options.zone ?? serpZone, {
-            ...options,
-            format: options.format ?? 'json',
+          toRequestBody(url, normalizedOptions.zone ?? serpZone, {
+            ...normalizedOptions,
+            format: normalizedOptions.format ?? 'json',
             method: 'GET',
           }),
-          options.timeout ?? timeout,
+          normalizedOptions.timeout ?? timeout,
         );
       },
     },

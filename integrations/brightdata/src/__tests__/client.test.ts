@@ -139,6 +139,33 @@ describe('getBrightDataClient', () => {
     expect(requestBody.url).toContain('hl=es');
   });
 
+  it('should normalize the language code to lowercase', async () => {
+    const client = getBrightDataClient({ apiKey: 'test-key' });
+
+    await client.search.google('pizza', { language: 'EN' });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(requestBody.url).toContain('hl=en');
+  });
+
+  it('should reject an invalid language code before making a request', async () => {
+    const client = getBrightDataClient({ apiKey: 'test-key' });
+
+    await expect(client.search.google('pizza', { language: '1_' })).rejects.toThrow(
+      'language must be a two-letter code',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('should not request structured JSON when raw format is requested', async () => {
+    const client = getBrightDataClient({ apiKey: 'test-key' });
+
+    await client.search.google('pizza', { format: 'raw' });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(requestBody.url).not.toContain('brd_json');
+  });
+
   it('should return a client object', () => {
     const client = getBrightDataClient({ apiKey: 'test-key' });
     expect(client).toBeDefined();
