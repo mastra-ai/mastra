@@ -1212,7 +1212,7 @@ export class MemoryPG extends MemoryStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.tx(async t => {
-        // Insert messages sequentially to avoid concurrent queries on the same pg client
+        // Validate all messages first
         for (const message of messages) {
           if (!message.threadId) {
             throw new Error(
@@ -1224,45 +1224,47 @@ export class MemoryPG extends MemoryStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
-          const BATCH_SIZE = 8192;
-          const batches: { placeholders: string[]; values: any[] }[] = [];
-          let currentBatch: { placeholders: string[]; values: any[] } | null = null;
+        }
 
-          for (let j = 0; j < messages.length; j++) {
-            const message = messages[j];
-            if (!currentBatch || currentBatch.placeholders.length >= BATCH_SIZE) {
-              currentBatch = { placeholders: [], values: [] };
-              batches.push(currentBatch);
-            }
-            const base = currentBatch.values.length;
-            currentBatch.placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`);
-            currentBatch.values.push(
-              message.id,
-              message.threadId,
-              typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-              message.createdAt || new Date(),
-              message.createdAt || new Date(),
-              message.role,
-              message.type || 'v2',
-              message.resourceId,
-            );
+        // Batch messages for multi-row INSERT (reduces round trips from N to ⌈N/8192⌉)
+        const BATCH_SIZE = 8192;
+        const batches: { placeholders: string[]; values: any[] }[] = [];
+        let currentBatch: { placeholders: string[]; values: any[] } | null = null;
+
+        for (const msg of messages) {
+          if (!currentBatch || currentBatch.placeholders.length >= BATCH_SIZE) {
+            currentBatch = { placeholders: [], values: [] };
+            batches.push(currentBatch);
           }
+          const base = currentBatch.values.length;
+          currentBatch.placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`);
+          currentBatch.values.push(
+            msg.id,
+            msg.threadId,
+            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+            msg.createdAt || new Date(),
+            msg.createdAt || new Date(),
+            msg.role,
+            msg.type || 'v2',
+            msg.resourceId,
+          );
+        }
 
-          for (const batch of batches) {
-            await t.none(
-              `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
-               VALUES ${batch.placeholders.join(", ")}
-               ON CONFLICT (id) DO UPDATE SET
-                thread_id = EXCLUDED.thread_id,
-                content = EXCLUDED.content,
-                role = EXCLUDED.role,
-                type = EXCLUDED.type,
-                "resourceId" = EXCLUDED."resourceId"`,
-              batch.values,
-            );
-          }
+        for (const batch of batches) {
+          await t.none(
+            `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
+             VALUES ${batch.placeholders.join(", ")}
+             ON CONFLICT (id) DO UPDATE SET
+              thread_id = EXCLUDED.thread_id,
+              content = EXCLUDED.content,
+              role = EXCLUDED.role,
+              type = EXCLUDED.type,
+              "resourceId" = EXCLUDED."resourceId"`,
+            batch.values,
+          );
+        }
 
-          // Update thread timestamp
+        // Update thread timestamp
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
         const now = new Date();
         await t.none(
