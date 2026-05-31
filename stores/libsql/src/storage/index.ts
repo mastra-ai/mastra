@@ -307,9 +307,20 @@ export class LibSQLStore extends MastraCompositeStore {
    * storage directory after Mastra.shutdown().
    *
    * Remote (Turso) databases skip the WAL pragmas and just close the client.
+   *
+   * Safe to call more than once; subsequent calls are no-ops.
    */
   async close(): Promise<void> {
-    if (this.isLocalDb) {
+    if (this.client.closed) {
+      return;
+    }
+
+    // A store built from an injected client may still point at a local file even
+    // though `isLocalDb` (derived from the url config) is false, so also trust the
+    // client's own protocol to decide whether WAL cleanup is needed.
+    const isLocalFileDb = this.isLocalDb || this.client.protocol === 'file';
+
+    if (isLocalFileDb) {
       try {
         await this.client.execute('PRAGMA wal_checkpoint(TRUNCATE);');
         await this.client.execute('PRAGMA journal_mode=DELETE;');
@@ -317,6 +328,7 @@ export class LibSQLStore extends MastraCompositeStore {
         this.logger.warn('LibSQLStore: Failed to checkpoint WAL before close.', err);
       }
     }
+
     this.client.close();
   }
 }
