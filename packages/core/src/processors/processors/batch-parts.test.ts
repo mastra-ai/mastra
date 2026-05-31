@@ -335,6 +335,52 @@ describe('BatchPartsProcessor', () => {
       });
       expect(result).toBeNull();
     });
+
+    it('emits the batched text through the writer and returns the non-text part (issue #17094)', async () => {
+      processor = new BatchPartsProcessor({ batchSize: 10 });
+
+      const written: ChunkType[] = [];
+      const writer = { custom: async (data: ChunkType) => void written.push(data) };
+
+      const chunks: ChunkType[] = [
+        { type: 'text-delta', payload: { text: 'Hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT },
+      ];
+
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      const abort = () => {
+        throw new Error('abort');
+      };
+
+      // Buffer two text deltas (batch size not reached).
+      expect(
+        await processor.processOutputStream({ part: chunks[0], streamParts: [chunks[0]], state, abort, writer }),
+      ).toBeNull();
+      expect(
+        await processor.processOutputStream({ part: chunks[1], streamParts: [chunks[1]], state, abort, writer }),
+      ).toBeNull();
+
+      // Non-text part arrives: the batched text is emitted via the writer and the
+      // non-text part is returned directly (NOT deferred), so nothing is lost even
+      // if the stream stops on this part.
+      const result = await processor.processOutputStream({
+        part: chunks[2],
+        streamParts: [chunks[2]],
+        state,
+        abort,
+        writer,
+      });
+
+      expect(written).toEqual([
+        { type: 'text-delta', runId: '1', from: ChunkFrom.AGENT, payload: { text: 'Hello world', id: 'text-1' } },
+      ]);
+      expect(result).toEqual({ type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT });
+      // Nothing should be left deferred.
+      expect((state as Record<string, unknown>).pendingNonText).toBeUndefined();
+      expect(state.batch).toEqual([]);
+    });
   });
 
   describe('timeout functionality', () => {
