@@ -86,7 +86,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * within the token budget.
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<void> {
-    const { messageList, systemMessages: coreSystemMessages } = args;
+    const { messageList } = args;
 
     if (!messageList) return;
 
@@ -99,12 +99,12 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       });
     }
 
-    // Calculate token count for system messages (always included, never filtered)
+    // Budget against the full system message set that will reach the model
+    // (untagged + tagged buckets), not just the untagged view exposed via args.
+    const allSystemMessages = messageList.getAllSystemMessages();
     let systemTokens = 0;
-    if (coreSystemMessages && coreSystemMessages.length > 0) {
-      for (const msg of coreSystemMessages) {
-        systemTokens += await this.countCoreSystemMessageTokens(msg);
-      }
+    for (const msg of allSystemMessages) {
+      systemTokens += await this.countCoreSystemMessageTokens(msg);
     }
 
     const limit = this.maxTokens;
@@ -162,8 +162,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   }
 
   /**
-   * Count tokens for a system message (CoreMessageV4 from args.systemMessages).
-   * This method only accepts system messages with string content and will throw otherwise.
+   * Count tokens for a system message. Accepts both untagged and tagged system messages
+   * read from `messageList.getAllSystemMessages()`. Only string content is supported.
    */
   private async countCoreSystemMessageTokens(message: CoreMessageV4): Promise<number> {
     if (message.role !== 'system') {

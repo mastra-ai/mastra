@@ -92,9 +92,46 @@ jobs:
           set -euo pipefail
           mapfile -t test_files < /tmp/changed-test-files
 
+          root_test_files=()
+          test_status=0
+
+          for file in "${test_files[@]}"; do
+            test_dir=""
+            search_dir="$(dirname "$file")"
+
+            while [ "$search_dir" != "." ] && [ "$search_dir" != "/" ]; do
+              if [ -f "$search_dir/vitest.config.ts" ] || [ -f "$search_dir/vitest.config.mts" ]; then
+                test_dir="$search_dir"
+                break
+              fi
+
+              search_dir="$(dirname "$search_dir")"
+            done
+
+            if [ -n "$test_dir" ]; then
+              relative_file="${file#"$test_dir"/}"
+
+              set +e
+              pnpm --dir "$test_dir" exec vitest run --passWithNoTests "$relative_file"
+              status=$?
+              set -e
+
+              if [ "$status" -ne 0 ]; then
+                test_status="$status"
+              fi
+            else
+              root_test_files+=("$file")
+            fi
+          done
+
           set +e
-          pnpm vitest run --passWithNoTests "${test_files[@]}"
-          test_status=$?
+          if [ "${#root_test_files[@]}" -gt 0 ]; then
+            pnpm vitest run --passWithNoTests "${root_test_files[@]}"
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              test_status="$status"
+            fi
+          fi
           set -e
 
           if [ "$test_status" -eq 0 ]; then

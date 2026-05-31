@@ -375,44 +375,71 @@ describe('ProcessorRunner', () => {
         expect(receivedMessages).toHaveLength(1);
         expect(receivedMessages[0].role).toBe('user');
 
-        // NEW: systemMessages parameter should be provided and contain all system messages
+        // systemMessages parameter exposes the untagged system message bucket only.
+        // Tagged buckets remain owned by the processors that added them and reach the
+        // model via messageList.getAllSystemMessages() at final assembly.
         expect(receivedSystemMessages).toBeDefined();
-        expect(receivedSystemMessages).toHaveLength(3);
+        expect(receivedSystemMessages).toHaveLength(1);
 
-        // Verify system messages content
         const systemTexts = receivedSystemMessages!.map((m: any) => {
           if (typeof m.content === 'string') return m.content;
-          // Handle structured content format with parts array
           if (m.content?.parts?.[0]?.text) return m.content.parts[0].text;
           return m.content;
         });
-        expect(systemTexts).toContain('You are a helpful assistant.');
-        expect(systemTexts).toContain('Remember the user prefers formal language.');
-        expect(systemTexts).toContain('Relevant context from previous conversations.');
+        expect(systemTexts).toEqual(['You are a helpful assistant.']);
+
+        const allSystemTexts = messageList.getAllSystemMessages().map((m: any) => m.content);
+        expect(allSystemTexts).toContain('You are a helpful assistant.');
+        expect(allSystemTexts).toContain('Remember the user prefers formal language.');
+        expect(allSystemTexts).toContain('Relevant context from previous conversations.');
       });
 
-      it('should allow InputProcessor to modify system messages via return value', async () => {
-        // Add system messages
-        messageList.addSystem('Original system prompt with verbose instructions.');
-        messageList.addSystem('Memory context that is too long and needs trimming.', 'memory');
-
-        // Add a user message
+      it('should preserve tagged system messages when InputProcessor returns systemMessages', async () => {
+        messageList.addSystem('Original system prompt.');
+        messageList.addSystem('Memory context.', 'memory');
         messageList.add([createMessage('Hello', 'user')], 'input');
 
         const inputProcessors: Processor[] = [
           {
-            id: 'system-trimmer',
-            name: 'System Trimmer',
+            id: 'system-appender',
+            name: 'System Appender',
             processInput: async ({ messages, systemMessages }) => {
-              // Modify system messages - trim them for smaller models
-              if (systemMessages) {
-                const modifiedSystemMessages = systemMessages.map((msg: any) => ({
-                  ...msg,
-                  content: typeof msg.content === 'string' ? msg.content.substring(0, 20) + '...' : msg.content,
-                }));
-                // Return modified system messages somehow (this is what the fix should enable)
-                return { messages, systemMessages: modifiedSystemMessages };
-              }
+              return {
+                messages,
+                systemMessages: [...systemMessages, { role: 'system' as const, content: 'Appended instruction.' }],
+              };
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        const result = await runner.runInputProcessors(messageList);
+
+        expect(result.getSystemMessages().map(m => m.content)).toEqual([
+          'Original system prompt.',
+          'Appended instruction.',
+        ]);
+        expect(result.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context.']);
+      });
+
+      it('should not pass tagged system messages into processor args.systemMessages', async () => {
+        let seenSystemMessages: any[] = [];
+        messageList.addSystem('Original system prompt.');
+        messageList.addSystem('Memory context.', 'memory');
+        messageList.add([createMessage('Hello', 'user')], 'input');
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-inspector',
+            name: 'System Inspector',
+            processInput: async ({ messages, systemMessages }) => {
+              seenSystemMessages = systemMessages;
               return messages;
             },
           },
@@ -427,16 +454,11 @@ describe('ProcessorRunner', () => {
 
         const result = await runner.runInputProcessors(messageList);
 
-        // After processing, the system messages should be modified
-        const allMessages = await result.get.all.aiV5.prompt();
-        const systemMessages = allMessages.filter((m: any) => m.role === 'system');
-
-        // Verify system messages were trimmed
-        expect(systemMessages).toHaveLength(2);
-        systemMessages.forEach((msg: any) => {
-          const content = typeof msg.content === 'string' ? msg.content : msg.content[0]?.text;
-          expect(content.length).toBeLessThanOrEqual(24); // 20 chars + '...'
-        });
+        expect(seenSystemMessages.map(m => m.content)).toEqual(['Original system prompt.']);
+        expect(result.getAllSystemMessages().map(m => m.content)).toEqual([
+          'Original system prompt.',
+          'Memory context.',
+        ]);
       });
 
       it('should continue to allow adding new system messages via return array (existing behavior)', async () => {
@@ -2473,7 +2495,8 @@ describe('ProcessorRunner', () => {
         expect.objectContaining({
           type: 'data-system-reminder',
           data: expect.objectContaining({
-            type: 'system-reminder',
+            type: 'reactive',
+            tagName: 'system-reminder',
             contents: 'remember this',
             metadata: { type: 'test-reminder' },
           }),

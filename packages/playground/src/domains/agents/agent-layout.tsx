@@ -7,6 +7,7 @@ import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-c
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
@@ -18,6 +19,8 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { hasObservability } = useHasObservability();
+  const { data: channelPlatforms } = useChannelPlatforms();
+  const hasChannels = Boolean(channelPlatforms?.length);
 
   const isExperimentalFeatures = coreFeatures.has('datasets');
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
@@ -37,7 +40,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         ? 'review'
         : location.pathname.includes('/traces')
           ? 'traces'
-          : 'chat';
+          : location.pathname.includes('/channels')
+            ? 'channels'
+            : 'chat';
 
   const showTopBarControls =
     (activeTab === 'versions' || activeTab === 'evaluate' || activeTab === 'review') &&
@@ -50,6 +55,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         activeTab={activeTab}
         showPlayground={showPlayground}
         showObservability={showObservability}
+        showChannels={hasChannels}
         rightSlot={showTopBarControls ? <AgentTopBarControls requestContextSchema={requestContextSchema} /> : undefined}
       />
       {children}
