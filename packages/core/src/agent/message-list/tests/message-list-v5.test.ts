@@ -367,6 +367,53 @@ describe('MessageList V5 Support', () => {
         });
       });
 
+      // Regression for #15569: a tool that failed must round-trip from storage as an
+      // error, not silently reappear as a successful result.
+      it('should round-trip a persisted output-error tool invocation as a v5 error (not a success)', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const v2Message: MastraDBMessage = {
+          id: 'msg-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: 'call-1',
+                  toolName: 'test-tool',
+                  step: 1,
+                  state: 'output-error',
+                  args: { param: 'value' },
+                  errorText: 'boom: tool exploded',
+                },
+              },
+            ],
+          },
+        };
+
+        list.add(v2Message, 'response');
+        const v5Messages = list.get.all.aiV5.ui();
+
+        const toolPart = v5Messages[0].parts.find(
+          p => p.type && typeof p.type === 'string' && p.type.startsWith('tool-'),
+        ) as { state?: string; errorText?: string; output?: unknown } | undefined;
+
+        expect(toolPart).toMatchObject({
+          type: 'tool-test-tool',
+          toolCallId: 'call-1',
+          input: { param: 'value' },
+          state: 'output-error',
+          errorText: 'boom: tool exploded',
+        });
+        // Must not be exposed as a successful output.
+        expect(toolPart?.state).not.toBe('output-available');
+        expect(toolPart?.output).toBeUndefined();
+      });
+
       it('should convert reasoning parts', () => {
         const list = new MessageList({ threadId, resourceId });
         const v2Message: MastraDBMessage = {
