@@ -257,7 +257,7 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
 
     // Handle vector data tables specially (but NOT vector_indexes which is a typed table)
     if (request.tableName.startsWith(VECTOR_TABLE_PREFIX) && request.tableName !== TABLE_VECTOR_INDEXES) {
-      return handleVectorOperation(ctx, request);
+      return await handleVectorOperation(ctx, request);
     }
 
     // Handle typed tables
@@ -287,6 +287,29 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
 function parseStoredSnapshot(stored: unknown, runId: string): Record<string, any> {
   if (typeof stored === 'string') return JSON.parse(stored);
   return JSON.parse(JSON.stringify(stored ?? createEmptyWorkflowSnapshot(runId)));
+}
+
+function parseMetadataForMerge(metadata: unknown): Record<string, unknown> {
+  if (metadata == null) return {};
+  if (typeof metadata === 'string') {
+    try {
+      const parsed = JSON.parse(metadata);
+      return parseMetadataForMerge(parsed);
+    } catch {
+      return {};
+    }
+  }
+  if (typeof metadata === 'object' && !Array.isArray(metadata)) {
+    return metadata as Record<string, unknown>;
+  }
+  return {};
+}
+
+function mergeMetadata(existing: unknown, update: Record<string, unknown> | undefined): Record<string, unknown> {
+  return {
+    ...parseMetadataForMerge(existing),
+    ...(update ?? {}),
+  };
 }
 
 /**
@@ -476,6 +499,65 @@ export async function handleTypedOperation(
         }
       });
       return { ok: true };
+    }
+
+    case 'updateThread': {
+      if (convexTable !== 'mastra_threads') {
+        return { ok: false, error: `Unsupported operation ${request.op} for table ${request.tableName}` };
+      }
+
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
+        .unique();
+
+      if (!existing) {
+        return { ok: true, result: null };
+      }
+
+      const patchRecord = {
+        title: request.title,
+        metadata: mergeMetadata(existing.metadata, request.metadata),
+        updatedAt: request.updatedAt,
+      };
+      await ctx.db.patch(existing._id, patchRecord);
+      return { ok: true, result: { ...existing, ...patchRecord } };
+    }
+
+    case 'updateResource': {
+      if (convexTable !== 'mastra_resources') {
+        return { ok: false, error: `Unsupported operation ${request.op} for table ${request.tableName}` };
+      }
+
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.resourceId))
+        .unique();
+
+      if (!existing) {
+        const record = {
+          id: request.resourceId,
+          ...(request.workingMemory !== undefined ? { workingMemory: request.workingMemory } : {}),
+          metadata: request.metadata ?? {},
+          createdAt: request.createdAt,
+          updatedAt: request.updatedAt,
+        };
+        await ctx.db.insert(convexTable, record);
+        return { ok: true, result: record };
+      }
+
+      const patchRecord: Record<string, unknown> = {
+        updatedAt: request.updatedAt,
+      };
+      if (request.workingMemory !== undefined) {
+        patchRecord.workingMemory = request.workingMemory;
+      }
+      if (request.metadata !== undefined) {
+        patchRecord.metadata = mergeMetadata(existing.metadata, request.metadata);
+      }
+
+      await ctx.db.patch(existing._id, patchRecord);
+      return { ok: true, result: { ...existing, ...patchRecord } };
     }
 
     case 'patch': {
@@ -807,6 +889,38 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
     }
 
     case 'queryTable': {
+      if (request.cursor !== undefined && request.pageSize === undefined) {
+        throw new Error('queryTable cursor requires pageSize');
+      }
+
+      if (request.pageSize !== undefined) {
+        if (!Number.isInteger(request.pageSize) || request.pageSize <= 0) {
+          throw new Error('queryTable pageSize must be a positive integer');
+        }
+        if (request.limit !== undefined) {
+          throw new Error('queryTable limit cannot be combined with pageSize');
+        }
+
+        const page = await ctx.db
+          .query(convexTable)
+          .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
+          .paginate({ cursor: request.cursor ?? null, numItems: request.pageSize });
+
+        let docs = page.page;
+
+        // Apply filters if provided
+        if (request.filters && request.filters.length > 0) {
+          docs = docs.filter((doc: any) => request.filters!.every(filter => doc[filter.field] === filter.value));
+        }
+
+        return {
+          ok: true,
+          result: docs,
+          hasMore: !page.isDone,
+          continuationCursor: page.continueCursor,
+        };
+      }
+
       // Use take() to avoid hitting Convex's 32k document limit
       const maxDocs = request.limit ? Math.min(request.limit * 2, 10000) : 10000;
       let docs = await ctx.db

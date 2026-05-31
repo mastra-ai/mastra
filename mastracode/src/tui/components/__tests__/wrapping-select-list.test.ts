@@ -138,4 +138,65 @@ describe('WrappingSelectList', () => {
       expect(onSelectionChange).toHaveBeenCalledWith(expect.objectContaining({ value: 'b' }));
     });
   });
+
+  describe('multi-select — space toggles, enter confirms all checked items', () => {
+    it('renders an unchecked checkbox per item in multi-select mode', () => {
+      const list = new WrappingSelectList(items('Alpha', 'Beta'), 5, theme, true);
+      const lines = list.render(40);
+      expect(lines[0]).toContain('[ ] Alpha');
+      expect(lines[1]).toContain('[ ] Beta');
+    });
+
+    it('checks the highlighted item when space is pressed', () => {
+      const list = new WrappingSelectList(items('Alpha', 'Beta'), 5, theme, true);
+      list.handleInput(' ');
+      const lines = list.render(40);
+      expect(lines[0]).toContain('[x] Alpha');
+      expect(lines[1]).toContain('[ ] Beta');
+    });
+
+    it('toggles an item off when space is pressed again', () => {
+      const list = new WrappingSelectList(items('Alpha'), 5, theme, true);
+      list.handleInput(' ');
+      list.handleInput(' ');
+      expect(list.render(40)[0]).toContain('[ ] Alpha');
+    });
+
+    it('does not fire onSelect on enter in multi-select mode', () => {
+      const list = new WrappingSelectList(items('Alpha', 'Beta'), 5, theme, true);
+      const onSelect = vi.fn();
+      list.onSelect = onSelect;
+      list.handleInput('__tui.select.confirm__');
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('fires onConfirmMulti with every checked item in display order on enter', () => {
+      const list = new WrappingSelectList(items('Alpha', 'Beta', 'Gamma'), 5, theme, true);
+      const onConfirmMulti = vi.fn();
+      list.onConfirmMulti = onConfirmMulti;
+      // Check Alpha, move to Gamma, check it — Beta stays unchecked.
+      list.handleInput(' ');
+      list.handleInput('__tui.select.down__');
+      list.handleInput('__tui.select.down__');
+      list.handleInput(' ');
+      list.handleInput('__tui.select.confirm__');
+      expect(onConfirmMulti).toHaveBeenCalledTimes(1);
+      expect(onConfirmMulti.mock.calls[0][0].map((i: { value: string }) => i.value)).toEqual(['Alpha', 'Gamma']);
+    });
+
+    it('fires onConfirmMulti with an empty array when nothing is checked', () => {
+      const list = new WrappingSelectList(items('Alpha'), 5, theme, true);
+      const onConfirmMulti = vi.fn();
+      list.onConfirmMulti = onConfirmMulti;
+      list.handleInput('__tui.select.confirm__');
+      expect(onConfirmMulti).toHaveBeenCalledWith([]);
+    });
+
+    it('ignores space in single-select mode', () => {
+      const list = new WrappingSelectList(items('Alpha'), 5, theme);
+      list.handleInput(' ');
+      expect(list.render(40)[0]).not.toContain('[x]');
+      expect(list.render(40)[0]).not.toContain('[ ]');
+    });
+  });
 });

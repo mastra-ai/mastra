@@ -365,4 +365,160 @@ describe('FilesystemVersionedHelpers - Git integration', () => {
     expect(FilesystemVersionedHelpers.isGitVersion('hydrated-agent-1-v1')).toBe(false);
     expect(FilesystemVersionedHelpers.isGitVersion('some-random-uuid')).toBe(false);
   });
+
+  it('loads git commits for per-entity files (code mode)', async () => {
+    // Code mode persists each agent as its own JSON file under agents/<id>.json
+    mkdirSync(join(storageDir, 'agents'), { recursive: true });
+
+    writeAndCommit(
+      storageDir,
+      'agents/agent-1.json',
+      { name: 'Agent v1', instructions: 'Be helpful' },
+      'Initial code-mode commit',
+    );
+    writeAndCommit(
+      storageDir,
+      'agents/agent-1.json',
+      { name: 'Agent v2', instructions: 'Be very helpful' },
+      'Tighten instructions',
+    );
+
+    const db = new FilesystemDB(storageDir);
+    const helpers = new FilesystemVersionedHelpers<StorageAgentType, AgentVersion>({
+      db,
+      entitiesFile: 'agents.json',
+      parentIdField: 'agentId',
+      name: 'TestAgents',
+      versionMetadataFields: ['id', 'agentId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt'],
+      perEntityFilesDir: 'agents',
+      shouldPersistToPerEntityFile: () => true,
+    });
+
+    const result = await helpers.listVersions(versionInput('agent-1'), 'agentId');
+
+    // 2 git commits + 1 hydrated (current disk) = 3
+    expect(result.total).toBe(3);
+    const versions = result.versions;
+    expect(versions[0]!.versionNumber).toBe(3); // hydrated
+    expect(versions[1]!.versionNumber).toBe(2);
+    expect(versions[2]!.versionNumber).toBe(1);
+
+    expect(versions[2]!.changeMessage).toBe('Initial code-mode commit');
+    expect(versions[1]!.changeMessage).toBe('Tighten instructions');
+
+    // Git versions are properly tagged
+    expect(versions[1]!.id.startsWith('git-')).toBe(true);
+    expect(versions[2]!.id.startsWith('git-')).toBe(true);
+
+    // Snapshot content is the per-entity file content (flattened, no entityId key)
+    const v1 = versions[2] as unknown as Record<string, unknown>;
+    expect(v1.name).toBe('Agent v1');
+    expect(v1.instructions).toBe('Be helpful');
+  });
+
+  it('lazily surfaces git history for a per-entity file deleted on disk', async () => {
+    // Commit a per-entity file, then delete it from disk in a later commit.
+    // It is no longer on disk and not in the entities map, so the bulk
+    // git-history pass would miss it; listVersions must discover it lazily.
+    mkdirSync(join(storageDir, 'agents'), { recursive: true });
+
+    // Keep another tracked file in the storage dir so it survives on disk after
+    // the per-entity file is removed (git does not track empty directories).
+    writeAndCommit(storageDir, 'agents.json', {}, 'Seed shared file');
+
+    writeAndCommit(
+      storageDir,
+      'agents/ghost-agent.json',
+      { name: 'Ghost v1', instructions: 'Be spooky' },
+      'Add ghost-agent',
+    );
+    writeAndCommit(
+      storageDir,
+      'agents/ghost-agent.json',
+      { name: 'Ghost v2', instructions: 'Be very spooky' },
+      'Update ghost-agent',
+    );
+    git(repoDir, ['rm', join('.mastra-storage', 'agents', 'ghost-agent.json')]);
+    git(repoDir, ['commit', '-m', 'Delete ghost-agent']);
+
+    const db = new FilesystemDB(storageDir);
+    const helpers = new FilesystemVersionedHelpers<StorageAgentType, AgentVersion>({
+      db,
+      entitiesFile: 'agents.json',
+      parentIdField: 'agentId',
+      name: 'TestAgents',
+      versionMetadataFields: ['id', 'agentId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt'],
+      perEntityFilesDir: 'agents',
+      shouldPersistToPerEntityFile: () => true,
+    });
+
+    const result = await helpers.listVersions(versionInput('ghost-agent'), 'agentId');
+
+    // 2 git commits, no hydrated version (deleted on disk)
+    expect(result.total).toBe(2);
+    const versions = result.versions;
+    expect(versions[0]!.changeMessage).toBe('Update ghost-agent');
+    expect(versions[1]!.changeMessage).toBe('Add ghost-agent');
+    expect(versions[0]!.id.startsWith('git-')).toBe(true);
+    expect(versions[1]!.id.startsWith('git-')).toBe(true);
+  });
+
+  it('getNextVersionNumber accounts for git-only versions of a deleted-on-disk entity', async () => {
+    // A recreated entity must not be assigned a version number that collides
+    // with the git history that getNextVersionNumber would otherwise miss.
+    mkdirSync(join(storageDir, 'agents'), { recursive: true });
+    writeAndCommit(storageDir, 'agents.json', {}, 'Seed shared file');
+    writeAndCommit(
+      storageDir,
+      'agents/ghost-agent.json',
+      { name: 'Ghost v1', instructions: 'Be spooky' },
+      'Add ghost-agent',
+    );
+    writeAndCommit(
+      storageDir,
+      'agents/ghost-agent.json',
+      { name: 'Ghost v2', instructions: 'Be very spooky' },
+      'Update ghost-agent',
+    );
+    git(repoDir, ['rm', join('.mastra-storage', 'agents', 'ghost-agent.json')]);
+    git(repoDir, ['commit', '-m', 'Delete ghost-agent']);
+
+    const db = new FilesystemDB(storageDir);
+    const helpers = new FilesystemVersionedHelpers<StorageAgentType, AgentVersion>({
+      db,
+      entitiesFile: 'agents.json',
+      parentIdField: 'agentId',
+      name: 'TestAgents',
+      versionMetadataFields: ['id', 'agentId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt'],
+      perEntityFilesDir: 'agents',
+      shouldPersistToPerEntityFile: () => true,
+    });
+
+    // 2 git versions exist for the deleted entity, so the next number is 3 —
+    // not 1, which would collide with the lazily discovered git versions.
+    expect(await helpers.getNextVersionNumber('ghost-agent')).toBe(3);
+  });
+
+  it('dangerouslyClearAll removes per-entity files', async () => {
+    mkdirSync(join(storageDir, 'agents'), { recursive: true });
+    writeFileSync(join(storageDir, 'agents', 'agent-1.json'), JSON.stringify({ name: 'Agent 1' }, null, 2));
+    writeFileSync(join(storageDir, 'agents', 'agent-2.json'), JSON.stringify({ name: 'Agent 2' }, null, 2));
+
+    const db = new FilesystemDB(storageDir);
+    const helpers = new FilesystemVersionedHelpers<StorageAgentType, AgentVersion>({
+      db,
+      entitiesFile: 'agents.json',
+      parentIdField: 'agentId',
+      name: 'TestAgents',
+      versionMetadataFields: ['id', 'agentId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt'],
+      perEntityFilesDir: 'agents',
+      shouldPersistToPerEntityFile: () => true,
+    });
+
+    expect(db.listDomainFiles('agents')).toHaveLength(2);
+
+    await helpers.dangerouslyClearAll();
+
+    expect(db.listDomainFiles('agents')).toHaveLength(0);
+  });
 });

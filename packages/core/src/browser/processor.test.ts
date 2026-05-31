@@ -154,7 +154,8 @@ describe('BrowserContextProcessor', () => {
       expect(addedMessage.content.metadata).toEqual(
         expect.objectContaining({
           signal: expect.objectContaining({
-            type: 'system-reminder',
+            type: 'reactive',
+            tagName: 'system-reminder',
             attributes: expect.objectContaining({ type: 'browser-context' }),
             metadata: expect.objectContaining({
               url: 'https://example.com/page',

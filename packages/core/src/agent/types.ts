@@ -82,6 +82,7 @@ export type ToolsInput = Record<
 export type AgentInstructions = SystemMessage;
 
 export type {
+  AgentMessageInput,
   AgentSignalAttributes,
   AgentSignalInput as AgentSignal,
   AgentSignalType,
@@ -132,6 +133,26 @@ export interface SendAgentSignalResult {
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
 }
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageResult = SendAgentSignalResult;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageResult = SendAgentSignalResult;
 
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;
