@@ -12,7 +12,7 @@ import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
-import type { AgentMethodType } from '../../types';
+import type { AgentMethodType, StructuredOutputOptions } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
@@ -171,8 +171,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided
     if (options.structuredOutput?.model) {
-      const structuredProcessor = new StructuredOutputProcessor({
-        ...options.structuredOutput,
+      const structuredOutput = options.structuredOutput as StructuredOutputOptions<Extract<OUTPUT, {}>>;
+      const structuredProcessor = new StructuredOutputProcessor<Extract<OUTPUT, {}>>({
+        ...structuredOutput,
         logger: capabilities.logger,
       });
       if (capabilities.mastra) {

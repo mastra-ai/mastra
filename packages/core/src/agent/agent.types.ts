@@ -647,19 +647,30 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   _skipBgTaskWait?: boolean;
 } & Partial<ObservabilityContext>;
 
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+type StructuredOutputExecutionOption<OUTPUT, STRUCTURED_OUTPUT> =
+  IsAny<OUTPUT> extends true
+    ? { structuredOutput?: STRUCTURED_OUTPUT }
+    : [OUTPUT] extends [undefined | null | void]
+      ? { structuredOutput?: never }
+      : OUTPUT extends {}
+        ? { structuredOutput: STRUCTURED_OUTPUT }
+        : { structuredOutput?: never };
+
 /**
  * Public-facing agent execution options that accept PublicSchema types (Zod, AI SDK Schema, JSON Schema, StandardSchemaWithJSON).
  * Use this type for public method signatures.
  */
 export type PublicAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  StructuredOutputExecutionOption<OUTPUT, PublicStructuredOutputOptions<OUTPUT>>;
 
 /**
  * Internal agent execution options that require StandardSchemaWithJSON.
  * Use this type internally after converting from PublicSchema.
  */
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  StructuredOutputExecutionOption<OUTPUT, StructuredOutputOptions<OUTPUT>>;
 
 export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   outputWriter?: OutputWriter;
@@ -673,4 +684,4 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     snapshot: WorkflowRunState;
   };
   toolCallId?: string;
-} & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+} & StructuredOutputExecutionOption<OUTPUT, StructuredOutputOptions<OUTPUT>>;
