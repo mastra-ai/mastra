@@ -38,12 +38,13 @@ describe('llm-execution-step response createdAt ordering (#16893)', () => {
     // messages are added rapidly.
     const HISTORY_COUNT = 80;
     for (let i = 0; i < HISTORY_COUNT; i++) {
+      const role = i % 2 === 0 ? 'user' : 'assistant';
       messageList.add(
         {
-          role: i % 2 === 0 ? 'user' : 'assistant',
+          role,
           content: `filler conversation message #${i}`,
         },
-        'input',
+        role === 'assistant' ? 'response' : 'input',
       );
     }
     messageList.add({ role: 'user', content: 'Please echo the exact word: hello' }, 'input');

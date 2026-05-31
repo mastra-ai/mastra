@@ -28,6 +28,58 @@ export type VercelToolV5 = ToolV5;
 
 export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 
+/**
+ * Context passed to a global `requireToolApproval` function, evaluated per tool call.
+ */
+export type ToolApprovalContext = {
+  /** Name of the tool being called. */
+  toolName: string;
+  /** Arguments the model is passing to the tool. */
+  args: Record<string, unknown>;
+  /** Plain object view of the request context, when available. */
+  requestContext?: Record<string, unknown>;
+  /** Active workspace, when the run is bound to one. */
+  workspace?: Workspace;
+};
+
+/**
+ * Function form of the global `requireToolApproval` option. Evaluated per tool call;
+ * return `true` to require approval for that call, `false` to allow it. Enables
+ * conditional, per-call approval policies (e.g. regex matching on `toolName`).
+ */
+export type RequireToolApprovalFn = (ctx: ToolApprovalContext) => boolean | Promise<boolean>;
+
+/**
+ * Global tool approval setting. `true` requires approval for every tool call,
+ * `false`/omitted requires none, and a function decides per call.
+ */
+export type RequireToolApproval = boolean | RequireToolApprovalFn;
+
+/**
+ * Context passed to a per-tool `needsApprovalFn` alongside the parsed tool input.
+ * This is the same context surfaced to a tool-level `requireApproval` function.
+ */
+export type NeedsApprovalContext = {
+  /** Plain object view of the request context, when available. */
+  requestContext?: Record<string, unknown>;
+  /** Active workspace, when the run is bound to one. */
+  workspace?: Workspace;
+};
+
+/**
+ * Per-tool approval predicate attached to a tool instance.
+ *
+ * This is the runtime-resolved form of a tool's `requireApproval` function (or of an
+ * MCP server-level `requireToolApproval` function wrapped by the MCP client). It is
+ * evaluated per tool call with the parsed input and the available context; return
+ * `true` to require approval for that call, `false` to allow it.
+ *
+ * It is attached to the tool instance by {@link CoreToolBuilder} / the MCP client and
+ * read by the agent runtime. Prefer the public `requireApproval` option on
+ * `createTool` over setting this directly.
+ */
+export type NeedsApprovalFn = (input: any, ctx?: NeedsApprovalContext) => boolean | Promise<boolean>;
+
 export type ToolPayloadTransformTarget = 'display' | 'transcript';
 
 export type ToolPayloadTransformPhase =
