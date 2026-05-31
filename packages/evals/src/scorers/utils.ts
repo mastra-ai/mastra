@@ -734,8 +734,8 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
     const fromParts = legacy
       ? undefined
       : message?.content?.parts
-          ?.filter((p: any): p is { type: 'tool-invocation'; toolInvocation: any } => p.type === 'tool-invocation')
-          .map((p: any) => p.toolInvocation);
+          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
+          .map(p => p.toolInvocation);
     const toolInvocations = legacy ?? fromParts;
 
     if (!toolInvocations?.length) continue;
@@ -846,8 +846,8 @@ export function extractToolResults(output: ScorerRunOutputForAgent): ToolResultI
     const fromParts = legacy
       ? undefined
       : message?.content?.parts
-          ?.filter((p: any): p is { type: 'tool-invocation'; toolInvocation: any } => p.type === 'tool-invocation')
-          .map((p: any) => p.toolInvocation);
+          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
+          .map(p => p.toolInvocation);
     const toolInvocations = legacy ?? fromParts;
 
     if (!toolInvocations?.length) continue;
