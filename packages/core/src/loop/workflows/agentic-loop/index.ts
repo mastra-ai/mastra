@@ -17,6 +17,71 @@ interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT = undefined>
   outputWriter: OutputWriter;
 }
 
+type StepContentCursor = {
+  messageIndex: number;
+  contentOffset: number;
+};
+
+// Agentic loop response messages grow at the tail within a run: the latest
+// message can gain content, and later iterations can append new messages. The
+// loop does not compact historical non-user messages between iterations, so this
+// cursor can track that tail without rebuilding already-processed content.
+function getMessageContent<Tools extends ToolSet>(message: { content: unknown }): StepResult<Tools>['content'] {
+  const content = message.content as unknown as StepResult<Tools>['content'];
+  return Array.isArray(content) ? content : ([content] as StepResult<Tools>['content']);
+}
+
+/**
+ * Returns the non-user message content appended since the last cursor position,
+ * without rebuilding already-processed content from earlier iterations.
+ *
+ * The cursor tracks both `messageIndex` (the tail message read last) and
+ * `contentOffset` (how many content parts of that message were already read),
+ * so it correctly handles two ways the tail grows between iterations: new
+ * content appended to the previous last message, and entirely new messages.
+ *
+ * Edge cases:
+ * - Empty `messages`: returns no content and a reset cursor `{ messageIndex: 0, contentOffset: 0 }`.
+ * - Cursor past the end (messages were truncated/replaced): returns no content
+ *   and points the cursor at the end of the current last message.
+ *
+ * @param messages - Accumulated non-user messages, each with a `content` field
+ *   (a single part or an array of parts).
+ * @param cursor - Position read up to in the previous call.
+ * @returns The newly appended content and the advanced cursor to pass next time.
+ */
+export function getCurrentStepContent<Tools extends ToolSet>(
+  messages: ReadonlyArray<{ content: unknown }>,
+  cursor: StepContentCursor,
+): { content: StepResult<Tools>['content']; cursor: StepContentCursor } {
+  if (messages.length === 0) {
+    return { content: [], cursor: { messageIndex: 0, contentOffset: 0 } };
+  }
+
+  if (cursor.messageIndex >= messages.length) {
+    const lastContent = getMessageContent<Tools>(messages[messages.length - 1]!);
+    return { content: [], cursor: { messageIndex: messages.length - 1, contentOffset: lastContent.length } };
+  }
+
+  const currentContent: StepResult<Tools>['content'] = [];
+  const nextCursor: StepContentCursor = { messageIndex: messages.length - 1, contentOffset: 0 };
+  for (let messageIndex = cursor.messageIndex; messageIndex < messages.length; messageIndex++) {
+    const messageContent = getMessageContent<Tools>(messages[messageIndex]!);
+    const contentOffset =
+      messageIndex === cursor.messageIndex ? Math.min(cursor.contentOffset, messageContent.length) : 0;
+
+    for (let contentIndex = contentOffset; contentIndex < messageContent.length; contentIndex++) {
+      currentContent.push(messageContent[contentIndex]!);
+    }
+
+    if (messageIndex === nextCursor.messageIndex) {
+      nextCursor.contentOffset = messageContent.length;
+    }
+  }
+
+  return { content: currentContent, cursor: nextCursor };
+}
+
 export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   params: AgenticLoopParams<Tools, OUTPUT>,
 ) {
@@ -36,7 +101,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
   // Track accumulated steps across iterations to pass to stopWhen
   const accumulatedSteps: StepResult<Tools>[] = [];
   // Track previous content to determine what's new in each step
-  let previousContentLength = 0;
+  let contentCursor: StepContentCursor = { messageIndex: 0, contentOffset: 0 };
   // When continue:false + feedback, allow one more LLM turn then stop
   let pendingFeedbackStop = false;
 
@@ -98,13 +163,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         pendingFeedbackStop = false;
       }
 
-      const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
-        message => message.content as unknown as StepResult<Tools>['content'],
-      );
-
       // Only include new content in this step (content added since the previous iteration)
-      const currentContent = allContent.slice(previousContentLength);
-      previousContentLength = allContent.length;
+      const currentStepContent = getCurrentStepContent<Tools>(typedInputData.messages.nonUser, contentCursor);
+      const currentContent = currentStepContent.content;
+      contentCursor = currentStepContent.cursor;
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
 
