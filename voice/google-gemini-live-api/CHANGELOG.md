@@ -1,5 +1,14 @@
 # @mastra/voice-google-gemini-live
 
+## 0.11.5-alpha.2
+
+### Patch Changes
+
+- Fixed Gemini Live tool registration failing with `1007 Unknown name` errors for tools using discriminated unions, literals, and nullable types. The `sanitizeToolParameters` method now rewrites `oneOf` → `anyOf`, `const` → `enum`, and collapses nullable `anyOf` patterns into OpenAPI 3.0-compatible `type` + `nullable: true` form. Fixes #17020. ([#17179](https://github.com/mastra-ai/mastra/pull/17179))
+
+- Updated dependencies [[`00eca42`](https://github.com/mastra-ai/mastra/commit/00eca4252393aa114dc8c9a5e1da68df91fa06cf), [`ff9d743`](https://github.com/mastra-ai/mastra/commit/ff9d743f71d7e072927725c0d700632aca0c1fee)]:
+  - @mastra/schema-compat@1.2.11-alpha.0
+
 ## 0.11.5-alpha.1
 
 ### Patch Changes
