@@ -198,6 +198,40 @@ describe('shell passthrough config', () => {
     });
   });
 
+  it('preserves inner quotes in cmd commands so /s strips only the outer pair', () => {
+    const invocation = resolveShellPassthroughInvocation(
+      'echo "hello world" & dir',
+      { mode: 'path', executable: 'cmd.exe' },
+      {},
+      'win32',
+    );
+
+    // Under /s cmd strips the first and last quote on the line, leaving the
+    // inner command (including its own quotes) intact.
+    expect(invocation).toMatchObject({
+      kind: 'explicit',
+      family: 'cmd',
+      args: ['/d', '/s', '/c', '"echo "hello world" & dir"'],
+    });
+  });
+
+  it('wraps cmd commands that end with a quote', () => {
+    const invocation = resolveShellPassthroughInvocation(
+      'type "notes.txt"',
+      { mode: 'path', executable: 'cmd.exe' },
+      {},
+      'win32',
+    );
+
+    // The appended wrapper quote becomes the line's last quote, so /s strips it
+    // and the leading wrapper quote, preserving the command's own trailing quote.
+    expect(invocation).toMatchObject({
+      kind: 'explicit',
+      family: 'cmd',
+      args: ['/d', '/s', '/c', '"type "notes.txt""'],
+    });
+  });
+
   it('does not label cmd login mode as loading profiles', () => {
     const invocation = resolveShellPassthroughInvocation('dir', { mode: 'login', executable: 'cmd.exe' }, {}, 'win32');
 

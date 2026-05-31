@@ -109,6 +109,10 @@ function buildExplicitShellArgs(
   }
 
   if (family === 'cmd') {
+    // With /s, cmd.exe strips the first and last quote on the line and runs
+    // everything in between verbatim. Wrapping the whole command in one pair of
+    // quotes therefore preserves any inner quotes (e.g. quoted paths) exactly,
+    // without needing to escape them. See the cmd /C quote-handling rules.
     return ['/d', '/s', '/c', `"${command}"`];
   }
 
