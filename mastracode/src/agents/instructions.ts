@@ -1,12 +1,9 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
-import type { z } from 'zod';
-import type { stateSchema } from '../schema.js';
+import type { MastraCodeState } from '../schema.js';
 import { detectCommonBinariesAsync } from '../utils/binaries.js';
 import { getCurrentGitBranchAsync } from '../utils/project.js';
 import type { PromptContext } from './prompts/index.js';
 import { buildFullPrompt } from './prompts/index.js';
-
-type MastraCodeState = z.infer<typeof stateSchema>;
 
 export async function getDynamicInstructions({ requestContext }: { requestContext: { get(key: string): unknown } }) {
   const harnessContext = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;

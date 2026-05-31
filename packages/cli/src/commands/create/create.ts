@@ -97,6 +97,8 @@ export const create = async (args: {
       observabilityProject: args.observabilityProject,
       observabilityMode: 'create',
       observabilityToken: result?.observabilityToken,
+      observabilityOrgId: result?.observabilityOrgId,
+      observabilityOrgName: result?.observabilityOrgName,
     });
     postCreate({ projectName });
     return;
