@@ -33,7 +33,7 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
 // would otherwise replace them with __vite-browser-external (no named exports).
 // Node-only npm packages imported by @mastra/core server-only code (e.g. sandbox).
 // These are never called in the browser — stub them alongside Node builtins.
-const nodeOnlyPackages = new Set(['execa', 'posthog-node', 'dotenv', 'ws']);
+const nodeOnlyPackages = new Set(['execa']);
 
 const stubNodeBuiltinsPlugin: Plugin = {
   name: 'stub-node-builtins',
@@ -56,28 +56,35 @@ const stubNodeBuiltinsPlugin: Plugin = {
   },
 };
 
-// Specifiers that must resolve to an EMPTY module in the Studio browser graph (dev + build).
-// @mastra/core dist top-level-imports these from browser-reachable subpaths, but only uses them
-// on lazy/server-only paths the browser never runs (e.g. posthog-node's `new PostHog()` lives in
-// `getClient()`; dotenv/ws are Node-only). stubNodeBuiltinsPlugin is apply:'build', so dev needs
-// its own stub. Two failure modes, one fix:
-//   - @standard-schema/spec: 0-byte type-only runtime -> "does not provide an export named 'default'".
-//   - posthog-node: pre-bundled module reads process.argv[1] at eval (process is {env:{}}) -> TypeError.
-// Pair with optimizeDeps.exclude below so esbuild never pre-bundles the crashing artifact. Root cause
-// is in @mastra/core dist; this stub holds until those imports are made lazy there.
-const browserStubPackages = new Set(['@standard-schema/spec', 'posthog-node', 'dotenv', 'ws']);
+// Server-only / type-only packages that @mastra/core dist top-level-imports from browser-reachable
+// subpaths but only uses on lazy paths the browser never runs (posthog-node's `new PostHog()` is in
+// `getClient()`; dotenv/ws are Node-only; @standard-schema/spec is a 0-byte type-only runtime).
+// Stub them to empty so the Studio dev server starts. Dev serves these as native ESM, which (unlike
+// the Rollup build) ignores `syntheticNamedExports` — so we must declare the exact named exports the
+// graph imports (e.g. `import { PostHog }`). Map each package to its imported names ([] = default-only).
+// Pair with optimizeDeps.exclude below so esbuild never pre-bundles the real (crashing) module.
+// Root cause is in @mastra/core dist; this stub holds until those imports are made lazy there.
+const browserStubPackages: Record<string, string[]> = {
+  '@standard-schema/spec': [],
+  'posthog-node': ['PostHog'],
+  dotenv: ['config', 'parse'],
+  ws: ['WebSocket'],
+};
 
 const stubBrowserPackagesPlugin: Plugin = {
   name: 'stub-browser-packages',
   enforce: 'pre',
   resolveId(source) {
-    if (browserStubPackages.has(source)) {
+    if (source in browserStubPackages) {
       return { id: `\0browser-stub:${source}`, moduleSideEffects: false };
     }
   },
   load(id) {
     if (id.startsWith('\0browser-stub:')) {
-      return { code: 'export default {}', syntheticNamedExports: true };
+      const names = browserStubPackages[id.slice('\0browser-stub:'.length)] ?? [];
+      // Functions are both callable and constructable, covering any lazy usage shape.
+      const named = names.map(name => `export const ${name} = function () {};`).join('\n');
+      return `${named}\nexport default {};`;
     }
   },
 };
