@@ -306,3 +306,38 @@ describe('toAssistantUIMessage file and image parts', () => {
     expect(part.image).toBe(dataUrl);
   });
 });
+
+describe('toAssistantUIMessage reasoning reload', () => {
+  /**
+   * Persisted reasoning parts arrive from the DB with an empty `reasoning` string
+   * and the actual thinking text inside `details` (AIV5Adapter writes
+   * `reasoning: '', details: [{ type: 'text', text }]`, and core's own reader
+   * falls back to `details` when `reasoning` is empty). On reload the converter
+   * receives this shape, so the visible reasoning text must come from `details`.
+   */
+  const persistedReasoningPart = (text: string): MastraMessagePart =>
+    ({ type: 'reasoning', reasoning: '', details: [{ type: 'text', text }] }) as MastraMessagePart;
+
+  it('renders persisted reasoning text from details when reasoning is empty', () => {
+    const { content } = toAssistantUIMessage(
+      assistantMessage([persistedReasoningPart('Let me think about this step by step.')]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('reasoning');
+    if (part.type !== 'reasoning') throw new Error('expected reasoning');
+    expect(part.text).toBe('Let me think about this step by step.');
+  });
+
+  it('still renders live reasoning text from the reasoning field while streaming', () => {
+    const livePart = { type: 'reasoning', reasoning: 'thinking out loud' } as MastraMessagePart;
+    const { content } = toAssistantUIMessage(assistantMessage([livePart]));
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('reasoning');
+    if (part.type !== 'reasoning') throw new Error('expected reasoning');
+    expect(part.text).toBe('thinking out loud');
+  });
+});
