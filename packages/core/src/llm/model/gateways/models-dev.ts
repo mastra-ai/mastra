@@ -67,12 +67,24 @@ function interpolateUrlTemplate(url: string, envVars?: typeof process.env): stri
   });
 }
 
+function resolveApiKeyFromEnv(apiKeyEnvVar: ProviderConfig['apiKeyEnvVar']): string | undefined {
+  const envVars = Array.isArray(apiKeyEnvVar) ? apiKeyEnvVar : [apiKeyEnvVar];
+
+  for (const envVar of envVars) {
+    const apiKey = process.env[envVar];
+    if (apiKey) return apiKey;
+  }
+}
+
 // Provider-specific overrides for URL, npm package, and other config.
 // These take priority over what models.dev returns (e.g. correct base URLs, SDK packages).
 // This constant is ONLY used during generation in fetchProviders() to determine
 // which providers from models.dev should be included in the registry.
 // At runtime, buildUrl() and buildHeaders() use the pre-generated PROVIDER_REGISTRY instead.
 const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
+  google: {
+    apiKeyEnvVar: ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
+  },
   mistral: {
     url: 'https://api.mistral.ai/v1',
   },
@@ -234,10 +246,11 @@ export class ModelsDevGateway extends MastraModelGateway {
       throw new Error(`Could not find config for provider ${provider} with model id ${modelId}`);
     }
 
-    const apiKey = typeof config.apiKeyEnvVar === `string` ? process.env[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
+    const apiKey = resolveApiKeyFromEnv(config.apiKeyEnvVar);
 
     if (!apiKey) {
-      throw new Error(`Could not find API key process.env.${config.apiKeyEnvVar} for model id ${modelId}`);
+      const envVarDisplay = Array.isArray(config.apiKeyEnvVar) ? config.apiKeyEnvVar.join(' or ') : config.apiKeyEnvVar;
+      throw new Error(`Could not find API key process.env.${envVarDisplay} for model id ${modelId}`);
     }
 
     return Promise.resolve(apiKey);

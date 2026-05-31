@@ -1,5 +1,77 @@
 # @mastra/core
 
+## 1.38.0-alpha.2
+
+### Minor Changes
+
+- Added `channels.threadContext.addSystemMessage` to opt out of the built-in channel system message. By default, `AgentChannels` injects a short system message telling the agent which channel/platform a request came from (DM vs public, bot identity, etc.). Set `addSystemMessage: false` to skip it: ([#17171](https://github.com/mastra-ai/mastra/pull/17171))
+
+  ```ts
+  new Agent({
+    channels: {
+      adapters: { slack: createSlackAdapter() },
+      threadContext: {
+        addSystemMessage: false,
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed Observational Memory and other tagged system context being lost when an agent uses Channels. Channel-specific context now adds itself alongside other processors' system messages instead of replacing them. ([#17168](https://github.com/mastra-ai/mastra/pull/17168))
+
+- Fixed Convex workflow storage to save concurrent workflow updates atomically. ([#16641](https://github.com/mastra-ai/mastra/pull/16641))
+
+- Add `updateThread` as an abstract method on the `MastraMemory` base class and implement it in `MockMemory`. Previously the method existed only on the concrete `Memory` subclass, so calling `updateThread` on a variable typed as `MastraMemory` (or any other `MastraMemory` subclass) produced a TypeScript error. Callers can now rename or re-title threads through the base class API without casting. ([#17130](https://github.com/mastra-ai/mastra/pull/17130))
+
+- Added `jsonPromptInjection` to the scorer `judge` config so users can opt out of native `response_format` for models that don't support it (e.g. some Groq Llama models). Previously, every scorer invocation made a wasted 400 API call before falling back to prompt injection. ([#17046](https://github.com/mastra-ai/mastra/pull/17046))
+
+  ```typescript
+  import { createScorer } from '@mastra/core/evals';
+
+  const scorer = createScorer({
+    id: 'translation-quality',
+    description: 'Evaluates translation quality',
+    judge: {
+      model: 'groq/llama-3.3-70b-versatile',
+      instructions: 'You are an expert evaluator…',
+      jsonPromptInjection: true, // skip the unsupported `response_format` attempt
+    },
+  });
+  ```
+
+  Fixes #17040.
+
+- Fixed `MASTRA_TELEMETRY_DISABLED` opt-out detection. The values `1`, `true`, and `yes` (case-insensitive, trimmed) now reliably disable telemetry in both `@mastra/core` enterprise events and the `mastra` CLI's PostHog analytics. ([#16990](https://github.com/mastra-ai/mastra/pull/16990))
+
+  Previously, `@mastra/core` only treated the literal string `'1'` as disabled, so common opt-out values like `MASTRA_TELEMETRY_DISABLED=true` silently kept telemetry on.
+
+  The `mastra` CLI's `PosthogAnalytics` constructor now also short-circuits when telemetry is disabled — no disk I/O, no tracking ID generation, no PostHog client. Previously the config file (`mastra-cli.json`) was written even when telemetry was disabled.
+
+  **Example:**
+
+  ```bash
+  # .env — any of these now reliably disable telemetry
+  MASTRA_TELEMETRY_DISABLED=true
+  MASTRA_TELEMETRY_DISABLED=1
+  MASTRA_TELEMETRY_DISABLED=yes
+  ```
+
+## 1.37.2-alpha.1
+
+### Patch Changes
+
+- Fixed sub-agent version resolution in supervisor mode. Sub-agents now inherit the parent's draft/published version semantics — when chatting in the editor (draft mode), sub-agents resolve to their latest draft version; in the main agent chat (published mode), sub-agents resolve to their published version. Previously, sub-agents without explicit per-agent version overrides always fell back to the code-defined default, ignoring the parent's version context. ([#17165](https://github.com/mastra-ai/mastra/pull/17165))
+
+## 1.37.2-alpha.0
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
 ## 1.37.1
 
 ### Patch Changes

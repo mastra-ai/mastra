@@ -1,5 +1,39 @@
 # @mastra/nestjs
 
+## 0.1.10-alpha.2
+
+### Patch Changes
+
+- Fixed validation error responses on routes with `bodySchema`, `queryParamSchema`, or `pathParamSchema` losing field path information when consumers pin a different `zod` major than the one bundled with this adapter. Responses now return the actual field name in `issues[].field` (e.g. `"agent_id"`) instead of `"unknown"` with the raw Zod issues serialized into `issues[0].message`. ([#17172](https://github.com/mastra-ai/mastra/pull/17172))
+
+  `ValidationError.zodError` is now typed as `ZodErrorLike` (a structural subset of `ZodError` exposing `issues[]`) so consumers pinning a different `zod` major still type-check. The runtime value is unchanged; cast to your installed `ZodError` type if you need its instance methods.
+
+  Fixes [#17167](https://github.com/mastra-ai/mastra/issues/17167).
+
+- Updated dependencies [[`d779de3`](https://github.com/mastra-ai/mastra/commit/d779de3cd9d2e7ed8110547190e2f15e786a0e41), [`1750c97`](https://github.com/mastra-ai/mastra/commit/1750c975d6179fbf6db2813b15229d4f8f23fc55), [`09972fe`](https://github.com/mastra-ai/mastra/commit/09972fe6b7b92ade32d70deda7094af2e52b2676), [`0e32507`](https://github.com/mastra-ai/mastra/commit/0e32507962cdfa5569b7bda5bc6fb3dd34e40b03), [`3a081c1`](https://github.com/mastra-ai/mastra/commit/3a081c1255c5ae8c99f6dad91cc612934ef6f2bd), [`fe9eacd`](https://github.com/mastra-ai/mastra/commit/fe9eacd9545a0a9d64aad31c9fa90294a425289e), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194)]:
+  - @mastra/core@1.38.0-alpha.2
+  - @mastra/server@1.38.0-alpha.2
+
+## 0.1.10-alpha.1
+
+### Patch Changes
+
+- Added sseFlushOnConnect route option to scope the SSE connected comment to subscribe endpoints only ([#17158](https://github.com/mastra-ai/mastra/pull/17158))
+
+- Scoped the SSE connected comment to subscribe routes only and added SSE comment passthrough for Fastify and NestJS adapters ([#17158](https://github.com/mastra-ai/mastra/pull/17158))
+
+- Updated dependencies [[`9d87d68`](https://github.com/mastra-ai/mastra/commit/9d87d688371f5d1252ebb18d96890b51ade7de7c), [`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c), [`9d87d68`](https://github.com/mastra-ai/mastra/commit/9d87d688371f5d1252ebb18d96890b51ade7de7c)]:
+  - @mastra/server@1.37.2-alpha.1
+  - @mastra/core@1.37.2-alpha.1
+
+## 0.1.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`07c3de7`](https://github.com/mastra-ai/mastra/commit/07c3de7f7bc418beccaea3b5e6b7f7cdda79d492)]:
+  - @mastra/core@1.37.2-alpha.0
+  - @mastra/server@1.37.2-alpha.0
+
 ## 0.1.9
 
 ### Patch Changes

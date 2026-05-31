@@ -4726,6 +4726,7 @@ export type PostAgentsAgentIdGenerate_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -4892,6 +4893,7 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5060,6 +5062,7 @@ export type PostAgentsAgentIdStream_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5226,6 +5229,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5397,6 +5401,7 @@ export type PostAgentsAgentIdStreamVnext_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5553,142 +5558,129 @@ export interface PostAgentsAgentIdObserve_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/signals
+// Route: POST /agents/:agentId/send-message
 // ============================================================================
-export type PostAgentsAgentIdSignals_PathParams = {
+export type PostAgentsAgentIdSendMessage_PathParams = {
   /** Unique identifier for the agent */
   agentId: string;
 };
 
-type PostAgentsAgentIdSignals_Body_Auxiliary_2 =
+type PostAgentsAgentIdSendMessage_Body_Auxiliary_3 =
   | string
   | number
   | boolean
   | null
-  | PostAgentsAgentIdSignals_Body_Auxiliary_2[]
+  | PostAgentsAgentIdSendMessage_Body_Auxiliary_3[]
   | {
-      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+      [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
     };
 
-export type PostAgentsAgentIdSignals_Body =
+export type PostAgentsAgentIdSendMessage_Body =
   | {
-      signal: {
-        id?: string | undefined;
-        createdAt?: (string | Date) | undefined;
-        metadata?:
-          | {
-              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-            }
-          | undefined;
-        attributes?:
-          | {
-              [key: string]: string | number | boolean | null | undefined;
-            }
-          | undefined;
-        type: string;
-        contents:
-          | string
-          | (
-              | {
-                  type: 'text';
-                  text: string;
-                  providerOptions?:
-                    | {
-                        [key: string]: {
-                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-                        };
-                      }
-                    | undefined;
-                }
-              | {
-                  type: 'file';
-                  data: string;
-                  mediaType: string;
-                  filename?: string | undefined;
-                  providerOptions?:
-                    | {
-                        [key: string]: {
-                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-                        };
-                      }
-                    | undefined;
-                }
-            )[];
-        providerOptions?:
-          | {
-              [key: string]: {
-                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-              };
-            }
-          | undefined;
-      };
       ifActive?:
         | {
             behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
           }
         | undefined;
       runId: string;
       resourceId?: string | undefined;
       threadId?: string | undefined;
       ifIdle?: undefined | undefined;
+      message:
+        | (
+            | string
+            | (
+                | {
+                    type: 'text';
+                    text: string;
+                    providerOptions?:
+                      | {
+                          [key: string]: {
+                            [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                          };
+                        }
+                      | undefined;
+                  }
+                | {
+                    type: 'file';
+                    data: string;
+                    mediaType: string;
+                    filename?: string | undefined;
+                    providerOptions?:
+                      | {
+                          [key: string]: {
+                            [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                          };
+                        }
+                      | undefined;
+                  }
+              )[]
+          )
+        | {
+            contents:
+              | string
+              | (
+                  | {
+                      type: 'text';
+                      text: string;
+                      providerOptions?:
+                        | {
+                            [key: string]: {
+                              [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                            };
+                          }
+                        | undefined;
+                    }
+                  | {
+                      type: 'file';
+                      data: string;
+                      mediaType: string;
+                      filename?: string | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: {
+                              [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                            };
+                          }
+                        | undefined;
+                    }
+                )[];
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                }
+              | undefined;
+            providerOptions?:
+              | {
+                  [key: string]: {
+                    [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                  };
+                }
+              | undefined;
+          };
     }
   | {
-      signal: {
-        id?: string | undefined;
-        createdAt?: (string | Date) | undefined;
-        metadata?:
-          | {
-              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-            }
-          | undefined;
-        attributes?:
-          | {
-              [key: string]: string | number | boolean | null | undefined;
-            }
-          | undefined;
-        type: string;
-        contents:
-          | string
-          | (
-              | {
-                  type: 'text';
-                  text: string;
-                  providerOptions?:
-                    | {
-                        [key: string]: {
-                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-                        };
-                      }
-                    | undefined;
-                }
-              | {
-                  type: 'file';
-                  data: string;
-                  mediaType: string;
-                  filename?: string | undefined;
-                  providerOptions?:
-                    | {
-                        [key: string]: {
-                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-                        };
-                      }
-                    | undefined;
-                }
-            )[];
-        providerOptions?:
-          | {
-              [key: string]: {
-                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
-              };
-            }
-          | undefined;
-      };
       ifActive?:
         | {
             behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
           }
         | undefined;
-      runId?: string | undefined;
+      runId?: undefined | undefined;
       resourceId: string;
       threadId: string;
       ifIdle?:
@@ -5736,6 +5728,7 @@ export type PostAgentsAgentIdSignals_Body =
                                   };
                             }
                           | undefined;
+                        defaultStatus?: ('draft' | 'published') | undefined;
                       }
                     | undefined;
                   maxSteps?: number | undefined;
@@ -5831,13 +5824,800 @@ export type PostAgentsAgentIdSignals_Body =
                   [x: string]: unknown;
                 }
               | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
           }
         | undefined;
+      message:
+        | (
+            | string
+            | (
+                | {
+                    type: 'text';
+                    text: string;
+                    providerOptions?:
+                      | {
+                          [key: string]: {
+                            [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                          };
+                        }
+                      | undefined;
+                  }
+                | {
+                    type: 'file';
+                    data: string;
+                    mediaType: string;
+                    filename?: string | undefined;
+                    providerOptions?:
+                      | {
+                          [key: string]: {
+                            [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                          };
+                        }
+                      | undefined;
+                  }
+              )[]
+          )
+        | {
+            contents:
+              | string
+              | (
+                  | {
+                      type: 'text';
+                      text: string;
+                      providerOptions?:
+                        | {
+                            [key: string]: {
+                              [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                            };
+                          }
+                        | undefined;
+                    }
+                  | {
+                      type: 'file';
+                      data: string;
+                      mediaType: string;
+                      filename?: string | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: {
+                              [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                            };
+                          }
+                        | undefined;
+                    }
+                )[];
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                }
+              | undefined;
+            providerOptions?:
+              | {
+                  [key: string]: {
+                    [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                  };
+                }
+              | undefined;
+          };
+    };
+
+export type PostAgentsAgentIdSendMessage_Response = {
+  accepted: true;
+  runId: string;
+  signal?: any | undefined;
+};
+
+export type PostAgentsAgentIdSendMessage_Request = Simplify<
+  (PostAgentsAgentIdSendMessage_PathParams extends never ? {} : { params: PostAgentsAgentIdSendMessage_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdSendMessage_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdSendMessage_Body
+        ? { body?: PostAgentsAgentIdSendMessage_Body }
+        : { body: PostAgentsAgentIdSendMessage_Body })
+>;
+
+export interface PostAgentsAgentIdSendMessage_RouteContract {
+  pathParams: PostAgentsAgentIdSendMessage_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdSendMessage_Body;
+  request: PostAgentsAgentIdSendMessage_Request;
+  response: PostAgentsAgentIdSendMessage_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/queue-message
+// ============================================================================
+export type PostAgentsAgentIdQueueMessage_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+type PostAgentsAgentIdQueueMessage_Body_Auxiliary_3 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostAgentsAgentIdQueueMessage_Body_Auxiliary_3[]
+  | {
+      [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+    };
+
+export type PostAgentsAgentIdQueueMessage_Body =
+  | {
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      runId: string;
+      resourceId?: string | undefined;
+      threadId?: string | undefined;
+      ifIdle?: undefined | undefined;
+      message:
+        | (
+            | string
+            | (
+                | {
+                    type: 'text';
+                    text: string;
+                    providerOptions?:
+                      | {
+                          [key: string]: {
+                            [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                          };
+                        }
+                      | undefined;
+                  }
+                | {
+                    type: 'file';
+                    data: string;
+                    mediaType: string;
+                    filename?: string | undefined;
+                    providerOptions?:
+                      | {
+                          [key: string]: {
+                            [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                          };
+                        }
+                      | undefined;
+                  }
+              )[]
+          )
+        | {
+            contents:
+              | string
+              | (
+                  | {
+                      type: 'text';
+                      text: string;
+                      providerOptions?:
+                        | {
+                            [key: string]: {
+                              [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                            };
+                          }
+                        | undefined;
+                    }
+                  | {
+                      type: 'file';
+                      data: string;
+                      mediaType: string;
+                      filename?: string | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: {
+                              [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                            };
+                          }
+                        | undefined;
+                    }
+                )[];
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                }
+              | undefined;
+            providerOptions?:
+              | {
+                  [key: string]: {
+                    [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                  };
+                }
+              | undefined;
+          };
+    }
+  | {
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      runId?: undefined | undefined;
+      resourceId: string;
+      threadId: string;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            streamOptions?:
+              | {
+                  instructions?: (string | string[] | any | any[]) | undefined;
+                  system?: (string | string[] | any | any[]) | undefined;
+                  context?: any[] | undefined;
+                  memory?:
+                    | {
+                        thread:
+                          | string
+                          | {
+                              id: string;
+                              [x: string]: unknown;
+                            };
+                        resource: string;
+                        options?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        readOnly?: boolean | undefined;
+                      }
+                    | undefined;
+                  runId?: string | undefined;
+                  savePerStep?: boolean | undefined;
+                  requestContext?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  versions?:
+                    | {
+                        agents?:
+                          | {
+                              [key: string]:
+                                | {
+                                    versionId: string;
+                                  }
+                                | {
+                                    status: 'draft' | 'published';
+                                  };
+                            }
+                          | undefined;
+                        defaultStatus?: ('draft' | 'published') | undefined;
+                      }
+                    | undefined;
+                  maxSteps?: number | undefined;
+                  stopWhen?: any | undefined;
+                  providerOptions?:
+                    | {
+                        anthropic?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        google?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        openai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        xai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                      }
+                    | undefined;
+                  modelSettings?: any | undefined;
+                  activeTools?: string[] | undefined;
+                  toolsets?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  clientTools?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  toolChoice?:
+                    | (
+                        | ('auto' | 'none' | 'required')
+                        | {
+                            type: 'tool';
+                            toolName: string;
+                          }
+                      )
+                    | undefined;
+                  requireToolApproval?: boolean | undefined;
+                  scorers?:
+                    | (
+                        | {
+                            [key: string]: any;
+                          }
+                        | {
+                            [key: string]: {
+                              scorer: string;
+                              sampling?: any | undefined;
+                            };
+                          }
+                      )
+                    | undefined;
+                  returnScorerData?: boolean | undefined;
+                  tracingOptions?:
+                    | {
+                        metadata?:
+                          | {
+                              [key: string]: unknown;
+                            }
+                          | undefined;
+                        requestContextKeys?: string[] | undefined;
+                        traceId?: string | undefined;
+                        parentSpanId?: string | undefined;
+                        tags?: string[] | undefined;
+                        hideInput?: boolean | undefined;
+                        hideOutput?: boolean | undefined;
+                      }
+                    | undefined;
+                  output?: any | undefined;
+                  structuredOutput?:
+                    | {
+                        schema: {
+                          [x: string]: unknown;
+                        };
+                        model?: (string | any) | undefined;
+                        instructions?: string | undefined;
+                        jsonPromptInjection?: boolean | undefined;
+                        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+                        fallbackValue?: any | undefined;
+                      }
+                    | undefined;
+                  [x: string]: unknown;
+                }
+              | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      message:
+        | (
+            | string
+            | (
+                | {
+                    type: 'text';
+                    text: string;
+                    providerOptions?:
+                      | {
+                          [key: string]: {
+                            [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                          };
+                        }
+                      | undefined;
+                  }
+                | {
+                    type: 'file';
+                    data: string;
+                    mediaType: string;
+                    filename?: string | undefined;
+                    providerOptions?:
+                      | {
+                          [key: string]: {
+                            [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                          };
+                        }
+                      | undefined;
+                  }
+              )[]
+          )
+        | {
+            contents:
+              | string
+              | (
+                  | {
+                      type: 'text';
+                      text: string;
+                      providerOptions?:
+                        | {
+                            [key: string]: {
+                              [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                            };
+                          }
+                        | undefined;
+                    }
+                  | {
+                      type: 'file';
+                      data: string;
+                      mediaType: string;
+                      filename?: string | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: {
+                              [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                            };
+                          }
+                        | undefined;
+                    }
+                )[];
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                }
+              | undefined;
+            providerOptions?:
+              | {
+                  [key: string]: {
+                    [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                  };
+                }
+              | undefined;
+          };
+    };
+
+export type PostAgentsAgentIdQueueMessage_Response = {
+  accepted: true;
+  runId: string;
+  signal?: any | undefined;
+};
+
+export type PostAgentsAgentIdQueueMessage_Request = Simplify<
+  (PostAgentsAgentIdQueueMessage_PathParams extends never ? {} : { params: PostAgentsAgentIdQueueMessage_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdQueueMessage_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdQueueMessage_Body
+        ? { body?: PostAgentsAgentIdQueueMessage_Body }
+        : { body: PostAgentsAgentIdQueueMessage_Body })
+>;
+
+export interface PostAgentsAgentIdQueueMessage_RouteContract {
+  pathParams: PostAgentsAgentIdQueueMessage_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdQueueMessage_Body;
+  request: PostAgentsAgentIdQueueMessage_Request;
+  response: PostAgentsAgentIdQueueMessage_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/signals
+// ============================================================================
+export type PostAgentsAgentIdSignals_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+type PostAgentsAgentIdSignals_Body_Auxiliary_3 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostAgentsAgentIdSignals_Body_Auxiliary_3[]
+  | {
+      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+    };
+
+export type PostAgentsAgentIdSignals_Body =
+  | {
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      runId: string;
+      resourceId?: string | undefined;
+      threadId?: string | undefined;
+      ifIdle?: undefined | undefined;
+      signal: {
+        id?: string | undefined;
+        createdAt?: (string | Date) | undefined;
+        metadata?:
+          | {
+              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+            }
+          | undefined;
+        attributes?:
+          | {
+              [key: string]: string | number | boolean | null | undefined;
+            }
+          | undefined;
+        type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
+        tagName?: string | undefined;
+        contents:
+          | string
+          | (
+              | {
+                  type: 'text';
+                  text: string;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                        };
+                      }
+                    | undefined;
+                }
+              | {
+                  type: 'file';
+                  data: string;
+                  mediaType: string;
+                  filename?: string | undefined;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                        };
+                      }
+                    | undefined;
+                }
+            )[];
+        providerOptions?:
+          | {
+              [key: string]: {
+                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+              };
+            }
+          | undefined;
+      };
+    }
+  | {
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      runId?: undefined | undefined;
+      resourceId: string;
+      threadId: string;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            streamOptions?:
+              | {
+                  instructions?: (string | string[] | any | any[]) | undefined;
+                  system?: (string | string[] | any | any[]) | undefined;
+                  context?: any[] | undefined;
+                  memory?:
+                    | {
+                        thread:
+                          | string
+                          | {
+                              id: string;
+                              [x: string]: unknown;
+                            };
+                        resource: string;
+                        options?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        readOnly?: boolean | undefined;
+                      }
+                    | undefined;
+                  runId?: string | undefined;
+                  savePerStep?: boolean | undefined;
+                  requestContext?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  versions?:
+                    | {
+                        agents?:
+                          | {
+                              [key: string]:
+                                | {
+                                    versionId: string;
+                                  }
+                                | {
+                                    status: 'draft' | 'published';
+                                  };
+                            }
+                          | undefined;
+                        defaultStatus?: ('draft' | 'published') | undefined;
+                      }
+                    | undefined;
+                  maxSteps?: number | undefined;
+                  stopWhen?: any | undefined;
+                  providerOptions?:
+                    | {
+                        anthropic?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        google?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        openai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        xai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                      }
+                    | undefined;
+                  modelSettings?: any | undefined;
+                  activeTools?: string[] | undefined;
+                  toolsets?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  clientTools?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  toolChoice?:
+                    | (
+                        | ('auto' | 'none' | 'required')
+                        | {
+                            type: 'tool';
+                            toolName: string;
+                          }
+                      )
+                    | undefined;
+                  requireToolApproval?: boolean | undefined;
+                  scorers?:
+                    | (
+                        | {
+                            [key: string]: any;
+                          }
+                        | {
+                            [key: string]: {
+                              scorer: string;
+                              sampling?: any | undefined;
+                            };
+                          }
+                      )
+                    | undefined;
+                  returnScorerData?: boolean | undefined;
+                  tracingOptions?:
+                    | {
+                        metadata?:
+                          | {
+                              [key: string]: unknown;
+                            }
+                          | undefined;
+                        requestContextKeys?: string[] | undefined;
+                        traceId?: string | undefined;
+                        parentSpanId?: string | undefined;
+                        tags?: string[] | undefined;
+                        hideInput?: boolean | undefined;
+                        hideOutput?: boolean | undefined;
+                      }
+                    | undefined;
+                  output?: any | undefined;
+                  structuredOutput?:
+                    | {
+                        schema: {
+                          [x: string]: unknown;
+                        };
+                        model?: (string | any) | undefined;
+                        instructions?: string | undefined;
+                        jsonPromptInjection?: boolean | undefined;
+                        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+                        fallbackValue?: any | undefined;
+                      }
+                    | undefined;
+                  [x: string]: unknown;
+                }
+              | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      signal: {
+        id?: string | undefined;
+        createdAt?: (string | Date) | undefined;
+        metadata?:
+          | {
+              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+            }
+          | undefined;
+        attributes?:
+          | {
+              [key: string]: string | number | boolean | null | undefined;
+            }
+          | undefined;
+        type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
+        tagName?: string | undefined;
+        contents:
+          | string
+          | (
+              | {
+                  type: 'text';
+                  text: string;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                        };
+                      }
+                    | undefined;
+                }
+              | {
+                  type: 'file';
+                  data: string;
+                  mediaType: string;
+                  filename?: string | undefined;
+                  providerOptions?:
+                    | {
+                        [key: string]: {
+                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                        };
+                      }
+                    | undefined;
+                }
+            )[];
+        providerOptions?:
+          | {
+              [key: string]: {
+                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+              };
+            }
+          | undefined;
+      };
     };
 
 export type PostAgentsAgentIdSignals_Response = {
   accepted: true;
   runId: string;
+  signal?: any | undefined;
 };
 
 export type PostAgentsAgentIdSignals_Request = Simplify<
@@ -6074,6 +6854,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -6407,6 +7188,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -6578,6 +7360,7 @@ export type PostAgentsAgentIdNetwork_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -7220,6 +8003,7 @@ export type PostAgentsAgentIdStreamVNext_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -7391,6 +8175,7 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -7564,6 +8349,7 @@ export type PostAgentsAgentIdStreamUi_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -8763,6 +9549,75 @@ export interface PostWorkflowsWorkflowIdResumeAsync_RouteContract {
   body: PostWorkflowsWorkflowIdResumeAsync_Body;
   request: PostWorkflowsWorkflowIdResumeAsync_Request;
   response: PostWorkflowsWorkflowIdResumeAsync_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /workflows/:workflowId/resume-no-wait
+// ============================================================================
+export type PostWorkflowsWorkflowIdResumeNoWait_PathParams = {
+  /** Unique identifier for the workflow */
+  workflowId: string;
+};
+
+export type PostWorkflowsWorkflowIdResumeNoWait_QueryParams = {
+  /** Unique identifier for the run */
+  runId: string;
+};
+
+export type PostWorkflowsWorkflowIdResumeNoWait_Body = {
+  step?: (string | string[]) | undefined;
+  resumeData?: unknown | undefined;
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  tracingOptions?:
+    | {
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContextKeys?: string[] | undefined;
+        traceId?: string | undefined;
+        parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
+      }
+    | undefined;
+  perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
+};
+
+export type PostWorkflowsWorkflowIdResumeNoWait_Response = {
+  runId: string;
+};
+
+export type PostWorkflowsWorkflowIdResumeNoWait_Request = Simplify<
+  (PostWorkflowsWorkflowIdResumeNoWait_PathParams extends never
+    ? {}
+    : { params: PostWorkflowsWorkflowIdResumeNoWait_PathParams }) &
+    (PostWorkflowsWorkflowIdResumeNoWait_QueryParams extends never
+      ? {}
+      : {} extends PostWorkflowsWorkflowIdResumeNoWait_QueryParams
+        ? { query?: PostWorkflowsWorkflowIdResumeNoWait_QueryParams }
+        : { query: PostWorkflowsWorkflowIdResumeNoWait_QueryParams }) &
+    (PostWorkflowsWorkflowIdResumeNoWait_Body extends never
+      ? {}
+      : {} extends PostWorkflowsWorkflowIdResumeNoWait_Body
+        ? { body?: PostWorkflowsWorkflowIdResumeNoWait_Body }
+        : { body: PostWorkflowsWorkflowIdResumeNoWait_Body })
+>;
+
+export interface PostWorkflowsWorkflowIdResumeNoWait_RouteContract {
+  pathParams: PostWorkflowsWorkflowIdResumeNoWait_PathParams;
+  queryParams: PostWorkflowsWorkflowIdResumeNoWait_QueryParams;
+  body: PostWorkflowsWorkflowIdResumeNoWait_Body;
+  request: PostWorkflowsWorkflowIdResumeNoWait_Request;
+  response: PostWorkflowsWorkflowIdResumeNoWait_Response;
   responseType: 'json';
 }
 
@@ -19297,6 +20152,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -19468,6 +20324,7 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -75650,6 +76507,7 @@ export type PostDatasetsDatasetIdExperiments_Body = {
                   };
             }
           | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
 };
@@ -77419,6 +78277,75 @@ export interface PostAgentBuilderActionIdResumeAsync_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agent-builder/:actionId/resume-no-wait
+// ============================================================================
+export type PostAgentBuilderActionIdResumeNoWait_PathParams = {
+  /** Unique identifier for the agent-builder action */
+  actionId: string;
+};
+
+export type PostAgentBuilderActionIdResumeNoWait_QueryParams = {
+  /** Unique identifier for the run */
+  runId: string;
+};
+
+export type PostAgentBuilderActionIdResumeNoWait_Body = {
+  step?: (string | string[]) | undefined;
+  resumeData?: unknown | undefined;
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  tracingOptions?:
+    | {
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContextKeys?: string[] | undefined;
+        traceId?: string | undefined;
+        parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
+      }
+    | undefined;
+  perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
+};
+
+export type PostAgentBuilderActionIdResumeNoWait_Response = {
+  runId: string;
+};
+
+export type PostAgentBuilderActionIdResumeNoWait_Request = Simplify<
+  (PostAgentBuilderActionIdResumeNoWait_PathParams extends never
+    ? {}
+    : { params: PostAgentBuilderActionIdResumeNoWait_PathParams }) &
+    (PostAgentBuilderActionIdResumeNoWait_QueryParams extends never
+      ? {}
+      : {} extends PostAgentBuilderActionIdResumeNoWait_QueryParams
+        ? { query?: PostAgentBuilderActionIdResumeNoWait_QueryParams }
+        : { query: PostAgentBuilderActionIdResumeNoWait_QueryParams }) &
+    (PostAgentBuilderActionIdResumeNoWait_Body extends never
+      ? {}
+      : {} extends PostAgentBuilderActionIdResumeNoWait_Body
+        ? { body?: PostAgentBuilderActionIdResumeNoWait_Body }
+        : { body: PostAgentBuilderActionIdResumeNoWait_Body })
+>;
+
+export interface PostAgentBuilderActionIdResumeNoWait_RouteContract {
+  pathParams: PostAgentBuilderActionIdResumeNoWait_PathParams;
+  queryParams: PostAgentBuilderActionIdResumeNoWait_QueryParams;
+  body: PostAgentBuilderActionIdResumeNoWait_Body;
+  request: PostAgentBuilderActionIdResumeNoWait_Request;
+  response: PostAgentBuilderActionIdResumeNoWait_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agent-builder/:actionId/resume
 // ============================================================================
 export type PostAgentBuilderActionIdResume_PathParams = {
@@ -78142,6 +79069,8 @@ export interface RouteTypes {
   'POST /agents/:agentId/stream-until-idle': PostAgentsAgentIdStreamUntilIdle_RouteContract;
   'POST /agents/:agentId/stream/vnext': PostAgentsAgentIdStreamVnext_RouteContract;
   'POST /agents/:agentId/observe': PostAgentsAgentIdObserve_RouteContract;
+  'POST /agents/:agentId/send-message': PostAgentsAgentIdSendMessage_RouteContract;
+  'POST /agents/:agentId/queue-message': PostAgentsAgentIdQueueMessage_RouteContract;
   'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
   'POST /agents/:agentId/threads/subscribe': PostAgentsAgentIdThreadsSubscribe_RouteContract;
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
@@ -78190,6 +79119,7 @@ export interface RouteTypes {
   'POST /workflows/:workflowId/start': PostWorkflowsWorkflowIdStart_RouteContract;
   'POST /workflows/:workflowId/observe': PostWorkflowsWorkflowIdObserve_RouteContract;
   'POST /workflows/:workflowId/resume-async': PostWorkflowsWorkflowIdResumeAsync_RouteContract;
+  'POST /workflows/:workflowId/resume-no-wait': PostWorkflowsWorkflowIdResumeNoWait_RouteContract;
   'POST /workflows/:workflowId/resume': PostWorkflowsWorkflowIdResume_RouteContract;
   'POST /workflows/:workflowId/runs/:runId/cancel': PostWorkflowsWorkflowIdRunsRunIdCancel_RouteContract;
   'POST /workflows/:workflowId/time-travel': PostWorkflowsWorkflowIdTimeTravel_RouteContract;
@@ -78449,6 +79379,7 @@ export interface RouteTypes {
   'POST /agent-builder/:actionId/observe': PostAgentBuilderActionIdObserve_RouteContract;
   'POST /agent-builder/:actionId/observe-stream-legacy': PostAgentBuilderActionIdObserveStreamLegacy_RouteContract;
   'POST /agent-builder/:actionId/resume-async': PostAgentBuilderActionIdResumeAsync_RouteContract;
+  'POST /agent-builder/:actionId/resume-no-wait': PostAgentBuilderActionIdResumeNoWait_RouteContract;
   'POST /agent-builder/:actionId/resume': PostAgentBuilderActionIdResume_RouteContract;
   'POST /agent-builder/:actionId/resume-stream': PostAgentBuilderActionIdResumeStream_RouteContract;
   'POST /agent-builder/:actionId/runs/:runId/cancel': PostAgentBuilderActionIdRunsRunIdCancel_RouteContract;
@@ -78501,6 +79432,9 @@ export interface Client {
   };
   '/agent-builder/:actionId/resume-async': {
     POST: PostAgentBuilderActionIdResumeAsync_RouteContract;
+  };
+  '/agent-builder/:actionId/resume-no-wait': {
+    POST: PostAgentBuilderActionIdResumeNoWait_RouteContract;
   };
   '/agent-builder/:actionId/resume-stream': {
     POST: PostAgentBuilderActionIdResumeStream_RouteContract;
@@ -78586,11 +79520,17 @@ export interface Client {
   '/agents/:agentId/observe': {
     POST: PostAgentsAgentIdObserve_RouteContract;
   };
+  '/agents/:agentId/queue-message': {
+    POST: PostAgentsAgentIdQueueMessage_RouteContract;
+  };
   '/agents/:agentId/resume-stream': {
     POST: PostAgentsAgentIdResumeStream_RouteContract;
   };
   '/agents/:agentId/resume-stream-until-idle': {
     POST: PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
+  };
+  '/agents/:agentId/send-message': {
+    POST: PostAgentsAgentIdSendMessage_RouteContract;
   };
   '/agents/:agentId/signals': {
     POST: PostAgentsAgentIdSignals_RouteContract;
@@ -79266,6 +80206,9 @@ export interface Client {
   };
   '/workflows/:workflowId/resume-async': {
     POST: PostWorkflowsWorkflowIdResumeAsync_RouteContract;
+  };
+  '/workflows/:workflowId/resume-no-wait': {
+    POST: PostWorkflowsWorkflowIdResumeNoWait_RouteContract;
   };
   '/workflows/:workflowId/resume-stream': {
     POST: PostWorkflowsWorkflowIdResumeStream_RouteContract;

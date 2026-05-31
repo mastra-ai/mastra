@@ -1,5 +1,56 @@
 # @mastra/server
 
+## 1.38.0-alpha.2
+
+### Minor Changes
+
+- Added `isZodError` helper and `ZodErrorLike` type, exported from `@mastra/server/server-adapter` (and `@mastra/server/handlers/error`). Use these instead of `instanceof ZodError` when handling validation errors in custom server adapters or middleware so the check survives consumers that pin a different `zod` package instance than the one bundled with `@mastra/server`. ([#17172](https://github.com/mastra-ai/mastra/pull/17172))
+
+  ```ts
+  import { isZodError } from '@mastra/server/server-adapter';
+
+  try {
+    await schema.parseAsync(input);
+  } catch (error) {
+    if (isZodError(error)) {
+      // structural check — works across zod v3/v4 realms
+      return formatValidationError(error);
+    }
+    throw error;
+  }
+  ```
+
+  Underpins the fix for [#17167](https://github.com/mastra-ai/mastra/issues/17167).
+
+### Patch Changes
+
+- Updated dependencies [[`d779de3`](https://github.com/mastra-ai/mastra/commit/d779de3cd9d2e7ed8110547190e2f15e786a0e41), [`1750c97`](https://github.com/mastra-ai/mastra/commit/1750c975d6179fbf6db2813b15229d4f8f23fc55), [`0e32507`](https://github.com/mastra-ai/mastra/commit/0e32507962cdfa5569b7bda5bc6fb3dd34e40b03), [`3a081c1`](https://github.com/mastra-ai/mastra/commit/3a081c1255c5ae8c99f6dad91cc612934ef6f2bd), [`fe9eacd`](https://github.com/mastra-ai/mastra/commit/fe9eacd9545a0a9d64aad31c9fa90294a425289e), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194)]:
+  - @mastra/core@1.38.0-alpha.2
+
+## 1.37.2-alpha.1
+
+### Patch Changes
+
+- Added sseFlushOnConnect route option to scope the SSE connected comment to subscribe endpoints only ([#17158](https://github.com/mastra-ai/mastra/pull/17158))
+
+- Fixed sub-agent version resolution in supervisor mode. Sub-agents now inherit the parent's draft/published version semantics — when chatting in the editor (draft mode), sub-agents resolve to their latest draft version; in the main agent chat (published mode), sub-agents resolve to their published version. Previously, sub-agents without explicit per-agent version overrides always fell back to the code-defined default, ignoring the parent's version context. ([#17165](https://github.com/mastra-ai/mastra/pull/17165))
+
+- Scoped the SSE connected comment to subscribe routes only and added SSE comment passthrough for Fastify and NestJS adapters ([#17158](https://github.com/mastra-ai/mastra/pull/17158))
+
+- Updated dependencies [[`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c)]:
+  - @mastra/core@1.37.2-alpha.1
+
+## 1.37.2-alpha.0
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
+- Updated dependencies [[`07c3de7`](https://github.com/mastra-ai/mastra/commit/07c3de7f7bc418beccaea3b5e6b7f7cdda79d492)]:
+  - @mastra/core@1.37.2-alpha.0
+
 ## 1.37.1
 
 ### Patch Changes

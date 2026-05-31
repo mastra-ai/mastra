@@ -1,4 +1,4 @@
-import type { DropResult } from '@hello-pangea/dnd';
+import type { DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
 import { Switch, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Icon } from '@mastra/playground-ui';
@@ -59,7 +59,7 @@ export const AgentMetadataModelList = ({
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <Droppable droppableId="model-list">
-        {provided => (
+        {(provided: DroppableProvided) => (
           <div {...provided.droppableProps} ref={provided.innerRef} className="flex flex-col gap-2">
             {modelConfigs.map((modelConfig, index) => (
               <Draggable key={modelConfig.id} draggableId={modelConfig.id} index={index}>

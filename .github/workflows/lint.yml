@@ -98,7 +98,7 @@ jobs:
 
       - name: Install test dependencies
         working-directory: ./e2e-tests/pkg-outputs
-        run: pnpm install --ignore-workspace
+        run: pnpm install
 
       - name: Check bundles
         working-directory: ./e2e-tests/pkg-outputs
