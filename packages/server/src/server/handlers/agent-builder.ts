@@ -403,6 +403,52 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   },
 });
 
+/**
+ * Fire-and-forget resume for agent-builder actions: returns immediately with the runId without
+ * waiting for completion. Delegates to the workflows `resume-no-wait` route.
+ *
+ * TODO(v2): fold this behavior into the `resume-async` route in Mastra v2 and remove this route.
+ * Kept separate in v1 to avoid breaking the existing `resume-async` response contract.
+ */
+export const RESUME_NO_WAIT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agent-builder/:actionId/resume-no-wait',
+  responseType: 'json',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: resumeAgentBuilderBodySchema,
+  responseSchema: createWorkflowRunResponseSchema,
+  summary: 'Resume action without waiting',
+  description:
+    'Resumes a suspended action execution without waiting (fire-and-forget) and returns immediately with the runId. The action continues executing in the background.',
+  tags: ['Agent Builder'],
+  requiresAuth: true,
+  handler: async ctx => {
+    const { mastra, actionId, runId, step, requestContext } = ctx;
+    const logger = mastra.getLogger();
+    try {
+      await registerAgentBuilderWorkflows(mastra);
+
+      if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
+        throw new HTTPException(400, { message: `Invalid agent-builder action: ${actionId}` });
+      }
+
+      logger.info('Resuming agent builder action without waiting', { actionId, runId, step });
+
+      return await workflows.RESUME_NO_WAIT_WORKFLOW_ROUTE.handler({
+        ...ctx,
+        workflowId: actionId,
+        requestContext,
+      });
+    } catch (error) {
+      logger.error('Error resuming agent builder action without waiting', { error, actionId });
+      return handleError(error, 'Error resuming agent builder action');
+    } finally {
+      WorkflowRegistry.cleanup();
+    }
+  },
+});
+
 export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-builder/:actionId/resume',

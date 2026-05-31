@@ -41,6 +41,18 @@ describe('system reminder filtering', () => {
         metadata: { signal: { type: 'system-reminder' } },
       },
     } as unknown as MastraDBMessage;
+    const reactiveSignalMessage = {
+      id: 'reactive-signal',
+      role: 'signal',
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: 'continue' }],
+        metadata: { signal: { type: 'reactive', tagName: 'policy-reminder' } },
+      },
+    } as unknown as MastraDBMessage;
     const userSignalMessage = {
       id: 'user-signal',
       role: 'signal',
@@ -68,6 +80,7 @@ describe('system reminder filtering', () => {
     expect(isSystemReminderMessage(metadataReminderMessage)).toBe(true);
     expect(isSystemReminderMessage(textReminderMessage)).toBe(true);
     expect(isSystemReminderMessage(signalReminderMessage)).toBe(true);
+    expect(isSystemReminderMessage(reactiveSignalMessage)).toBe(true);
     expect(isSystemReminderMessage(userSignalMessage)).toBe(false);
     expect(isSystemReminderMessage(embeddedMarkupMessage)).toBe(false);
     expect(
@@ -75,6 +88,7 @@ describe('system reminder filtering', () => {
         metadataReminderMessage,
         textReminderMessage,
         signalReminderMessage,
+        reactiveSignalMessage,
         userSignalMessage,
         embeddedMarkupMessage,
       ]),

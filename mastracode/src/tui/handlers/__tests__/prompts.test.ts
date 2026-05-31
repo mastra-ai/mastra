@@ -57,6 +57,28 @@ describe('handleAskQuestion goal mode', () => {
     state.activeInlineQuestion!.handleInput('\r');
     await promise;
   });
+
+  it('resolves a multi_select prompt with an array of every toggled option label', async () => {
+    const { ctx, state } = createCtx();
+    const options = [{ label: 'React' }, { label: 'Vue' }, { label: 'Svelte' }];
+
+    const promise = handleAskQuestion(ctx, 'q1', 'Which apply?', options, 'multi_select');
+
+    const component = state.activeInlineQuestion!;
+    // Toggle React (space), move down twice to Svelte, toggle it, then confirm (enter).
+    component.handleInput(' ');
+    component.handleInput('\x1b[B');
+    component.handleInput('\x1b[B');
+    component.handleInput(' ');
+    component.handleInput('\r');
+
+    await promise;
+
+    expect(state.harness.respondToQuestion).toHaveBeenCalledWith({
+      questionId: 'q1',
+      answer: ['React', 'Svelte'],
+    });
+  });
 });
 
 function createPlanApprovalCtx() {

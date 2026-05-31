@@ -3,6 +3,12 @@ export { AgentBrowser } from './agent-browser';
 
 // Type exports
 export type { BrowserConfig } from './types';
+export type { AgentBrowserConfig } from './agent-browser';
+export type { CreateAgentBrowserThreadManager } from './thread-manager';
+
+// Thread manager (for custom providers e.g. @mastra/browser-firecrawl)
+export { AgentBrowserThreadManager } from './thread-manager';
+export type { AgentBrowserThreadManagerConfig, AgentBrowserSession } from './thread-manager';
 
 // Utility exports
 export { getBrowserPid } from './utils';
