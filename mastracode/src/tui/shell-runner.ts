@@ -8,11 +8,12 @@ export async function createShellPassthroughSubprocess(
   settings: ShellPassthroughSettings,
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform | string = process.platform,
+  cwd: string = process.cwd(),
 ) {
   const { execa } = await import('execa');
   const invocation = resolveShellPassthroughInvocation(command, settings, env, platform);
   const options = {
-    cwd: process.cwd(),
+    cwd,
     reject: false,
     timeout: SHELL_COMMAND_TIMEOUT_MS,
     env: {

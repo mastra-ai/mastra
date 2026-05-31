@@ -63,6 +63,17 @@ describe('createShellPassthroughSubprocess', () => {
     );
   });
 
+  it('passes an injected cwd through to execa', async () => {
+    await createShellPassthroughSubprocess('echo ok', { mode: 'default' }, {}, 'darwin', '/tmp/work');
+
+    expect(execaMock).toHaveBeenCalledWith(
+      'echo ok',
+      expect.objectContaining({
+        cwd: '/tmp/work',
+      }),
+    );
+  });
+
   it('uses Windows verbatim arguments for explicit cmd mode', async () => {
     const { invocation } = await createShellPassthroughSubprocess(
       'echo "hi" & dir',
