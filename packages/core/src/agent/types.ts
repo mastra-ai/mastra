@@ -33,6 +33,12 @@ import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
+import type { NotificationDeliveryPolicyConfig } from '../notifications/delivery-policy';
+import type {
+  NotificationDeliveryDecision,
+  NotificationRecord,
+  SendNotificationSignalInput,
+} from '../notifications/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
@@ -63,6 +69,23 @@ export type {
   MessageList,
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
+export type {
+  NotificationDeliveryPolicyConfig,
+  NotificationDeliveryPolicyDecider,
+  NotificationDeliveryPolicyDecision,
+  NotificationDeliveryPolicyInput,
+} from '../notifications/delivery-policy';
+export type {
+  NotificationDeliveryAction,
+  NotificationDeliveryDecision,
+  NotificationDeliveryThreadState,
+  NotificationPriority,
+  NotificationRecord,
+  NotificationSignalAttributes,
+  NotificationStatus,
+  NotificationSummary,
+  SendNotificationSignalInput,
+} from '../notifications/types';
 export type { LLMStepResult } from '../stream/types';
 export type { MastraBrowser } from '../browser/browser';
 // Screencast types now on MastraBrowser directly
@@ -167,6 +190,38 @@ export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptio
 export type SendAgentStateSignalResult =
   | (SendAgentSignalResult & { skipped?: false })
   | { accepted: true; skipped: true; reason: 'unchanged'; runId?: string; signal?: undefined };
+
+/**
+ * @experimental Agent notification signal APIs are experimental and may change in a future release.
+ */
+export type AgentNotificationSignal = SendNotificationSignalInput;
+
+/**
+ * @experimental Agent notification signal APIs are experimental and may change in a future release.
+ */
+export type SendAgentNotificationSignalOptions<OUTPUT = unknown> = Extract<
+  SendAgentSignalOptions<OUTPUT>,
+  { resourceId: string; threadId: string }
+>;
+
+/**
+ * @experimental Agent notification signal APIs are experimental and may change in a future release.
+ */
+export type AgentNotificationConfig = {
+  deliveryPolicy?: NotificationDeliveryPolicyConfig;
+};
+
+/**
+ * @experimental Agent notification signal APIs are experimental and may change in a future release.
+ */
+export type SendAgentNotificationSignalResult = {
+  accepted: true;
+  record: NotificationRecord;
+  decision: NotificationDeliveryDecision;
+  runId?: string;
+  signal?: CreatedAgentSignal;
+  persisted?: Promise<void>;
+};
 
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;
@@ -562,6 +617,10 @@ interface AgentConfigBase<
    * Controls which tools can run in the background and their behavior.
    */
   backgroundTasks?: AgentBackgroundConfig;
+  /**
+   * Notification delivery configuration for record-first notification signals.
+   */
+  notifications?: AgentNotificationConfig;
   /**
    * Optional agent-level transform policy for tool payloads before they are
    * serialized into display streams or user-visible transcripts.

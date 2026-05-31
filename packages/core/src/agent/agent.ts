@@ -44,6 +44,9 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
+import { resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
+import { createNotificationSignal } from '../notifications/signals';
+import type { SendNotificationSignalInput } from '../notifications/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
 import {
   EntityType,
@@ -112,6 +115,7 @@ import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
   AgentGenerateOptions,
+  AgentNotificationConfig,
   AgentStreamOptions,
   ToolsetsInput,
   ToolsInput,
@@ -131,6 +135,8 @@ import type {
   QueueAgentMessageResult,
   SendAgentMessageOptions,
   SendAgentMessageResult,
+  SendAgentNotificationSignalOptions,
+  SendAgentNotificationSignalResult,
   SendAgentSignalOptions,
   SendAgentSignalResult,
   SendAgentStateSignalOptions,
@@ -349,6 +355,7 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  #notifications?: AgentNotificationConfig;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #editorConfig?: AgentEditorConfig;
   /**
@@ -556,6 +563,10 @@ export class Agent<
 
     if (config.backgroundTasks) {
       this.#backgroundTasks = config.backgroundTasks;
+    }
+
+    if (config.notifications) {
+      this.#notifications = config.notifications;
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -6624,6 +6635,84 @@ export class Agent<
     target: SendAgentStateSignalOptions<OUTPUT>,
   ): Promise<SendAgentStateSignalResult> {
     return agentThreadStreamRuntime.sendStateSignal(this as Agent<any, any, any, any>, state, target, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent notification signal APIs are experimental and may change in a future release.
+   */
+  async sendNotificationSignal<OUTPUT = TOutput>(
+    notification: SendNotificationSignalInput,
+    target: SendAgentNotificationSignalOptions<OUTPUT>,
+  ): Promise<SendAgentNotificationSignalResult> {
+    const notifications = await this.#mastra?.getStorage()?.getStore('notifications');
+    if (!notifications) {
+      throw new Error('sendNotificationSignal requires a notifications storage domain');
+    }
+
+    const record = await notifications.createNotification({
+      ...notification,
+      agentId: this.id,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+    });
+
+    const threadState = agentThreadStreamRuntime.getThreadState(
+      { resourceId: target.resourceId, threadId: target.threadId },
+      this.getPubSub(),
+    );
+    const decision = await resolveNotificationDeliveryDecision({
+      config: this.#notifications?.deliveryPolicy,
+      now: new Date(),
+      record,
+      threadState,
+    });
+
+    if (decision.action === 'discard') {
+      const updated = await notifications.updateNotification({
+        id: record.id,
+        threadId: record.threadId,
+        status: 'discarded',
+        deliveryReason: decision.reason,
+      });
+      return { accepted: true, record: updated, decision };
+    }
+
+    if (decision.action === 'persist') {
+      const updated = await notifications.updateNotification({
+        id: record.id,
+        threadId: record.threadId,
+        deliveryReason: decision.reason,
+      });
+      return { accepted: true, record: updated, decision };
+    }
+
+    if (decision.action === 'defer' || decision.action === 'summarize') {
+      const updated = await notifications.updateNotification({
+        id: record.id,
+        threadId: record.threadId,
+        deliverAt: decision.action === 'defer' ? decision.deliverAt : (decision.deliverAt ?? record.deliverAt),
+        summaryAt: decision.action === 'summarize' ? decision.summaryAt : (decision.summaryAt ?? record.summaryAt),
+        deliveryReason: decision.reason,
+      });
+      return { accepted: true, record: updated, decision };
+    }
+
+    const signal = createNotificationSignal(record);
+    const result = agentThreadStreamRuntime.sendSignal(
+      this as Agent<any, any, any, any>,
+      signal,
+      target,
+      this.getPubSub(),
+    );
+    const updated = await notifications.updateNotification({
+      id: record.id,
+      threadId: record.threadId,
+      status: 'delivered',
+      deliveredSignalId: result.signal.id,
+      deliveryReason: decision.reason,
+    });
+
+    return { ...result, record: updated, decision };
   }
 
   /**

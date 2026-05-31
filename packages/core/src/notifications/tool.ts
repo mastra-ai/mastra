@@ -7,7 +7,7 @@ const notificationActionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('list'),
     threadId: z.string().optional(),
-    status: z.enum(['pending', 'delivered', 'seen', 'dismissed', 'archived']).optional(),
+    status: z.enum(['pending', 'delivered', 'seen', 'dismissed', 'archived', 'discarded']).optional(),
     priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
     source: z.string().optional(),
     limit: z.number().int().positive().optional(),

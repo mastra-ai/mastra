@@ -1,19 +1,36 @@
 import { createSignal } from '../agent/signals';
-import type { CreatedAgentSignal } from '../agent/signals';
+import type { AgentSignalAttributes, CreatedAgentSignal } from '../agent/signals';
 import type { NotificationRecord, NotificationSummary } from './types';
+
+export function notificationSignalAttributes(notification: NotificationRecord): AgentSignalAttributes {
+  return {
+    ...notification.attributes,
+    id: notification.id,
+    source: notification.source,
+    type: notification.kind,
+    kind: notification.kind,
+    priority: notification.priority,
+    status: notification.status,
+    ...(notification.coalescedCount && notification.coalescedCount > 1
+      ? { coalescedCount: notification.coalescedCount }
+      : {}),
+  };
+}
+
+export function notificationSummaryContents(summary: NotificationSummary): string {
+  const sources = Object.entries(summary.bySource)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([source, count]) => `${source}: ${count}`)
+    .join(', ');
+  return sources || 'No pending notifications';
+}
 
 export function createNotificationSignal(notification: NotificationRecord): CreatedAgentSignal {
   return createSignal({
     type: 'notification',
     tagName: 'notification',
     contents: notification.summary,
-    attributes: {
-      id: notification.id,
-      source: notification.source,
-      type: notification.kind,
-      priority: notification.priority,
-      status: notification.status,
-    },
+    attributes: notificationSignalAttributes(notification),
     metadata: { notification },
   });
 }
@@ -22,13 +39,11 @@ export function createNotificationSummarySignal(summary: NotificationSummary): C
   return createSignal({
     type: 'notification',
     tagName: 'notification-summary',
-    contents: Object.entries(summary.bySource)
-      .map(([source, count]) => `${source}: ${count}`)
-      .join(', '),
+    contents: notificationSummaryContents(summary),
     attributes: {
       pending: summary.pending,
     },
-    metadata: { notificationSummary: summary },
+    metadata: { notificationSummary: summary, notificationIds: summary.notificationIds },
   });
 }
 
@@ -43,6 +58,8 @@ export function summarizeNotifications(notifications: NotificationRecord[]): Not
     },
     {
       threadId: notifications[0]?.threadId ?? '',
+      resourceId: notifications[0]?.resourceId,
+      agentId: notifications[0]?.agentId,
       pending: 0,
       bySource: {},
       byPriority: {},

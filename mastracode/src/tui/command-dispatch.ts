@@ -40,6 +40,7 @@ import {
   handleApiKeysCommand,
   handleFeedbackCommand,
   handleObservabilityCommand,
+  handleNotifyCommand,
   handleGoalCommand,
   handleJudgeCommand,
 } from './commands/index.js';
@@ -244,6 +245,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'observability':
       await handleObservabilityCommand(buildCtx(), args);
+      return true;
+    case 'notify':
+      await handleNotifyCommand(buildCtx(), args);
       return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);

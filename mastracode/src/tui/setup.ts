@@ -349,6 +349,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'observability', description: 'Configure cloud observability' },
+    { name: 'notify', description: 'Send an agent notification' },
     {
       name: 'goal',
       description: 'Set/manage persistent goal (Ralph loop)',
