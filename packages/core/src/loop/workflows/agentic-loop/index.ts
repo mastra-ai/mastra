@@ -31,6 +31,25 @@ function getMessageContent<Tools extends ToolSet>(message: { content: unknown })
   return Array.isArray(content) ? content : ([content] as StepResult<Tools>['content']);
 }
 
+/**
+ * Returns the non-user message content appended since the last cursor position,
+ * without rebuilding already-processed content from earlier iterations.
+ *
+ * The cursor tracks both `messageIndex` (the tail message read last) and
+ * `contentOffset` (how many content parts of that message were already read),
+ * so it correctly handles two ways the tail grows between iterations: new
+ * content appended to the previous last message, and entirely new messages.
+ *
+ * Edge cases:
+ * - Empty `messages`: returns no content and a reset cursor `{ messageIndex: 0, contentOffset: 0 }`.
+ * - Cursor past the end (messages were truncated/replaced): returns no content
+ *   and points the cursor at the end of the current last message.
+ *
+ * @param messages - Accumulated non-user messages, each with a `content` field
+ *   (a single part or an array of parts).
+ * @param cursor - Position read up to in the previous call.
+ * @returns The newly appended content and the advanced cursor to pass next time.
+ */
 export function getCurrentStepContent<Tools extends ToolSet>(
   messages: ReadonlyArray<{ content: unknown }>,
   cursor: StepContentCursor,

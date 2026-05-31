@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Reduced overhead in long-running agent workflow loops.
+Improved agent performance in long-running loops with many iterations.
