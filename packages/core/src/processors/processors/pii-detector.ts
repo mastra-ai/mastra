@@ -187,6 +187,28 @@ export class PIIDetector implements Processor<'pii-detector'> {
     'iban', // International Bank Account Numbers
   ];
 
+  /**
+   * Regex patterns for local (zero-cost) PII detection during streaming.
+   * These run instead of LLM calls in processOutputStream to eliminate
+   * per-chunk API costs and latency.
+   */
+  private static readonly PII_PATTERNS: Record<string, RegExp> = {
+    email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+    phone: /(?:\+?\d{1,3}[-.\ ]?)?\(?\d{3}\)?[-.\ ]?\d{3}[-.\ ]?\d{4}/g,
+    'credit-card': /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
+    ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
+    'api-key':
+      /(?:(?:sk|pk)[-_](?:live|test|proj)[-_][A-Za-z0-9]{16,}|(?:api[_-]?key|apikey|api[_-]?secret)\s*[:=]\s*["']?[a-zA-Z0-9_\-]{20,}["']?)/gi,
+    'ip-address': /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g,
+    url: /https?:\/\/[^\s<>"']+/gi,
+    uuid: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+    'crypto-wallet': /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-zA-HJ-NP-Z0-9]{39,59})\b/g,
+    iban: /\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]?){0,16}\b/g,
+  };
+
+  /** PII types that require LLM context and cannot be detected by regex */
+  private static readonly LLM_ONLY_TYPES = new Set(['name', 'address', 'date-of-birth']);
+
   constructor(options: PIIDetectorOptions) {
     this.detectionTypes = options.detectionTypes || PIIDetector.DEFAULT_DETECTION_TYPES;
     this.threshold = options.threshold ?? 0.6;
@@ -598,7 +620,60 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
   }
 
   /**
-   * Process streaming output chunks for PII detection and redaction
+   * Detect PII using local regex patterns (zero-cost, no LLM calls).
+   * Used during streaming to avoid per-chunk LLM API calls.
+   * Context-dependent types (name, address, date-of-birth) are skipped
+   * here and handled by the LLM-based detectPII in processOutputResult.
+   */
+  private detectPIILocal(content: string): PIIDetectionResult {
+    const categories: PIICategoryScores = [];
+    const detections: PIIDetection[] = [];
+
+    for (const type of this.detectionTypes) {
+      if (PIIDetector.LLM_ONLY_TYPES.has(type)) continue;
+
+      const pattern = PIIDetector.PII_PATTERNS[type];
+      if (!pattern) continue;
+
+      // Reset lastIndex for /g patterns
+      pattern.lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        detections.push({
+          type,
+          value: match[0],
+          confidence: 1.0,
+          start: match.index,
+          end: match.index + match[0].length,
+          ...(this.strategy === 'redact' ? { redacted_value: this.redactValue(match[0], type) } : {}),
+        });
+      }
+    }
+
+    const detectedTypes = new Set(detections.map(d => d.type));
+    for (const type of detectedTypes) {
+      categories.push({ type, score: 1.0 });
+    }
+
+    let redacted_content: string | null | undefined;
+    if (this.strategy === 'redact' && detections.length > 0) {
+      redacted_content = this.applyRedactionMethod(content, detections);
+    } else if (this.strategy === 'redact') {
+      redacted_content = null;
+    }
+
+    return {
+      categories: categories.length > 0 ? categories : null,
+      detections: detections.length > 0 ? detections : null,
+      ...(this.strategy === 'redact' ? { redacted_content } : {}),
+    };
+  }
+
+  /**
+   * Process streaming output chunks for PII detection and redaction.
+   * Uses local regex patterns instead of LLM calls to eliminate per-chunk
+   * API costs and latency. Context-dependent PII (names, addresses) is
+   * caught by the LLM-based processOutputResult on the complete text.
    */
   async processOutputStream(
     args: {
@@ -608,8 +683,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       abort: (reason?: string) => never;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, ...rest } = args;
-    const observabilityContext = resolveObservabilityContext(rest);
+    const { part, abort } = args;
     try {
       // Only process text-delta chunks
       if (part.type !== 'text-delta') {
@@ -621,7 +695,8 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         return part;
       }
 
-      const detectionResult = await this.detectPII(textContent, observabilityContext);
+      // Use local regex detection — no LLM calls during streaming
+      const detectionResult = this.detectPIILocal(textContent);
 
       if (this.isPIIFlagged(detectionResult)) {
         switch (this.strategy) {
