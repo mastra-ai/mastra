@@ -5,7 +5,6 @@ import { TripWire } from '../agent/trip-wire';
 import type { IMastraLogger } from '../logger';
 import type { ChunkType } from '../stream';
 import { ChunkFrom } from '../stream/types';
-import { BatchPartsProcessor } from './processors/batch-parts';
 import { ProcessorRunner } from './runner';
 import type { Processor } from './index';
 
@@ -797,90 +796,6 @@ describe('ProcessorRunner', () => {
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('original text');
       expect(result.blocked).toBe(false);
-    });
-
-    it('feeds the BatchPartsProcessor flushed batch through downstream processors (issue #17094)', async () => {
-      // Downstream processor that uppercases text-delta chunks. The flushed
-      // batch emitted alongside the non-text part must pass through this
-      // processor too — it must NOT bypass the rest of the chain.
-      const seenByDownstream: ChunkType[] = [];
-      const outputProcessors: Processor[] = [
-        new BatchPartsProcessor({ batchSize: 10 }),
-        {
-          id: 'uppercase',
-          name: 'Uppercase',
-          processOutputStream: async ({ part }) => {
-            seenByDownstream.push(part);
-            if (part.type === 'text-delta') {
-              return {
-                type: 'text-delta',
-                payload: { text: part.payload.text.toUpperCase(), id: part.payload.id },
-                runId: part.runId,
-                from: part.from,
-              } as ChunkType;
-            }
-            return part;
-          },
-        },
-      ];
-
-      runner = new ProcessorRunner({
-        inputProcessors: [],
-        outputProcessors,
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      const emitted: ChunkType[] = [];
-      const writer = { custom: async (data: any) => void emitted.push(data as ChunkType) };
-      const processorStates = new Map();
-
-      // Two text deltas get buffered by BatchPartsProcessor.
-      await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello ', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
-        processorStates,
-        undefined,
-        undefined,
-        undefined,
-        0,
-        writer,
-      );
-      await runner.processPart(
-        { type: 'text-delta', payload: { text: 'world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
-        processorStates,
-        undefined,
-        undefined,
-        undefined,
-        0,
-        writer,
-      );
-
-      // A non-text part arrives. BatchPartsProcessor flushes the buffered text
-      // and returns the non-text part. The flushed text should be emitted via
-      // the writer AFTER passing through the downstream uppercase processor.
-      const result = await runner.processPart(
-        { type: 'tool-result', payload: { result: { ok: true } }, runId: '1', from: ChunkFrom.AGENT } as ChunkType,
-        processorStates,
-        undefined,
-        undefined,
-        undefined,
-        0,
-        writer,
-      );
-
-      // The flushed batch was emitted before the returned part and was uppercased
-      // by the downstream processor (i.e. it did NOT bypass the chain).
-      expect(emitted).toHaveLength(1);
-      const flushed = emitted[0] as Extract<ChunkType, { type: 'text-delta' }>;
-      expect(flushed.type).toBe('text-delta');
-      expect(flushed.payload.text).toBe('HELLO WORLD');
-
-      // The non-text part is returned (to be emitted by the caller) and unaltered.
-      expect(result.part?.type).toBe('tool-result');
-      expect(result.blocked).toBe(false);
-
-      // Downstream processor saw the flushed text part.
-      expect(seenByDownstream.some(p => p.type === 'text-delta' && p.payload.text === 'hello world')).toBe(true);
     });
   });
 

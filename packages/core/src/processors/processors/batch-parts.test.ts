@@ -336,12 +336,12 @@ describe('BatchPartsProcessor', () => {
       expect(result).toBeNull();
     });
 
-    it('stashes the batched text for the runner and returns the non-text part (issue #17094)', async () => {
+    it('returns the batched text and stashes the non-text part for reprocessing (issue #17094)', async () => {
       processor = new BatchPartsProcessor({ batchSize: 10 });
 
-      // A writer being present signals that we are running inside the processor
-      // chain, so the batched text is handed to the runner via state rather than
-      // deferred to a next call that may never happen.
+      // A writer being present signals that we're running inside the processor
+      // chain, so the non-text part is stashed for the runner to re-drive
+      // through the chain rather than deferred to a next call that may never come.
       const writer = { custom: async () => {} };
 
       const chunks: ChunkType[] = [
@@ -364,10 +364,10 @@ describe('BatchPartsProcessor', () => {
         await processor.processOutputStream({ part: chunks[1], streamParts: [chunks[1]], state, abort, writer }),
       ).toBeNull();
 
-      // Non-text part arrives: the batched text is stashed under the
-      // emit-before key (so the runner emits it through downstream processors
-      // before the returned part) and the non-text part is returned directly
-      // (NOT deferred), so nothing is lost even if the stream stops here.
+      // Non-text part arrives: the batched text is returned (so it flows through
+      // downstream processors) and the non-text part is stashed under the
+      // reprocess key for the runner to re-drive — NOT deferred — so nothing is
+      // lost even if the stream stops on this part.
       const result = await processor.processOutputStream({
         part: chunks[2],
         streamParts: [chunks[2]],
@@ -376,14 +376,19 @@ describe('BatchPartsProcessor', () => {
         writer,
       });
 
-      expect((state as Record<string, unknown>).__mastraEmitBeforePart).toEqual({
+      expect(result).toEqual({
         type: 'text-delta',
         runId: '1',
         from: ChunkFrom.AGENT,
         payload: { text: 'Hello world', id: 'text-1' },
       });
-      expect(result).toEqual({ type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT });
-      // Nothing should be left deferred in the legacy field.
+      expect((state as Record<string, unknown>).__mastraReprocessPart).toEqual({
+        type: 'object',
+        object: { key: 'value' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      });
+      // Nothing should be left in the legacy deferral field.
       expect((state as Record<string, unknown>).pendingNonText).toBeUndefined();
       expect(state.batch).toEqual([]);
     });

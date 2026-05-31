@@ -25,7 +25,7 @@ import {
   summarizeToolChoiceForSpan,
 } from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
-import { EMIT_BEFORE_PART_KEY } from './stream-emit';
+import { REPROCESS_PART_KEY } from './stream-reprocess';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
 import type {
@@ -585,7 +585,6 @@ export class ProcessorRunner {
     messageList?: MessageList,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
-    startIndex: number = 0,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -602,7 +601,6 @@ export class ProcessorRunner {
       const isFinishChunk = part.type === 'finish';
 
       for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
-        if (index < startIndex) continue;
         // Handle workflows for stream processing
         if (isProcessorWorkflow(processorOrWorkflow)) {
           if (!processedPart) continue;
@@ -690,34 +688,6 @@ export class ProcessorRunner {
             // Track output chunk and update processedPart
             processedPart = result as ChunkType<OUTPUT> | null | undefined;
             state.addOutputPart(processedPart);
-
-            // A processor may ask to emit an extra part immediately before the
-            // part it returned (e.g. BatchPartsProcessor flushing buffered text
-            // alongside the non-text part that triggered the flush). Feed that
-            // buffered part through the remaining downstream processors so it
-            // still gets their processing, then emit it before the current part.
-            const emitBefore = (state.customState as Record<string, unknown>)[EMIT_BEFORE_PART_KEY] as
-              | ChunkType<OUTPUT>
-              | undefined;
-            if (emitBefore) {
-              delete (state.customState as Record<string, unknown>)[EMIT_BEFORE_PART_KEY];
-              const downstream = await this.processPart(
-                emitBefore,
-                processorStates,
-                observabilityContext,
-                requestContext,
-                messageList,
-                retryCount,
-                writer,
-                index + 1,
-              );
-              if (downstream.blocked) {
-                return downstream;
-              }
-              if (downstream.part != null && writer) {
-                await writer.custom(downstream.part as ChunkType);
-              }
-            }
           }
         } catch (error) {
           if (error instanceof TripWire) {
@@ -772,6 +742,81 @@ export class ProcessorRunner {
     }
   }
 
+  /**
+   * Re-drive any parts that stream processors stashed for reprocessing through
+   * the full output processor chain.
+   *
+   * A stream processor can only return one part from `processOutputStream`, but
+   * some processors (e.g. `BatchPartsProcessor`) need to emit a second part for
+   * one input — it returns the first part and stashes the second under
+   * `REPROCESS_PART_KEY` on its state. After the primary part has been emitted,
+   * callers invoke this to push each stashed part back through the whole chain
+   * (so it receives downstream processing) and emit the results in order.
+   *
+   * Returns the processed results in emission order. Reprocessing can itself
+   * stash more parts, so this drains until none remain.
+   */
+  async drainReprocessParts<OUTPUT>(
+    processorStates: Map<string, ProcessorState<OUTPUT>>,
+    observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
+    messageList?: MessageList,
+    retryCount: number = 0,
+    writer?: ProcessorStreamWriter,
+  ): Promise<
+    Array<{
+      part: ChunkType<OUTPUT> | null | undefined;
+      blocked: boolean;
+      reason?: string;
+      tripwireOptions?: TripWireOptions<unknown>;
+      processorId?: string;
+    }>
+  > {
+    const results: Array<{
+      part: ChunkType<OUTPUT> | null | undefined;
+      blocked: boolean;
+      reason?: string;
+      tripwireOptions?: TripWireOptions<unknown>;
+      processorId?: string;
+    }> = [];
+
+    // Pull the next stashed part (if any) from processor states, in processor order.
+    const takeNext = (): ChunkType<OUTPUT> | undefined => {
+      for (const state of processorStates.values()) {
+        const custom = state.customState as Record<string, unknown>;
+        const stashed = custom[REPROCESS_PART_KEY];
+        if (stashed) {
+          delete custom[REPROCESS_PART_KEY];
+          return stashed as ChunkType<OUTPUT>;
+        }
+      }
+      return undefined;
+    };
+
+    // Bound the loop defensively to avoid an infinite cycle if a processor were
+    // to keep restashing the same part.
+    let guard = 0;
+    let next = takeNext();
+    while (next && guard++ < 1000) {
+      const result = await this.processPart(
+        next,
+        processorStates,
+        observabilityContext,
+        requestContext,
+        messageList,
+        retryCount,
+        writer,
+      );
+      results.push(result);
+      if (result.blocked) {
+        break;
+      }
+      next = takeNext();
+    }
+
+    return results;
+  }
+
   async runOutputProcessorsForStream<OUTPUT = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     observabilityContext?: ObservabilityContext,
@@ -813,24 +858,26 @@ export class ProcessorRunner {
               streamWriter,
             );
 
-            if (blocked) {
-              // Log that part was blocked
+            const enqueueTripwire = (r?: string, opts?: TripWireOptions<unknown>, pid?: string) => {
               void this.logger.debug('Stream part blocked by output processor', {
                 agent: this.agentName,
-                reason,
+                reason: r,
                 originalPart: value,
               });
-
-              // Send tripwire part and close stream for abort
               controller.enqueue({
                 type: 'tripwire',
                 payload: {
-                  reason: reason || 'Output processor blocked content',
-                  retry: tripwireOptions?.retry,
-                  metadata: tripwireOptions?.metadata,
-                  processorId,
+                  reason: r || 'Output processor blocked content',
+                  retry: opts?.retry,
+                  metadata: opts?.metadata,
+                  processorId: pid,
                 },
               });
+            };
+
+            if (blocked) {
+              // Send tripwire part and close stream for abort
+              enqueueTripwire(reason, tripwireOptions, processorId);
               controller.close();
               break;
             } else if (processedPart != null) {
@@ -838,6 +885,33 @@ export class ProcessorRunner {
               controller.enqueue(processedPart);
             }
             // If processedPart is null/undefined, don't emit anything for this part
+
+            // Emit any parts a processor stashed for reprocessing (e.g. the
+            // non-text part that triggered a BatchPartsProcessor flush), pushing
+            // each back through the whole chain so it gets downstream processing.
+            const reprocessed = await this.drainReprocessParts(
+              processorStates,
+              observabilityContext,
+              undefined,
+              undefined,
+              0,
+              streamWriter,
+            );
+            let aborted = false;
+            for (const r of reprocessed) {
+              if (r.blocked) {
+                enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
+                controller.close();
+                aborted = true;
+                break;
+              }
+              if (r.part != null) {
+                controller.enqueue(r.part);
+              }
+            }
+            if (aborted) {
+              break;
+            }
           }
         } catch (error) {
           controller.error(error);

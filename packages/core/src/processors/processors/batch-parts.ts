@@ -1,7 +1,7 @@
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { Processor } from '../index';
-import { EMIT_BEFORE_PART_KEY } from '../stream-emit';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
 
 export type BatchPartsState = {
   batch: ChunkType[];
@@ -87,15 +87,16 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
       if (batchedChunk) {
         // We have two parts to emit (the batched text and this non-text part)
         // but can only return one. When running inside the processor chain,
-        // ask the runner to emit the batched text first (feeding it through any
-        // downstream processors) and return the non-text part directly. This
-        // avoids deferring the non-text part to the next processOutputStream
-        // call — which never happens when the stream stops on this part (e.g. a
-        // `stopWhen` condition halting the agentic loop on a tool result),
-        // dropping the part from the stream entirely.
+        // return the batched text (so it flows through any downstream
+        // processors) and stash the non-text part for the runner to re-drive
+        // through the whole chain right after. This avoids deferring the
+        // non-text part to the next processOutputStream call — which never
+        // happens when the stream stops on this part (e.g. a `stopWhen`
+        // condition halting the agentic loop on a tool result), dropping the
+        // part from the stream entirely.
         if (writer) {
-          state[EMIT_BEFORE_PART_KEY] = batchedChunk;
-          return part;
+          state[REPROCESS_PART_KEY] = part;
+          return batchedChunk;
         }
         // No writer (e.g. direct unit invocation): fall back to deferring the
         // non-text part to the next call.
