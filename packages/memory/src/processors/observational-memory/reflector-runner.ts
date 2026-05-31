@@ -29,7 +29,7 @@ import {
 } from './reflector-agent';
 import type { CompressionLevel } from './reflector-agent';
 import { withRetry } from './retry';
-import { getMaxThreshold } from './thresholds';
+import { calculateDynamicThreshold, getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
 import type {
@@ -504,7 +504,10 @@ export class ReflectorRunner {
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
     const observationTokens = currentRecord.observationTokenCount ?? 0;
-    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(currentRecord));
+    const reflectThreshold = calculateDynamicThreshold(
+      this.getEffectiveReflectionTokens(currentRecord),
+      observationTokens,
+    );
     const bufferActivation = this.reflectionConfig.bufferActivation ?? 0.5;
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -703,7 +706,10 @@ export class ReflectorRunner {
       // defined, positive bufferActivation. Dropping the ?? fallback keeps
       // that invariant visible in the types.
       const bufferActivation = this.reflectionConfig.bufferActivation!;
-      const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(freshRecord));
+      const reflectThreshold = calculateDynamicThreshold(
+        this.getEffectiveReflectionTokens(freshRecord),
+        freshRecord.observationTokenCount ?? 0,
+      );
       const regularActivationTarget = reflectThreshold * (1 - bufferActivation);
       const minCombinedTokens = Math.round(regularActivationTarget * EARLY_ACTIVATION_SIZE_FLOOR_RATIO);
       if (combinedTokenCount < minCombinedTokens) {
@@ -797,7 +803,7 @@ export class ReflectorRunner {
       threadId: requestedThreadId,
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
-    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
+    const reflectThreshold = calculateDynamicThreshold(this.getEffectiveReflectionTokens(record), observationTokens);
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio

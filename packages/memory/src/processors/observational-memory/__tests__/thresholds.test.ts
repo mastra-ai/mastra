@@ -266,4 +266,33 @@ describe('thresholds', () => {
       expect(result).toBe(12000);
     });
   });
+
+  describe('retention floor fallback safety', () => {
+    it('resolveRetentionFloor with ratio 1 produces 0 — unsafe without buffering', () => {
+      // Demonstrates the bug: fallback of 1 produces retentionFloor = 0
+      expect(resolveRetentionFloor(1, 30000)).toBe(0);
+    });
+
+    it('resolveRetentionFloor with ratio 0.8 retains 20% — safe default', () => {
+      // 0.8 → retentionFloor = 30000 * 0.2 = 6000
+      expect(resolveRetentionFloor(0.8, 30000)).toBeCloseTo(6000, 0);
+    });
+  });
+
+  describe('reflection threshold uses dynamic calculation', () => {
+    it('calculateDynamicThreshold with number threshold is no-op', () => {
+      // Non-shared-budget configs: threshold is a plain number
+      expect(calculateDynamicThreshold(30000, 10000)).toBe(30000);
+      expect(calculateDynamicThreshold(30000, 0)).toBe(30000);
+    });
+
+    it('calculateDynamicThreshold with ThresholdRange adapts for reflection', () => {
+      // Shared-budget: reflection can expand into unused space
+      // Total budget = 70000 (30k message + 40k reflection)
+      // With 0 observations used → reflection can use full 70k
+      expect(calculateDynamicThreshold({ min: 30000, max: 70000 }, 0)).toBe(70000);
+      // With 10k observations → reflection gets 60k
+      expect(calculateDynamicThreshold({ min: 30000, max: 70000 }, 10000)).toBe(60000);
+    });
+  });
 });

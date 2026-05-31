@@ -2307,6 +2307,50 @@ describe('observation auto-triggers reflection when threshold exceeded', () => {
   });
 });
 
+describe('reflection threshold with shared token budget', () => {
+  let storage: InMemoryMemory;
+  const threadId = 'shared-budget-thread';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+  });
+
+  it('should use dynamic reflection threshold when shareTokenBudget is enabled', async () => {
+    // With shareTokenBudget, both messageTokens and reflection.observationTokens
+    // are stored as ThresholdRange { min: base, max: totalBudget }.
+    // messageTokens=50, observationTokens=100 → totalBudget=150
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      shareTokenBudget: true,
+      observation: {
+        model: createMockObserverModel(),
+        messageTokens: 50,
+        bufferTokens: false,
+      },
+      reflection: {
+        model: createMockReflectorModel(),
+        observationTokens: 100,
+      },
+    });
+
+    // Create enough messages to trigger observation
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    const result = await om.observe({ threadId });
+    expect(result.observed).toBe(true);
+
+    // After observation, check status — reflection threshold should be dynamic
+    const status = await om.getStatus({ threadId });
+
+    // With shared budget, the reflection threshold should expand into unused space.
+    // Total budget = 50 + 100 = 150. After observation, observation tokens are small,
+    // so effective reflection threshold = max(150 - obsTokens, 100) ≈ 150.
+    // The key assertion: effectiveObservationTokensThreshold should NOT equal the base (100).
+    expect(status.effectiveObservationTokensThreshold).toBeGreaterThan(100);
+  });
+});
+
 describe('getStatus shouldBuffer vs shouldObserve boundary', () => {
   let storage: InMemoryMemory;
   const threadId = 'boundary-thread';

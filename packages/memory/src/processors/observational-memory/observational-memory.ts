@@ -500,7 +500,7 @@ export class ObservationalMemory {
     // Resolve reflection config with defaults
     this.reflectionConfig = {
       model: reflectionModel,
-      observationTokens: observationTokens,
+      observationTokens: isSharedBudget ? { min: observationTokens, max: totalBudget } : observationTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
         temperature:
@@ -2712,8 +2712,12 @@ ${formattedMessages}
     // Should observe?
     const shouldObserve = pendingTokens >= threshold;
 
-    // Should reflect? (use per-record override if set)
-    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
+    // Should reflect? Use dynamic threshold so shared-budget configs
+    // can expand reflection into unused message space (or vice versa).
+    const reflectThreshold = calculateDynamicThreshold(
+      this.getEffectiveReflectionTokens(record),
+      currentObservationTokens,
+    );
     const shouldReflect = currentObservationTokens >= reflectThreshold;
 
     // Can activate?
@@ -3431,7 +3435,10 @@ ${formattedMessages}
     registerOp(record.id, 'reflecting');
 
     try {
-      const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
+      const reflectThreshold = calculateDynamicThreshold(
+        this.getEffectiveReflectionTokens(record),
+        record.observationTokenCount ?? 0,
+      );
       const reflectResult = await this.reflector.call(
         record.activeObservations,
         prompt,
