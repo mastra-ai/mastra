@@ -322,4 +322,109 @@ describe('AgentBuilderAgentEdit MSW integration — initial onboarding layout', 
     // Still on the edit route (no navigation away).
     expect(screen.queryByTestId('view-page')).toBeNull();
   });
+
+  it('initial step with all mandatory fields and not streaming: renders the two mobile CTAs', async () => {
+    server.use(...baseHandlers(populatedAgent));
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
+    });
+
+    expect(screen.getByTestId('agent-builder-mobile-initial-cta-chat')).toBeTruthy();
+    expect(screen.getByTestId('agent-builder-mobile-initial-cta-config')).toBeTruthy();
+  });
+
+  it('initial step while streaming: does not render the mobile CTAs', async () => {
+    useStreamRunningMock.mockReturnValue(true);
+    server.use(...baseHandlers(populatedAgent));
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
+    });
+
+    expect(screen.queryByTestId('agent-builder-mobile-initial-cta-chat')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-mobile-initial-cta-config')).toBeNull();
+  });
+
+  it('initial step with missing mandatory fields: does not render the mobile CTAs', async () => {
+    server.use(...baseHandlers(halfPopulatedAgent));
+
+    renderPage();
+
+    await screen.findByTestId('agent-builder-panel-chat');
+
+    expect(screen.queryByTestId('agent-builder-mobile-initial-cta-chat')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-mobile-initial-cta-config')).toBeNull();
+  });
+
+  it('mobile initial CTA "Chat with my agent" navigates to /view', async () => {
+    server.use(...baseHandlers(populatedAgent));
+
+    renderPage();
+
+    const chatCta = await screen.findByTestId('agent-builder-mobile-initial-cta-chat');
+    fireEvent.click(chatCta);
+
+    await screen.findByTestId('view-page');
+  });
+
+  it('mobile initial CTA "See configuration" advances the wizard out of the initial step', async () => {
+    server.use(...baseHandlers(populatedAgent));
+
+    renderPage();
+
+    const configCta = await screen.findByTestId('agent-builder-mobile-initial-cta-config');
+    fireEvent.click(configCta);
+
+    // After advancing, the mobile initial CTAs disappear (step is no longer 'initial').
+    await waitFor(() => {
+      expect(screen.queryByTestId('agent-builder-mobile-initial-cta-chat')).toBeNull();
+      expect(screen.queryByTestId('agent-builder-mobile-initial-cta-config')).toBeNull();
+    });
+  });
+
+  it('on the end step: the chat column is hidden on mobile via "hidden lg:block" classes', async () => {
+    // No starter message → wizard starts at 'end'.
+    useStarterUserMessageMock.mockReturnValue(undefined);
+    server.use(...baseHandlers(populatedAgent));
+
+    renderPage();
+
+    const chatPanel = await screen.findByTestId('agent-builder-panel-chat');
+    expect(chatPanel.classList.contains('hidden')).toBe(true);
+    expect(chatPanel.classList.contains('lg:block')).toBe(true);
+
+    // Profile is still rendered.
+    expect(screen.getByTestId('agent-builder-panel-profile')).toBeTruthy();
+  });
+
+  it('on the initial step: the chat column is NOT hidden on mobile', async () => {
+    server.use(...baseHandlers(populatedAgent));
+
+    renderPage();
+
+    const chatPanel = await screen.findByTestId('agent-builder-panel-chat');
+    expect(chatPanel.classList.contains('hidden')).toBe(false);
+  });
+
+  it('on the end step: hero actions (Delete + Add to library) are wrapped in a mobile-hidden container', async () => {
+    // No starter message → wizard starts at 'end' (the step where hero actions render).
+    useStarterUserMessageMock.mockReturnValue(undefined);
+    server.use(...baseHandlers(populatedAgent));
+
+    renderPage();
+
+    const heroActionsWrapper = await screen.findByTestId('agent-builder-hero-actions-desktop');
+    expect(heroActionsWrapper.classList.contains('hidden')).toBe(true);
+    expect(heroActionsWrapper.classList.contains('lg:flex')).toBe(true);
+
+    // Confirm the delete button is a child of the mobile-hidden wrapper (not a sibling).
+    await waitFor(() => {
+      expect(heroActionsWrapper.querySelector('[data-testid="agent-builder-delete-agent"]')).not.toBeNull();
+    });
+  });
 });

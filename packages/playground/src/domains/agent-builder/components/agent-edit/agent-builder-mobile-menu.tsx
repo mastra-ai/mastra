@@ -1,6 +1,7 @@
 import { Button, DropdownMenu } from '@mastra/playground-ui';
-import { Globe, LockIcon, MoreVerticalIcon } from 'lucide-react';
+import { EyeIcon, Globe, LockIcon, MoreVerticalIcon, PencilIcon } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
+import { useNavigate } from 'react-router';
 import { useVisibilityChange } from '../../hooks/use-visibility-change-agent';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { DeleteAgentMenuItem } from './delete-agent-action';
@@ -13,6 +14,10 @@ export interface AgentBuilderMobileMenuProps {
   showSetVisibility?: boolean;
   /** When true, includes the destructive "Delete agent" item. Owner-only. */
   showDelete?: boolean;
+  /** When true, includes a "View agent" item that navigates to the view page. */
+  showViewAgent?: boolean;
+  /** When true, includes an "Edit agent" item that navigates to the edit page. Owner-only. */
+  showEditAgent?: boolean;
   /** Required when showDelete is true — used in the confirm dialog copy. */
   agentName?: string;
   /** Disables all actions (e.g. during streaming). */
@@ -23,13 +28,18 @@ export function AgentBuilderMobileMenu({
   agentId,
   showSetVisibility = false,
   showDelete = false,
+  showViewAgent = false,
+  showEditAgent = false,
   agentName,
   disabled = false,
 }: AgentBuilderMobileMenuProps) {
+  const navigate = useNavigate();
   const canDelete = showDelete && Boolean(agentId) && Boolean(agentName);
   const canSetVisibility = showSetVisibility && Boolean(agentId);
+  const canViewAgent = showViewAgent && Boolean(agentId);
+  const canEditAgent = showEditAgent && Boolean(agentId);
 
-  if (!canSetVisibility && !canDelete) return null;
+  if (!canSetVisibility && !canDelete && !canViewAgent && !canEditAgent) return null;
 
   return (
     <div className="lg:hidden" data-testid="agent-builder-mobile-menu">
@@ -40,6 +50,31 @@ export function AgentBuilderMobileMenu({
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
+          {canViewAgent && (
+            <DropdownMenu.Item
+              data-testid="agent-builder-mobile-menu-view-agent"
+              disabled={disabled}
+              onSelect={() => {
+                void navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true });
+              }}
+            >
+              <EyeIcon />
+              <span>View agent</span>
+            </DropdownMenu.Item>
+          )}
+          {canEditAgent && (
+            <DropdownMenu.Item
+              data-testid="agent-builder-mobile-menu-edit-agent"
+              disabled={disabled}
+              onSelect={() => {
+                void navigate(`/agent-builder/agents/${agentId}/edit`, { viewTransition: true });
+              }}
+            >
+              <PencilIcon />
+              <span>Edit agent</span>
+            </DropdownMenu.Item>
+          )}
+          {(canViewAgent || canEditAgent) && (canSetVisibility || canDelete) && <DropdownMenu.Separator />}
           {canSetVisibility && <VisibilityMenuItem agentId={agentId as string} disabled={disabled} />}
           {canDelete && (
             <>

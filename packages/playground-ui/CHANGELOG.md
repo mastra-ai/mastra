@@ -1,5 +1,111 @@
 # @mastra/playground-ui
 
+## 30.0.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`d779de3`](https://github.com/mastra-ai/mastra/commit/d779de3cd9d2e7ed8110547190e2f15e786a0e41), [`1750c97`](https://github.com/mastra-ai/mastra/commit/1750c975d6179fbf6db2813b15229d4f8f23fc55), [`0e32507`](https://github.com/mastra-ai/mastra/commit/0e32507962cdfa5569b7bda5bc6fb3dd34e40b03), [`3a081c1`](https://github.com/mastra-ai/mastra/commit/3a081c1255c5ae8c99f6dad91cc612934ef6f2bd), [`fe9eacd`](https://github.com/mastra-ai/mastra/commit/fe9eacd9545a0a9d64aad31c9fa90294a425289e), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194)]:
+  - @mastra/core@1.38.0-alpha.2
+  - @mastra/client-js@1.21.2-alpha.2
+  - @mastra/react@0.4.3-alpha.2
+
+## 30.0.2-alpha.1
+
+### Patch Changes
+
+- Pointer drags inside the `SideDialog` body now select text reliably instead of fighting with the close-swipe gesture. The popup chrome (header, edges) still closes the drawer on drag. ([#16959](https://github.com/mastra-ai/mastra/pull/16959))
+
+  **Drawer composition**
+
+  `DrawerContent` is now the shadcn-style opinionated bundle (`DrawerPortal` + `DrawerBackdrop` + `DrawerViewport` + `DrawerPopup`, with a handle bar on top/bottom-anchored drawers and a fade-out when a nested drawer covers the parent). Most drawers can now be written as:
+
+  ```tsx
+  <Drawer>
+    <DrawerTrigger>…</DrawerTrigger>
+    <DrawerContent>
+      <DrawerHeader>…</DrawerHeader>
+      <DrawerBody>…</DrawerBody>
+    </DrawerContent>
+  </Drawer>
+  ```
+
+  The low-level primitives (`DrawerPortal`, `DrawerBackdrop`, `DrawerViewport`, `DrawerPopup`) remain exported for drawers that need a custom portal target, non-modal page behavior, or chrome outside the popup (see the `SwipeToOpen` and `NonModal` Storybook examples).
+
+  Base UI's text-selectable region (the `Drawer.Content` part — pointer drags inside it select text instead of closing the drawer) is now exported as `DrawerInteractive`. Migration:
+
+  ```tsx
+  // Before
+  import { DrawerContent } from '@mastra/playground-ui';
+  <DrawerContent render={<div>...</div>} />;
+
+  // After
+  import { DrawerInteractive } from '@mastra/playground-ui';
+  <DrawerInteractive render={<div>...</div>} />;
+  ```
+
+- Improved `@mastra/playground-ui` stability by removing legacy runtime UI dependencies without changing `SideDialog`, `MainSidebar`, or accessibility behavior. Nested `SideDialog` levels now stack consistently, so multi-level flows behave predictably. ([#16959](https://github.com/mastra-ai/mastra/pull/16959))
+
+- Updated dependencies [[`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c)]:
+  - @mastra/client-js@1.21.2-alpha.1
+  - @mastra/core@1.37.2-alpha.1
+  - @mastra/react@0.4.3-alpha.1
+
+## 30.0.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`07c3de7`](https://github.com/mastra-ai/mastra/commit/07c3de7f7bc418beccaea3b5e6b7f7cdda79d492)]:
+  - @mastra/core@1.37.2-alpha.0
+  - @mastra/client-js@1.21.2-alpha.0
+  - @mastra/react@0.4.3-alpha.0
+
+## 30.0.1
+
+### Patch Changes
+
+- Renamed `DataList.Row` (the non-interactive grid wrapper) to `DataList.RowWrapper` for clarity, since the name `Row` was easy to confuse with the interactive row primitives (`.RowButton`, `.RowLink`, `.RowStatic`). The corresponding exported component is now `DataListRowWrapper` (was `DataListRow`). ([#17123](https://github.com/mastra-ai/mastra/pull/17123))
+
+  **Migration**
+
+  ```tsx
+  // Before
+  <DataList.Row>
+    <DataList.SelectCell ... />
+    <DataList.RowButton ...>...</DataList.RowButton>
+  </DataList.Row>
+
+  // After
+  <DataList.RowWrapper>
+    <DataList.SelectCell ... />
+    <DataList.RowButton ...>...</DataList.RowButton>
+  </DataList.RowWrapper>
+  ```
+
+  The `.RowButton`, `.RowLink`, and `.RowStatic` primitives are unchanged.
+
+- `ContextMenu` Positioner and popup raised from `z-50` to `z-1000` with `isolate`, so the menu sits above app chrome that uses higher stacking contexts (e.g. sticky headers with `z-500`). Previously the menu would render behind such elements when opened on triggers near them. ([#17133](https://github.com/mastra-ai/mastra/pull/17133))
+
+- Removed the EntityList and EntityListPageLayout components — they were superseded by DataList. The 9 Studio root list pages (Agents, Datasets, Experiments, MCPs, Processors, Prompts, Scorers, Tools, Workflows) now build on DataList, matching the condensed layout shared across the rest of Studio. ([#17058](https://github.com/mastra-ai/mastra/pull/17058))
+
+  **Migration**
+
+  If you were importing EntityList or EntityListPageLayout from `@mastra/playground-ui`, switch to DataList — its API is a strict superset:
+
+  ```tsx
+  // Before
+  import { EntityList, EntityListSkeleton } from '@mastra/playground-ui';
+
+  // After
+  import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+  ```
+
+  The primitive names match (`.Top`, `.TopCell`, `.TopCellSmart`, `.RowLink`, `.Cell`, `.TextCell`, `.NameCell`, `.DescriptionCell`, `.NoMatch`, `.Pagination`). DataList additionally exposes `.Row`, `.RowButton`, `.RowStatic`, `.IdCell`, `.MonoCell`, `.SelectCell`, `.NextPageLoading`, and more — useful when you need selection rows or action cells outside a RowLink.
+
+- Updated dependencies [[`21db1a4`](https://github.com/mastra-ai/mastra/commit/21db1a4b8ac058d5a4fbe38b516cc1b81e526915)]:
+  - @mastra/core@1.37.1
+  - @mastra/client-js@1.21.1
+  - @mastra/react@0.4.2
+
 ## 30.0.1-alpha.0
 
 ### Patch Changes

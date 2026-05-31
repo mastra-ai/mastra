@@ -78,20 +78,6 @@ export const API_ROUTE_METADATA = {
       "kind": "array"
     }
   },
-  "GET /agents/:agentId/speakers": {
-    "method": "GET",
-    "path": "/agents/:agentId/speakers",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "array"
-    }
-  },
   "POST /agents/:agentId/generate": {
     "method": "POST",
     "path": "/agents/:agentId/generate",
@@ -162,6 +148,34 @@ export const API_ROUTE_METADATA = {
       "tracingOptions",
       "versions"
     ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/send-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/send-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/queue-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/queue-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -356,23 +370,6 @@ export const API_ROUTE_METADATA = {
   "POST /agents/:agentId/voice/listen": {
     "method": "POST",
     "path": "/agents/:agentId/voice/listen",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [
-      "audio",
-      "options"
-    ],
-    "hasQuery": false,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /agents/:agentId/listen": {
-    "method": "POST",
-    "path": "/agents/:agentId/listen",
     "pathParams": [
       "agentId"
     ],
@@ -593,6 +590,29 @@ export const API_ROUTE_METADATA = {
   "POST /workflows/:workflowId/resume-async": {
     "method": "POST",
     "path": "/workflows/:workflowId/resume-async",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workflows/:workflowId/resume-no-wait": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/resume-no-wait",
     "pathParams": [
       "workflowId"
     ],
@@ -5139,6 +5159,29 @@ export const API_ROUTE_METADATA = {
   "POST /agent-builder/:actionId/resume-async": {
     "method": "POST",
     "path": "/agent-builder/:actionId/resume-async",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/resume-no-wait": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/resume-no-wait",
     "pathParams": [
       "actionId"
     ],
