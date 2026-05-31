@@ -700,7 +700,7 @@ test.describe('Comprehensive Persistence Test', () => {
     // === Tools ===
     await clickSidebarLink(page, 'Tools');
     await page.getByRole('button', { name: 'Add Tools' }).click({ timeout: 10000 });
-    const firstToolOption = page.locator('[data-radix-popper-content-wrapper] button').first();
+    const firstToolOption = page.locator('[data-slot="popover-content"] button').first();
     await firstToolOption.waitFor({ state: 'visible', timeout: 5000 });
     await firstToolOption.click();
     await expect(page.getByLabel(/^Remove /).first()).toBeVisible({ timeout: 5000 });

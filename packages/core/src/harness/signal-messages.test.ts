@@ -53,6 +53,34 @@ function createHarness(
 }
 
 describe('Harness signal messages', () => {
+  it('renders persisted user-message signal attributes', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const thread = await harness.createThread();
+
+    await storage.stores.memory!.saveMessages({
+      messages: [
+        createSignal({
+          id: 'signal-user-1',
+          type: 'user-message',
+          contents: 'Continue with this',
+          attributes: { delivery: 'while-active' },
+          createdAt: new Date('2026-05-04T00:00:00.000Z'),
+        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      ],
+    });
+
+    await expect(harness.listMessages()).resolves.toEqual([
+      {
+        id: 'signal-user-1',
+        role: 'user',
+        content: [{ type: 'text', text: 'Continue with this' }],
+        attributes: { delivery: 'while-active' },
+        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      },
+    ]);
+  });
+
   it('renders persisted system-reminder signals from signal attributes', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
@@ -126,15 +154,18 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('Hello'),
     });
     const harness = createHarness(storage, agent);
-    const thread = await harness.createThread();
-
-    const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {})(),
       unsubscribe: vi.fn(),
       abort: vi.fn(),
       activeRunId: () => 'active-run-id',
     });
+    const thread = await harness.createThread();
+
+    // Simulate an active run from the harness consumer's perspective
+    (harness as any).currentRunId = 'active-run-id';
+
+    const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
     const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
@@ -146,12 +177,99 @@ describe('Harness signal messages', () => {
 
     expect(buildToolsets).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ id: signal.id, type: 'user-message', contents: 'active hello' }),
-      {
+      expect.objectContaining({ id: signal.id, type: 'user', tagName: 'user', contents: 'active hello' }),
+      expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
-      },
+      }),
     );
+  });
+
+  it('tracks queued follow-ups in display state while running', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    (harness as any).abortController = new AbortController();
+
+    await harness.followUp({ content: 'queued follow-up' });
+
+    expect(harness.getFollowUpCount()).toBe(1);
+    expect(harness.getDisplayState().queuedFollowUps).toBe(1);
+    expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
+  });
+
+  it('uses queueMessage when draining follow-ups for a subscribed thread', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'follow-up-queue-agent',
+      name: 'follow-up-queue-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const harness = createHarness(storage, agent);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: true,
+      runId: 'queued-run-id',
+      signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+    });
+    const sendSignal = vi.spyOn(agent, 'sendSignal');
+    const thread = await harness.createThread();
+    (harness as any).abortController = new AbortController();
+
+    await harness.followUp({ content: 'queued follow-up' });
+    await (harness as any).drainFollowUpQueue();
+
+    expect(queueMessage).toHaveBeenCalledWith(
+      'queued follow-up',
+      expect.objectContaining({
+        resourceId: thread.resourceId,
+        threadId: thread.id,
+        ifIdle: expect.objectContaining({
+          streamOptions: expect.objectContaining({
+            memory: { thread: thread.id, resource: thread.resourceId },
+            maxSteps: 1000,
+            savePerStep: false,
+            requireToolApproval: true,
+          }),
+        }),
+      }),
+    );
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(harness.getFollowUpCount()).toBe(0);
+    expect(harness.getDisplayState().queuedFollowUps).toBe(0);
+    expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
+    expect(events).toContainEqual({ type: 'follow_up_queued', count: 0, runId: 'queued-run-id' });
+  });
+
+  it('sends idle follow-ups immediately without marking them queued', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const sendMessage = vi.spyOn(harness, 'sendMessage').mockResolvedValue(undefined);
+
+    await harness.followUp({ content: 'idle follow-up' });
+
+    expect(sendMessage).toHaveBeenCalledWith({ content: 'idle follow-up', requestContext: undefined });
+    expect(harness.getFollowUpCount()).toBe(0);
+    expect(harness.getDisplayState().queuedFollowUps).toBe(0);
+    expect(events.some(event => event.type === 'follow_up_queued')).toBe(false);
   });
 
   it('aborts the current thread stream through the active subscription', async () => {
@@ -164,13 +282,13 @@ describe('Harness signal messages', () => {
     });
     const harness = createHarness(storage, agent);
     const abort = vi.fn();
-    await harness.createThread();
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {})(),
       unsubscribe: vi.fn(),
       abort,
       activeRunId: () => 'active-run-id',
     });
+    await harness.createThread();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
@@ -196,13 +314,20 @@ describe('Harness signal messages', () => {
     const abort = vi.fn(() => true);
     const unsubscribe = vi.fn();
 
+    vi.spyOn(agent, 'subscribeToThread')
+      .mockResolvedValueOnce({
+        stream: (async function* () {})(),
+        unsubscribe,
+        abort,
+        activeRunId: () => 'active-run-id',
+      })
+      .mockResolvedValue({
+        stream: (async function* () {})(),
+        unsubscribe: vi.fn(),
+        abort: vi.fn(),
+        activeRunId: () => null,
+      });
     await harness.createThread();
-    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
-      stream: (async function* () {})(),
-      unsubscribe,
-      abort,
-      activeRunId: () => 'active-run-id',
-    });
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
@@ -234,7 +359,6 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    await harness.createThread();
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {
         yield { type: 'start', runId: 'run-1' };
@@ -244,18 +368,12 @@ describe('Harness signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'run-1',
     });
-    vi.spyOn(agent, 'sendSignal').mockReturnValue({
-      accepted: true,
-      runId: 'run-1',
-      signal: createSignal({ type: 'user-message', contents: 'active hello' }),
-    });
-
-    const signal = harness.sendSignal({ content: 'active hello' });
-    await signal.accepted;
+    await harness.createThread();
 
     await waitFor(() => events.some(event => event.type === 'agent_end' && event.reason === 'error'));
 
     expect(events.some(event => event.type === 'error' && event.error.message === 'subscription failed')).toBe(true);
+    await waitFor(() => harness.getCurrentRunId() === null);
     expect(harness.getCurrentRunId()).toBeNull();
   });
 
@@ -284,7 +402,6 @@ describe('Harness signal messages', () => {
       return true;
     });
 
-    await harness.createThread();
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {
         yield { type: 'start', runId: 'run-1' };
@@ -296,6 +413,7 @@ describe('Harness signal messages', () => {
       abort,
       activeRunId: () => activeRunId,
     });
+    await harness.createThread();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'run-1',
@@ -538,13 +656,10 @@ describe('Harness signal messages', () => {
         data: {
           id: 'signal-file-1',
           type: 'user-message',
-          contents: {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Review this' },
-              { type: 'file', data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'note.txt' },
-            ],
-          },
+          contents: [
+            { type: 'text', text: 'Review this' },
+            { type: 'file', data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'note.txt' },
+          ],
           createdAt: '2026-05-04T00:00:00.000Z',
         },
       },

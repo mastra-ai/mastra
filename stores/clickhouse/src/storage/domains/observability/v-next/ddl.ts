@@ -20,6 +20,8 @@
  *   - No physical createdAt/updatedAt columns
  */
 
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+
 // ---------------------------------------------------------------------------
 // Table names
 // ---------------------------------------------------------------------------
@@ -27,10 +29,16 @@
 export const TABLE_SPAN_EVENTS = 'mastra_span_events';
 export const TABLE_TRACE_ROOTS = 'mastra_trace_roots';
 export const TABLE_TRACE_BRANCHES = 'mastra_trace_branches';
+export const TABLE_TRACE_ROOTS_DELTA = 'mastra_trace_roots_delta';
+export const TABLE_TRACE_BRANCHES_DELTA = 'mastra_trace_branches_delta';
 export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
 export const TABLE_FEEDBACK_EVENTS = 'mastra_feedback_events';
+export const TABLE_METRIC_EVENTS_DELTA = 'mastra_metric_events_delta';
+export const TABLE_LOG_EVENTS_DELTA = 'mastra_log_events_delta';
+export const TABLE_SCORE_EVENTS_DELTA = 'mastra_score_events_delta';
+export const TABLE_FEEDBACK_EVENTS_DELTA = 'mastra_feedback_events_delta';
 export const TABLE_DISCOVERY_VALUES = 'mastra_discovery_values';
 export const TABLE_DISCOVERY_PAIRS = 'mastra_discovery_pairs';
 
@@ -40,8 +48,53 @@ export const TABLE_DISCOVERY_PAIRS = 'mastra_discovery_pairs';
 
 export const MV_TRACE_ROOTS = 'mastra_mv_trace_roots';
 export const MV_TRACE_BRANCHES = 'mastra_mv_trace_branches';
+export const MV_TRACE_ROOTS_DELTA = 'mastra_mv_trace_roots_delta';
+export const MV_TRACE_BRANCHES_DELTA = 'mastra_mv_trace_branches_delta';
+export const MV_METRIC_EVENTS_DELTA = 'mastra_mv_metric_events_delta';
+export const MV_LOG_EVENTS_DELTA = 'mastra_mv_log_events_delta';
+export const MV_SCORE_EVENTS_DELTA = 'mastra_mv_score_events_delta';
+export const MV_FEEDBACK_EVENTS_DELTA = 'mastra_mv_feedback_events_delta';
 export const MV_DISCOVERY_VALUES = 'mastra_mv_discovery_values';
 export const MV_DISCOVERY_PAIRS = 'mastra_mv_discovery_pairs';
+
+export const DELTA_TABLE_NAMES = [
+  TABLE_TRACE_ROOTS_DELTA,
+  TABLE_TRACE_BRANCHES_DELTA,
+  TABLE_METRIC_EVENTS_DELTA,
+  TABLE_LOG_EVENTS_DELTA,
+  TABLE_SCORE_EVENTS_DELTA,
+  TABLE_FEEDBACK_EVENTS_DELTA,
+] as const;
+
+export const DELTA_MV_NAMES = [
+  MV_TRACE_ROOTS_DELTA,
+  MV_TRACE_BRANCHES_DELTA,
+  MV_METRIC_EVENTS_DELTA,
+  MV_LOG_EVENTS_DELTA,
+  MV_SCORE_EVENTS_DELTA,
+  MV_FEEDBACK_EVENTS_DELTA,
+] as const;
+
+/**
+ * `generateSerialID` counter keys used by the serial delta-cursor strategy.
+ * Each delta MV passes one of these to `generateSerialID(...)` to mint a
+ * monotonic `cursorId` per row.
+ *
+ * ClickHouse's `generateSerialID` is server-lifetime keyed and starts at 0.
+ * On an empty stream `max(cursorId)` also returns 0, which would collide with
+ * the very first row inserted after a server cold-start (both reported as 0,
+ * skipping that row in `WHERE cursorId > 0` reads). `init()` burns the 0
+ * value for every counter so the first real row is guaranteed to land at
+ * `cursorId >= 1`.
+ */
+export const DELTA_CURSOR_COUNTER_NAMES = [
+  'mastra_trace_roots_delta_cursor',
+  'mastra_trace_branches_delta_cursor',
+  'mastra_metric_events_delta_cursor',
+  'mastra_log_events_delta_cursor',
+  'mastra_score_events_delta_cursor',
+  'mastra_feedback_events_delta_cursor',
+] as const;
 
 /**
  * Span types that anchor a listable trace branch -- a named entity got
@@ -309,6 +362,127 @@ FROM ${TABLE_SPAN_EVENTS}
 WHERE spanType IN (${BRANCH_SPAN_TYPE_VALUES.map(v => `'${v}'`).join(', ')})
 `;
 
+const DELTA_INGESTED_AT_TYPE = `DateTime64(9, 'UTC')`;
+const DELTA_CURSOR_EPOCH_MS = 1777852800000;
+const DELTA_CURSOR_SUFFIX_BITS = 26;
+const DELTA_CURSOR_SUFFIX_MASK = 67108863;
+
+function buildFallbackCursorExpr(stableKeyExpr: string): string {
+  return `bitOr(
+    bitShiftLeft(
+      toUInt64(toUnixTimestamp64Milli(ingestedAt) - ${DELTA_CURSOR_EPOCH_MS}),
+      ${DELTA_CURSOR_SUFFIX_BITS}
+    ),
+    bitAnd(farmFingerprint64(toString(${stableKeyExpr})), toUInt64(${DELTA_CURSOR_SUFFIX_MASK}))
+  )`;
+}
+
+function buildDeltaCursorExpr(
+  strategy: ClickHouseDeltaCursorStrategy,
+  counterName: string,
+  stableKeyExpr: string,
+): string {
+  if (strategy === 'serial') {
+    return `generateSerialID('${counterName}')`;
+  }
+
+  return buildFallbackCursorExpr(stableKeyExpr);
+}
+
+// ---------------------------------------------------------------------------
+// trace_roots_delta — append-only cursor index for incremental trace polling
+// ---------------------------------------------------------------------------
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+
+export function buildTraceRootsDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  startedAt          DateTime64(3, 'UTC'),
+  traceId            String,
+  dedupeKey          String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+`;
+}
+
+export function buildTraceRootsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_TRACE_ROOTS_DELTA}
+TO ${TABLE_TRACE_ROOTS_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_trace_roots_delta_cursor', 'dedupeKey')} AS cursorId,
+  ingestedAt,
+  startedAt,
+  traceId,
+  dedupeKey
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    startedAt,
+    traceId,
+    dedupeKey
+  FROM ${TABLE_TRACE_ROOTS}
+)
+`;
+}
+
+// ---------------------------------------------------------------------------
+// trace_branches_delta — append-only cursor index for incremental branch polling
+// ---------------------------------------------------------------------------
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+
+export function buildTraceBranchesDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  spanType           LowCardinality(String),
+  startedAt          DateTime64(3, 'UTC'),
+  traceId            String,
+  spanId             String,
+  dedupeKey          String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+`;
+}
+
+export function buildTraceBranchesDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_TRACE_BRANCHES_DELTA}
+TO ${TABLE_TRACE_BRANCHES_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_trace_branches_delta_cursor', 'dedupeKey')} AS cursorId,
+  ingestedAt,
+  spanType,
+  startedAt,
+  traceId,
+  spanId,
+  dedupeKey
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    spanType,
+    startedAt,
+    traceId,
+    spanId,
+    dedupeKey
+  FROM ${TABLE_TRACE_BRANCHES}
+)
+`;
+}
+
 // ---------------------------------------------------------------------------
 // metric_events — ReplacingMergeTree with metricId dedup
 // ---------------------------------------------------------------------------
@@ -445,6 +619,43 @@ PARTITION BY toDate(timestamp)
 ORDER BY (timestamp, logId)
 `;
 
+export function buildLogEventsDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  timestamp          DateTime64(3, 'UTC'),
+  logId              String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+`;
+}
+
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+export function buildLogEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_LOG_EVENTS_DELTA}
+TO ${TABLE_LOG_EVENTS_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_log_events_delta_cursor', 'logId')} AS cursorId,
+  ingestedAt,
+  timestamp,
+  logId
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    timestamp,
+    logId
+  FROM ${TABLE_LOG_EVENTS}
+)
+`;
+}
+
 // ---------------------------------------------------------------------------
 // score_events — ReplacingMergeTree with scoreId dedup
 // ---------------------------------------------------------------------------
@@ -510,6 +721,47 @@ PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
 `;
+
+export function buildScoreEventsDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  traceId            Nullable(String),
+  timestamp          DateTime64(3, 'UTC'),
+  scoreId            String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+SETTINGS allow_nullable_key = 1
+`;
+}
+
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
+TO ${TABLE_SCORE_EVENTS_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_score_events_delta_cursor', 'scoreId')} AS cursorId,
+  ingestedAt,
+  traceId,
+  timestamp,
+  scoreId
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    traceId,
+    timestamp,
+    scoreId
+  FROM ${TABLE_SCORE_EVENTS}
+)
+`;
+}
 
 // ---------------------------------------------------------------------------
 // feedback_events — ReplacingMergeTree with feedbackId dedup
@@ -580,17 +832,107 @@ ORDER BY (traceId, timestamp, feedbackId)
 SETTINGS allow_nullable_key = 1
 `;
 
+export function buildFeedbackEventsDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  traceId            Nullable(String),
+  timestamp          DateTime64(3, 'UTC'),
+  feedbackId         String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+SETTINGS allow_nullable_key = 1
+`;
+}
+
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+export function buildFeedbackEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_FEEDBACK_EVENTS_DELTA}
+TO ${TABLE_FEEDBACK_EVENTS_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_feedback_events_delta_cursor', 'feedbackId')} AS cursorId,
+  ingestedAt,
+  traceId,
+  timestamp,
+  feedbackId
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    traceId,
+    timestamp,
+    feedbackId
+  FROM ${TABLE_FEEDBACK_EVENTS}
+)
+`;
+}
+
+// ---------------------------------------------------------------------------
+// metric_events_delta — append-only cursor index for incremental metric polling
+// ---------------------------------------------------------------------------
+
+export function buildMetricEventsDeltaDDL(): string {
+  return `
+CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS_DELTA} (
+  cursorId           UInt64,
+  ingestedAt         ${DELTA_INGESTED_AT_TYPE},
+  name               LowCardinality(String),
+  timestamp          DateTime64(3, 'UTC'),
+  metricId           String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId)
+TTL ingestedAt + toIntervalDay(2)
+`;
+}
+
+// Forward-only index: historical rows that predate this delta schema are not
+// backfilled into delta polling.
+export function buildMetricEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_METRIC_EVENTS_DELTA}
+TO ${TABLE_METRIC_EVENTS_DELTA}
+AS
+SELECT
+  ${buildDeltaCursorExpr(strategy, 'mastra_metric_events_delta_cursor', 'metricId')} AS cursorId,
+  ingestedAt,
+  name,
+  timestamp,
+  metricId
+FROM (
+  SELECT
+    now64(9, 'UTC') AS ingestedAt,
+    name,
+    timestamp,
+    metricId
+  FROM ${TABLE_METRIC_EVENTS}
+)
+`;
+}
+
 // ---------------------------------------------------------------------------
 // discovery_values — refreshable helper
 // ---------------------------------------------------------------------------
 
+// ReplacingMergeTree with ORDER BY covering every column: the refreshable MV
+// below writes via `REFRESH EVERY ... TO <pre-created table>`, which in
+// ClickHouse appends a fresh copy of its result set on each refresh. Pairing
+// the helper table with ReplacingMergeTree lets background merges collapse
+// the identical rows so on-disk size tracks actual cardinality.
 export const DISCOVERY_VALUES_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_VALUES} (
   kind               LowCardinality(String),
   key1               String,
   value              String
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 ORDER BY (kind, key1, value)
 `;
 
@@ -598,6 +940,7 @@ ORDER BY (kind, key1, value)
 // discovery_pairs — refreshable helper
 // ---------------------------------------------------------------------------
 
+// ReplacingMergeTree for the same reason as DISCOVERY_VALUES_DDL above.
 export const DISCOVERY_PAIRS_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_PAIRS} (
   kind               LowCardinality(String),
@@ -605,7 +948,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_PAIRS} (
   key2               String,
   value              String
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 ORDER BY (kind, key1, key2, value)
 `;
 
@@ -687,7 +1030,7 @@ SELECT DISTINCT kind, key1, key2, value FROM (
 // All DDL in creation order (tables first, then MVs)
 // ---------------------------------------------------------------------------
 
-export const ALL_TABLE_DDL = [
+export const BASE_TABLE_DDL = [
   SPAN_EVENTS_DDL,
   TRACE_ROOTS_DDL,
   TRACE_BRANCHES_DDL,
@@ -699,7 +1042,37 @@ export const ALL_TABLE_DDL = [
   DISCOVERY_PAIRS_DDL,
 ];
 
-export const ALL_MV_DDL = [TRACE_ROOTS_MV_DDL, TRACE_BRANCHES_MV_DDL];
+export function buildDeltaTableDDL(): string[] {
+  return [
+    buildTraceRootsDeltaDDL(),
+    buildTraceBranchesDeltaDDL(),
+    buildMetricEventsDeltaDDL(),
+    buildLogEventsDeltaDDL(),
+    buildScoreEventsDeltaDDL(),
+    buildFeedbackEventsDeltaDDL(),
+  ];
+}
+
+export function buildAllTableDDL(): string[] {
+  return [...BASE_TABLE_DDL, ...buildDeltaTableDDL()];
+}
+
+export const BASE_MV_DDL = [TRACE_ROOTS_MV_DDL, TRACE_BRANCHES_MV_DDL];
+
+export function buildDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string[] {
+  return [
+    buildTraceRootsDeltaMvDDL(strategy),
+    buildTraceBranchesDeltaMvDDL(strategy),
+    buildMetricEventsDeltaMvDDL(strategy),
+    buildLogEventsDeltaMvDDL(strategy),
+    buildScoreEventsDeltaMvDDL(strategy),
+    buildFeedbackEventsDeltaMvDDL(strategy),
+  ];
+}
+
+export function buildAllMvDDL(strategy: ClickHouseDeltaCursorStrategy): string[] {
+  return [...BASE_MV_DDL, ...buildDeltaMvDDL(strategy)];
+}
 
 /** Discovery-specific refreshable MVs — created separately from core MVs. */
 export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL];
@@ -789,16 +1162,24 @@ export const METRIC_SKIP_INDEX_NAMES = [
   'idx_requestId',
 ] as const;
 
-export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
+export function buildAllDDL(strategy: ClickHouseDeltaCursorStrategy): string[] {
+  return [...buildAllTableDDL(), ...buildAllMvDDL(strategy), ...DISCOVERY_MV_DDL];
+}
 
 export const ALL_TABLE_NAMES = [
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
   TABLE_TRACE_BRANCHES,
+  TABLE_TRACE_ROOTS_DELTA,
+  TABLE_TRACE_BRANCHES_DELTA,
   TABLE_METRIC_EVENTS,
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_FEEDBACK_EVENTS,
+  TABLE_METRIC_EVENTS_DELTA,
+  TABLE_LOG_EVENTS_DELTA,
+  TABLE_SCORE_EVENTS_DELTA,
+  TABLE_FEEDBACK_EVENTS_DELTA,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
 ];

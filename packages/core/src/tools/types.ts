@@ -80,6 +80,31 @@ export type ToolPayloadTransformPolicy = {
 };
 
 /**
+ * Observability helpers available on the tool execution context.
+ * Wraps child span creation and structured log emission in a
+ * null-safe API that callers never need to check — when no tracing
+ * context is active, `span` runs the function directly and `log` is
+ * a no-op.
+ */
+export interface ToolObserve {
+  span<T>(name: string, fn: () => Promise<T> | T, attributes?: Record<string, unknown>): Promise<T>;
+  log(level: 'debug' | 'info' | 'warn' | 'error' | 'fatal', message: string, data?: Record<string, unknown>): void;
+}
+
+/**
+ * A no-op ToolObserve implementation. `span` runs the function
+ * directly; `log` does nothing. Used as the default when no
+ * collector/tracing context is active, so user code never needs to
+ * null-check `observe`.
+ */
+export const noopObserve: ToolObserve = {
+  async span<T>(_name: string, fn: () => Promise<T> | T): Promise<T> {
+    return fn();
+  },
+  log(): void {},
+};
+
+/**
  * MCP-specific context properties available during tool execution in MCP environments.
  */
 // Agent tool execution context - properties specific when tools are executed by agents
@@ -176,6 +201,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * stream is not memory-backed.
      */
     flushMessages?: () => Promise<void>;
+    /** Observability helper to expose on the final tool execution context. */
+    observe?: ToolObserve;
   };
 
 /**
@@ -423,6 +450,21 @@ export interface ToolExecutionContext<
 
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
+
+  /**
+   * Observability helpers for recording child spans and structured logs
+   * from inside a tool's execute function. Always provided — when no
+   * tracing context is active, `span` runs the function directly and
+   * `log` is a no-op. No null-checking needed.
+   *
+   * ```ts
+   * execute: async ({ userId }, { observe }) => {
+   *   observe.log('info', 'fetching user', { userId })
+   *   return observe.span('fetch user', () => fetch(`/api/users/${userId}`))
+   * }
+   * ```
+   */
+  observe: ToolObserve;
 }
 
 export interface ToolAction<
@@ -468,11 +510,15 @@ export interface ToolAction<
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
-  // Returns: The expected output OR a validation error if input validation fails
+  // Returns: The expected output, a validation error, or void when the tool
+  // suspends via `context.agent?.suspend?.(...)` / `context.workflow?.suspend?.(...)`.
+  // When `suspend` has been called, the tool runtime skips output validation
+  // (see `Tool.execute` in tool.ts), so returning `undefined` after `suspend`
+  // is the supported idiom (e.g. `return await suspend(...)`).
   // Note: When no outputSchema is provided, returns any to allow property access
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
-  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError>;
+  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError | void>;
   mastra?: Mastra;
   /**
    * Whether the tool requires explicit user approval before execution.

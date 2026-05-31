@@ -22,15 +22,6 @@
     "@mastra/mcp": "*",
     "mastra": "*",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@mastra/core": "link:../../core",
-      "@mastra/agent-builder": "link:../../agent-builder",
-      "@mastra/libsql": "link:../../../stores/libsql",
-      "@mastra/mcp": "link:../../mcp",
-      "mastra": "link:../../cli"
-    }
+    "vitest": "^4.1.7"
   }
 }

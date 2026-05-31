@@ -2080,4 +2080,151 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       spy.mockRestore();
     }
   });
+
+  it('should end the AGENT_RUN span when the stream suspends for tool-call-approval', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const findUserTool = createTool({
+        id: 'findUserTool',
+        description: 'Returns a user record',
+        inputSchema: z.object({ name: z.string() }),
+        requireApproval: true,
+        execute: async () => ({ name: 'Dero Israel', email: 'dero@mail.com' }),
+      });
+
+      const approvalModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: '__GATEWAY_OPENAI_MODEL__', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'findUserTool',
+              input: '{"name":"Dero Israel"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-orphaned-span-suspend',
+        name: 'Test Orphaned Span Suspend',
+        model: approvalModel,
+        instructions: 'You are a helpful assistant.',
+        tools: { findUserTool },
+        memory: new MockMemory(),
+      });
+
+      const output = await agent.stream('Find the user with name - Dero Israel', {
+        memory: { thread: 'thread-suspend', resource: 'resource-suspend' },
+        modelSettings: { maxRetries: 0 },
+      });
+
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.end).toHaveBeenCalled();
+      expect(agentRunSpan.error).not.toHaveBeenCalled();
+      expect(agentRunSpan.end.mock.calls[0][0]).toMatchObject({
+        output: {
+          status: 'suspended',
+          reason: 'tool-call-approval',
+          toolName: 'findUserTool',
+          toolCallId: 'call-1',
+        },
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('should end the AGENT_RUN span when the stream is aborted mid-flight', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const abortController = new AbortController();
+      let pullCalls = 0;
+
+      const abortMidStreamModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            pull(controller) {
+              switch (pullCalls++) {
+                case 0:
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  break;
+                case 1:
+                  controller.enqueue({
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: '__GATEWAY_OPENAI_MODEL__',
+                    timestamp: new Date(0),
+                  });
+                  break;
+                case 2:
+                  // Abort during streaming, before any finish chunk reaches output.ts.
+                  // This mirrors the browser-disconnect / AbortController.abort() path
+                  // that previously left the AGENT_RUN span orphaned.
+                  abortController.abort();
+                  controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                  break;
+              }
+            },
+          }),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-orphaned-span-abort',
+        name: 'Test Orphaned Span Abort',
+        model: abortMidStreamModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', {
+        abortSignal: abortController.signal,
+        modelSettings: { maxRetries: 0 },
+      });
+
+      try {
+        for await (const _chunk of output.fullStream) {
+          // drain
+        }
+      } catch {
+        // expected: stream may error on abort
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.end).toHaveBeenCalled();
+      expect(agentRunSpan.error).not.toHaveBeenCalled();
+      expect(agentRunSpan.end.mock.calls[0][0]).toMatchObject({
+        output: {
+          status: 'aborted',
+          reason: 'abort',
+        },
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

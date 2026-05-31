@@ -11,7 +11,7 @@ import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import {
@@ -271,23 +271,18 @@ export function DataCodeSection({
           <ButtonsGroup>
             <CopyButton content={codeStr || 'No content'} size="sm" />
             {hasMultilineText && (
-              <ButtonWithTooltip
+              <Button
                 size="sm"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
-                tooltipContent={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+                tooltip={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
               >
                 {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-              </ButtonWithTooltip>
+              </Button>
             )}
-            <ButtonWithTooltip
-              size="sm"
-              aria-label="Expand"
-              tooltipContent="Expand"
-              onClick={() => setExpandedOpen(true)}
-            >
+            <Button size="sm" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
               <ExpandIcon />
-            </ButtonWithTooltip>
+            </Button>
           </ButtonsGroup>
         </div>
       </div>
@@ -336,19 +331,19 @@ export function DataCodeSection({
               <ButtonsGroup>
                 <CopyButton content={codeStr || 'No content'} size="sm" />
                 {hasMultilineText && (
-                  <ButtonWithTooltip
+                  <Button
                     size="sm"
                     aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
-                    tooltipContent={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
+                    tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                     onClick={() => setExpandedMultiline(v => !v)}
                   >
                     {expandedMultiline ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-                  </ButtonWithTooltip>
+                  </Button>
                 )}
                 <DialogClose asChild>
-                  <ButtonWithTooltip size="sm" aria-label="Close" tooltipContent="Close">
+                  <Button size="sm" aria-label="Close" tooltip="Close">
                     <XIcon />
-                  </ButtonWithTooltip>
+                  </Button>
                 </DialogClose>
               </ButtonsGroup>
             </div>

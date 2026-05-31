@@ -7,7 +7,7 @@ import {
   isNewerVersion,
   runUpdate,
 } from '../../utils/update-check.js';
-import { askModalQuestion } from '../modal-question.js';
+import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<void> {
@@ -46,12 +46,31 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
   }
   question += `\n\nWould you like to update now?`;
 
-  const answer = await askModalQuestion(ctx.state.ui, {
-    question,
-    options: [
-      { label: 'Yes', description: 'Update and restart' },
-      { label: 'No', description: 'Skip this version' },
-    ],
+  const answer = await new Promise<string | null>(resolve => {
+    const component = new AskQuestionInlineComponent(
+      {
+        question,
+        options: [
+          { label: 'Yes', description: 'Update and restart' },
+          { label: 'No', description: 'Skip this version' },
+        ],
+        allowCustomResponse: false,
+        onSubmit: answer => {
+          ctx.state.activeInlineQuestion = undefined;
+          resolve(answer);
+        },
+        onCancel: () => {
+          ctx.state.activeInlineQuestion = undefined;
+          resolve(null);
+        },
+      },
+      ctx.state.ui,
+    );
+
+    ctx.state.chatContainer.addChild(component);
+    ctx.state.activeInlineQuestion = component;
+    component.focused = true;
+    ctx.state.ui.requestRender();
   });
 
   if (answer === 'Yes') {

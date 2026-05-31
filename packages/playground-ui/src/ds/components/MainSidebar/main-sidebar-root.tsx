@@ -1,8 +1,8 @@
-import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
+import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarRootProps = {
@@ -162,7 +162,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     [isCollapsed, width, minWidth, maxWidth, setWidth, expand, commit, toggleSidebar],
   );
 
-  // Mobile: render as an off-canvas drawer via Radix Dialog.
+  // Mobile: render as an off-canvas drawer via Base UI Dialog.
   // Auto-close on link navigation (standard drawer UX). Don't gate on
   // `defaultPrevented` — client-side router links call `preventDefault()` for
   // SPA navigation, and we still want to close the drawer when they do.
@@ -183,20 +183,20 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     return (
       <DialogPrimitive.Root open={openMobile} onOpenChange={setOpenMobile}>
         <DialogPrimitive.Portal>
-          <DialogPrimitive.Overlay
+          <DialogPrimitive.Backdrop
             className={cn(
               'fixed inset-0 z-40 bg-overlay backdrop-blur-sm',
-              'data-[state=open]:animate-in data-[state=closed]:animate-out',
-              'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
+              'opacity-100 transition-opacity duration-200 ease-out motion-reduce:transition-none',
+              'data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 data-[ending-style]:duration-150 data-[ending-style]:ease-in',
             )}
           />
-          <DialogPrimitive.Content
+          <DialogPrimitive.Popup
             className={cn(
               'fixed inset-y-0 left-0 z-50 flex h-full flex-col',
               'w-3/4 max-w-(--sidebar-width-mobile)',
               'bg-surface2 shadow-xl',
-              'data-[state=open]:animate-in data-[state=closed]:animate-out',
-              'data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left',
+              'data-[open]:animate-in data-[closed]:animate-out',
+              'data-[open]:slide-in-from-left data-[closed]:slide-out-to-left',
               'duration-200',
               className,
             )}
@@ -210,7 +210,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
             <div onClick={closeOnAnchor} className="flex flex-col h-full min-h-0 px-4 py-2 overflow-hidden">
               {children}
             </div>
-          </DialogPrimitive.Content>
+          </DialogPrimitive.Popup>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
     );

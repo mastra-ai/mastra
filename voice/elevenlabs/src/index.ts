@@ -1,4 +1,4 @@
-import { MastraVoice } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
 import { ElevenLabsClient } from 'elevenlabs';
 
 type ElevenLabsModel =

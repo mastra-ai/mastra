@@ -31,6 +31,17 @@ function getTemporalGapReminderMetadata(message: MastraDBMessage, gapText: strin
   };
 }
 
+function getTemporalGapReminderAttributes(message: MastraDBMessage, gapText: string, gapMs: number, timestamp: number) {
+  return {
+    type: TEMPORAL_GAP_REMINDER_TYPE,
+    gapText,
+    gapMs,
+    timestamp: formatTemporalTimestamp(new Date(timestamp)),
+    timestampMs: timestamp,
+    precedesMessageId: message.id,
+  };
+}
+
 function isTemporalGapMarkerForMessage(message: MastraDBMessage, targetMessageId: string): boolean {
   if (!isTemporalGapMarker(message)) {
     return false;
@@ -53,37 +64,10 @@ function isTemporalGapMarkerForMessage(message: MastraDBMessage, targetMessageId
   );
 }
 
-function createTemporalGapMarker(
-  message: MastraDBMessage,
-  gapText: string,
-  gapMs: number,
-  timestamp: number,
-): MastraDBMessage {
-  const metadata = getTemporalGapReminderMetadata(message, gapText, gapMs, timestamp);
-
-  return {
-    id: `__temporal_gap_${crypto.randomUUID()}`,
-    role: 'user',
-    createdAt: new Date(timestamp - 1),
-    threadId: message.threadId,
-    resourceId: message.resourceId,
-    content: {
-      format: 2,
-      parts: [
-        {
-          type: 'text',
-          text: `<system-reminder type="${TEMPORAL_GAP_REMINDER_TYPE}" precedesMessageId="${message.id}">${getTemporalGapReminderText(gapText, timestamp)}</system-reminder>`,
-        },
-      ],
-      metadata,
-    },
-  };
-}
-
 export async function insertTemporalGapMarkers({
   messageList,
-  writer,
-}: Pick<ProcessInputStepArgs, 'messageList' | 'writer'>): Promise<void> {
+  sendSignal,
+}: Pick<ProcessInputStepArgs, 'messageList' | 'sendSignal'>): Promise<void> {
   const inputMessages = messageList.get.input.db().filter((message): message is MastraDBMessage => Boolean(message));
   const latestInputMessage = inputMessages.at(-1);
 
@@ -123,17 +107,14 @@ export async function insertTemporalGapMarkers({
     return;
   }
 
-  const reminderMetadata = getTemporalGapReminderMetadata(latestInputMessage, gapText, gapMs, timestamp);
-
-  await writer?.custom({
-    type: 'data-system-reminder',
-    data: {
-      message: getTemporalGapReminderText(gapText, timestamp),
-      ...reminderMetadata,
-    },
-    transient: true,
+  await sendSignal?.({
+    id: `__temporal_gap_${crypto.randomUUID()}`,
+    type: 'reactive',
+    tagName: 'system-reminder',
+    contents: getTemporalGapReminderText(gapText, timestamp),
+    createdAt: new Date(timestamp - 1),
+    acceptedAt: new Date(timestamp),
+    attributes: getTemporalGapReminderAttributes(latestInputMessage, gapText, gapMs, timestamp),
+    metadata: getTemporalGapReminderMetadata(latestInputMessage, gapText, gapMs, timestamp),
   });
-
-  const marker = createTemporalGapMarker(latestInputMessage, gapText, gapMs, timestamp);
-  messageList.add(marker, 'input');
 }

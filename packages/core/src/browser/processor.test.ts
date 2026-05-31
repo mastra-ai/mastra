@@ -154,7 +154,8 @@ describe('BrowserContextProcessor', () => {
       expect(addedMessage.content.metadata).toEqual(
         expect.objectContaining({
           signal: expect.objectContaining({
-            type: 'system-reminder',
+            type: 'reactive',
+            tagName: 'system-reminder',
             attributes: expect.objectContaining({ type: 'browser-context' }),
             metadata: expect.objectContaining({
               url: 'https://example.com/page',
@@ -440,13 +441,11 @@ describe('BrowserContextProcessor', () => {
       expect(textPart.text).toContain('<Results>');
 
       const llmMessage = mastraDBMessageToSignal(addedMessage).toLLMMessage();
-      expect(llmMessage).toEqual([
-        {
-          role: 'user',
-          content:
-            '<system-reminder type="browser-context">Current URL: https://example.com/search?q=foo&amp;bar=1 | Page title: Search &lt;Results&gt; &amp; More</system-reminder>',
-        },
-      ]);
+      expect(llmMessage).toEqual({
+        role: 'user',
+        content:
+          '<system-reminder type="browser-context">Current URL: https://example.com/search?q=foo&amp;bar=1 | Page title: Search &lt;Results&gt; &amp; More</system-reminder>',
+      });
     });
   });
 });

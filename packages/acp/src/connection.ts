@@ -6,6 +6,7 @@ import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from '@agentclie
 import type {
   Client,
   InitializeRequest,
+  ModelInfo,
   NewSessionRequest,
   NewSessionResponse,
   PermissionOption,
@@ -110,6 +111,27 @@ export class ACPConnection {
 
   get sessionId(): string | undefined {
     return this.session?.sessionId;
+  }
+
+  async getAvailableModels(): Promise<ModelInfo[]> {
+    await this.ensureConnected();
+    return this.session?.models?.availableModels ?? [];
+  }
+
+  async setModel(modelId: string): Promise<void> {
+    await this.ensureConnected();
+
+    const available = this.session?.models?.availableModels;
+
+    if (available && !available.some(m => m.modelId === modelId)) {
+      const ids = available.map(m => m.modelId).join(', ') || '(none)';
+      throw new Error(`Model "${modelId}" is not available. Available models: ${ids}`);
+    }
+
+    await this.connection!.unstable_setSessionModel({
+      sessionId: this.session!.sessionId,
+      modelId,
+    });
   }
 
   async prompt(task: string, signal?: AbortSignal): Promise<string> {
@@ -256,6 +278,20 @@ export class ACPConnection {
       }
 
       this.session = await this.connection.newSession(this.getNewSessionRequest());
+
+      if (this.options.model) {
+        const available = this.session.models?.availableModels;
+
+        if (available && !available.some(m => m.modelId === this.options.model)) {
+          const ids = available.map(m => m.modelId).join(', ') || '(none)';
+          throw new Error(`Model "${this.options.model}" is not available. Available models: ${ids}`);
+        }
+
+        await this.connection.unstable_setSessionModel({
+          sessionId: this.session.sessionId,
+          modelId: this.options.model,
+        });
+      }
     } catch (error) {
       this.disconnect();
       throw this.withStderr(error);

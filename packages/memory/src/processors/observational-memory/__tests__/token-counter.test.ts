@@ -333,7 +333,7 @@ describe('TokenCounter', () => {
       expect(cachedEntry.tokens).toBe(85);
     });
 
-    it('counts non-image file parts from descriptors instead of raw payload bytes', () => {
+    it('keeps URL-only non-image files on descriptor-only local counting', () => {
       const counter = new TokenCounter();
       const pdfUrlMessage = createMessage({
         format: 2,
@@ -346,6 +346,24 @@ describe('TokenCounter', () => {
           },
         ],
       });
+
+      const pdfUrlTokens = counter.countMessage(pdfUrlMessage);
+
+      // URL-only file parts have no measurable body, so they fall back to the
+      // small descriptor-only estimate.
+      expect(pdfUrlTokens).toBeGreaterThan(0);
+      expect(pdfUrlTokens).toBeLessThan(50);
+    });
+
+    // The local/sync counting path used to count only the descriptor JSON
+    // (~8 tokens) for inline file bodies, so the Observational Memory
+    // threshold never tripped on large attachments. Local counting now
+    // estimates token cost from the attachment's byte size and mime type
+    // so large inline files are reflected in OM and context budgets.
+    // (countMessagesAsync() can still use provider token-count endpoints
+    // for supported providers; this only improves the local fallback.)
+    it('counts inline PDF file bytes instead of only the file descriptor', () => {
+      const counter = new TokenCounter();
       const uploadedPdfMessage = createMessage({
         format: 2,
         parts: [
@@ -358,13 +376,99 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const pdfUrlTokens = counter.countMessage(pdfUrlMessage);
       const uploadedPdfTokens = counter.countMessage(uploadedPdfMessage);
 
-      expect(pdfUrlTokens).toBeGreaterThan(0);
-      expect(uploadedPdfTokens).toBeGreaterThan(0);
-      expect(uploadedPdfTokens).toBeLessThan(500);
-      expect(Math.abs(uploadedPdfTokens - pdfUrlTokens)).toBeLessThan(50);
+      // 200_000 base64 chars decodes to ~150_000 bytes; with the default
+      // PDF heuristic (bytes/4) that's ~37_500 tokens — well above the
+      // ~8-token descriptor estimate that used to be returned.
+      expect(uploadedPdfTokens).toBeGreaterThan(10_000);
+    });
+
+    it('scales local non-image file estimates with byte size for text mime types', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: `data:text/plain;base64,${Buffer.from('x'.repeat(40_000)).toString('base64')}`,
+            mimeType: 'text/plain',
+            filename: 'notes.txt',
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+
+      // 40_000 bytes / 4 ≈ 10_000 tokens (well over the descriptor estimate).
+      expect(tokens).toBeGreaterThan(5_000);
+    });
+
+    it('produces a smaller estimate for Google PDFs than Anthropic PDFs of the same size', () => {
+      const data = `data:application/pdf;base64,${'a'.repeat(200000)}`;
+      const buildMessage = () =>
+        createMessage({
+          format: 2,
+          parts: [{ type: 'file', data, mimeType: 'application/pdf', filename: 'doc.pdf' }],
+        });
+
+      const googleCounter = new TokenCounter({
+        model: { provider: 'google', modelId: 'gemini-2.5-flash' },
+      });
+      const anthropicCounter = new TokenCounter({
+        model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
+      });
+
+      const googleTokens = googleCounter.countMessage(buildMessage());
+      const anthropicTokens = anthropicCounter.countMessage(buildMessage());
+
+      // Google bills PDFs at 258 tokens/page (~5KB/page); Anthropic bills at
+      // 1500–3000 tokens/page. So for any given non-trivial size Google's
+      // estimate is significantly smaller.
+      expect(googleTokens).toBeLessThan(anthropicTokens);
+    });
+
+    it('normalizes mime type casing and parameters when picking the PDF heuristic', () => {
+      const data = `data:application/pdf;base64,${'a'.repeat(200000)}`;
+      const buildMessage = (mimeType: string) =>
+        createMessage({
+          format: 2,
+          parts: [{ type: 'file', data, mimeType, filename: 'doc.pdf' }],
+        });
+
+      const anthropicCounter = new TokenCounter({
+        model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
+      });
+
+      const canonical = anthropicCounter.countMessage(buildMessage('application/pdf'));
+      const uppercased = new TokenCounter({
+        model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
+      }).countMessage(buildMessage('Application/PDF'));
+      const parameterized = new TokenCounter({
+        model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
+      }).countMessage(buildMessage('application/pdf; charset=binary'));
+
+      expect(uppercased).toBe(canonical);
+      expect(parameterized).toBe(canonical);
+    });
+
+    it('reuses cached local non-image file estimates across fresh TokenCounter instances', () => {
+      const part: Record<string, any> = {
+        type: 'file',
+        data: `data:application/pdf;base64,${'a'.repeat(200000)}`,
+        mimeType: 'application/pdf',
+        filename: 'cached.pdf',
+      };
+      const message = createMessage({ format: 2, parts: [part] });
+
+      const first = new TokenCounter().countMessage(message);
+      const cachedAfterFirst = part.providerMetadata?.mastra?.tokenEstimate;
+      const second = new TokenCounter().countMessage(message);
+
+      expect(second).toBe(first);
+      // The byte-size estimate is persisted under the new 'non-image-file'
+      // cache source so subsequent counters re-use it without recomputing.
+      expect(cachedAfterFirst).toBeDefined();
     });
 
     // Pipelines that strip the real binary payload before persistence (e.g.
@@ -461,16 +565,30 @@ describe('TokenCounter', () => {
           ],
         });
 
+      const baseline = new TokenCounter().countMessage(
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'file',
+              data: `data:application/pdf;base64,${'a'.repeat(200000)}`,
+              mimeType: 'application/pdf',
+              filename: 'with-invalid-estimate.pdf',
+            },
+          ],
+        }),
+      );
+
       const counter = new TokenCounter();
       const nan = counter.countMessage(buildMessage(Number.NaN));
       const negative = counter.countMessage(buildMessage(-1));
       const nonNumeric = counter.countMessage(buildMessage('lots'));
 
-      // Invalid values fall through to the descriptor estimate (<500 tokens),
-      // not the raw stringified value the caller supplied.
-      expect(nan).toBeLessThan(500);
-      expect(negative).toBeLessThan(500);
-      expect(nonNumeric).toBeLessThan(500);
+      // Invalid values fall through to the framework auto-estimator, not the
+      // raw stringified value the caller supplied.
+      expect(nan).toBe(baseline);
+      expect(negative).toBe(baseline);
+      expect(nonNumeric).toBe(baseline);
     });
 
     it('does not call provider fetches when a client tokenEstimate is present', async () => {
@@ -894,6 +1012,143 @@ describe('TokenCounter', () => {
       const modelOutputTokens = counter.countMessage(withModelOutput);
 
       expect(modelOutputTokens).toBeLessThan(rawResultTokens);
+    });
+
+    it('counts stored multimodal tool modelOutput as media instead of base64 JSON text', () => {
+      const counter = new TokenCounter();
+      const modelOutput = {
+        type: 'content',
+        value: [
+          { type: 'text', text: 'Calculator screenshot' },
+          { type: 'image-data', data: 'a'.repeat(200_000), mediaType: 'image/png' },
+        ],
+      };
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'cua_screenshot',
+              result: { content: [{ type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' }] },
+            },
+            providerMetadata: {
+              mastra: { modelOutput },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeLessThan(2_000);
+      expect(estimate.key).toContain('tool-result-multimodal-content');
+      expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(modelOutput)));
+    });
+
+    it('counts raw MCP multimodal tool results as media instead of base64 JSON text', () => {
+      const counter = new TokenCounter();
+      const rawResultWithoutMalformed = {
+        content: [
+          { type: 'text', text: 'Calculator screenshot' },
+          { type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' },
+        ],
+      };
+      const rawResult = {
+        content: [...rawResultWithoutMalformed.content, { type: 'audio', mimeType: 'audio/wav' }],
+      };
+      const createScreenshotMessage = (result: unknown) =>
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-1',
+                toolName: 'cua_screenshot',
+                result,
+              },
+            },
+          ],
+        });
+      const message = createScreenshotMessage(rawResult);
+      const messageWithoutMalformed = createScreenshotMessage(rawResultWithoutMalformed);
+
+      const tokens = counter.countMessage(message);
+      const tokensWithoutMalformed = counter.countMessage(messageWithoutMalformed);
+      const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(tokensWithoutMalformed);
+      expect(tokens).toBeLessThan(2_000);
+      expect(estimate.key).toContain('tool-result-multimodal-content');
+      expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(rawResult)));
+    });
+
+    it('honors client-supplied tokenEstimate on raw MCP multimodal content parts', () => {
+      const counter = new TokenCounter();
+      const createCloudResult = (withClientEstimates: boolean) => ({
+        content: [
+          { type: 'text', text: 'Cloud-hosted multimodal result' },
+          {
+            type: 'image',
+            data: 'storage://bucket/screenshot-ref',
+            mimeType: 'image/png',
+            ...(withClientEstimates
+              ? {
+                  providerMetadata: {
+                    mastra: {
+                      tokenEstimate: { v: 0, source: 'client', key: 'client-image', tokens: 5_000 },
+                    },
+                  },
+                }
+              : {}),
+          },
+          {
+            type: 'audio',
+            data: 'storage://bucket/audio-ref',
+            mimeType: 'audio/wav',
+            ...(withClientEstimates
+              ? {
+                  providerMetadata: {
+                    mastra: {
+                      tokenEstimate: { v: 0, source: 'client', key: 'client-audio', tokens: 7_000 },
+                    },
+                  },
+                }
+              : {}),
+          },
+        ],
+      });
+      const createToolResultMessage = (result: unknown) =>
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-1',
+                toolName: 'cloud_multimodal_tool',
+                result,
+              },
+            },
+          ],
+        });
+      const withClientEstimates = createToolResultMessage(createCloudResult(true));
+      const withoutClientEstimates = createToolResultMessage(createCloudResult(false));
+
+      const estimatedTokens = counter.countMessage(withClientEstimates);
+      const fallbackTokens = counter.countMessage(withoutClientEstimates);
+      const estimate = withClientEstimates.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(estimatedTokens).toBeGreaterThanOrEqual(12_000);
+      expect(estimatedTokens).toBeGreaterThan(fallbackTokens);
+      expect(estimate.key).toContain('tool-result-multimodal-content');
+      expect(estimate.tokens).toBeGreaterThanOrEqual(12_000);
     });
 
     it('recomputes tool-result estimates when stored modelOutput changes', async () => {

@@ -1,5 +1,29 @@
 # @mastra/fastembed
 
+## 1.1.1
+
+### Patch Changes
+
+- Removed zod as a required peer dependency. Internal schemas now use plain JSON Schema objects instead of zod runtime. ([#16726](https://github.com/mastra-ai/mastra/pull/16726))
+
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Removed zod as a required peer dependency. Internal schemas now use plain JSON Schema objects instead of zod runtime. ([#16726](https://github.com/mastra-ai/mastra/pull/16726))
+
+## 1.1.0
+
+### Minor Changes
+
+- Replace the abandoned `fastembed` npm dependency with a maintained, vendored implementation. The public API and all embedding models remain unchanged — no migration needed. ([#16772](https://github.com/mastra-ai/mastra/pull/16772))
+
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- Replace the abandoned `fastembed` npm dependency with a maintained, vendored implementation. The public API and all embedding models remain unchanged — no migration needed. ([#16772](https://github.com/mastra-ai/mastra/pull/16772))
+
 ## 1.0.1
 
 ### Patch Changes

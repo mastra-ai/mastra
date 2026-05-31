@@ -1,6 +1,6 @@
-import { ButtonWithTooltip } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
 import { Plus } from 'lucide-react';
-import { useCanCreateAgent } from '@/domains/agents/hooks/use-can-create-agent';
+import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
 
@@ -16,9 +16,9 @@ export function AgentHeaderCreateAction() {
   if (!canCreateAgent || !createPath) return null;
   return (
     <RouteHeaderActions owner="agent-list">
-      <ButtonWithTooltip as={Link} to={createPath} tooltipContent="Create an agent" size="icon-sm">
+      <Button as={Link} to={createPath} tooltip="Create an agent" size="icon-sm">
         <Plus />
-      </ButtonWithTooltip>
+      </Button>
     </RouteHeaderActions>
   );
 }

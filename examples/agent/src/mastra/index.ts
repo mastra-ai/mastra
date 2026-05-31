@@ -84,6 +84,7 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
+import { codeModeAgent } from './agents/code-mode-agent';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -124,6 +125,7 @@ export const mastra = new Mastra({
     subscriptionOrchestratorAgent,
     cryptoResearchAgent,
     slackDemoAgent,
+    codeModeAgent,
   },
   processors: {
     moderationProcessor,

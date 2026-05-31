@@ -12,14 +12,10 @@ describe('registerApiRoute', () => {
       handler: mockHandler,
     });
 
-    expect(route).toEqual({
+    expect(route).toMatchObject({
       path: '/test',
       method,
       handler: mockHandler,
-      createHandler: undefined,
-      openapi: undefined,
-      middleware: undefined,
-      requiresAuth: undefined,
     });
 
     route = registerApiRoute('/test', {
@@ -27,14 +23,10 @@ describe('registerApiRoute', () => {
       createHandler: mockCreateHandler,
     });
 
-    expect(route).toEqual({
+    expect(route).toMatchObject({
       path: '/test',
       method,
       createHandler: mockCreateHandler,
-      handler: undefined,
-      openapi: undefined,
-      middleware: undefined,
-      requiresAuth: undefined,
     });
   });
 
@@ -48,13 +40,17 @@ describe('registerApiRoute', () => {
     expect(route.requiresAuth).toBe(false);
   });
 
-  it('should throw if path starts with /api', () => {
-    expect(() => {
-      registerApiRoute('/api/test', {
-        method: 'GET',
-        handler: mockHandler,
-      } as any);
-    }).toThrow(/Path must not start with "\/api", it's reserved for internal API routes/);
+  it('should allow paths starting with /api when custom apiPrefix is used', () => {
+    const route = registerApiRoute('/api/test', {
+      method: 'GET',
+      handler: mockHandler,
+    });
+
+    expect(route).toMatchObject({
+      path: '/api/test',
+      method: 'GET',
+      handler: mockHandler,
+    });
   });
 
   it('should throw if method is missing', () => {
