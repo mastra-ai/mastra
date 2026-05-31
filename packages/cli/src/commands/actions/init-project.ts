@@ -21,6 +21,15 @@ interface InitArgs {
 }
 
 export const initProject = async (args: InitArgs) => {
+  if (args.observability !== undefined) {
+    analytics.trackEvent('cli_observability_selected', {
+      command: 'init',
+      enabled: args.observability,
+      answer: args.observability ? 'yes' : 'no',
+      selection_method: 'cli_args',
+    });
+  }
+
   await analytics.trackCommandExecution({
     command: 'init',
     args: { ...args },
@@ -34,7 +43,13 @@ export const initProject = async (args: InitArgs) => {
       await checkAndInstallCoreDeps(Boolean(args?.example || args?.default), versionTag);
 
       if (!Object.keys(args).length) {
-        const result = await interactivePrompt({ skip: { gitInit: skipGitInit } });
+        const result = await interactivePrompt({
+          options: {
+            command: 'init',
+            onObservabilitySelected: event => analytics.trackEvent('cli_observability_selected', event),
+          },
+          skip: { gitInit: skipGitInit },
+        });
         await init({
           ...result,
           llmApiKey: result?.llmApiKey as string,
@@ -45,6 +60,8 @@ export const initProject = async (args: InitArgs) => {
           versionTag,
           observability: result?.observability,
           observabilityToken: result?.observabilityToken,
+          observabilityOrgId: result?.observabilityOrgId,
+          observabilityOrgName: result?.observabilityOrgName,
         });
         return;
       }

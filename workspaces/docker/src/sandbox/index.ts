@@ -9,6 +9,7 @@
  * @see https://docs.docker.com/engine/api/
  */
 
+import { isDeepStrictEqual } from 'node:util';
 import type { RequestContext } from '@mastra/core/di';
 import type { SandboxInfo, ProviderStatus, MastraSandboxOptions } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
@@ -25,13 +26,28 @@ const LOG_PREFIX = '[DockerSandbox]';
  */
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 
+type DockerSandboxUlimit = {
+  name: string;
+  soft: number;
+  hard: number;
+};
+
+type DockerSandboxTmpfs = Record<string, string>;
+
 // =============================================================================
 // Docker Sandbox Options
 // =============================================================================
 
 export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
-  /** Unique identifier for this sandbox instance. Used for container naming and reconnection. */
+  /** Unique identifier for this sandbox instance. Used for label-based reconnection. */
   id?: string;
+  /**
+   * Container display name passed to Docker as `--name`.
+   * Characters outside `[a-zA-Z0-9_.-]` are replaced with `-` and the result
+   * is prefixed if it would not start with an alphanumeric character.
+   * @default the sandbox `id`
+   */
+  name?: string;
   /** Docker image to use.
    * @default 'node:22-slim'
    */
@@ -50,6 +66,30 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
    * @default false
    */
   privileged?: boolean;
+  /** Memory limit in bytes (HostConfig.Memory). Docker treats 0 as unlimited. */
+  memory?: number;
+  /** Total memory plus swap in bytes (HostConfig.MemorySwap). */
+  memorySwap?: number;
+  /** CPU shares relative weight (HostConfig.CpuShares). */
+  cpuShares?: number;
+  /** CPU quota in microseconds per period (HostConfig.CpuQuota). */
+  cpuQuota?: number;
+  /** CPU period in microseconds (HostConfig.CpuPeriod). */
+  cpuPeriod?: number;
+  /** Maximum number of PIDs in the container (HostConfig.PidsLimit). */
+  pidsLimit?: number;
+  /** Mount the container root filesystem as read-only (HostConfig.ReadonlyRootfs). */
+  readonlyRootfs?: boolean;
+  /** Linux capabilities to drop (HostConfig.CapDrop), e.g. ['ALL']. */
+  capDrop?: string[];
+  /** Linux capabilities to add (HostConfig.CapAdd). */
+  capAdd?: string[];
+  /** Security options (HostConfig.SecurityOpt), e.g. ['no-new-privileges:true']. */
+  securityOpt?: string[];
+  /** Ulimit entries for Docker HostConfig.Ulimits. */
+  ulimits?: DockerSandboxUlimit[];
+  /** tmpfs mount paths with options (HostConfig.Tmpfs). */
+  tmpfs?: DockerSandboxTmpfs;
   /** Default command timeout in milliseconds
    * @default 300_000 // 5 minutes
    */
@@ -124,12 +164,26 @@ export class DockerSandbox extends MastraSandbox {
   private _container: Container | null = null;
 
   /** Configuration */
+  private readonly _containerName: string;
   private readonly _image: string;
   private readonly _command: string[];
   private readonly _env: Record<string, string>;
   private readonly _volumes: Record<string, string>;
   private readonly _network?: string;
   private readonly _privileged: boolean;
+  private readonly _privilegedWasSet: boolean;
+  private readonly _memory?: number;
+  private readonly _memorySwap?: number;
+  private readonly _cpuShares?: number;
+  private readonly _cpuQuota?: number;
+  private readonly _cpuPeriod?: number;
+  private readonly _pidsLimit?: number;
+  private readonly _readonlyRootfs?: boolean;
+  private readonly _capDrop?: string[];
+  private readonly _capAdd?: string[];
+  private readonly _securityOpt?: string[];
+  private readonly _ulimits?: DockerSandboxUlimit[];
+  private readonly _tmpfs?: DockerSandboxTmpfs;
   private readonly _workingDir: string;
   private readonly _labels: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
@@ -147,12 +201,26 @@ export class DockerSandbox extends MastraSandbox {
     });
 
     this.id = options.id ?? this._generateId();
+    this._containerName = sanitizeContainerName(options.name ?? this.id);
     this._image = options.image ?? 'node:22-slim';
     this._command = options.command ?? ['sleep', 'infinity'];
     this._env = options.env ?? {};
     this._volumes = options.volumes ?? {};
     this._network = options.network;
     this._privileged = options.privileged ?? false;
+    this._privilegedWasSet = options.privileged !== undefined;
+    this._memory = options.memory;
+    this._memorySwap = options.memorySwap;
+    this._cpuShares = options.cpuShares;
+    this._cpuQuota = options.cpuQuota;
+    this._cpuPeriod = options.cpuPeriod;
+    this._pidsLimit = options.pidsLimit;
+    this._readonlyRootfs = options.readonlyRootfs;
+    this._capDrop = options.capDrop;
+    this._capAdd = options.capAdd;
+    this._securityOpt = options.securityOpt;
+    this._ulimits = options.ulimits;
+    this._tmpfs = options.tmpfs;
     this._workingDir = options.workingDir ?? '/workspace';
     this._labels = {
       ...options.labels,
@@ -190,6 +258,9 @@ export class DockerSandbox extends MastraSandbox {
       // Use inspect() to get authoritative container state — listContainers() state
       // can be stale immediately after stop() returns but before container fully exits
       const info = await this._container.inspect();
+      // On reconnect, actual HostConfig controls whether hardening is effective.
+      this._warnOnPrivilegedHardeningConflict(info.HostConfig?.Privileged ?? this._privileged);
+      this._warnOnReconnectedHostConfigMismatch(existing.Id, info.HostConfig);
       const actualState = info.State?.Running ? 'running' : 'stopped';
 
       if (actualState !== 'running') {
@@ -204,6 +275,8 @@ export class DockerSandbox extends MastraSandbox {
       return;
     }
 
+    this._warnOnPrivilegedHardeningConflict(this._privileged);
+
     // Pull image if not available locally
     await this._ensureImage();
 
@@ -216,6 +289,7 @@ export class DockerSandbox extends MastraSandbox {
     // Create container
     this.logger.debug(`${LOG_PREFIX} Creating container with image ${this._image}...`);
     this._container = await this._docker.createContainer({
+      name: this._containerName,
       Image: this._image,
       Cmd: this._command,
       Env: envArray,
@@ -225,6 +299,18 @@ export class DockerSandbox extends MastraSandbox {
         Binds: binds.length > 0 ? binds : undefined,
         NetworkMode: this._network,
         Privileged: this._privileged,
+        Memory: this._memory,
+        MemorySwap: this._memorySwap,
+        CpuShares: this._cpuShares,
+        CpuQuota: this._cpuQuota,
+        CpuPeriod: this._cpuPeriod,
+        PidsLimit: this._pidsLimit,
+        ReadonlyRootfs: this._readonlyRootfs,
+        CapDrop: this._capDrop,
+        CapAdd: this._capAdd,
+        SecurityOpt: this._securityOpt,
+        Ulimits: this._ulimits?.map(toDockerUlimit),
+        Tmpfs: this._tmpfs,
       },
       // Keep stdin open for interactive use
       OpenStdin: true,
@@ -238,6 +324,90 @@ export class DockerSandbox extends MastraSandbox {
     this.processes.setContainer(this._container);
 
     this.logger.debug(`${LOG_PREFIX} Container started: ${this._container.id}`);
+  }
+
+  private _warnOnPrivilegedHardeningConflict(effectivePrivileged: boolean | undefined): void {
+    if (!effectivePrivileged) return;
+
+    // Privileged mode makes capability and security-option controls ineffective.
+    // ReadonlyRootfs, ulimits, tmpfs, memory, CPU, and PID limits still apply.
+    const conflictedHostConfigFields = [
+      this._capDrop && this._capDrop.length > 0 ? 'CapDrop' : undefined,
+      this._capAdd && this._capAdd.length > 0 ? 'CapAdd' : undefined,
+      this._securityOpt && this._securityOpt.length > 0 ? 'SecurityOpt' : undefined,
+    ].filter((field): field is keyof Docker.HostConfig => field !== undefined);
+
+    if (conflictedHostConfigFields.length === 0) return;
+
+    const optionNames = conflictedHostConfigFields.map(toDockerSandboxOptionName);
+
+    this.logger.warn(
+      `${LOG_PREFIX} Privileged containers can bypass some requested hardening controls: ${optionNames.join(', ')}`,
+      { fields: optionNames, hostConfigFields: conflictedHostConfigFields },
+    );
+  }
+
+  private _warnOnReconnectedHostConfigMismatch(containerId: string, hostConfig?: Docker.HostConfig): void {
+    if (!hostConfig) return;
+
+    const mismatchedHostConfigFields = this._requestedHardeningHostConfigEntries(hostConfig)
+      .filter(([field, requestedValue]) => !isHostConfigValueEqual(field, hostConfig[field], requestedValue))
+      .map(([field]) => field);
+
+    if (mismatchedHostConfigFields.length === 0) return;
+
+    if (
+      !this._privilegedWasSet &&
+      hostConfig.Privileged === true &&
+      mismatchedHostConfigFields.includes('Privileged')
+    ) {
+      this.logger.warn(
+        `${LOG_PREFIX} Reconnected to existing container ${containerId}; the existing container is privileged, but this DockerSandbox did not request privileged mode. Destroy and recreate the sandbox to apply the default non-privileged mode.`,
+        { containerId, fields: ['privileged'], hostConfigFields: ['Privileged'] },
+      );
+    }
+
+    const remainingMismatchedHostConfigFields = mismatchedHostConfigFields.filter(
+      field => field !== 'Privileged' || this._privilegedWasSet,
+    );
+
+    if (remainingMismatchedHostConfigFields.length === 0) return;
+
+    const mismatchedOptions = remainingMismatchedHostConfigFields.map(toDockerSandboxOptionName);
+
+    this.logger.warn(
+      `${LOG_PREFIX} Reconnected to existing container ${containerId}; requested Docker option(s) ${mismatchedOptions.join(
+        ', ',
+      )} differ from inspected HostConfig field(s) ${remainingMismatchedHostConfigFields.join(
+        ', ',
+      )} and cannot be applied to the existing container. Destroy and recreate the sandbox to apply them.`,
+      { containerId, fields: mismatchedOptions, hostConfigFields: remainingMismatchedHostConfigFields },
+    );
+  }
+
+  private _requestedHardeningHostConfigEntries(
+    hostConfig?: Docker.HostConfig,
+  ): Array<[keyof Docker.HostConfig, unknown]> {
+    const entries: Array<[keyof Docker.HostConfig, unknown]> = [
+      ['Memory', this._memory],
+      ['MemorySwap', this._memorySwap],
+      ['CpuShares', this._cpuShares],
+      ['CpuQuota', this._cpuQuota],
+      ['CpuPeriod', this._cpuPeriod],
+      ['PidsLimit', this._pidsLimit],
+      ['ReadonlyRootfs', this._readonlyRootfs],
+      ['CapDrop', this._capDrop],
+      ['CapAdd', this._capAdd],
+      ['SecurityOpt', this._securityOpt],
+      ['Ulimits', this._ulimits],
+      ['Tmpfs', this._tmpfs],
+    ];
+
+    if (this._privilegedWasSet || hostConfig?.Privileged === true) {
+      entries.unshift(['Privileged', this._privileged]);
+    }
+
+    return entries.filter((entry): entry is [keyof Docker.HostConfig, unknown] => isPresentHostConfigValue(entry[1]));
   }
 
   async stop(): Promise<void> {
@@ -409,6 +579,14 @@ export class DockerSandbox extends MastraSandbox {
 // Error detection helpers
 // =============================================================================
 
+// Docker container name regex (`^[a-zA-Z0-9][a-zA-Z0-9_.-]+$`) — first char must be
+// alphanumeric, remaining chars from `[a-zA-Z0-9_.-]`, total length ≥ 2.
+function sanitizeContainerName(value: string): string {
+  const replaced = value.replace(/[^a-zA-Z0-9_.-]/g, '-');
+  const withLeading = /^[a-zA-Z0-9]/.test(replaced) ? replaced : `s-${replaced}`;
+  return withLeading.length >= 2 ? withLeading : `${withLeading}-sandbox`;
+}
+
 function isContainerNotRunningError(error: unknown): boolean {
   if (error instanceof Error) {
     return error.message.includes('is not running') || error.message.includes('container already stopped');
@@ -429,4 +607,121 @@ function isImageNotFoundError(error: unknown): boolean {
     return error.message.toLowerCase().includes('no such image');
   }
   return false;
+}
+
+function isHostConfigValueEqual(field: keyof Docker.HostConfig, actual: unknown, expected: unknown): boolean {
+  // Structural equality for the Docker HostConfig shapes exposed by DockerSandboxOptions.
+  return isDeepStrictEqual(normalizeHostConfigValue(field, actual), normalizeHostConfigValue(field, expected));
+}
+
+function normalizeHostConfigValue(field: keyof Docker.HostConfig, value: unknown): unknown {
+  if (value == null) return undefined;
+
+  if ((field === 'CapAdd' || field === 'CapDrop') && Array.isArray(value)) {
+    if (value.length === 0) return undefined;
+    return value.map(normalizeCapability).sort();
+  }
+
+  if (field === 'SecurityOpt' && Array.isArray(value)) {
+    if (value.length === 0) return undefined;
+    return value.map(normalizeSecurityOpt).sort();
+  }
+
+  if (field === 'Tmpfs' && value && typeof value === 'object' && !Array.isArray(value)) {
+    if (Object.keys(value).length === 0) return undefined;
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([path, options]) => [path, typeof options === 'string' ? normalizeTmpfsOptions(options) : options]),
+    );
+  }
+
+  if (Array.isArray(value)) {
+    if (field === 'Ulimits' && value.length === 0) return undefined;
+    return value
+      .map(nestedValue => normalizeHostConfigValue(field, nestedValue))
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  }
+
+  if (field === 'Ulimits' && value && typeof value === 'object') {
+    return normalizeUlimit(value);
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, nestedValue]) => [key, normalizeHostConfigValue(field, nestedValue)]),
+    );
+  }
+
+  return value;
+}
+
+function isPresentHostConfigValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === 'object') return Object.keys(value).length > 0;
+  return true;
+}
+
+function normalizeCapability(capability: unknown): unknown {
+  return typeof capability === 'string' ? capability.toUpperCase().replace(/^CAP_/, '') : capability;
+}
+
+function normalizeTmpfsOptions(options: string): string {
+  return options
+    .split(',')
+    .map(option => option.trim())
+    .filter(Boolean)
+    .sort()
+    .join(',');
+}
+
+function normalizeSecurityOpt(option: unknown): unknown {
+  if (typeof option !== 'string') return option;
+
+  const noNewPrivileges = option.match(/^no-new-privileges[:=](.+)$/i);
+  if (noNewPrivileges) {
+    return `no-new-privileges=${noNewPrivileges[1]}`;
+  }
+
+  return option;
+}
+
+function normalizeUlimit(value: object): unknown {
+  const record = value as Record<string, unknown>;
+  return {
+    name: record.name ?? record.Name,
+    soft: record.soft ?? record.Soft,
+    hard: record.hard ?? record.Hard,
+  };
+}
+
+function toDockerUlimit(ulimit: DockerSandboxUlimit): Docker.Ulimit {
+  return {
+    Name: ulimit.name,
+    Soft: ulimit.soft,
+    Hard: ulimit.hard,
+  };
+}
+
+function toDockerSandboxOptionName(field: keyof Docker.HostConfig): string {
+  const optionNames: Partial<Record<keyof Docker.HostConfig, string>> = {
+    Privileged: 'privileged',
+    Memory: 'memory',
+    MemorySwap: 'memorySwap',
+    CpuShares: 'cpuShares',
+    CpuQuota: 'cpuQuota',
+    CpuPeriod: 'cpuPeriod',
+    PidsLimit: 'pidsLimit',
+    ReadonlyRootfs: 'readonlyRootfs',
+    CapDrop: 'capDrop',
+    CapAdd: 'capAdd',
+    SecurityOpt: 'securityOpt',
+    Ulimits: 'ulimits',
+    Tmpfs: 'tmpfs',
+  };
+
+  return optionNames[field] ?? String(field);
 }

@@ -499,7 +499,15 @@ export class InternalMastraMCPClient extends MastraBase {
         const originalOnClose = this.client.onclose;
         this.client.onclose = () => {
           this.log('debug', `MCP server connection closed`);
+          // Close the stale transport before any reconnect so its EventSource/session
+          // can't keep retrying and leak server-side sessions (issue #16693). Clear
+          // synchronously first so a concurrent connect() sees a clean slate.
+          const staleTransport = this.transport;
+          this.transport = undefined;
           this.isConnected = null;
+          if (staleTransport) {
+            void staleTransport.close().catch(() => {});
+          }
           if (typeof originalOnClose === 'function') {
             originalOnClose();
           }
@@ -749,6 +757,11 @@ export class InternalMastraMCPClient extends MastraBase {
         let requireApproval: boolean | undefined;
         let needsApprovalFn: ((args: any, ctx: any) => boolean | Promise<boolean>) | undefined;
 
+        // Capture server-advertised annotations (title, readOnlyHint, destructiveHint, ...).
+        // These are exposed on the tool's `mcp.annotations` field and forwarded to the
+        // requireToolApproval callback so consumers can write annotation-driven policies.
+        const annotations = tool.annotations;
+
         if (typeof this.requireToolApproval === 'function') {
           // Wrap the server-level function to match the per-tool needsApprovalFn signature.
           // Note: ctx may be undefined when called via network/index.ts (which only passes args).
@@ -757,7 +770,12 @@ export class InternalMastraMCPClient extends MastraBase {
           const toolName = tool.name;
           requireApproval = true; // Signal that approval check is needed
           needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
-            return serverApprovalFn({ toolName, args, ...ctx });
+            // Server-supplied annotations are placed AFTER the ctx spread so a
+            // caller can't accidentally (or maliciously) override them by
+            // injecting an `annotations` key into ctx — the value the
+            // requireToolApproval policy sees always reflects what came back
+            // from the MCP server's tools/list response.
+            return serverApprovalFn({ toolName, args, ...ctx, annotations });
           };
         } else if (this.requireToolApproval === true) {
           requireApproval = true;
@@ -769,6 +787,15 @@ export class InternalMastraMCPClient extends MastraBase {
         // Stamp serverId into _meta.ui so consumers can resolve app resources
         // back to the originating MCP server without scanning all servers.
         const toolMeta = rawMeta ? this.stampServerIdInMeta(rawMeta) : undefined;
+        const mcpToolProps =
+          toolMeta || annotations
+            ? {
+                mcp: {
+                  ...(toolMeta ? { _meta: toolMeta } : {}),
+                  ...(annotations ? { annotations } : {}),
+                },
+              }
+            : {};
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -776,7 +803,9 @@ export class InternalMastraMCPClient extends MastraBase {
           strict: getMastraToolStrictMeta(toolMeta),
           // Preserve the full _meta from the remote MCP server (including ui.resourceUri
           // for MCP Apps) so downstream consumers (e.g. Studio) can detect app tools.
-          ...(toolMeta ? { mcp: { _meta: toolMeta } } : {}),
+          // Also propagate MCP tool annotations so listTools() / listToolsets() consumers
+          // can read them via `tool.mcp.annotations`.
+          ...mcpToolProps,
           // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
           // already validates structuredContent against the tool's outputSchema using AJV.
           // Passing it here causes Zod to strip unrecognized keys from the CallToolResult

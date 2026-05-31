@@ -24,7 +24,7 @@ export const agent = new Agent({
   name: 'Test Agent',
   // highlight-next-line
   instructions: 'You are a helpful assistant that provides concise answers.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 // System message object
@@ -37,7 +37,7 @@ export const agent2 = new Agent({
     content: 'You are an expert programmer',
   },
   // highlight-end
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 // Array of system messages
@@ -50,7 +50,7 @@ export const agent3 = new Agent({
     { role: 'system', content: 'You have expertise in TypeScript' },
   ],
   // highlight-end
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -75,7 +75,7 @@ export const agent = new Agent({
     },
     // highlight-end
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -104,15 +104,15 @@ export const agent = new Agent({
       },
     },
   ],
-  model: 'anthropic/claude-sonnet-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
 })
 ```
 
 ## Thread signals
 
-Use Agent signals to send real-time context into a memory thread. Signals are useful when a user adds input while an agent is already streaming, or when another process needs to add structured context to the thread.
+Use Agent signals to send real-time input and context into a memory thread. Message APIs are for user-authored input. `sendSignal()` is the lower-level API for system-generated context.
 
-A `user-message` signal represents user input. When the target thread is running, Mastra delivers the signal into the active agent loop. When the thread is idle, Mastra starts a stream with the signal as the first input by default.
+When the target thread is running, `sendMessage()` delivers the message into the active agent loop. When the thread is idle, Mastra starts a stream with the message as the first input by default.
 
 ```typescript title="src/mastra/signals.ts"
 const subscription = await agent.subscribeToThread({
@@ -126,32 +126,103 @@ void (async () => {
   }
 })()
 
-agent.sendSignal(
-  { type: 'user-message', contents: 'Use the latest customer note too.' },
-  {
-    resourceId: 'user-123',
-    threadId: 'thread-abc',
-    ifIdle: {
-      streamOptions: {
-        maxSteps: 3,
-      },
+agent.sendMessage('Use the latest customer note too.', {
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  ifIdle: {
+    streamOptions: {
+      maxSteps: 3,
     },
   },
-)
+})
 ```
 
-Use a custom signal type for contextual messages that should reach the model as XML-wrapped context instead of normal user input:
+Use `attributes` to identify different users in a shared thread. The attributes are rendered as XML so the model can distinguish who said what:
 
 ```typescript
-agent.sendSignal(
+agent.sendMessage(
   {
-    type: 'system-reminder',
-    contents: 'Continue from the previous tool result.',
-    attributes: { reminderType: 'tool-result' },
+    contents: 'Can we simplify the API surface?',
+    attributes: { name: 'Devin', from: 'slack' },
   },
   { resourceId: 'user-123', threadId: 'thread-abc' },
 )
 ```
+
+The model receives this as:
+
+```xml
+<user name="Devin" from="slack">Can we simplify the API surface?</user>
+```
+
+The UI sees just the message contents but can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
+
+### `sendMessage(message, options)`
+
+Sends a user message to an active run or memory thread. Use this when the active agent should receive the message immediately.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'message',
+    type: 'string | Array<TextPart | FilePart> | { contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }',
+    description:
+      'User-authored input. Bare strings and parts without attributes are sent to the model as normal user input. When `attributes` are present, Mastra renders the message as a `<user>` XML element with the attributes included.',
+  },
+  {
+    name: 'options.runId',
+    type: 'string',
+    isOptional: true,
+    description: 'Run ID to target directly. Use this when you already know the active run ID.',
+  },
+  {
+    name: 'options.resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted messages.',
+  },
+  {
+    name: 'options.threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID to target. Required with `resourceId` for thread-targeted messages.',
+  },
+  {
+    name: 'options.ifActive.behavior',
+    type: "'deliver' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+  },
+  {
+    name: 'options.ifIdle.behavior',
+    type: "'wake' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+  },
+  {
+    name: 'options.ifIdle.streamOptions',
+    type: 'AgentExecutionOptions',
+    isOptional: true,
+    description:
+      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+  },
+]}
+/>
+
+Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory.
+
+### `queueMessage(message, options)`
+
+Queues a user message for the next turn on a thread. If the thread is active, Mastra waits for the active run to finish, then starts a new run with the queued message. If the thread is idle, Mastra starts a run immediately.
+
+```typescript
+agent.queueMessage('Also check whether the tests need updates.', {
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+```
+
+`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`.
 
 ### `sendSignal(signal, options)`
 
@@ -161,9 +232,9 @@ Sends a signal to an active run or memory thread.
   content={[
   {
     name: 'signal',
-    type: "{ type: 'user-message'; contents: MessageListInput } | { type: string; contents: string }",
+    type: "{ type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
     description:
-      '`user-message` signals are treated as user input. Other signal types are converted to XML context before the next model call.',
+      "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
   },
   {
     name: 'options.runId',
@@ -209,7 +280,7 @@ Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?
 
 ### `subscribeToThread(options)`
 
-Subscribes to raw stream chunks for a memory thread. Use this before calling `sendSignal()` when you need to render stream output, observe signal echoes, or abort the active run.
+Subscribes to raw stream chunks for a memory thread. Use this before calling `sendMessage()`, `queueMessage()`, or `sendSignal()` when you need to render stream output, observe signal echoes, or abort the active run.
 
 <PropertiesTable
   content={[
@@ -275,6 +346,13 @@ Returns an `AgentThreadSubscription` object with these members:
     type: 'string',
     isOptional: true,
     description: "Optional description of the agent's purpose and capabilities.",
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown> | ({ requestContext: RequestContext }) => Record<string, unknown> | Promise<Record<string, unknown>>',
+    isOptional: true,
+    description:
+      'Optional metadata for classifying or filtering the agent in clients. Can be a static record or a function that resolves the metadata from the request context.',
   },
   {
     name: 'instructions',

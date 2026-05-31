@@ -1,15 +1,16 @@
-import React from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 import type { FontSizes } from '../../tokens';
 import { cn } from '@/lib/utils';
 
-export interface TxtProps extends React.HTMLAttributes<HTMLDivElement | HTMLLabelElement> {
+export interface TxtProps extends HTMLAttributes<HTMLDivElement | HTMLLabelElement> {
   as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'div';
   variant?: keyof typeof FontSizes;
   font?: 'mono';
   htmlFor?: string;
   className?: string;
-  children?: React.ReactNode;
+  title?: string;
+  children?: ReactNode;
 }
 
 const variants = {

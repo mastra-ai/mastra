@@ -7,6 +7,12 @@
  * Per design: discovery methods return empty results until the
  * helper tables have been initialized and refreshed successfully.
  * They do NOT fall back to base-table scans.
+ *
+ * Queries use `SELECT DISTINCT` even though the helper tables are
+ * ReplacingMergeTree — dedup happens during background merges, so a row
+ * can briefly appear more than once between refresh cycles. DISTINCT over
+ * the ORDER BY columns is effectively free at this cardinality and keeps
+ * results unique regardless of merge timing.
  */
 
 import type { ClickHouseClient } from '@clickhouse/client';
@@ -50,7 +56,7 @@ export async function getEntityTypes(
 ): Promise<GetEntityTypesResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'entityType' ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'entityType' ORDER BY value`,
   );
 
   const validTypes = new Set(Object.values(EntityType));
@@ -77,7 +83,7 @@ export async function getEntityNames(
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value`,
     params,
   );
   return { names: rows.map(r => r.value) };
@@ -91,7 +97,7 @@ export async function getServiceNames(
 ): Promise<GetServiceNamesResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'serviceName' ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'serviceName' ORDER BY value`,
   );
   return { serviceNames: rows.map(r => r.value) };
 }
@@ -102,7 +108,7 @@ export async function getEnvironments(
 ): Promise<GetEnvironmentsResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'environment' ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'environment' ORDER BY value`,
   );
   return { environments: rows.map(r => r.value) };
 }
@@ -120,7 +126,7 @@ export async function getTags(client: ClickHouseClient, args: GetTagsArgs): Prom
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value`,
     params,
   );
   return { tags: rows.map(r => r.value) };

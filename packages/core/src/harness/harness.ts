@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Agent } from '../agent';
-import { createSignal } from '../agent/signals';
-import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import type { MastraDBMessage } from '../agent/message-list/state/types';
+import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
+import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
@@ -103,38 +104,25 @@ function getRecordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
+function signalContentsToHarnessContent(contents: AgentSignalContents): HarnessMessageContent[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
-  if (!contents || typeof contents !== 'object') return [];
-
-  const content = (contents as { content?: unknown }).content;
-  if (typeof content === 'string') return [{ type: 'text', text: content }];
-  if (Array.isArray(content)) {
-    return content.flatMap((part): HarnessMessageContent[] => {
-      const record = getRecordValue(part);
-      if (!record) return [];
-      if (record.type === 'text' && typeof record.text === 'string') {
-        return [{ type: 'text', text: record.text }];
-      }
-      if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
-        if (record.mediaType.startsWith('image/')) {
-          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
-        }
-        return [
-          {
-            type: 'file',
-            data: record.data,
-            mediaType: record.mediaType,
-            filename: typeof record.filename === 'string' ? record.filename : undefined,
-          },
-        ];
-      }
-      return [];
-    });
-  }
-
-  return [];
+  return contents.flatMap((part): HarnessMessageContent[] => {
+    if (part.type === 'text') {
+      return [{ type: 'text', text: part.text }];
+    }
+    if (typeof part.data !== 'string') return [];
+    if (part.mediaType.startsWith('image/')) {
+      return [{ type: 'image', data: part.data, mimeType: part.mediaType }];
+    }
+    return [
+      {
+        type: 'file',
+        data: part.data,
+        mediaType: part.mediaType,
+        filename: part.filename,
+      },
+    ];
+  });
 }
 
 function toSystemReminderContent(
@@ -142,7 +130,7 @@ function toSystemReminderContent(
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
   const metadata = getRecordValue(payload.metadata);
-  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  const message = getStringValue(payload.contents);
   if (message === undefined) return undefined;
 
   return {
@@ -172,17 +160,26 @@ function toSystemReminderContent(
 
 function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
   const id = getStringValue(payload.id);
-  const contents = payload.contents ?? payload.message;
-  if (!id || contents === undefined) return undefined;
+  const rawContents = payload.contents;
+  if (!id || rawContents === undefined) return undefined;
 
-  const content = signalContentsToHarnessContent(contents);
+  const signal = createSignal({
+    id,
+    type: 'user',
+    tagName: 'user',
+    contents: rawContents as AgentSignalContents,
+    attributes: getRecordValue(payload.attributes) as AgentSignalInput['attributes'],
+    createdAt: getStringValue(payload.createdAt),
+  });
+  const content = signalContentsToHarnessContent(signal.contents);
   if (content.length === 0) return undefined;
 
   return {
-    id,
+    id: signal.id,
     role: 'user',
     content,
-    createdAt: new Date(getStringValue(payload.createdAt) ?? Date.now()),
+    createdAt: signal.createdAt,
+    attributes: signal.attributes,
   };
 }
 
@@ -258,6 +255,9 @@ export class Harness<TState = {}> {
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
   private stateUpdateQueue: Promise<void> = Promise.resolve();
+  private switchModeVersion: number = 0;
+  private availableModelsCache: AvailableModel[] | null = null;
+  private availableModelsCacheTime: number = 0;
   #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
@@ -347,6 +347,7 @@ export class Harness<TState = {}> {
       this.#internalMastra = new Mastra({
         logger: false,
         storage: this.config.storage,
+        ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
       });
       await this.#internalMastra.getStorage()!.init();
@@ -379,28 +380,11 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Propagate harness-level Mastra, memory, workspace, and browser to mode agents (after workspace init)
-    const workspaceForAgents = this.workspaceFn ?? this.workspace;
-    const browserForAgents = this.browserFn ?? this.browser;
+    // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
     for (const mode of this.config.modes) {
       const agent = typeof mode.agent === 'function' ? null : mode.agent;
       if (!agent) continue;
-
-      const alreadyHasMastra = !!agent.getMastraInstance();
-
-      if (this.config.memory && !agent.hasOwnMemory()) {
-        agent.__setMemory(this.config.memory);
-      }
-      if (workspaceForAgents && !agent.hasOwnWorkspace()) {
-        agent.__setWorkspace(workspaceForAgents);
-      }
-      if (browserForAgents && !agent.hasOwnBrowser()) {
-        agent.setBrowser(browserForAgents as MastraBrowser);
-      }
-
-      if (this.#internalMastra && !alreadyHasMastra) {
-        this.#internalMastra.addAgent(agent);
-      }
+      this.propagateRuntimeServicesToAgent(agent);
     }
 
     this.startHeartbeats();
@@ -421,6 +405,7 @@ export class Harness<TState = {}> {
     await this.config.threadLock?.acquire(mostRecent.id);
     this.currentThreadId = mostRecent.id;
     await this.loadThreadMetadata();
+    await this.ensureCurrentAgentThreadSubscription();
 
     return mostRecent;
   }
@@ -559,25 +544,31 @@ export class Harness<TState = {}> {
 
     this.abort();
 
-    // Save current model to the outgoing mode before switching
     const currentModelId = this.getCurrentModelId();
-    if (currentModelId) {
-      await this.setThreadSetting({ key: `modeModelId_${this.currentModeId}`, value: currentModelId });
-    }
-
     const previousModeId = this.currentModeId;
+    const version = ++this.switchModeVersion;
+
+    // Update local state and emit events immediately so UIs can update
+    // without waiting for storage round-trips.
     this.currentModeId = modeId;
+    this.emit({ type: 'mode_changed', modeId, previousModeId });
+
+    // Save current model to the outgoing mode before switching
+    if (currentModelId) {
+      await this.setThreadSetting({ key: `modeModelId_${previousModeId}`, value: currentModelId });
+    }
+    if (this.switchModeVersion !== version) return;
 
     await this.setThreadSetting({ key: 'currentModeId', value: modeId });
+    if (this.switchModeVersion !== version) return;
 
     // Load the incoming mode's model
     const modeModelId = await this.loadModeModelId(modeId);
+    if (this.switchModeVersion !== version) return;
     if (modeModelId) {
       void this.setState({ currentModelId: modeModelId } as unknown as Partial<TState>);
       this.emit({ type: 'model_changed', modelId: modeModelId } as HarnessEvent);
     }
-
-    this.emit({ type: 'mode_changed', modeId, previousModeId });
   }
 
   /**
@@ -603,15 +594,38 @@ export class Harness<TState = {}> {
     return null;
   }
 
+  private propagateRuntimeServicesToAgent(agent: Agent): Agent {
+    const alreadyHasMastra = !!agent.getMastraInstance();
+    const workspaceForAgents = this.workspaceFn ?? this.workspace;
+    const browserForAgents = this.browserFn ?? this.browser;
+
+    if (this.config.memory && !agent.hasOwnMemory()) {
+      agent.__setMemory(this.config.memory);
+    }
+    if (workspaceForAgents && !agent.hasOwnWorkspace()) {
+      agent.__setWorkspace(workspaceForAgents);
+    }
+    if (browserForAgents && !agent.hasOwnBrowser()) {
+      agent.setBrowser(browserForAgents as MastraBrowser);
+    }
+    if (this.config.pubsub && !agent.hasOwnPubSub()) {
+      agent.__setPubSub(this.config.pubsub);
+    }
+
+    if (this.#internalMastra && !alreadyHasMastra) {
+      this.#internalMastra.addAgent(agent);
+    }
+
+    return agent;
+  }
+
   /**
    * Get the agent for the current mode.
    */
   private getCurrentAgent(): Agent {
     const mode = this.getCurrentMode();
-    if (typeof mode.agent === 'function') {
-      return mode.agent(this.state);
-    }
-    return mode.agent;
+    const agent = typeof mode.agent === 'function' ? mode.agent(this.state) : mode.agent;
+    return this.propagateRuntimeServicesToAgent(agent);
   }
 
   /**
@@ -724,6 +738,11 @@ export class Harness<TState = {}> {
    * `customModelCatalogProvider` hooks.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
+    const now = Date.now();
+    if (this.availableModelsCache && now - this.availableModelsCacheTime < 10_000) {
+      return this.availableModelsCache;
+    }
+
     try {
       const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
 
@@ -787,11 +806,19 @@ export class Harness<TState = {}> {
         }
       }
 
-      return [...modelsById.values()];
+      const result = [...modelsById.values()];
+      this.availableModelsCache = result;
+      this.availableModelsCacheTime = Date.now();
+      return result;
     } catch (error) {
       console.warn('Failed to load available models:', error);
       return [];
     }
+  }
+
+  invalidateAvailableModelsCache(): void {
+    this.availableModelsCache = null;
+    this.availableModelsCacheTime = 0;
   }
 
   private async getProviderApiKeyEnvVar(provider: string): Promise<string | undefined> {
@@ -930,6 +957,7 @@ export class Harness<TState = {}> {
 
     this.tokenUsage = createEmptyTokenUsage();
     this.emit({ type: 'thread_created', thread });
+    await this.ensureCurrentAgentThreadSubscription();
 
     return thread;
   }
@@ -1045,6 +1073,7 @@ export class Harness<TState = {}> {
     await this.loadThreadMetadata();
     this.tokenUsage = createEmptyTokenUsage();
     this.emit({ type: 'thread_created', thread: clonedThread });
+    await this.ensureCurrentAgentThreadSubscription();
 
     return clonedThread;
   }
@@ -1075,6 +1104,7 @@ export class Harness<TState = {}> {
     await this.loadThreadMetadata();
 
     this.emit({ type: 'thread_changed', threadId, previousThreadId });
+    await this.ensureCurrentAgentThreadSubscription();
   }
 
   async listThreads(options?: {
@@ -1575,16 +1605,112 @@ export class Harness<TState = {}> {
     void this.processSubscribedThreadStream(subscription);
   }
 
+  private async ensureCurrentAgentThreadSubscription(): Promise<void> {
+    if (!this.currentThreadId) return;
+    await this.ensureAgentThreadSubscription(this.getCurrentAgent(), this.currentThreadId);
+  }
+
+  private createMessageInput({
+    content,
+    files,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+  }): AgentSignalContents {
+    if (!files?.length) return content;
+
+    const fileParts = files.map(f => {
+      const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+      if (isText) {
+        let textContent = f.data;
+        const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+        if (base64Match) {
+          try {
+            textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+          } catch {
+            // Fall through with raw data
+          }
+        }
+        const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+        const maxBacktickRun = Math.max(0, ...Array.from(textContent.matchAll(/`+/g), match => match[0].length));
+        const fence = '`'.repeat(Math.max(3, maxBacktickRun + 1));
+        return { type: 'text' as const, text: `${label}\n${fence}\n${textContent}\n${fence}` };
+      }
+      return {
+        type: 'file' as const,
+        data: f.data,
+        mediaType: f.mediaType,
+        ...(f.filename ? { filename: f.filename } : {}),
+      };
+    });
+
+    return [{ type: 'text', text: content }, ...fileParts];
+  }
+
+  private async buildAgentMessageStreamOptions({
+    requestContext: requestContextInput,
+    tracingContext,
+    tracingOptions,
+  }: {
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<Record<string, unknown>> {
+    if (!this.currentThreadId) {
+      throw new Error('Cannot build stream options without a current thread');
+    }
+
+    this.abortRequested = false;
+    this.abortController ??= new AbortController();
+    const requestContext = await this.buildRequestContext(requestContextInput);
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const streamOptions: Record<string, unknown> = {
+      memory: { thread: this.currentThreadId, resource: this.resourceId },
+      abortSignal: this.abortController.signal,
+      requestContext,
+      maxSteps: 1000,
+      savePerStep: false,
+      requireToolApproval: !isYolo,
+      modelSettings: { temperature: 1 },
+      ...(tracingContext && { tracingContext }),
+      ...(tracingOptions && { tracingOptions }),
+    };
+    streamOptions.toolsets = await this.buildToolsets(requestContext);
+    return streamOptions;
+  }
+
   private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
     if (this.followUpQueue.length === 0) return;
 
     const next = this.followUpQueue.shift()!;
-    await this.sendMessage({
-      content: next.content,
-      requestContext: next.requestContext,
-      tracingContext: options?.tracingContext,
-      tracingOptions: options?.tracingOptions,
-    });
+    try {
+      if (this.agentThreadSubscription && this.currentThreadId) {
+        const agent = this.getCurrentAgent();
+        const streamOptions = await this.buildAgentMessageStreamOptions({
+          requestContext: next.requestContext,
+          tracingContext: options?.tracingContext,
+          tracingOptions: options?.tracingOptions,
+        });
+        const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
+          resourceId: this.resourceId,
+          threadId: this.currentThreadId,
+          ifIdle: { streamOptions: streamOptions as any },
+        });
+        this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length, runId: result.runId });
+      } else {
+        this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
+        await this.sendMessage({
+          content: next.content,
+          requestContext: next.requestContext,
+          tracingContext: options?.tracingContext,
+          tracingOptions: options?.tracingOptions,
+        });
+      }
+    } catch (error) {
+      this.followUpQueue.unshift(next);
+      this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
+      throw error;
+    }
   }
 
   private isActiveAgentThreadSubscription(subscription: AgentThreadSubscription<any>): boolean {
@@ -1697,13 +1823,19 @@ export class Harness<TState = {}> {
       | AgentSignalInput
       | {
           content: AgentSignalContents;
+          ifActive?: { attributes?: AgentSignalAttributes };
+          ifIdle?: { attributes?: AgentSignalAttributes };
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
         },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
-    const signal = createSignal('content' in input ? { type: 'user-message', contents: input.content } : input);
+    const ifActive = 'content' in input ? input.ifActive : undefined;
+    const ifIdle = 'content' in input ? input.ifIdle : undefined;
+    const signal = createSignal(
+      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
+    );
     const accepted = Promise.resolve().then(async () => {
       if (!this.currentThreadId) {
         const thread = await this.createThread();
@@ -1713,35 +1845,27 @@ export class Harness<TState = {}> {
       const agent = this.getCurrentAgent();
       await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
 
-      if (this.agentThreadSubscription?.activeRunId()) {
+      if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
         const result = agent.sendSignal(signal, {
           resourceId: this.resourceId,
           threadId: this.currentThreadId,
+          ifActive,
+          ifIdle,
         });
         return { accepted: result.accepted, runId: result.runId };
       }
 
-      this.abortRequested = false;
-      this.abortController ??= new AbortController();
-      const requestContext = await this.buildRequestContext(requestContextInput);
-      const isYolo = (this.state as Record<string, unknown>).yolo === true;
-      const streamOptions: Record<string, unknown> = {
-        memory: { thread: this.currentThreadId, resource: this.resourceId },
-        abortSignal: this.abortController.signal,
-        requestContext,
-        maxSteps: 1000,
-        savePerStep: false,
-        requireToolApproval: !isYolo,
-        modelSettings: { temperature: 1 },
-        ...(tracingContext && { tracingContext }),
-        ...(tracingOptions && { tracingOptions }),
-      };
-      streamOptions.toolsets = await this.buildToolsets(requestContext);
+      const streamOptions = await this.buildAgentMessageStreamOptions({
+        requestContext: requestContextInput,
+        tracingContext,
+        tracingOptions,
+      });
 
       const result = agent.sendSignal(signal, {
         resourceId: this.resourceId,
         threadId: this.currentThreadId,
-        ifIdle: { streamOptions: streamOptions as any },
+        ifActive,
+        ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
       return { accepted: result.accepted, runId: result.runId };
     });
@@ -1766,35 +1890,7 @@ export class Harness<TState = {}> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
   }): Promise<void> {
-    let messageInput: AgentSignalContents = content;
-    if (files?.length) {
-      const fileParts = files.map(f => {
-        const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
-        if (isText) {
-          let textContent = f.data;
-          const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
-          if (base64Match) {
-            try {
-              textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
-            } catch {
-              // Fall through with raw data
-            }
-          }
-          const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
-          return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
-        }
-        return {
-          type: 'file' as const,
-          data: f.data,
-          mediaType: f.mediaType,
-          filename: f.filename,
-        };
-      });
-      messageInput = {
-        role: 'user',
-        content: [{ type: 'text', text: content }, ...fileParts],
-      } as AgentSignalContents;
-    }
+    const messageInput = this.createMessageInput({ content, files });
 
     const wasActive = this.isCurrentThreadStreamActive();
     let emittedAgentEnd = false;
@@ -1961,36 +2057,46 @@ export class Harness<TState = {}> {
       };
     }
 
-    const signalMetadata = getRecordValue(msg.content.metadata?.signal);
-    if (signalMetadata?.type === 'user-message') {
-      const signalContent = signalContentsToHarnessContent(signalMetadata.contents ?? msg.content.content);
-      if (signalContent.length > 0) {
+    if (msg.role === 'signal') {
+      const signal = mastraDBMessageToSignal(msg as MastraDBMessage);
+
+      if (signal.type === 'user') {
+        const signalContent = signalContentsToHarnessContent(signal.contents);
+        if (signalContent.length > 0) {
+          return {
+            id: msg.id,
+            role: 'user',
+            content: signalContent,
+            createdAt: msg.createdAt,
+            attributes: signal.attributes,
+          };
+        }
+      }
+
+      if (signal.type === 'reactive' && signal.tagName === 'system-reminder') {
+        const reminder = toSystemReminderContent({
+          type: signal.type,
+          contents:
+            typeof signal.contents === 'string'
+              ? signal.contents
+              : signal.contents
+                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                  .map(p => p.text)
+                  .join('\n'),
+          attributes: signal.attributes ?? msg.content.metadata,
+          metadata: signal.metadata,
+        });
+        if (reminder) {
+          content.push(reminder);
+        }
+
         return {
           id: msg.id,
           role: 'user',
-          content: signalContent,
+          content,
           createdAt: msg.createdAt,
         };
       }
-    }
-
-    if (signalMetadata?.type === 'system-reminder') {
-      const reminder = toSystemReminderContent({
-        type: signalMetadata.type,
-        contents: signalMetadata.contents ?? msg.content.content,
-        attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
-        metadata: getRecordValue(signalMetadata.metadata),
-      });
-      if (reminder) {
-        content.push(reminder);
-      }
-
-      return {
-        id: msg.id,
-        role: 'user',
-        content,
-        createdAt: msg.createdAt,
-      };
     }
 
     for (const part of msg.content.parts) {
@@ -2677,7 +2783,8 @@ export class Harness<TState = {}> {
             triggeredBy: payload.triggeredBy,
             lastActivityAt: payload.lastActivityAt,
             ttlExpiredMs: payload.ttlExpiredMs,
-            activateAfterIdle: payload.config?.activateAfterIdle,
+            activateAfterIdle:
+              typeof payload.config?.activateAfterIdle === 'number' ? payload.config.activateAfterIdle : undefined,
             previousModel: payload.previousModel,
             currentModel: payload.currentModel,
           });
@@ -2750,6 +2857,7 @@ export class Harness<TState = {}> {
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
     this.followUpQueue = [];
+    this.emit({ type: 'follow_up_queued', count: 0 });
     await this.sendMessage({ content, requestContext });
   }
 
@@ -2783,6 +2891,16 @@ export class Harness<TState = {}> {
     );
   }
 
+  /**
+   * Resolve once the current thread's stream is fully idle.
+   *
+   * After `abort()` is called the run's status can still be `'running'` for a
+   * few microtasks while the underlying model stream finalizes. Callers that
+   * need to send a fresh signal after an abort (e.g. plan approval → mode
+   * switch → trigger reminder) should await this before calling `sendSignal`
+   * to avoid the new signal being queued onto the dying run, which would then
+   * be drained with the previous run's already-aborted abortSignal.
+   */
   private async waitForCurrentThreadStreamIdle(): Promise<void> {
     while (this.isCurrentThreadStreamActive() || this.currentRunId !== null) {
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -2833,6 +2951,8 @@ export class Harness<TState = {}> {
     this.displayState.pendingPlanApproval = null;
     this.displayState.activeSubagents = new Map();
     this.displayState.currentMessage = null;
+    this.followUpQueue = [];
+    this.displayState.queuedFollowUps = 0;
     this.displayState.modifiedFiles = new Map();
     this.displayState.tasks = [];
     this.displayState.previousTasks = [];
@@ -2961,6 +3081,15 @@ export class Harness<TState = {}> {
       if (defaultMode && defaultMode.id !== this.currentModeId) {
         await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
         await this.switchMode({ modeId: defaultMode.id });
+        // switchMode aborts the in-flight run but does not wait for it to
+        // finalize. If the caller (e.g. mastracode's plan-approval handler)
+        // immediately fires a system-reminder signal, that signal can land in
+        // the dying run's pending queue and later get drained with the run's
+        // already-aborted abortSignal — manifesting as a hang where the agent
+        // never resumes after "The user has approved the plan, begin
+        // executing.". Waiting for the stream to be fully idle here ensures
+        // the next sendSignal() always starts a fresh run.
+        await this.waitForCurrentThreadStreamIdle();
       }
     }
   }
@@ -3487,6 +3616,11 @@ export class Harness<TState = {}> {
       case 'task_updated':
         ds.previousTasks = [...ds.tasks];
         ds.tasks = event.tasks;
+        break;
+
+      // ── Follow-up queue ────────────────────────────────────────────────
+      case 'follow_up_queued':
+        ds.queuedFollowUps = event.count;
         break;
 
       // ── Thread lifecycle ───────────────────────────────────────────────

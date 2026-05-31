@@ -1,7 +1,5 @@
-import type { ThreadMessageLike, AppendMessage } from '@assistant-ui/react';
+import type { AppendMessage } from '@assistant-ui/react';
 import { useExternalStoreRuntime, AssistantRuntimeProvider } from '@assistant-ui/react';
-import type { UIMessageWithMetadata } from '@mastra/client-js';
-import { MastraClient } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/di';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@mastra/playground-ui';
@@ -10,6 +8,11 @@ import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
+import {
+  buildMaxStepsStreamErrorMessage,
+  buildStreamErrorMessage,
+  isMaxStepsFinishChunk,
+} from './stream-error-message';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -19,13 +22,19 @@ import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
 import { ThreadRuntimeStateProvider } from '@/lib/ai-ui/thread-runtime-state';
 import type { ChatProps } from '@/types';
 
-const handleFinishReason = (finishReason: string) => {
-  switch (finishReason) {
-    case 'tool-calls':
-      throw new Error('Stream finished with reason tool-calls, try increasing maxSteps');
-    default:
-      break;
+const getAppendMessageText = (message: AppendMessage) => {
+  const text = (message.content[0] as { text?: unknown } | undefined)?.text;
+
+  if (typeof text === 'string') return text;
+
+  if (text && typeof text === 'object' && 'content' in text && Array.isArray(text.content)) {
+    return text.content
+      .map(part => (part?.type === 'text' && typeof part.text === 'string' ? part.text : ''))
+      .filter(Boolean)
+      .join('\n');
   }
+
+  throw new Error('Only text messages are supported');
 };
 
 const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
@@ -134,34 +143,6 @@ const buildGlobalOmPartsByCycleId = (messages: MastraUIMessage[]) => {
     indexOmPartsByCycleId(msg.parts, map);
   }
   return map;
-};
-
-/**
- * Build a `MastraUIMessage` representing a stream `error` chunk so it can be
- * rendered by `error-aware-text`. Prefer the human-readable `message` field on
- * the error payload when present, falling back to a JSON dump so we never
- * silently swallow an error.
- */
-const buildStreamErrorMessage = (chunk: { runId?: string; payload?: { error?: unknown } }): MastraUIMessage => {
-  const errorValue = chunk.payload?.error;
-  let text: string;
-  if (typeof errorValue === 'string') {
-    text = errorValue;
-  } else if (
-    errorValue &&
-    typeof errorValue === 'object' &&
-    typeof (errorValue as { message?: unknown }).message === 'string'
-  ) {
-    text = (errorValue as { message: string }).message;
-  } else {
-    text = JSON.stringify(errorValue ?? 'Unknown error');
-  }
-  return {
-    id: `error-${chunk.runId ?? 'unknown'}-${Date.now()}`,
-    role: 'assistant',
-    parts: [{ type: 'text', text }],
-    metadata: { status: 'error' },
-  } as MastraUIMessage;
 };
 
 /**
@@ -304,103 +285,10 @@ const convertOmPartsInMastraMessage = (
   };
 };
 
-const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
-  // @ts-expect-error - TODO: fix the ThreadMessageLike type, it's missing some properties like "data" from the role.
-  const convertedMessages: ThreadMessageLike[] = initialMessages
-    ?.map((message: UIMessageWithMetadata) => {
-      const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
-        type: image.contentType.startsWith(`image/`)
-          ? 'image'
-          : image.contentType.startsWith(`audio/`)
-            ? 'audio'
-            : 'file',
-        mimeType: image.contentType,
-        image: image.url,
-      }));
-
-      const formattedParts = (message.parts || [])
-        .map((part: any) => {
-          if (part.type === 'reasoning') {
-            return {
-              type: 'reasoning',
-              text:
-                part.reasoning ||
-                part?.details
-                  ?.filter((detail: any) => detail.type === 'text')
-                  ?.map((detail: any) => detail.text)
-                  .join(' '),
-            };
-          }
-          if (part.type === 'tool-invocation') {
-            if (part.toolInvocation.state === 'result') {
-              return {
-                type: 'tool-call',
-                toolCallId: part.toolInvocation.toolCallId,
-                toolName: part.toolInvocation.toolName,
-                args: part.toolInvocation.args,
-                result: part.toolInvocation.result,
-              };
-            } else if (part.toolInvocation.state === 'call') {
-              // Only return pending tool calls that are legitimately awaiting approval
-              const toolCallId = part.toolInvocation.toolCallId;
-              const toolName = part.toolInvocation.toolName;
-              const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
-              const suspensionData = pendingToolApprovals?.[toolCallId];
-              if (suspensionData) {
-                return {
-                  type: 'tool-call',
-                  toolCallId,
-                  toolName,
-                  args: part.toolInvocation.args,
-                  metadata: {
-                    mode: 'stream',
-                    requireApprovalMetadata: {
-                      [toolName]: suspensionData,
-                    },
-                  },
-                };
-              }
-            }
-          }
-
-          if (part.type === 'file') {
-            return {
-              type: 'file',
-              mimeType: part.mimeType,
-              data: part.data,
-            };
-          }
-
-          if (part.type === 'text') {
-            return {
-              type: 'text',
-              text: part.text,
-            };
-          }
-
-          // Keep data-om-* parts as-is - they'll be converted by convertOmPartsInMastraMessage later
-          if (part.type?.startsWith('data-om-')) {
-            return part;
-          }
-        })
-        .filter(Boolean);
-
-      return {
-        ...message,
-        content: [...formattedParts, ...attachmentsAsContentParts],
-      };
-    })
-    .filter(Boolean);
-
-  return convertedMessages;
-};
-
 export function MastraRuntimeProvider({
   children,
   agentId,
   initialMessages,
-  initialLegacyMessages,
-  memory,
   threadId,
   refreshThreadList,
   settings,
@@ -412,8 +300,7 @@ export function MastraRuntimeProvider({
 }> &
   ChatProps) {
   const { settings: tracingSettings } = useTracingSettings();
-  const [isLegacyRunning, setIsLegacyRunning] = useState(false);
-  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>([]);
+
   // Errors emitted as `error` chunks (or thrown by sendMessage) are not persisted to
   // server memory, so they get wiped from useChat's `messages` state when
   // `initialMessages` refreshes after a stream ends. Track them in a parallel
@@ -422,6 +309,7 @@ export function MastraRuntimeProvider({
   const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
+  const threadSignalsEnabled = window.MASTRA_AGENT_SIGNALS === 'true';
 
   const addPendingSignal = useCallback((signalId: string, preview: string) => {
     setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
@@ -440,16 +328,17 @@ export function MastraRuntimeProvider({
     setThreadSignalsUnsupported(false);
   }, [agentId, threadId]);
 
-  useEffect(() => {
-    setLegacyMessages(initializeMessageState(initialLegacyMessages || []));
-  }, [initialLegacyMessages]);
-
   const chatRequestContext = useMemo(() => {
-    if (!agentVersionId) return undefined;
+    if (!agentVersionId && !requestContext) return undefined;
     const ctx = new RequestContext();
-    ctx.set('agentVersionId', agentVersionId);
+    Object.entries(requestContext ?? {}).forEach(([key, value]) => {
+      ctx.set(key, value);
+    });
+    if (agentVersionId) {
+      ctx.set('agentVersionId', agentVersionId);
+    }
     return ctx;
-  }, [agentVersionId]);
+  }, [agentVersionId, requestContext]);
 
   const {
     messages,
@@ -470,6 +359,7 @@ export function MastraRuntimeProvider({
     threadId,
     initialMessages,
     requestContext: chatRequestContext,
+    enableThreadSignals: threadSignalsEnabled,
     onSignalSent: addPendingSignal,
     onSignalEcho: removePendingSignal,
     onThreadSignalsUnsupported: () => {
@@ -486,9 +376,10 @@ export function MastraRuntimeProvider({
   // Check if OM is enabled from the agent's memory config.
   // The config value can be `true`, `false`, `undefined`, or an object with/without `.enabled`.
   const { data: memoryConfigData } = useMemoryConfig(agentId);
-  const omConfig = memoryConfigData?.config?.observationalMemory;
+  const omConfig = memoryConfigData?.config?.observationalMemory as unknown;
   const isOMEnabled =
-    omConfig === true || (typeof omConfig === 'object' && omConfig !== null && omConfig.enabled !== false);
+    omConfig === true ||
+    (typeof omConfig === 'object' && omConfig !== null && (!('enabled' in omConfig) || omConfig.enabled !== false));
   const {
     setIsObservingFromStream,
     setIsReflectingFromStream,
@@ -667,7 +558,6 @@ export function MastraRuntimeProvider({
 
     // Mark any in-progress observation markers as disconnected
     setMessages(prev => markOmMarkersAsDisconnected(prev));
-    setLegacyMessages(prev => markOmMarkersAsDisconnected(prev));
 
     // Refresh to get latest state from server
     void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
@@ -677,7 +567,7 @@ export function MastraRuntimeProvider({
   // On initial load, scan messages for activation markers and the last progress part.
   // This ensures buffering badges show as activated and token counts are accurate on reload.
   useEffect(() => {
-    const allMessages = [...(initialMessages || []), ...(initialLegacyMessages || [])];
+    const allMessages = [...(initialMessages || [])];
     let lastProgress: any = null;
     for (const msg of allMessages) {
       const parts = (msg as any).parts || (msg as any).content || [];
@@ -708,13 +598,11 @@ export function MastraRuntimeProvider({
     topK,
     topP,
     seed,
-    chatWithGenerateLegacy,
     chatWithGenerate,
     chatWithNetwork,
     providerOptions,
     requireToolApproval,
   } = settings?.modelSettings ?? {};
-  const toolCallIdToName = useRef<Record<string, string>>({});
 
   const modelSettingsArgs = {
     frequencyPenalty,
@@ -740,10 +628,7 @@ export function MastraRuntimeProvider({
 
     const attachments = await convertToAIAttachments(message.attachments);
 
-    const input = message.content[0].text;
-    if (!isSupportedModel) {
-      setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
-    }
+    const input = getAppendMessageText(message);
 
     // Reset persisted errors at the start of a new turn so a fresh send doesn't
     // carry over errors from a previous failed run.
@@ -751,15 +636,6 @@ export function MastraRuntimeProvider({
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
-    // Create a new client instance with the abort signal
-    // We can't use useMastraClient hook here, so we'll create the client directly
-    const clientWithAbort = new MastraClient({
-      ...baseClient.options,
-      abortSignal: controller.signal,
-    });
-
-    const agent = clientWithAbort.getAgent(agentId);
 
     const requestContextInstance = new RequestContext();
     Object.entries(requestContext ?? {}).forEach(([key, value]) => {
@@ -770,20 +646,100 @@ export function MastraRuntimeProvider({
     }
 
     try {
-      if (isSupportedModel) {
-        if (chatWithNetwork) {
+      if (chatWithNetwork) {
+        await sendMessage({
+          message: input,
+          mode: 'network',
+          coreUserMessages: attachments,
+          requestContext: requestContextInstance,
+          threadId,
+          modelSettings: modelSettingsArgs,
+          signal: controller.signal,
+          tracingOptions: tracingSettings?.tracingOptions,
+          onNetworkChunk: async chunk => {
+            if (
+              chunk.type === 'tool-execution-end' &&
+              chunk.payload?.toolName === 'updateWorkingMemory' &&
+              typeof chunk.payload.result === 'object' &&
+              'success' in chunk.payload.result! &&
+              chunk.payload.result?.success
+            ) {
+              void refreshWorkingMemory?.();
+            }
+
+            if (chunk.type === 'network-execution-event-step-finish') {
+              refreshThreadList?.();
+            }
+
+            if ((chunk as any).type === 'error') {
+              setStreamErrors(prev => [...prev, buildStreamErrorMessage(chunk as any)]);
+            }
+
+            // Signal observation/reflection started (for sidebar status)
+            if ((chunk as any).type === 'data-om-observation-start') {
+              handleObservationStart((chunk as any).data?.operationType);
+            }
+
+            // Update progress from streamed data-om-status parts
+            if ((chunk as any).type === 'data-om-status') {
+              handleProgressUpdate((chunk as any).data);
+            }
+
+            // Refresh OM sidebar when observation/reflection completes (if OM chunks are passed through network mode)
+            if (
+              (chunk as any).type === 'data-om-observation-end' ||
+              (chunk as any).type === 'data-om-observation-failed' ||
+              (chunk as any).type === 'data-om-activation'
+            ) {
+              refreshObservationalMemory((chunk as any).data?.operationType);
+            }
+
+            // Mark cycleIds as activated for UI update of buffering badges
+            if ((chunk as any).type === 'data-om-activation') {
+              handleActivation((chunk as any).data);
+            }
+          },
+        });
+      } else {
+        if (chatWithGenerate) {
           await sendMessage({
             message: input,
-            mode: 'network',
+            mode: 'generate',
             coreUserMessages: attachments,
             requestContext: requestContextInstance,
             threadId,
             modelSettings: modelSettingsArgs,
             signal: controller.signal,
             tracingOptions: tracingSettings?.tracingOptions,
-            onNetworkChunk: async chunk => {
+          });
+
+          await refreshThreadList?.();
+
+          return;
+        } else {
+          await sendMessage({
+            message: input,
+            mode: 'stream',
+            coreUserMessages: attachments,
+            requestContext: requestContextInstance,
+            threadId,
+            modelSettings: modelSettingsArgs,
+            tracingOptions: tracingSettings?.tracingOptions,
+            onChunk: async chunk => {
+              if (chunk.type === 'finish') {
+                if (isMaxStepsFinishChunk(chunk)) {
+                  setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, maxSteps)]);
+                }
+
+                await refreshThreadList?.();
+              }
+
+              if (chunk.type === 'error') {
+                setStreamErrors(prev => [...prev, buildStreamErrorMessage(chunk)]);
+              }
+
               if (
-                chunk.type === 'tool-execution-end' &&
+                chunk.type === 'tool-result' &&
                 chunk.payload?.toolName === 'updateWorkingMemory' &&
                 typeof chunk.payload.result === 'object' &&
                 'success' in chunk.payload.result! &&
@@ -792,470 +748,47 @@ export function MastraRuntimeProvider({
                 void refreshWorkingMemory?.();
               }
 
-              if (chunk.type === 'network-execution-event-step-finish') {
-                refreshThreadList?.();
-              }
-
-              if ((chunk as any).type === 'error') {
-                setStreamErrors(prev => [...prev, buildStreamErrorMessage(chunk as any)]);
-              }
-
-              // Signal observation/reflection started (for sidebar status)
-              if ((chunk as any).type === 'data-om-observation-start') {
+              // Signal observation started (for sidebar status)
+              if (chunk.type === 'data-om-observation-start') {
                 handleObservationStart((chunk as any).data?.operationType);
               }
 
               // Update progress from streamed data-om-status parts
-              if ((chunk as any).type === 'data-om-status') {
+              if (chunk.type === 'data-om-status') {
                 handleProgressUpdate((chunk as any).data);
               }
 
-              // Refresh OM sidebar when observation/reflection completes (if OM chunks are passed through network mode)
+              // Refresh OM sidebar when observation completes or buffered observations are activated
               if (
-                (chunk as any).type === 'data-om-observation-end' ||
-                (chunk as any).type === 'data-om-observation-failed' ||
-                (chunk as any).type === 'data-om-activation'
+                chunk.type === 'data-om-observation-end' ||
+                chunk.type === 'data-om-observation-failed' ||
+                chunk.type === 'data-om-activation'
               ) {
                 refreshObservationalMemory((chunk as any).data?.operationType);
               }
 
               // Mark cycleIds as activated for UI update of buffering badges
-              if ((chunk as any).type === 'data-om-activation') {
+              if (chunk.type === 'data-om-activation') {
                 handleActivation((chunk as any).data);
               }
             },
+            signal: controller.signal,
           });
-        } else {
-          if (chatWithGenerate) {
-            await sendMessage({
-              message: input,
-              mode: 'generate',
-              coreUserMessages: attachments,
-              requestContext: requestContextInstance,
-              threadId,
-              modelSettings: modelSettingsArgs,
-              signal: controller.signal,
-              tracingOptions: tracingSettings?.tracingOptions,
-            });
 
-            await refreshThreadList?.();
-
-            return;
-          } else {
-            await sendMessage({
-              message: input,
-              mode: 'stream',
-              coreUserMessages: attachments,
-              requestContext: requestContextInstance,
-              threadId,
-              modelSettings: modelSettingsArgs,
-              tracingOptions: tracingSettings?.tracingOptions,
-              onChunk: async chunk => {
-                if (chunk.type === 'finish') {
-                  await refreshThreadList?.();
-                }
-
-                if (chunk.type === 'error') {
-                  setStreamErrors(prev => [...prev, buildStreamErrorMessage(chunk)]);
-                }
-
-                if (
-                  chunk.type === 'tool-result' &&
-                  chunk.payload?.toolName === 'updateWorkingMemory' &&
-                  typeof chunk.payload.result === 'object' &&
-                  'success' in chunk.payload.result! &&
-                  chunk.payload.result?.success
-                ) {
-                  void refreshWorkingMemory?.();
-                }
-
-                // Signal observation started (for sidebar status)
-                if (chunk.type === 'data-om-observation-start') {
-                  handleObservationStart((chunk as any).data?.operationType);
-                }
-
-                // Update progress from streamed data-om-status parts
-                if (chunk.type === 'data-om-status') {
-                  handleProgressUpdate((chunk as any).data);
-                }
-
-                // Refresh OM sidebar when observation completes or buffered observations are activated
-                if (
-                  chunk.type === 'data-om-observation-end' ||
-                  chunk.type === 'data-om-observation-failed' ||
-                  chunk.type === 'data-om-activation'
-                ) {
-                  refreshObservationalMemory((chunk as any).data?.operationType);
-                }
-
-                // Mark cycleIds as activated for UI update of buffering badges
-                if (chunk.type === 'data-om-activation') {
-                  handleActivation((chunk as any).data);
-                }
-              },
-              signal: controller.signal,
-            });
-
-            // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
-            if (threadId && isOMEnabled) {
-              baseClient
-                .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
-                .then(result => {
-                  setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-                  void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-                  void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
-                })
-                .catch(() => {});
-            }
-
-            return;
+          // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
+          if (threadId && isOMEnabled) {
+            baseClient
+              .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
+              .then(result => {
+                setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+                void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+                void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+              })
+              .catch(() => {});
           }
+
+          return;
         }
-      } else {
-        if (chatWithGenerateLegacy) {
-          setIsLegacyRunning(true);
-          const generateResponse = await agent.generateLegacy({
-            messages: [
-              {
-                role: 'user',
-                content: input,
-              },
-              ...attachments,
-            ],
-            frequencyPenalty,
-            presencePenalty,
-            maxRetries,
-            maxSteps,
-            maxTokens,
-            temperature,
-            topK,
-            topP,
-            seed,
-            requestContext: requestContextInstance,
-            ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions,
-          });
-          if (generateResponse.response && 'messages' in generateResponse.response) {
-            const latestMessage = generateResponse.response.messages.reduce(
-              (acc: ThreadMessageLike, message: any) => {
-                const _content = Array.isArray(acc.content) ? acc.content : [];
-                if (typeof message.content === 'string') {
-                  return {
-                    ...acc,
-                    content: [
-                      ..._content,
-                      ...(generateResponse.reasoning ? [{ type: 'reasoning', text: generateResponse.reasoning }] : []),
-                      {
-                        type: 'text',
-                        text: message.content,
-                      },
-                    ],
-                  };
-                }
-                if (message.role === 'assistant') {
-                  const toolCallContent = Array.isArray(message.content)
-                    ? message.content.find((content: any) => content.type === 'tool-call')
-                    : undefined;
-                  const reasoningContent = Array.isArray(message.content)
-                    ? message.content.find((content: any) => content.type === 'reasoning')
-                    : undefined;
-
-                  if (toolCallContent) {
-                    const newContent = _content.map(c => {
-                      if (c.type === 'tool-call' && c.toolCallId === toolCallContent?.toolCallId) {
-                        return { ...c, ...toolCallContent };
-                      }
-                      return c;
-                    });
-
-                    const containsToolCall = newContent.some(c => c.type === 'tool-call');
-                    return {
-                      ...acc,
-                      content: containsToolCall
-                        ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
-                        : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                    };
-                  }
-
-                  const textContent = Array.isArray(message.content)
-                    ? message.content.find((content: any) => content.type === 'text' && content.text)
-                    : undefined;
-
-                  if (textContent) {
-                    return {
-                      ...acc,
-                      content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                    };
-                  }
-                }
-
-                if (message.role === 'tool') {
-                  const toolResult = Array.isArray(message.content)
-                    ? message.content.find((content: any) => content.type === 'tool-result')
-                    : undefined;
-
-                  if (toolResult) {
-                    const newContent = _content.map(c => {
-                      if (c.type === 'tool-call' && c.toolCallId === toolResult?.toolCallId) {
-                        return { ...c, result: toolResult.result };
-                      }
-                      return c;
-                    });
-                    const containsToolCall = newContent.some(c => c.type === 'tool-call');
-
-                    return {
-                      ...acc,
-                      content: containsToolCall
-                        ? newContent
-                        : [
-                            ..._content,
-                            { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.result },
-                          ],
-                    };
-                  }
-
-                  return {
-                    ...acc,
-                    content: [..._content, toolResult],
-                  };
-                }
-                return acc;
-              },
-              { role: 'assistant', content: [] },
-            );
-            setLegacyMessages(currentConversation => [...currentConversation, latestMessage as ThreadMessageLike]);
-            handleFinishReason(generateResponse.finishReason);
-          }
-
-          setIsLegacyRunning(false);
-        } else {
-          setIsLegacyRunning(true);
-          const response = await agent.streamLegacy({
-            messages: [
-              {
-                role: 'user',
-                content: input,
-              },
-              ...attachments,
-            ],
-            frequencyPenalty,
-            presencePenalty,
-            maxRetries,
-            maxSteps,
-            maxTokens,
-            temperature,
-            topK,
-            topP,
-            seed,
-            requestContext: requestContextInstance,
-            ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions,
-          });
-
-          if (!response.body) {
-            throw new Error('No response body');
-          }
-
-          let content = '';
-          let assistantMessageAdded = false;
-          let assistantToolCallAddedForUpdater = false;
-          let assistantToolCallAddedForContent = false;
-
-          function updater() {
-            setLegacyMessages(currentConversation => {
-              const message: ThreadMessageLike = {
-                role: 'assistant',
-                content: [{ type: 'text', text: content }],
-              };
-
-              if (!assistantMessageAdded) {
-                assistantMessageAdded = true;
-                if (assistantToolCallAddedForUpdater) {
-                  assistantToolCallAddedForUpdater = false;
-                }
-                return [...currentConversation, message];
-              }
-
-              if (assistantToolCallAddedForUpdater) {
-                // add as new message item in messages array if tool call was added
-                assistantToolCallAddedForUpdater = false;
-                return [...currentConversation, message];
-              }
-              return [...currentConversation.slice(0, -1), message];
-            });
-          }
-
-          await response.processDataStream({
-            onTextPart(value: any) {
-              if (assistantToolCallAddedForContent) {
-                // start new content value to add as next message item in messages array
-                assistantToolCallAddedForContent = false;
-                content = value;
-              } else {
-                content += value;
-              }
-              updater();
-            },
-            async onToolCallPart(value: any) {
-              // Update the messages state
-              setLegacyMessages(currentConversation => {
-                // Get the last message (should be the assistant's message)
-                const lastMessage = currentConversation[currentConversation.length - 1];
-
-                // Only process if the last message is from the assistant
-                if (lastMessage && lastMessage.role === 'assistant') {
-                  // Check if this tool call already exists in the content
-                  if (Array.isArray(lastMessage.content)) {
-                    const existingToolCall = lastMessage.content.find(
-                      (part: any) => part.type === 'tool-call' && part.toolCallId === value.toolCallId,
-                    );
-                    if (existingToolCall) {
-                      // Tool call already exists, skip adding duplicate
-                      return currentConversation;
-                    }
-                  }
-
-                  // Create a new message with the tool call part
-                  const updatedMessage: ThreadMessageLike = {
-                    ...lastMessage,
-                    content: Array.isArray(lastMessage.content)
-                      ? [
-                          ...lastMessage.content,
-                          {
-                            type: 'tool-call',
-                            toolCallId: value.toolCallId,
-                            toolName: value.toolName,
-                            args: value.args,
-                          },
-                        ]
-                      : [
-                          ...(typeof lastMessage.content === 'string'
-                            ? [{ type: 'text', text: lastMessage.content }]
-                            : []),
-                          {
-                            type: 'tool-call',
-                            toolCallId: value.toolCallId,
-                            toolName: value.toolName,
-                            args: value.args,
-                          },
-                        ],
-                  };
-
-                  assistantToolCallAddedForUpdater = true;
-                  assistantToolCallAddedForContent = true;
-
-                  // Replace the last message with the updated one
-                  return [...currentConversation.slice(0, -1), updatedMessage];
-                }
-
-                // If there's no assistant message yet, create one
-                const newMessage: ThreadMessageLike = {
-                  role: 'assistant',
-                  content: [
-                    { type: 'text', text: content },
-                    {
-                      type: 'tool-call',
-                      toolCallId: value.toolCallId,
-                      toolName: value.toolName,
-                      args: value.args,
-                    },
-                  ],
-                };
-                assistantToolCallAddedForUpdater = true;
-                assistantToolCallAddedForContent = true;
-                return [...currentConversation, newMessage];
-              });
-              toolCallIdToName.current[value.toolCallId] = value.toolName;
-            },
-            async onToolResultPart(value: any) {
-              // Update the messages state
-              setLegacyMessages(currentConversation => {
-                // Get the last message (should be the assistant's message)
-                const lastMessage = currentConversation[currentConversation.length - 1];
-
-                // Only process if the last message is from the assistant and has content array
-                if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
-                  // Find the tool call content part that this result belongs to
-                  const updatedContent = lastMessage.content.map(part => {
-                    if (typeof part === 'object' && part.type === 'tool-call' && part.toolCallId === value.toolCallId) {
-                      return {
-                        ...part,
-                        result: value.result,
-                      };
-                    }
-                    return part;
-                  });
-
-                  // Create a new message with the updated content
-                  const updatedMessage: ThreadMessageLike = {
-                    ...lastMessage,
-                    content: updatedContent,
-                  };
-                  // Replace the last message with the updated one
-                  return [...currentConversation.slice(0, -1), updatedMessage];
-                }
-                return currentConversation;
-              });
-              try {
-                const toolName = toolCallIdToName.current[value.toolCallId];
-                if (toolName === 'updateWorkingMemory' && value.result?.success) {
-                  await refreshWorkingMemory?.();
-                }
-              } finally {
-                // Clean up
-                delete toolCallIdToName.current[value.toolCallId];
-              }
-            },
-            onErrorPart(error: any) {
-              throw new Error(error);
-            },
-            onFinishMessagePart({ finishReason }: { finishReason: any }) {
-              handleFinishReason(finishReason);
-            },
-            onReasoningPart(value: any) {
-              setLegacyMessages(currentConversation => {
-                // Get the last message (should be the assistant's message)
-                const lastMessage = currentConversation[currentConversation.length - 1];
-
-                // Only process if the last message is from the assistant
-                if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
-                  // Find and update the reasoning content type
-                  const updatedContent = lastMessage.content.map(part => {
-                    if (typeof part === 'object' && part.type === 'reasoning') {
-                      return {
-                        ...part,
-                        text: part.text + value,
-                      };
-                    }
-                    return part;
-                  });
-                  // Create a new message with the updated reasoning content
-                  const updatedMessage: ThreadMessageLike = {
-                    ...lastMessage,
-                    content: updatedContent,
-                  };
-
-                  // Replace the last message with the updated one
-                  return [...currentConversation.slice(0, -1), updatedMessage];
-                }
-
-                // If there's no assistant message yet, create one
-                const newMessage: ThreadMessageLike = {
-                  role: 'assistant',
-                  content: [
-                    {
-                      type: 'reasoning',
-                      text: value,
-                    },
-                    { type: 'text', text: content },
-                  ],
-                };
-                return [...currentConversation, newMessage];
-              });
-            },
-          });
-        }
-        setIsLegacyRunning(false);
       }
 
       setTimeout(() => {
@@ -1268,7 +801,7 @@ export function MastraRuntimeProvider({
           .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
           .then(result => {
             setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-            setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+
             void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
             void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
           })
@@ -1276,7 +809,6 @@ export function MastraRuntimeProvider({
       }
     } catch (error: any) {
       console.error('Error occurred in MastraRuntimeProvider', error);
-      setIsLegacyRunning(false);
 
       // Handle cancellation gracefully
       if (error.name === 'AbortError') {
@@ -1284,14 +816,7 @@ export function MastraRuntimeProvider({
         return;
       }
 
-      if (isSupportedModel) {
-        setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
-      } else {
-        setLegacyMessages(currentConversation => [
-          ...currentConversation,
-          { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
-        ]);
-      }
+      setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
       // Reset OM streaming state when an error occurs (stream was interrupted)
       resetObservationalMemoryStreamState();
     } finally {
@@ -1306,7 +831,6 @@ export function MastraRuntimeProvider({
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setPendingSignals([]);
-    setIsLegacyRunning(false);
     // Reset OM streaming state in case observation was in progress
     resetObservationalMemoryStreamState();
     cancelRun?.();
@@ -1317,7 +841,7 @@ export function MastraRuntimeProvider({
         .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
         .then(result => {
           setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-          setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+
           void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
         })
@@ -1343,8 +867,8 @@ export function MastraRuntimeProvider({
   });
 
   const runtime = useExternalStoreRuntime({
-    isRunning: isLegacyRunning || isRunningStream,
-    messages: isSupportedModel ? vnextmessages : legacyMessages,
+    isRunning: isRunningStream,
+    messages: vnextmessages,
     convertMessage: x => x,
     onNew,
     onCancel,
@@ -1360,8 +884,9 @@ export function MastraRuntimeProvider({
   return (
     <ThreadRuntimeStateProvider
       value={{
-        isStreaming: isLegacyRunning || isRunningStream,
-        canSendWhileStreaming: isSupportedModel && !threadSignalsUnsupported,
+        isStreaming: isRunningStream,
+        canSendWhileStreaming:
+          isSupportedModel && threadSignalsEnabled && Boolean(threadId) && !threadSignalsUnsupported,
         cancelStream: onCancel,
         pendingSignals,
         hasPendingMessages: pendingSignals.length > 0,

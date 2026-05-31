@@ -1,7 +1,7 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
 import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
-import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
+import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
@@ -12,10 +12,12 @@ import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
 import { useThreadRuntimeState } from './thread-runtime-state';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
+import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
+import { Link } from '@/lib/link';
 // import { useBackgroundTaskStream } from '@/hooks';
 
 export interface ThreadProps {
@@ -127,16 +129,11 @@ interface ComposerProps {
   hideModelSwitcher?: boolean;
 }
 
-const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRuntime = useComposerRuntime();
   const { isStreaming, canSendWhileStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
-  // Track IME composition state to prevent Enter from submitting during CJK input.
-  // Without this, pressing Enter to confirm a Chinese/Japanese/Korean character
-  // triggers form submission instead of completing the IME composition.
-  // See: https://github.com/mastra-ai/mastra/issues/16109
-  const isComposingRef = useRef(false);
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
@@ -212,32 +209,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
                 name=""
                 id=""
                 onChange={e => setThreadInput?.(e.target.value)}
-                onCompositionStart={() => {
-                  isComposingRef.current = true;
-                }}
-                onCompositionEnd={() => {
-                  isComposingRef.current = false;
-                }}
                 onKeyDownCapture={e => {
-                  if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    composerRuntime.send();
-                  }
-                }}
-                onKeyDown={e => {
-                  // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
-                  // while an IME composition session is active (e.g. Chinese pinyin).
-                  // With asChild composition (@radix-ui/react-slot), stopPropagation() alone does
-                  // not prevent the primitive's onKeyDown from running on the same element —
-                  // preventDefault() is required. e.nativeEvent.isComposing is added as a
-                  // defensive fallback for browsers/timings where compositionend has already fired.
-                  if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                  }
-
                   if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -251,6 +223,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
             <ComposerActionRow
               canExecute={canExecuteAgent}
               agentId={agentId}
+              threadId={threadId}
               showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
             />
           </div>
@@ -313,22 +286,40 @@ interface ComposerActionProps {
 
 interface ComposerActionRowProps extends ComposerActionProps {
   agentId?: string;
+  threadId?: string;
   showModelSwitcher?: boolean;
 }
 
-const ComposerActionRow = ({ canExecute = true, agentId, showModelSwitcher }: ComposerActionRowProps) => {
+const ComposerActionRow = ({ canExecute = true, agentId, threadId, showModelSwitcher }: ComposerActionRowProps) => {
   const [isAddAttachmentDialogOpen, setIsAddAttachmentDialogOpen] = useState(false);
 
   return (
     <>
       {/* Keep action buttons above the switcher when this row wraps. */}
-      <div className="flex flex-wrap-reverse items-center gap-2 px-1.5 pb-1.5">
+      <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
         {showModelSwitcher && agentId && (
-          <div className="shrink-0 max-w-full rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
-            <ComposerModelSwitcher agentId={agentId} />
+          <div className="flex items-center gap-1.5 shrink-0 max-w-full">
+            <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
+              <ComposerModelSwitcher agentId={agentId} />
+            </div>
+            <ComposerModelSettings agentId={agentId} />
           </div>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+
+        {threadId && (
+          <ThreadPrimitive.If empty={false}>
+            <Button
+              as={Link}
+              variant="default"
+              tooltip="View thread traces"
+              href={`/observability?filterThreadId=${encodeURIComponent(threadId)}`}
+            >
+              <EyeIcon className="h-5 w-5 text-neutral3 hover:text-neutral6" /> Traces
+            </Button>
+          </ThreadPrimitive.If>
+        )}
+
+        <div className="flex shrink-0 items-center gap-1.5">
           <ButtonsGroup spacing="close">
             {canExecute && (
               <Button

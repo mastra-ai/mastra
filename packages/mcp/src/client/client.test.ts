@@ -628,6 +628,51 @@ describe('MastraMCPClient - tools without outputSchema preserve envelope', () =>
   });
 });
 
+describe('MastraMCPClient - multimodal content', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'multimodal-test',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should not attach toModelOutput that duplicates MCP image content into providerMetadata', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'screenshot',
+          description: 'Takes a screenshot',
+          inputSchema: { type: 'object' as const, properties: {} },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const tool = tools['screenshot'];
+    expect(tool).toBeDefined();
+    expect((tool as any).toModelOutput).toBeUndefined();
+  });
+});
+
 describe('MastraMCPClient - AbortSignal forwarding', () => {
   let testServer: {
     httpServer: HttpServer;
@@ -2676,8 +2721,87 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(approvalFn).toHaveBeenCalledWith({
       toolName: 'greet',
       args: testArgs,
+      annotations: undefined,
       requestContext: { userId: '123' },
     });
+  });
+
+  it('should forward MCP tool annotations to the requireToolApproval callback', async () => {
+    testServer = await setupTestServer(false);
+    // Register a tool with annotations on the test server
+    testServer.mcpServer.tool(
+      'delete_repo',
+      'Delete a repo',
+      { repo: z.string() },
+      {
+        title: 'Delete Repository',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    const approvalFn = vi.fn().mockImplementation(({ annotations }) => Boolean(annotations?.destructiveHint));
+    client = new InternalMastraMCPClient({
+      name: 'approval-annotations-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: approvalFn,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const destructiveTool = tools.delete_repo;
+    expect(destructiveTool).toBeDefined();
+
+    const result = await (destructiveTool as any).needsApprovalFn({ repo: 'foo' }, {});
+    expect(result).toBe(true);
+    expect(approvalFn).toHaveBeenCalledWith({
+      toolName: 'delete_repo',
+      args: { repo: 'foo' },
+      annotations: expect.objectContaining({
+        title: 'Delete Repository',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      }),
+    });
+  });
+
+  it('should expose MCP tool annotations on the Mastra tool (mcp.annotations)', async () => {
+    testServer = await setupTestServer(false);
+    testServer.mcpServer.tool(
+      'list_repos',
+      'List repos',
+      { owner: z.string() },
+      {
+        title: 'List Repositories',
+        readOnlyHint: true,
+        destructiveHint: false,
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    client = new InternalMastraMCPClient({
+      name: 'annotations-exposure-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const readTool = tools.list_repos as any;
+    expect(readTool).toBeDefined();
+    expect(readTool.mcp?.annotations).toMatchObject({
+      title: 'List Repositories',
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+
+    // Tool without annotations should not have `annotations` populated
+    const greetTool = tools.greet as any;
+    expect(greetTool.mcp?.annotations).toBeUndefined();
   });
 
   it('should support async approval functions', async () => {
@@ -3021,4 +3145,51 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
 
     tokenWaiters.forEach(cancel => cancel());
   }, 20000);
+});
+
+describe('InternalMastraMCPClient - transport cleanup on close (issue #16693)', () => {
+  let testServer: Awaited<ReturnType<typeof setupTestServer>>;
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'test-close-cleanup-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('closes and clears the stale transport when the connection closes', async () => {
+    const staleTransport = (client as any).transport;
+    expect(staleTransport).toBeDefined();
+    const closeSpy = vi.spyOn(staleTransport, 'close');
+
+    // Simulate a server-initiated close firing the SDK client's onclose handler.
+    (client as any).client.onclose?.();
+
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+
+    // Let the fire-and-forget close settle.
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  it('does not throw when the stale transport close rejects', async () => {
+    const staleTransport = (client as any).transport;
+    vi.spyOn(staleTransport, 'close').mockRejectedValueOnce(new Error('already closed'));
+
+    expect(() => (client as any).client.onclose?.()).not.toThrow();
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
 });

@@ -1,8 +1,8 @@
-pnpm --version || {
-  echo "Pre-commit requires pnpm to be installed globally"
+corepack pnpm@11.3.0 --version || {
+  echo "Pre-commit requires corepack pnpm@11.3.0"
   exit 0
 }
 
 # Formatting on staged files
-pnpm lint-staged --quiet
+corepack pnpm@11.3.0 lint-staged --quiet
 

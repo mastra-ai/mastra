@@ -547,7 +547,7 @@ describe('MCPServer', () => {
     let notificationTestServer: MCPServer;
     let notificationTestInternalClient: InternalMastraMCPClient;
     let notificationHttpServer: http.Server;
-    const NOTIFICATION_PORT = 9400 + Math.floor(Math.random() * 1000);
+    let notificationPort: number;
 
     const mockInitialResources: Resource[] = [
       {
@@ -599,7 +599,7 @@ describe('MCPServer', () => {
       notificationTestServer = new MCPServer(serverOptions);
 
       notificationHttpServer = http.createServer(async (req, res) => {
-        const url = new URL(req.url || '', `http://localhost:${NOTIFICATION_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${notificationPort}`);
         await notificationTestServer.startSSE({
           url,
           ssePath: '/sse',
@@ -608,12 +608,22 @@ describe('MCPServer', () => {
           res,
         });
       });
-      await new Promise<void>(resolve => notificationHttpServer.listen(NOTIFICATION_PORT, resolve));
+      notificationPort = await new Promise<number>((resolve, reject) => {
+        notificationHttpServer.once('error', reject);
+        notificationHttpServer.listen(0, () => {
+          const address = notificationHttpServer.address();
+          if (address && typeof address === 'object') {
+            resolve(address.port);
+            return;
+          }
+          reject(new Error('Failed to obtain notification test port'));
+        });
+      });
 
       notificationTestInternalClient = new InternalMastraMCPClient({
         name: 'notification-internal-client',
         server: {
-          url: new URL(`http://localhost:${NOTIFICATION_PORT}/sse`),
+          url: new URL(`http://localhost:${notificationPort}/sse`),
           logger: logMessage =>
             console.log(
               `[${logMessage.serverName} - ${logMessage.level.toUpperCase()}]: ${logMessage.message}`,
@@ -625,7 +635,7 @@ describe('MCPServer', () => {
     });
 
     afterAll(async () => {
-      await notificationTestInternalClient.disconnect();
+      await notificationTestInternalClient?.disconnect();
       if (notificationHttpServer) {
         await new Promise<void>((resolve, reject) =>
           notificationHttpServer.close(err => {
@@ -634,7 +644,7 @@ describe('MCPServer', () => {
           }),
         );
       }
-      await notificationTestServer.close();
+      await notificationTestServer?.close();
     });
 
     beforeEach(() => {
@@ -982,6 +992,34 @@ describe('MCPServer', () => {
         body: JSON.stringify({ tool: 'weatherTool', input: { location: 'Austin' } }),
       });
       expect(res.status).toBe(503);
+    });
+
+    it('should close previous SSE transport when a new client connects', async () => {
+      // First SSE connection
+      const firstRes = await fetch(`http://localhost:${PORT}/sse`, {
+        headers: { Accept: 'text/event-stream' },
+      });
+      expect(firstRes.status).toBe(200);
+      const firstTransport = (server as any).sseTransport;
+      expect(firstTransport).toBeDefined();
+
+      // Spy on close of the first transport
+      const closeSpy = vi.spyOn(firstTransport, 'close');
+
+      // Second SSE connection — should close the first transport
+      const secondRes = await fetch(`http://localhost:${PORT}/sse`, {
+        headers: { Accept: 'text/event-stream' },
+      });
+      expect(secondRes.status).toBe(200);
+
+      expect(closeSpy).toHaveBeenCalled();
+      expect((server as any).sseTransport).not.toBe(firstTransport);
+
+      // Clean up: close the active transport so the protocol is reset for subsequent tests
+      await (server as any).sseTransport?.close?.();
+      (server as any).sseTransport = undefined;
+      await firstRes.body?.cancel().catch(() => {});
+      await secondRes.body?.cancel().catch(() => {});
     });
   });
 

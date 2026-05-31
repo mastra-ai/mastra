@@ -1,4 +1,4 @@
-import { Agent, createSignal } from '@mastra/core/agent';
+import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
@@ -233,6 +233,24 @@ export function mockAgentMethods(agent: Agent) {
 
   vi.spyOn(agent, 'sendSignal').mockImplementation((signal: any, target: any) => {
     const createdSignal = createSignal(signal);
+    return {
+      accepted: true,
+      runId: target?.runId ?? 'test-run',
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'sendMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
+    return {
+      accepted: true,
+      runId: target?.runId ?? 'test-run',
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'queueMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
     return {
       accepted: true,
       runId: target?.runId ?? 'test-run',
@@ -534,6 +552,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     createProcessor: vi.fn(),
   };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
+    hasEnabledBuilderConfig: () => true,
+    resolveBuilder: async () => ({
+      enabled: true,
+      getFeatures: () => ({ agent: { favorites: true } }),
+      getConfiguration: () => undefined,
+      getModelPolicyWarnings: () => [],
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
@@ -544,6 +569,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     agent: {
       list: vi.fn().mockResolvedValue({ agents: [] }),
       clearCache: vi.fn(),
+      create: vi.fn().mockImplementation(async (input: any) => {
+        // Delegate to storage directly, mirroring what editor.agent.create does
+        const agents = await mastra.getStorage()!.getStore('agents');
+        return agents!.create({ agent: input });
+      }),
       clone: vi.fn().mockResolvedValue({
         id: 'cloned-agent',
         name: 'Test Agent (Clone)',

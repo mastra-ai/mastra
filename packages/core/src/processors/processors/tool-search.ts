@@ -261,6 +261,15 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   }
 
   /**
+   * Get loaded tools for the given request context.
+   * Used by agent resume paths to rebuild tool executors after approval suspension.
+   */
+  public getLoadedToolsForRequestContext(args?: { requestContext?: RequestContext }): Record<string, Tool<any, any>> {
+    const threadId = (args?.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) || 'default';
+    return this.getLoadedTools(threadId);
+  }
+
+  /**
    * Clear loaded tools for a specific thread (useful for testing).
    *
    * @param threadId - The thread ID to clear, or 'default' if not provided

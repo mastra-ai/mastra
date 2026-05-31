@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-modelslab",
-  "version": "0.1.0",
+  "version": "0.1.1-alpha.0",
   "description": "Mastra ModelsLab voice integration",
   "type": "module",
   "files": [
@@ -32,7 +32,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@mastra/core": "workspace:*",
+    "@internal/voice": "workspace:*",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -40,9 +40,6 @@
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
-  },
-  "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {
