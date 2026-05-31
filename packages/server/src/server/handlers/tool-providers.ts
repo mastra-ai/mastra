@@ -2,7 +2,7 @@ import type { IMastraEditor } from '@mastra/core/editor';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
-import { SHARED_BUCKET_ID, UnknownToolProviderError } from '@mastra/core/tool-provider';
+import type * as ToolProviderModule from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import { MASTRA_USER_KEY } from '../constants';
@@ -39,9 +39,33 @@ import { handleError } from './error';
 
 const TOOL_PROVIDERS_RESOURCE = 'tool-providers' as const;
 
+/**
+ * Mirrors `@mastra/core/tool-provider#SHARED_BUCKET_ID`. Inlined locally so this
+ * module evaluates under any peer-compatible core; a regression test in
+ * `tool-providers.test.ts` verifies the literal stays in lockstep with core.
+ */
+const SHARED_BUCKET_ID = 'shared' as const;
+
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Lazily import `@mastra/core/tool-provider` so this server module can evaluate
+ * under any peer-compatible core. The new value exports (`UnknownToolProviderError`,
+ * `SHARED_BUCKET_ID`) ship in core `>=1.39.0-0`; users on older cores who never
+ * configure a `MastraEditor` short-circuit via `requireEditor` long before this
+ * runs. ESM caches one module instance per resolved specifier so the
+ * `instanceof` check below sees the same class identity that `@mastra/editor`
+ * throws.
+ */
+let _toolProviderModule: typeof ToolProviderModule | undefined;
+async function loadToolProviderModule() {
+  if (!_toolProviderModule) {
+    _toolProviderModule = await import('@mastra/core/tool-provider');
+  }
+  return _toolProviderModule;
+}
 
 function requireEditor(editor: IMastraEditor | undefined): IMastraEditor {
   if (!editor) {
@@ -50,10 +74,11 @@ function requireEditor(editor: IMastraEditor | undefined): IMastraEditor {
   return editor;
 }
 
-function resolveProvider(editor: IMastraEditor, providerId: string): ToolProvider {
+async function resolveProvider(editor: IMastraEditor, providerId: string): Promise<ToolProvider> {
   try {
     return editor.getToolProviderOrThrow(providerId);
   } catch (error) {
+    const { UnknownToolProviderError } = await loadToolProviderModule();
     if (error instanceof UnknownToolProviderError) {
       throw new HTTPException(404, { message: error.message });
     }
@@ -148,7 +173,7 @@ export const LIST_TOOL_PROVIDER_TOOLKITS_ROUTE = createRoute({
   handler: async ({ mastra, providerId }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (provider.listToolkitsVNext) {
         return await provider.listToolkitsVNext();
       }
@@ -179,7 +204,7 @@ export const LIST_TOOL_PROVIDER_TOOLS_ROUTE = createRoute({
   handler: async ({ mastra, providerId, toolkit, search, page, perPage }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       const opts: { toolkit?: string; search?: string; page?: number; perPage?: number } = {};
       if (toolkit !== undefined) opts.toolkit = toolkit;
       if (search !== undefined) opts.search = search;
@@ -211,7 +236,7 @@ export const GET_TOOL_PROVIDER_TOOL_SCHEMA_ROUTE = createRoute({
   handler: async ({ mastra, providerId, toolSlug }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.getToolSchema) {
         throw new HTTPException(404, { message: `Tool provider ${providerId} does not support getToolSchema` });
       }
@@ -244,7 +269,7 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
   handler: async ({ mastra, providerId, toolkit, connectionId, toolName, config, label, scope, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.authorize) {
         throw new HTTPException(400, { message: `Tool provider ${providerId} does not support authorize` });
       }
@@ -325,7 +350,7 @@ export const GET_TOOL_PROVIDER_AUTH_STATUS_ROUTE = createRoute({
   handler: async ({ mastra, providerId, authId }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.getAuthStatus) {
         throw new HTTPException(400, { message: `Tool provider ${providerId} does not support getAuthStatus` });
       }
@@ -354,7 +379,7 @@ export const TOOL_PROVIDER_CONNECTION_STATUS_ROUTE = createRoute({
   handler: async ({ mastra, providerId, items }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.getConnectionStatus) {
         throw new HTTPException(400, { message: `Tool provider ${providerId} does not support getConnectionStatus` });
       }
@@ -395,7 +420,7 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
   }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.listConnections) {
         throw new HTTPException(400, { message: `Tool provider ${providerId} does not support listConnections` });
       }
@@ -516,7 +541,7 @@ export const LIST_TOOL_PROVIDER_CONNECTION_FIELDS_ROUTE = createRoute({
   handler: async ({ mastra, providerId, toolkit }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.listConnectionFields) {
         return { fields: [] };
       }
@@ -549,7 +574,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
   handler: async ({ mastra, providerId, connectionId, force, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
       const isForce = force === true || force === 'true';
@@ -636,7 +661,7 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
   handler: async ({ mastra, providerId, connectionId, toolkit, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
 
@@ -696,7 +721,7 @@ export const GET_TOOL_PROVIDER_HEALTH_ROUTE = createRoute({
   handler: async ({ mastra, providerId }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.getHealth) {
         return { ok: true };
       }

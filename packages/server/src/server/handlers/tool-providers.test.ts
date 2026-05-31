@@ -196,6 +196,37 @@ function makeEditor(provider?: ToolProvider): Partial<IMastraEditor> {
   };
 }
 
+describe('lazy @mastra/core/tool-provider integration', () => {
+  // Regression guards for the lazy dynamic-import strategy in the handler.
+  // The handler keeps SHARED_BUCKET_ID as a local literal and resolves
+  // UnknownToolProviderError via `await import(...)` to keep the @mastra/core
+  // peer-dep floor at >=1.34. These tests fail loudly if either invariant
+  // drifts away from core's exports.
+
+  it('local SHARED_BUCKET_ID stays in lockstep with @mastra/core/tool-provider', async () => {
+    const { SHARED_BUCKET_ID: coreShared } = await import('@mastra/core/tool-provider');
+    expect(coreShared).toBe('shared');
+  });
+
+  it('resolveProvider returns 404 when editor throws UnknownToolProviderError (lazy instanceof works)', async () => {
+    // This drives `LIST_TOOL_PROVIDER_TOOLKITS_ROUTE` via a mock editor whose
+    // `getToolProviderOrThrow` throws a real `UnknownToolProviderError`. The
+    // handler's resolveProvider awaits a dynamic import of
+    // `@mastra/core/tool-provider` to evaluate `instanceof` — this proves
+    // Node's ESM cache delivers the same class identity to both the editor
+    // mock and the handler.
+    const editor: Partial<IMastraEditor> = {
+      getToolProviderOrThrow: (id: string) => {
+        throw new UnknownToolProviderError(id, []);
+      },
+    };
+    const mastra = makeMastra(editor);
+    await expect(
+      LIST_TOOL_PROVIDER_TOOLKITS_ROUTE.handler({ mastra, providerId: 'missing' } as any),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
 describe('LIST_TOOL_PROVIDERS_ROUTE', () => {
   it('returns 500 when editor is not configured', async () => {
     const mastra = makeMastra(undefined);
