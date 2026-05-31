@@ -82,6 +82,7 @@ export type ToolsInput = Record<
 export type AgentInstructions = SystemMessage;
 
 export type {
+  AgentMessageInput,
   AgentSignalAttributes,
   AgentSignalInput as AgentSignal,
   AgentSignalType,
@@ -132,6 +133,26 @@ export interface SendAgentSignalResult {
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
 }
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageResult = SendAgentSignalResult;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageResult = SendAgentSignalResult;
 
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;
@@ -435,9 +456,16 @@ export interface AgentConfig<
    */
   browser?: MastraBrowser;
   /**
-   * Voice settings for speech input and output.
+   * Voice settings for speech input and output. Can be provided statically or resolved dynamically per request.
+   *
+   * Provide a resolver (`({ requestContext }) => new SomeVoice(...)`) to give each request/session its own
+   * voice instance. This is required for realtime / speech-to-speech providers, where concurrent live sessions
+   * must not share a single mutable instance (ws, tools, instructions, request context). The caller owns the
+   * lifecycle (e.g. `disconnect()`) of a resolver-produced instance.
+   *
+   * A static `MastraVoice` remains shared across requests, which is appropriate for one-shot TTS.
    */
-  voice?: MastraVoice;
+  voice?: DynamicArgument<MastraVoice, TRequestContext>;
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *

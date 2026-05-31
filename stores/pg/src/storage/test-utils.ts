@@ -1,4 +1,4 @@
-import { createSampleThread } from '@internal/storage-test-utils';
+import { createSampleMessageV2, createSampleThread } from '@internal/storage-test-utils';
 import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -70,6 +70,35 @@ export function pgTests() {
         await store.init();
         // Recreate dbOps with new store connection
         dbOps = new PgDB({ client: store.db });
+      });
+    });
+
+    describe('Memory saveMessages batching', () => {
+      it('should save a message batch larger than one PostgreSQL bind-parameter chunk', async () => {
+        const memory = (await store.getStore('memory'))!;
+        const thread = createSampleThread({
+          id: `batch-thread-${Date.now()}`,
+          resourceId: `batch-resource-${Date.now()}`,
+        });
+        await memory.saveThread({ thread });
+
+        const messages = Array.from({ length: 8192 }, (_, index) =>
+          createSampleMessageV2({
+            threadId: thread.id,
+            resourceId: thread.resourceId,
+            content: { content: `Batch message ${index}` },
+            createdAt: new Date(Date.now() + index),
+          }),
+        );
+
+        const { messages: savedMessages } = await memory.saveMessages({ messages });
+        expect(savedMessages).toHaveLength(8192);
+
+        const row = await store.db.one<{ count: string }>(
+          'SELECT COUNT(*)::text AS count FROM mastra_messages WHERE thread_id = $1',
+          [thread.id],
+        );
+        expect(Number(row.count)).toBe(8192);
       });
     });
 

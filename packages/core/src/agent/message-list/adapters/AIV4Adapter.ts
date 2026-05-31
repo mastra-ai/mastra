@@ -100,6 +100,23 @@ function getSignalType(message: MastraDBMessage): string | undefined {
   return message.type;
 }
 
+function getSignalTagName(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const tagName = (signal as Record<string, unknown>).tagName;
+    if (typeof tagName === 'string') return tagName;
+  }
+
+  const type = getSignalType(message);
+  if (type === 'user') return 'user';
+  if (type === 'reactive') return message.type;
+  return type;
+}
+
+function isUserSignalType(type: string | undefined): boolean {
+  return type === 'user' || type === 'user-message';
+}
+
 function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMessagePart {
   const signal =
     message.content.metadata?.signal && typeof message.content.metadata.signal === 'object'
@@ -110,11 +127,15 @@ function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMes
       ? (signal.metadata as Record<string, unknown>)
       : {};
 
+  const type = getSignalType(message) ?? 'signal';
+  const tagName = getSignalTagName(message) ?? type;
+  const dataPartTagName = type === 'user' && tagName === 'user' ? 'user-message' : tagName;
   return {
-    type: `data-${getSignalType(message) ?? 'signal'}`,
+    type: `data-${dataPartTagName}`,
     data: {
       id: typeof signal.id === 'string' ? signal.id : message.id,
-      type: getSignalType(message) ?? 'signal',
+      type,
+      tagName,
       contents: 'contents' in signal ? signal.contents : contents,
       createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
       ...(Object.keys(metadata).length ? { metadata } : {}),
@@ -278,7 +299,7 @@ export class AIV4Adapter {
     }
 
     const signalType = m.role === 'signal' ? getSignalType(m) : undefined;
-    const isUserMessageSignal = signalType === 'user-message';
+    const isUserMessageSignal = isUserSignalType(signalType);
     const v4Parts = preserveExtendedParts(
       m.role === 'signal' && !isUserMessageSignal ? [toSignalDataPart(m, m.content.content || contentString)] : parts,
     );
