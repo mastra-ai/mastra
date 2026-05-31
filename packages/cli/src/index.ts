@@ -311,6 +311,7 @@ program
   .option('-e, --env <env>', 'Custom env file to include')
   .option('--debug', 'Enable debug logs', false)
   .option('-y, --yes', 'Skip confirmation prompt (for CI/automation)')
+  .option('--skip-install', 'Skip dependency installation (for immutable lockfile environments)')
   .action(migrate);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');

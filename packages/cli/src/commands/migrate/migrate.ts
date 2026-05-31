@@ -31,12 +31,14 @@ export async function migrate({
   env,
   debug,
   yes,
+  skipInstall,
 }: {
   dir?: string;
   root?: string;
   env?: string;
   debug: boolean;
   yes: boolean;
+  skipInstall?: boolean;
 }) {
   const logger = createLogger(debug);
   const { rootDir, mastraDir } = resolveMigratePaths({
@@ -100,7 +102,7 @@ export async function migrate({
   }
 
   try {
-    const bundler = new MigrateBundler(env);
+    const bundler = new MigrateBundler(env, skipInstall);
     bundler.__setLogger(logger);
 
     logger.info('Building project for migration...');

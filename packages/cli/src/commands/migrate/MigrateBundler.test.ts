@@ -11,6 +11,7 @@ vi.mock('@mastra/deployer/build', () => ({
 vi.mock('../build/BuildBundler.js', () => ({
   BuildBundler: class MockBuildBundler {
     protected platform = 'node';
+    protected logger: { info: (...args: unknown[]) => void } = { info: vi.fn() };
     constructor(_options?: { studio?: boolean }) {}
     __setLogger(_logger: unknown) {}
     getAllToolPaths(_dir: string, _extra: unknown[]) {
@@ -23,6 +24,9 @@ vi.mock('../build/BuildBundler.js', () => ({
       return Promise.resolve(new Map());
     }
     protected _bundle(_entry: string, _entryFile: string, _options: unknown, _toolsPaths: unknown): Promise<void> {
+      return Promise.resolve();
+    }
+    protected installDependencies(_outputDirectory: string, _rootDir?: string): Promise<void> {
       return Promise.resolve();
     }
   },
@@ -125,6 +129,60 @@ describe('MigrateBundler', () => {
 
       expect(entry).toContain('catch (error)');
       expect(entry).toContain('error instanceof Error ? error.message');
+    });
+  });
+
+  describe('installDependencies', () => {
+    it('should call super.installDependencies when no skip flags are set', async () => {
+      delete process.env.YARN_ENABLE_IMMUTABLE_INSTALLS;
+      delete process.env.npm_config_ci;
+      const bundler = new MigrateBundler(undefined, false);
+      const superInstall = vi.spyOn(Object.getPrototypeOf(Object.getPrototypeOf(bundler)), 'installDependencies');
+      await (bundler as any).installDependencies('/out', '/root');
+      expect(superInstall).toHaveBeenCalledWith('/out', '/root');
+    });
+
+    it('should skip installDependencies when skipInstall is true', async () => {
+      delete process.env.YARN_ENABLE_IMMUTABLE_INSTALLS;
+      delete process.env.npm_config_ci;
+      const bundler = new MigrateBundler(undefined, true);
+      const superInstall = vi.spyOn(Object.getPrototypeOf(Object.getPrototypeOf(bundler)), 'installDependencies');
+      await (bundler as any).installDependencies('/out', '/root');
+      expect(superInstall).not.toHaveBeenCalled();
+    });
+
+    it('should skip installDependencies when YARN_ENABLE_IMMUTABLE_INSTALLS=true', async () => {
+      process.env.YARN_ENABLE_IMMUTABLE_INSTALLS = 'true';
+      delete process.env.npm_config_ci;
+      const bundler = new MigrateBundler(undefined, false);
+      const superInstall = vi.spyOn(Object.getPrototypeOf(Object.getPrototypeOf(bundler)), 'installDependencies');
+      const logSpy = vi.spyOn((bundler as any).logger, 'info');
+      await (bundler as any).installDependencies('/out', '/root');
+      expect(superInstall).not.toHaveBeenCalled();
+      expect(logSpy).toHaveBeenCalledWith(
+        'Skipping dependency installation (immutable lockfile mode or --skip-install flag)',
+      );
+    });
+
+    it('should skip installDependencies when npm_command=ci', async () => {
+      delete process.env.YARN_ENABLE_IMMUTABLE_INSTALLS;
+      delete process.env.npm_config_ci;
+      process.env.npm_command = 'ci';
+      const bundler = new MigrateBundler(undefined, false);
+      const superInstall = vi.spyOn(Object.getPrototypeOf(Object.getPrototypeOf(bundler)), 'installDependencies');
+      await (bundler as any).installDependencies('/out', '/root');
+      expect(superInstall).not.toHaveBeenCalled();
+      delete process.env.npm_command;
+    });
+
+    it('should skip installDependencies when npm_config_ci=true', async () => {
+      delete process.env.YARN_ENABLE_IMMUTABLE_INSTALLS;
+      delete process.env.npm_command;
+      process.env.npm_config_ci = 'true';
+      const bundler = new MigrateBundler(undefined, false);
+      const superInstall = vi.spyOn(Object.getPrototypeOf(Object.getPrototypeOf(bundler)), 'installDependencies');
+      await (bundler as any).installDependencies('/out', '/root');
+      expect(superInstall).not.toHaveBeenCalled();
     });
   });
 

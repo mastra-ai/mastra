@@ -5,10 +5,25 @@ import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class MigrateBundler extends BuildBundler {
   private customEnvFile?: string;
+  private skipInstall: boolean;
 
-  constructor(customEnvFile?: string) {
+  constructor(customEnvFile?: string, skipInstall = false) {
     super({ studio: false });
     this.customEnvFile = customEnvFile;
+    this.skipInstall = skipInstall;
+  }
+
+  protected override async installDependencies(outputDirectory: string, rootDir?: string): Promise<void> {
+    if (
+      this.skipInstall ||
+      process.env['YARN_ENABLE_IMMUTABLE_INSTALLS'] === 'true' ||
+      process.env['npm_command'] === 'ci' ||
+      process.env['npm_config_ci'] === 'true'
+    ) {
+      this.logger?.info('Skipping dependency installation (immutable lockfile mode or --skip-install flag)');
+      return;
+    }
+    return super.installDependencies(outputDirectory, rootDir);
   }
 
   override getEnvFiles(): Promise<string[]> {
