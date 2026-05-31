@@ -1,5 +1,5 @@
-import { Txt, PanelSeparator } from '@mastra/playground-ui';
-import { Panel, Group, useDefaultLayout } from 'react-resizable-panels';
+import { Txt, PanelSeparator, CollapsiblePanel } from '@mastra/playground-ui';
+import { Group, useDefaultLayout } from 'react-resizable-panels';
 
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
@@ -70,24 +70,26 @@ function LeftPanel({
   });
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {versionSelector}
+    <div className="h-full w-full pb-2 pl-2">
+      <div className="flex flex-col h-full overflow-hidden bg-surface3 rounded-studio-panel border border-border1">
+        {versionSelector}
 
-      <div className="px-4 pt-3">
-        <Txt variant="ui-sm" className="text-neutral3">
-          Edit your agent's system prompt, tools, and variables below.
-        </Txt>
+        <div className="px-4 pt-3">
+          <Txt variant="ui-sm" className="text-neutral3">
+            Edit your agent's system prompt, tools, and variables below.
+          </Txt>
+        </div>
+
+        <div className="flex-1 min-h-0">
+          <AgentPlaygroundConfig
+            agentId={agentId}
+            selectedVersionId={selectedVersionId}
+            latestVersionId={latestVersionId}
+          />
+        </div>
+
+        {actionBar}
       </div>
-
-      <div className="flex-1 min-h-0">
-        <AgentPlaygroundConfig
-          agentId={agentId}
-          selectedVersionId={selectedVersionId}
-          latestVersionId={latestVersionId}
-        />
-      </div>
-
-      {actionBar}
     </div>
   );
 }
@@ -112,15 +114,23 @@ export function AgentPlaygroundView({
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `agent-playground-${agentId}`,
+    id: `agent-playground`,
     storage: localStorage,
   });
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-surface2">
+    <div className="flex flex-col h-full overflow-hidden">
       <Group className="flex-1 min-h-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
         {/* Left panel - Version Bar + Configuration + Action Bar */}
-        <Panel id="playground-config" minSize={30} defaultSize={50} className="overflow-hidden">
+        <CollapsiblePanel
+          direction="left"
+          id="playground-config"
+          minSize={420}
+          defaultSize="50%"
+          collapsedSize={80}
+          collapsible
+          className="overflow-hidden"
+        >
           <LeftPanel
             agentId={agentId}
             activeVersionId={activeVersionId}
@@ -136,13 +146,21 @@ export function AgentPlaygroundView({
             onPublish={onPublish}
             isViewingPreviousVersion={isViewingPreviousVersion}
           />
-        </Panel>
+        </CollapsiblePanel>
 
         <PanelSeparator />
 
         {/* Right panel - Test Chat */}
-        <Panel id="playground-chat" minSize={30} defaultSize={50} className="overflow-hidden">
-          <div className="flex flex-col h-full overflow-hidden bg-surface1">
+        <CollapsiblePanel
+          direction="right"
+          id="playground-chat"
+          minSize={420}
+          defaultSize="50%"
+          collapsedSize={80}
+          collapsible
+          className="overflow-hidden"
+        >
+          <div className="flex flex-col h-full overflow-hidden">
             <div className="flex-1 min-h-0">
               <AgentPlaygroundTestChat
                 agentId={agentId}
@@ -153,7 +171,7 @@ export function AgentPlaygroundView({
               />
             </div>
           </div>
-        </Panel>
+        </CollapsiblePanel>
       </Group>
     </div>
   );

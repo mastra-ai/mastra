@@ -1,5 +1,3 @@
-import { Spacer } from '@mariozechner/pi-tui';
-
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import {
   detectPackageManager,
@@ -48,49 +46,48 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
   }
   question += `\n\nWould you like to update now?`;
 
-  // Show interactive prompt
-  return new Promise<void>(resolve => {
-    const questionComponent = new AskQuestionInlineComponent(
+  const answer = await new Promise<string | null>(resolve => {
+    const component = new AskQuestionInlineComponent(
       {
         question,
         options: [
           { label: 'Yes', description: 'Update and restart' },
           { label: 'No', description: 'Skip this version' },
         ],
-        formatResult: answer => (answer === 'Yes' ? 'Updating…' : 'Update skipped.'),
-        onSubmit: async answer => {
+        allowCustomResponse: false,
+        onSubmit: answer => {
           ctx.state.activeInlineQuestion = undefined;
-          if (answer === 'Yes') {
-            ctx.showInfo(`Updating to v${latestVersion}…`);
-            const ok = await runUpdate(pm, latestVersion);
-            if (ok) {
-              ctx.showInfo(`Updated to v${latestVersion}. Please restart Mastra Code.`);
-              ctx.stop();
-              process.exit(0);
-            } else {
-              const cmd = getInstallCommand(pm, latestVersion);
-              ctx.showError(`Auto-update failed. Run \`${cmd}\` manually.`);
-            }
-          } else {
-            const s = loadSettings();
-            s.updateDismissedVersion = latestVersion;
-            saveSettings(s);
-            ctx.showInfo('Update skipped.');
-          }
-          resolve();
+          resolve(answer);
         },
         onCancel: () => {
           ctx.state.activeInlineQuestion = undefined;
-          resolve();
+          resolve(null);
         },
       },
       ctx.state.ui,
     );
 
-    ctx.state.activeInlineQuestion = questionComponent;
-    ctx.state.chatContainer.addChild(questionComponent);
-    ctx.state.chatContainer.addChild(new Spacer(1));
+    ctx.state.chatContainer.addChild(component);
+    ctx.state.activeInlineQuestion = component;
+    component.focused = true;
     ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
   });
+
+  if (answer === 'Yes') {
+    ctx.showInfo(`Updating to v${latestVersion}…`);
+    const ok = await runUpdate(pm, latestVersion);
+    if (ok) {
+      ctx.showInfo(`Updated to v${latestVersion}. Please restart Mastra Code.`);
+      ctx.stop();
+      process.exit(0);
+    } else {
+      const cmd = getInstallCommand(pm, latestVersion);
+      ctx.showError(`Auto-update failed. Run \`${cmd}\` manually.`);
+    }
+  } else if (answer === 'No') {
+    const s = loadSettings();
+    s.updateDismissedVersion = latestVersion;
+    saveSettings(s);
+    ctx.showInfo('Update skipped.');
+  }
 }

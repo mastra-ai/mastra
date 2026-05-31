@@ -2,6 +2,7 @@ import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   executeToolContextBodySchema,
@@ -118,7 +119,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, registeredTools }) => {
+  handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
       const allTools =
         registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : mastra.listTools() || {};
@@ -130,6 +131,20 @@ export const LIST_TOOLS_ROUTE = createRoute({
         },
         {} as Record<string, any>,
       );
+
+      // Filter tools by FGA if configured
+      const fgaProvider = mastra.getServer?.()?.fga;
+      const user = requestContext?.get('user');
+      if (fgaProvider && user) {
+        const toolList = Object.entries(serializedTools).map(([id, t]) => ({ id, ...t }));
+        const accessible = await fgaProvider.filterAccessible(user, toolList, 'tool', MastraFGAPermissions.TOOLS_READ);
+        const accessibleSet = new Set(accessible.map((t: any) => t.id));
+        for (const id of Object.keys(serializedTools)) {
+          if (!accessibleSet.has(id)) {
+            delete serializedTools[id];
+          }
+        }
+      }
 
       return serializedTools;
     } catch (error) {

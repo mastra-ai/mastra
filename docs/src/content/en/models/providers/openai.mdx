@@ -842,6 +842,12 @@ const response = await agent.generate("Hello!", {
         "type": "boolean | undefined",
         "description": "",
         "isOptional": true
+    },
+    {
+        "name": "allowedTools",
+        "type": "{ toolNames: string[]; mode?: \"auto\" | \"required\" | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
     }
 ]}
 />

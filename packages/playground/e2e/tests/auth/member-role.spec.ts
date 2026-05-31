@@ -14,6 +14,7 @@
 import { test, expect } from '@playwright/test';
 import { setupMemberAuth, setupMockAuth } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Member Role', () => {
   test.afterEach(async () => {
@@ -26,7 +27,7 @@ test.describe('Member Role', () => {
       await page.goto('/agents');
 
       // Wait for page to load
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Member should see main navigation links
       await expect(page.getByRole('link', { name: /^Agents$/i })).toBeVisible();
@@ -39,15 +40,15 @@ test.describe('Member Role', () => {
 
       // Navigate to agents
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Navigate to workflows
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Navigate to tools
       await page.goto('/tools');
-      await expect(page.locator('h1')).toHaveText('Tools');
+      await expectCurrentBreadcrumb(page, 'Tools');
     });
   });
 
@@ -57,7 +58,7 @@ test.describe('Member Role', () => {
       await page.goto('/agents');
 
       // Should see the agents page
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Should see agents in the list
       await expect(page.getByText('Weather Agent')).toBeVisible();
@@ -100,7 +101,7 @@ test.describe('Member Role', () => {
       await page.goto('/agents');
 
       // Wait for page to load
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Member should NOT see create agent button
       // Look for common create button patterns
@@ -126,10 +127,10 @@ test.describe('Member Role', () => {
       await page.goto('/workflows');
 
       // Should see the workflows page
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.locator('.entity-list-row').filter({ hasText: /workflow/i });
+      const workflowRow = page.locator('.data-list-row').filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -139,7 +140,7 @@ test.describe('Member Role', () => {
 
       // Click on a workflow
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
@@ -187,10 +188,10 @@ test.describe('Member Role', () => {
       await page.goto('/tools');
 
       // Should see the tools page
-      await expect(page.locator('h1')).toHaveText('Tools');
+      await expectCurrentBreadcrumb(page, 'Tools');
 
       // Should see tools in the list
-      const toolRow = page.locator('.entity-list-row').filter({ hasText: /weatherInfo|simpleMcpTool/i });
+      const toolRow = page.locator('.data-list-row').filter({ hasText: /weatherInfo|simpleMcpTool/i });
       await expect(toolRow.first()).toBeVisible();
     });
 
@@ -200,7 +201,7 @@ test.describe('Member Role', () => {
 
       // Click on weatherInfo tool
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /weatherInfo/i })
         .click();
 
@@ -237,15 +238,15 @@ test.describe('Member Role', () => {
 
       // Member can access agents (read)
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Member can access workflows (full)
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Member can access tools (read/execute)
       await page.goto('/tools');
-      await expect(page.locator('h1')).toHaveText('Tools');
+      await expectCurrentBreadcrumb(page, 'Tools');
     });
 
     test('member sees correct user info', async ({ page }) => {
@@ -253,7 +254,7 @@ test.describe('Member Role', () => {
       await page.goto('/agents');
 
       // Page should load successfully
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // User info display depends on implementation
     });
@@ -283,7 +284,7 @@ test.describe('Member Role', () => {
       await page.goto('/agents');
 
       // Member should see agents page
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Now check as admin
       await setupMockAuth(page, {
@@ -294,7 +295,7 @@ test.describe('Member Role', () => {
       await page.reload();
 
       // Admin should have same view but with more controls available
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('member has more permissions than viewer for workflows', async ({ page }) => {

@@ -47,10 +47,10 @@
             },
             "metadata": {
               "runId": "<runId-1>",
+              "environment": "production",
               "customValue": "tacos",
               "stepType": "metadata-test",
-              "executionTime": "<date>",
-              "environment": "production"
+              "executionTime": "<date>"
             },
             "input": {
               "value": "tacos"

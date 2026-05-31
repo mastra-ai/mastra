@@ -368,4 +368,86 @@ describe('estimateCosts', () => {
       error: 'no_matching_model',
     });
   });
+
+  it('resolves OpenRouter "vendor/model" ids when pricing data keeps the vendor prefix', () => {
+    // OpenRouter reports model ids with a slash separator, but pricing entries
+    // flatten them with a dash (e.g. "xiaomi/mimo-v2-pro" → "xiaomi-mimo-v2-pro").
+    const costs = estimateCosts(
+      {
+        provider: 'openrouter',
+        model: 'xiaomi/mimo-v2-pro-20260318',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 100,
+        },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'openrouter',
+      model: 'xiaomi-mimo-v2-pro',
+      estimatedCost: 0.001,
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openrouter-xiaomi-mimo-v2-pro',
+        tier_index: 0,
+      },
+    });
+  });
+
+  it('resolves OpenRouter "vendor/model" ids when pricing data drops the vendor prefix', () => {
+    // Some OpenRouter pricing rows omit the vendor prefix entirely
+    // (e.g. "openai/gpt-5-mini" is stored as "gpt-5-mini").
+    const costs = estimateCosts(
+      {
+        provider: 'openrouter',
+        model: 'openai/gpt-5-mini-2025-08-07',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 100,
+        },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'openrouter',
+      model: 'gpt-5-mini',
+      estimatedCost: 0.00025,
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openrouter-gpt-5-mini',
+        tier_index: 0,
+      },
+    });
+  });
+
+  it('resolves OpenRouter "vendor/model" ids whose version contains a dot', () => {
+    // OpenRouter keeps the dotted version in the route id (e.g.
+    // "google/gemini-2.5-flash"), but pricing keys flatten dots to dashes
+    // ("gemini-2-5-flash"). The vendor-stripped id must be dot-flattened too.
+    const costs = estimateCosts(
+      {
+        provider: 'openrouter',
+        model: 'google/gemini-2.5-flash',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 100,
+        },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'openrouter',
+      model: 'gemini-2-5-flash',
+      estimatedCost: 0.001,
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openrouter-gemini-2-5-flash',
+        tier_index: 0,
+      },
+    });
+  });
 });

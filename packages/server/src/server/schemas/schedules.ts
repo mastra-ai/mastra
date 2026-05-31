@@ -42,26 +42,52 @@ export const scheduleResponseSchema = z.object({
   lastRunId: z.string().optional(),
   lastRun: scheduleRunSummarySchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  ownerType: z.string().optional(),
+  ownerId: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
 
-export const scheduleTriggerStatusSchema = z.enum(['published', 'failed']);
+export const scheduleTriggerOutcomeSchema = z.enum([
+  'published',
+  'failed',
+  'skipped',
+  'acked',
+  'alerted',
+  'deferred',
+  'appended-from-queue',
+  'dropped-stale',
+  'dropped-superseded',
+  'dropped-busy',
+]);
+
+export const scheduleTriggerKindSchema = z.enum(['schedule-fire', 'queue-drain']);
 
 export const scheduleTriggerResponseSchema = z.object({
+  id: z.string().optional(),
   scheduleId: z.string(),
-  runId: z.string(),
+  runId: z.string().nullable(),
   scheduledFireAt: z.number(),
   actualFireAt: z.number(),
-  status: scheduleTriggerStatusSchema,
+  outcome: scheduleTriggerOutcomeSchema,
   error: z.string().optional(),
+  triggerKind: scheduleTriggerKindSchema.optional(),
+  parentTriggerId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   run: scheduleRunSummarySchema.optional(),
 });
 
-export const listSchedulesQuerySchema = z.object({
-  workflowId: z.string().optional(),
-  status: scheduleStatusSchema.optional(),
-});
+export const listSchedulesQuerySchema = z
+  .object({
+    workflowId: z.string().optional(),
+    status: scheduleStatusSchema.optional(),
+    ownerType: z.string().optional(),
+    ownerId: z.string().optional(),
+  })
+  .refine(data => data.ownerId === undefined || data.ownerType !== undefined, {
+    message: 'ownerId can only be used together with ownerType',
+    path: ['ownerId'],
+  });
 
 export const listSchedulesResponseSchema = z.object({
   schedules: z.array(scheduleResponseSchema),

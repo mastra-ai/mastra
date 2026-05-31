@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Check, AlertCircle, Info as InfoIcon } from 'lucide-react';
+import { Check, AlertCircle, Info as InfoIcon, TriangleAlert, Tag } from 'lucide-react';
 import { Badge } from './Badge';
 
 const meta: Meta<typeof Badge> = {
@@ -8,68 +8,38 @@ const meta: Meta<typeof Badge> = {
   parameters: {
     layout: 'centered',
   },
-  argTypes: {
-    variant: {
-      control: { type: 'select' },
-      options: ['default', 'success', 'error', 'info'],
-    },
-  },
 };
 
 export default meta;
 type Story = StoryObj<typeof Badge>;
 
-export const Default: Story = {
-  args: {
-    children: 'Badge',
-    variant: 'default',
-  },
-};
-
-export const Success: Story = {
-  args: {
-    children: 'Success',
-    variant: 'success',
-  },
-};
-
-export const Error: Story = {
-  args: {
-    children: 'Error',
-    variant: 'error',
-  },
-};
-
-export const Info: Story = {
-  args: {
-    children: 'Info',
-    variant: 'info',
-  },
-};
-
-export const WithIcon: Story = {
-  args: {
-    children: 'Completed',
-    icon: <Check className="h-3 w-3" />,
-    variant: 'success',
-  },
-};
-
-export const WithErrorIcon: Story = {
-  args: {
-    children: 'Failed',
-    icon: <AlertCircle className="h-3 w-3" />,
-    variant: 'error',
-  },
-};
-
-export const AllVariants: Story = {
+export const Matrix: Story = {
   render: () => (
-    <div className="flex items-center gap-2">
-      <Badge variant="default">Default</Badge>
-      <Badge variant="success">Success</Badge>
-      <Badge variant="error">Error</Badge>
-      <Badge variant="info">Info</Badge>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <Badge variant="default">Default</Badge>
+        <Badge variant="success">Success</Badge>
+        <Badge variant="error">Error</Badge>
+        <Badge variant="info">Info</Badge>
+        <Badge variant="warning">Warning</Badge>
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant="default" icon={<Tag />}>
+          Default
+        </Badge>
+        <Badge variant="success" icon={<Check />}>
+          Success
+        </Badge>
+        <Badge variant="error" icon={<AlertCircle />}>
+          Error
+        </Badge>
+        <Badge variant="info" icon={<InfoIcon />}>
+          Info
+        </Badge>
+        <Badge variant="warning" icon={<TriangleAlert />}>
+          Warning
+        </Badge>
+      </div>
     </div>
   ),
 };

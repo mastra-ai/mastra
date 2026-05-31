@@ -6,11 +6,12 @@ import type {
   ScheduleTrigger,
   ScheduleTriggerListOptions,
   ScheduleUpdate,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import { SchedulesStorage, TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { DbClient } from '../../client';
-import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 
 function getSchemaName(schema?: string) {
@@ -58,18 +59,26 @@ function rowToSchedule(row: Record<string, any>): Schedule {
   if (row.last_run_id != null) schedule.lastRunId = String(row.last_run_id);
   const metadata = parseJson<Record<string, unknown>>(row.metadata);
   if (metadata !== undefined) schedule.metadata = metadata;
+  if (row.owner_type != null) schedule.ownerType = String(row.owner_type) as Schedule['ownerType'];
+  if (row.owner_id != null) schedule.ownerId = String(row.owner_id);
   return schedule;
 }
 
 function rowToTrigger(row: Record<string, any>): ScheduleTrigger {
   const trigger: ScheduleTrigger = {
+    id: row.id != null ? String(row.id) : undefined,
     scheduleId: String(row.schedule_id),
-    runId: String(row.run_id),
+    runId: row.run_id != null ? String(row.run_id) : null,
     scheduledFireAt: toNumber(row.scheduled_fire_at),
     actualFireAt: toNumber(row.actual_fire_at),
-    status: String(row.status) as ScheduleTrigger['status'],
+    outcome: String(row.outcome) as ScheduleTrigger['outcome'],
+    triggerKind:
+      row.trigger_kind != null ? (String(row.trigger_kind) as ScheduleTrigger['triggerKind']) : 'schedule-fire',
   };
   if (row.error != null) trigger.error = String(row.error);
+  if (row.parent_trigger_id != null) trigger.parentTriggerId = String(row.parent_trigger_id);
+  const metadata = parseJson<Record<string, unknown>>(row.metadata);
+  if (metadata !== undefined) trigger.metadata = metadata;
   return trigger;
 }
 
@@ -77,16 +86,20 @@ export class SchedulesPG extends SchedulesStorage {
   #db: PgDB;
   #client: DbClient;
   #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS] as const;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
     this.#client = client;
     this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (SchedulesPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
@@ -98,23 +111,87 @@ export class SchedulesPG extends SchedulesStorage {
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
     });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the schedules domain.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
+   */
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
+    return [
+      {
+        name: `${schemaPrefix}idx_mastra_schedules_status_next_fire`,
+        table: TABLE_SCHEDULES,
+        columns: ['status', 'next_fire_at'],
+      },
+      {
+        name: `${schemaPrefix}idx_mastra_schedule_triggers_schedule_fire`,
+        table: TABLE_SCHEDULE_TRIGGERS,
+        columns: ['schedule_id', 'actual_fire_at DESC'],
+      },
+    ];
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return SchedulesPG.getDefaultIndexDefs(schemaPrefix);
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   static getExportDDL(schemaName?: string): string[] {
-    return [
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    statements.push(
       generateTableSQL({
         tableName: TABLE_SCHEDULES,
         schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
         schemaName,
         includeAllConstraints: true,
       }),
+    );
+    statements.push(
       generateTableSQL({
         tableName: TABLE_SCHEDULE_TRIGGERS,
         schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
         schemaName,
         includeAllConstraints: true,
       }),
-    ];
+    );
+
+    for (const idx of SchedulesPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -146,6 +223,8 @@ export class SchedulesPG extends SchedulesStorage {
         created_at: schedule.createdAt,
         updated_at: schedule.updatedAt,
         metadata: schedule.metadata ?? null,
+        owner_type: schedule.ownerType ?? null,
+        owner_id: schedule.ownerId ?? null,
       },
     });
     return schedule;
@@ -171,6 +250,22 @@ export class SchedulesPG extends SchedulesStorage {
       // target is jsonb; ->> extracts a text field.
       params.push(filter.workflowId);
       conditions.push(`target->>'workflowId' = $${params.length}`);
+    }
+    if (filter?.ownerType !== undefined) {
+      if (filter.ownerType === null) {
+        conditions.push('owner_type IS NULL');
+      } else {
+        params.push(filter.ownerType);
+        conditions.push(`owner_type = $${params.length}`);
+      }
+    }
+    if (filter?.ownerId !== undefined) {
+      if (filter.ownerId === null) {
+        conditions.push('owner_id IS NULL');
+      } else {
+        params.push(filter.ownerId);
+        conditions.push(`owner_id = $${params.length}`);
+      }
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -212,6 +307,8 @@ export class SchedulesPG extends SchedulesStorage {
     if ('metadata' in patch) {
       push('metadata = ?::jsonb', patch.metadata != null ? JSON.stringify(patch.metadata) : null);
     }
+    if ('ownerType' in patch) push('owner_type = ?', (patch.ownerType as string | undefined) ?? null);
+    if ('ownerId' in patch) push('owner_id = ?', (patch.ownerId as string | undefined) ?? null);
 
     push('updated_at = ?', Date.now());
 
@@ -255,15 +352,20 @@ export class SchedulesPG extends SchedulesStorage {
   }
 
   async recordTrigger(trigger: ScheduleTrigger): Promise<void> {
+    const id = trigger.id ?? crypto.randomUUID();
     await this.#db.insert({
       tableName: TABLE_SCHEDULE_TRIGGERS,
       record: {
+        id,
         schedule_id: trigger.scheduleId,
         run_id: trigger.runId,
         scheduled_fire_at: trigger.scheduledFireAt,
         actual_fire_at: trigger.actualFireAt,
-        status: trigger.status,
+        outcome: trigger.outcome,
         error: trigger.error ?? null,
+        trigger_kind: trigger.triggerKind ?? 'schedule-fire',
+        parent_trigger_id: trigger.parentTriggerId ?? null,
+        metadata: trigger.metadata ?? null,
       },
     });
   }

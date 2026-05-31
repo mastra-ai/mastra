@@ -45,11 +45,10 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:rw
+      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
-      pull-requests: read
-      statuses: write
+      contents: read
 
     steps:
       - name: Checkout repo
@@ -58,18 +57,239 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
 
-      - name: Setup custom action
-        continue-on-error: true
-        uses: ./.github/workflows/shared-actions/set-pr-status
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache@v4
         with:
-          status: 'pending'
-          context: 'Full Test Suite'
-          description: 'Waiting for build to complete'
-          sha: ${{ github.event.pull_request.head.sha }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Build
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+
+  test-suite:
+    name: Unit and E2E Tests
+    needs: [changes, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || needs.prebuild.result == 'success')
+    uses: ./.github/workflows/test-suite.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      head_sha: ${{ github.event.pull_request.head.sha }}
+      base_ref: ${{ github.event.pull_request.base.ref }}
+      has_code: ${{ needs.changes.outputs.has_code }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+  e2e-check-changes:
+    name: Detect E2E changes
+    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
+    needs: changes
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      e2e-changed: ${{ steps.filter.outputs.e2e }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes that require e2e tests
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          filters: |
+            e2e:
+              - 'packages/**'
+              - 'e2e-tests/**'
+              - 'stores/**'
+              - 'client-sdks/**'
+              - 'deployers/**'
+              - 'server-adapters/**'
+              - '.github/workflows/e2e-tests.yml'
+              - '!**/*.md'
+
+  e2e-tests:
+    name: E2E Tests
+    needs: [changes, e2e-check-changes, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.e2e-check-changes.outputs.e2e-changed == 'true' && needs.prebuild.result == 'success'
+    uses: ./.github/workflows/e2e-tests.yml
+    permissions:
+      contents: read
+    with:
+      head_sha: ${{ github.event.pull_request.head.sha }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+  combined-stores-check-changes:
+    name: Detect stores changes
+    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
+    needs: changes
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      stores-changed: ${{ steps.filter.outputs.stores }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check for stores changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          filters: |
+            stores:
+              - 'stores/**'
+              - 'packages/core/**'
+              - '.github/workflows/test-combined-stores.yml'
+
+  combined-stores-tests:
+    name: Combined Store Tests
+    needs: [changes, combined-stores-check-changes, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.combined-stores-check-changes.outputs.stores-changed == 'true' && needs.prebuild.result == 'success'
+    uses: ./.github/workflows/test-combined-stores.yml
+    permissions:
+      contents: read
+    with:
+      head_sha: ${{ github.event.pull_request.head.sha }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+      ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
+      ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
+      ABHI_CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
+      ABHI_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
+
+  workspace-tests:
+    name: Workspace Tests
+    needs: [changes, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true' && needs.prebuild.result == 'success'
+    uses: ./.github/workflows/test-workspaces.yml
+    permissions:
+      contents: read
+    with:
+      head_sha: ${{ github.event.pull_request.head.sha }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+  memory-check-changes:
+    name: Detect memory changes
+    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
+    needs: changes
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      changed: ${{ steps.changes.outputs.changed == 'true' || steps.integration-test-manifest.outputs.changed == 'true' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: 'false'
+
+      - name: Check for memory package changes using Turborepo
+        id: changes
+        uses: ./.github/actions/turbo-changed
+        with:
+          packages: '@mastra/memory'
+          tasks: 'build,test'
+          base-ref: 'origin/main'
+
+      - name: Check for memory integration test manifest changes
+        id: integration-test-manifest
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -qx 'packages/memory/integration-tests/package.json'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  memory-test:
+    name: Memory Tests
+    needs: [memory-check-changes, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.memory-check-changes.outputs.changed == 'true' && needs.prebuild.result == 'success'
+    runs-on: starsling-ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mastra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Build dependencies
+        run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed" --filter "@internal/llm-recorder" --filter "@internal/test-utils"
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      - name: Install integration test dependencies
+        run: pnpm install
+        working-directory: packages/memory/integration-tests
+
+      - name: Run Memory tests
+        run: pnpm vitest run
+        working-directory: packages/memory/integration-tests
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+          DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'

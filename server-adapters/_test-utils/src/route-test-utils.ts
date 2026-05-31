@@ -40,6 +40,9 @@ export function generateContextualValue(fieldName?: string): string {
 
   const field = fieldName.toLowerCase();
 
+  // Timestamp fields used in body validation need a valid ISO string.
+  if (field === 'createdat' || field === 'updatedat') return new Date().toISOString();
+
   if (field === 'entitytype') return 'AGENT';
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
@@ -92,6 +95,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('mcp') && field.includes('client')) return 'test-mcp-client';
   if (field.includes('prompt') && field.includes('block')) return 'test-prompt-block';
   if (field.includes('block')) return 'test-prompt-block';
+  if (field === 'uri') return 'ui://test/app';
 
   return 'test-string';
 }
@@ -106,6 +110,16 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   // Unwrap effects first
   while (typeName === 'ZodEffects') {
     schema = def.schema;
+    typeName = getZodTypeName(schema);
+    def = getZodDef(schema);
+  }
+
+  // Unwrap z.preprocess / .transform pipes (Zod 4 represents these as ZodPipe
+  // with the validated schema at `def.out`). Without this the generator falls
+  // through to `undefined` for any query schema that uses a top-level
+  // preprocess (e.g. legacy-shape back-compat shims).
+  while (typeName === 'ZodPipe' && def?.out) {
+    schema = def.out;
     typeName = getZodTypeName(schema);
     def = getZodDef(schema);
   }
@@ -168,6 +182,13 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
         if (zod4Def.check === 'safeint') {
           requiresSafeInt = true;
           requiresInt = true;
+        }
+        // Zod 4 emits `int()` as `number_format` with `format: 'int' | 'safeint'`.
+        if (zod4Def.check === 'number_format') {
+          if (zod4Def.format === 'int' || zod4Def.format === 'safeint') {
+            requiresInt = true;
+            if (zod4Def.format === 'safeint') requiresSafeInt = true;
+          }
         }
       }
     }
@@ -360,6 +381,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   } else if (route.path.includes(':scorerId')) {
     params.scorerId = 'test-scorer';
   }
+  if (route.path.includes(':scoreId')) params.scoreId = 'test-score';
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
   if (route.path.includes(':runId')) params.runId = 'test-run';
   if (route.path.includes(':stepId')) params.stepId = 'test-step';
@@ -373,6 +395,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
   if (route.path.includes(':storedScorerId')) params.storedScorerId = 'test-stored-scorer';
+  if (route.path.includes(':roleId')) params.roleId = 'test-role';
   if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
   // MCP route params - need to get actual server ID from test context
@@ -411,6 +434,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Channel route params
   if (route.path.includes(':platform')) params.platform = 'test-platform';
 
+  // Builder registry route params
+  if (route.path.includes(':registryId')) params.registryId = 'skills-sh';
+
   return params;
 }
 
@@ -420,6 +446,10 @@ export function getDefaultInvalidPathParams(route: ServerRoute): Array<Record<st
 
   if (route.path.includes(':agentId')) {
     invalid.push({ agentId: 123 });
+  }
+
+  if (route.path.includes(':registryId')) {
+    invalid.push({ registryId: 123 });
   }
 
   return invalid;

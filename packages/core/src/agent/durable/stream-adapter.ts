@@ -2,6 +2,7 @@ import { ReadableStream } from 'node:stream/web';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
+import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
 import { MessageList } from '../message-list';
@@ -121,7 +122,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     rejectReady = reject;
   });
 
-  // Handler for pubsub events
+  // Handler for pubsub events.
+  //
+  // All `controller.enqueue` / `controller.close` / `controller.error` calls
+  // are wrapped in safe* helpers because pubsub events can arrive AFTER the
+  // stream has already been closed (e.g. a stale background-task lifecycle
+  // event published after the agent's FINISH chunk closed the controller).
+  // Without the guards, those late events surface as
+  // `TypeError: Invalid state: Controller is already closed` from the
+  // controller, which the outer try/catch logs but which floods the
+  // console and (in test runs) causes timeouts as event handlers retry.
   const handleEvent = async (event: Event) => {
     if (!controller) return;
 
@@ -132,7 +142,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
           const chunk = streamEvent.data as AgentChunkEventData;
-          controller.enqueue(chunk as ChunkType<OUTPUT>);
+          safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           await onChunk?.(chunk as ChunkType<OUTPUT>);
           break;
         }
@@ -141,7 +151,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Step start - enqueue if it's a chunk type
           const chunk = streamEvent.data as ChunkType<OUTPUT>;
           if (chunk && 'type' in chunk) {
-            controller.enqueue(chunk);
+            safeEnqueue(controller, chunk);
           }
           break;
         }
@@ -162,8 +172,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               stepResult: data.stepResult,
             },
           } as ChunkType<OUTPUT>;
-          controller.enqueue(finishChunk);
-          controller.close();
+          safeEnqueue(controller, finishChunk);
+          safeClose(controller);
           // Call callback after closing stream (errors don't prevent closure)
           try {
             await onFinish?.(data);
@@ -180,8 +190,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          // Close stream with error first, then call callback
-          controller.error(error);
+          // Close stream with error first, then call callback. Wrapped in
+          // try/catch because `controller.error` throws if the controller
+          // has already been closed/errored by an earlier event.
+          try {
+            controller.error(error);
+          } catch {
+            // Stream already closed/errored — drop silently.
+          }
           try {
             await onError?.(error);
           } catch (callbackError) {

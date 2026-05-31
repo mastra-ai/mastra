@@ -25,11 +25,13 @@ function makeSchedule(overrides: Partial<Schedule> = {}): Schedule {
 
 function makeTrigger(overrides: Partial<ScheduleTrigger> = {}): ScheduleTrigger {
   return {
+    id: overrides.id ?? `tr_${crypto.randomUUID()}`,
     scheduleId: overrides.scheduleId ?? 'sched_1',
     runId: overrides.runId ?? 'run_1',
     scheduledFireAt: overrides.scheduledFireAt ?? Date.now(),
     actualFireAt: overrides.actualFireAt ?? Date.now(),
-    status: overrides.status ?? 'published',
+    outcome: overrides.outcome ?? 'published',
+    triggerKind: overrides.triggerKind ?? 'schedule-fire',
     error: overrides.error,
   };
 }

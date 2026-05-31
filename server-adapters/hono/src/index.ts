@@ -7,6 +7,8 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  checkRouteFGA,
+  isZodError,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -14,7 +16,6 @@ import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
-import { ZodError } from 'zod';
 export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
@@ -135,6 +136,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => c.req.header(name),
+      });
 
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);
@@ -163,6 +168,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return stream(
       res,
       async stream => {
+        if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+          await stream.write(': connected\n\n');
+        }
+
         const readableStream = result instanceof ReadableStream ? result : result.fullStream;
         const reader = readableStream.getReader();
 
@@ -176,6 +185,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             if (done) break;
 
             if (value) {
+              if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+                await stream.write(value);
+                continue;
+              }
+
               // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
               const shouldRedact = this.streamOptions?.redact ?? true;
               const outputValue = shouldRedact ? redactStreamChunk(value) : value;
@@ -436,7 +450,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing query params', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            if (error instanceof ZodError) {
+            if (isZodError(error)) {
               const { status, body } = this.resolveValidationError(route, error, 'query');
               return c.json(body as any, status as any);
             }
@@ -457,7 +471,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing body', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            if (error instanceof ZodError) {
+            if (isZodError(error)) {
               const { status, body } = this.resolveValidationError(route, error, 'body');
               return c.json(body as any, status as any);
             }
@@ -479,7 +493,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing path params', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            if (error instanceof ZodError) {
+            if (isZodError(error)) {
               const { status, body } = this.resolveValidationError(route, error, 'path');
               return c.json(body as any, status as any);
             }
@@ -513,7 +527,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         if (authConfig) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const userPermissions = c.get('requestContext').get('mastra__userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
             if (permissionError) {
@@ -526,6 +540,16 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               );
             }
           }
+        }
+
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, route, c.get('requestContext'), {
+          ...params.urlParams,
+          ...params.queryParams,
+          ...(typeof params.body === 'object' ? params.body : {}),
+        });
+        if (fgaError) {
+          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
         }
 
         try {
@@ -589,6 +613,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         responseType: 'json',
         handler: async () => {},
         requiresAuth: route.requiresAuth,
+        requiresPermission: route.requiresPermission,
+        fga: route.fga,
       };
 
       const routeHandler: MiddlewareHandler = async (c: Context) => {
@@ -618,7 +644,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         if (authConfig) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const userPermissions = c.get('requestContext').get('mastra__userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
             if (permissionError) {
               return c.json(
@@ -627,6 +653,37 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               );
             }
           }
+        }
+
+        // Check FGA authorization (EE feature)
+        let bodyParams: Record<string, unknown> = {};
+        const contentType = c.req.header('content-type');
+        if (contentType?.includes('application/json')) {
+          try {
+            const body = (await c.req.raw.clone().json()) as unknown;
+            if (body && typeof body === 'object' && !Array.isArray(body)) {
+              bodyParams = body as Record<string, unknown>;
+            }
+          } catch {
+            bodyParams = {};
+          }
+        } else if (
+          contentType?.includes('application/x-www-form-urlencoded') ||
+          contentType?.includes('multipart/form-data')
+        ) {
+          try {
+            bodyParams = Object.fromEntries(await c.req.raw.clone().formData());
+          } catch {
+            bodyParams = {};
+          }
+        }
+        const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
+          ...c.req.param(),
+          ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
+          ...bodyParams,
+        });
+        if (fgaError) {
+          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
         }
 
         const reqHeaders: Record<string, string | string[] | undefined> = {};
@@ -639,6 +696,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           reqHeaders,
           c.req.raw.body,
           c.get('requestContext'),
+          c.req.raw.signal,
         );
         if (!response) {
           return c.json({ error: 'Not Found' }, 404);

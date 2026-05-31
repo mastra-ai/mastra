@@ -1,4 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { RequireToolApproval } from '../../../tools';
 
 export type ToolCallForeachOptions = {
   concurrency: number;
@@ -13,7 +14,10 @@ export function effectiveToolSetRequiresSequentialExecution({
   tools,
   activeTools,
 }: {
-  requireToolApproval?: boolean;
+  // A function-valued global approval policy is evaluated per call at execution time;
+  // before args are known we conservatively treat it like `true` and force sequential
+  // execution so approval suspensions never race with concurrent tool calls.
+  requireToolApproval?: RequireToolApproval;
   tools?: ToolSet;
   activeTools?: readonly string[];
 }): boolean {
@@ -45,7 +49,7 @@ export function resolveToolCallConcurrency({
   activeTools,
   configuredConcurrency,
 }: {
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   tools?: ToolSet;
   activeTools?: readonly string[];
   configuredConcurrency: number;

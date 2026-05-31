@@ -162,7 +162,9 @@ export const createMastraProject = async ({
   llmApiKey,
   skills,
   mcpServer,
+  observability,
   needsInteractive,
+  onObservabilitySelected,
 }: {
   projectName?: string;
   createVersionTag?: string;
@@ -171,7 +173,14 @@ export const createMastraProject = async ({
   llmApiKey?: string;
   skills?: string[];
   mcpServer?: string;
+  observability?: boolean;
   needsInteractive?: boolean;
+  onObservabilitySelected?: (event: {
+    command?: 'create' | 'init';
+    enabled: boolean;
+    answer: 'yes' | 'no';
+    selection_method: 'interactive';
+  }) => void;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
 
@@ -199,12 +208,13 @@ export const createMastraProject = async ({
     const skipGitInit = await isGitInitialized({ cwd: process.cwd() });
 
     result = await interactivePrompt({
-      options: { showBanner: false },
+      options: { command: 'create', showBanner: false, onObservabilitySelected },
       skip: {
         llmProvider: llmProvider !== undefined,
         llmApiKey: llmApiKey !== undefined,
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
+        observability: observability !== undefined,
         directory: true,
         gitInit: skipGitInit,
       },
@@ -246,6 +256,22 @@ export const createMastraProject = async ({
     } catch (error) {
       throw new Error(
         `Failed to initialize project structure: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+
+    // Write pnpm workspace config for pnpm v11
+    if (pm === 'pnpm') {
+      await fs.writeFile(
+        'pnpm-workspace.yaml',
+        `packages:
+  - '.'
+allowBuilds:
+  esbuild: true
+  sharp: true
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+`,
       );
     }
 

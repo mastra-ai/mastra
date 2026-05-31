@@ -63,7 +63,7 @@ describe('WorkflowScheduler', () => {
 
     const triggers = await store.listTriggers(created.id);
     expect(triggers).toHaveLength(1);
-    expect(triggers[0]!.status).toBe('published');
+    expect(triggers[0]!.outcome).toBe('published');
   });
 
   it('skips paused schedules', async () => {
@@ -163,7 +163,7 @@ describe('WorkflowScheduler', () => {
 
     const triggers = await store.listTriggers('sched-fail');
     expect(triggers).toHaveLength(1);
-    expect(triggers[0]!.status).toBe('failed');
+    expect(triggers[0]!.outcome).toBe('failed');
     expect(triggers[0]!.error).toBe('boom');
     expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0]![1]).toEqual({ scheduleId: 'sched-fail' });
@@ -270,5 +270,181 @@ describe('WorkflowScheduler', () => {
 
     await scheduler.stop();
     expect(scheduler.isRunning).toBe(false);
+  });
+
+  it('skips firing when the target workflow is not registered', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: {
+        tickIntervalMs: 60_000,
+        isWorkflowRegistered: () => false,
+        missesBeforeDelete: 3,
+      },
+    });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-ghost',
+      target: { type: 'workflow', workflowId: 'wf-missing' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    await scheduler.start();
+    // No publish, row still present, nextFireAt not advanced.
+    expect(events).toHaveLength(0);
+    const row = await store.getSchedule('sched-ghost');
+    expect(row?.nextFireAt).toBe(past);
+
+    await scheduler.stop();
+  });
+
+  it('deletes a schedule whose target workflow is missing for too many consecutive ticks', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: {
+        tickIntervalMs: 60_000,
+        isWorkflowRegistered: () => false,
+        missesBeforeDelete: 3,
+      },
+    });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-ghost',
+      target: { type: 'workflow', workflowId: 'wf-missing' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    // Three ticks total — first two skip, third deletes the row.
+    await scheduler.start();
+    expect(await store.getSchedule('sched-ghost')).not.toBeNull();
+    await scheduler.tick();
+    expect(await store.getSchedule('sched-ghost')).not.toBeNull();
+    await scheduler.tick();
+    expect(await store.getSchedule('sched-ghost')).toBeNull();
+    expect(events).toHaveLength(0);
+
+    await scheduler.stop();
+  });
+
+  it('resets the miss counter when the target workflow appears within the grace window', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    let registered = false;
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: {
+        tickIntervalMs: 60_000,
+        isWorkflowRegistered: () => registered,
+        missesBeforeDelete: 3,
+      },
+    });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-late',
+      target: { type: 'workflow', workflowId: 'wf-late' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    // Two misses while the workflow hasn't registered yet.
+    await scheduler.start();
+    await scheduler.tick();
+    expect(await store.getSchedule('sched-late')).not.toBeNull();
+    expect(events).toHaveLength(0);
+
+    // Workflow finishes registering before the grace window expires.
+    registered = true;
+    await scheduler.tick();
+    expect(events).toHaveLength(1);
+    const row = await store.getSchedule('sched-late');
+    expect(row).not.toBeNull();
+    expect(row?.nextFireAt).toBeGreaterThan(past);
+
+    await scheduler.stop();
+  });
+
+  it('does not interfere with firing when no predicate is configured', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { tickIntervalMs: 60_000 },
+    });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-no-predicate',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 1 1 *',
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    await scheduler.start();
+    expect(events).toHaveLength(1);
+
+    await scheduler.stop();
+  });
+
+  it('applies defaults when config values are explicitly undefined', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+
+    // Simulate a user config where optional fields are present but undefined,
+    // e.g. from destructuring a partial object.
+    const scheduler = new WorkflowScheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { enabled: true, tickIntervalMs: undefined, batchSize: undefined },
+    });
+
+    const listDue = vi.spyOn(store, 'listDueSchedules');
+    const siSpy = vi.spyOn(globalThis, 'setInterval');
+
+    await scheduler.start();
+
+    // batchSize should fall back to 100 (the default), not undefined/NaN
+    expect(listDue).toHaveBeenCalled();
+    const batchArg = listDue.mock.calls[0]![1];
+    expect(batchArg).toBe(100);
+
+    // tickIntervalMs should fall back to 10_000 (the default), not undefined
+    // setInterval is called once after the warm-up tick
+    const intervalCall = siSpy.mock.calls.find(call => {
+      const cb = call[0];
+      return typeof cb === 'function' && call[1] !== undefined;
+    });
+    expect(intervalCall).toBeDefined();
+    expect(intervalCall![1]).toBe(10_000);
+
+    await scheduler.stop();
+    siSpy.mockRestore();
   });
 });

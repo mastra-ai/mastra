@@ -1,4 +1,4 @@
-import { Box, SelectList, Spacer, Text, isKeyRelease } from '@mariozechner/pi-tui';
+import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SelectItem } from '@mariozechner/pi-tui';
 
 import type { ThinkingLevelSetting } from '../../onboarding/settings.js';
@@ -8,6 +8,7 @@ import {
   getThinkingLevelForModel,
   getThinkingLevelsForModel,
 } from '../components/thinking-settings.js';
+import { showModalOverlay } from '../overlay.js';
 import { theme, getSelectListTheme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -76,7 +77,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
   const modelNote = getModelNote(ctx);
 
   return new Promise<void>(resolve => {
-    const container = new Box(1, 1);
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', 'Thinking Level')), 0, 0));
     container.addChild(new Spacer(1));
     if (modelNote) {
@@ -87,11 +88,9 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     const selectList = new SelectList(items, items.length, getSelectListTheme());
 
     selectList.onSelect = async (item: SelectItem) => {
-      ctx.state.activeInlineQuestion = undefined;
+      ctx.state.ui.hideOverlay();
       const selectedLevel = item.value;
       if (!isThinkingLevelSetting(selectedLevel)) {
-        collapseResult('cancelled');
-        ctx.state.ui.requestRender();
         resolve();
         return;
       }
@@ -100,21 +99,16 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
         await ctx.harness.setState({ thinkingLevel: selectedLevel } as any);
         persistGlobalThinkingLevel(selectedLevel);
         const selectedLabel = getThinkingLevelForModel(modelId, selectedLevel).label;
-        collapseResult(
-          `Thinking → ${theme.bold(selectedLevel === currentLevel ? `${selectedLabel} (unchanged)` : selectedLabel)}`,
-        );
+        ctx.showInfo(`Thinking → ${selectedLevel === currentLevel ? `${selectedLabel} (unchanged)` : selectedLabel}`);
       } catch {
-        collapseResult('cancelled');
+        // Keep cancel behavior silent.
       } finally {
-        ctx.state.ui.requestRender();
         resolve();
       }
     };
 
     selectList.onCancel = () => {
-      ctx.state.activeInlineQuestion = undefined;
-      collapseResult('cancelled');
-      ctx.state.ui.requestRender();
+      ctx.state.ui.hideOverlay();
       resolve();
     };
 
@@ -126,28 +120,8 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     const currentIdx = thinkingLevels.findIndex(l => l.id === currentLevel);
     if (currentIdx > 0) selectList.setSelectedIndex(currentIdx);
 
-    const collapseResult = (result: string) => {
-      container.clear();
-      if (result === 'cancelled') {
-        container.addChild(new Text(theme.fg('dim', `${theme.fg('error', '✗')} Thinking level (cancelled)`), 0, 0));
-      } else {
-        container.addChild(new Text(theme.fg('text', `${theme.fg('success', '✓')} ${result}`), 0, 0));
-      }
-    };
-
-    // Route input through activeInlineQuestion (filter key releases from Kitty protocol)
-    const inputShim = {
-      handleInput: (data: string) => {
-        if (isKeyRelease(data)) return;
-        selectList.handleInput(data);
-      },
-    } as any;
-    ctx.state.activeInlineQuestion = inputShim;
-
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(container);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    const modal = container as Box & { handleInput: (data: string) => void };
+    modal.handleInput = (data: string) => selectList.handleInput(data);
+    showModalOverlay(ctx.state.ui, modal, { maxHeight: '60%' });
   });
 }

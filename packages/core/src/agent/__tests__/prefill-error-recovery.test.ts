@@ -94,7 +94,8 @@ function createPrefillErrorModel(
   return { model, getCallCount: () => callCount, getReceivedPrompts: () => receivedPrompts };
 }
 
-const ANTHROPIC_PREFILL_RETRY_REMINDER = '<system-reminder>continue</system-reminder>';
+const ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE = 'anthropic-prefill-processor-retry';
+const ANTHROPIC_PREFILL_RETRY_REMINDER = `<system-reminder type="${ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE}">continue</system-reminder>`;
 
 describe('PrefillErrorHandler Recovery', () => {
   describe('generate()', () => {
@@ -184,23 +185,34 @@ describe('PrefillErrorHandler Recovery', () => {
       expect(
         visibleMessages.messages.some(
           message =>
-            message.role === 'user' &&
-            message.content.parts.some(part => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
+            message.role === 'signal' &&
+            (message.content.metadata as any)?.signal?.attributes?.type === ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE,
         ),
       ).toBe(false);
 
       const rawMessages = await mockMemory.recall({ threadId, resourceId, includeSystemReminders: true });
       const retryReminderMessage = rawMessages.messages.find(
         message =>
-          message.role === 'user' &&
-          message.content.parts.some(part => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
+          message.role === 'signal' &&
+          message.content.parts.some(part => part.type === 'text' && part.text === 'continue'),
       );
       expect(retryReminderMessage).toBeDefined();
+      expect(retryReminderMessage?.content.parts).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'continue' })]),
+      );
       expect(retryReminderMessage?.content.metadata).toEqual({
-        systemReminder: {
-          type: 'anthropic-prefill-processor-retry',
-        },
+        signal: expect.objectContaining({
+          type: 'reactive',
+          tagName: 'system-reminder',
+          attributes: {
+            type: ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE,
+          },
+          metadata: {
+            message: 'Continuing after prefill error',
+          },
+        }),
       });
+      expect((retryReminderMessage?.content.metadata as any)?.signal).not.toHaveProperty('contents');
     });
 
     it('should still run processAPIError after the retry cap is reached without retrying again', async () => {

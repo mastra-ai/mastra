@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { MCPServerBase } from '@mastra/core/mcp';
 import type { Tool } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
@@ -16,6 +17,7 @@ import equal from 'fast-deep-equal';
 import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
 import { isReconnectableMCPError } from './error-utils';
+import { MCPClientServerProxy } from './server-proxy';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
@@ -732,6 +734,22 @@ To fix this you have three different options:
   }
 
   /**
+   * Returns instructions advertised by connected MCP servers during initialize.
+   *
+   * Servers that have not connected yet, or did not advertise instructions,
+   * return `undefined`.
+   */
+  public getServerInstructions(): Record<string, string | undefined> {
+    const instructions: Record<string, string | undefined> = {};
+
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      instructions[serverName] = this.mcpClientsById.get(serverName)?.instructions;
+    }
+
+    return instructions;
+  }
+
+  /**
    * Retrieves all tools from all configured servers with namespaced names.
    *
    * Tool names are namespaced as `serverName_toolName` to prevent conflicts between servers.
@@ -860,6 +878,39 @@ To fix this you have three different options:
     }
 
     return { toolsets: connectedToolsets, errors };
+  }
+
+  /**
+   * Creates MCPServerBase-compatible proxy objects for each server connection
+   * in this MCPClient.  The returned record can be spread directly into
+   * Mastra's `mcpServers` config so that external (non-Mastra) servers
+   * appear in Studio alongside native MCPServer instances.
+   *
+   * @returns Record mapping server names to MCPServerBase proxy instances
+   *
+   * @example
+   * ```typescript
+   * const mcp = new MCPClient({
+   *   servers: {
+   *     trailhead: { command: 'npx', args: ['trailhead-server'] },
+   *   },
+   * });
+   *
+   * const mastra = new Mastra({
+   *   mcpServers: {
+   *     ...mcp.toMCPServerProxies(),
+   *   },
+   * });
+   * ```
+   */
+  public toMCPServerProxies(): Record<string, MCPServerBase> {
+    const proxies: Record<string, MCPServerBase> = {};
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      proxies[serverName] = new MCPClientServerProxy({ name: serverName, id: serverName }, () =>
+        this.getConnectedClientForServer(serverName),
+      );
+    }
+    return proxies;
   }
 
   /**

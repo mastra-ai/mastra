@@ -96,7 +96,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
 
   const createMockSandboxApi = () => ({
     Sandbox: {
-      betaCreate: vi.fn().mockResolvedValue(mockSandbox),
+      create: vi.fn().mockResolvedValue(mockSandbox),
       connect: vi.fn().mockResolvedValue(mockSandbox),
       list: vi.fn().mockReturnValue({
         nextItems: vi.fn().mockResolvedValue([]),
@@ -113,7 +113,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
    */
   const resetMockDefaults = async () => {
     const { Sandbox, Template } = await import('e2b');
-    (Sandbox.betaCreate as any).mockResolvedValue(mockSandbox);
+    (Sandbox.create as any).mockResolvedValue(mockSandbox);
     (Sandbox.connect as any).mockResolvedValue(mockSandbox);
     (Sandbox.list as any).mockReturnValue({
       nextItems: vi.fn().mockResolvedValue([]),
@@ -203,8 +203,8 @@ describe('E2BSandbox', () => {
       // Both promises should resolve to the same value (void)
       expect(result1).toBe(result2);
 
-      // betaCreate should only be called once
-      expect(Sandbox.betaCreate).toHaveBeenCalledTimes(1);
+      // create should only be called once
+      expect(Sandbox.create).toHaveBeenCalledTimes(1);
     });
 
     it('start() is idempotent when already running', async () => {
@@ -212,11 +212,11 @@ describe('E2BSandbox', () => {
       const sandbox = new E2BSandbox();
 
       await sandbox._start();
-      expect(Sandbox.betaCreate).toHaveBeenCalledTimes(1);
+      expect(Sandbox.create).toHaveBeenCalledTimes(1);
 
       // Second start should not create another sandbox
       await sandbox._start();
-      expect(Sandbox.betaCreate).toHaveBeenCalledTimes(1);
+      expect(Sandbox.create).toHaveBeenCalledTimes(1);
     });
 
     it('status transitions through starting to running', async () => {
@@ -237,19 +237,19 @@ describe('E2BSandbox', () => {
 
       await sandbox._start();
 
-      expect(Sandbox.betaCreate).toHaveBeenCalled();
+      expect(Sandbox.create).toHaveBeenCalled();
     });
 
-    it('uses autoPause for sandbox persistence', async () => {
+    it('uses lifecycle onTimeout pause for sandbox persistence', async () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox();
 
       await sandbox._start();
 
-      expect(Sandbox.betaCreate).toHaveBeenCalledWith(
+      expect(Sandbox.create).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          autoPause: true,
+          lifecycle: { onTimeout: 'pause' },
         }),
       );
     });
@@ -260,7 +260,7 @@ describe('E2BSandbox', () => {
 
       await sandbox._start();
 
-      expect(Sandbox.betaCreate).toHaveBeenCalledWith(
+      expect(Sandbox.create).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           metadata: expect.objectContaining({
@@ -319,8 +319,8 @@ describe('E2BSandbox', () => {
       const sandbox = new E2BSandbox({ template: 'my-custom-template' });
       await sandbox._start();
 
-      // betaCreate should be called with the custom template ID
-      expect(Sandbox.betaCreate).toHaveBeenCalledWith('my-custom-template', expect.any(Object));
+      // create should be called with the custom template ID
+      expect(Sandbox.create).toHaveBeenCalledWith('my-custom-template', expect.any(Object));
     });
   });
 
@@ -352,14 +352,14 @@ describe('E2BSandbox', () => {
   });
 
   describe('Environment Variables', () => {
-    it('env vars not passed to Sandbox.betaCreate', async () => {
+    it('env vars not passed to Sandbox.create', async () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox({ env: { KEY: 'value' } });
 
       await sandbox._start();
 
-      // betaCreate should NOT have envs option
-      expect(Sandbox.betaCreate).toHaveBeenCalledWith(
+      // create should NOT have envs option
+      expect(Sandbox.create).toHaveBeenCalledWith(
         expect.any(String),
         expect.not.objectContaining({
           envs: expect.any(Object),
@@ -584,7 +584,7 @@ describe('E2BSandbox Race Conditions', () => {
 
   it('start() clears _startPromise after error', async () => {
     const { Sandbox } = await import('e2b');
-    (Sandbox.betaCreate as any).mockRejectedValueOnce(new Error('Creation failed'));
+    (Sandbox.create as any).mockRejectedValueOnce(new Error('Creation failed'));
 
     const sandbox = new E2BSandbox();
 
@@ -613,7 +613,7 @@ describe('E2BSandbox Template Handling', () => {
 
     // First call fails with 404 error (matching the implementation check), second succeeds
     let callCount = 0;
-    (Sandbox.betaCreate as any).mockImplementation(() => {
+    (Sandbox.create as any).mockImplementation(() => {
       callCount++;
       if (callCount === 1) {
         // Error message must include both '404' and 'not found' to trigger rebuild
@@ -627,7 +627,7 @@ describe('E2BSandbox Template Handling', () => {
 
     // Template.build should be called to rebuild after 404
     expect(Template.build).toHaveBeenCalled();
-    // And betaCreate should be called twice (retry after rebuild)
+    // And create should be called twice (retry after rebuild)
     expect(callCount).toBe(2);
   });
 
@@ -797,6 +797,132 @@ describe('E2BSandbox Mount Configuration', () => {
       expect(s3fsMountCall[0]).toContain('test-bucket:/workspace/data');
       expect(s3fsMountCall[0]).not.toContain('test-bucket:/workspace/data/');
     }
+  });
+
+  it('S3 mount passes region to s3fs as endpoint option', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-region',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'ap-northeast-1',
+        endpoint: 'https://example.supabase.co/storage/v1/s3',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-region');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-region') && !call[0].includes('which'),
+    );
+
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      expect(s3fsMountCall[0]).toContain('endpoint=ap-northeast-1');
+    }
+  });
+
+  it('S3 mount throws when s3fs returns 0 but mountpoint check fails', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    // Override the default mock to make `mountpoint -q` fail (simulating
+    // s3fs daemon dying after fork — the parent returns 0 but no mount attached).
+    mockSandbox.commands.run.mockImplementation((cmd: string) => {
+      if (cmd.includes('which s3fs')) {
+        return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '' });
+      }
+      if (cmd.includes('id -u')) {
+        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+      }
+      if (cmd.startsWith('mountpoint -q')) {
+        return Promise.resolve({ exitCode: 32, stdout: '', stderr: '' });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+    });
+
+    const mockFilesystem = {
+      id: 'test-s3-silent-fail',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-silent');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/not a mountpoint/);
+  });
+
+  it('S3 mount rejects invalid region before invoking s3fs', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-bad-region',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us east 1; rm -rf /',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-bad-region');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid region/);
+    expect(
+      mockSandbox.commands.run.mock.calls.some(
+        (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-bad-region'),
+      ),
+    ).toBe(false);
+  });
+
+  it('S3 mount rejects missing region (undefined) before invoking s3fs', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-no-region',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: undefined,
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-no-region');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid region/);
+    expect(
+      mockSandbox.commands.run.mock.calls.some(
+        (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-no-region'),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -1979,8 +2105,8 @@ describe('E2BSandbox Internal Methods', () => {
 
       // Should succeed on retry (auto-restarts sandbox)
       expect(result.success).toBe(true);
-      // betaCreate called once in initial start(), once in retry start()
-      expect(Sandbox.betaCreate).toHaveBeenCalledTimes(2);
+      // create called once in initial start(), once in retry start()
+      expect(Sandbox.create).toHaveBeenCalledTimes(2);
     });
 
     it('does not retry infinitely (only once)', async () => {
@@ -2083,7 +2209,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
     await resetMockDefaults();
   });
 
-  it('forwards domain/apiUrl/apiKey/accessToken to Sandbox.betaCreate', async () => {
+  it('forwards domain/apiUrl/apiKey/accessToken to Sandbox.create', async () => {
     const { Sandbox } = await import('e2b');
     const sandbox = new E2BSandbox({
       domain: 'custom.dev',
@@ -2094,7 +2220,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
 
     await sandbox._start();
 
-    expect(Sandbox.betaCreate).toHaveBeenCalledWith(
+    expect(Sandbox.create).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         domain: 'custom.dev',
@@ -2191,12 +2317,12 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
     const sandbox = new E2BSandbox();
     await sandbox._start();
 
-    // betaCreate should not contain domain/apiUrl/apiKey/accessToken
-    const betaCreateOpts = (Sandbox.betaCreate as any).mock.calls[0][1];
-    expect(betaCreateOpts).not.toHaveProperty('domain');
-    expect(betaCreateOpts).not.toHaveProperty('apiUrl');
-    expect(betaCreateOpts).not.toHaveProperty('apiKey');
-    expect(betaCreateOpts).not.toHaveProperty('accessToken');
+    // create should not contain domain/apiUrl/apiKey/accessToken
+    const createOpts = (Sandbox.create as any).mock.calls[0][1];
+    expect(createOpts).not.toHaveProperty('domain');
+    expect(createOpts).not.toHaveProperty('apiUrl');
+    expect(createOpts).not.toHaveProperty('apiKey');
+    expect(createOpts).not.toHaveProperty('accessToken');
 
     // list should not contain connection opts
     const listOpts = (Sandbox.list as any).mock.calls[0][0];

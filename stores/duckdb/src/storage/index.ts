@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { coreFeatures } from '@mastra/core/features';
 import type { StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore, ObservabilityStorage as CoreObservabilityStorage } from '@mastra/core/storage';
 
@@ -10,6 +11,8 @@ import type {
 
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
+const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
+const DUCKDB_OBSERVABILITY_FEATURES = ['delta-polling'] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -112,6 +115,16 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return this.delegate?.tracingStrategy ?? this.observabilityStrategy;
   }
 
+  getFeatures(): ReturnType<ObservabilityStoreImpl['getFeatures']> {
+    // Deliberately mirrored here so the lazy facade can advertise DuckDB's
+    // static delta polling feature before the delegate is instantiated.
+    if (!coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE)) {
+      return undefined;
+    }
+
+    return DUCKDB_OBSERVABILITY_FEATURES;
+  }
+
   async init(...args: Parameters<ObservabilityStoreImpl['init']>): ReturnType<ObservabilityStoreImpl['init']> {
     const delegate = await this.loadDelegate();
     if (!delegate) {
@@ -154,6 +167,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getSpan(...args);
   }
 
+  async getSpans(
+    ...args: Parameters<ObservabilityStoreImpl['getSpans']>
+  ): ReturnType<ObservabilityStoreImpl['getSpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getSpans(...args);
+  }
+
   async getRootSpan(
     ...args: Parameters<ObservabilityStoreImpl['getRootSpan']>
   ): ReturnType<ObservabilityStoreImpl['getRootSpan']> {
@@ -180,6 +200,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['listTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.listTraces(...args);
+  }
+
+  async listBranches(
+    ...args: Parameters<ObservabilityStoreImpl['listBranches']>
+  ): ReturnType<ObservabilityStoreImpl['listBranches']> {
+    const delegate = await this.requireDelegate();
+    return delegate.listBranches(...args);
   }
 
   async batchCreateSpans(
@@ -332,6 +359,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['listScores']> {
     const delegate = await this.requireDelegate();
     return delegate.listScores(...args);
+  }
+
+  async getScoreById(
+    ...args: Parameters<ObservabilityStoreImpl['getScoreById']>
+  ): ReturnType<ObservabilityStoreImpl['getScoreById']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getScoreById(...args);
   }
 
   async getScoreAggregate(

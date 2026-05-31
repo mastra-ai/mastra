@@ -1,7 +1,8 @@
 import { ReadableStream } from 'node:stream/web';
+import { coreFeatures } from '@mastra/core/features';
 import type { ObservabilityExporter, TracingEvent, ExportedSpan } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from './instances';
 import { ModelSpanTracker } from './model-tracing';
@@ -1358,6 +1359,345 @@ describe('ModelSpanTracker', () => {
       // Should NOT contain tool definitions or fallback keys summary
       expect(stepSpans[0]!.input).not.toHaveProperty('tools');
       expect(Array.isArray(stepSpans[0]!.input)).toBe(true);
+    });
+  });
+
+  describe('MODEL_INFERENCE span', () => {
+    beforeEach(() => {
+      // Guarantee the feature is enabled regardless of nested-describe ordering
+      coreFeatures.add('model-inference-span');
+    });
+
+    it('creates a MODEL_INFERENCE span as a child of MODEL_STEP, with chunks parented under it', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hello' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { totalTokens: 10 } },
+            stepResult: { reason: 'stop', warnings: [] },
+            metadata: {},
+          },
+        },
+      ];
+
+      const stream = createMockStream(chunks);
+      await consumeStream(tracker.wrapStream(stream));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      const chunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+
+      expect(stepSpan).toBeDefined();
+      expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.parentSpanId).toBe(stepSpan!.id);
+      expect(inferenceSpan!.attributes).toMatchObject({
+        stepIndex: 0,
+        model: 'gpt-test',
+        provider: 'test',
+        streaming: true,
+        finishReason: 'stop',
+      });
+
+      expect(chunkSpans.length).toBeGreaterThan(0);
+      for (const chunk of chunkSpans) {
+        expect(chunk.parentSpanId).toBe(inferenceSpan!.id);
+      }
+    });
+
+    it('duplicates usage and finishReason onto MODEL_INFERENCE and MODEL_STEP', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { promptTokens: 4, completionTokens: 6, totalTokens: 10 } },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      expect(stepSpan!.attributes).toMatchObject({ finishReason: 'stop' });
+      expect(stepSpan!.attributes.usage).toBeDefined();
+      expect(inferenceSpan!.attributes).toMatchObject({ finishReason: 'stop' });
+      expect(inferenceSpan!.attributes.usage).toBeDefined();
+    });
+
+    it('applies inference context (parameters / providerOptions / availableTools / toolChoice / responseFormat) set via setInferenceContext', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+      tracker.setInferenceContext({
+        parameters: { temperature: 0.7, maxOutputTokens: 1024 },
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        availableTools: ['weather', 'calculator'],
+        toolChoice: 'auto',
+        responseFormat: 'json_schema',
+      });
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { totalTokens: 5 } },
+            stepResult: { reason: 'stop', warnings: [] },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.attributes).toMatchObject({
+        parameters: { temperature: 0.7, maxOutputTokens: 1024 },
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        availableTools: ['weather', 'calculator'],
+        toolChoice: 'auto',
+        responseFormat: 'json_schema',
+      });
+    });
+
+    describe('feature-flag fallback for older @mastra/core', () => {
+      afterEach(() => {
+        // Restore the flag for subsequent tests in the suite
+        coreFeatures.add('model-inference-span');
+      });
+
+      it('falls back to parenting chunks under MODEL_STEP when feature flag is absent', async () => {
+        // Simulate an older @mastra/core that predates the model-inference-span feature
+        coreFeatures.delete('model-inference-span');
+
+        const modelSpan = tracing.startSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: 'test-generation',
+        });
+
+        const tracker = new ModelSpanTracker(modelSpan);
+
+        const chunks = [
+          { type: 'step-start', payload: { messageId: 'msg-1' } },
+          { type: 'text-delta', payload: { text: 'hi' } },
+          {
+            type: 'step-finish',
+            payload: {
+              output: { usage: { totalTokens: 5 } },
+              stepResult: { reason: 'stop', warnings: [] },
+              metadata: {},
+            },
+          },
+        ];
+
+        await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+        modelSpan.end();
+
+        // No MODEL_INFERENCE span is created
+        const inferenceSpans = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+        expect(inferenceSpans).toHaveLength(0);
+
+        // Chunks parent under MODEL_STEP (pre-MODEL_INFERENCE behavior)
+        const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+        const chunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+        expect(stepSpan).toBeDefined();
+        expect(chunkSpans.length).toBeGreaterThan(0);
+        for (const chunk of chunkSpans) {
+          expect(chunk.parentSpanId).toBe(stepSpan!.id);
+        }
+      });
+    });
+
+    it('does not open MODEL_INFERENCE from startStep — only MODEL_STEP starts', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.startStep({ messageId: 'msg-1', request: {} });
+
+      // No MODEL_INFERENCE has been emitted yet — the inference span only
+      // opens via startInference() / first chunk arrival, so processor work
+      // between startStep and the model call is excluded from its duration.
+      const liveInferenceStarts = testExporter.events.filter(
+        e => e.type === TracingEventType.SPAN_STARTED && e.exportedSpan.type === SpanType.MODEL_INFERENCE,
+      );
+      expect(liveInferenceStarts).toHaveLength(0);
+    });
+
+    it('startInference() opens MODEL_INFERENCE with the latest setInferenceContext snapshot', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.startStep();
+      // Simulate input processors mutating the tool set after startStep
+      tracker.setInferenceContext({
+        availableTools: ['searchDocs', 'lookupOrder'],
+        toolChoice: 'required',
+      });
+      tracker.startInference();
+
+      const chunks = [
+        { type: 'text-delta', payload: { text: 'ok' } },
+        {
+          type: 'step-finish',
+          payload: { output: {}, stepResult: { reason: 'stop', warnings: [] }, metadata: {} },
+        },
+      ];
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.attributes?.availableTools).toEqual(['searchDocs', 'lookupOrder']);
+      expect(inferenceSpan!.attributes?.toolChoice).toEqual('required');
+    });
+
+    it('MODEL_INFERENCE.startTime excludes work between startStep and startInference', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.startStep();
+      const stepStartedAt = Date.now();
+      // Simulate processor work between startStep and the model call
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const beforeInference = Date.now();
+      tracker.startInference();
+
+      await consumeStream(
+        tracker.wrapStream(
+          createMockStream([
+            { type: 'text-delta', payload: { text: 'ok' } },
+            {
+              type: 'step-finish',
+              payload: { output: {}, stepResult: { reason: 'stop', warnings: [] }, metadata: {} },
+            },
+          ]),
+        ),
+      );
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      const stepStart = new Date(stepSpan!.startTime).getTime();
+      const inferenceStart = new Date(inferenceSpan!.startTime).getTime();
+
+      expect(stepStart).toBeGreaterThanOrEqual(stepStartedAt - 5);
+      expect(inferenceStart).toBeGreaterThanOrEqual(beforeInference - 5);
+      // MODEL_INFERENCE started at least ~50ms after MODEL_STEP (the simulated processor work).
+      expect(inferenceStart - stepStart).toBeGreaterThanOrEqual(40);
+    });
+
+    it('chunk-arrival auto-creates MODEL_INFERENCE when caller did not call startInference', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.startStep();
+      // Caller forgets startInference() — chunk handlers should auto-create it
+      // so chunks still parent under MODEL_INFERENCE rather than MODEL_STEP.
+      await consumeStream(
+        tracker.wrapStream(
+          createMockStream([
+            { type: 'text-delta', payload: { text: 'ok' } },
+            {
+              type: 'step-finish',
+              payload: { output: {}, stepResult: { reason: 'stop', warnings: [] }, metadata: {} },
+            },
+          ]),
+        ),
+      );
+      modelSpan.end();
+
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      const chunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+      expect(inferenceSpan).toBeDefined();
+      expect(chunkSpans.length).toBeGreaterThan(0);
+      for (const chunk of chunkSpans) {
+        expect(chunk.parentSpanId).toBe(inferenceSpan!.id);
+      }
+    });
+
+    it('closes MODEL_INFERENCE on step-finish even when step-close is deferred (durable mode)', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+      tracker.setDeferStepClose(true);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { totalTokens: 5 } },
+            stepResult: { reason: 'tool-calls', warnings: [], isContinued: true },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+
+      // Inference span should already be closed even though the step is still
+      // open waiting for tool execution under it.
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.attributes).toMatchObject({ finishReason: 'tool-calls' });
+
+      const stepSpansBefore = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpansBefore).toHaveLength(0);
+
+      modelSpan.end();
     });
   });
 });

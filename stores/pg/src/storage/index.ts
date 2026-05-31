@@ -21,6 +21,7 @@ import { BlobsPG } from './domains/blobs';
 import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
+import { FavoritesPG } from './domains/favorites';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
@@ -32,6 +33,7 @@ import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
+import { buildConnectionStringPoolConfig } from './pool-config';
 
 /** Default maximum number of connections in the pool */
 const DEFAULT_MAX_CONNECTIONS = 20;
@@ -53,6 +55,7 @@ const ALL_DOMAINS = [
   DatasetsPG,
   ExperimentsPG,
   BackgroundTasksPG,
+  FavoritesPG,
   ChannelsPG,
   SchedulesPG,
 ] as const;
@@ -94,6 +97,7 @@ export {
   ScoresPG,
   SchedulesPG,
   SkillsPG,
+  FavoritesPG,
   WorkflowsPG,
   WorkspacesPG,
 };
@@ -169,6 +173,7 @@ export class PostgresStore extends MastraCompositeStore {
         mcpServers: new MCPServersPG(domainConfig),
         workspaces: new WorkspacesPG(domainConfig),
         skills: new SkillsPG(domainConfig),
+        favorites: new FavoritesPG(domainConfig),
         blobs: new BlobsPG(domainConfig),
         datasets: new DatasetsPG(domainConfig),
         experiments: new ExperimentsPG(domainConfig),
@@ -190,12 +195,12 @@ export class PostgresStore extends MastraCompositeStore {
 
   private createPool(config: PostgresStoreConfig): Pool {
     if (isConnectionStringConfig(config)) {
-      return new Pool({
-        connectionString: config.connectionString,
-        ssl: config.ssl,
-        max: config.max ?? DEFAULT_MAX_CONNECTIONS,
-        idleTimeoutMillis: config.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
-      });
+      return new Pool(
+        buildConnectionStringPoolConfig(config, {
+          max: DEFAULT_MAX_CONNECTIONS,
+          idleTimeoutMillis: DEFAULT_IDLE_TIMEOUT_MS,
+        }),
+      );
     }
 
     if (isHostConfig(config)) {

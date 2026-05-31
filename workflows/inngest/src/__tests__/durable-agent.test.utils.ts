@@ -11,7 +11,6 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
-import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Mastra } from '@mastra/core/mastra';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
@@ -49,7 +48,6 @@ export function getSharedInngest(): Inngest {
     sharedInngest = new Inngest({
       id: 'durable-agent-tests',
       baseUrl: `http://localhost:${INNGEST_PORT}`,
-      middleware: [realtimeMiddleware()],
     });
   }
   return sharedInngest;
