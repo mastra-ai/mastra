@@ -49,7 +49,14 @@ function emitUsageMetrics(
   let metricCosts = new Map<TokenMetrics, CostContext>();
   try {
     const provider = attrs.provider;
-    const model = attrs.responseModel ?? attrs.model;
+    // OpenRouter's responseModel is the downstream provider's internal id
+    // (e.g. "anthropic/claude-4.6-sonnet-20260217") which may use a different
+    // word ordering than the alias stored in the pricing registry
+    // (e.g. "anthropic/claude-sonnet-4-6"). Use the configured alias for
+    // OpenRouter so the registry lookup succeeds; fall back to responseModel
+    // only if no configured model is present.
+    const model =
+      provider === 'openrouter' ? (attrs.model ?? attrs.responseModel) : (attrs.responseModel ?? attrs.model);
 
     if (provider && model) {
       metricCosts = estimateCosts({

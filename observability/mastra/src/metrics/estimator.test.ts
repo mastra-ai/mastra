@@ -263,4 +263,42 @@ describe('estimateCosts', () => {
       },
     });
   });
+
+  it('fails to resolve OpenRouter Anthropic models by responseModel id (word-order mismatch)', () => {
+    // Demonstrates why auto-extract.ts must not use responseModel for OpenRouter:
+    // OpenRouter returns responseModel="anthropic/claude-4.6-sonnet-20260217" but
+    // the pricing registry stores the configured alias "anthropic/claude-sonnet-4-6".
+    // No textual variant bridges the word-order difference (4.6-sonnet vs sonnet-4-6).
+    const costs = estimateCosts(
+      {
+        provider: 'openrouter',
+        model: 'anthropic/claude-4.6-sonnet-20260217',
+        usage: { inputTokens: 1_000, outputTokens: 100 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      costMetadata: { error: 'no_matching_model' },
+    });
+  });
+
+  it('resolves OpenRouter Anthropic models when the configured alias is used', () => {
+    // Counterpart to the test above: passing the configured alias
+    // "anthropic/claude-sonnet-4-6" (as auto-extract.ts now does for openrouter)
+    // hits the pricing registry entry directly.
+    const costs = estimateCosts(
+      {
+        provider: 'openrouter',
+        model: 'anthropic/claude-sonnet-4-6',
+        usage: { inputTokens: 1_000, outputTokens: 100 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      costMetadata: { pricing_id: 'openrouter-anthropic-claude-sonnet-4-6' },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeGreaterThan(0);
+  });
 });
