@@ -283,6 +283,7 @@ export function zodToJsonSchema(
   zodSchema: any,
   target: Targets = 'jsonSchema7',
   strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative',
+  strictMode: boolean = false,
 ): JSONSchema7 {
   // Route based on whether the schema is v4 (has _zod) or v3 (only has _def).
   // We use zV4.toJSONSchema (imported from 'zod/v4') for v4 schemas, since the
@@ -311,13 +312,23 @@ export function zodToJsonSchema(
       },
     }) as JSONSchema7;
 
+    if (strictMode) {
+      return prepareJsonSchemaForOpenAIStrictMode(jsonSchema);
+    }
+
     // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
     return fixAnyOfNullable(jsonSchema);
   } else {
     // Zod v3 path - use the original converter
-    return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+    const jsonSchema = zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
       $refStrategy: strategy,
       target,
     }) as JSONSchema7;
+
+    if (strictMode) {
+      return prepareJsonSchemaForOpenAIStrictMode(jsonSchema);
+    }
+
+    return jsonSchema;
   }
 }

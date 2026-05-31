@@ -724,3 +724,69 @@ describe('ensureAllPropertiesRequired', () => {
     expect(result.required).not.toContain('optional');
   });
 });
+
+// =============================================================================
+// zodToJsonSchema strictMode — unit tests
+// =============================================================================
+
+describe('zodToJsonSchema strictMode', () => {
+  it('should add additionalProperties: false and all keys in required', () => {
+    const schema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+
+    const result = zodToJsonSchema(schema, 'jsonSchema7', 'relative', true);
+
+    expect(result.additionalProperties).toBe(false);
+    expect(result.required).toContain('name');
+    expect(result.required).toContain('age');
+  });
+
+  it('should include optional fields in required and represent them as anyOf with null', () => {
+    const schema = z.object({
+      name: z.string(),
+      nickname: z.string().optional(),
+    });
+
+    const result = zodToJsonSchema(schema, 'jsonSchema7', 'relative', true);
+
+    expect(result.required).toContain('name');
+    expect(result.required).toContain('nickname');
+
+    const nicknameProp = result.properties!.nickname as any;
+    expect(nicknameProp).toBeDefined();
+    expect(Array.isArray(nicknameProp.type)).toBe(false);
+  });
+
+  it('should recursively apply additionalProperties: false on nested objects', () => {
+    const schema = z.object({
+      user: z.object({
+        name: z.string(),
+        address: z.object({
+          city: z.string(),
+        }),
+      }),
+    });
+
+    const result = zodToJsonSchema(schema, 'jsonSchema7', 'relative', true);
+
+    expect(result.additionalProperties).toBe(false);
+    const userProp = result.properties!.user as any;
+    expect(userProp.additionalProperties).toBe(false);
+    const addressProp = userProp.properties.address as any;
+    expect(addressProp.additionalProperties).toBe(false);
+  });
+
+  it('should not apply strict mode transforms when strictMode is false (default)', () => {
+    const schema = z.object({
+      name: z.string(),
+      optional: z.string().optional(),
+    });
+
+    const result = zodToJsonSchema(schema);
+
+    expect(result.required).toContain('name');
+    expect(result.required).not.toContain('optional');
+  });
+});
