@@ -15,3 +15,8 @@ export const GLOBAL_EXTERNALS = [
   'execa',
 ];
 export const DEPRECATED_EXTERNALS = ['fastembed', 'nodemailer', 'jsdom', 'sqlite3'];
+
+export const CO_EXTERNALS: { trigger: string; requires: string[] }[] = [
+  { trigger: '@mastra/pg', requires: ['@mastra/core/storage'] },
+  { trigger: '@mastra/store-pg', requires: ['@mastra/core/storage'] },
+];

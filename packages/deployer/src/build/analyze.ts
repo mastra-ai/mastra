@@ -11,7 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
+import { CO_EXTERNALS, DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
@@ -345,11 +345,18 @@ export async function analyzeBundle(
 
   let externalsPreset = false;
 
-  const userExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
+  const rawUserExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
   const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
   if (bundlerOptions?.externals === true) {
     externalsPreset = true;
   }
+
+  const coRequired = externalsPreset
+    ? []
+    : CO_EXTERNALS.filter(r => rawUserExternals.some(e => isDependencyPartOfPackage(e, r.trigger))).flatMap(
+        r => r.requires,
+      );
+  const userExternals = coRequired.length ? [...rawUserExternals, ...new Set(coRequired)] : rawUserExternals;
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
