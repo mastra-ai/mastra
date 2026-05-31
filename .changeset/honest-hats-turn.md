@@ -3,20 +3,17 @@
 '@mastra/core': minor
 ---
 
-Added MCP server instructions forwarding into agent system prompts.
+Added opt-in MCP server instructions forwarding into agent system prompts.
 
-When an MCP server advertises instructions during initialization, agents that use tools from `MCPClient` now receive that guidance as a separate system message by default. This is enabled out of the box — if your MCP servers already publish instructions, agent behavior may change on upgrade because the model now sees that guidance.
-
-Set `forwardInstructions: false` on any server to opt out:
+When an MCP server advertises instructions during initialization, you can now forward that guidance into the system prompt of agents that use the server's tools. This is **opt-in** — set `forwardInstructions: true` per server to enable it. Forwarded instructions are injected into the agent's system prompt, so only enable this for servers you trust.
 
 ```ts
 const mcp = new MCPClient({
   servers: {
     db: {
       url: new URL('http://localhost:4111/mcp'),
-      // Both options below are the defaults — shown for clarity:
-      forwardInstructions: true,   // set to false to suppress
-      instructionsMaxLength: 512,  // max chars forwarded per server
+      forwardInstructions: true, // opt in; defaults to false
+      instructionsMaxLength: 512, // max chars forwarded per server
     },
   },
 });
@@ -30,7 +27,7 @@ const agent = new Agent({
 });
 ```
 
-You can also inspect cached instructions without forwarding them:
+You can always inspect cached instructions without forwarding them:
 
 ```ts
 const instructions = mcp.getServerInstructions();

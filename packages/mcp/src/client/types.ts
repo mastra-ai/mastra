@@ -182,7 +182,10 @@ export type BaseServerOptions = {
    * Whether instructions returned by this MCP server during initialization should
    * be forwarded to agents that use the server's tools.
    *
-   * @default true
+   * Disabled by default: forwarded instructions are injected into the agent's
+   * system prompt, so only enable this for servers you trust.
+   *
+   * @default false
    */
   forwardInstructions?: boolean;
   /**

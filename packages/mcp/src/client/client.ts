@@ -583,7 +583,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   get forwardInstructions(): boolean {
-    return this.serverConfig.forwardInstructions ?? true;
+    return this.serverConfig.forwardInstructions ?? false;
   }
 
   get instructionsMaxLength(): number {

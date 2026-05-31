@@ -138,6 +138,7 @@ import type {
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
+import { buildMcpServerGuidance } from './mcp-guidance';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -179,56 +180,6 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
   }
 
   return cb(value as T);
-}
-
-function truncateMcpInstructions(instructions: string, maxLength?: number): string {
-  const resolvedMaxLength = maxLength ?? 512;
-  if (resolvedMaxLength < 1) {
-    return '';
-  }
-
-  return instructions.length > resolvedMaxLength ? instructions.slice(0, resolvedMaxLength) : instructions;
-}
-
-function buildMcpServerGuidance(tools: Array<{ mcpMetadata?: McpMetadata } | undefined>): string | undefined {
-  const instructionsByServer = new Map<
-    string,
-    {
-      instructions: string;
-      maxLength?: number;
-    }
-  >();
-
-  for (const tool of tools) {
-    const metadata = tool?.mcpMetadata;
-    if (!metadata?.serverName || metadata.forwardInstructions === false) {
-      continue;
-    }
-
-    const instructions = metadata.serverInstructions?.trim();
-    if (!instructions || instructionsByServer.has(metadata.serverName)) {
-      continue;
-    }
-
-    instructionsByServer.set(metadata.serverName, {
-      instructions,
-      maxLength: metadata.instructionsMaxLength,
-    });
-  }
-
-  const guidance = [...instructionsByServer.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([serverName, { instructions, maxLength }]) => {
-      const truncatedInstructions = truncateMcpInstructions(instructions, maxLength).trim();
-      if (!truncatedInstructions) {
-        return undefined;
-      }
-
-      return `## Guidance from MCP server "${serverName}"\n\n${truncatedInstructions}`;
-    })
-    .filter((entry): entry is string => Boolean(entry));
-
-  return guidance.length > 0 ? guidance.join('\n\n') : undefined;
 }
 
 function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {

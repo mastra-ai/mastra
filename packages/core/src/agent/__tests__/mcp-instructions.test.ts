@@ -59,6 +59,27 @@ function mcpTool({
   });
 }
 
+function mcpToolWithoutForwarding({
+  id,
+  serverName,
+  serverInstructions,
+}: {
+  id: string;
+  serverName: string;
+  serverInstructions?: string;
+}) {
+  return createTool({
+    id,
+    description: id,
+    inputSchema: z.object({}),
+    mcpMetadata: {
+      serverName,
+      serverInstructions,
+    },
+    execute: async () => ({ ok: true }),
+  });
+}
+
 describe('Agent MCP server instructions', () => {
   it('adds MCP instructions as a separate system message', async () => {
     const captured: { systemMessages: string[] } = { systemMessages: [] };
@@ -215,6 +236,28 @@ describe('Agent MCP server instructions', () => {
     await agent.generate('Hello');
 
     // Only the base instructions system message, no MCP guidance
+    const mcpMessage = captured.systemMessages.find(msg => msg.includes('Guidance from MCP server'));
+    expect(mcpMessage).toBeUndefined();
+  });
+
+  it('does not forward instructions by default (opt-in required)', async () => {
+    const captured: { systemMessages: string[] } = { systemMessages: [] };
+    const agent = new Agent({
+      id: 'mcp-agent',
+      name: 'mcp-agent',
+      instructions: 'You are helpful.',
+      model: createCapturingModel(captured),
+      tools: {
+        query: mcpToolWithoutForwarding({
+          id: 'query',
+          serverName: 'db-tools',
+          serverInstructions: 'Always call validate_schema before migrate_schema.',
+        }),
+      },
+    });
+
+    await agent.generate('Run the migration');
+
     const mcpMessage = captured.systemMessages.find(msg => msg.includes('Guidance from MCP server'));
     expect(mcpMessage).toBeUndefined();
   });

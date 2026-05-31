@@ -142,9 +142,9 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     name: 'forwardInstructions',
     type: 'boolean',
     isOptional: true,
-    defaultValue: 'true',
+    defaultValue: 'false',
     description:
-      "Whether to append instructions advertised by this MCP server to an agent's system prompt when the agent uses this server's tools.",
+      "Whether to append instructions advertised by this MCP server to an agent's system prompt when the agent uses this server's tools. Disabled by default; enable it only for servers you trust, since the instructions are injected into the agent's system prompt.",
   },
   {
     name: 'instructionsMaxLength',
@@ -233,7 +233,7 @@ The same annotations are also exposed on the tools returned by `listTools()` and
 
 ## Server instructions
 
-When an MCP server advertises instructions during initialization, `MCPClient` stores them for that server. Agents that use tools from `listTools()` or `listToolsets()` automatically receive those instructions in their system prompt.
+When an MCP server advertises instructions during initialization, `MCPClient` stores them for that server. Forwarding those instructions into an agent's system prompt is **opt-in**: set `forwardInstructions: true` on a server to have agents that use its tools (via `listTools()` or `listToolsets()`) receive its instructions automatically.
 
 The guidance is grouped by server name and truncated to `instructionsMaxLength` characters per server.
 
@@ -257,7 +257,9 @@ const agent = new Agent({
 })
 ```
 
-Set `forwardInstructions` to `false` for a server when you want to inspect or handle its instructions yourself.
+When `forwardInstructions` is omitted (the default), instructions are still cached and can be inspected via [`getServerInstructions()`](#getserverinstructions), but are not added to any agent's system prompt.
+
+> **Security note:** server instructions are forwarded verbatim (subject only to length truncation) into the agent's system prompt. A malicious or compromised MCP server can use them to inject instructions the agent will treat as trusted system guidance. Only enable `forwardInstructions` for servers you trust, and prefer reviewing instructions with `getServerInstructions()` before forwarding instructions from third-party servers.
 
 ## Methods
 

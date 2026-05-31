@@ -274,7 +274,7 @@ export interface McpMetadata {
   serverVersion?: string;
   /** Instructions advertised by the MCP server during initialize. */
   serverInstructions?: string;
-  /** Whether the agent should append these instructions to its system prompt. */
+  /** Whether the agent should append these instructions to its system prompt. Defaults to false (opt-in). */
   forwardInstructions?: boolean;
   /** Maximum number of characters to forward into the agent system prompt. */
   instructionsMaxLength?: number;
