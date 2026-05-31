@@ -1632,6 +1632,77 @@ describe('PIIDetector', () => {
       expect((result2 as any).payload.text).toBe('Hello there, how are you.');
       expect(llmCallCount).toBe(1);
     });
+
+    it('should respect custom bufferSize option', async () => {
+      let llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      // Small buffer size of 50 chars
+      const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'], bufferSize: 50 });
+      const state: Record<string, any> = {};
+
+      // Send chunks totaling ~60 chars — should trigger flush with bufferSize=50
+      await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-0', text: 'This is some text that is longer than fifty chars okay' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+
+      // Buffer exceeded 50 chars, should have flushed
+      expect(llmCallCount).toBe(1);
+      expect(state._piiBuffer).toBe('');
+    });
+
+    it('should use default bufferSize of 200 when not specified', async () => {
+      let llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'] });
+      const state: Record<string, any> = {};
+
+      // Send 100 chars — under default 200 threshold, no sentence boundary
+      await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-0', text: 'A'.repeat(100) },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+
+      // Should NOT have flushed (100 < 200 default)
+      expect(llmCallCount).toBe(0);
+      expect(state._piiBuffer).toBe('A'.repeat(100));
+    });
   });
 
   describe('processOutputResult', () => {

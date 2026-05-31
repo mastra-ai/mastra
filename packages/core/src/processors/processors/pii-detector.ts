@@ -148,6 +148,14 @@ export interface PIIDetectorOptions extends LastMessageOnlyOption {
    * ```
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Character threshold for flushing the LLM buffer during streaming (default: 200).
+   * Only applies when LLM-only detection types (name, address, date-of-birth) are configured.
+   * Higher values give the LLM more context but add more stream latency.
+   * Lower values reduce latency but may miss PII that spans multiple chunks.
+   */
+  bufferSize?: number;
 }
 
 /**
@@ -171,6 +179,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
   private lastMessageOnly: boolean;
   private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
+  private bufferSize: number;
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -211,12 +220,8 @@ export class PIIDetector implements Processor<'pii-detector'> {
   /** PII types that require LLM context and cannot be detected by regex */
   private static readonly LLM_ONLY_TYPES = new Set(['name', 'address', 'date-of-birth']);
 
-  /**
-   * Character threshold for flushing the LLM buffer during streaming.
-   * When LLM-only types are configured, chunks are buffered and flushed
-   * through the LLM at this threshold or on sentence boundaries.
-   */
-  private static readonly LLM_BUFFER_FLUSH_SIZE = 200;
+  /** Default character threshold for flushing the LLM buffer during streaming. */
+  private static readonly DEFAULT_BUFFER_SIZE = 200;
 
   constructor(options: PIIDetectorOptions) {
     this.detectionTypes = options.detectionTypes || PIIDetector.DEFAULT_DETECTION_TYPES;
@@ -228,6 +233,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
+    this.bufferSize = options.bufferSize ?? PIIDetector.DEFAULT_BUFFER_SIZE;
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
@@ -854,7 +860,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           state._piiBuffer +=
             result.type === 'text-delta' ? (result as ChunkType & { type: 'text-delta' }).payload.text : textContent;
           // Check flush threshold
-          if (state._piiBuffer.length >= PIIDetector.LLM_BUFFER_FLUSH_SIZE || /[.!?]\s*$/.test(state._piiBuffer)) {
+          if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
             return this.flushLLMBuffer(state, abort, observabilityContext);
           }
           return null; // Hold back until flush
@@ -877,7 +883,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       state._piiBuffer += textContent;
 
       // Flush on sentence boundary or size threshold
-      if (state._piiBuffer.length >= PIIDetector.LLM_BUFFER_FLUSH_SIZE || /[.!?]\s*$/.test(state._piiBuffer)) {
+      if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
         return this.flushLLMBuffer(state, abort, observabilityContext);
       }
 
