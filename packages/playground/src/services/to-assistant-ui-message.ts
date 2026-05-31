@@ -214,7 +214,12 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
   }
 
   if (part.type === 'reasoning') {
-    return { type: 'reasoning', text: part.reasoning, metadata: getPartMetadata(message, part) } as ContentPart;
+    // Persisted reasoning parts arrive with an empty `reasoning` string and the
+    // text in `details` (AIV5Adapter writes `reasoning: '', details: [...]`), so
+    // fall back to the joined `details` text on reload, mirroring core's reader.
+    const text =
+      part.reasoning || (part.details ?? []).map(detail => (detail.type === 'text' ? detail.text : '')).join('');
+    return { type: 'reasoning', text, metadata: getPartMetadata(message, part) } as ContentPart;
   }
 
   if (part.type === 'source') {
