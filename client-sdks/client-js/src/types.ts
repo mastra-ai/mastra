@@ -602,6 +602,7 @@ export type GetWorkflowRunByIdResponse = WorkflowState;
 export interface GetWorkflowResponse {
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   steps: {
     [key: string]: {
       id: string;
@@ -2419,6 +2420,10 @@ export type UpdateToolProviderConnectionParams = GeneratedRequest<
 
 export type UpdateToolProviderConnectionResponse =
   GeneratedResponse<'PATCH /tool-providers/:providerId/connections/:connectionId'>;
+
+export type GetToolProviderConnectionUsageParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connections/:connectionId/usage'>
+>;
 
 export type GetToolProviderConnectionUsageResponse =
   GeneratedResponse<'GET /tool-providers/:providerId/connections/:connectionId/usage'>;

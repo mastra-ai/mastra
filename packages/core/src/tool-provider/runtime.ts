@@ -32,12 +32,26 @@ export interface ResolveStoredToolProvidersOpts {
  * - The returned suffix is added to `usedSuffixes` in place.
  */
 export function buildConnectionSuffix(label: string | undefined, usedSuffixes: Set<string>): string {
-  const base =
-    (label ?? '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9_]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_+|_+$/g, '') || 'CONN';
+  // Single linear pass over the input — no regex with quantifiers on
+  // user-controlled data (CodeQL js/polynomial-redos).
+  const raw = (label ?? '').toUpperCase();
+  let base = '';
+  let prevWasUnderscore = true; // start true → skips leading underscores
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw.charCodeAt(i);
+    const isAllowed =
+      (c >= 0x41 && c <= 0x5a) || // A-Z
+      (c >= 0x30 && c <= 0x39); // 0-9
+    if (isAllowed) {
+      base += raw[i];
+      prevWasUnderscore = false;
+    } else if (!prevWasUnderscore) {
+      base += '_';
+      prevWasUnderscore = true;
+    }
+  }
+  if (base.endsWith('_')) base = base.slice(0, -1);
+  if (!base) base = 'CONN';
 
   let candidate = base;
   let n = 2;

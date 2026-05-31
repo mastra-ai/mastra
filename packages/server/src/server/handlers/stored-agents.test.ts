@@ -1441,7 +1441,7 @@ describe('UPDATE_STORED_AGENT_ROUTE — model policy is surface-scoped, not enfo
     const result = await UPDATE_STORED_AGENT_ROUTE.handler({
       ...createTestContext(mastra as unknown as MockMastra),
       storedAgentId: 'a1',
-      model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+      model: { provider: 'anthropic', name: 'claude-opus-4-6' },
     });
     expect(result).toMatchObject({ id: 'a1' });
   });
@@ -1488,7 +1488,7 @@ describe('UPDATE_STORED_AGENT_ROUTE — model policy is surface-scoped, not enfo
     const result = await UPDATE_STORED_AGENT_ROUTE.handler({
       ...createTestContext(mastra as unknown as MockMastra),
       storedAgentId: 'a1',
-      model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+      model: { provider: 'anthropic', name: 'claude-opus-4-6' },
     });
     expect(result).toMatchObject({ id: 'a1' });
   });

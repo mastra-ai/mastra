@@ -451,7 +451,7 @@ describe('Integration Tools (tool providers)', () => {
           name: 'Composio toolProviders Agent',
           authorId: 'author-1',
           instructions: 'You list GitHub issues',
-          model: { provider: 'openai', name: 'gpt-4' },
+          model: { provider: 'openai', name: 'gpt-5' },
           toolProviders: {
             composio: {
               tools: {

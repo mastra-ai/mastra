@@ -1387,6 +1387,54 @@ describe('requireApproval property preservation', () => {
       }
     }
   });
+
+  it('should preserve a needsApprovalFn attached directly to a tool (MCP shape) through convertTools', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [{ type: 'text', text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    // Mirror how the MCP client builds tools: boolean requireApproval plus a
+    // server-level approval function attached directly as needsApprovalFn.
+    const needsApprovalFn = (args: any) => args.amount > 100;
+    const mcpStyleTool = createTool({
+      id: 'transfer-funds',
+      description: 'Transfer funds',
+      inputSchema: z.object({ amount: z.number() }),
+      requireApproval: true,
+      execute: async ({ amount }) => ({ success: true, amount }),
+    });
+    mcpStyleTool.needsApprovalFn = needsApprovalFn;
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for conditional approval',
+      model: mockModel,
+    });
+
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      toolsets: {
+        banking: {
+          transferFunds: mcpStyleTool,
+        },
+      },
+    });
+
+    expect(tools.transferFunds).toBeDefined();
+    expect((tools.transferFunds as any).requireApproval).toBe(true);
+    // The conditional approval function must survive conversion so tool-call-step
+    // can evaluate it per call instead of falling back to the boolean flag.
+    expect((tools.transferFunds as any).needsApprovalFn).toBe(needsApprovalFn);
+  });
 });
 
 describe('sub-agent prompt input normalization (GitHub #14154)', () => {

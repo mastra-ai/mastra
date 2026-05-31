@@ -44,4 +44,6 @@ Providers implement a VNext surface (`listToolkitsVNext`, `listToolsVNext`, `res
 
 Connections list responses use `page`/`perPage` pagination, matching the rest of the server surface.
 
+Both stored agents (`editor.agent.getById(...)`) and code-defined agents with stored overrides (`editor.agent.applyStoredOverrides(...)`) resolve `toolProviders` at request time, merging provider-resolved tools alongside code/registry/MCP/integration tools.
+
 Stored agents that don't set `toolProviders` continue to work unchanged. The Studio/Builder UI ships separately.

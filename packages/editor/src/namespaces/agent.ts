@@ -391,15 +391,26 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hasStoredTools = storedConfig.tools != null;
     const hasStoredMCPClients = storedConfig.mcpClients != null;
     const hasStoredIntegrationTools = storedConfig.integrationTools != null;
+    const hasStoredToolProviders =
+      storedConfig.toolProviders != null && Object.keys(storedConfig.toolProviders as object).length > 0;
 
-    if (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools) {
+    if (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools || hasStoredToolProviders) {
       const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
       const hasConditionalMCPClients =
         storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
       const hasConditionalIntegrationTools =
         storedConfig.integrationTools != null && this.isConditionalVariants(storedConfig.integrationTools);
+      const hasConditionalToolProviders =
+        storedConfig.toolProviders != null && this.isConditionalVariants(storedConfig.toolProviders);
+      // toolProviders need request-time context for `caller-supplied` scope, so they
+      // always force the dynamic branch (mirrors the create-stored-agent path).
       const isDynamicTools =
-        hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasStoredIntegrationTools;
+        hasConditionalTools ||
+        hasConditionalMCPClients ||
+        hasConditionalIntegrationTools ||
+        hasStoredIntegrationTools ||
+        hasConditionalToolProviders ||
+        hasStoredToolProviders;
 
       if (isDynamicTools) {
         // Wrap in a dynamic function that merges at request time
@@ -437,7 +448,24 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             requestContext,
           );
 
-          return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
+          // Resolve tool providers (v1 toolProviders)
+          const resolvedToolProvidersConfig = hasConditionalToolProviders
+            ? this.accumulateObjectVariants(
+                storedConfig!.toolProviders as StorageConditionalVariant<ToolProviders>[],
+                ctx,
+              )
+            : (storedConfig!.toolProviders as ToolProviders | undefined);
+          const providerTools = await resolveStoredToolProviders(
+            resolvedToolProvidersConfig,
+            (providerId: string) => this.editor.getToolProviderOrThrow(providerId),
+            {
+              requestContext: ctx,
+              authorId: storedConfig!.authorId,
+              logger: this.logger,
+            },
+          );
+
+          return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools, ...providerTools };
         };
         fork.__setTools(toolsFn);
       } else {

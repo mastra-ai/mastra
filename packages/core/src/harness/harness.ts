@@ -165,7 +165,8 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
 
   const signal = createSignal({
     id,
-    type: 'user-message',
+    type: 'user',
+    tagName: 'user',
     contents: rawContents as AgentSignalContents,
     attributes: getRecordValue(payload.attributes) as AgentSignalInput['attributes'],
     createdAt: getStringValue(payload.createdAt),
@@ -1609,30 +1610,106 @@ export class Harness<TState = {}> {
     await this.ensureAgentThreadSubscription(this.getCurrentAgent(), this.currentThreadId);
   }
 
+  private createMessageInput({
+    content,
+    files,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+  }): AgentSignalContents {
+    if (!files?.length) return content;
+
+    const fileParts = files.map(f => {
+      const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+      if (isText) {
+        let textContent = f.data;
+        const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+        if (base64Match) {
+          try {
+            textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+          } catch {
+            // Fall through with raw data
+          }
+        }
+        const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+        const maxBacktickRun = Math.max(0, ...Array.from(textContent.matchAll(/`+/g), match => match[0].length));
+        const fence = '`'.repeat(Math.max(3, maxBacktickRun + 1));
+        return { type: 'text' as const, text: `${label}\n${fence}\n${textContent}\n${fence}` };
+      }
+      return {
+        type: 'file' as const,
+        data: f.data,
+        mediaType: f.mediaType,
+        ...(f.filename ? { filename: f.filename } : {}),
+      };
+    });
+
+    return [{ type: 'text', text: content }, ...fileParts];
+  }
+
+  private async buildAgentMessageStreamOptions({
+    requestContext: requestContextInput,
+    tracingContext,
+    tracingOptions,
+  }: {
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<Record<string, unknown>> {
+    if (!this.currentThreadId) {
+      throw new Error('Cannot build stream options without a current thread');
+    }
+
+    this.abortRequested = false;
+    this.abortController ??= new AbortController();
+    const requestContext = await this.buildRequestContext(requestContextInput);
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const streamOptions: Record<string, unknown> = {
+      memory: { thread: this.currentThreadId, resource: this.resourceId },
+      abortSignal: this.abortController.signal,
+      requestContext,
+      maxSteps: 1000,
+      savePerStep: false,
+      requireToolApproval: !isYolo,
+      modelSettings: { temperature: 1 },
+      ...(tracingContext && { tracingContext }),
+      ...(tracingOptions && { tracingOptions }),
+    };
+    streamOptions.toolsets = await this.buildToolsets(requestContext);
+    return streamOptions;
+  }
+
   private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
     if (this.followUpQueue.length === 0) return;
 
     const next = this.followUpQueue.shift()!;
-    if (this.agentThreadSubscription) {
-      // When called from processSubscribedThreadStream → finishSubscribedStreamRun,
-      // sendMessage would deadlock: it waits for the new run to finish via
-      // waitForCurrentThreadStreamIdle, but the subscription consumer is blocked
-      // here and cannot advance the generator to process that run. Send the
-      // signal directly and let the subscription handle the run lifecycle.
-      const signal = this.sendSignal({
-        content: next.content,
-        requestContext: next.requestContext,
-        tracingContext: options?.tracingContext,
-        tracingOptions: options?.tracingOptions,
-      });
-      await signal.accepted;
-    } else {
-      await this.sendMessage({
-        content: next.content,
-        requestContext: next.requestContext,
-        tracingContext: options?.tracingContext,
-        tracingOptions: options?.tracingOptions,
-      });
+    try {
+      if (this.agentThreadSubscription && this.currentThreadId) {
+        const agent = this.getCurrentAgent();
+        const streamOptions = await this.buildAgentMessageStreamOptions({
+          requestContext: next.requestContext,
+          tracingContext: options?.tracingContext,
+          tracingOptions: options?.tracingOptions,
+        });
+        const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
+          resourceId: this.resourceId,
+          threadId: this.currentThreadId,
+          ifIdle: { streamOptions: streamOptions as any },
+        });
+        this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length, runId: result.runId });
+      } else {
+        this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
+        await this.sendMessage({
+          content: next.content,
+          requestContext: next.requestContext,
+          tracingContext: options?.tracingContext,
+          tracingOptions: options?.tracingOptions,
+        });
+      }
+    } catch (error) {
+      this.followUpQueue.unshift(next);
+      this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
+      throw error;
     }
   }
 
@@ -1756,7 +1833,9 @@ export class Harness<TState = {}> {
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
-    const signal = createSignal('content' in input ? { type: 'user-message', contents: input.content } : input);
+    const signal = createSignal(
+      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
+    );
     const accepted = Promise.resolve().then(async () => {
       if (!this.currentThreadId) {
         const thread = await this.createThread();
@@ -1776,22 +1855,11 @@ export class Harness<TState = {}> {
         return { accepted: result.accepted, runId: result.runId };
       }
 
-      this.abortRequested = false;
-      this.abortController ??= new AbortController();
-      const requestContext = await this.buildRequestContext(requestContextInput);
-      const isYolo = (this.state as Record<string, unknown>).yolo === true;
-      const streamOptions: Record<string, unknown> = {
-        memory: { thread: this.currentThreadId, resource: this.resourceId },
-        abortSignal: this.abortController.signal,
-        requestContext,
-        maxSteps: 1000,
-        savePerStep: false,
-        requireToolApproval: !isYolo,
-        modelSettings: { temperature: 1 },
-        ...(tracingContext && { tracingContext }),
-        ...(tracingOptions && { tracingOptions }),
-      };
-      streamOptions.toolsets = await this.buildToolsets(requestContext);
+      const streamOptions = await this.buildAgentMessageStreamOptions({
+        requestContext: requestContextInput,
+        tracingContext,
+        tracingOptions,
+      });
 
       const result = agent.sendSignal(signal, {
         resourceId: this.resourceId,
@@ -1822,32 +1890,7 @@ export class Harness<TState = {}> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
   }): Promise<void> {
-    let messageInput: AgentSignalContents = content;
-    if (files?.length) {
-      const fileParts = files.map(f => {
-        const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
-        if (isText) {
-          let textContent = f.data;
-          const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
-          if (base64Match) {
-            try {
-              textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
-            } catch {
-              // Fall through with raw data
-            }
-          }
-          const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
-          return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
-        }
-        return {
-          type: 'file' as const,
-          data: f.data,
-          mediaType: f.mediaType,
-          ...(f.filename ? { filename: f.filename } : {}),
-        };
-      });
-      messageInput = [{ type: 'text', text: content }, ...fileParts];
-    }
+    const messageInput = this.createMessageInput({ content, files });
 
     const wasActive = this.isCurrentThreadStreamActive();
     let emittedAgentEnd = false;
@@ -2017,7 +2060,7 @@ export class Harness<TState = {}> {
     if (msg.role === 'signal') {
       const signal = mastraDBMessageToSignal(msg as MastraDBMessage);
 
-      if (signal.type === 'user-message') {
+      if (signal.type === 'user') {
         const signalContent = signalContentsToHarnessContent(signal.contents);
         if (signalContent.length > 0) {
           return {
@@ -2030,7 +2073,7 @@ export class Harness<TState = {}> {
         }
       }
 
-      if (signal.type === 'system-reminder') {
+      if (signal.type === 'reactive' && signal.tagName === 'system-reminder') {
         const reminder = toSystemReminderContent({
           type: signal.type,
           contents:
@@ -2814,6 +2857,7 @@ export class Harness<TState = {}> {
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
     this.followUpQueue = [];
+    this.emit({ type: 'follow_up_queued', count: 0 });
     await this.sendMessage({ content, requestContext });
   }
 
@@ -2907,6 +2951,8 @@ export class Harness<TState = {}> {
     this.displayState.pendingPlanApproval = null;
     this.displayState.activeSubagents = new Map();
     this.displayState.currentMessage = null;
+    this.followUpQueue = [];
+    this.displayState.queuedFollowUps = 0;
     this.displayState.modifiedFiles = new Map();
     this.displayState.tasks = [];
     this.displayState.previousTasks = [];
@@ -3570,6 +3616,11 @@ export class Harness<TState = {}> {
       case 'task_updated':
         ds.previousTasks = [...ds.tasks];
         ds.tasks = event.tasks;
+        break;
+
+      // ── Follow-up queue ────────────────────────────────────────────────
+      case 'follow_up_queued':
+        ds.queuedFollowUps = event.count;
         break;
 
       // ── Thread lifecycle ───────────────────────────────────────────────

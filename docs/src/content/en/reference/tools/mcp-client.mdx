@@ -139,6 +139,21 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description: 'Whether to enable logging for this server.',
   },
   {
+    name: 'forwardInstructions',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Whether to append instructions advertised by this MCP server to an agent's system prompt when the agent uses this server's tools. Disabled by default; enable it only for servers you trust, since the instructions are injected into the agent's system prompt.",
+  },
+  {
+    name: 'instructionsMaxLength',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '512',
+    description: "Maximum number of server instruction characters to append to an agent's system prompt.",
+  },
+  {
     name: 'requireToolApproval',
     type: 'boolean | (params: RequireToolApprovalContext) => boolean | Promise<boolean>',
     isOptional: true,
@@ -216,6 +231,36 @@ Per the MCP specification, **clients MUST consider tool annotations to be untrus
 
 The same annotations are also exposed on the tools returned by `listTools()` and `listToolsets()` under `tool.mcp.annotations`, so you can inspect them when wiring tools into an agent.
 
+## Server instructions
+
+When an MCP server advertises instructions during initialization, `MCPClient` stores them for that server. Forwarding those instructions into an agent's system prompt is **opt-in**: set `forwardInstructions: true` on a server to have agents that use its tools (via `listTools()` or `listToolsets()`) receive its instructions automatically.
+
+The guidance is grouped by server name and truncated to `instructionsMaxLength` characters per server.
+
+```typescript
+const mcp = new MCPClient({
+  servers: {
+    db: {
+      url: new URL('http://localhost:3000/mcp'),
+      forwardInstructions: true,
+      instructionsMaxLength: 512,
+    },
+  },
+})
+
+const agent = new Agent({
+  id: 'db-agent',
+  name: 'DB Agent',
+  instructions: 'Help with database changes.',
+  model,
+  tools: await mcp.listTools(),
+})
+```
+
+When `forwardInstructions` is omitted (the default), instructions are still cached and can be inspected via [`getServerInstructions()`](#getserverinstructions), but are not added to any agent's system prompt.
+
+> **Security note:** server instructions are forwarded verbatim (subject only to length truncation) into the agent's system prompt. A malicious or compromised MCP server can use them to inject instructions the agent will treat as trusted system guidance. Only enable `forwardInstructions` for servers you trust, and prefer reviewing instructions with `getServerInstructions()` before forwarding instructions from third-party servers.
+
 ## Methods
 
 ### `listTools()`
@@ -236,6 +281,23 @@ Intended to be passed dynamically into the generate or stream method.
 const res = await agent.stream(prompt, {
   toolsets: await mcp.listToolsets(),
 })
+```
+
+### `getServerInstructions()`
+
+Returns the instructions currently known for each configured MCP server. Servers that have not connected yet, or do not advertise instructions, return `undefined`.
+
+```typescript prettier:false
+getServerInstructions(): Record<string, string | undefined>
+```
+
+Example:
+
+```typescript
+await mcp.listTools()
+
+const instructionsByServer = mcp.getServerInstructions()
+console.log(instructionsByServer.db)
 ```
 
 ### `disconnect()`

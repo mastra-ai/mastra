@@ -29,7 +29,7 @@ import {
 } from './authorship';
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
-import { prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
+import { enrichOrStripFavorites, prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
 import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
@@ -204,7 +204,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       );
       const annotated = enrichment
         ? visibleAgents.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
-        : visibleAgents;
+        : visibleAgents.map(stripFavoriteFields);
 
       return { ...result, agents: annotated };
     } catch (error) {
@@ -252,11 +252,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       // holder, and the record isn't public/legacy-unowned.
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
-      const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'agent', [agent.id]);
-      if (enrichment) {
-        return { ...agent, isFavorited: enrichment.starredIds.has(agent.id) };
-      }
-      return stripFavoriteFields(agent);
+      return enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
     }
@@ -408,7 +404,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
       }
 
-      return resolved;
+      return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
     } catch (error) {
       return handleError(error, 'Error creating stored agent');
     }
@@ -622,7 +618,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
       }
 
-      return resolved;
+      return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
     } catch (error) {
       return handleError(error, 'Error updating stored agent');
     }

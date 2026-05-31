@@ -346,7 +346,9 @@ export class ComposioToolProvider extends BaseToolProvider {
       limit: perPage,
     });
 
-    const items: ExistingConnection[] = list.items.map(account => ({
+    // Defensive: tolerate undocumented SDK shape drift where `items` is
+    // missing or `nextCursor` is `null`/`undefined`/`''`.
+    const items: ExistingConnection[] = (list.items ?? []).map(account => ({
       connectionId: account.id,
       status: mapComposioStatus(account.status, account.isDisabled),
       createdAt: account.createdAt,
@@ -355,7 +357,8 @@ export class ComposioToolProvider extends BaseToolProvider {
       authorId: (account as unknown as { user_id?: string }).user_id,
     }));
 
-    const hasMore = Boolean((list as { nextCursor?: string | null }).nextCursor);
+    const nextCursor = (list as { nextCursor?: string | null }).nextCursor ?? null;
+    const hasMore = typeof nextCursor === 'string' && nextCursor.length > 0;
     return { items, pagination: { page, perPage, hasMore } };
   }
 

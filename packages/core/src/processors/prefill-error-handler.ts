@@ -62,7 +62,8 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
     if (!isPrefillError(error)) return;
 
     await sendSignal?.({
-      type: 'system-reminder',
+      type: 'reactive',
+      tagName: 'system-reminder',
       contents: 'continue',
       attributes: {
         type: 'anthropic-prefill-processor-retry',

@@ -10,11 +10,10 @@ import { z } from 'zod/v4';
  * Rules:
  *  - **Additive-only.** No version field. Future fields are introduced as
  *    optional and existing fields are never removed in v1.x.
- *  - `label` lives on the connection row itself (set via
- *    `PATCH /tool-providers/:providerId/connections/:connectionId`), not on
- *    the pin. The optional `label` field below is retained only for
- *    back-compat with older stored configs; the server does not enforce
- *    anything on it.
+ *  - `label` is optional when there is exactly one connection for a
+ *    `toolkit`. Once two or more connections share a `toolkit`, every
+ *    connection must carry a non-empty, ≤ 32 char, `[A-Za-z0-9 _-]+`
+ *    label that is case-insensitively unique within that toolkit.
  *  - `kind` accepts all three values for forward-compat; v1 only writes
  *    `'author'`.
  */
@@ -23,10 +22,7 @@ const labelSchema = z
   .string()
   .min(1, 'Connection label is required')
   .max(32, 'Connection label must be ≤ 32 characters')
-  .regex(
-    /^[\p{L}\p{N} _\-'.,&()/]+$/u,
-    "Connection label may only contain letters, digits, spaces, and the punctuation _ - ' . , & ( ) /",
-  );
+  .regex(/^[A-Za-z0-9 _-]+$/, 'Connection label may only contain letters, digits, spaces, _ and -');
 
 /**
  * Per-pin identity bucketing.
@@ -55,13 +51,44 @@ const toolMetaSchema = z.object({
 /**
  * Stored shape for one provider's configuration on one agent.
  *
- * Labels are no longer enforced on the pin: they live on the connection row
- * and are set via `PATCH /tool-providers/:providerId/connections/:connectionId`.
+ * `superRefine` enforces case-insensitive uniqueness of `label` within
+ * each `connections[toolkit]` array.
  */
-export const toolProviderConfigSchema = z.object({
-  tools: z.record(z.string(), toolMetaSchema),
-  connections: z.record(z.string(), z.array(connectionSchema)),
-});
+export const toolProviderConfigSchema = z
+  .object({
+    tools: z.record(z.string(), toolMetaSchema),
+    connections: z.record(z.string(), z.array(connectionSchema)),
+  })
+  .superRefine((value, ctx) => {
+    for (const [toolkit, connections] of Object.entries(value.connections)) {
+      if (connections.length < 2) continue;
+
+      const seen = new Map<string, number>();
+      for (let i = 0; i < connections.length; i++) {
+        const conn = connections[i]!;
+        const trimmed = conn.label?.trim() ?? '';
+        if (trimmed.length === 0) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['connections', toolkit, i, 'label'],
+            message: `Connection label is required on toolkit "${toolkit}" once it has two or more connections`,
+          });
+          continue;
+        }
+        const key = trimmed.toLocaleLowerCase();
+        const prevIndex = seen.get(key);
+        if (prevIndex !== undefined) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['connections', toolkit, i, 'label'],
+            message: `Duplicate connection label "${conn.label}" on toolkit "${toolkit}" (labels must be unique case-insensitively)`,
+          });
+        } else {
+          seen.set(key, i);
+        }
+      }
+    }
+  });
 
 /**
  * Full v1 tool providers payload: keyed by provider id.
@@ -146,9 +173,13 @@ export const authorizeToolProviderBodySchema = z.object({
     .describe('Provider-specific user-supplied connection fields (e.g. subdomain)'),
   label: z
     .string()
-    .max(64)
+    .min(1, 'Connection label is required')
+    .max(32, 'Connection label must be ≤ 32 characters')
+    .regex(/^[A-Za-z0-9 _-]+$/, 'Connection label may only contain letters, digits, spaces, _ and -')
     .nullish()
-    .describe('Optional human label to persist on the resulting tool_provider_connections row'),
+    .describe(
+      'Optional human label to persist on the resulting tool_provider_connections row. Must match the stored connection label rules (≤ 32 chars, [A-Za-z0-9 _-]+).',
+    ),
   scope: connectionScopeSchema
     .optional()
     .describe(

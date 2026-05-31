@@ -5,12 +5,12 @@
 '@mastra/cloudflare': patch
 ---
 
-Adds the `tool_provider_connections` storage domain. Stored agents can now persist per-agent ToolProvider config, and agent runs can resolve OAuth-style connections (per-author, shared, or caller-supplied) without re-prompting the user every run.
+Added the `tool_provider_connections` storage domain. Stored agents can now persist per-agent ToolProvider config that round-trips on read/write/create. Runtime connection resolution (per-author, shared, caller-supplied) ships in a follow-up PR.
 
 **What you can do**
 
 - Pin a connection on a stored agent's config and have it round-trip on read/write/create.
-- Persist multiple connections per toolkit and let the runtime fan-out to the right one at execution time (runtime ships in a follow-up PR).
+- Persist multiple connections per toolkit so a follow-up runtime PR can fan-out to the right one at execution time.
 
 **Example**
 

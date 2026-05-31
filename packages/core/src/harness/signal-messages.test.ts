@@ -177,12 +177,99 @@ describe('Harness signal messages', () => {
 
     expect(buildToolsets).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ id: signal.id, type: 'user-message', contents: 'active hello' }),
-      {
+      expect.objectContaining({ id: signal.id, type: 'user', tagName: 'user', contents: 'active hello' }),
+      expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
-      },
+      }),
     );
+  });
+
+  it('tracks queued follow-ups in display state while running', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    (harness as any).abortController = new AbortController();
+
+    await harness.followUp({ content: 'queued follow-up' });
+
+    expect(harness.getFollowUpCount()).toBe(1);
+    expect(harness.getDisplayState().queuedFollowUps).toBe(1);
+    expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
+  });
+
+  it('uses queueMessage when draining follow-ups for a subscribed thread', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'follow-up-queue-agent',
+      name: 'follow-up-queue-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const harness = createHarness(storage, agent);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: true,
+      runId: 'queued-run-id',
+      signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+    });
+    const sendSignal = vi.spyOn(agent, 'sendSignal');
+    const thread = await harness.createThread();
+    (harness as any).abortController = new AbortController();
+
+    await harness.followUp({ content: 'queued follow-up' });
+    await (harness as any).drainFollowUpQueue();
+
+    expect(queueMessage).toHaveBeenCalledWith(
+      'queued follow-up',
+      expect.objectContaining({
+        resourceId: thread.resourceId,
+        threadId: thread.id,
+        ifIdle: expect.objectContaining({
+          streamOptions: expect.objectContaining({
+            memory: { thread: thread.id, resource: thread.resourceId },
+            maxSteps: 1000,
+            savePerStep: false,
+            requireToolApproval: true,
+          }),
+        }),
+      }),
+    );
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(harness.getFollowUpCount()).toBe(0);
+    expect(harness.getDisplayState().queuedFollowUps).toBe(0);
+    expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
+    expect(events).toContainEqual({ type: 'follow_up_queued', count: 0, runId: 'queued-run-id' });
+  });
+
+  it('sends idle follow-ups immediately without marking them queued', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const sendMessage = vi.spyOn(harness, 'sendMessage').mockResolvedValue(undefined);
+
+    await harness.followUp({ content: 'idle follow-up' });
+
+    expect(sendMessage).toHaveBeenCalledWith({ content: 'idle follow-up', requestContext: undefined });
+    expect(harness.getFollowUpCount()).toBe(0);
+    expect(harness.getDisplayState().queuedFollowUps).toBe(0);
+    expect(events.some(event => event.type === 'follow_up_queued')).toBe(false);
   });
 
   it('aborts the current thread stream through the active subscription', async () => {
