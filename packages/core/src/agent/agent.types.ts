@@ -652,14 +652,22 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
  * Use this type for public method signatures.
  */
 export type PublicAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  ([NonNullable<OUTPUT>] extends [never]
+    ? { structuredOutput?: never }
+    : OUTPUT extends {}
+      ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> }
+      : { structuredOutput?: never });
 
 /**
  * Internal agent execution options that require StandardSchemaWithJSON.
  * Use this type internally after converting from PublicSchema.
  */
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  ([NonNullable<OUTPUT>] extends [never]
+    ? { structuredOutput?: never }
+    : OUTPUT extends {}
+      ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
+      : { structuredOutput?: never });
 
 export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   outputWriter?: OutputWriter;
@@ -673,4 +681,8 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     snapshot: WorkflowRunState;
   };
   toolCallId?: string;
-} & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+} & ([NonNullable<OUTPUT>] extends [never]
+    ? { structuredOutput?: never }
+    : OUTPUT extends {}
+      ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
+      : { structuredOutput?: never });
