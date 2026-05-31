@@ -72,6 +72,16 @@ describe('ModelsDevGateway', () => {
         api: 'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
         npm: '@ai-sdk/openai-compatible',
       },
+      google: {
+        id: 'google',
+        name: 'Google',
+        models: {
+          'gemini-3.1-flash-lite': { name: 'Gemini 3.1 Flash Lite' },
+        },
+        env: ['GOOGLE_API_KEY'],
+        api: 'https://generativelanguage.googleapis.com/v1beta',
+        npm: '@ai-sdk/google',
+      },
       'unknown-provider': {
         id: 'unknown-provider',
         name: 'Unknown',
@@ -121,6 +131,17 @@ describe('ModelsDevGateway', () => {
       // OpenAI should be included even though it uses @ai-sdk/openai
       expect(providers.openai).toBeDefined();
       expect(providers.openai.url).toBe('https://api.openai.com/v1');
+    });
+
+    it('should preserve Google legacy API key fallback when generating providers', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockApiResponse,
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.google.apiKeyEnvVar).toEqual(['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY']);
     });
 
     it('should keep hyphens in provider IDs', async () => {
@@ -422,10 +443,8 @@ describe('ModelsDevGateway', () => {
   });
 
   describe('getApiKey', () => {
-    it('should fall back to legacy Google Generative AI API key env var', async () => {
-      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'legacy-google-key');
-
-      gateway = new ModelsDevGateway({
+    const createGoogleGateway = () =>
+      new ModelsDevGateway({
         google: {
           apiKeyEnvVar: ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
           name: 'Google',
@@ -433,6 +452,21 @@ describe('ModelsDevGateway', () => {
           gateway: 'models.dev',
         },
       });
+
+    it('should prefer Google API key env var over legacy env var', async () => {
+      vi.stubEnv('GOOGLE_API_KEY', 'google-key');
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'legacy-google-key');
+
+      gateway = createGoogleGateway();
+
+      await expect(gateway.getApiKey('google/gemini-3.1-flash-lite')).resolves.toBe('google-key');
+    });
+
+    it('should fall back to legacy Google Generative AI API key env var', async () => {
+      vi.stubEnv('GOOGLE_API_KEY', '');
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'legacy-google-key');
+
+      gateway = createGoogleGateway();
 
       await expect(gateway.getApiKey('google/gemini-3.1-flash-lite')).resolves.toBe('legacy-google-key');
     });

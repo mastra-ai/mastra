@@ -82,6 +82,9 @@ function resolveApiKeyFromEnv(apiKeyEnvVar: ProviderConfig['apiKeyEnvVar']): str
 // which providers from models.dev should be included in the registry.
 // At runtime, buildUrl() and buildHeaders() use the pre-generated PROVIDER_REGISTRY instead.
 const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
+  google: {
+    apiKeyEnvVar: ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
+  },
   mistral: {
     url: 'https://api.mistral.ai/v1',
   },
