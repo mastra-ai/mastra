@@ -178,9 +178,16 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
   const result = { ...schema };
 
   if (result.type === 'object' && result.properties) {
+    const existingRequired = new Set(result.required ?? []);
     result.required = Object.keys(result.properties);
     result.properties = Object.fromEntries(
-      Object.entries(result.properties).map(([key, value]) => [key, ensureAllPropertiesRequired(value as JSONSchema7)]),
+      Object.entries(result.properties).map(([key, value]) => {
+        const processed = ensureAllPropertiesRequired(value as JSONSchema7);
+        if (!existingRequired.has(key)) {
+          return [key, { anyOf: [processed, { type: 'null' as const }] }];
+        }
+        return [key, processed];
+      }),
     );
   }
 

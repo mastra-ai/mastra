@@ -658,9 +658,11 @@ describe('ensureAllPropertiesRequired', () => {
 
     expect(fixed.required).toContain('outer');
 
+    // `outer` was not in parent required[], so it's wrapped as anyOf[nullable]
     const outerProp = fixed.properties!.outer as any;
-    expect(outerProp.required).toContain('required');
-    expect(outerProp.required).toContain('optional');
+    const outerSchema = outerProp.anyOf ? outerProp.anyOf[0] : outerProp;
+    expect(outerSchema.required).toContain('required');
+    expect(outerSchema.required).toContain('optional');
   });
 
   it('should handle schemas without properties (no-op)', () => {
@@ -757,6 +759,8 @@ describe('zodToJsonSchema strictMode', () => {
     const nicknameProp = result.properties!.nickname as any;
     expect(nicknameProp).toBeDefined();
     expect(Array.isArray(nicknameProp.type)).toBe(false);
+    expect(Array.isArray(nicknameProp.anyOf)).toBe(true);
+    expect(nicknameProp.anyOf.some((s: any) => s?.type === 'null')).toBe(true);
   });
 
   it('should recursively apply additionalProperties: false on nested objects', () => {
