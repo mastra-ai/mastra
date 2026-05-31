@@ -7718,8 +7718,8 @@ importers:
   workspaces/e2b:
     dependencies:
       e2b:
-        specifier: ^2.14.1
-        version: 2.19.5
+        specifier: ^2.24.0
+        version: 2.27.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -21138,8 +21138,8 @@ packages:
   duplexify@4.1.3:
     resolution: {integrity: sha512-M3BmBhwJRZsSx38lZyhE53Csddgzl5R7xGJNk7CVddZD6CcmwMCH8J+7AprIrQKH7TonKxaCjcv27Qmf+sQ+oA==}
 
-  e2b@2.19.5:
-    resolution: {integrity: sha512-pd1LvDrf5CWn1kHRK0CzKvnHJGeoaH/4//QOhkV+oyFPhBNtvPnUvSv60Zd1vdcuNRFM5b3j0Krg+44hVkLuRg==}
+  e2b@2.27.0:
+    resolution: {integrity: sha512-g6YvN4weHtsj39sSg0S+4Ib5ujtlEwZzIHGH9gRhRP1QWD/KblO9bdEh1NS6aQTLgiyL0hRPrScEoF1V86inFg==}
     engines: {node: '>=20.18.1'}
 
   eastasianwidth@0.2.0:
@@ -22235,10 +22235,6 @@ packages:
     engines: {node: 20 || >=22}
     deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
     hasBin: true
-
-  glob@13.0.0:
-    resolution: {integrity: sha512-tvZgpqk6fz4BaNZ66ZsRaZnbHvP/jG3uKJvAZOwEVUL4RTA5nJeeLYfyN9/VA8NX/V3IBG+hkeuGpKjvELkVhA==}
-    engines: {node: 20 || >=22}
 
   glob@13.0.6:
     resolution: {integrity: sha512-Wjlyrolmm8uDpm/ogGyXZXb1Z+Ca2B8NbJwqBVg0axK9GbBeoS7yGV6vjXnYdGm6X53iehEuxxbyiKp8QmN4Vw==}
@@ -25223,10 +25219,6 @@ packages:
   path-scurry@1.11.1:
     resolution: {integrity: sha512-Xa4Nw17FS9ApQFJ9umLiJS4orGjm7ZzwUrwamcGQuHSzDyth9boKDaycYdDcZDuqYATXw4HFXgaqWTctW/v1HA==}
     engines: {node: '>=16 || 14 >=14.18'}
-
-  path-scurry@2.0.1:
-    resolution: {integrity: sha512-oWyT4gICAu+kaA7QWk/jvCHWarMKNs6pXOGWKDTr7cw4IGcUbW+PeTfbaQiLGheFRpjo6O9J0PmyMfQPjH71oA==}
-    engines: {node: 20 || >=22}
 
   path-scurry@2.0.2:
     resolution: {integrity: sha512-3O/iVVsJAPsOnpwWIeD+d6z/7PmqApyQePUtCndjatj/9I5LylHvt5qluFaBT3I5h3r1ejfR056c+FCv+NnNXg==}
@@ -35486,7 +35478,7 @@ snapshots:
       content-disposition: 1.0.1
       fastify-plugin: 5.1.0
       fastq: 1.20.1
-      glob: 13.0.0
+      glob: 13.0.6
 
   '@fastify/swagger-ui@5.2.5':
     dependencies:
@@ -46820,7 +46812,7 @@ snapshots:
       readable-stream: 3.6.2
       stream-shift: 1.0.3
 
-  e2b@2.19.5:
+  e2b@2.27.0:
     dependencies:
       '@bufbuild/protobuf': 2.10.0
       '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@2.10.0)
@@ -48345,13 +48337,7 @@ snapshots:
       minimatch: 10.2.4
       minipass: 7.1.3
       package-json-from-dist: 1.0.1
-      path-scurry: 2.0.1
-
-  glob@13.0.0:
-    dependencies:
-      minimatch: 10.2.4
-      minipass: 7.1.3
-      path-scurry: 2.0.1
+      path-scurry: 2.0.2
 
   glob@13.0.6:
     dependencies:
@@ -52091,11 +52077,6 @@ snapshots:
   path-scurry@1.11.1:
     dependencies:
       lru-cache: 10.4.3
-      minipass: 7.1.3
-
-  path-scurry@2.0.1:
-    dependencies:
-      lru-cache: 11.3.6
       minipass: 7.1.3
 
   path-scurry@2.0.2:
