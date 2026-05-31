@@ -223,6 +223,12 @@ export class PIIDetector implements Processor<'pii-detector'> {
   /** Default character threshold for flushing the LLM buffer during streaming. */
   private static readonly DEFAULT_BUFFER_SIZE = 200;
 
+  /**
+   * Number of characters to carry over between chunks for regex detection.
+   * Ensures PII split across chunk boundaries (e.g. "test@" + "example.com") is caught.
+   */
+  private static readonly REGEX_CARRYOVER_SIZE = 128;
+
   constructor(options: PIIDetectorOptions) {
     this.detectionTypes = options.detectionTypes || PIIDetector.DEFAULT_DETECTION_TYPES;
     this.threshold = options.threshold ?? 0.6;
@@ -812,8 +818,9 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
               state[REPROCESS_PART_KEY] = part;
               return flushed;
             }
-            // No writer (unit tests): stash non-text for next call
-            state._piiPendingNonText = part;
+            // No writer (unit tests): queue non-text for next call
+            if (!state._piiPendingNonText) state._piiPendingNonText = [];
+            state._piiPendingNonText.push(part);
             return flushed;
           }
         }
@@ -823,11 +830,13 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       // At this point we know part.type === 'text-delta'
       const textPart = part as ChunkType & { type: 'text-delta' };
 
-      // Emit any pending non-text part stashed from a previous flush
-      if (state._piiPendingNonText) {
-        const pending = state._piiPendingNonText;
-        state._piiPendingNonText = undefined;
-        // Re-queue current part for the next call
+      // Drain queued non-text parts (FIFO) stashed from previous flush
+      if (state._piiPendingNonText && state._piiPendingNonText.length > 0) {
+        const pending = state._piiPendingNonText.shift();
+        if (state._piiPendingNonText.length === 0) {
+          state._piiPendingNonText = undefined;
+        }
+        // Re-queue current text part for the next call
         if (!state._piiBuffer) state._piiBuffer = '';
         state._piiBuffer += textPart.payload.text;
         if (!state._piiFirstPayloadId) {
@@ -841,14 +850,38 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         return textPart;
       }
 
-      // Step 1: Regex-based detection (always runs, zero cost)
-      const regexResult = this.detectPIILocal(textContent);
+      // Step 1: Regex-based detection with carryover for split PII
+      const tail: string = state._piiRegexTail || '';
+      const combined = tail + textContent;
+      const regexResult = this.detectPIILocal(combined);
+      // Update tail for next chunk
+      state._piiRegexTail = combined.slice(-PIIDetector.REGEX_CARRYOVER_SIZE);
 
-      if (this.isPIIFlagged(regexResult)) {
-        // Regex caught pattern-based PII — apply strategy immediately
-        const result = this.applyStreamStrategy(textPart, regexResult, abort);
+      // Only flag if PII overlaps with the new chunk (not just the carryover tail)
+      const hasNewPII =
+        this.isPIIFlagged(regexResult) && (regexResult.detections?.some(d => d.end > tail.length) ?? false);
+
+      if (hasNewPII) {
+        // Regex caught pattern-based PII — apply strategy to original chunk
+        // (redaction is applied to `combined` then we extract the new portion)
+        const combinedRedacted = regexResult.redacted_content;
+        let effectiveResult: ChunkType | null;
+        if (this.strategy === 'redact' && combinedRedacted) {
+          // Extract only the portion corresponding to the new chunk
+          const redactedNew = combinedRedacted.slice(tail.length);
+          const redactedPart: ChunkType & { type: 'text-delta' } = {
+            ...textPart,
+            payload: { ...textPart.payload, text: redactedNew },
+          };
+          console.info(
+            `[PIIDetector] Redacted PII in streaming content: ${this.getDetectedTypes(regexResult).join(', ')}`,
+          );
+          effectiveResult = redactedPart;
+        } else {
+          effectiveResult = this.applyStreamStrategy(textPart, regexResult, abort);
+        }
         // If block/filter returned null or threw, no need to buffer
-        if (!result) return null;
+        if (!effectiveResult) return null;
         // For warn/redact, the chunk passes through (possibly redacted)
         // If we're in buffered mode, buffer the processed text
         if (this.hasLLMOnlyTypes) {
@@ -858,14 +891,16 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
             state._piiFirstRunId = textPart.runId;
           }
           state._piiBuffer +=
-            result.type === 'text-delta' ? (result as ChunkType & { type: 'text-delta' }).payload.text : textContent;
+            effectiveResult.type === 'text-delta'
+              ? (effectiveResult as ChunkType & { type: 'text-delta' }).payload.text
+              : textContent;
           // Check flush threshold
           if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
             return this.flushLLMBuffer(state, abort, observabilityContext);
           }
           return null; // Hold back until flush
         }
-        return result;
+        return effectiveResult;
       }
 
       // Step 2: No regex PII found
