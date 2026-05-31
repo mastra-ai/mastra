@@ -55,6 +55,26 @@ function createThrowingStreamModel(modelId: string, statusCode: number) {
   });
 }
 
+function createAbortAwareHangingModel(modelId: string) {
+  const waitForAbort = (abortSignal?: AbortSignal) =>
+    new Promise<never>((_, reject) => {
+      if (abortSignal?.aborted) {
+        reject(abortSignal.reason ?? new Error('Aborted'));
+        return;
+      }
+
+      abortSignal?.addEventListener('abort', () => reject(abortSignal.reason ?? new Error('Aborted')), {
+        once: true,
+      });
+    });
+
+  return new MockLanguageModelV2({
+    modelId,
+    doStream: async ({ abortSignal }) => waitForAbort(abortSignal),
+    doGenerate: async ({ abortSignal }) => waitForAbort(abortSignal),
+  });
+}
+
 describe('Per-fallback-entry settings', () => {
   describe('modelSettings', () => {
     it('should pass each fallback entry its own temperature to doStream', async () => {
@@ -139,6 +159,50 @@ describe('Per-fallback-entry settings', () => {
         await agent.stream('Hello', { requestContext })
       ).text;
       expect(primary.doStreamCalls[0]?.temperature).toBe(0.1);
+    });
+
+    it('should fall back to the next model when step timeout is exceeded', { timeout: 2000 }, async () => {
+      const primary = createAbortAwareHangingModel('primary-step-timeout');
+      const secondary = createRecordingStreamModel('secondary-after-step-timeout', 'secondary response');
+
+      const agent = new Agent({
+        id: 'step-timeout-fallback',
+        name: 'Step Timeout Fallback Test',
+        instructions: 'You are a test agent',
+        model: [
+          { model: primary, maxRetries: 0 },
+          { model: secondary, maxRetries: 0 },
+        ],
+      });
+
+      const text = await (
+        await agent.stream('Hello', {
+          modelSettings: { timeout: { stepMs: 10 } } as any,
+        })
+      ).text;
+
+      expect(text).toBe('secondary response');
+      expect(primary.doStreamCalls).toHaveLength(1);
+      expect(secondary.doStreamCalls).toHaveLength(1);
+    });
+
+    it('should fail the run when total timeout is exceeded', { timeout: 2000 }, async () => {
+      const primary = createAbortAwareHangingModel('primary-total-timeout');
+
+      const agent = new Agent({
+        id: 'total-timeout-failure',
+        name: 'Total Timeout Failure Test',
+        instructions: 'You are a test agent',
+        model: [{ model: primary, maxRetries: 0 }],
+      });
+
+      await expect(
+        agent.generate('Hello', {
+          modelSettings: { timeout: { totalMs: 10 } } as any,
+        }),
+      ).rejects.toThrow(/timed out after 10ms/);
+
+      expect(primary.doGenerateCalls).toHaveLength(1);
     });
   });
 

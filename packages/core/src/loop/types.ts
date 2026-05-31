@@ -1,11 +1,5 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type {
-  CallSettings,
-  IdGenerator,
-  StopCondition as StopConditionV5,
-  ToolChoice,
-  ToolSet,
-} from '@internal/ai-sdk-v5';
+import type { IdGenerator, StopCondition as StopConditionV5, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
@@ -15,6 +9,7 @@ import type { CreatedAgentSignal } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import type { ModelRouterModelId } from '../llm/model';
+import type { MastraModelSettings } from '../llm/model/model-settings';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
@@ -129,7 +124,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   toolCallStreaming?: boolean;
   messageList: MessageList;
   includeRawChunks?: boolean;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
   options?: LoopConfig<OUTPUT>;

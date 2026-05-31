@@ -1,11 +1,17 @@
 import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Prompt, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
+import {
+  createTimeoutAbortSignal,
+  getAbortReason,
+  isMastraTimeoutError,
+  raceAgainstAbort,
+} from '../../../loop/timeout';
 import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
@@ -19,6 +25,130 @@ function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K
     delete newObj[key];
   }
   return newObj;
+}
+
+/**
+ * Keeps the step timeout alive until upstream tokens are drained or cancelled.
+ * Without this, `timeoutSignal.cleanup()` runs as soon as `doStream()` resolves and `stepMs`
+ * would only bound stream creation, not mid-stream stalls.
+ *
+ * Uses `timeoutPromise` in a race with upstream reads so `MastraTimeoutError` is surfaced
+ * (reader.cancel surfaces Abort-like errors instead).
+ */
+function wrapStreamUntilStepTimeoutCleanup(
+  result: LanguageModelV2StreamResult,
+  timeoutBundle: ReturnType<typeof createTimeoutAbortSignal>,
+): LanguageModelV2StreamResult {
+  const upstream = result.stream;
+  let reader: ReadableStreamDefaultReader<LanguageModelV2StreamPart> | undefined;
+  let cleaned = false;
+  const signal = timeoutBundle.signal;
+  const timeoutPromise = timeoutBundle.timeoutPromise;
+
+  const cleanupOnce = () => {
+    if (cleaned) return;
+    cleaned = true;
+    signal?.removeEventListener('abort', onAbortUpstream);
+    timeoutBundle.cleanup();
+  };
+
+  const onAbortUpstream = () => {
+    const reason = signal ? getAbortReason(signal) : undefined;
+    // Step timeout rejects `timeoutPromise` for Promise.race; canceling here would make many
+    // upstream reads resolve `{ done: true }` before MastraTimeoutError reaches the wrapper.
+    if (isMastraTimeoutError(reason)) {
+      return;
+    }
+    reader?.cancel(reason).catch(() => {});
+  };
+
+  if (signal) {
+    signal.addEventListener('abort', onAbortUpstream);
+  }
+
+  const readWithStepDeadline = async (): Promise<ReadableStreamReadResult<LanguageModelV2StreamPart>> => {
+    const r = reader!;
+    if (timeoutPromise === undefined) {
+      return r.read();
+    }
+    try {
+      return await Promise.race([r.read(), timeoutPromise]);
+    } catch (raceErr) {
+      if (isMastraTimeoutError(raceErr)) {
+        await r.cancel(raceErr).catch(() => {});
+        throw raceErr;
+      }
+      throw raceErr;
+    }
+  };
+
+  return {
+    ...result,
+    stream: new ReadableStream<LanguageModelV2StreamPart>({
+      async start(controller) {
+        reader = upstream.getReader();
+        try {
+          while (true) {
+            if (signal?.aborted) {
+              cleanupOnce();
+              controller.error(getAbortReason(signal));
+              return;
+            }
+
+            let readChunk: ReadableStreamReadResult<LanguageModelV2StreamPart>;
+
+            try {
+              readChunk = await readWithStepDeadline();
+            } catch (e) {
+              cleanupOnce();
+              if (isMastraTimeoutError(e)) {
+                controller.error(e);
+                return;
+              }
+              if (signal?.aborted && isMastraTimeoutError(getAbortReason(signal))) {
+                controller.error(getAbortReason(signal));
+                return;
+              }
+              controller.error(e);
+              return;
+            }
+
+            const { done, value } = readChunk;
+
+            if (done) {
+              cleanupOnce();
+              controller.close();
+              return;
+            }
+
+            if (signal?.aborted && isMastraTimeoutError(getAbortReason(signal))) {
+              cleanupOnce();
+              controller.error(getAbortReason(signal));
+              return;
+            }
+
+            controller.enqueue(value);
+          }
+        } finally {
+          try {
+            reader.releaseLock();
+          } catch {
+            //
+          }
+        }
+      },
+
+      cancel(reason) {
+        cleanupOnce();
+        if (reader) {
+          const r = reader;
+          reader = undefined;
+          return r.cancel(reason);
+        }
+        return upstream.cancel(reason);
+      },
+    }),
+  };
 }
 
 type ExecutionProps<OUTPUT = undefined> = {
@@ -151,46 +281,77 @@ export function execute<OUTPUT = undefined>({
     runId,
     onResult,
     createStream: async () => {
+      let timeoutSignal: ReturnType<typeof createTimeoutAbortSignal> | undefined;
       try {
-        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers']);
-        const abortSignal = options?.abortSignal;
+        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'timeout']);
+        timeoutSignal = createTimeoutAbortSignal({
+          parentSignal: options?.abortSignal,
+          timeoutMs: modelSettings?.timeout?.stepMs,
+          timeoutType: 'step',
+        });
+        const abortSignal = timeoutSignal.signal;
 
         const pRetry = await import('p-retry');
-        return await pRetry.default(
-          async () => {
-            const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
+        try {
+          const streamResult = await pRetry.default(
+            async () => {
+              const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
 
-            // Cast needed: V2 and V3 call options are structurally compatible but typed differently
-            // (e.g., tool types differ: V2 uses 'provider-defined', V3 uses 'provider')
-            const streamResult = await (fn as Function)({
-              ...toolsAndToolChoice,
-              prompt,
-              providerOptions: providerOptionsToUse,
-              abortSignal,
-              includeRawChunks,
-              responseFormat:
-                structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection
-                  ? responseFormat
-                  : undefined,
-              ...filteredModelSettings,
-              headers,
-            });
+              // Cast needed: V2 and V3 call options are structurally compatible but typed differently
+              // (e.g., tool types differ: V2 uses 'provider-defined', V3 uses 'provider')
+              const streamResultInner = await raceAgainstAbort(
+                (fn as Function)({
+                  ...toolsAndToolChoice,
+                  prompt,
+                  providerOptions: providerOptionsToUse,
+                  abortSignal,
+                  includeRawChunks,
+                  responseFormat:
+                    structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection
+                      ? responseFormat
+                      : undefined,
+                  ...filteredModelSettings,
+                  headers,
+                }),
+                abortSignal,
+              );
 
-            // We have to cast this because doStream is missing the warnings property in its return type even though it exists
-            return streamResult as unknown as LanguageModelV2StreamResult;
-          },
-          {
-            retries: modelSettings?.maxRetries ?? 2,
-            signal: abortSignal,
-            shouldRetry(context) {
-              if (APICallError.isInstance(context.error)) {
-                return context.error.isRetryable;
-              }
-              return true;
+              // We have to cast this because doStream is missing the warnings property in its return type even though it exists
+              return streamResultInner as unknown as LanguageModelV2StreamResult;
             },
-          },
-        );
+            {
+              retries: modelSettings?.maxRetries ?? 2,
+              signal: abortSignal,
+              shouldRetry(context) {
+                if (isMastraTimeoutError(context.error)) {
+                  return false;
+                }
+                if (APICallError.isInstance(context.error)) {
+                  return context.error.isRetryable;
+                }
+                return true;
+              },
+            },
+          );
+
+          const result = streamResult as unknown as LanguageModelV2StreamResult;
+          const deferStreamCleanup = methodType === 'stream' && modelSettings?.timeout?.stepMs !== undefined;
+
+          if (!deferStreamCleanup) {
+            timeoutSignal.cleanup();
+          }
+
+          if (deferStreamCleanup) {
+            return wrapStreamUntilStepTimeoutCleanup(result, timeoutSignal);
+          }
+
+          return result;
+        } catch (retryError) {
+          timeoutSignal.cleanup();
+          throw retryError;
+        }
       } catch (error) {
+        timeoutSignal?.cleanup();
         if (shouldThrowError) {
           throw error;
         }
