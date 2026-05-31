@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import fsExtra from 'fs-extra/esm';
 
-import { FileEnvService } from './service.fileEnv';
+import { FileEnvService } from './service.env';
 
 export class FileService {
   /**

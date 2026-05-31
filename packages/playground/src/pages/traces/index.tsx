@@ -1,10 +1,14 @@
 import { EntityType } from '@mastra/core/observability';
 import {
+  Button,
   DateTimeRangePicker,
+  Label,
   NoTracesInfo,
+  Notice,
   PageLayout,
   PropertyFilterCreator,
   SpanDataPanelView,
+  Switch,
   TraceDataPanelView,
   TracesErrorContent,
   TracesLayout,
@@ -12,6 +16,7 @@ import {
   TracesToolbar,
   buildTraceListFilters,
   createTracePropertyFilterFields,
+  isBranchesNotSupportedError,
   neutralizeFilterTokens,
   useEntityNames,
   useEnvironments,
@@ -26,6 +31,7 @@ import {
   useTraces,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
+import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
@@ -78,6 +84,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
   const [spanScoresPage, setSpanScoresPage] = useState(0);
   const [traceCollapsed, setTraceCollapsed] = useState(false);
+  // Set once we detect the active storage provider doesn't implement `listBranches`. Drives both the
+  // auto-flip from branches→traces below and hiding the Branches option in the List mode filter.
+  const [branchesUnsupported, setBranchesUnsupported] = useState(false);
+  const [branchesNoticeDismissed, setBranchesNoticeDismissed] = useState(false);
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<{
     traceId: string;
     rootSpanId: string | undefined;
@@ -177,9 +187,24 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     hasNextPage,
     setEndOfListElement,
     error: tracesError,
+    isRefetching: isRefetchingTraces,
+    autoRefetch: autoRefetchTraces,
+    setAutoRefetch: setAutoRefetchTraces,
+    recentlyAddedKeys: recentlyAddedTraceKeys,
   } = useTraces({ filters: traceFilters, listMode: url.listMode });
 
   const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+
+  // Storage providers that don't implement `listBranches` throw a known MastraError. When that
+  // surfaces in branches mode, treat the provider as branches-incapable for the rest of the
+  // session: flip the URL back to traces mode so the next query succeeds, and remove the
+  // Branches option from the List mode filter (see `branchesSupported` in `filterFields`).
+  useEffect(() => {
+    if (!tracesError || branchesUnsupported) return;
+    if (!isBranchesNotSupportedError(tracesError)) return;
+    setBranchesUnsupported(true);
+    if (url.listMode === 'branches') url.handleListModeChange('traces');
+  }, [tracesError, branchesUnsupported, url]);
 
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(lightSpans, url.spanIdParam ?? null, id =>
     url.handleSpanChange(id),
@@ -251,13 +276,57 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
+      <div className="flex h-form-default items-center gap-2 ml-auto">
+        {!branchesUnsupported && (
+          <>
+            <Switch
+              id="show-subtraces"
+              checked={url.listMode === 'branches'}
+              onCheckedChange={checked => url.handleListModeChange(checked ? 'branches' : 'traces')}
+              disabled={isTracesLoading}
+            />
+            <Label htmlFor="show-subtraces">Show subtraces</Label>
+          </>
+        )}
+        <Button
+          variant="ghost"
+          size="md"
+          onClick={() => setAutoRefetchTraces(!autoRefetchTraces)}
+          aria-label="Toggle auto-refetch"
+          aria-pressed={autoRefetchTraces}
+          tooltip={autoRefetchTraces ? 'Auto-refetch ON' : 'Auto-refetch OFF'}
+        >
+          {autoRefetchTraces ? (
+            <RefreshCw className={`h-4 w-4 ${isRefetchingTraces ? 'animate-spin' : ''}`} />
+          ) : (
+            <CircleSlash2 className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
     </>
   );
+
+  const branchesUnsupportedNotice =
+    branchesUnsupported && !branchesNoticeDismissed ? (
+      <Notice
+        variant="info"
+        action={
+          <Notice.Button variant="ghost" onClick={() => setBranchesNoticeDismissed(true)}>
+            Dismiss
+          </Notice.Button>
+        }
+        className="mb-4"
+      >
+        <Notice.Message>
+          Selected list mode isn't supported by this storage provider — switched to default.
+        </Notice.Message>
+      </Notice>
+    ) : null;
 
   const pageTopArea = (
     <PageLayout.TopArea>
       <PageLayout.Row>
-        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
+        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2 w-full">
           {toolbarControls}
         </PageLayout.Column>
       </PageLayout.Row>
@@ -275,10 +344,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         lockedFieldIds={lockedFieldIds}
         lockedTooltipContent={lockedTooltipContent}
       />
+
+      {branchesUnsupportedNotice}
     </PageLayout.TopArea>
   );
 
-  if (tracesError) {
+  // Swallow the "branches not supported" error — the effect above flips listMode back to traces
+  // and the next query will succeed. Showing the red error screen for one frame would be jarring.
+  if (tracesError && !isBranchesNotSupportedError(tracesError)) {
     return (
       <PageLayout width="wide" height="full">
         {pageTopArea}
@@ -325,6 +398,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             // In branches mode the row identity is (traceId, anchorSpanId) — spanIdParam may
             // have drifted via intra-panel span nav and shouldn't decide which row is featured.
             featuredSpanId={url.listMode === 'branches' ? url.anchorSpanIdParam : null}
+            isBranchesMode={url.listMode === 'branches'}
+            recentlyAddedKeys={recentlyAddedTraceKeys}
             onTraceClick={trace => {
               const isBranches = url.listMode === 'branches';
               const isSameRow = isBranches
@@ -417,14 +492,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         }
       />
 
-      {datasetDialogTarget && (
-        <TraceAsItemDialog
-          rootSpanId={datasetDialogTarget.rootSpanId}
-          traceId={datasetDialogTarget.traceId}
-          isOpen
-          onClose={() => setDatasetDialogTarget(null)}
-        />
-      )}
+      <TraceAsItemDialog
+        rootSpanId={datasetDialogTarget?.rootSpanId}
+        traceId={datasetDialogTarget?.traceId}
+        isOpen={!!datasetDialogTarget}
+        onClose={() => setDatasetDialogTarget(null)}
+      />
     </PageLayout>
   );
 }

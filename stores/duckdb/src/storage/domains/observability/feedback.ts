@@ -14,10 +14,18 @@ import type {
   AggregationInterval,
   AggregationType,
 } from '@mastra/core/storage';
+import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
+import {
+  assertDeltaPollingEnabled,
+  deltaPollingFeatureEnabled,
+  encodeDeltaCursor,
+  extendWhereClause,
+  validateCursorId,
+} from './polling';
 
 type LegacyFeedbackRecord = CreateFeedbackArgs['feedback'] & {
   source?: string | null;
@@ -243,7 +251,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
   const feedbackUserId = f.feedbackUserId ?? f.userId ?? null;
   await db.execute(
     `INSERT INTO feedback_events (
-      feedbackId, timestamp, traceId, spanId, experimentId,
+      feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
@@ -251,6 +259,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
      VALUES (${[
        v(f.feedbackId),
        v(f.timestamp),
+       "nextval('feedback_events_cursor_id_seq')",
        v(f.traceId),
        v(f.spanId ?? null),
        v(f.experimentId ?? null),
@@ -301,6 +310,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
     return `(${[
       v(legacyFeedback.feedbackId),
       v(legacyFeedback.timestamp),
+      "nextval('feedback_events_cursor_id_seq')",
       v(legacyFeedback.traceId),
       v(legacyFeedback.spanId ?? null),
       v(legacyFeedback.experimentId ?? null),
@@ -340,7 +350,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
 
   await db.execute(
     `INSERT INTO feedback_events (
-      feedbackId, timestamp, traceId, spanId, experimentId,
+      feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
@@ -352,16 +362,51 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
 
 /** Query feedback events with filtering, ordering, and pagination. */
 export async function listFeedback(db: DuckDBConnection, args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
+  const { mode, filters, pagination, orderBy, after, limit } = listFeedbackArgsSchema.parse(args);
+  const page = Number(pagination.page);
+  const perPage = Number(pagination.perPage);
 
   const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>, {
     source: 'feedbackSource',
   });
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const streamHeadCursor = await getStreamHeadCursor(db);
+    if (after === undefined) {
+      return {
+        feedback: [],
+        delta: { limit, hasMore: false },
+        deltaCursor: streamHeadCursor,
+      };
+    }
+
+    const afterCursorId = validateCursorId(after);
+    const deltaWhereClause = extendWhereClause(filterClause, ['cursorId IS NOT NULL', `cursorId > CAST(? AS BIGINT)`]);
+    const rows = await db.query<Record<string, unknown>>(
+      `SELECT * FROM feedback_events ${deltaWhereClause} ORDER BY cursorId ASC LIMIT ?`,
+      [...filterParams, afterCursorId, limit + 1],
+    );
+
+    const visibleRows = rows.slice(0, limit).map(row => ({
+      cursorId: row.cursorId,
+      feedback: rowToFeedbackRecord(row),
+    }));
+
+    return {
+      feedback: visibleRows.map(row => row.feedback) as ListFeedbackResponse['feedback'],
+      delta: { limit, hasMore: rows.length > limit },
+      deltaCursor:
+        visibleRows.length > 0 ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId) : streamHeadCursor,
+    };
+  }
+
   const orderByClause = buildOrderByClause(orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+  const currentDeltaCursor = deltaPollingFeatureEnabled()
+    ? await getDeltaCursor(db, filterClause, filterParams)
+    : undefined;
 
   const countResult = await db.query<{ total: number }>(
     `SELECT COUNT(*) as total FROM feedback_events ${filterClause}`,
@@ -377,7 +422,28 @@ export async function listFeedback(db: DuckDBConnection, args: ListFeedbackArgs)
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     feedback: rows.map(row => rowToFeedbackRecord(row)) as ListFeedbackResponse['feedback'],
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
+}
+
+async function getDeltaCursor(db: DuckDBConnection, filterClause: string, filterParams: unknown[]): Promise<string> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT max(cursorId) AS cursorId FROM feedback_events ${filterClause}`,
+    filterParams,
+  );
+
+  const cursorId = rows[0]?.cursorId;
+  if (cursorId !== null && cursorId !== undefined) {
+    return encodeDeltaCursor(cursorId);
+  }
+
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM feedback_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
+}
+
+async function getStreamHeadCursor(db: DuckDBConnection): Promise<string> {
+  const streamRows = await db.query<Record<string, unknown>>(`SELECT max(cursorId) AS cursorId FROM feedback_events`);
+  return encodeDeltaCursor(streamRows[0]?.cursorId);
 }
 
 export async function getFeedbackAggregate(

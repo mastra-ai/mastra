@@ -9,6 +9,8 @@ export interface HelpTextOptions {
   modes: number;
   /** User-defined custom slash commands */
   customSlashCommands: SlashCommandMetadata[];
+  /** Active direct shell passthrough mode label */
+  shellModeLabel?: string;
 }
 
 interface HelpEntry {
@@ -29,6 +31,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/name', description: 'Rename current thread' },
     { key: '/resource', description: 'Show/switch resource ID' },
     { key: '/skills', description: 'List available skills' },
+    { key: '/skill/<name>', description: 'Activate a skill' },
     { key: '/models', description: 'Switch model pack' },
     { key: '/custom-providers', description: 'Manage custom providers and models' },
     { key: '/subagents', description: 'Configure subagent models' },
@@ -111,7 +114,14 @@ export function buildHelpText(options: HelpTextOptions): string {
     sections.push(renderSection('Custom Commands', customEntries));
   }
 
-  sections.push(renderSection('Shell', [{ key: '!<cmd>', description: 'Run a shell command' }]));
+  sections.push(
+    renderSection('Shell', [
+      {
+        key: '!<cmd>',
+        description: `Run a direct shell command (${options.shellModeLabel ?? 'default shell'})`,
+      },
+    ]),
+  );
 
   sections.push(renderSection('Keyboard Shortcuts', getShortcuts(options.modes)));
 

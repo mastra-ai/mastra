@@ -1,11 +1,4 @@
-import {
-  ArrowLeftIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  FilterIcon,
-  ListFilterPlusIcon,
-  PlusIcon,
-} from 'lucide-react';
+import { ArrowLeftIcon, ChevronRightIcon, FilterIcon, ListFilterPlusIcon, PlusIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
@@ -178,12 +171,13 @@ export function PropertyFilterCreator({
       <PopoverContent
         align="end"
         className="p-3 w-64"
-        onOpenAutoFocus={e => e.preventDefault()}
-        onCloseAutoFocus={e => {
+        initialFocus={false}
+        finalFocus={() => {
           if (skipCloseFocusRef.current) {
             skipCloseFocusRef.current = false;
-            e.preventDefault();
+            return false;
           }
+          return true;
         }}
       >
         <div className="grid gap-3">
@@ -387,7 +381,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronLeftIcon className="h-4 w-4 text-neutral3 shrink-0" />}
+          {open && <ChevronRightIcon className="h-4 w-4 text-neutral3 shrink-0" />}
           <span className="truncate">{field.label}</span>
           {!open && <ChevronRightIcon className="h-4 w-4 ml-auto text-neutral3 shrink-0" />}
         </button>
@@ -398,7 +392,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
         align="start"
         sideOffset={8}
         className="w-64 p-2"
-        onOpenAutoFocus={e => e.preventDefault()}
+        initialFocus={false}
         onKeyDown={e => {
           if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
           const items = Array.from(

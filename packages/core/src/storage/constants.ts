@@ -25,6 +25,7 @@ export const TABLE_WORKSPACE_VERSIONS = 'mastra_workspace_versions';
 export const TABLE_SKILLS = 'mastra_skills';
 export const TABLE_SKILL_VERSIONS = 'mastra_skill_versions';
 export const TABLE_SKILL_BLOBS = 'mastra_skill_blobs';
+export const TABLE_FAVORITES = 'mastra_favorites';
 
 // Dataset tables
 export const TABLE_DATASETS = 'mastra_datasets';
@@ -43,6 +44,9 @@ export const TABLE_SCHEDULE_TRIGGERS = 'mastra_schedule_triggers';
 // Channel tables
 export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
 export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
+
+// Tool provider connections
+export const TABLE_TOOL_PROVIDER_CONNECTIONS = 'mastra_tool_provider_connections';
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -74,10 +78,12 @@ export type TABLE_NAMES =
   | typeof TABLE_EXPERIMENTS
   | typeof TABLE_EXPERIMENT_RESULTS
   | typeof TABLE_BACKGROUND_TASKS
+  | typeof TABLE_FAVORITES
   | typeof TABLE_SCHEDULES
   | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
-  | typeof TABLE_CHANNEL_CONFIG;
+  | typeof TABLE_CHANNEL_CONFIG
+  | typeof TABLE_TOOL_PROVIDER_CONNECTIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -149,7 +155,9 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft' or 'published'
   activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
   authorId: { type: 'text', nullable: true }, // Author identifier for multi-tenant filtering
+  visibility: { type: 'text', nullable: true }, // 'private' | 'public' | null (legacy)
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
+  favoriteCount: { type: 'integer', nullable: true }, // Denormalised count of favorites for this agent
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -168,6 +176,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   workflows: { type: 'jsonb', nullable: true },
   agents: { type: 'jsonb', nullable: true },
   integrationTools: { type: 'jsonb', nullable: true },
+  toolProviders: { type: 'jsonb', nullable: true },
   inputProcessors: { type: 'jsonb', nullable: true },
   outputProcessors: { type: 'jsonb', nullable: true },
   memory: { type: 'jsonb', nullable: true },
@@ -177,6 +186,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   workspace: { type: 'jsonb', nullable: true },
   skills: { type: 'jsonb', nullable: true },
   skillsFormat: { type: 'text', nullable: true },
+  browser: { type: 'jsonb', nullable: true },
   // Version metadata
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
@@ -320,6 +330,34 @@ export const SKILLS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
   activeVersionId: { type: 'text', nullable: true }, // FK to skill_versions.id
   authorId: { type: 'text', nullable: true },
+  visibility: { type: 'text', nullable: true }, // 'private' | 'public' | null (legacy)
+  favoriteCount: { type: 'integer', nullable: true }, // Denormalised count of favorites for this skill
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const FAVORITES_SCHEMA: Record<string, StorageColumn> = {
+  userId: { type: 'text', nullable: false },
+  entityType: { type: 'text', nullable: false }, // 'agent' | 'skill'
+  entityId: { type: 'text', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+/**
+ * Per-author registry of authorized tool provider connections. Stores a stable
+ * user-supplied label across agents. Composite primary key on
+ * (authorId, providerId, connectionId). `scope` buckets identity:
+ * 'per-author' (default), 'shared' (visible to all callers), or
+ * 'caller-supplied' (authorId is a host-app end-user id forwarded via request
+ * context).
+ */
+export const TOOL_PROVIDER_CONNECTIONS_SCHEMA: Record<string, StorageColumn> = {
+  authorId: { type: 'text', nullable: false },
+  providerId: { type: 'text', nullable: false },
+  connectionId: { type: 'text', nullable: false },
+  toolkit: { type: 'text', nullable: false },
+  label: { type: 'text', nullable: true },
+  scope: { type: 'text', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -337,6 +375,7 @@ export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   references: { type: 'jsonb', nullable: true },
   scripts: { type: 'jsonb', nullable: true },
   assets: { type: 'jsonb', nullable: true },
+  files: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   tree: { type: 'jsonb', nullable: true },
   changedFields: { type: 'jsonb', nullable: true },
@@ -555,6 +594,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
+  [TABLE_FAVORITES]: FAVORITES_SCHEMA,
   [TABLE_BACKGROUND_TASKS]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     tool_call_id: { type: 'text', nullable: false },
@@ -620,6 +660,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     data: { type: 'jsonb', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },
+  [TABLE_TOOL_PROVIDER_CONNECTIONS]: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
 };
 
 /**
@@ -628,6 +669,11 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
  */
 export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
+  [TABLE_FAVORITES]: { columns: FAVORITES_SCHEMA, compositePrimaryKey: ['userId', 'entityType', 'entityId'] },
+  [TABLE_TOOL_PROVIDER_CONNECTIONS]: {
+    columns: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
+    compositePrimaryKey: ['authorId', 'providerId', 'connectionId'],
+  },
 };
 
 /**

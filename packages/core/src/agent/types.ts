@@ -6,7 +6,8 @@ import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
-import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
+import type { AgentChannels } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/types';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type {
@@ -52,7 +53,7 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { CreatedAgentSignal } from './signals';
+import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
@@ -81,6 +82,8 @@ export type ToolsInput = Record<
 export type AgentInstructions = SystemMessage;
 
 export type {
+  AgentMessageInput,
+  AgentSignalAttributes,
   AgentSignalInput as AgentSignal,
   AgentSignalType,
   AgentSignalDataPart,
@@ -105,15 +108,19 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       runId: string;
       resourceId?: string;
       threadId?: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: never;
     }
   | {
       runId?: string;
       resourceId: string;
       threadId: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
-      ifIdle?: { behavior?: AgentSignalIdleBehavior; streamOptions?: AgentExecutionOptions<OUTPUT> };
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
+      ifIdle?: {
+        behavior?: AgentSignalIdleBehavior;
+        streamOptions?: AgentExecutionOptions<OUTPUT>;
+        attributes?: AgentSignalAttributes;
+      };
     };
 
 /**
@@ -126,6 +133,26 @@ export interface SendAgentSignalResult {
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
 }
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageResult = SendAgentSignalResult;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageResult = SendAgentSignalResult;
 
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;
@@ -400,6 +427,11 @@ export interface AgentConfig<
    */
   mastra?: Mastra;
   /**
+   * Pub/sub system for coordinating runtime services such as thread signals.
+   * When omitted, the agent uses its Mastra instance pubsub or the default in-memory pubsub.
+   */
+  pubsub?: PubSub;
+  /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */
   agents?: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
@@ -424,9 +456,16 @@ export interface AgentConfig<
    */
   browser?: MastraBrowser;
   /**
-   * Voice settings for speech input and output.
+   * Voice settings for speech input and output. Can be provided statically or resolved dynamically per request.
+   *
+   * Provide a resolver (`({ requestContext }) => new SomeVoice(...)`) to give each request/session its own
+   * voice instance. This is required for realtime / speech-to-speech providers, where concurrent live sessions
+   * must not share a single mutable instance (ws, tools, instructions, request context). The caller owns the
+   * lifecycle (e.g. `disconnect()`) of a resolver-produced instance.
+   *
+   * A static `MastraVoice` remains shared across requests, which is appropriate for one-shot TTS.
    */
-  voice?: MastraVoice;
+  voice?: DynamicArgument<MastraVoice, TRequestContext>;
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *

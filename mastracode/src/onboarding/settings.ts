@@ -69,6 +69,19 @@ export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 /** Browser provider type. */
 export type BrowserProvider = 'stagehand' | 'agent-browser';
 
+/** Direct TUI `!` shell passthrough mode. */
+export type ShellPassthroughSettingsMode = 'default' | 'path' | 'login';
+
+/** Direct TUI `!` shell command language. */
+export type ShellPassthroughSettingsFamily = 'posix' | 'cmd' | 'powershell';
+
+/** Direct TUI `!` shell passthrough configuration. */
+export interface ShellPassthroughSettings {
+  mode?: ShellPassthroughSettingsMode | string;
+  executable?: string;
+  family?: ShellPassthroughSettingsFamily | string;
+}
+
 /** Stagehand environment type. */
 export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
 
@@ -119,6 +132,7 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
+    quietModePreferenceSelected: boolean;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -166,6 +180,12 @@ export interface GlobalSettings {
      * overridden per-thread.
      */
     omCavemanObservations: boolean | null;
+    /**
+     * Whether Observational Memory forwards image/file attachment parts to the
+     * Observer LLM. `null` ⇒ inherit built-in default ('auto'). 'auto' checks
+     * model capabilities; true/false forces the setting.
+     */
+    omObserveAttachments: 'auto' | boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
     /** Default judge model for /goal. */
@@ -181,6 +201,8 @@ export interface GlobalSettings {
     thinkingLevel: ThinkingLevelSetting;
     /** When true, components like subagent output collapse to compact summaries on completion. */
     quietMode: boolean;
+    /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
+    quietModeMaxToolPreviewLines: number;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -198,8 +220,17 @@ export interface GlobalSettings {
   lsp?: LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
+  // Direct TUI `!` shell passthrough configuration
+  shellPassthrough: ShellPassthroughSettings;
+  // Signal routing configuration
+  signals: SignalSettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
   observability: ObservabilitySettings;
+}
+
+export interface SignalSettings {
+  /** Opt into local Unix socket PubSub for cross-process signal routing. */
+  unixSocketPubSub: boolean;
 }
 
 export interface ObservabilityResourceConfig {
@@ -232,6 +263,7 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
+    quietModePreferenceSelected: true,
   },
   models: {
     activeModelPackId: null,
@@ -243,6 +275,7 @@ const DEFAULTS: GlobalSettings = {
     omObservationThreshold: null,
     omReflectionThreshold: null,
     omCavemanObservations: null,
+    omObserveAttachments: null,
     subagentModels: {},
     goalJudgeModel: null,
     goalMaxTurns: null,
@@ -252,6 +285,7 @@ const DEFAULTS: GlobalSettings = {
     theme: 'auto',
     thinkingLevel: 'off',
     quietMode: false,
+    quietModeMaxToolPreviewLines: 2,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
@@ -267,15 +301,24 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
+  shellPassthrough: { mode: 'default' },
+  signals: { unixSocketPubSub: false },
   observability: { resources: {}, localTracing: false },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
+const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 
 function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
   return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
     ? (value as ThinkingLevelSetting)
     : DEFAULTS.preferences.thinkingLevel;
+}
+
+function parseQuietModeMaxToolPreviewLines(value: unknown): number {
+  const rawValue =
+    typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
+  return Math.min(QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX, Math.max(0, Math.floor(rawValue)));
 }
 
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
@@ -285,7 +328,28 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...DEFAULTS.preferences,
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+    quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
   };
+}
+
+function hasQuietModePreferenceSelected(rawOnboarding: unknown): boolean {
+  return Boolean(
+    rawOnboarding &&
+    typeof rawOnboarding === 'object' &&
+    Object.prototype.hasOwnProperty.call(rawOnboarding, 'quietModePreferenceSelected'),
+  );
+}
+
+function applyQuietModePreferenceRollout(settings: GlobalSettings, rawOnboarding: unknown): void {
+  if (hasQuietModePreferenceSelected(rawOnboarding)) return;
+  settings.onboarding.quietModePreferenceSelected = settings.preferences.quietMode === true;
+}
+
+function getNewInstallDefaults(): GlobalSettings {
+  const settings = structuredClone(DEFAULTS);
+  settings.preferences.quietMode = true;
+  settings.onboarding.quietModePreferenceSelected = true;
+  return settings;
 }
 
 export function getSettingsPath(): string {
@@ -408,6 +472,23 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   };
 }
 
+function parseShellPassthroughSettings(rawShellPassthrough: unknown): ShellPassthroughSettings {
+  const raw =
+    rawShellPassthrough && typeof rawShellPassthrough === 'object'
+      ? (rawShellPassthrough as Record<string, unknown>)
+      : {};
+  const executable = typeof raw.executable === 'string' && raw.executable.trim() ? raw.executable.trim() : undefined;
+  const family = typeof raw.family === 'string' && raw.family.trim() ? raw.family.trim() : undefined;
+  const mode = typeof raw.mode === 'string' && raw.mode.trim() ? raw.mode.trim() : undefined;
+  const defaultMode = executable ? undefined : DEFAULTS.shellPassthrough.mode;
+
+  return {
+    ...((mode ?? defaultMode) ? { mode: mode ?? defaultMode } : {}),
+    ...(executable ? { executable } : {}),
+    ...(family ? { family } : {}),
+  };
+}
+
 const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 
 function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
@@ -473,8 +554,16 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
+        shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
+        signals: {
+          unixSocketPubSub:
+            raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
+              ? raw.signals.unixSocketPubSub
+              : DEFAULTS.signals.unixSocketPubSub,
+        },
         observability: parseObservabilitySettings(raw.observability),
       };
+      applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
       settings = structuredClone(DEFAULTS);
     }
@@ -569,7 +658,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
 
-  if (!existsSync(filePath)) return structuredClone(DEFAULTS);
+  if (!existsSync(filePath)) return getNewInstallDefaults();
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
@@ -592,11 +681,22 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
+      shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
+      signals: {
+        unixSocketPubSub:
+          raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
+            ? raw.signals.unixSocketPubSub
+            : DEFAULTS.signals.unixSocketPubSub,
+      },
       observability: parseObservabilitySettings(raw.observability),
     };
 
     // Migrate legacy omModelId → omModelOverride
     let settingsChanged = false;
+    if (!hasQuietModePreferenceSelected(raw.onboarding)) {
+      applyQuietModePreferenceRollout(settings, raw.onboarding);
+      settingsChanged = true;
+    }
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
       settingsChanged = true;

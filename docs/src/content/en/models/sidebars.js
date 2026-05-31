@@ -223,6 +223,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/crof',
+          label: 'CrofAI',
+        },
+        {
+          type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
         },
@@ -318,6 +323,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/inceptron',
+          label: 'Inceptron',
+        },
+        {
+          type: 'doc',
           id: 'providers/inference',
           label: 'Inference',
         },
@@ -345,6 +355,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/kuae-cloud-coding-plan',
           label: 'KUAE Cloud Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/lilac',
+          label: 'Lilac',
         },
         {
           type: 'doc',
@@ -478,6 +493,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/orcarouter',
+          label: 'OrcaRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
         },
@@ -523,6 +543,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/routing-run',
+          label: 'routing.run',
+        },
+        {
+          type: 'doc',
           id: 'providers/sarvam',
           label: 'Sarvam AI',
         },
@@ -549,6 +574,11 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/stepfun',
+          label: 'StepFun',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun-ai',
           label: 'StepFun',
         },
         {

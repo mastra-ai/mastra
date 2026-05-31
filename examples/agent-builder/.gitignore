@@ -1,0 +1,5 @@
+.env
+.env.development
+node_modules
+.vercel
+.mastra.mastra

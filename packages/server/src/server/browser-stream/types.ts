@@ -24,7 +24,16 @@ export interface BrowserStreamConfig {
    * Function to retrieve the BrowserToolset for a given agent ID.
    * Returns undefined if no browser is available for this agent.
    */
-  getToolset: (agentId: string) => MastraBrowser | undefined;
+  getToolset: (agentId: string) => MastraBrowser | undefined | Promise<MastraBrowser | undefined>;
+  /**
+   * API route prefix for HTTP endpoints (probe and close). Defaults to `/api`.
+   * Should match the prefix the rest of the server is mounted under so clients
+   * configured with a non-default `apiPrefix` can reach these routes.
+   *
+   * The WebSocket upgrade path (`/browser/:agentId/stream`) is not affected by
+   * this prefix.
+   */
+  apiPrefix?: string;
 }
 
 /**

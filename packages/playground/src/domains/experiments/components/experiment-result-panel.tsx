@@ -3,6 +3,7 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import {
   Column,
+  Icon,
   ItemList,
   MainHeader,
   PrevNextNav,
@@ -13,7 +14,17 @@ import {
   Notice,
 } from '@mastra/playground-ui';
 import { format } from 'date-fns/format';
-import { FileOutputIcon, Calendar1Icon, PlayIcon, FileCodeIcon, PanelRightIcon, TagIcon, XIcon } from 'lucide-react';
+import {
+  ClipboardCheck,
+  FileOutputIcon,
+  Calendar1Icon,
+  PlayIcon,
+  FileCodeIcon,
+  PanelRightIcon,
+  TagIcon,
+  TargetIcon,
+  XIcon,
+} from 'lucide-react';
 
 const scoreColumns = [
   { name: 'scorer', label: 'Scorer', size: '1fr' },
@@ -29,6 +40,7 @@ export type ExperimentResultPanelProps = {
   onShowTrace?: () => void;
   onScoreClick?: (scoreId: string) => void;
   featuredScoreId?: string | null;
+  onFlagForReview?: (resultId: string) => void;
 };
 
 export function ExperimentResultPanel({
@@ -40,10 +52,12 @@ export function ExperimentResultPanel({
   onShowTrace,
   onScoreClick,
   featuredScoreId,
+  onFlagForReview,
 }: ExperimentResultPanelProps) {
   const hasError = Boolean(result?.error);
   const inputStr = formatValue(result?.input);
   const outputStr = formatValue(result?.output);
+  const groundTruthStr = formatValue(result?.groundTruth);
 
   return (
     <>
@@ -55,6 +69,14 @@ export function ExperimentResultPanel({
           nextAriaLabel="View next result details"
         />
         <ButtonsGroup>
+          {onFlagForReview && result.status !== 'needs-review' && result.status !== 'complete' && (
+            <Button onClick={() => onFlagForReview(result.id)}>
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              Flag for Review
+            </Button>
+          )}
           <Button onClick={onShowTrace} disabled={!result.traceId}>
             <PanelRightIcon />
             Show Trace
@@ -147,6 +169,7 @@ export function ExperimentResultPanel({
 
         <SideDialog.CodeSection title="Input" icon={<FileCodeIcon />} codeStr={inputStr} />
         <SideDialog.CodeSection title="Output" icon={<FileOutputIcon />} codeStr={outputStr} />
+        <SideDialog.CodeSection title="Ground Truth" icon={<TargetIcon />} codeStr={groundTruthStr} />
 
         <div className="grid gap-2">
           <h4 className="text-sm font-medium text-neutral5 flex items-center gap-2">

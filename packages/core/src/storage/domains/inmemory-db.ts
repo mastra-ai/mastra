@@ -9,8 +9,10 @@ import type {
   StoragePromptBlockType,
   StorageResourceType,
   StorageScorerDefinitionType,
+  StorageFavoriteType,
   StorageWorkspaceType,
   StorageSkillType,
+  StorageToolProviderConnection,
   StorageWorkflowRun,
   ObservationalMemoryRecord,
   DatasetRecord,
@@ -51,6 +53,13 @@ export class InMemoryDB {
   readonly logRecords: LogRecord[] = [];
   readonly scoreRecords: ScoreRecord[] = [];
   readonly feedbackRecords: FeedbackRecord[] = [];
+  observabilityNextCursorId = 1;
+  readonly traceCursorIds = new Map<string, number>();
+  readonly branchCursorIds = new Map<string, number>();
+  readonly metricCursorIds = new Map<MetricRecord, number>();
+  readonly logCursorIds = new Map<LogRecord, number>();
+  readonly scoreCursorIds = new Map<ScoreRecord, number>();
+  readonly feedbackCursorIds = new Map<FeedbackRecord, number>();
   readonly agents = new Map<string, StorageAgentType>();
   readonly agentVersions = new Map<string, AgentVersion>();
   readonly promptBlocks = new Map<string, StoragePromptBlockType>();
@@ -65,6 +74,13 @@ export class InMemoryDB {
   readonly workspaceVersions = new Map<string, WorkspaceVersion>();
   readonly skills = new Map<string, StorageSkillType>();
   readonly skillVersions = new Map<string, SkillVersion>();
+  /**
+   * Favorites keyed by `${userId}\u0000${entityType}\u0000${entityId}`. The
+   * favorites domain owns reads/writes; this Map lives on InMemoryDB so the
+   * favorites domain can also mutate `agents` / `skills` `favoriteCount` atomically
+   * within the same synchronous block.
+   */
+  readonly favorites = new Map<string, StorageFavoriteType>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
@@ -85,6 +101,11 @@ export class InMemoryDB {
   readonly scheduleTriggers: ScheduleTrigger[] = [];
 
   /**
+   * Tool provider connections keyed by `${authorId}\u0000${providerId}\u0000${connectionId}`.
+   */
+  readonly toolProviderConnections = new Map<string, StorageToolProviderConnection>();
+
+  /**
    * Clears all data from all collections.
    * Useful for testing.
    */
@@ -99,6 +120,13 @@ export class InMemoryDB {
     this.logRecords.length = 0;
     this.scoreRecords.length = 0;
     this.feedbackRecords.length = 0;
+    this.observabilityNextCursorId = 1;
+    this.traceCursorIds.clear();
+    this.branchCursorIds.clear();
+    this.metricCursorIds.clear();
+    this.logCursorIds.clear();
+    this.scoreCursorIds.clear();
+    this.feedbackCursorIds.clear();
     this.agents.clear();
     this.agentVersions.clear();
     this.promptBlocks.clear();
@@ -113,6 +141,7 @@ export class InMemoryDB {
     this.workspaceVersions.clear();
     this.skills.clear();
     this.skillVersions.clear();
+    this.favorites.clear();
     this.observationalMemory.clear();
     this.datasets.clear();
     this.datasetItems.clear();
@@ -122,5 +151,6 @@ export class InMemoryDB {
     this.backgroundTasks.clear();
     this.schedules.clear();
     this.scheduleTriggers.length = 0;
+    this.toolProviderConnections.clear();
   }
 }

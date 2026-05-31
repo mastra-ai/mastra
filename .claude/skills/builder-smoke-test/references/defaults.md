@@ -4,6 +4,8 @@ When the Agent Builder is enabled, `applyBuilderDefaults()` fills in workspace, 
 
 Reference: `packages/core/src/agent-builder/ee/apply-builder-defaults.ts` and the scaffolded project's `src/mastra/index.ts` (the `builder.configuration.agent` block).
 
+> **Visibility under `--auth off`.** Some examples below pass `"visibility": "private"`. With `--auth off` the server has no caller to attribute ownership to and forces `visibility: "public"` (and `authorId: null`) regardless of what you send. That is expected; don't fail the step on it. Under `--auth on`, `"private"` is preserved.
+
 ## Source-of-truth: builder config in the scaffolded project
 
 ```ts

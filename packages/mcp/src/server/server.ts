@@ -646,7 +646,7 @@ export class MCPServer extends MCPServerBase {
           };
         }
 
-        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
+        const validation = await tool.parameters.validate?.(request.params.arguments ?? {});
         if (validation && !validation.success) {
           this.logger.warn('Invalid tool arguments', {
             tool: request.params.name,
@@ -747,7 +747,7 @@ export class MCPServer extends MCPServerBase {
             structuredContent = result;
           }
 
-          const outputValidation = tool.outputSchema.validate?.(structuredContent ?? {});
+          const outputValidation = await tool.outputSchema.validate?.(structuredContent ?? {});
           if (outputValidation && !outputValidation.success) {
             this.logger.warn('Invalid structured content', {
               tool: request.params.name,
@@ -1840,6 +1840,13 @@ export class MCPServer extends MCPServerBase {
   }) {
     try {
       this.logger.debug('Received SSE connection');
+
+      // Close the previous transport so the underlying protocol accepts a new one.
+      if (this.sseTransport) {
+        await this.sseTransport.close?.();
+        this.sseTransport = undefined;
+      }
+
       this.sseTransport = new SSEServerTransport(messagePath, res);
       await this.server.connect(this.sseTransport);
 

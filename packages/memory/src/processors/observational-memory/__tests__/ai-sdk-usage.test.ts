@@ -626,6 +626,24 @@ describe('AI SDK: multi-turn buffer→activate lifecycle invariants', () => {
     expect(recordAfter!.lastObservedAt).toEqual(lastObservedBefore);
   });
 
+  it('can skip the minimum token gate for idle-triggered short turns', async () => {
+    const shortTurnOm = createOM(storage, { messageTokens: 2000, bufferTokens: 1000 });
+    const thresholdThreadId = `${threadId}-threshold-short`;
+    const idleThreadId = `${threadId}-idle-short`;
+
+    await storage.saveMessages({
+      messages: [{ ...createTestMessage('ok', 'user', `${thresholdThreadId}-msg`), threadId: thresholdThreadId }],
+    });
+    await storage.saveMessages({
+      messages: [{ ...createTestMessage('ok', 'user', `${idleThreadId}-msg`), threadId: idleThreadId }],
+    });
+
+    await expect(shortTurnOm.buffer({ threadId: thresholdThreadId })).resolves.toMatchObject({ buffered: false });
+    await expect(shortTurnOm.buffer({ threadId: idleThreadId, skipMinimumTokenCheck: true })).resolves.toMatchObject({
+      buffered: true,
+    });
+  });
+
   it('activate promotes buffered observations without LLM call', async () => {
     await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
 

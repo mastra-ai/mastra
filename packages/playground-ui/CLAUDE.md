@@ -6,9 +6,20 @@ Standards and conventions for building components in `packages/playground-ui`.
 
 On every change to this package, you MUST ALWAYS follow these instructions:
 
-- use `e2e-frontend-validation` skill
+- use `playground-msw-tests` skill — PRIMARY testing strategy for components and hooks
+- use `e2e-tests-studio` skill — only when MSW cannot model the journey
 - use `react-best-practices` skill
 - use `tailwind-best-practices` skill
+
+## Testing Priority (highest first)
+
+1. **Vitest + MSW + typed `@mastra/client-js` fixtures** — `playground-msw-tests`
+   skill. This is the #1 way to test this package. Cover business hooks, data
+   components, gating, and React Query flows here. The same rules apply as in
+   `packages/playground`: drive the real client SDK, only mock the network,
+   never mock our own hooks, and type every fixture from `@mastra/client-js`.
+2. **Playwright E2E** — `e2e-tests-studio` skill. Use only when MSW cannot
+   model the journey.
 
 ## Commands
 

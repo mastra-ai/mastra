@@ -325,14 +325,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     options: {
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
+      activeTools: execOptions?.activeTools,
       temperature: execOptions?.modelSettings?.temperature,
-      requireToolApproval: execOptions?.requireToolApproval,
+      // Durable runs serialize their options, so a function-valued global approval policy
+      // can't be persisted. Degrade safely by requiring approval for every tool call.
+      requireToolApproval:
+        typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: (execOptions as any)?.returnScorerData,
       hasErrorProcessors: errorProcessors.length > 0,
+      providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
     },

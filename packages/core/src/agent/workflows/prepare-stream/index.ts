@@ -8,8 +8,8 @@ import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import type { ToolPayloadTransformPolicy } from '../../../tools';
-import { createWorkflow } from '../../../workflows';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
+import { createWorkflow } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -35,7 +35,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   memory?: MastraMemory;
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
@@ -55,8 +55,6 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
-  /** Signal inputs already stored in the initial message list that still need stream data-part echoes. */
-  initialSignalEchoes?: CreatedAgentSignal[];
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -85,7 +83,6 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
-  initialSignalEchoes,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -136,7 +133,6 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolPayloadTransform,
     skipBgTaskWait,
     drainPendingSignals,
-    initialSignalEchoes,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -163,6 +159,10 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,
       },
+      // This is an internal, non-resumable workflow created per agent generate/stream call.
+      // It must never write snapshot rows to the user's storage. Registering Mastra (done by
+      // the agent) lets it read storage to suppress noise, while this keeps writes off.
+      shouldPersistSnapshot: () => false,
       validateInputs: false,
     },
   })

@@ -161,7 +161,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    const actorModelContext = model?.modelId ? { provider: model.provider, modelId: model.modelId } : undefined;
+    const actorModelContext = model?.modelId
+      ? { provider: model.provider, modelId: model.modelId, providerOptions: args.providerOptions }
+      : undefined;
     state.__omActorModelContext = actorModelContext;
 
     return this.engine.getTokenCounter().runWithModelContext(actorModelContext, async () => {
@@ -239,10 +241,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           },
         });
         this.turn.writer = writer;
+        this.turn.sendSignal = args.sendSignal;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
         if (stepNumber === 0 && this.temporalMarkers) {
-          await insertTemporalGapMarkers({ messageList, writer });
+          await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
         }
         state.__omTurn = this.turn;
       }

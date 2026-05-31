@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-workos",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "description": "Mastra WorkOS Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,8 @@
     "lru-cache": "^11.2.7"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.32.0-0 <2.0.0-0",
+    "hono": "^4.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
