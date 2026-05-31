@@ -718,6 +718,11 @@ const sidebars = {
               id: 'observability/metrics/overview',
               label: 'Overview',
             },
+            {
+              type: 'doc',
+              id: 'observability/metrics/querying',
+              label: 'Querying metrics',
+            },
           ],
         },
       ],
