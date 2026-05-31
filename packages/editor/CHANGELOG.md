@@ -1,5 +1,67 @@
 # @mastra/editor
 
+## 0.11.0-alpha.2
+
+### Minor Changes
+
+- Added the v1 ToolProvider runtime, server routes, client SDK methods, and editor wiring that power OAuth-backed integrations on stored agents. ([#17248](https://github.com/mastra-ai/mastra/pull/17248))
+
+  **Stored agents can now pin OAuth connections per toolkit**
+
+  A stored agent's config accepts a new `toolProviders` shape that tells the runtime which connection to bind for each toolkit at execution time. Connections can be scoped per-author, shared across an org, or supplied by the caller.
+
+  ```ts
+  {
+    toolProviders: {
+      composio: {
+        connections: {
+          gmail: [{ kind: 'author', toolkit: 'gmail', connectionId: 'auth_abc', scope: 'per-author' }],
+        },
+        tools: {
+          GMAIL_FETCH_EMAILS: { toolkit: 'gmail' },
+        },
+      },
+    },
+  }
+  ```
+
+  **New client SDK surface for managing connections**
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: '…' });
+  const composio = client.toolProvider('composio');
+
+  const { items } = await composio.listConnections({ toolkit: 'gmail' });
+  await composio.disconnectConnection('auth_abc');
+  ```
+
+  **New `ToolProvider` interface for custom providers**
+
+  Providers implement a VNext surface (`listToolkitsVNext`, `listToolsVNext`, `resolveToolsVNext`) plus the auth round-trip (`authorize`, `getAuthStatus`, `listConnections`, `disconnectConnection`, `listConnectionFields`, `health`). The Composio provider has been rewritten on this surface; the older catalog methods remain as `@deprecated` shims for back-compat.
+
+  Connections list responses use `page`/`perPage` pagination, matching the rest of the server surface.
+
+  Both stored agents (`editor.agent.getById(...)`) and code-defined agents with stored overrides (`editor.agent.applyStoredOverrides(...)`) resolve `toolProviders` at request time, merging provider-resolved tools alongside code/registry/MCP/integration tools.
+
+  Stored agents that don't set `toolProviders` continue to work unchanged. The Studio/Builder UI ships separately.
+
+### Patch Changes
+
+- Improved observability and error isolation in the v1 ToolProvider runtime. ([#17248](https://github.com/mastra-ai/mastra/pull/17248))
+
+  **Better visibility into connection-scope misconfiguration**
+
+  When an agent runs with a stored ToolProvider connection whose scope cannot be resolved from the request context, the runtime now logs a one-shot warning and falls back to a shared bucket instead of silently routing every caller to the same OAuth account. Multi-tenant deployments get a clear signal when their identity wiring isn't reaching the runtime.
+
+  **One bad toolkit no longer disables sibling providers**
+
+  If a provider returns more connections for a toolkit than its declared capabilities allow, the runtime now logs and skips that toolkit instead of throwing. Other providers and other toolkits on the same agent continue to resolve normally.
+
+- Updated dependencies [[`50ed00c`](https://github.com/mastra-ai/mastra/commit/50ed00caa914a85969b33de83f26b48e328ef641), [`9283971`](https://github.com/mastra-ai/mastra/commit/928397157009b4aef4d5fdf3a0a273cb371beb55), [`0bf2d93`](https://github.com/mastra-ai/mastra/commit/0bf2d932d20e2936f2d9abb8c0a86e24fbc97ec6), [`94dfef6`](https://github.com/mastra-ai/mastra/commit/94dfef6e2bf19a88467ea3940afcbce88a433f0f), [`a122f79`](https://github.com/mastra-ai/mastra/commit/a122f79427ae225ec79c7b2ed46278da48d04b17), [`4c02027`](https://github.com/mastra-ai/mastra/commit/4c020277235eaa6b1dc957c90ad0639eef213992), [`6855012`](https://github.com/mastra-ai/mastra/commit/685501247cc4717506f3e89beed03509d63a5370), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23)]:
+  - @mastra/core@1.38.0-alpha.4
+
 ## 0.10.2-alpha.1
 
 ### Patch Changes
