@@ -9,7 +9,7 @@ import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { ToolPayloadTransformPolicy } from '../tools';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
@@ -568,8 +568,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   isTaskComplete?: StreamIsTaskCompleteConfig;
 
-  /** Require approval for all tool calls */
-  requireToolApproval?: boolean;
+  /**
+   * Require approval for tool calls. Pass `true` to require approval for every tool call,
+   * or a function evaluated per call (with the tool name, args, and request context) to
+   * decide conditionally — e.g. to gate approval by a regex on the tool name.
+   */
+  requireToolApproval?: RequireToolApproval;
 
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;

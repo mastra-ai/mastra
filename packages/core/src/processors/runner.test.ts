@@ -1000,6 +1000,137 @@ describe('ProcessorRunner', () => {
     });
   });
 
+  describe('drainReprocessParts', () => {
+    const makeTextDelta = (text: string): ChunkType => ({
+      type: 'text-delta',
+      payload: { text, id: 'text-1' },
+      runId: '1',
+      from: ChunkFrom.AGENT,
+    });
+
+    it('re-drives a stashed part through the whole chain and emits the result', async () => {
+      const seenByDownstream: string[] = [];
+      const outputProcessors: Processor[] = [
+        // Upstream processor that (in real usage) stashes a part for reprocessing.
+        {
+          id: 'stasher',
+          name: 'Stasher',
+          processOutputStream: async ({ part }) => part,
+        },
+        // Downstream processor that uppercases text-delta parts.
+        {
+          id: 'uppercaser',
+          name: 'Uppercaser',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'text-delta') {
+              seenByDownstream.push(part.payload.text);
+              return { ...part, payload: { ...part.payload, text: part.payload.text.toUpperCase() } } as ChunkType;
+            }
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      // Seed the chain so the stasher's state exists, then stash a part on it.
+      await runner.processPart(makeTextDelta('primary'), processorStates);
+      const stasherState = processorStates.get('stasher')!;
+      stasherState.customState.__mastraReprocessPart = makeTextDelta('stashed');
+
+      const results = await runner.drainReprocessParts(processorStates);
+
+      // The stashed part was re-driven through the downstream uppercaser.
+      expect(seenByDownstream).toContain('stashed');
+      expect(results).toHaveLength(1);
+      expect(results[0]!.blocked).toBe(false);
+      expect((results[0]!.part as any)?.payload?.text).toBe('STASHED');
+      // The stash key is consumed.
+      expect(stasherState.customState.__mastraReprocessPart).toBeUndefined();
+    });
+
+    it('drains parts stashed by multiple processors in processor order', async () => {
+      const outputProcessors: Processor[] = [
+        { id: 'first', name: 'First', processOutputStream: async ({ part }) => part },
+        { id: 'second', name: 'Second', processOutputStream: async ({ part }) => part },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      // Seed both processor states.
+      await runner.processPart(makeTextDelta('primary'), processorStates);
+
+      // Stash a part on each processor; drain should emit them in processor order
+      // (first processor's stash before second processor's stash).
+      processorStates.get('first')!.customState.__mastraReprocessPart = makeTextDelta('from-first');
+      processorStates.get('second')!.customState.__mastraReprocessPart = makeTextDelta('from-second');
+
+      const results = await runner.drainReprocessParts(processorStates);
+
+      expect(results.map(r => (r.part as any)?.payload?.text)).toEqual(['from-first', 'from-second']);
+      expect(processorStates.get('first')!.customState.__mastraReprocessPart).toBeUndefined();
+      expect(processorStates.get('second')!.customState.__mastraReprocessPart).toBeUndefined();
+    });
+
+    it('returns an empty array when nothing is stashed', async () => {
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [{ id: 'noop', name: 'Noop', processOutputStream: async ({ part }) => part }],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      await runner.processPart(makeTextDelta('primary'), processorStates);
+
+      const results = await runner.drainReprocessParts(processorStates);
+      expect(results).toEqual([]);
+    });
+
+    it('stops draining and reports the blocked result when a reprocessed part is aborted', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'blocker',
+          name: 'Blocker',
+          processOutputStream: async ({ part, abort }) => {
+            if (part.type === 'text-delta' && part.payload.text === 'stashed') {
+              abort('blocked on reprocess');
+            }
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      await runner.processPart(makeTextDelta('primary'), processorStates);
+      processorStates.get('blocker')!.customState.__mastraReprocessPart = makeTextDelta('stashed');
+
+      const results = await runner.drainReprocessParts(processorStates);
+      expect(results).toHaveLength(1);
+      expect(results[0]!.blocked).toBe(true);
+      expect(results[0]!.reason).toBe('blocked on reprocess');
+    });
+  });
+
   describe('Stream Processing Integration', () => {
     it('should create a readable stream that processes text chunks', async () => {
       const outputProcessors: Processor[] = [

@@ -397,7 +397,14 @@ export type StorageDefaultOptions = Omit<
   | 'system' // SystemMessage can be arrays or complex message objects
   | 'stopWhen' // StopCondition is a complex union type from AI SDK
   | 'providerOptions' // ProviderOptions includes provider-specific types from external packages
->;
+  | 'requireToolApproval' // can be a function at runtime; stored options must be serializable
+> & {
+  /**
+   * Stored agents only support a boolean here. Function-based approval policies are runtime-only
+   * and cannot be serialized, so they are intentionally excluded from stored default options.
+   */
+  requireToolApproval?: boolean;
+};
 
 /**
  * A conditional variant: a value paired with an optional RuleGroup.
