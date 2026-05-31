@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { WebSocket } from 'ws';
 import { OpenAIRealtimeVoice } from './index';
 
 // Mock RealtimeClient
@@ -74,6 +75,17 @@ describe('OpenAIRealtimeVoice', () => {
 
     it('should throw error on empty input', async () => {
       await expect(voice.speak('')).rejects.toThrow('Input text is empty');
+    });
+  });
+
+  describe('connect', () => {
+    it('should not send the deprecated OpenAI-Beta header', async () => {
+      await voice.connect();
+
+      expect(WebSocket).toHaveBeenCalledTimes(1);
+      const headers = (vi.mocked(WebSocket).mock.calls[0]![2] as { headers: Record<string, string> }).headers;
+      expect(headers.Authorization).toBe('Bearer test-api-key');
+      expect(headers).not.toHaveProperty('OpenAI-Beta');
     });
   });
 
