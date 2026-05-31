@@ -32,14 +32,22 @@ const createMockAgent = (response: string, shouldFail = false): Agent =>
   }) as unknown as Agent;
 
 // Helper to create mock workflow
-const createMockWorkflow = (result: Record<string, unknown>): Workflow =>
-  ({
+const createMockWorkflow = (result: Record<string, unknown>, resumeResults?: Record<string, unknown>[]): Workflow => {
+  const resumeMock = vi.fn();
+  if (resumeResults) {
+    for (const r of resumeResults) {
+      resumeMock.mockResolvedValueOnce(r);
+    }
+  }
+  return {
     id: 'test-workflow',
     name: 'Test Workflow',
     createRun: vi.fn().mockImplementation(async () => ({
       start: vi.fn().mockResolvedValue(result),
+      resume: resumeMock,
     })),
-  }) as unknown as Workflow;
+  } as unknown as Workflow;
+};
 
 describe('executeTarget', () => {
   beforeEach(() => {
@@ -249,9 +257,11 @@ describe('executeTarget', () => {
       expect(result.error).toEqual(expect.objectContaining({ message: 'Workflow tripwire: Limit exceeded' }));
     });
 
-    it('returns not-yet-supported error on suspended status', async () => {
+    it('returns suspended error with guidance when no resume data provided', async () => {
       const mockWorkflow = createMockWorkflow({
         status: 'suspended',
+        suspendPayload: { prompt: 'Approve?' },
+        suspended: [['approval-step']],
       });
 
       const result = await executeTarget(mockWorkflow, 'workflow', {
@@ -264,10 +274,220 @@ describe('executeTarget', () => {
         updatedAt: new Date(),
       });
 
-      expect(result.output).toBeNull();
+      // suspend payload exposed as output for debugging
+      expect(result.output).toEqual({ prompt: 'Approve?' });
       expect(result.error).toEqual(
-        expect.objectContaining({ message: 'Workflow suspended - not yet supported in dataset experiments' }),
+        expect.objectContaining({
+          message: expect.stringContaining('provide resume data'),
+        }),
       );
+    });
+
+    it('auto-resumes suspended workflow with flat resumeData', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['approval-step']],
+          suspendPayload: { prompt: 'Approve?' },
+          steps: {},
+          traceId: 'trace-1',
+          spanId: 'span-1',
+        },
+        [
+          {
+            status: 'success',
+            result: { approved: true },
+            steps: {},
+            traceId: 'trace-1',
+            spanId: 'span-1',
+            stepExecutionPath: ['approval-step'],
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-resume-1',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeData: { approved: true },
+      });
+
+      expect(result.error).toBeNull();
+      expect(result.output).toEqual({ approved: true });
+
+      // Verify resume was called with correct args
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).toHaveBeenCalledTimes(1);
+      expect(run.resume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeData: { approved: true },
+          step: 'approval-step',
+        }),
+      );
+    });
+
+    it('auto-resumes suspended workflow with per-step resumeSteps', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['review-step']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-2',
+          spanId: 'span-2',
+        },
+        [
+          {
+            status: 'success',
+            result: { reviewed: true },
+            steps: {},
+            traceId: 'trace-2',
+            spanId: 'span-2',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-resume-2',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeSteps: { 'review-step': { decision: 'approve' } },
+      });
+
+      expect(result.error).toBeNull();
+      expect(result.output).toEqual({ reviewed: true });
+
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeData: { decision: 'approve' },
+          step: 'review-step',
+        }),
+      );
+    });
+
+    it('auto-resumes through multiple suspend/resume cycles', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['step-a']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-3',
+          spanId: 'span-3',
+        },
+        [
+          {
+            status: 'suspended',
+            suspended: [['step-b']],
+            suspendPayload: {},
+            steps: {},
+            traceId: 'trace-3',
+            spanId: 'span-3',
+          },
+          {
+            status: 'success',
+            result: { done: true },
+            steps: {},
+            traceId: 'trace-3',
+            spanId: 'span-3',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-resume-3',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeSteps: {
+          'step-a': { value: 'a' },
+          'step-b': { value: 'b' },
+        },
+      });
+
+      expect(result.error).toBeNull();
+      expect(result.output).toEqual({ done: true });
+
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.resume).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops resuming when no data matches the suspended step', async () => {
+      const mockWorkflow = createMockWorkflow({
+        status: 'suspended',
+        suspended: [['unknown-step']],
+        suspendPayload: { prompt: 'Input needed' },
+        steps: {},
+        traceId: 'trace-4',
+        spanId: 'span-4',
+      });
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-resume-4',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resumeSteps: { 'other-step': { value: 'x' } },
+      });
+
+      // Should still be suspended — no matching resume data
+      expect(result.output).toEqual({ prompt: 'Input needed' });
+      expect(result.error).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('provide resume data'),
+        }),
+      );
+    });
+
+    it('reads resume data from metadata fallback', async () => {
+      const mockWorkflow = createMockWorkflow(
+        {
+          status: 'suspended',
+          suspended: [['approval-step']],
+          suspendPayload: {},
+          steps: {},
+          traceId: 'trace-5',
+          spanId: 'span-5',
+        },
+        [
+          {
+            status: 'success',
+            result: { ok: true },
+            steps: {},
+            traceId: 'trace-5',
+            spanId: 'span-5',
+          },
+        ],
+      );
+
+      const result = await executeTarget(mockWorkflow, 'workflow', {
+        id: 'item-resume-5',
+        datasetId: 'ds-1',
+        input: { data: 'test' },
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: { resumeData: { approved: true } },
+      });
+
+      expect(result.error).toBeNull();
+      expect(result.output).toEqual({ ok: true });
     });
 
     it('returns not-yet-supported error on paused status', async () => {
