@@ -69,6 +69,19 @@ export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 /** Browser provider type. */
 export type BrowserProvider = 'stagehand' | 'agent-browser';
 
+/** Direct TUI `!` shell passthrough mode. */
+export type ShellPassthroughSettingsMode = 'default' | 'path' | 'login';
+
+/** Direct TUI `!` shell command language. */
+export type ShellPassthroughSettingsFamily = 'posix' | 'cmd' | 'powershell';
+
+/** Direct TUI `!` shell passthrough configuration. */
+export interface ShellPassthroughSettings {
+  mode?: ShellPassthroughSettingsMode | string;
+  executable?: string;
+  family?: ShellPassthroughSettingsFamily | string;
+}
+
 /** Stagehand environment type. */
 export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
 
@@ -169,10 +182,10 @@ export interface GlobalSettings {
     omCavemanObservations: boolean | null;
     /**
      * Whether Observational Memory forwards image/file attachment parts to the
-     * Observer LLM. `null` ⇒ inherit built-in default (true). Turn off when
-     * using a text-only observer model.
+     * Observer LLM. `null` ⇒ inherit built-in default ('auto'). 'auto' checks
+     * model capabilities; true/false forces the setting.
      */
-    omObserveAttachments: boolean | null;
+    omObserveAttachments: 'auto' | boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
     /** Default judge model for /goal. */
@@ -207,6 +220,8 @@ export interface GlobalSettings {
   lsp?: LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
+  // Direct TUI `!` shell passthrough configuration
+  shellPassthrough: ShellPassthroughSettings;
   // Signal routing configuration
   signals: SignalSettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
@@ -286,6 +301,7 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
+  shellPassthrough: { mode: 'default' },
   signals: { unixSocketPubSub: false },
   observability: { resources: {}, localTracing: false },
 };
@@ -456,6 +472,23 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   };
 }
 
+function parseShellPassthroughSettings(rawShellPassthrough: unknown): ShellPassthroughSettings {
+  const raw =
+    rawShellPassthrough && typeof rawShellPassthrough === 'object'
+      ? (rawShellPassthrough as Record<string, unknown>)
+      : {};
+  const executable = typeof raw.executable === 'string' && raw.executable.trim() ? raw.executable.trim() : undefined;
+  const family = typeof raw.family === 'string' && raw.family.trim() ? raw.family.trim() : undefined;
+  const mode = typeof raw.mode === 'string' && raw.mode.trim() ? raw.mode.trim() : undefined;
+  const defaultMode = executable ? undefined : DEFAULTS.shellPassthrough.mode;
+
+  return {
+    ...((mode ?? defaultMode) ? { mode: mode ?? defaultMode } : {}),
+    ...(executable ? { executable } : {}),
+    ...(family ? { family } : {}),
+  };
+}
+
 const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 
 function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
@@ -521,6 +554,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
+        shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         signals: {
           unixSocketPubSub:
             raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
@@ -647,6 +681,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
+      shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       signals: {
         unixSocketPubSub:
           raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'

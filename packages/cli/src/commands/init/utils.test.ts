@@ -24,22 +24,35 @@ vi.mock('../auth/credentials.js', () => ({
   loadCredentials: vi.fn(),
 }));
 
-const { promptForObservability, writeObservabilityEnv } = await import('./utils');
+vi.mock('../auth/orgs.js', () => ({
+  resolveCurrentOrg: vi.fn(),
+}));
+
+const { getAPIKey, promptForObservability, writeObservabilityEnv } = await import('./utils');
 const prompts = await import('@clack/prompts');
 const { getToken, loadCredentials } = await import('../auth/credentials.js');
+const { resolveCurrentOrg } = await import('../auth/orgs.js');
 
 const selectMock = vi.mocked(prompts.select);
 const getTokenMock = vi.mocked(getToken);
 const loadCredentialsMock = vi.mocked(loadCredentials);
+const resolveCurrentOrgMock = vi.mocked(resolveCurrentOrg);
+
+describe('getAPIKey', () => {
+  test('returns GOOGLE_API_KEY for Google provider', async () => {
+    await expect(getAPIKey('google')).resolves.toBe('GOOGLE_API_KEY');
+  });
+});
 
 describe('promptForObservability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getTokenMock.mockResolvedValue('platform-token');
     loadCredentialsMock.mockResolvedValue(null);
+    resolveCurrentOrgMock.mockResolvedValue({ orgId: 'org_test', orgName: 'Test Org' });
   });
 
-  test('starts platform auth immediately when observability is enabled', async () => {
+  test('starts platform auth and prompts for an org immediately when observability is enabled', async () => {
     selectMock.mockResolvedValueOnce('yes' as never);
 
     await expect(
@@ -47,9 +60,12 @@ describe('promptForObservability', () => {
     ).resolves.toEqual({
       enabled: true,
       token: 'platform-token',
+      orgId: 'org_test',
+      orgName: 'Test Org',
     });
 
     expect(getTokenMock).toHaveBeenCalledTimes(1);
+    expect(resolveCurrentOrgMock).toHaveBeenCalledWith('platform-token', { forcePrompt: true });
     expect(trackEventMock).toHaveBeenCalledWith('cli_observability_selected', {
       command: undefined,
       enabled: true,
@@ -68,6 +84,7 @@ describe('promptForObservability', () => {
     });
 
     expect(getTokenMock).not.toHaveBeenCalled();
+    expect(resolveCurrentOrgMock).not.toHaveBeenCalled();
     expect(trackEventMock).toHaveBeenCalledWith('cli_observability_selected', {
       command: undefined,
       enabled: false,
@@ -137,7 +154,12 @@ describe('promptForObservability', () => {
     selectMock.mockResolvedValueOnce('yes' as never).mockResolvedValueOnce('yes' as never);
     getTokenMock.mockRejectedValueOnce(new Error('Login timed out (60s)')).mockResolvedValueOnce('retry-token');
 
-    await expect(promptForObservability()).resolves.toEqual({ enabled: true, token: 'retry-token' });
+    await expect(promptForObservability()).resolves.toEqual({
+      enabled: true,
+      token: 'retry-token',
+      orgId: 'org_test',
+      orgName: 'Test Org',
+    });
 
     expect(selectMock).toHaveBeenCalledTimes(2);
     expect(getTokenMock).toHaveBeenCalledTimes(2);

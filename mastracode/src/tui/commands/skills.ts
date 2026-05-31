@@ -1,5 +1,6 @@
 import { formatSkillActivation } from '@mastra/core/workspace';
 import { SlashCommandComponent } from '../components/slash-command.js';
+import { isCurrentThreadActive, sendSlashCommandMessage } from './send-slash-command-message.js';
 import { isUserInvocable } from './skill-filters.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -109,19 +110,22 @@ export async function handleSkillCommand(ctx: SlashCommandContext, skillName: st
       return;
     }
 
-    const component = new SlashCommandComponent(`skill/${skill.name}`, content);
-    ctx.state.allSlashCommandComponents.push(component);
-    ctx.state.chatContainer.addChild(component);
-    ctx.state.ui.requestRender();
-
-    if (ctx.state.pendingNewThread) {
-      await ctx.harness.createThread();
-      ctx.state.pendingNewThread = false;
+    if (!isCurrentThreadActive(ctx)) {
+      const component = new SlashCommandComponent(`skill/${skill.name}`, content);
+      ctx.state.allSlashCommandComponents.push(component);
+      ctx.state.chatContainer.addChild(component);
+      ctx.state.ui.requestRender();
     }
 
-    await ctx.harness.sendMessage({
-      content: `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`,
-    });
+    const displayText = `/skill/${skill.name}${trimmedArgs ? ` ${trimmedArgs}` : ''}`;
+    await sendSlashCommandMessage(
+      ctx,
+      displayText,
+      `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`,
+      {
+        renderIdleUserMessage: false,
+      },
+    );
   } catch (error) {
     ctx.showError(
       `Error executing /skill/${normalizedSkillName}: ${error instanceof Error ? error.message : String(error)}`,

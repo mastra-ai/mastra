@@ -590,6 +590,16 @@ export interface ObservationalMemoryObservationConfig {
    * @default false
    */
   threadTitle?: boolean;
+
+  /**
+   * Whether image/file attachment parts are forwarded to the Observer LLM.
+   * - `true` forwards attachments
+   * - `false` drops attachments and leaves placeholder text
+   * - `'auto'` checks model capabilities to decide
+   *
+   * @default true
+   */
+  observeAttachments?: 'auto' | boolean;
 }
 
 /**
@@ -1314,6 +1324,8 @@ export type SerializedObservationalMemoryObservationConfig = {
   previousObserverTokens?: number | false;
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
+  /** Whether image/file attachment parts are forwarded to the Observer LLM */
+  observeAttachments?: 'auto' | boolean;
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */

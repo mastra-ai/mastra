@@ -583,6 +583,51 @@ describe('SentryExporter', () => {
       );
     });
 
+    it('should set gen_ai.conversation.id from threadId', async () => {
+      const span = createMockSpan({
+        id: 'span-with-thread',
+        name: 'test',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          threadId: 'thread-789',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith(
+        expect.objectContaining({
+          'gen_ai.conversation.id': 'thread-789',
+        }),
+      );
+    });
+
+    it('should not set gen_ai.conversation.id when threadId is absent', async () => {
+      const span = createMockSpan({
+        id: 'span-no-thread',
+        name: 'test',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          userId: 'user-123',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      const call = mockSpan.setAttributes.mock.calls[0][0];
+      expect(call).not.toHaveProperty('gen_ai.conversation.id');
+    });
+
     it('should not include langfuse metadata', async () => {
       const span = createMockSpan({
         id: 'span-with-langfuse',

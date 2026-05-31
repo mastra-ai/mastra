@@ -23,7 +23,7 @@ function rerank(
 ```typescript
 import { rerank } from '@mastra/rag'
 
-const model = 'openai/gpt-5.4'
+const model = '__GATEWAY_OPENAI_MODEL__'
 
 const rerankedResults = await rerank(vectorSearchResults, 'How do I deploy to production?', model, {
   weights: {

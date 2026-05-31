@@ -153,7 +153,7 @@ export function isNewerVersion(current: string, latest: string): boolean {
 }
 
 /** Max entries to show in the changelog summary. */
-const MAX_CHANGELOG_ENTRIES = 10;
+const MAX_CHANGELOG_ENTRIES = 20;
 
 /**
  * Fetch the CHANGELOG.md for a specific published version from the npm CDN
@@ -219,13 +219,8 @@ export function parseChangelog(markdown: string, version: string): string | null
     entry = entry.replace(/\s*\(#\d+\)\s*/g, ' ');
     // Strip commit SHA references like (`abc123`)
     entry = entry.replace(/\s*\(`[a-f0-9]+`\)\s*/g, ' ');
-    // Take only the first sentence for long entries
-    const sentenceEnd = entry.search(/\.\s/);
-    if (sentenceEnd !== -1 && sentenceEnd < 100) {
-      entry = entry.slice(0, sentenceEnd + 1);
-    } else if (entry.length > 120) {
-      entry = entry.slice(0, 117).trimEnd() + '…';
-    }
+    // Trim trailing periods for cleaner bullet display
+    entry = entry.replace(/\.\s*$/, '');
     entry = entry.trim();
     if (entry) entries.push(entry);
     if (entries.length >= MAX_CHANGELOG_ENTRIES) break;

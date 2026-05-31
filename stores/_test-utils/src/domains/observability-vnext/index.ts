@@ -30,6 +30,22 @@ export interface CreateObservabilityVNextTestsOptions {
    * `storage.dangerouslyClearAll()`.
    */
   cleanup?: (storage: ObservabilityStorage) => Promise<void> | void;
+  /**
+   * Optional hook for adapters whose discovery surface is fed by asynchronous
+   * helper tables (e.g. ClickHouse vNext's refreshable materialized views).
+   * Called after the discovery test fixtures are written but before any
+   * discovery assertion runs. Adapters with synchronous discovery (InMemory,
+   * DuckDB) can omit this — discovery reads will already reflect the writes.
+   */
+  refreshDiscovery?: (storage: ObservabilityStorage) => Promise<void> | void;
+  /**
+   * Optional hook for adapters whose signal-table dedup happens via background
+   * merges instead of inline on insert (ClickHouse's `ReplacingMergeTree`).
+   * Called inside retry-idempotency tests between the duplicate insert and the
+   * read assertion so the duplicate is collapsed in time. Adapters that dedupe
+   * inline (InMemory upsert-by-id, DuckDB `INSERT OR IGNORE`) can omit this.
+   */
+  flushPendingMerges?: (storage: ObservabilityStorage) => Promise<void> | void;
 }
 
 /**
@@ -43,8 +59,31 @@ export interface CreateObservabilityVNextTestsOptions {
  * retention, retry idempotency on persistent storage, internal helpers like
  * `extractBranchSpans`) stays in the adapter's own test file.
  */
+/**
+ * Polls `fn` until `predicate` returns true. Used in tests that read through
+ * adapter components with eventual visibility (e.g. ClickHouse incremental
+ * materialized views) so the assertion isn't racey. Adapters with synchronous
+ * reads (InMemory, DuckDB) satisfy the predicate on the first call.
+ */
+async function waitFor<T>(
+  fn: () => Promise<T>,
+  predicate: (value: T) => boolean,
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<T> {
+  const timeoutMs = opts.timeoutMs ?? 5000;
+  const intervalMs = opts.intervalMs ?? 50;
+  const deadline = Date.now() + timeoutMs;
+  let lastValue: T | undefined;
+  while (Date.now() < deadline) {
+    lastValue = await fn();
+    if (predicate(lastValue)) return lastValue;
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  return lastValue as T;
+}
+
 export function createObservabilityVNextTests(options: CreateObservabilityVNextTestsOptions) {
-  const { capabilities, getStorage, cleanup } = options;
+  const { capabilities, getStorage, cleanup, refreshDiscovery, flushPendingMerges } = options;
 
   describe(`observability vNext shared suite — ${capabilities.label}`, () => {
     let storage: ObservabilityStorage;
@@ -703,7 +742,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             traceId: 'trace-2',
             feedbackType: 'rating',
             feedbackSource: 'user',
-            value: '4',
+            value: 4,
             entityName: 'agent-b',
           },
           {
@@ -840,18 +879,29 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ],
         });
 
-        const deltaFromPage = await storage.listTraces({
-          mode: 'delta',
-          filters: { entityName: 'Observer' },
-          after: page.deltaCursor!,
-        });
+        // ClickHouse populates trace_roots through an incremental MV; the row
+        // is normally visible immediately but occasionally lags a tick under
+        // CI load. Poll briefly so the assertion is not racey.
+        const deltaFromPage = await waitFor(
+          () =>
+            storage.listTraces({
+              mode: 'delta',
+              filters: { entityName: 'Observer' },
+              after: page.deltaCursor!,
+            }),
+          result => result.spans.length === 1,
+        );
         expect(deltaFromPage.spans.map(span => span.traceId)).toEqual(['trace-1']);
 
-        const deltaFromStart = await storage.listTraces({
-          mode: 'delta',
-          filters: { entityName: 'Observer' },
-          after: start.deltaCursor!,
-        });
+        const deltaFromStart = await waitFor(
+          () =>
+            storage.listTraces({
+              mode: 'delta',
+              filters: { entityName: 'Observer' },
+              after: start.deltaCursor!,
+            }),
+          result => result.spans.length === 1,
+        );
         expect(deltaFromStart.spans.map(span => span.traceId)).toEqual(['trace-1']);
       });
 
@@ -1957,6 +2007,49 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
+    describe('logs (create + list)', () => {
+      it('creates and lists logs', async () => {
+        await storage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'log-test-1',
+              timestamp: new Date(),
+              level: 'info',
+              message: 'Test log message',
+              data: { key: 'value' },
+              traceId: 'trace-1',
+              spanId: 'span-1',
+              tags: ['test'],
+              entityType: EntityType.AGENT,
+              entityId: 'agent-1',
+              entityName: 'myAgent',
+              metadata: null,
+            },
+            {
+              logId: 'log-test-2',
+              timestamp: new Date(),
+              level: 'error',
+              message: 'Error occurred',
+              data: null,
+              traceId: 'trace-1',
+              spanId: null,
+              tags: null,
+              metadata: null,
+            },
+          ],
+        });
+
+        const result = await storage.listLogs({});
+        expect(result.logs).toHaveLength(2);
+
+        const filtered = await storage.listLogs({
+          filters: { level: 'error' },
+        });
+        expect(filtered.logs).toHaveLength(1);
+        expect(filtered.logs[0]!.message).toBe('Error occurred');
+      });
+    });
+
     describe('logs (resumable cursor)', () => {
       it('returns a resumable page deltaCursor for empty filtered logs', async () => {
         const hadFlag = coreFeatures.has('observability-delta-polling');
@@ -1995,6 +2088,147 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         } finally {
           if (!hadFlag) coreFeatures.delete('observability-delta-polling');
         }
+      });
+    });
+
+    describe('metrics (basic OLAP)', () => {
+      beforeEach(async () => {
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-basic-1',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 100,
+              labels: { status: 'ok' },
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              estimatedCost: 0.1,
+              costUnit: 'usd',
+              tags: ['prod'],
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+            },
+            {
+              metricId: 'metric-basic-2',
+              timestamp: new Date('2026-01-01T00:00:05Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 200,
+              labels: { status: 'ok' },
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              estimatedCost: 0.2,
+              costUnit: 'usd',
+              tags: ['prod'],
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+            },
+            {
+              metricId: 'metric-basic-3',
+              timestamp: new Date('2026-01-01T00:00:10Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 500,
+              labels: { status: 'error' },
+              provider: 'anthropic',
+              model: 'claude-3-7-sonnet',
+              estimatedCost: 0.5,
+              costUnit: 'usd',
+              tags: ['prod'],
+              entityType: EntityType.AGENT,
+              entityName: 'codeAgent',
+            },
+            {
+              metricId: 'metric-basic-4',
+              timestamp: new Date('2026-01-01T01:00:00Z'),
+              name: 'mastra_tool_calls_started',
+              value: 1,
+              labels: {},
+              tags: ['prod'],
+              entityType: EntityType.TOOL,
+              entityName: 'search',
+            },
+          ],
+        });
+      });
+
+      it('getMetricAggregate returns sum', async () => {
+        const result = await storage.getMetricAggregate({
+          name: ['mastra_agent_duration_ms'],
+          aggregation: 'sum',
+        });
+        expect(result.value).toBe(800);
+        expect(result.estimatedCost).toBeCloseTo(0.8);
+        expect(result.costUnit).toBe('usd');
+      });
+
+      it('listMetrics returns paginated metric records with shared filters', async () => {
+        const result = await storage.listMetrics({
+          filters: {
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            tags: ['prod'],
+          },
+          pagination: { page: 0, perPage: 1 },
+          orderBy: { field: 'timestamp', direction: 'ASC' },
+        });
+
+        expect(result.pagination!.total).toBe(2);
+        expect(result.pagination!.hasMore).toBe(true);
+        expect(result.metrics).toHaveLength(1);
+        expect(result.metrics[0]!.provider).toBe('openai');
+        expect(result.metrics[0]!.model).toBe('gpt-4o-mini');
+        expect(result.metrics[0]!.estimatedCost).toBeCloseTo(0.1);
+        expect(result.metrics[0]!.costUnit).toBe('usd');
+        expect(result.metrics[0]!.tags).toEqual(['prod']);
+        expect(result.metrics[0]!.labels).toEqual({ status: 'ok' });
+      });
+
+      it('getMetricBreakdown groups by entityName', async () => {
+        const result = await storage.getMetricBreakdown({
+          name: ['mastra_agent_duration_ms'],
+          groupBy: ['entityName'],
+          aggregation: 'avg',
+        });
+        expect(result.groups).toHaveLength(2);
+        const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
+        const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
+        expect(weather).toBeDefined();
+        expect(weather!.value).toBe(150);
+        expect(weather!.estimatedCost).toBeCloseTo(0.3);
+        expect(weather!.costUnit).toBe('usd');
+        expect(code).toBeDefined();
+        expect(code!.value).toBe(500);
+        expect(code!.estimatedCost).toBeCloseTo(0.5);
+        expect(code!.costUnit).toBe('usd');
+      });
+
+      it('getMetricBreakdown groups by label keys', async () => {
+        const result = await storage.getMetricBreakdown({
+          name: ['mastra_agent_duration_ms'],
+          groupBy: ['status'],
+          aggregation: 'count',
+        });
+
+        expect(result.groups).toHaveLength(2);
+        const ok = result.groups.find(g => g.dimensions.status === 'ok');
+        const error = result.groups.find(g => g.dimensions.status === 'error');
+
+        expect(ok?.value).toBe(2);
+        expect(ok?.estimatedCost).toBeCloseTo(0.3);
+        expect(error?.value).toBe(1);
+        expect(error?.estimatedCost).toBeCloseTo(0.5);
+      });
+
+      it('getMetricTimeSeries returns bucketed data', async () => {
+        const result = await storage.getMetricTimeSeries({
+          name: ['mastra_agent_duration_ms'],
+          interval: '1h',
+          aggregation: 'sum',
+        });
+        expect(result.series.length).toBeGreaterThanOrEqual(1);
+        const mainSeries = result.series[0]!;
+        expect(mainSeries.points.length).toBeGreaterThanOrEqual(1);
+        expect(mainSeries.costUnit).toBe('usd');
       });
     });
 
@@ -2050,6 +2284,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ],
         });
 
+        if (refreshDiscovery) {
+          await refreshDiscovery(storage);
+        }
+
         const keys = await storage.getMetricLabelKeys({ metricName: 'mastra_agent_duration_ms' });
         expect(keys.keys).toContain('foo-bar');
 
@@ -2061,11 +2299,13 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
 
         const alpha = result.groups.find(group => group.dimensions['foo-bar'] === 'alpha');
         const beta = result.groups.find(group => group.dimensions['foo-bar'] === 'beta');
-        const missing = result.groups.find(group => group.dimensions['foo-bar'] === null);
 
         expect(alpha?.value).toBe(1);
         expect(beta?.value).toBe(1);
-        expect(missing?.value).toBe(3);
+        // Note: rows missing the 'foo-bar' label key are surfaced differently per
+        // adapter — InMemory/DuckDB include them with a null dimension, while
+        // ClickHouse vNext excludes them by design. Those adapter-specific
+        // expectations live in each adapter's bespoke suite.
       });
 
       it('getMetricTimeSeries keeps colliding display names as separate grouped series', async () => {
@@ -2158,6 +2398,286 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.value).toBe(300);
         expect(result.estimatedCost).toBeCloseTo(0.3);
       });
+
+      it('getMetricAggregate returns avg', async () => {
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-avg-1',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 100,
+              labels: {},
+            },
+            {
+              metricId: 'metric-avg-2',
+              timestamp: new Date('2026-01-01T00:00:05Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 200,
+              labels: {},
+            },
+            {
+              metricId: 'metric-avg-3',
+              timestamp: new Date('2026-01-01T00:00:10Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 500,
+              labels: {},
+            },
+          ],
+        });
+
+        const result = await storage.getMetricAggregate({
+          name: ['mastra_agent_duration_ms'],
+          aggregation: 'avg',
+        });
+        expect(result.value).toBeCloseTo(266.67, 0);
+      });
+
+      it('getMetricAggregate returns count', async () => {
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-count-1',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 100,
+              labels: {},
+            },
+            {
+              metricId: 'metric-count-2',
+              timestamp: new Date('2026-01-01T00:00:05Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 200,
+              labels: {},
+            },
+            {
+              metricId: 'metric-count-3',
+              timestamp: new Date('2026-01-01T00:00:10Z'),
+              name: 'mastra_agent_duration_ms',
+              value: 500,
+              labels: {},
+            },
+          ],
+        });
+
+        const result = await storage.getMetricAggregate({
+          name: ['mastra_agent_duration_ms'],
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(3);
+      });
+    });
+
+    describe('default ORDER BY', () => {
+      it('listLogs defaults to timestamp DESC', async () => {
+        await storage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'log-order-1',
+              timestamp: new Date('2026-01-01T00:00:01Z'),
+              level: 'info',
+              message: 'first',
+              data: null,
+              metadata: null,
+            },
+            {
+              logId: 'log-order-2',
+              timestamp: new Date('2026-01-01T00:00:03Z'),
+              level: 'info',
+              message: 'third',
+              data: null,
+              metadata: null,
+            },
+            {
+              logId: 'log-order-3',
+              timestamp: new Date('2026-01-01T00:00:02Z'),
+              level: 'info',
+              message: 'second',
+              data: null,
+              metadata: null,
+            },
+          ],
+        });
+
+        const result = await storage.listLogs({});
+        expect(result.logs).toHaveLength(3);
+        expect(result.logs[0]!.message).toBe('third');
+        expect(result.logs[1]!.message).toBe('second');
+        expect(result.logs[2]!.message).toBe('first');
+      });
+
+      it('listMetrics defaults to timestamp DESC', async () => {
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-order-1',
+              timestamp: new Date('2026-01-01T00:00:01Z'),
+              name: 'order_test',
+              value: 1,
+              labels: {},
+            },
+            {
+              metricId: 'metric-order-2',
+              timestamp: new Date('2026-01-01T00:00:03Z'),
+              name: 'order_test',
+              value: 3,
+              labels: {},
+            },
+            {
+              metricId: 'metric-order-3',
+              timestamp: new Date('2026-01-01T00:00:02Z'),
+              name: 'order_test',
+              value: 2,
+              labels: {},
+            },
+          ],
+        });
+
+        const result = await storage.listMetrics({ filters: { name: ['order_test'] } });
+        expect(result.metrics).toHaveLength(3);
+        expect(result.metrics[0]!.value).toBe(3);
+        expect(result.metrics[1]!.value).toBe(2);
+        expect(result.metrics[2]!.value).toBe(1);
+      });
+
+      it('listScores defaults to timestamp DESC', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-order-1',
+            timestamp: new Date('2026-01-01T00:00:01Z'),
+            traceId: 'ord-1',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.1,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-order-2',
+            timestamp: new Date('2026-01-01T00:00:03Z'),
+            traceId: 'ord-3',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.3,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-order-3',
+            timestamp: new Date('2026-01-01T00:00:02Z'),
+            traceId: 'ord-2',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.2,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+
+        const result = await storage.listScores({});
+        expect(result.scores).toHaveLength(3);
+        expect(result.scores[0]!.traceId).toBe('ord-3');
+        expect(result.scores[1]!.traceId).toBe('ord-2');
+        expect(result.scores[2]!.traceId).toBe('ord-1');
+      });
+
+      it('listFeedback defaults to timestamp DESC', async () => {
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-order-1',
+            timestamp: new Date('2026-01-01T00:00:01Z'),
+            traceId: 'fb-ord-1',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-order-2',
+            timestamp: new Date('2026-01-01T00:00:03Z'),
+            traceId: 'fb-ord-3',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 3,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-order-3',
+            timestamp: new Date('2026-01-01T00:00:02Z'),
+            traceId: 'fb-ord-2',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 2,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
+        });
+
+        const result = await storage.listFeedback({});
+        expect(result.feedback).toHaveLength(3);
+        expect(result.feedback[0]!.traceId).toBe('fb-ord-3');
+        expect(result.feedback[1]!.traceId).toBe('fb-ord-2');
+        expect(result.feedback[2]!.traceId).toBe('fb-ord-1');
+      });
+
+      it('listTraces defaults to startedAt DESC', async () => {
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({
+              traceId: 'tr-ord-1',
+              spanId: 'root-1',
+              name: 'first',
+              startedAt: new Date('2026-01-01T00:00:01Z'),
+              endedAt: new Date('2026-01-01T00:00:02Z'),
+            }),
+            makeSpan({
+              traceId: 'tr-ord-3',
+              spanId: 'root-3',
+              name: 'third',
+              startedAt: new Date('2026-01-01T00:00:03Z'),
+              endedAt: new Date('2026-01-01T00:00:04Z'),
+            }),
+            makeSpan({
+              traceId: 'tr-ord-2',
+              spanId: 'root-2',
+              name: 'second',
+              startedAt: new Date('2026-01-01T00:00:02Z'),
+              endedAt: new Date('2026-01-01T00:00:03Z'),
+            }),
+          ],
+        });
+
+        const result = await storage.listTraces({});
+        expect(result.spans).toHaveLength(3);
+        expect(result.spans[0]!.traceId).toBe('tr-ord-3');
+        expect(result.spans[1]!.traceId).toBe('tr-ord-2');
+        expect(result.spans[2]!.traceId).toBe('tr-ord-1');
+      });
     });
 
     describe('discovery', () => {
@@ -2226,6 +2746,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             }),
           ],
         });
+
+        if (refreshDiscovery) {
+          await refreshDiscovery(storage);
+        }
       });
 
       it('getMetricNames returns distinct names', async () => {
@@ -2295,6 +2819,225 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
+    describe('scores (create + list)', () => {
+      it('creates and lists scores', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-basic-1',
+            timestamp: new Date(),
+            traceId: 'trace-1',
+            spanId: null,
+            scorerId: 'relevance',
+            score: 0.85,
+            reason: 'Good answer',
+            experimentId: 'exp-1',
+            metadata: { entityType: 'agent' },
+          },
+        });
+
+        await storage.createScore({
+          score: {
+            scoreId: 'score-basic-2',
+            timestamp: new Date(),
+            traceId: 'trace-1',
+            spanId: 'span-1',
+            scorerId: 'factuality',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+
+        const result = await storage.listScores({});
+        expect(result.scores).toHaveLength(2);
+
+        const filtered = await storage.listScores({
+          filters: { scorerId: 'relevance' },
+        });
+        expect(filtered.scores).toHaveLength(1);
+        expect(filtered.scores[0]!.score).toBe(0.85);
+      });
+
+      it('gets a score by id', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-lookup-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-lookup-1',
+            spanId: null,
+            scorerId: 'relevance',
+            score: 0.85,
+            reason: 'Good answer',
+            experimentId: 'exp-lookup',
+            metadata: { entityType: 'agent' },
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-lookup-2',
+            timestamp: new Date('2026-01-01T00:01:00Z'),
+            traceId: 'trace-lookup-2',
+            spanId: 'span-lookup-2',
+            scorerId: 'factuality',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+
+        const score = await storage.getScoreById('score-lookup-1');
+        expect(score).toEqual(
+          expect.objectContaining({
+            scoreId: 'score-lookup-1',
+            traceId: 'trace-lookup-1',
+            scorerId: 'relevance',
+            score: 0.85,
+          }),
+        );
+        expect(await storage.getScoreById('missing-score')).toBeNull();
+      });
+
+      it('supports nullable traceId for scores at the storage boundary', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-null-trace-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: null,
+            spanId: null,
+            scorerId: 'quality',
+            scoreSource: 'automated',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listScores({});
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]!.traceId).toBeNull();
+        expect(result.scores[0]!.scoreSource).toBe('automated');
+      });
+
+      it('accepts deprecated `source` alias on score input and writes it to scoreSource', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-legacy-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-legacy-score',
+            spanId: null,
+            scorerId: 'legacy',
+            source: 'manual',
+            score: 1,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listScores({ filters: { scorerId: 'legacy' } });
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]!.traceId).toBe('trace-legacy-score');
+        expect(result.scores[0]!.scoreSource).toBe('manual');
+      });
+    });
+
+    describe('feedback (create + list)', () => {
+      it('creates and lists feedback', async () => {
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-basic-1',
+            timestamp: new Date(),
+            traceId: 'trace-1',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+            comment: 'Great!',
+            experimentId: null,
+            feedbackUserId: 'user-1',
+            sourceId: 'source-1',
+            metadata: null,
+          },
+        });
+
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-basic-2',
+            timestamp: new Date(),
+            traceId: 'trace-2',
+            spanId: null,
+            feedbackSource: 'reviewer',
+            feedbackType: 'rating',
+            value: 4,
+            comment: null,
+            experimentId: 'exp-1',
+            feedbackUserId: 'user-2',
+            sourceId: 'source-2',
+            metadata: null,
+          },
+        });
+
+        const result = await storage.listFeedback({});
+        expect(result.feedback).toHaveLength(2);
+
+        const filtered = await storage.listFeedback({
+          filters: { feedbackSource: 'user' },
+        });
+        expect(filtered.feedback).toHaveLength(1);
+        expect(filtered.feedback[0]!.value).toBe(1);
+        expect(filtered.feedback[0]!.sourceId).toBe('source-1');
+      });
+
+      it('supports nullable traceId for feedback at the storage boundary', async () => {
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-null-trace-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: null,
+            spanId: null,
+            feedbackSource: 'manual',
+            feedbackType: 'rating',
+            value: 5,
+            comment: null,
+            experimentId: null,
+            sourceId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listFeedback({});
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.traceId).toBeNull();
+        expect(result.feedback[0]!.feedbackSource).toBe('manual');
+      });
+
+      it('accepts deprecated `source` alias on feedback input and writes it to feedbackSource', async () => {
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-legacy-1',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-legacy-feedback',
+            spanId: null,
+            source: 'manual',
+            feedbackType: 'rating',
+            value: 5,
+            comment: null,
+            experimentId: null,
+            sourceId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listFeedback({ filters: { feedbackSource: 'manual' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.traceId).toBe('trace-legacy-feedback');
+        expect(result.feedback[0]!.feedbackSource).toBe('manual');
+      });
+    });
+
     describe('feedback (batch)', () => {
       it('batch creates and lists feedback', async () => {
         await storage.batchCreateFeedback({
@@ -2357,7 +3100,6 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             feedbackType: 'thumbs',
             value: 1,
             comment: 'Helpful',
-            metadata: null,
           }),
           expect.objectContaining({
             traceId: 'batch-trace-2',
@@ -2396,6 +3138,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         };
         await storage.batchCreateLogs({ logs: [log] });
         await storage.batchCreateLogs({ logs: [log] });
+        if (flushPendingMerges) await flushPendingMerges(storage);
         const result = await storage.listLogs({ filters: { traceId: 'trace-retry-log' } });
         expect(result.logs).toHaveLength(1);
         expect(result.logs[0]!.logId).toBe('log-retry-1');
@@ -2412,6 +3155,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         };
         await storage.batchCreateMetrics({ metrics: [metric] });
         await storage.batchCreateMetrics({ metrics: [metric] });
+        if (flushPendingMerges) await flushPendingMerges(storage);
         const result = await storage.listMetrics({ filters: { name: ['mastra_agent_duration_ms'] } });
         expect(result.metrics).toHaveLength(1);
         expect(result.metrics[0]!.metricId).toBe('metric-retry-1');
@@ -2431,6 +3175,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         };
         await storage.createScore({ score });
         await storage.createScore({ score });
+        if (flushPendingMerges) await flushPendingMerges(storage);
         const result = await storage.listScores({ filters: { traceId: 'trace-retry-score' } });
         expect(result.scores).toHaveLength(1);
         expect(result.scores[0]!.scoreId).toBe('score-retry-1');
@@ -2453,9 +3198,388 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         };
         await storage.createFeedback({ feedback });
         await storage.createFeedback({ feedback });
+        if (flushPendingMerges) await flushPendingMerges(storage);
         const result = await storage.listFeedback({ filters: { traceId: 'trace-retry-feedback' } });
         expect(result.feedback).toHaveLength(1);
         expect(result.feedback[0]!.feedbackId).toBe('feedback-retry-1');
+      });
+    });
+
+    // ========================================================================
+    // Scores — OLAP expansions
+    // ========================================================================
+
+    describe('scores OLAP (expansions)', () => {
+      beforeEach(async () => {
+        await storage.batchCreateScores({
+          scores: [
+            {
+              scoreId: 'score-olap-1',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              traceId: 'olap-s-1',
+              spanId: null,
+              scorerId: 'quality',
+              score: 0.8,
+              reason: null,
+              experimentId: null,
+              scoreSource: 'automated',
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+              environment: 'production',
+              metadata: null,
+            },
+            {
+              scoreId: 'score-olap-2',
+              timestamp: new Date('2026-01-01T00:00:05Z'),
+              traceId: 'olap-s-2',
+              spanId: null,
+              scorerId: 'quality',
+              score: 0.6,
+              reason: null,
+              experimentId: null,
+              scoreSource: 'automated',
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+              environment: 'production',
+              metadata: null,
+            },
+            {
+              scoreId: 'score-olap-3',
+              timestamp: new Date('2026-01-01T00:00:10Z'),
+              traceId: 'olap-s-3',
+              spanId: null,
+              scorerId: 'quality',
+              score: 0.9,
+              reason: null,
+              experimentId: null,
+              scoreSource: 'automated',
+              entityType: EntityType.AGENT,
+              entityName: 'codeAgent',
+              environment: 'staging',
+              metadata: null,
+            },
+            {
+              scoreId: 'score-olap-4',
+              timestamp: new Date('2026-01-01T01:00:00Z'),
+              traceId: 'olap-s-4',
+              spanId: null,
+              scorerId: 'factuality',
+              score: 0.5,
+              reason: null,
+              experimentId: null,
+              scoreSource: 'manual',
+              metadata: null,
+            },
+          ],
+        });
+      });
+
+      it('getScoreAggregate returns avg', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          aggregation: 'avg',
+        });
+        expect(result.value).toBeCloseTo(0.7667, 2);
+      });
+
+      it('getScoreAggregate returns sum', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          aggregation: 'sum',
+        });
+        expect(result.value).toBeCloseTo(2.3);
+      });
+
+      it('getScoreAggregate returns count', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(3);
+      });
+
+      it('getScoreAggregate filters by scoreSource', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          scoreSource: 'automated',
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(3);
+
+        const manualResult = await storage.getScoreAggregate({
+          scorerId: 'factuality',
+          scoreSource: 'manual',
+          aggregation: 'count',
+        });
+        expect(manualResult.value).toBe(1);
+      });
+
+      it('getScoreAggregate supports signal filters', async () => {
+        const result = await storage.getScoreAggregate({
+          scorerId: 'quality',
+          aggregation: 'count',
+          filters: { environment: 'production' },
+        });
+        expect(result.value).toBe(2);
+      });
+
+      it('getScoreBreakdown groups by entityName', async () => {
+        const result = await storage.getScoreBreakdown({
+          scorerId: 'quality',
+          groupBy: ['entityName'],
+          aggregation: 'avg',
+        });
+        expect(result.groups).toHaveLength(2);
+        const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
+        const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
+        expect(weather).toBeDefined();
+        expect(weather!.value).toBeCloseTo(0.7);
+        expect(code).toBeDefined();
+        expect(code!.value).toBeCloseTo(0.9);
+      });
+
+      it('getScoreTimeSeries returns bucketed data', async () => {
+        const result = await storage.getScoreTimeSeries({
+          scorerId: 'quality',
+          interval: '1h',
+          aggregation: 'avg',
+        });
+        expect(result.series.length).toBeGreaterThanOrEqual(1);
+        expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('getScoreTimeSeries with groupBy returns multi-series', async () => {
+        const result = await storage.getScoreTimeSeries({
+          scorerId: 'quality',
+          interval: '1h',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        });
+        expect(result.series.length).toBeGreaterThanOrEqual(2);
+      });
+
+      it('getScorePercentiles returns percentile series', async () => {
+        const result = await storage.getScorePercentiles({
+          scorerId: 'quality',
+          percentiles: [0.5, 0.99],
+          interval: '1h',
+        });
+        expect(result.series).toHaveLength(2);
+        const p50 = result.series.find(s => s.percentile === 0.5);
+        expect(p50).toBeDefined();
+        expect(p50!.points.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('supports nullable traceId for scores at the storage boundary', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-nullable-trace',
+            timestamp: new Date(),
+            traceId: null,
+            spanId: null,
+            scorerId: 'quality-null',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'automated',
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listScores({ filters: { scorerId: 'quality-null' } });
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]!.traceId).toBeNull();
+        expect(result.scores[0]!.scoreSource).toBe('automated');
+      });
+    });
+
+    // ========================================================================
+    // Feedback — OLAP expansions
+    // ========================================================================
+
+    describe('feedback OLAP (expansions)', () => {
+      beforeEach(async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            {
+              feedbackId: 'feedback-olap-1',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              traceId: 'olap-f-1',
+              spanId: null,
+              feedbackType: 'thumbs',
+              feedbackSource: 'user',
+              value: 1,
+              comment: null,
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+              environment: 'production',
+              metadata: null,
+            },
+            {
+              feedbackId: 'feedback-olap-2',
+              timestamp: new Date('2026-01-01T00:00:05Z'),
+              traceId: 'olap-f-2',
+              spanId: null,
+              feedbackType: 'thumbs',
+              feedbackSource: 'user',
+              value: 0,
+              comment: null,
+              entityType: EntityType.AGENT,
+              entityName: 'weatherAgent',
+              environment: 'production',
+              metadata: null,
+            },
+            {
+              feedbackId: 'feedback-olap-3',
+              timestamp: new Date('2026-01-01T00:00:10Z'),
+              traceId: 'olap-f-3',
+              spanId: null,
+              feedbackType: 'thumbs',
+              feedbackSource: 'user',
+              value: 1,
+              comment: null,
+              entityType: EntityType.AGENT,
+              entityName: 'codeAgent',
+              environment: 'staging',
+              metadata: null,
+            },
+            {
+              feedbackId: 'feedback-olap-4',
+              timestamp: new Date('2026-01-01T01:00:00Z'),
+              traceId: 'olap-f-4',
+              spanId: null,
+              feedbackType: 'rating',
+              feedbackSource: 'reviewer',
+              value: 4,
+              comment: null,
+              metadata: null,
+            },
+            {
+              feedbackId: 'feedback-olap-5',
+              timestamp: new Date('2026-01-01T01:00:05Z'),
+              traceId: 'olap-f-5',
+              spanId: null,
+              feedbackType: 'flag',
+              feedbackSource: 'system',
+              value: 'needs-review',
+              comment: null,
+              metadata: null,
+            },
+          ],
+        });
+      });
+
+      it('getFeedbackAggregate returns sum of numeric values', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'thumbs',
+          aggregation: 'sum',
+        });
+        expect(result.value).toBe(2);
+      });
+
+      it('getFeedbackAggregate returns count', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'thumbs',
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(3);
+      });
+
+      it('getFeedbackAggregate returns avg', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'thumbs',
+          aggregation: 'avg',
+        });
+        expect(result.value).toBeCloseTo(0.6667, 2);
+      });
+
+      it('getFeedbackAggregate filters by feedbackSource', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'rating',
+          feedbackSource: 'reviewer',
+          aggregation: 'count',
+        });
+        expect(result.value).toBe(1);
+      });
+
+      it('getFeedbackAggregate supports signal filters', async () => {
+        const result = await storage.getFeedbackAggregate({
+          feedbackType: 'thumbs',
+          aggregation: 'count',
+          filters: { environment: 'production' },
+        });
+        expect(result.value).toBe(2);
+      });
+
+      it('getFeedbackBreakdown groups by entityName', async () => {
+        const result = await storage.getFeedbackBreakdown({
+          feedbackType: 'thumbs',
+          groupBy: ['entityName'],
+          aggregation: 'avg',
+        });
+        expect(result.groups.length).toBeGreaterThanOrEqual(2);
+        const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
+        const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
+        expect(weather).toBeDefined();
+        expect(weather!.value).toBeCloseTo(0.5);
+        expect(code).toBeDefined();
+        expect(code!.value).toBeCloseTo(1.0);
+      });
+
+      it('getFeedbackTimeSeries returns bucketed data', async () => {
+        const result = await storage.getFeedbackTimeSeries({
+          feedbackType: 'thumbs',
+          interval: '1h',
+          aggregation: 'sum',
+        });
+        expect(result.series.length).toBeGreaterThanOrEqual(1);
+        expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('getFeedbackTimeSeries with groupBy returns multi-series', async () => {
+        const result = await storage.getFeedbackTimeSeries({
+          feedbackType: 'thumbs',
+          interval: '1h',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        });
+        expect(result.series.length).toBeGreaterThanOrEqual(2);
+      });
+
+      it('getFeedbackPercentiles returns percentile series', async () => {
+        const result = await storage.getFeedbackPercentiles({
+          feedbackType: 'thumbs',
+          percentiles: [0.5, 0.99],
+          interval: '1h',
+        });
+        expect(result.series).toHaveLength(2);
+        const p50 = result.series.find(s => s.percentile === 0.5);
+        expect(p50).toBeDefined();
+        expect(p50!.points.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('supports nullable traceId for feedback at the storage boundary', async () => {
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-nullable-trace',
+            timestamp: new Date(),
+            traceId: null,
+            spanId: null,
+            feedbackSource: 'manual',
+            feedbackType: 'nullable-rating',
+            value: 5,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          } as any,
+        });
+
+        const result = await storage.listFeedback({ filters: { feedbackType: 'nullable-rating' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.traceId).toBeNull();
+        expect(result.feedback[0]!.feedbackSource).toBe('manual');
       });
     });
   });

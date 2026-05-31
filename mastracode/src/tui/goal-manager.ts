@@ -35,6 +35,8 @@ export interface GoalState {
   startedAt: string;
   activeStartedAt?: string;
   activeDurationMs?: number;
+  /** Set when the goal was paused because the judge could not complete evaluation. */
+  lastPauseWasJudgeFailure?: boolean;
 }
 
 export interface GoalJudgeResult {
@@ -50,6 +52,7 @@ export interface GoalEvaluationResult {
 export interface GoalEvaluationOptions {
   abortSignal?: AbortSignal;
   onActivity?: (line: string) => void;
+  requireAssistantMessage?: boolean;
 }
 
 // =============================================================================
@@ -58,6 +61,10 @@ export interface GoalEvaluationOptions {
 
 export const DEFAULT_MAX_TURNS = 50;
 const THREAD_GOAL_KEY = 'goal';
+const JUDGE_MAX_STEPS = 50;
+
+const JUDGE_RETRY_PROMPT =
+  'You did not produce a structured decision. You MUST respond with a JSON object containing "decision" (one of "done", "continue", or "waiting") and "reason" (a brief explanation). Do not use any tools — respond with the JSON decision immediately based on what you already know.';
 
 const JUDGE_SYSTEM_PROMPT = `You are the goal judge. Your decision directly controls whether the assistant continues working toward the goal.
 
@@ -228,10 +235,23 @@ export class GoalManager {
       return { continuation: null, judgeResult: null };
     }
     if (!context.lastAssistantContent) {
+      if (options.requireAssistantMessage) {
+        const result = {
+          decision: 'paused' as const,
+          reason: 'Judge could not evaluate this turn: no assistant response.',
+        };
+        this.stopActiveTimer();
+        this.goal.status = 'paused';
+        this.goal.lastPauseWasJudgeFailure = true;
+        await this.saveToThread(state);
+        return { continuation: null, judgeResult: result };
+      }
+
       // No assistant message to judge — continue anyway (but check budget)
       if (this.goal.turnsUsed >= this.goal.maxTurns) {
         this.stopActiveTimer();
         this.goal.status = 'paused';
+        this.goal.lastPauseWasJudgeFailure = false;
         await this.saveToThread(state);
         return { continuation: null, judgeResult: null };
       }
@@ -254,10 +274,12 @@ export class GoalManager {
     }
     if (result.decision === 'continue' || result.decision === 'done') {
       this.goal.turnsUsed++;
+      this.goal.lastPauseWasJudgeFailure = false;
     }
     if (result.decision === 'paused') {
       this.stopActiveTimer();
       this.goal.status = 'paused';
+      this.goal.lastPauseWasJudgeFailure = isJudgeFailureReason(result.reason);
       await this.saveToThread(state);
       return { continuation: null, judgeResult: result };
     }
@@ -279,6 +301,7 @@ export class GoalManager {
     if (this.goal.turnsUsed >= this.goal.maxTurns) {
       this.stopActiveTimer();
       this.goal.status = 'paused';
+      this.goal.lastPauseWasJudgeFailure = false;
       await this.saveToThread(state);
       return { continuation: null, judgeResult: result };
     }
@@ -358,25 +381,41 @@ export class GoalManager {
         ? `\n\nLatest user message:\n${truncateForJudge(context.lastUserContent)}\n\nAssistant steps since that user message: ${context.assistantStepsSinceLastUser}`
         : '';
 
-      const stream = await judgeAgent.stream(
-        `Goal: ${this.goal!.objective}${recentUser}\n\nLatest assistant message:\n${context.lastAssistantContent}`,
-        {
-          ...(memory
-            ? { memory: { thread: this.getJudgeThreadId(state), resource: state.harness.getResourceId() } }
-            : {}),
-          abortSignal: options.abortSignal,
-          structuredOutput: {
-            schema: judgeSchema,
-          },
+      const prompt = `Goal: ${this.goal!.objective}${recentUser}\n\nLatest assistant message:\n${context.lastAssistantContent}`;
+      const memoryOpts = memory
+        ? { memory: { thread: this.getJudgeThreadId(state), resource: state.harness.getResourceId() } }
+        : {};
+      const streamOpts = {
+        ...memoryOpts,
+        abortSignal: options.abortSignal,
+        maxSteps: JUDGE_MAX_STEPS,
+        structuredOutput: {
+          schema: judgeSchema,
+          errorStrategy: 'warn' as const,
         },
-      );
+      };
 
+      const stream = await judgeAgent.stream(prompt, streamOpts as any);
       await this.consumeJudgeStream(stream, options.onActivity);
-      const output = (await stream.getFullOutput()).object as z.infer<typeof judgeSchema> | undefined;
-      if (!output) {
-        return { decision: 'paused', reason: 'Judge returned no structured decision.' };
+      const output = (await stream.getFullOutput()).object as GoalJudgeResult | undefined;
+      if (output) {
+        return { decision: output.decision, reason: output.reason };
       }
-      return { decision: output.decision, reason: output.reason };
+      if (options.abortSignal?.aborted) {
+        return { decision: 'paused', reason: 'Judge evaluation was interrupted.' };
+      }
+
+      // Follow up: the judge failed to produce a structured decision. Send a
+      // follow-up prompt asking it to respond with the required JSON. The judge
+      // has memory, so it sees its own previous messages.
+      options.onActivity?.('retrying (no structured decision)');
+      const retryStream = await judgeAgent.stream(JUDGE_RETRY_PROMPT, streamOpts as any);
+      await this.consumeJudgeStream(retryStream, options.onActivity);
+      const retryOutput = (await retryStream.getFullOutput()).object as GoalJudgeResult | undefined;
+      if (retryOutput) {
+        return { decision: retryOutput.decision, reason: retryOutput.reason };
+      }
+      return { decision: 'paused', reason: 'Judge returned no structured decision.' };
     } catch (error) {
       if (options.abortSignal?.aborted) {
         return { decision: 'paused', reason: 'Judge evaluation was interrupted.' };
@@ -527,4 +566,16 @@ function formatQuotedActivityValue(value: unknown): string {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+const JUDGE_FAILURE_PATTERNS = [
+  'no structured decision',
+  'could not be initialized',
+  'could not evaluate',
+  'was interrupted',
+];
+
+function isJudgeFailureReason(reason: string): boolean {
+  const lower = reason.toLowerCase();
+  return JUDGE_FAILURE_PATTERNS.some(p => lower.includes(p));
 }

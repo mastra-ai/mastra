@@ -17,8 +17,14 @@ import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
-import type { OutputResult, Processor } from '../../processors';
-import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
+import {
+  ProcessorRunner,
+  ProcessorState,
+  ProcessorStepOutputSchema,
+  ProcessorStepSchema,
+  createProcessorSendSignal,
+} from '../../processors';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -748,7 +754,7 @@ function createStepFromProcessor<TProcessorId extends string>(
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
       z.infer<typeof ProcessorStepOutputSchema>
     >,
-    execute: async ({ inputData, requestContext, ...obsFields }) => {
+    execute: async ({ inputData, requestContext, outputWriter, ...obsFields }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
@@ -1007,15 +1013,40 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Base context for all processor methods - includes requestContext for memory processors
       // and observabilityContext for proper span nesting when processors call internal agents
       // state is per-processor state that persists across all method calls within this request
+      const processorWriter: ProcessorStreamWriter | undefined = outputWriter
+        ? {
+            custom: async <T extends { type: string }>(data: T) => {
+              await outputWriter(data as any);
+            },
+          }
+        : undefined;
+      const processorMessageList =
+        messageList ??
+        (Array.isArray(messages)
+          ? new MessageList()
+              .add(messages as MastraDBMessage[], 'input')
+              .addSystem((systemMessages ?? []) as CoreMessage[])
+          : undefined);
+
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
         state: processorState,
+        writer: processorWriter,
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        ...(processorMessageList
+          ? {
+              sendSignal: createProcessorSendSignal({
+                messageList: processorMessageList,
+                writer: processorWriter,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
+              }),
+            }
+          : {}),
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -1024,13 +1055,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         phase,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
-        messageList:
-          messageList ??
-          (Array.isArray(messages)
-            ? new MessageList()
-                .add(messages as MastraDBMessage[], 'input')
-                .addSystem((systemMessages ?? []) as CoreMessage[])
-            : undefined),
+        messageList: processorMessageList,
         stepNumber,
         systemMessages,
         streamParts,
@@ -1112,7 +1137,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1138,7 +1163,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1205,6 +1230,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                systemMessages: passThrough.messageList!.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1320,7 +1346,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1346,7 +1372,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1400,7 +1426,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1426,7 +1452,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };

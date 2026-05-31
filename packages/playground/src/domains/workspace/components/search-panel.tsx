@@ -84,7 +84,8 @@ export function SearchWorkspacePanel({
               value={query}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
               placeholder="Search workspace files..."
-              className="pl-9 h-10 bg-surface2 border-border1"
+              variant="outline"
+              className="pl-9 h-10"
             />
           </div>
 
