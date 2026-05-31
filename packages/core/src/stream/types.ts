@@ -957,7 +957,7 @@ export interface LanguageModelV2StreamResult {
   warnings?: LLMStepResult['warnings'];
 }
 
-export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void;
+export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void | ChunkType | ChunkType[];
 export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
 
 export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };

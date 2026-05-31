@@ -112,6 +112,59 @@ describe('Output Processor Tool Result Chunks', () => {
     // This is the bug - currently tool-result chunks bypass output processors
     expect(capturedChunkTypes).toContain('tool-result');
   });
+
+  it('should receive step lifecycle chunks in processOutputStream', async () => {
+    const capturedChunkTypes: string[] = [];
+
+    class StepLifecycleTrackingProcessor implements Processor {
+      readonly id = 'step-lifecycle-tracking-processor';
+      readonly name = 'Step Lifecycle Tracking Processor';
+
+      async processOutputStream({ part }: any) {
+        capturedChunkTypes.push(part.type);
+        return part;
+      }
+    }
+
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'hello' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          },
+        ]),
+        rawCall: { rawPrompt: [], rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent',
+      model: mockModel as any,
+      outputProcessors: [new StepLifecycleTrackingProcessor()],
+    });
+
+    const stream = await agent.stream('Say hello');
+
+    const streamChunkTypes: string[] = [];
+    for await (const chunk of stream.fullStream) {
+      streamChunkTypes.push(chunk.type);
+    }
+
+    expect(streamChunkTypes).toContain('step-start');
+    expect(streamChunkTypes).toContain('step-finish');
+    expect(capturedChunkTypes).toContain('step-start');
+    expect(capturedChunkTypes).toContain('step-finish');
+  });
 });
 
 describe('Output Processor State Persistence Across Tool Execution', () => {
@@ -223,13 +276,16 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
     expect(finishChunks.length).toBe(1);
 
     const toolCallIndex = capturedChunks.findIndex(c => c.type === 'tool-call');
-    expect(toolCallIndex).toBe(1); // Should be the second chunk (after response-metadata)
+    expect(toolCallIndex).toBe(2); // Should follow step-start and response-metadata
 
     // Verify state accumulation works
-    expect(capturedChunks[0]!.type).toBe('response-metadata');
-    expect(capturedChunks[0]!.accumulatedTypes).toEqual(['response-metadata']);
+    expect(capturedChunks[0]!.type).toBe('step-start');
+    expect(capturedChunks[0]!.accumulatedTypes).toEqual(['step-start']);
 
-    expect(capturedChunks[1]!.type).toBe('tool-call');
-    expect(capturedChunks[1]!.accumulatedTypes).toEqual(['response-metadata', 'tool-call']);
+    expect(capturedChunks[1]!.type).toBe('response-metadata');
+    expect(capturedChunks[1]!.accumulatedTypes).toEqual(['step-start', 'response-metadata']);
+
+    expect(capturedChunks[2]!.type).toBe('tool-call');
+    expect(capturedChunks[2]!.accumulatedTypes).toEqual(['step-start', 'response-metadata', 'tool-call']);
   });
 });

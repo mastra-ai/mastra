@@ -1373,7 +1373,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       messageId: currentStep.messageId,
                     });
 
-                    safeEnqueue(controller, {
+                    return {
                       runId,
                       from: ChunkFrom.AGENT,
                       type: 'step-start',
@@ -1382,7 +1382,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         warnings: warnings || [],
                         messageId: currentStep.messageId,
                       },
-                    });
+                    };
                   },
                   shouldThrowError: !isLastModel,
                 }),
