@@ -1226,8 +1226,10 @@ export class MemoryPG extends MemoryStorage {
           }
         }
 
-        // Batch messages for multi-row INSERT (reduces round trips from N to ⌈N/8192⌉)
-        const BATCH_SIZE = 8192;
+        // Batch messages for multi-row INSERT (reduces round trips from N to ⌈N/8191⌉)
+        // Postgres supports at most 65535 bind parameters per query;
+        // each row uses 8 parameters, so max batch size is 65535/8 ≈ 8191.
+        const BATCH_SIZE = 8191;
         const batches: { placeholders: string[]; values: any[] }[] = [];
         let currentBatch: { placeholders: string[]; values: any[] } | null = null;
 
