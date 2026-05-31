@@ -3,6 +3,7 @@ import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
+import { MODEL_TOKENS } from '../../../../../../docs/src/plugins/remark-model-tokens/models';
 import { MessageList } from '../../../agent/message-list';
 import { SpanType } from '../../../observability';
 import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
@@ -499,7 +500,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
           model: {
             specificationVersion: 'v2' as const,
             provider: 'mock-provider',
-            modelId: 'mock-model-id',
+            modelId: MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__,
             supportedUrls: {},
             doGenerate: vi.fn(),
             doStream: vi.fn(async () => ({
