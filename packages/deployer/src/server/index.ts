@@ -4,6 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { sValidator } from '@hono/standard-validator';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute, CorsOptions } from '@mastra/core/server';
@@ -18,7 +19,6 @@ import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
-import { sValidator } from '@hono/standard-validator';
 import { describeRoute } from 'hono-openapi';
 import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
@@ -145,8 +145,22 @@ export async function createHonoServer(
     }
 
     if ('validators' in route && route.validators) {
-      for (const [target, schema] of Object.entries(route.validators) as [ValidatorTarget, NonNullable<(typeof route.validators)[ValidatorTarget]>][]) {
-        injected.push(sValidator(target, schema));
+      for (const [target, schema] of Object.entries(route.validators) as [
+        ValidatorTarget,
+        NonNullable<(typeof route.validators)[ValidatorTarget]>,
+      ][]) {
+        if (!schema) continue;
+        injected.push(
+          sValidator(target, schema, (result, c) => {
+            if (!result.success) {
+              const issues = (result as any).error ?? [];
+              const message = (Array.isArray(issues) ? issues : [])
+                .map((i: any) => `- ${i.path?.join('.') || 'root'}: ${i.message}`)
+                .join('\n');
+              return c.json({ error: `Validation failed:\n${message}` }, 400);
+            }
+          }) as unknown as MiddlewareHandler,
+        );
       }
     }
 
