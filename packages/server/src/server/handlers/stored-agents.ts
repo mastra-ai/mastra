@@ -1,4 +1,3 @@
-import { assertModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
 
@@ -346,6 +345,11 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       if (model !== undefined) {
         const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
         if (policy.active) {
+          // Lazy-load the EE subpath so this module remains importable on
+          // `@mastra/core` versions that pre-date it (added in core 1.34.0).
+          // `policy.active` is only true when an editor with builder support
+          // is configured, which guarantees a compatible core.
+          const { assertModelAllowed } = await import('@mastra/core/agent-builder/ee');
           assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
         }
       }
@@ -509,6 +513,8 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       if (model !== undefined) {
         const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
         if (policy.active) {
+          // Lazy-load: see comment on the CREATE handler above.
+          const { assertModelAllowed } = await import('@mastra/core/agent-builder/ee');
           assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
         }
       }
