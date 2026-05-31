@@ -29,7 +29,9 @@
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {},
+  "dependencies": {
+    "@vercel/sandbox": "2.0.2"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",

@@ -49,9 +49,6 @@
   "engines": {
     "node": ">=22.13.0"
   },
-  "dependencies": {
-    "@brightdata/sdk": "^1.1.0"
-  },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "zod": ">=3.0.0"

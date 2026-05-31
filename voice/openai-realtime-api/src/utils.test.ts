@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool } from '@internal/voice';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { transformTools } from './utils';

@@ -27,7 +27,7 @@ models: {
 ### 1. Settings exposes the policy
 
 ```bash
-curl -s "$BASE/editor/builder/settings" | jq '.agent.models // .configuration.agent.models'
+curl -s "$BASE/editor/builder/settings" | jq '.configuration.agent.models'
 ```
 
 - [ ] `allowed` is an array with the two entries above

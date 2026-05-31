@@ -19,6 +19,7 @@ import {
   isStudioClientTypeHeader,
 } from '../constants';
 import { formatZodError } from '../handlers/error';
+export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';

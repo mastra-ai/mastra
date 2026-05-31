@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
-import { AgentChannels, matchesDomain, extractUrls } from '../agent-channels';
+import { AgentChannels } from '../agent-channels';
+import { matchesDomain, extractUrls } from '../inline-media';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -38,6 +39,13 @@ function createMockAgent(name = 'test-agent') {
           controller.close();
         },
       }),
+    }),
+    sendMessage: vi.fn().mockResolvedValue({ accepted: true, runId: 'run-1' }),
+    subscribeToThread: vi.fn().mockResolvedValue({
+      stream: (async function* () {})(),
+      activeRunId: () => null,
+      abort: () => false,
+      unsubscribe: vi.fn(),
     }),
     getMemory: vi.fn().mockResolvedValue(null),
     logger: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -94,6 +102,27 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('getInputProcessors', () => {
+    it('adds ChatChannelProcessor by default', () => {
+      const processors = agentChannels.getInputProcessors();
+      expect(processors).toHaveLength(1);
+      expect(processors[0]!.id).toBe('chat-channel-context');
+    });
+
+    it('skips ChatChannelProcessor entirely when threadContext.addSystemMessage is false', () => {
+      const disabled = new AgentChannels({
+        adapters: { test: createMockAdapter('test') },
+        threadContext: { addSystemMessage: false },
+      });
+      expect(disabled.getInputProcessors()).toEqual([]);
+    });
+
+    it('skips when the user already provided a ChatChannelProcessor', () => {
+      const userProcessor = { id: 'chat-channel-context', processInputStep: () => undefined } as any;
+      expect(agentChannels.getInputProcessors([userProcessor])).toEqual([]);
+    });
+  });
+
   describe('channelConfig', () => {
     it('exposes the original ChannelConfig (round-trippable)', () => {
       const discord = createMockAdapter('discord');
@@ -112,6 +141,20 @@ describe('AgentChannels', () => {
       const channels = new AgentChannels(originalConfig as any);
 
       expect(channels.channelConfig).toBe(originalConfig);
+    });
+
+    it('preserves the per-adapter streaming option', () => {
+      const adapter = createMockAdapter('test');
+      const streaming = new AgentChannels({
+        adapters: { test: { adapter, streaming: { updateIntervalMs: 250 } } },
+      });
+      expect(streaming.channelConfig.adapters.test).toMatchObject({
+        streaming: { updateIntervalMs: 250 },
+      });
+
+      const buffered = new AgentChannels({ adapters: { test: createMockAdapter('test') } });
+      // No adapter config wrapping means no streaming opt-in.
+      expect((buffered.channelConfig.adapters.test as any).streaming).toBeUndefined();
     });
 
     it('lets a provider rebuild AgentChannels while preserving existing adapters', () => {
@@ -264,6 +307,77 @@ describe('AgentChannels', () => {
       expect(typeof agentChannels.sdk!.onNewMention).toBe('function');
       expect(typeof agentChannels.sdk!.onReaction).toBe('function');
       expect(typeof agentChannels.sdk!.onNewMessage).toBe('function');
+    });
+  });
+
+  describe('message routing', () => {
+    it('routes inbound channel messages through sendMessage with channel metadata', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello from discord',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        {
+          contents: 'hello from discord',
+          attributes: {
+            messageId: 'message-1',
+            authorName: 'Tyler Barnes',
+            authorId: 'user-1',
+            authorMention: '<@user-1>',
+          },
+          providerOptions: {
+            mastra: {
+              channels: {
+                discord: {
+                  messageId: 'message-1',
+                  author: {
+                    userId: 'user-1',
+                    userName: 'tyler',
+                    fullName: 'Tyler Barnes',
+                    mention: '<@user-1>',
+                  },
+                },
+              },
+            },
+          },
+        },
+        expect.objectContaining({
+          resourceId: 'discord:user-1',
+          threadId: expect.any(String),
+          ifIdle: expect.objectContaining({
+            behavior: 'wake',
+            streamOptions: expect.objectContaining({
+              requestContext: expect.any(Object),
+              memory: expect.objectContaining({ resource: 'discord:user-1' }),
+            }),
+          }),
+        }),
+      );
     });
   });
 
