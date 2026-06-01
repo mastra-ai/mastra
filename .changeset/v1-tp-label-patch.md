@@ -17,7 +17,7 @@ await client.getToolProvider('composio').updateConnection('auth_abc', {
 });
 ```
 
-Pass `label: null` to clear the existing label. Labels are 1–32 characters and accept letters, digits, spaces, and the punctuation `_ - ' . , & ( ) /`.
+Pass `label: null` (or an empty string) to clear the existing label. Labels are 1–32 characters and accept letters, digits, spaces, underscores, and hyphens (`[A-Za-z0-9 _-]+`).
 
 **Ownership enforced server-side**
 
