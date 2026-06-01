@@ -138,4 +138,25 @@ describe('agent signal UI conversion', () => {
       ),
     ).toBe(true);
   });
+
+  it('converts signal to assistant in-place when no immediate neighbor is assistant', () => {
+    const list = new MessageList();
+
+    list.add('What is the weather?', 'input');
+    list.add(
+      signalToMastraDBMessage({
+        id: 'signal-orphan-1',
+        type: 'system-reminder',
+        contents: 'continue',
+        createdAt: new Date('2024-01-01T00:00:02.000Z'),
+      }),
+      'memory',
+    );
+
+    const v5Messages = list.get.all.aiV5.ui();
+    expect(v5Messages.every(m => m.role !== 'system')).toBe(true);
+    const converted = v5Messages.find(m => m.parts.some(p => p.type === 'data-system-reminder'));
+    expect(converted).toBeDefined();
+    expect(converted!.role).toBe('assistant');
+  });
 });

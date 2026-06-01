@@ -42,36 +42,37 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
+function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
+  return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
+}
+
 /**
- * Post-processes converted UI messages to merge non-user signal data parts into the
- * preceding assistant message. This matches the behavior of active streaming, where
- * signal data parts are written to the current assistant message via writer.custom().
+ * Post-processes converted UI messages to merge non-user signal data parts into an
+ * immediate neighbor assistant message, matching active-streaming behavior.
  *
- * Non-user signals (system-reminder, reactive, notification, state, etc.) are stored as
- * separate role:'signal' DB messages. The per-message adapters convert them to role:'system'
- * UI messages with data-* parts, but assistant-ui rejects system messages with non-text parts.
- *
- * This function moves those data parts onto the preceding assistant message and removes
- * the standalone signal message. User-type signals (already converted to role:'user' by
- * the adapters) are left untouched.
+ * Only checks immediate neighbors: append to preceding assistant, or prepend to
+ * following assistant. If neither neighbor is assistant, convert the signal in-place
+ * to an assistant message with just its data parts.
  */
 function mergeSignalDataParts<T extends { role: string; parts: Array<{ type: string }> }>(messages: T[]): T[] {
   const result: T[] = [];
-  for (const message of messages) {
-    if (
-      message.role === 'system' &&
-      message.parts.length > 0 &&
-      message.parts.every(part => part.type.startsWith('data-'))
-    ) {
-      for (let i = result.length - 1; i >= 0; i--) {
-        if (result[i]!.role === 'assistant') {
-          result[i] = { ...result[i]!, parts: [...result[i]!.parts, ...message.parts] };
-          break;
-        }
-      }
+  for (let idx = 0; idx < messages.length; idx++) {
+    const message = messages[idx]!;
+    if (!isSignalDataMessage(message)) {
+      result.push(message);
       continue;
     }
-    result.push(message);
+
+    const prev = result[result.length - 1];
+    const next = messages[idx + 1];
+
+    if (prev && prev.role === 'assistant') {
+      result[result.length - 1] = { ...prev, parts: [...prev.parts, ...message.parts] };
+    } else if (next && next.role === 'assistant') {
+      messages[idx + 1] = { ...next, parts: [...message.parts, ...next.parts] } as T;
+    } else {
+      result.push({ ...message, role: 'assistant' } as T);
+    }
   }
   return result;
 }
