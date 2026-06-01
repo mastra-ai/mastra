@@ -79,7 +79,7 @@ export const StreamChatProvider = ({
         modelSettings: {
           maxRetries: 3,
           maxSteps: 100,
-          maxTokens: 10000,
+          maxTokens: 1000,
           temperature: 1,
         },
         requestContext,
