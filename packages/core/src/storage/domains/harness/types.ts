@@ -7,7 +7,6 @@ export interface SessionRecord {
   origin: 'top-level' | 'subagent-tool';
   modeId: string;
   modelId: string;
-  subagentModelId?: string;
   createdAt: Date;
   lastActivityAt: Date;
 }

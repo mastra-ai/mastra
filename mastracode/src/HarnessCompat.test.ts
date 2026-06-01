@@ -9,7 +9,11 @@ let legacyListModes: ReturnType<typeof vi.fn<() => unknown[]>>;
 
 vi.mock('@mastra/core/harness', () => ({
   Harness: class {
-    constructor(_args: unknown) {}
+    constructor(_args: unknown) {
+      void (this as { setState: (updates: Record<string, unknown>) => Promise<void> }).setState({
+        currentModelId: 'constructor-model',
+      });
+    }
 
     getState() {
       return legacyState;
@@ -36,6 +40,21 @@ vi.mock('@mastra/core/harness', () => ({
       return Promise.resolve();
     }
 
+    getSubagentModelId({ agentType }: { agentType?: string } = {}) {
+      if (agentType) {
+        const perType = legacyState[`subagentModelId_${agentType}`];
+        if (typeof perType === 'string') return perType;
+      }
+      const global = legacyState.subagentModelId;
+      return typeof global === 'string' ? global : null;
+    }
+
+    async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }) {
+      const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
+      await this.setState({ [key]: modelId });
+      await this.setThreadSetting({ key, value: modelId });
+    }
+
     getResourceId() {
       return 'resource-id';
     }
@@ -51,17 +70,12 @@ const planMode = { id: 'plan', agentId: 'agent', defaultModelId: 'plan-model' };
 
 function createSession() {
   let modelId = 'session-model';
-  let subagentModelId: string | undefined = 'session-subagent-model';
   let mode = buildMode;
 
   return {
     getModelId: vi.fn(() => modelId),
     setModelId: vi.fn((next: string) => {
       modelId = next;
-    }),
-    getSubagentModelId: vi.fn(() => subagentModelId),
-    setSubagentModelId: vi.fn((next: string | undefined) => {
-      subagentModelId = next;
     }),
     getMode: vi.fn(() => mode),
     setMode: vi.fn(next => {
@@ -80,7 +94,7 @@ describe('HarnessCompat session-derived state', () => {
     legacyListModes = vi.fn(() => []);
   });
 
-  it('composes model, mode, and default subagent model from the active session', async () => {
+  it('composes model and mode from the active session', async () => {
     const { HarnessCompat } = await import('./HarnessCompat.js');
     const session = createSession();
     const harnessV1 = {
@@ -95,7 +109,6 @@ describe('HarnessCompat session-derived state', () => {
       projectPath: '/repo',
       currentModelId: 'session-model',
       modeId: 'build',
-      subagentModelId: 'session-subagent-model',
     });
     expect(harnessV1.session).toHaveBeenCalledWith({ threadId: 'thread-id', resourceId: 'resource-id' });
   });
@@ -113,13 +126,11 @@ describe('HarnessCompat session-derived state', () => {
 
     await harness.setState({
       currentModelId: 'new-session-model',
-      subagentModelId: 'new-session-subagent-model',
       modeId: 'plan',
       projectPath: '/new-repo',
     } as never);
 
     expect(session.setModelId).toHaveBeenCalledWith('new-session-model');
-    expect(session.setSubagentModelId).toHaveBeenCalledWith('new-session-subagent-model');
     expect(session.setMode).toHaveBeenCalledWith(planMode);
     expect(legacySwitchMode).toHaveBeenCalledWith({ modeId: 'plan' });
     expect(legacySetState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
@@ -127,7 +138,6 @@ describe('HarnessCompat session-derived state', () => {
       projectPath: '/new-repo',
       currentModelId: 'new-session-model',
       modeId: 'plan',
-      subagentModelId: 'new-session-subagent-model',
     });
   });
 
@@ -143,11 +153,11 @@ describe('HarnessCompat session-derived state', () => {
     await harness.switchThread({ threadId: 'thread-id' });
 
     expect(harness.getSubagentModelId({ agentType: 'worker' })).toBe('worker-model');
-    expect(harness.getSubagentModelId()).toBe('session-subagent-model');
+    expect(harness.getSubagentModelId()).toBeNull();
 
     await harness.setSubagentModelId({ modelId: 'default-subagent-model' });
 
-    expect(session.setSubagentModelId).toHaveBeenCalledWith('default-subagent-model');
-    expect(legacySetThreadSetting).toHaveBeenCalledWith({ key: 'subagentModelId', value: 'default-subagent-model' });
+    expect(legacySetState).toHaveBeenCalledWith({ subagentModelId: 'default-subagent-model' });
+    expect(harness.getSubagentModelId()).toBe('default-subagent-model');
   });
 });

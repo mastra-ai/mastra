@@ -6,7 +6,6 @@ export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 export type MastraCodeSessionState = {
   currentModelId: string;
   modeId: string;
-  subagentModelId?: string;
 };
 
 export type MastraCodeComposedState = MastraCodeState & MastraCodeSessionState;
@@ -14,6 +13,7 @@ export type MastraCodeComposedState = MastraCodeState & MastraCodeSessionState;
 export interface MastraCodeState {
   [key: string]: unknown;
   [key: `subagentModelId_${string}`]: string | undefined;
+  subagentModelId?: string;
   projectPath?: string;
   projectName?: string;
   configDir: string;
@@ -64,6 +64,7 @@ export interface MastraCodeState {
 }
 
 export const stateSchema = z.object({
+  subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),

@@ -17,7 +17,6 @@ type HarnessV1Session<TState = {}> = Session<TState>;
 type SessionStateFields = {
   currentModelId?: string;
   modeId?: string;
-  subagentModelId?: string;
 };
 
 export function v1ModeToLegacy<TState = {}>(mode: HarnessMode, agent: Agent): HarnessModeLegacy<TState> {
@@ -44,30 +43,38 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
 
   getState(): Readonly<TState> {
     const state = super.getState() as Readonly<TState> & SessionStateFields;
-    if (!this.#session) {
+    let session: Session<TState> | undefined;
+    try {
+      session = this.#session;
+    } catch {
+      session = undefined;
+    }
+
+    if (!session) {
       return state;
     }
 
     return {
       ...state,
-      currentModelId: this.#session.getModelId(),
-      modeId: this.#session.getMode().id,
-      subagentModelId: this.#session.getSubagentModelId(),
+      currentModelId: session.getModelId(),
+      modeId: session.getMode().id,
     } as Readonly<TState>;
   }
 
   async setState(updates: Partial<TState>): Promise<void> {
-    const { currentModelId, modeId, subagentModelId, ...harnessUpdates } = updates as Partial<TState> &
-      SessionStateFields;
+    const { currentModelId, modeId, ...harnessUpdates } = updates as Partial<TState> & SessionStateFields;
+    let session: Session<TState> | undefined;
+    try {
+      session = this.#session;
+    } catch {
+      session = undefined;
+    }
 
-    if (this.#session) {
+    if (session) {
       if (typeof currentModelId === 'string') {
-        this.#session.setModelId(currentModelId);
+        session.setModelId(currentModelId);
       }
-      if (Object.prototype.hasOwnProperty.call(updates, 'subagentModelId')) {
-        this.#session.setSubagentModelId(subagentModelId);
-      }
-      if (typeof modeId === 'string' && modeId !== this.#session.getMode().id) {
+      if (typeof modeId === 'string' && modeId !== session.getMode().id) {
         await this.switchMode({ modeId });
       }
     }
@@ -78,33 +85,19 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
   }
 
   getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
-    const state = super.getState() as Record<string, unknown>;
-    if (agentType) {
-      const perType = state[`subagentModelId_${agentType}`];
-      if (typeof perType === 'string') return perType;
-    }
-
-    return this.#session?.getSubagentModelId() ?? null;
+    return super.getSubagentModelId({ agentType });
   }
 
   async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
-    if (agentType) {
-      await super.setSubagentModelId({ modelId, agentType });
-      return;
-    }
-
-    this.#session?.setSubagentModelId(modelId);
-    await this.setThreadSetting({ key: 'subagentModelId', value: modelId });
+    await super.setSubagentModelId({ modelId, agentType });
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
     const modes = this.listModes();
 
-    const legacyState = super.getState() as Record<string, unknown>;
     const session = await this.#harnessV1.session({
       threadId,
       resourceId: this.getResourceId(),
-      subagentModelId: typeof legacyState['subagentModelId'] === 'string' ? legacyState['subagentModelId'] : undefined,
     });
     this.#session = session;
 
