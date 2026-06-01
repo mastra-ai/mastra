@@ -5,6 +5,7 @@ import type { MastraMemory } from '../../memory';
 import type { StorageCloneThreadInput } from '../../storage';
 import { HarnessStorage } from '../../storage/domains/harness';
 import type { SessionRecord } from '../../storage/domains/harness';
+import type { HarnessEvent } from './events';
 import { Harness } from './harness';
 
 class RecordingHarnessStorage extends HarnessStorage {
@@ -274,6 +275,111 @@ describe('Harness.session()', () => {
 
     expect(memory.saveMessages).toHaveBeenCalledWith({ messages });
     expect(result.messages).toEqual(messages);
+  });
+});
+
+describe('Harness events', () => {
+  it('emits session_created only for newly persisted sessions', async () => {
+    const { harness } = createHarness(createMemory());
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    const session = await harness.session({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      modeId: 'plan',
+      modelId: 'test-model',
+    });
+    await harness.session({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      modeId: 'build',
+      modelId: 'ignored-model',
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'session_created',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      modeId: 'plan',
+      modelId: 'test-model',
+    });
+    expect(events[0]?.id).toMatch(/^harness-v1:[0-9a-f-]{36}:0$/);
+    expect(events[0]?.timestamp).toEqual(expect.any(Number));
+    expect(session.id).toMatch(/^sess-[a-f0-9]{32}$/);
+  });
+
+  it('emits mode and model changes from sessions', async () => {
+    const { harness } = createHarness(createMemory());
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const session = await harness.session({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      modeId: 'build',
+      modelId: 'model-1',
+    });
+    events.length = 0;
+
+    session.setModelId('model-2');
+    session.setMode({ id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model' });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'model_changed',
+        sessionId: session.id,
+        modelId: 'model-2',
+        previousModelId: 'model-1',
+      }),
+      expect.objectContaining({
+        type: 'mode_changed',
+        sessionId: session.id,
+        modeId: 'plan',
+        previousModeId: 'build',
+      }),
+    ]);
+  });
+
+  it('emits thread_cloned from session.clone and session_created from harness.cloneSession', async () => {
+    const { harness } = createHarness(createMemory());
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    events.length = 0;
+
+    await session.clone({ threadId: 'thread-2', title: 'Clone' });
+    await harness.cloneSession(session, { sessionId: 'session-2', threadId: 'thread-3' });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'thread_cloned',
+        sessionId: session.id,
+        threadId: 'thread-2',
+        resourceId: 'resource-1',
+        sourceThreadId: 'thread-1',
+        title: 'Clone',
+      }),
+      expect.objectContaining({
+        type: 'thread_cloned',
+        sessionId: session.id,
+        threadId: 'thread-3',
+        resourceId: 'resource-1',
+        sourceThreadId: 'thread-1',
+      }),
+      expect.objectContaining({
+        type: 'session_created',
+        threadId: 'thread-3',
+        resourceId: 'resource-1',
+        parentSessionId: session.id,
+      }),
+    ]);
   });
 });
 
