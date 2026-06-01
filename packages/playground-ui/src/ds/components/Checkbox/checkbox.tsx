@@ -2,7 +2,6 @@ import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
 import { Check, Minus } from 'lucide-react';
 import * as React from 'react';
 
-import { formElementFocus } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -34,31 +33,37 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         ref={ref}
         checked={isCheckedIndeterminate ? false : checked}
         indeterminate={indeterminate ?? isCheckedIndeterminate}
+        data-slot="checkbox"
         className={cn(
-          'peer h-4 w-4 shrink-0 rounded-sm border border-neutral3',
-          'flex items-center justify-center',
-          'shadow-sm',
+          'peer flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.3125rem]',
+          'border border-neutral6/5 bg-neutral6/5 text-surface1 outline-hidden',
           transitions.all,
-          'hover:border-neutral5 hover:shadow-md',
-          formElementFocus,
+          'hover:border-border2 hover:bg-surface-overlay-strong',
+          'active:scale-95 active:border-neutral5/35 active:bg-surface-overlay-strong',
+          'focus-visible:border-neutral5/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55',
           // Base UI's Checkbox.Root is a `<span>`, so `:disabled` never matches — target `data-disabled`.
-          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:border-neutral3 data-[disabled]:hover:shadow-sm',
-          'data-[checked]:bg-accent1 data-[checked]:border-accent1 data-[checked]:text-surface1',
-          'data-[indeterminate]:bg-accent1 data-[indeterminate]:border-accent1 data-[indeterminate]:text-surface1',
-          'data-[checked]:shadow-glow-accent1 data-[indeterminate]:shadow-glow-accent1',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[disabled]:hover:border-neutral6/5 data-[disabled]:hover:bg-neutral6/5 data-[disabled]:active:scale-100',
+          'data-[checked]:border-neutral6 data-[checked]:bg-neutral6 data-[checked]:text-surface1',
+          'data-[indeterminate]:border-neutral6 data-[indeterminate]:bg-neutral6 data-[indeterminate]:text-surface1',
+          'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
+          'data-[indeterminate]:hover:border-neutral5 data-[indeterminate]:hover:bg-neutral5',
+          'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
+          'data-[indeterminate]:active:border-neutral4 data-[indeterminate]:active:bg-neutral4',
           className,
         )}
         {...props}
       >
         <CheckboxPrimitive.Indicator
+          keepMounted
           className={cn(
             'group/checkbox-indicator flex items-center justify-center text-current',
-            'data-[checked]:animate-in data-[checked]:zoom-in-50 data-[checked]:duration-150',
-            'data-[indeterminate]:animate-in data-[indeterminate]:zoom-in-50 data-[indeterminate]:duration-150',
+            'opacity-0 scale-75 transition-[opacity,transform] duration-150 ease-out-custom',
+            'data-[checked]:opacity-100 data-[checked]:scale-100',
+            'data-[indeterminate]:opacity-100 data-[indeterminate]:scale-100',
+            'data-[starting-style]:opacity-0 data-[starting-style]:scale-75',
+            'data-[ending-style]:opacity-0 data-[ending-style]:scale-75',
           )}
         >
-          {/* `keepMounted` is false by default, so the indicator only mounts in
-              the checked/indeterminate states — pick the icon accordingly. */}
           <CheckboxIndicatorIcon />
         </CheckboxPrimitive.Indicator>
       </CheckboxPrimitive.Root>
@@ -69,14 +74,13 @@ Checkbox.displayName = 'Checkbox';
 
 /**
  * Picks the checkmark vs. the dash based on the Indicator's data attributes.
- * The Indicator only renders while checked or indeterminate, so this reads the
- * closest element with a `data-indeterminate` attribute.
+ * The Indicator stays mounted so unchecked transitions can animate out cleanly.
  */
 function CheckboxIndicatorIcon() {
   return (
     <>
-      <Check className="h-3.5 w-3.5 stroke-3 group-data-[indeterminate]/checkbox-indicator:hidden" />
-      <Minus className="hidden h-3.5 w-3.5 stroke-3 group-data-[indeterminate]/checkbox-indicator:block" />
+      <Check className="size-3 stroke-[3.25] group-data-[indeterminate]/checkbox-indicator:hidden" />
+      <Minus className="hidden size-3 stroke-[3.25] group-data-[indeterminate]/checkbox-indicator:block" />
     </>
   );
 }

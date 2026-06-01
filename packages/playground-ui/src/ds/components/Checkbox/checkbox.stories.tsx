@@ -13,7 +13,8 @@ const meta: Meta<typeof Checkbox> = {
       control: { type: 'boolean' },
     },
     checked: {
-      control: { type: 'boolean' },
+      control: { type: 'radio' },
+      options: [false, true, 'indeterminate'],
     },
   },
 };
@@ -42,6 +43,52 @@ export const DisabledChecked: Story = {
     disabled: true,
     checked: true,
   },
+};
+
+export const Indeterminate: Story = {
+  args: {
+    checked: 'indeterminate',
+  },
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: 'centered',
+  },
+  render: () => (
+    <div className="grid min-w-[26rem] gap-4 rounded-lg border border-border1 bg-surface2 p-4">
+      <div className="grid grid-cols-[9rem_repeat(4,minmax(0,1fr))] items-center gap-x-5 gap-y-3 text-ui-sm text-neutral3">
+        <span />
+        <span>Default</span>
+        <span>Checked</span>
+        <span>Mixed</span>
+        <span>Focus</span>
+
+        <span className="text-neutral5">Enabled</span>
+        <Checkbox aria-label="enabled unchecked" />
+        <Checkbox aria-label="enabled checked" checked onCheckedChange={() => {}} />
+        <Checkbox aria-label="enabled mixed" checked="indeterminate" onCheckedChange={() => {}} />
+        <Checkbox
+          aria-label="focused checked"
+          checked
+          onCheckedChange={() => {}}
+          className="border-neutral5/60 outline outline-1 outline-offset-2 outline-neutral5/55"
+        />
+
+        <span className="text-neutral5">Disabled</span>
+        <Checkbox aria-label="disabled unchecked" disabled />
+        <Checkbox aria-label="disabled checked" checked disabled onCheckedChange={() => {}} />
+        <Checkbox aria-label="disabled mixed" checked="indeterminate" disabled onCheckedChange={() => {}} />
+        <Checkbox
+          aria-label="disabled focus preview"
+          checked
+          disabled
+          onCheckedChange={() => {}}
+          className="border-neutral5/60 outline outline-1 outline-offset-2 outline-neutral5/35"
+        />
+      </div>
+    </div>
+  ),
 };
 
 export const WithLabel: Story = {
