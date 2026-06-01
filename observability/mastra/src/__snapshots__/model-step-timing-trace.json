@@ -61,7 +61,8 @@
                 "outputDetails": {
                   "text": 5
                 }
-              }
+              },
+              "responseModel": ""
             },
             "metadata": {
               "runId": "<runId-1>",
