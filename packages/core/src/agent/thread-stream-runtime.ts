@@ -402,6 +402,89 @@ export class AgentThreadStreamRuntime {
     });
   }
 
+  #broadcastPersistedSignal(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    signal: CreatedAgentSignal,
+    resourceId: string,
+    threadId: string,
+  ) {
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const parts: any[] = [
+      { type: 'start', runId },
+      { ...signal.toDataPart(), runId },
+      {
+        type: 'finish',
+        runId,
+        payload: {
+          stepResult: { reason: 'stop' },
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        },
+      },
+    ];
+    const output = {
+      runId,
+      status: 'running',
+      fullStream: new ReadableStream({
+        start(controller) {
+          for (const part of parts) controller.enqueue(part);
+          controller.close();
+          finish();
+        },
+      }),
+      _waitUntilFinished: () => finished,
+    } as MastraModelOutput<any>;
+    const {
+      output: outputForSubscribers,
+      createSubscriberStream,
+      startBroadcast,
+    } = this.#withBroadcastStream(output, pubsub, key);
+    const record: AgentThreadRunRecord<any> = {
+      agent: { id: `persisted-signal:${signal.id}` } as Agent<any, any, any, any>,
+      output: outputForSubscribers,
+      runId,
+      threadId,
+      resourceId,
+      streamOptions: {},
+      createSubscriberStream,
+    };
+
+    state.threadRunsById.set(runId, record);
+    state.threadKeysByRunId.set(runId, key);
+    const registered = this.#publishAndWait(pubsub, key, { type: 'run-registered', runId });
+    void registered.then(startBroadcast, startBroadcast);
+    void outputForSubscribers._waitUntilFinished().finally(() => {
+      setTimeout(() => {
+        state.threadRunsById.delete(runId);
+        state.threadKeysByRunId.delete(runId);
+        if (state.activeThreadRunIds.get(key) === runId) {
+          state.activeThreadRunIds.delete(key);
+        }
+        this.#publish(pubsub, key, { type: 'run-completed', runId });
+      }, 0);
+    });
+  }
+
+  async #persistAndBroadcastIdleSignal(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    agent: Agent<any, any, any, any>,
+    signal: CreatedAgentSignal,
+    resourceId: string,
+    threadId: string,
+    requestContext?: RequestContext,
+  ) {
+    await this.#persistSignal(agent, signal, resourceId, threadId, requestContext);
+    this.#broadcastPersistedSignal(state, pubsub, key, runId, signal, resourceId, threadId);
+  }
+
   registerRun<OUTPUT>(
     agent: Agent<any, any, any, any>,
     output: MastraModelOutput<OUTPUT>,
@@ -1062,22 +1145,26 @@ export class AgentThreadStreamRuntime {
     }
 
     runId = randomUUID();
+    key ??= this.#threadKey(resourceId, threadId);
+    if (idleBehavior === 'persist') {
+      const persisted = this.#persistAndBroadcastIdleSignal(
+        state,
+        pubsub,
+        key,
+        runId,
+        agent,
+        signal,
+        resourceId,
+        threadId,
+        target.ifIdle?.streamOptions?.requestContext,
+      );
+      void persisted.catch(() => {});
+      return { accepted: true, runId, signal, persisted };
+    }
     if (idleBehavior !== 'wake') {
-      if (idleBehavior === 'persist') {
-        const persisted = this.#persistSignal(
-          agent,
-          signal,
-          resourceId,
-          threadId,
-          target.ifIdle?.streamOptions?.requestContext,
-        );
-        void persisted.catch(() => {});
-        return { accepted: true, runId, signal, persisted };
-      }
       return { accepted: true, runId, signal };
     }
 
-    key ??= this.#threadKey(resourceId, threadId);
     if (state.activeThreadRunIds.has(key)) {
       // Another run owns the thread. Queue this idle-start request and let the watcher
       // launch it only after the active run clears the thread reservation.

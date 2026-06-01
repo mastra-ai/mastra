@@ -47,6 +47,7 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   'web-search': 'read',
   web_extract: 'read',
   'web-extract': 'read',
+  [MC_TOOLS.NOTIFICATION_INBOX]: 'read',
   // Edit tools — modify files
   [MC_TOOLS.STRING_REPLACE_LSP]: 'edit',
   [MC_TOOLS.AST_SMART_EDIT]: 'edit',

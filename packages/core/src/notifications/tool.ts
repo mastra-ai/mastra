@@ -1,30 +1,90 @@
 import { z } from 'zod';
 import { createTool } from '../tools';
+import { createNotificationSignal } from './signals';
 import type { NotificationsStorage } from './storage';
-import type { ListNotificationsInput, NotificationStatus } from './types';
+import type { ListNotificationsInput, NotificationRecord, NotificationStatus } from './types';
 
-const notificationActionSchema = z.discriminatedUnion('action', [
-  z.object({
-    action: z.literal('list'),
-    threadId: z.string().optional(),
-    status: z.enum(['pending', 'delivered', 'seen', 'dismissed', 'archived', 'discarded']).optional(),
-    priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
-    source: z.string().optional(),
-    limit: z.number().int().positive().optional(),
-  }),
-  z.object({ action: z.literal('read'), id: z.string(), threadId: z.string().optional() }),
-  z.object({ action: z.literal('markSeen'), id: z.string(), threadId: z.string().optional() }),
-  z.object({ action: z.literal('dismiss'), id: z.string(), threadId: z.string().optional() }),
-  z.object({ action: z.literal('archive'), id: z.string(), threadId: z.string().optional() }),
-  z.object({
-    action: z.literal('search'),
-    threadId: z.string().optional(),
-    query: z.string(),
-    limit: z.number().int().positive().optional(),
-  }),
-]);
+const notificationActionSchema = z.object({
+  action: z.enum(['list', 'read', 'markSeen', 'dismiss', 'archive', 'search']),
+  threadId: z.string().optional(),
+  id: z.string().optional(),
+  status: z.enum(['pending', 'delivered', 'seen', 'dismissed', 'archived', 'discarded']).optional(),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+  source: z.string().optional(),
+  query: z.string().optional(),
+  limit: z.number().int().positive().optional(),
+});
 
 type NotificationInboxAction = z.infer<typeof notificationActionSchema>;
+
+type NotificationToolAgent = {
+  sendSignal: (
+    signal: ReturnType<typeof createNotificationSignal>,
+    target: { resourceId: string; threadId: string },
+  ) => { signal: ReturnType<typeof createNotificationSignal>; persisted?: Promise<void> };
+};
+
+const isReadable = (notification: NotificationRecord) =>
+  notification.status === 'pending' || notification.status === 'delivered';
+
+async function deliverNotifications({
+  notifications,
+  storage,
+  context,
+}: {
+  notifications: NotificationRecord[];
+  storage: NotificationsStorage;
+  context: any;
+}) {
+  let delivered = 0;
+  let markedSeen = 0;
+  let unavailable = 0;
+  let alreadyRead = 0;
+
+  for (const notification of notifications) {
+    if (!isReadable(notification)) {
+      alreadyRead += 1;
+      continue;
+    }
+
+    const agentId = notification.agentId ?? context?.agent?.agentId;
+    const resourceId = notification.resourceId ?? context?.agent?.resourceId;
+    const mastra = context?.mastra;
+    const agent =
+      agentId && typeof mastra?.getAgentById === 'function' ? await mastra.getAgentById(agentId) : undefined;
+
+    if (agent && resourceId && !notification.deliveredSignalId) {
+      const signal = createNotificationSignal({ ...notification, status: 'delivered' });
+      const result = (agent as NotificationToolAgent).sendSignal(signal, {
+        resourceId,
+        threadId: notification.threadId,
+      });
+      await result.persisted;
+      await storage.updateNotification({
+        threadId: notification.threadId,
+        id: notification.id,
+        status: 'seen',
+        deliveredSignalId: result.signal.id,
+      });
+      delivered += 1;
+      continue;
+    }
+
+    if (notification.deliveredSignalId) {
+      await storage.updateNotification({ threadId: notification.threadId, id: notification.id, status: 'seen' });
+      markedSeen += 1;
+    } else {
+      unavailable += 1;
+    }
+  }
+
+  const message =
+    delivered > 0
+      ? `${delivered} notification${delivered === 1 ? '' : 's'} will now be delivered.`
+      : 'No unread notifications needed delivery.';
+
+  return { message, delivered, markedSeen, unavailable, alreadyRead };
+}
 
 export function createNotificationInboxTool({ storage }: { storage: NotificationsStorage }) {
   return createTool({
@@ -50,20 +110,34 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
       }
 
       if (input.action === 'search') {
+        if (!input.query) throw new Error('notification-inbox search requires query');
         return {
           notifications: await storage.listNotifications({ threadId, search: input.query, limit: input.limit }),
         };
       }
 
       if (input.action === 'read') {
-        const notification = await storage.getNotification({ threadId, id: input.id });
-        if (!notification) throw new Error(`Notification ${input.id} was not found for thread ${threadId}`);
-        if (notification.status === 'pending' || notification.status === 'delivered') {
-          return { notification: await storage.updateNotification({ threadId, id: input.id, status: 'seen' }) };
-        }
-        return { notification };
+        const notifications = input.id
+          ? [await storage.getNotification({ threadId, id: input.id })]
+          : await storage.listNotifications({
+              threadId,
+              status: input.status ?? ['pending', 'delivered'],
+              priority: input.priority,
+              source: input.source,
+              limit: input.limit,
+            });
+        if (input.id && !notifications[0])
+          throw new Error(`Notification ${input.id} was not found for thread ${threadId}`);
+        return deliverNotifications({
+          notifications: notifications.filter((notification): notification is NotificationRecord =>
+            Boolean(notification),
+          ),
+          storage,
+          context,
+        });
       }
 
+      if (!input.id) throw new Error(`notification-inbox ${input.action} requires id`);
       const statusByAction = {
         markSeen: 'seen',
         dismiss: 'dismissed',

@@ -1,9 +1,25 @@
 import type { CreatedAgentSignal } from '../agent/signals';
-import type { SendAgentSignalResult } from '../agent/types';
+import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
+import type { SendAgentSignalOptions } from '../agent/types';
+import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
 import { createNotificationSignal, createNotificationSummarySignal, summarizeNotifications } from './signals';
 import type { NotificationsStorage } from './storage';
 import type { NotificationRecord } from './types';
+
+type NotificationDispatchAgent = {
+  id?: string;
+  getPubSub?: () => PubSub | undefined;
+  sendSignal: (
+    signal: CreatedAgentSignal,
+    target: SendAgentSignalOptions,
+  ) => {
+    accepted: boolean;
+    runId: string;
+    signal: CreatedAgentSignal;
+    persisted?: Promise<void>;
+  };
+};
 
 export type DispatchDueNotificationsInput = {
   mastra: Mastra;
@@ -58,19 +74,33 @@ async function sendNotificationRecord({
   storage: NotificationsStorage;
   record: NotificationRecord;
   now: Date;
-}): Promise<{ record: NotificationRecord; signal: CreatedAgentSignal }> {
-  if (!record.agentId) throw new Error(`Notification ${record.id} is missing agentId`);
-  if (!record.resourceId) throw new Error(`Notification ${record.id} is missing resourceId`);
+}): Promise<{ record: NotificationRecord; signal: CreatedAgentSignal } | null> {
+  const current = await storage.getNotification({ threadId: record.threadId, id: record.id });
+  if (!current || current.status !== 'pending' || current.deliveredSignalId) return null;
+  if (!current.agentId) throw new Error(`Notification ${current.id} is missing agentId`);
+  if (!current.resourceId) throw new Error(`Notification ${current.id} is missing resourceId`);
 
-  const agent = await mastra.getAgentById(record.agentId as never);
-  const signal = createNotificationSignal(record);
-  const result = (agent as { sendSignal: typeof agent.sendSignal }).sendSignal(signal, {
-    resourceId: record.resourceId,
-    threadId: record.threadId,
-  }) as SendAgentSignalResult;
+  const agent = (await mastra.getAgentById(current.agentId as never)) as NotificationDispatchAgent;
+  if (current.priority === 'high' && current.summarySignalId) {
+    const threadState = agentThreadStreamRuntime.getThreadState(
+      { resourceId: current.resourceId, threadId: current.threadId },
+      agent.getPubSub?.(),
+    );
+    if (threadState === 'active') return null;
+  }
+
+  const signal = createNotificationSignal({
+    ...current,
+    status: 'delivered',
+    deliveredAt: now,
+    lastDeliveryAttemptAt: now,
+  });
+  const target: SendAgentSignalOptions = { resourceId: current.resourceId, threadId: current.threadId };
+  const result = agent.sendSignal(signal, target);
+  await result.persisted;
   const updated = await storage.updateNotification({
-    id: record.id,
-    threadId: record.threadId,
+    id: current.id,
+    threadId: current.threadId,
     status: 'delivered',
     deliveredSignalId: result.signal.id,
     lastDeliveryAttemptAt: now,
@@ -96,10 +126,11 @@ async function sendNotificationSummary({
   const agent = await mastra.getAgentById(first.agentId as never);
   const summary = summarizeNotifications(records);
   const signal = createNotificationSummarySignal(summary);
-  const result = (agent as { sendSignal: typeof agent.sendSignal }).sendSignal(signal, {
-    resourceId: first.resourceId,
-    threadId: first.threadId,
-  }) as SendAgentSignalResult;
+  const target: SendAgentSignalOptions = records.every(record => record.priority === 'low')
+    ? { resourceId: first.resourceId, threadId: first.threadId, ifIdle: { behavior: 'persist' } }
+    : { resourceId: first.resourceId, threadId: first.threadId };
+  const result = (agent as NotificationDispatchAgent).sendSignal(signal, target);
+  await result.persisted;
 
   const updatedRecords: NotificationRecord[] = [];
   for (const record of records) {
@@ -107,7 +138,7 @@ async function sendNotificationSummary({
       await storage.updateNotification({
         id: record.id,
         threadId: record.threadId,
-        status: 'delivered',
+        summaryAt: null,
         summarySignalId: result.signal.id,
         lastDeliveryAttemptAt: now,
       }),
@@ -164,6 +195,7 @@ export async function dispatchDueNotifications({
   for (const record of individual) {
     try {
       const result = await sendNotificationRecord({ mastra, storage, record, now });
+      if (!result) continue;
       delivered.push(result.record);
       signals.push(result.signal);
     } catch (error) {

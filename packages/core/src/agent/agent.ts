@@ -45,7 +45,11 @@ import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import { resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
-import { createNotificationSignal } from '../notifications/signals';
+import {
+  createNotificationSignal,
+  createNotificationSummarySignal,
+  summarizeNotifications,
+} from '../notifications/signals';
 import type { SendNotificationSignalInput } from '../notifications/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
 import {
@@ -6687,17 +6691,39 @@ export class Agent<
     }
 
     if (decision.action === 'defer' || decision.action === 'summarize') {
+      const shouldEmitSummaryNow = decision.action === 'summarize' && record.priority === 'high' && decision.deliverAt;
       const updated = await notifications.updateNotification({
         id: record.id,
         threadId: record.threadId,
         deliverAt: decision.action === 'defer' ? decision.deliverAt : (decision.deliverAt ?? record.deliverAt),
-        summaryAt: decision.action === 'summarize' ? decision.summaryAt : (decision.summaryAt ?? record.summaryAt),
+        summaryAt: shouldEmitSummaryNow
+          ? null
+          : decision.action === 'summarize'
+            ? decision.summaryAt
+            : (decision.summaryAt ?? record.summaryAt),
         deliveryReason: decision.reason,
       });
+
+      if (shouldEmitSummaryNow) {
+        const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
+        const result = agentThreadStreamRuntime.sendSignal(
+          this as Agent<any, any, any, any>,
+          signal,
+          { ...target, ifIdle: { ...target.ifIdle, behavior: 'persist' } },
+          this.getPubSub(),
+        );
+        const summarized = await notifications.updateNotification({
+          id: updated.id,
+          threadId: updated.threadId,
+          summarySignalId: result.signal.id,
+        });
+        return { ...result, record: summarized, decision };
+      }
+
       return { accepted: true, record: updated, decision };
     }
 
-    const signal = createNotificationSignal(record);
+    const signal = createNotificationSignal({ ...record, status: 'delivered' });
     const result = agentThreadStreamRuntime.sendSignal(
       this as Agent<any, any, any, any>,
       signal,
