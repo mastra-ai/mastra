@@ -33,4 +33,15 @@ export const resolveStarterModel = (allowedModels: ModelInfo[], policy?: Builder
   return FALLBACK_MODEL;
 };
 
+/**
+ * Returns true when the form's `name` value is still the auto-generated
+ * placeholder derived from the original starter prompt. Used by the form
+ * snapshot so the builder LLM knows it needs to call `set-agent-name`.
+ */
+export const isPlaceholderAgentName = (name: string | undefined, originalPrompt: string | undefined): boolean => {
+  if (typeof name !== 'string' || name.length === 0) return false;
+  if (typeof originalPrompt !== 'string' || originalPrompt.length === 0) return false;
+  return name === truncateName(originalPrompt);
+};
+
 export const truncateName = (prompt: string): string => (prompt.length <= 20 ? prompt : prompt.slice(0, 20) + '…');
