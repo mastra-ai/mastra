@@ -1,8 +1,7 @@
-import { formatZodError } from '@mastra/server/handlers/error';
+import { formatZodError, isZodError } from '@mastra/server/handlers/error';
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { ZodError } from 'zod';
 
 import { ValidationError } from '../services/route-handler.service';
 
@@ -11,18 +10,6 @@ interface NormalizedError {
   error: string;
   code?: string;
   issues?: Array<{ field?: string; path?: string[]; message: string }>;
-}
-
-function isZodErrorLike(exception: unknown): exception is ZodError {
-  return (
-    exception instanceof ZodError ||
-    (typeof exception === 'object' &&
-      exception !== null &&
-      'name' in exception &&
-      (exception as { name?: unknown }).name === 'ZodError' &&
-      'issues' in exception &&
-      Array.isArray((exception as { issues?: unknown }).issues))
-  );
 }
 
 /**
@@ -121,7 +108,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
     }
 
     // Zod validation error
-    if (isZodErrorLike(exception)) {
+    if (isZodError(exception)) {
       const formatted = formatZodError(exception, 'request');
       return {
         status: HttpStatus.BAD_REQUEST,

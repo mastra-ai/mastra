@@ -201,7 +201,9 @@ describe('ComposioToolProvider — resolveTools', () => {
   it('injects connectedAccountId via beforeExecute, clears outputSchema, applies description override', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
-    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
     const mastra = getMastraInstance();
     mastra.tools.get.mockClear();
 
@@ -236,7 +238,9 @@ describe('ComposioToolProvider — resolveTools', () => {
   it('falls back to "default" internalUserId when MASTRA_RESOURCE_ID_KEY missing', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
-    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
     const mastra = getMastraInstance();
     mastra.tools.get.mockClear();
     mastra.tools.get.mockResolvedValue({});
@@ -253,7 +257,9 @@ describe('ComposioToolProvider — resolveTools', () => {
   it('reads MASTRA_RESOURCE_ID_KEY from requestContext when present', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
-    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
     const mastra = getMastraInstance();
     mastra.tools.get.mockClear();
     mastra.tools.get.mockResolvedValue({});
@@ -271,7 +277,9 @@ describe('ComposioToolProvider — resolveTools', () => {
   it('prefers opts.authorId over requestContext when supplied (author-bound pin)', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
-    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' }).catch(() => undefined);
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
     const mastra = getMastraInstance();
     mastra.tools.get.mockClear();
     mastra.tools.get.mockResolvedValue({});
@@ -405,7 +413,14 @@ describe('ComposioToolProvider — listConnectionFields', () => {
         default: undefined,
       },
       { name: 'port', displayName: undefined, description: undefined, type: 'number', required: false, default: 443 },
-      { name: 'tls', displayName: undefined, description: undefined, type: 'boolean', required: false, default: undefined },
+      {
+        name: 'tls',
+        displayName: undefined,
+        description: undefined,
+        type: 'boolean',
+        required: false,
+        default: undefined,
+      },
     ]);
   });
 
@@ -448,9 +463,7 @@ describe('ComposioToolProvider — getAuthStatus', () => {
 describe('ComposioToolProvider — getConnectionStatus', () => {
   it('makes exactly one SDK call for N items and buckets results by connectionId', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
-    await integration
-      .getConnectionStatus({ items: [{ connectionId: 'x', toolkit: 'gmail' }] })
-      .catch(() => undefined);
+    await integration.getConnectionStatus({ items: [{ connectionId: 'x', toolkit: 'gmail' }] }).catch(() => undefined);
     const raw = getRawInstance();
     raw.connectedAccounts.list.mockClear();
 
@@ -533,9 +546,7 @@ describe('ComposioToolProvider — listConnections', () => {
 
   it('forwards userIds[] for multi-bucket lookup', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
-    await integration
-      .listConnections({ toolkit: 'gmail', userIds: ['user_a', 'user_b'] })
-      .catch(() => undefined);
+    await integration.listConnections({ toolkit: 'gmail', userIds: ['user_a', 'user_b'] }).catch(() => undefined);
     const raw = getRawInstance();
     raw.connectedAccounts.list.mockResolvedValue({ items: [] });
 

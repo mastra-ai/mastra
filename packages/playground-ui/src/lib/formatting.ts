@@ -34,6 +34,19 @@ export const formatJSON = async (code: string) => {
   return formatted;
 };
 
+export const formatTypeScript = async (code: string) => {
+  const [prettier, prettierPluginBabel, prettierPluginEstree] = await loadPrettier();
+
+  const formatted = await prettier.format(code, {
+    parser: 'babel-ts',
+    printWidth: 80,
+    tabWidth: 2,
+    plugins: [prettierPluginBabel, prettierPluginEstree],
+  });
+
+  return formatted;
+};
+
 export const isValidJson = (str: string) => {
   try {
     // Attempt to parse the string as JSON

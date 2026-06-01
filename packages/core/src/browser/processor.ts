@@ -113,7 +113,8 @@ export class BrowserContextProcessor {
     }
 
     await args.sendSignal?.({
-      type: 'system-reminder',
+      type: 'reactive',
+      tagName: 'system-reminder',
       contents: reminderText,
       attributes: {
         type: REMINDER_TYPE,

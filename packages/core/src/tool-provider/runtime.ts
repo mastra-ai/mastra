@@ -32,12 +32,26 @@ export interface ResolveStoredToolProvidersOpts {
  * - The returned suffix is added to `usedSuffixes` in place.
  */
 export function buildConnectionSuffix(label: string | undefined, usedSuffixes: Set<string>): string {
-  const base =
-    (label ?? '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9_]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_+|_+$/g, '') || 'CONN';
+  // Single linear pass over the input — no regex with quantifiers on
+  // user-controlled data (CodeQL js/polynomial-redos).
+  const raw = (label ?? '').toUpperCase();
+  let base = '';
+  let prevWasUnderscore = true; // start true → skips leading underscores
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw.charCodeAt(i);
+    const isAllowed =
+      (c >= 0x41 && c <= 0x5a) || // A-Z
+      (c >= 0x30 && c <= 0x39); // 0-9
+    if (isAllowed) {
+      base += raw[i];
+      prevWasUnderscore = false;
+    } else if (!prevWasUnderscore) {
+      base += '_';
+      prevWasUnderscore = true;
+    }
+  }
+  if (base.endsWith('_')) base = base.slice(0, -1);
+  if (!base) base = 'CONN';
 
   let candidate = base;
   let n = 2;
@@ -106,10 +120,11 @@ export async function resolveStoredToolProviders(
       }
 
       if (connections.length > 1 && !provider.capabilities?.multipleConnectionsPerToolkit) {
-        throw new Error(
-          `Provider "${providerId}" does not support multiple connections per toolkit ` +
-            `but received ${connections.length} for "${toolkit}".`,
+        logger?.warn(
+          `[resolveStoredToolProviders] provider "${providerId}" does not support multiple ` +
+            `connections per toolkit but received ${connections.length} for "${toolkit}" — skipping`,
         );
+        continue;
       }
 
       // Group selected slugs by ToolProviderToolMeta.toolkit. Falls back to a
@@ -136,7 +151,7 @@ export async function resolveStoredToolProviders(
       for (const connection of connections) {
         const suffix = skipSuffix ? '' : `__${buildConnectionSuffix(connection.label, usedSuffixes)}`;
 
-        const resolvedAuthorId = resolveConnectionAuthorId(connection, authorId, requestContext);
+        const resolvedAuthorId = resolveConnectionAuthorId(connection, authorId, requestContext, logger);
 
         let resolved: Record<string, ToolAction<any, any, any>>;
         try {
@@ -174,6 +189,20 @@ export async function resolveStoredToolProviders(
   return out;
 }
 
+// Emit a single warn per process when the connection-owner fallback fires.
+// Multi-tenant deployments that forget to wire `mapUserToResourceId` silently
+// funnel every `caller-supplied` pin into one shared OAuth account — surface
+// that misconfiguration once.
+let defaultBucketWarned = false;
+function warnDefaultBucketFallback(logger: IMastraLogger | undefined): void {
+  if (defaultBucketWarned) return;
+  defaultBucketWarned = true;
+  logger?.warn(
+    '[resolveStoredToolProviders] caller-supplied scope falling back to shared "default" bucket — ' +
+      'wire authConfig.mapUserToResourceId to avoid cross-tenant OAuth sharing',
+  );
+}
+
 /**
  * Resolve the provider user bucket for a pinned connection.
  *
@@ -189,6 +218,7 @@ function resolveConnectionAuthorId(
   connection: ToolProviderConnection,
   callerAuthorId: string | undefined,
   requestContext: Record<string, unknown> | undefined,
+  logger: IMastraLogger | undefined,
 ): string | undefined {
   if (connection.kind !== 'author') return undefined;
   if (connection.scope === 'shared') return SHARED_BUCKET_ID;
@@ -200,6 +230,7 @@ function resolveConnectionAuthorId(
     // authConfig.mapUserToResourceId), fall back to a shared 'default' bucket
     // so tools still resolve. Multi-tenant deployments must wire the resource
     // id explicitly to avoid cross-user bucket sharing.
+    warnDefaultBucketFallback(logger);
     return 'default';
   }
   return callerAuthorId;

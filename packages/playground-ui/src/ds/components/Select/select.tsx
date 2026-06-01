@@ -109,6 +109,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
     return (
       <SelectPrimitive.Trigger
         ref={ref}
+        data-slot="select-trigger"
         className={cn(
           'inline-flex w-full cursor-pointer select-none items-center justify-between gap-1.5 whitespace-nowrap',
           formElementSizes[size],

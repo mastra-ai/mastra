@@ -106,6 +106,7 @@ export default defineConfig({
   },
   metafile: true,
   sourcemap: true,
+  external: ['msw', 'msw/node', 'vitest'],
   esbuildPlugins: [stubVercelOidcPlugin],
   onSuccess: async () => {
     const { copyAIDtsFiles } = await import('./scripts/copy-ai-dts-files.js');

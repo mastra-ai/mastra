@@ -426,20 +426,18 @@ describe('Integration Tools (tool providers)', () => {
         })),
         getToolSchema: vi.fn(async () => ({ type: 'object', properties: {} })),
         resolveTools: vi.fn(async () => ({})),
-        resolveToolsVNext: vi.fn(
-          async (opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> => {
-            const result: Record<string, ToolAction<any, any, any>> = {};
-            for (const slug of opts.toolSlugs) {
-              const descOverride = opts.toolMeta?.[slug]?.description;
-              result[slug] = {
-                id: slug,
-                description: descOverride ?? 'default desc',
-                execute: vi.fn(async () => ({ ok: true, connectionId: opts.connectionId })),
-              } as any;
-            }
-            return result;
-          },
-        ),
+        resolveToolsVNext: vi.fn(async (opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> => {
+          const result: Record<string, ToolAction<any, any, any>> = {};
+          for (const slug of opts.toolSlugs) {
+            const descOverride = opts.toolMeta?.[slug]?.description;
+            result[slug] = {
+              id: slug,
+              description: descOverride ?? 'default desc',
+              execute: vi.fn(async () => ({ ok: true, connectionId: opts.connectionId })),
+            } as any;
+          }
+          return result;
+        }),
       };
 
       const composioEditor = new MastraEditor({ toolProviders: { composio: stubProvider } });
@@ -453,7 +451,7 @@ describe('Integration Tools (tool providers)', () => {
           name: 'Composio toolProviders Agent',
           authorId: 'author-1',
           instructions: 'You list GitHub issues',
-          model: { provider: 'openai', name: 'gpt-4' },
+          model: { provider: 'openai', name: 'gpt-5' },
           toolProviders: {
             composio: {
               tools: {
@@ -482,9 +480,7 @@ describe('Integration Tools (tool providers)', () => {
 
       const tools = await agent!.listTools();
       expect(tools['GITHUB_LIST_REPOSITORY_ISSUES']).toBeDefined();
-      expect(tools['GITHUB_LIST_REPOSITORY_ISSUES'].description).toBe(
-        'Lists issues (toolProviders e2e override)',
-      );
+      expect(tools['GITHUB_LIST_REPOSITORY_ISSUES'].description).toBe('Lists issues (toolProviders e2e override)');
       expect(typeof tools['GITHUB_LIST_REPOSITORY_ISSUES'].execute).toBe('function');
 
       // Confirm the runtime resolver was called with the stored connection id

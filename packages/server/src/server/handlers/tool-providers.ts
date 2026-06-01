@@ -1,7 +1,8 @@
 import type { IMastraEditor } from '@mastra/core/editor';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
-import { SHARED_BUCKET_ID, UnknownToolProviderError } from '@mastra/core/tool-provider';
+import type * as ToolProviderModule from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import { MASTRA_USER_KEY } from '../constants';
@@ -40,9 +41,33 @@ import { handleError } from './error';
 
 const TOOL_PROVIDERS_RESOURCE = 'tool-providers' as const;
 
+/**
+ * Mirrors `@mastra/core/tool-provider#SHARED_BUCKET_ID`. Inlined locally so this
+ * module evaluates under any peer-compatible core; a regression test in
+ * `tool-providers.test.ts` verifies the literal stays in lockstep with core.
+ */
+const SHARED_BUCKET_ID = 'shared' as const;
+
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Lazily import `@mastra/core/tool-provider` so this server module can evaluate
+ * under any peer-compatible core. The new value exports (`UnknownToolProviderError`,
+ * `SHARED_BUCKET_ID`) ship in core `>=1.39.0-0`; users on older cores who never
+ * configure a `MastraEditor` short-circuit via `requireEditor` long before this
+ * runs. ESM caches one module instance per resolved specifier so the
+ * `instanceof` check below sees the same class identity that `@mastra/editor`
+ * throws.
+ */
+let _toolProviderModule: typeof ToolProviderModule | undefined;
+async function loadToolProviderModule() {
+  if (!_toolProviderModule) {
+    _toolProviderModule = await import('@mastra/core/tool-provider');
+  }
+  return _toolProviderModule;
+}
 
 function requireEditor(editor: IMastraEditor | undefined): IMastraEditor {
   if (!editor) {
@@ -51,10 +76,11 @@ function requireEditor(editor: IMastraEditor | undefined): IMastraEditor {
   return editor;
 }
 
-function resolveProvider(editor: IMastraEditor, providerId: string): ToolProvider {
+async function resolveProvider(editor: IMastraEditor, providerId: string): Promise<ToolProvider> {
   try {
     return editor.getToolProviderOrThrow(providerId);
   } catch (error) {
+    const { UnknownToolProviderError } = await loadToolProviderModule();
     if (error instanceof UnknownToolProviderError) {
       throw new HTTPException(404, { message: error.message });
     }
@@ -62,12 +88,26 @@ function resolveProvider(editor: IMastraEditor, providerId: string): ToolProvide
   }
 }
 
+// Emit a single warn per process when the connection-owner fallback fires.
+// Multi-tenant deployments that forget to wire `mapUserToResourceId` (or
+// `MASTRA_USER_KEY`) silently funnel every `caller-supplied` pin into one
+// shared OAuth account — surface that misconfiguration once.
+let defaultBucketWarned = false;
+function warnDefaultBucketFallback(logger: IMastraLogger | undefined): void {
+  if (defaultBucketWarned) return;
+  defaultBucketWarned = true;
+  logger?.warn(
+    '[tool-providers] caller-supplied scope falling back to shared "default" bucket — ' +
+      'wire mapUserToResourceId or set MASTRA_USER_KEY to avoid cross-tenant OAuth sharing',
+  );
+}
+
 /**
  * Resolve the connection owner (provider `userId` bucket) from the caller's
  * `RequestContext`. Mirrors the runtime fan-out fallback to `'default'` when
  * no auth context is present so OSS deployments still work.
  */
-function resolveOwnerId(requestContext: RequestContext | undefined): string {
+function resolveOwnerId(requestContext: RequestContext | undefined, logger: IMastraLogger | undefined): string {
   const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
   if (typeof resourceId === 'string' && resourceId.length > 0) {
     return resourceId;
@@ -81,6 +121,7 @@ function resolveOwnerId(requestContext: RequestContext | undefined): string {
     }
   }
 
+  warnDefaultBucketFallback(logger);
   return 'default';
 }
 
@@ -134,7 +175,7 @@ export const LIST_TOOL_PROVIDER_TOOLKITS_ROUTE = createRoute({
   handler: async ({ mastra, providerId }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (provider.listToolkitsVNext) {
         return await provider.listToolkitsVNext();
       }
@@ -165,7 +206,7 @@ export const LIST_TOOL_PROVIDER_TOOLS_ROUTE = createRoute({
   handler: async ({ mastra, providerId, toolkit, search, page, perPage }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       const opts: { toolkit?: string; search?: string; page?: number; perPage?: number } = {};
       if (toolkit !== undefined) opts.toolkit = toolkit;
       if (search !== undefined) opts.search = search;
@@ -197,7 +238,7 @@ export const GET_TOOL_PROVIDER_TOOL_SCHEMA_ROUTE = createRoute({
   handler: async ({ mastra, providerId, toolSlug }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.getToolSchema) {
         throw new HTTPException(404, { message: `Tool provider ${providerId} does not support getToolSchema` });
       }
@@ -230,7 +271,7 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
   handler: async ({ mastra, providerId, toolkit, connectionId, toolName, config, label, scope, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.authorize) {
         throw new HTTPException(400, { message: `Tool provider ${providerId} does not support authorize` });
       }
@@ -248,7 +289,7 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
           });
         }
       }
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const ownerAuthorId =
         effectiveScope === 'shared'
           ? SHARED_BUCKET_ID
@@ -311,7 +352,7 @@ export const GET_TOOL_PROVIDER_AUTH_STATUS_ROUTE = createRoute({
   handler: async ({ mastra, providerId, authId }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.getAuthStatus) {
         throw new HTTPException(400, { message: `Tool provider ${providerId} does not support getAuthStatus` });
       }
@@ -340,7 +381,7 @@ export const TOOL_PROVIDER_CONNECTION_STATUS_ROUTE = createRoute({
   handler: async ({ mastra, providerId, items }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.getConnectionStatus) {
         throw new HTTPException(400, { message: `Tool provider ${providerId} does not support getConnectionStatus` });
       }
@@ -381,11 +422,11 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
   }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.listConnections) {
         throw new HTTPException(400, { message: `Tool provider ${providerId} does not support listConnections` });
       }
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
 
       const requestedAuthorId =
@@ -502,7 +543,7 @@ export const LIST_TOOL_PROVIDER_CONNECTION_FIELDS_ROUTE = createRoute({
   handler: async ({ mastra, providerId, toolkit }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.listConnectionFields) {
         return { fields: [] };
       }
@@ -535,8 +576,8 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
   handler: async ({ mastra, providerId, connectionId, force, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const provider = await resolveProvider(editor, providerId);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
       const isForce = force === true || force === 'true';
 
@@ -545,11 +586,25 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
 
       let ownerAuthorId: string | undefined;
       let ownerScope: 'shared' | 'per-author' | 'caller-supplied' | undefined;
+      let matched = false;
       if (store) {
         const rows = await store.listConnectionsByAuthor({ providerId: provider.info.id });
         const match = rows.find(r => r.connectionId === connectionId);
-        ownerAuthorId = match?.authorId;
-        ownerScope = match?.scope;
+        if (match) {
+          matched = true;
+          ownerAuthorId = match.authorId;
+          ownerScope = match.scope;
+        }
+      }
+
+      // Fail closed: if storage is configured and no row matches the
+      // requested connectionId, refuse the call for non-admins. Without
+      // this guard, a caller could trigger provider-side `revokeConnection`
+      // against another tenant's connectionId by guessing it.
+      if (store && !matched && !isAdmin) {
+        throw new HTTPException(403, {
+          message: 'You do not have permission to disconnect this connection',
+        });
       }
 
       const effectiveOwner = ownerAuthorId ?? callerAuthorId;
@@ -613,8 +668,8 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
   handler: async ({ mastra, providerId, connectionId, label, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const provider = await resolveProvider(editor, providerId);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
 
       const storage = mastra.getStorage();
@@ -677,20 +732,34 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
   handler: async ({ mastra, providerId, connectionId, toolkit, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
-      const callerAuthorId = resolveOwnerId(requestContext);
+      const provider = await resolveProvider(editor, providerId);
+      const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
 
       const storage = mastra.getStorage();
       const store = await storage?.getStore('toolProviderConnections');
       let ownerAuthorId: string | undefined;
       let ownerScope: 'shared' | 'per-author' | 'caller-supplied' | undefined;
+      let matched = false;
       if (store) {
         const rows = await store.listConnectionsByAuthor({ providerId: provider.info.id });
         const match = rows.find(r => r.connectionId === connectionId);
-        ownerAuthorId = match?.authorId;
-        ownerScope = match?.scope;
+        if (match) {
+          matched = true;
+          ownerAuthorId = match.authorId;
+          ownerScope = match.scope;
+        }
       }
+
+      // Fail closed: if storage is configured and no row matches the
+      // requested connectionId, refuse the call for non-admins so callers
+      // cannot probe for other tenants' connections.
+      if (store && !matched && !isAdmin) {
+        throw new HTTPException(403, {
+          message: 'You do not have permission to view usage for this connection',
+        });
+      }
+
       const effectiveOwner = ownerAuthorId ?? callerAuthorId;
       const isShared = ownerScope === 'shared';
       if (!isShared && effectiveOwner !== callerAuthorId && !isAdmin) {
@@ -723,7 +792,7 @@ export const GET_TOOL_PROVIDER_HEALTH_ROUTE = createRoute({
   handler: async ({ mastra, providerId }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
-      const provider = resolveProvider(editor, providerId);
+      const provider = await resolveProvider(editor, providerId);
       if (!provider.getHealth) {
         return { ok: true };
       }

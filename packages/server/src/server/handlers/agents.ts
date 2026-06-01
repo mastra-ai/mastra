@@ -1,5 +1,10 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
-import type { AgentModelManagerConfig, AgentSignalInput, DurableAgentLike } from '@mastra/core/agent';
+import type {
+  AgentMessageInput,
+  AgentModelManagerConfig,
+  AgentSignalInput,
+  DurableAgentLike,
+} from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
@@ -49,7 +54,9 @@ import {
   declineNetworkToolCallBodySchema,
   observeAgentBodySchema,
   observeAgentResponseSchema,
+  sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
+  queueAgentMessageBodySchema,
   subscribeAgentThreadBodySchema,
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
@@ -89,6 +96,25 @@ function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides |
   if (merged) {
     ctx.set(MASTRA_VERSIONS_KEY, merged);
   }
+}
+
+/**
+ * Ensure `defaultStatus` is set on the version overrides in the RequestContext
+ * so sub-agents inherit the same draft/published semantics as the parent.
+ *
+ * When the parent agent is resolved via a specific versionId (editor context),
+ * sub-agents should default to `draft`. When resolved with published (main
+ * chat), sub-agents default to `published`. An explicit `defaultStatus` from
+ * the request body takes precedence.
+ */
+function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: { versionId: string } | undefined): void {
+  const existingRaw = ctx.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+  // Don't overwrite an explicit defaultStatus from the body
+  if (existingRaw?.defaultStatus) return;
+
+  const inferredStatus: 'draft' | 'published' = versionOptions ? 'draft' : 'published';
+  const updated: VersionOverrides = { ...existingRaw, defaultStatus: inferredStatus };
+  ctx.set(MASTRA_VERSIONS_KEY, updated);
 }
 
 function getIsStudioFromContext(requestContext: RequestContext): boolean {
@@ -1185,13 +1211,15 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       validateBody({ messages });
 
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
+        versionOptions,
         requestContext: serverRequestContext,
       });
 
@@ -1201,6 +1229,9 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
       stashVersionOverrides(serverRequestContext, versions);
+
+      // Propagate draft/published default to sub-agents
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1399,7 +1430,23 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
-              return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+              // Sanitize the error message to prevent leaking internal details,
+              // stack traces, or provider-specific error metadata to the client.
+              // See: https://github.com/mastra-ai/mastra/issues/15827
+              if (error instanceof Error) {
+                const safeMessage = error.message
+                  // Strip file paths (e.g. /home/user/..., C:\users\...)
+                  .replace(/([A-Za-z]:)?[\/][^\s,)]+/g, '<path>')
+                  // Strip stack-trace lines ("at Foo (bar.js:10:5)")
+                  .replace(/\s+at\s+[^\n]*/g, '')
+                  // Strip aiohttp/provider response bodies embedded in messages
+                  .replace(/Response body:.*/s, '')
+                  .trim();
+                return `An error occurred while processing your request. ${safeMessage || 'Unknown error'}`;
+              }
+              // For non-Error objects, avoid JSON.stringify which could dump
+              // entire error payloads (including secrets from provider responses).
+              return 'An error occurred while processing your request.';
             },
           });
 
@@ -1507,13 +1554,15 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
 
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
+        versionOptions,
         requestContext: serverRequestContext,
       });
 
@@ -1523,6 +1572,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
       stashVersionOverrides(serverRequestContext, versions);
+
+      // Propagate draft/published default to sub-agents
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1578,10 +1630,13 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   },
 });
 
-const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string }> = z.object({
+const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; signal?: unknown }> = z.object({
   accepted: z.literal(true),
   runId: z.string(),
+  signal: z.any().optional(),
 });
+
+const sendAgentMessageResponseSchema = sendAgentSignalResponseSchema;
 
 export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
   InferParams<typeof agentIdPathParams, undefined, typeof sendAgentSignalBodySchema>,
@@ -1619,21 +1674,27 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
     ifIdle,
   }) => {
     try {
-      const bodyRequestContext = ifIdle?.streamOptions?.requestContext;
+      const idleStreamOptions = ifIdle?.streamOptions as
+        | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
+        | undefined;
+      const bodyRequestContext = idleStreamOptions?.requestContext;
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(serverRequestContext, bodyRequestContext as Record<string, unknown>),
+        versionOptions,
         requestContext: serverRequestContext,
       });
+      stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
         ifIdle: {
           ...(ifIdle ?? {}),
-          streamOptions: { ...(ifIdle?.streamOptions ?? {}), requestContext: serverRequestContext } as any,
+          streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
         },
       };
 
@@ -1658,7 +1719,9 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
           ...(ifActive ? { ifActive } : {}),
         });
-        return { accepted: result.accepted, runId: result.runId, signal: result.signal };
+        return result.signal === undefined
+          ? { accepted: result.accepted, runId: result.runId }
+          : { accepted: result.accepted, runId: result.runId, signal: result.signal };
       }
 
       if (!effectiveResourceId || !effectiveThreadId) {
@@ -1671,9 +1734,140 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         ...(ifActive ? { ifActive } : {}),
         ...ifIdleWithContext,
       });
-      return { accepted: result.accepted, runId: result.runId, signal: result.signal };
+      return result.signal === undefined
+        ? { accepted: result.accepted, runId: result.runId }
+        : { accepted: result.accepted, runId: result.runId, signal: result.signal };
     } catch (error) {
       return handleError(error, 'error sending agent signal');
+    }
+  },
+});
+
+async function handleAgentMessageRoute({
+  mastra,
+  agentId,
+  requestContext: serverRequestContext,
+  message,
+  runId,
+  resourceId,
+  threadId,
+  ifActive,
+  ifIdle,
+  methodName,
+}: {
+  mastra: any;
+  agentId: string;
+  requestContext: RequestContext;
+  message: AgentMessageInput;
+  runId?: string;
+  resourceId?: string;
+  threadId?: string;
+  ifActive?: { behavior?: 'deliver' | 'persist' | 'discard' };
+  ifIdle?: { behavior?: 'wake' | 'persist' | 'discard'; streamOptions?: Record<string, unknown> };
+  methodName: 'sendMessage' | 'queueMessage';
+}) {
+  const idleStreamOptions = ifIdle?.streamOptions as
+    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
+    | undefined;
+  const bodyRequestContext = idleStreamOptions?.requestContext;
+  mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+  const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
+
+  const agent = await getAgentFromSystem({
+    mastra,
+    agentId,
+    versionOptions,
+    requestContext: serverRequestContext,
+  });
+  stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+  ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+  const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+  const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
+  const ifIdleWithContext = {
+    ifIdle: {
+      ...(ifIdle ?? {}),
+      streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
+    },
+  };
+
+  if (effectiveThreadId && effectiveResourceId) {
+    const memory = await agent.getMemory({ requestContext: serverRequestContext });
+    if (memory) {
+      const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+      await validateThreadOwnership(thread, effectiveResourceId);
+    }
+  }
+
+  if (typeof (agent as unknown as Record<string, unknown>)[methodName] !== 'function') {
+    throw new HTTPException(501, { message: `agent ${methodName} is not supported by this Mastra core version` });
+  }
+
+  if (runId) {
+    const result = await agent[methodName](message, {
+      runId,
+      ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
+      ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
+      ...(ifActive ? { ifActive } : {}),
+    } as any);
+    return result.signal === undefined
+      ? { accepted: result.accepted, runId: result.runId }
+      : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+  }
+
+  if (!effectiveResourceId || !effectiveThreadId) {
+    throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
+  }
+
+  const result = await agent[methodName](message, {
+    resourceId: effectiveResourceId,
+    threadId: effectiveThreadId,
+    ...(ifActive ? { ifActive } : {}),
+    ...ifIdleWithContext,
+  } as any);
+  return result.signal === undefined
+    ? { accepted: result.accepted, runId: result.runId }
+    : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+}
+
+export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/send-message',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: sendAgentMessageBodySchema,
+  responseSchema: sendAgentMessageResponseSchema,
+  summary: 'Send agent message',
+  description: 'Sends a user message to an active agent run or starts a memory thread run when the thread is idle',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async params => {
+    try {
+      return await handleAgentMessageRoute({ ...params, methodName: 'sendMessage' });
+    } catch (error) {
+      return handleError(error, 'error sending agent message');
+    }
+  },
+});
+
+export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/queue-message',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: queueAgentMessageBodySchema,
+  responseSchema: sendAgentMessageResponseSchema,
+  summary: 'Queue agent message',
+  description:
+    'Queues a user message to run after the active thread run completes, or starts a memory thread run when idle',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async params => {
+    try {
+      return await handleAgentMessageRoute({ ...params, methodName: 'queueMessage' });
+    } catch (error) {
+      return handleError(error, 'error queueing agent message');
     }
   },
 });
@@ -1683,6 +1877,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   path: '/agents/:agentId/threads/subscribe',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
+  sseFlushOnConnect: true,
   pathParamSchema: agentIdPathParams,
   bodySchema: subscribeAgentThreadBodySchema,
   responseSchema: streamResponseSchema,
@@ -2118,18 +2313,21 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ...rest
       } = params;
 
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
+        versionOptions,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       stashVersionOverrides(serverRequestContext, versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
@@ -2222,13 +2420,15 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       // Honor body-scoped `requestContext.agentVersionId` so callers
       // resuming a suspended draft / versioned agent get the right one.
       // Mirrors RESUME_STREAM_ROUTE.
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
+        versionOptions,
       });
 
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
@@ -2240,6 +2440,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       }
 
       stashVersionOverrides(serverRequestContext, versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;

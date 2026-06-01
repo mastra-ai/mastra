@@ -158,6 +158,7 @@ export type ServerRoute<
   path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream';
+  sseFlushOnConnect?: boolean;
   handler(params: TParams & ServerContext): ReturnType<ServerRouteHandler<TParams, TResponse, TResponseType>>;
   pathParamSchema?: z.ZodSchema;
   queryParamSchema?: z.ZodSchema;
@@ -186,6 +187,7 @@ interface RouteConfig<
   path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream';
+  sseFlushOnConnect?: boolean;
   handler: ServerRouteHandler<
     InferParams<TPathSchema, TQuerySchema, TBodySchema>,
     TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
