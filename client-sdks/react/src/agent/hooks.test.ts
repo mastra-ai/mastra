@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,9 +20,18 @@ const streamUntilIdleMock = vi.fn(async () => ({
 // producer that simulates the server pushing chunks over the open subscription.
 let nextSubscribeChunks: Array<any> = [];
 let keepSubscriptionOpen = false;
+let omitThreadSubscriptionUnsubscribe = false;
+const constructedClientOptions: any[] = [];
+const threadSubscriptionAbortMock = vi.fn(async () => true);
+const threadSubscriptionUnsubscribeMock = vi.fn();
 const subscribeToThreadMock = vi.fn(async (_params: any) => {
   const chunks = nextSubscribeChunks;
-  return {
+  const subscription: {
+    abort: typeof threadSubscriptionAbortMock;
+    unsubscribe?: typeof threadSubscriptionUnsubscribeMock;
+    processDataStream: ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => Promise<void>;
+  } = {
+    abort: threadSubscriptionAbortMock,
     processDataStream: async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
       for (const chunk of chunks) {
         await onChunk(chunk);
@@ -32,6 +41,10 @@ const subscribeToThreadMock = vi.fn(async (_params: any) => {
       }
     },
   };
+  if (!omitThreadSubscriptionUnsubscribe) {
+    subscription.unsubscribe = threadSubscriptionUnsubscribeMock;
+  }
+  return subscription;
 });
 const generateMock = vi.fn(async () => ({
   response: { uiMessages: [] },
@@ -43,6 +56,7 @@ vi.mock('@mastra/client-js', () => ({
     options: any;
     constructor(options: any) {
       this.options = options;
+      constructedClientOptions.push(options);
     }
     getAgent() {
       return {
@@ -75,13 +89,91 @@ describe('useChat forwards clientTools', () => {
     sendSignalMock.mockClear();
     streamUntilIdleMock.mockClear();
     subscribeToThreadMock.mockClear();
+    threadSubscriptionAbortMock.mockClear();
+    threadSubscriptionUnsubscribeMock.mockClear();
     generateMock.mockClear();
     nextSubscribeChunks = [];
     keepSubscriptionOpen = false;
+    omitThreadSubscriptionUnsubscribe = false;
+    constructedClientOptions.length = 0;
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
+    keepSubscriptionOpen = true;
+    const { rerender } = renderHook(
+      ({ enableThreadSignals }: { enableThreadSignals: boolean }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals,
+        }),
+      { wrapper, initialProps: { enableThreadSignals: true } },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      rerender({ enableThreadSignals: false });
+    });
+
+    await waitFor(() => expect(threadSubscriptionUnsubscribeMock).toHaveBeenCalledTimes(1));
+    expect(threadSubscriptionAbortMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the subscription AbortController when unsubscribe is unavailable', async () => {
+    keepSubscriptionOpen = true;
+    omitThreadSubscriptionUnsubscribe = true;
+    const { rerender } = renderHook(
+      ({ enableThreadSignals }: { enableThreadSignals: boolean }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals,
+        }),
+      { wrapper, initialProps: { enableThreadSignals: true } },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+    const subscriptionSignal = constructedClientOptions.find(options => options.abortSignal)
+      ?.abortSignal as AbortSignal;
+    expect(subscriptionSignal.aborted).toBe(false);
+
+    act(() => {
+      rerender({ enableThreadSignals: false });
+    });
+
+    await waitFor(() => expect(subscriptionSignal.aborted).toBe(true));
+    expect(threadSubscriptionUnsubscribeMock).not.toHaveBeenCalled();
+    expect(threadSubscriptionAbortMock).not.toHaveBeenCalled();
+  });
+
+  it('aborts and unsubscribes on explicit cancel', async () => {
+    keepSubscriptionOpen = true;
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      result.current.cancelRun();
+    });
+
+    expect(threadSubscriptionAbortMock).toHaveBeenCalledTimes(1);
+    expect(threadSubscriptionUnsubscribeMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps hook-prop clientTools on sendSignal when threadId is provided', async () => {
