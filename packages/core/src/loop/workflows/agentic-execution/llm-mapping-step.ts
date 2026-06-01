@@ -299,7 +299,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
               toolInvocation: {
-                state: 'output-error' as const,
+                state: 'result' as const,
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
@@ -307,7 +307,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 // plain {name,message,stack} shape after the pubsub JSON round-trip).
                 // Without reification the `instanceof Error` check below falls through to
                 // `safeStringify`, dumping the whole stringified payload into the history.
-                errorText: reifiedError.message || 'Tool execution failed',
+                result: reifiedError.message || 'Tool execution failed',
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
