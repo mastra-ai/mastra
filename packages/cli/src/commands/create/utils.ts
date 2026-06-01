@@ -74,16 +74,17 @@ async function initializePackageJson(pm: PackageManager): Promise<void> {
     node: '>=22.13.0',
   };
 
-  // pnpm v11+ may write a semver range into packageManager or devEngines that
-  // corepack rejects. Strip range prefixes so the version is exact.
-  if (typeof packageJson.packageManager === 'string') {
-    packageJson.packageManager = packageJson.packageManager.replace(/@[~^>=<]*(\d)/, '@$1');
-  }
-  if (packageJson.devEngines?.packageManager?.version) {
-    packageJson.devEngines.packageManager.version = packageJson.devEngines.packageManager.version.replace(
-      /^[~^>=<]*/,
-      '',
-    );
+  // pnpm v11+ writes devEngines.packageManager with a semver range (e.g.
+  // "^11.3.0"). Corepack ≤0.35.0 (bundled with Node 22) reads this field
+  // too and rejects ranges, so we must remove both the legacy packageManager
+  // field and devEngines.packageManager to avoid the error:
+  //   "Invalid package manager specification in package.json (pnpm@^11.3.0)"
+  delete packageJson.packageManager;
+  if (packageJson.devEngines?.packageManager) {
+    delete packageJson.devEngines.packageManager;
+    if (Object.keys(packageJson.devEngines).length === 0) {
+      delete packageJson.devEngines;
+    }
   }
 
   await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));

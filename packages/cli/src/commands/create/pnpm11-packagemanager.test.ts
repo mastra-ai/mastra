@@ -116,7 +116,7 @@ describe('pnpm v11 packageManager normalization', () => {
     process.exit = originalExit;
   });
 
-  it('should strip range prefix from devEngines.packageManager.version', async () => {
+  it('should remove devEngines.packageManager from pnpm v11 init output', async () => {
     // Simulate pnpm v11 init output
     mocks.readFileContent = JSON.stringify({
       name: 'test-project',
@@ -137,19 +137,21 @@ describe('pnpm v11 packageManager normalization', () => {
       needsInteractive: false,
     });
 
-    // Find the writeFile call that writes package.json content (first one after init)
+    // Find the writeFile call that writes package.json content
     const writeFileCalls = mocks.mockWriteFile.mock.calls;
     const packageJsonWrite = writeFileCalls.find(
-      (call: any[]) => typeof call[1] === 'string' && call[1].includes('"devEngines"'),
+      (call: any[]) => typeof call[1] === 'string' && call[1].includes('"type"'),
     );
 
     expect(packageJsonWrite).toBeDefined();
     const written = JSON.parse(packageJsonWrite![1]);
-    expect(written.devEngines.packageManager.version).toBe('11.3.0');
+    // Both packageManager and devEngines.packageManager should be removed
+    // because corepack ≤0.35.0 rejects ranges in both fields
+    expect(written.packageManager).toBeUndefined();
+    expect(written.devEngines).toBeUndefined();
   });
 
-  it('should strip range prefix from legacy packageManager field', async () => {
-    // Simulate older pnpm writing legacy packageManager with range
+  it('should remove legacy packageManager field with range', async () => {
     mocks.readFileContent = JSON.stringify({
       name: 'test-project',
       scripts: {},
@@ -165,15 +167,15 @@ describe('pnpm v11 packageManager normalization', () => {
 
     const writeFileCalls = mocks.mockWriteFile.mock.calls;
     const packageJsonWrite = writeFileCalls.find(
-      (call: any[]) => typeof call[1] === 'string' && call[1].includes('"packageManager"'),
+      (call: any[]) => typeof call[1] === 'string' && call[1].includes('"type"'),
     );
 
     expect(packageJsonWrite).toBeDefined();
     const written = JSON.parse(packageJsonWrite![1]);
-    expect(written.packageManager).toBe('pnpm@11.3.0');
+    expect(written.packageManager).toBeUndefined();
   });
 
-  it('should not modify exact packageManager version', async () => {
+  it('should remove exact packageManager field too', async () => {
     mocks.readFileContent = JSON.stringify({
       name: 'test-project',
       scripts: {},
@@ -189,11 +191,11 @@ describe('pnpm v11 packageManager normalization', () => {
 
     const writeFileCalls = mocks.mockWriteFile.mock.calls;
     const packageJsonWrite = writeFileCalls.find(
-      (call: any[]) => typeof call[1] === 'string' && call[1].includes('"packageManager"'),
+      (call: any[]) => typeof call[1] === 'string' && call[1].includes('"type"'),
     );
 
     expect(packageJsonWrite).toBeDefined();
     const written = JSON.parse(packageJsonWrite![1]);
-    expect(written.packageManager).toBe('pnpm@10.29.3');
+    expect(written.packageManager).toBeUndefined();
   });
 });
