@@ -602,6 +602,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   // native file lock) before the process exits. On `mastra dev` hot reloads
   // the old process is sent SIGINT; without this the lock can linger and the
   // restarted process fails with "Conflicting lock is held".
+  const SHUTDOWN_TIMEOUT_MS = 5000;
   let shuttingDown = false;
   const shutdown = async (signal: NodeJS.Signals) => {
     if (shuttingDown) {
@@ -614,10 +615,21 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     // Feature-detect for older @mastra/core versions without shutdown().
     const lifecycle = mastra as unknown as { shutdown?: () => Promise<void> };
     if (typeof lifecycle.shutdown === 'function') {
+      // Bound the wait so a hanging shutdown can't block process exit.
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = Symbol('shutdown-timeout');
+      const timeoutPromise = new Promise<typeof timedOut>(resolve => {
+        timeout = setTimeout(() => resolve(timedOut), SHUTDOWN_TIMEOUT_MS);
+      });
       try {
-        await lifecycle.shutdown();
+        const result = await Promise.race([lifecycle.shutdown(), timeoutPromise]);
+        if (result === timedOut) {
+          logger.warn('Mastra shutdown timed out; forcing exit', { timeoutMs: SHUTDOWN_TIMEOUT_MS });
+        }
       } catch (error) {
         logger.error('Error during Mastra shutdown', { error });
+      } finally {
+        clearTimeout(timeout);
       }
     }
     process.exit(0);
