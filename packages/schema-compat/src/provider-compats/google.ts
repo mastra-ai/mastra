@@ -61,10 +61,21 @@ function fixNullableUnionTypes(schema: Record<string, any>): Record<string, any>
     }
   }
 
-  // Recursively fix properties
+  // Recursively fix properties and remove optional ones with no Gemini-compatible type.
+  // Gemini (OpenAPI 3.0) requires every property to have a `type`, `anyOf`, `oneOf`,
+  // `allOf`, or `$ref`. z.any() serialises to `{}` which Gemini rejects even when optional
+  // — causing a misleading "required[N]: property is not defined" error on valid required
+  // properties. Strip such properties to avoid the INVALID_ARGUMENT 400 from Gemini.
   if (result.properties && typeof result.properties === 'object') {
+    const required = new Set(Array.isArray(result.required) ? result.required : []);
     result.properties = Object.fromEntries(
-      Object.entries(result.properties).map(([key, value]) => [key, fixNullableUnionTypes(value as any)]),
+      Object.entries(result.properties)
+        .filter(([key, value]) => {
+          if (typeof value !== 'object' || value === null || required.has(key)) return true;
+          const v = value as Record<string, unknown>;
+          return !!(v['type'] || v['anyOf'] || v['oneOf'] || v['allOf'] || v['$ref'] || v['enum']);
+        })
+        .map(([key, value]) => [key, fixNullableUnionTypes(value as any)]),
     );
   }
 
@@ -197,6 +208,34 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
 
       if ('propertyNames' in schema) {
         delete (schema as Record<string, unknown>).propertyNames;
+      }
+
+      // Remove optional properties that have no Gemini-compatible type.
+      // Gemini (OpenAPI 3.0) requires every property to have a `type`, `anyOf`, `oneOf`,
+      // `allOf`, or `$ref`. Schemas from z.any() (and similar "catch-all" types) serialize
+      // to `{}` which Gemini rejects — even when the property is optional and not in
+      // `required`. An invalid property causes Gemini to fail the entire function declaration,
+      // reporting a misleading "required[N]: property is not defined" error even for valid
+      // required properties like `prompt`.
+      if (schema.properties && typeof schema.properties === 'object') {
+        const required = new Set(Array.isArray(schema.required) ? (schema.required as string[]) : []);
+        const props = schema.properties as Record<string, unknown>;
+        for (const key of Object.keys(props)) {
+          const prop = props[key];
+          if (
+            typeof prop === 'object' &&
+            prop !== null &&
+            !required.has(key) &&
+            !(prop as Record<string, unknown>)['type'] &&
+            !(prop as Record<string, unknown>)['anyOf'] &&
+            !(prop as Record<string, unknown>)['oneOf'] &&
+            !(prop as Record<string, unknown>)['allOf'] &&
+            !(prop as Record<string, unknown>)['$ref'] &&
+            !(prop as Record<string, unknown>)['enum']
+          ) {
+            delete props[key];
+          }
+        }
       }
     }
   }

@@ -174,6 +174,36 @@ describe('GoogleSchemaCompatLayer', () => {
           expect(Array.isArray((prop as any).type)).toBe(false);
         }
       }
+
+      // resumeData (z.any()) must be removed — Gemini rejects properties with no type
+      expect(properties?.resumeData).toBeUndefined();
+    });
+
+    it('removes z.any() optional properties from supervisor agent tool schemas (OpenRouter Gemini fix)', () => {
+      // Reproduces issue #17325: supervisor agent fails with openrouter/google/gemini-* models.
+      // z.any() serialises to `{}` (no type), which Gemini rejects via OpenRouter even when
+      // the property is optional, causing the misleading "required[0]: property is not defined"
+      // error for valid required properties like `prompt`.
+      const schema = z.object({
+        prompt: z.string().describe('Prompt for the sub-agent'),
+        threadId: z.string().nullish().describe('Thread ID'),
+        suspendedToolRunId: z.string().nullable().optional().describe('Suspended run ID'),
+        resumeData: z.any().optional().describe('Resume data'),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      const result = layer.processToJSONSchema(schema, 'input') as Record<string, any>;
+
+      // prompt must be present and typed
+      expect(result.properties.prompt.type).toBe('string');
+      expect(result.required).toContain('prompt');
+
+      // optional nullable fields keep their type
+      expect(result.properties.threadId).toBeDefined();
+      expect(result.properties.suspendedToolRunId).toBeDefined();
+
+      // z.any() optional property must be removed — no valid Gemini type
+      expect(result.properties.resumeData).toBeUndefined();
     });
   });
 
