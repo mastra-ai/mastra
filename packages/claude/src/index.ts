@@ -54,17 +54,15 @@ export type ClaudeQueryOptions = {
   pathToClaudeCodeExecutable?: string;
 };
 
-export type ClaudeQueryFunction = (params: { prompt: string }) => AsyncIterable<unknown>;
-export type ClaudeQueryFunctionWithOptions = (params: {
+type ClaudeQueryParams = {
   prompt: string;
   options?: ClaudeQueryOptions;
-}) => AsyncIterable<unknown>;
-export type ClaudeAgentInput =
-  | ClaudeQueryFunction
-  | ClaudeQueryFunctionWithOptions
-  | { query: ClaudeQueryFunction | ClaudeQueryFunctionWithOptions };
+};
 
-export type ClaudeAgentOptions = ClaudeQueryOptions & {
+export type ClaudeQueryFunction = (params: { prompt: string }) => AsyncIterable<unknown>;
+type RunnableClaudeQueryFunction = (params: ClaudeQueryParams) => AsyncIterable<unknown>;
+
+export type ClaudeAgentOptions = {
   /**
    * Mastra agent id used when registering this wrapper with Mastra.
    */
@@ -78,12 +76,14 @@ export type ClaudeAgentOptions = ClaudeQueryOptions & {
    */
   description: string;
   /**
-   * Claude Agent SDK `query` function, or an object with a `query` function.
-   *
-   * Passing the function directly avoids coupling the app to the dependency
-   * instance used to type `@mastra/core`.
+   * Claude Agent SDK `query` function. SDK options are passed separately via
+   * `options` to avoid coupling apps to this package's installed SDK types.
    */
-  agent: ClaudeAgentInput;
+  query: ClaudeQueryFunction;
+  /**
+   * Claude Agent SDK options forwarded to `query()` on every run.
+   */
+  options?: ClaudeQueryOptions;
 };
 
 export class ClaudeSDKAgent extends Agent {
@@ -310,16 +310,18 @@ function runClaudeAsMastraStream<OUTPUT>(
 
 function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSignal): AsyncIterable<SDKMessage> {
   const abortController = createAbortController(signal);
-  const agent = options.agent;
-  const query = (typeof agent === 'function' ? agent : agent.query) as ClaudeQueryFunctionWithOptions;
-  const { id: _id, name: _name, description: _description, agent: _agent, ...queryOptions } = options;
+  const queryOptions = {
+    ...options.options,
+  };
+  if (abortController) {
+    queryOptions.abortController = abortController;
+  }
+
+  const query = options.query as RunnableClaudeQueryFunction;
 
   return query({
     prompt,
-    options: {
-      ...queryOptions,
-      abortController,
-    },
+    options: queryOptions,
   }) as AsyncIterable<SDKMessage>;
 }
 
@@ -401,7 +403,7 @@ function createAbortController(signal: AbortSignal | undefined): AbortController
 }
 
 function getModelId(options: ClaudeAgentOptions): string {
-  return options.model ?? MODEL_ID;
+  return options.options?.model ?? MODEL_ID;
 }
 
 function createClaudeUsageCollector() {
@@ -514,14 +516,16 @@ function toV3Usage(usage: ClaudeUsageTotals): V3Usage {
 }
 
 function getClaudeProviderMetadata(options: ClaudeAgentOptions, usage?: ClaudeUsageTotals): ProviderMetadata {
+  const queryOptions = options.options;
+
   return createProviderMetadata('claude', {
     totalCostUsd: usage?.totalCostUsd,
     model: getModelId(options),
-    cwd: options.cwd,
-    permissionMode: options.permissionMode,
-    maxTurns: options.maxTurns,
-    allowedTools: options.allowedTools,
-    disallowedTools: options.disallowedTools,
+    cwd: queryOptions?.cwd,
+    permissionMode: queryOptions?.permissionMode,
+    maxTurns: queryOptions?.maxTurns,
+    allowedTools: queryOptions?.allowedTools,
+    disallowedTools: queryOptions?.disallowedTools,
     usage,
   });
 }

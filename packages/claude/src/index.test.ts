@@ -102,8 +102,10 @@ describe('ClaudeSDKAgent', () => {
       id: 'claude-agent',
       name: 'Claude Agent',
       description: 'Use Claude Agent as a Mastra agent.',
-      agent: query,
-      model: 'claude-sonnet-4-6',
+      query,
+      options: {
+        model: 'claude-sonnet-4-6',
+      },
     });
 
     expect(agent.id).toBe('claude-agent');
@@ -118,21 +120,23 @@ describe('ClaudeSDKAgent', () => {
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      agent: query,
-      cwd: '/tmp/project',
-      model: 'claude-sonnet-4-6',
-      maxTurns: 1,
-      permissionMode: 'acceptEdits',
-      tools: ['Read', 'Bash'],
-      allowedTools: ['Read'],
-      disallowedTools: ['Bash'],
-      mcpServers: {
-        weather: { type: 'sdk', name: 'weather' },
+      query,
+      options: {
+        cwd: '/tmp/project',
+        model: 'claude-sonnet-4-6',
+        maxTurns: 1,
+        permissionMode: 'acceptEdits',
+        tools: ['Read', 'Bash'],
+        allowedTools: ['Read'],
+        disallowedTools: ['Bash'],
+        mcpServers: {
+          weather: { type: 'sdk', name: 'weather' },
+        },
+        env: {
+          CLAUDE_AGENT_SDK_CLIENT_APP: 'mastra-test',
+        },
+        pathToClaudeCodeExecutable: '/usr/local/bin/claude',
       },
-      env: {
-        CLAUDE_AGENT_SDK_CLIENT_APP: 'mastra-test',
-      },
-      pathToClaudeCodeExecutable: '/usr/local/bin/claude',
     });
 
     const result = await agent.generate('Generate prompt', {
@@ -194,8 +198,10 @@ describe('ClaudeSDKAgent', () => {
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      agent: query,
-      model: 'claude-sonnet-4-6',
+      query,
+      options: {
+        model: 'claude-sonnet-4-6',
+      },
     });
 
     const result = await agent.generate('Generate prompt');
@@ -224,8 +230,10 @@ describe('ClaudeSDKAgent', () => {
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      agent: { query },
-      model: 'claude-sonnet-4-6',
+      query,
+      options: {
+        model: 'claude-sonnet-4-6',
+      },
     });
 
     const stream = await agent.stream('Stream prompt', { runId: 'stream-mastra-run' });

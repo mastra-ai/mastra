@@ -13,8 +13,10 @@ import { ClaudeSDKAgent } from '@mastra/claude';
 export const claudeAgent = new ClaudeSDKAgent({
   id: 'claude-sdk-agent',
   description: 'Use Claude Agent SDK through Mastra.',
-  agent: query,
-  model: 'claude-sonnet-4-5',
-  cwd: process.cwd(),
+  query,
+  options: {
+    model: 'claude-sonnet-4-5',
+    cwd: process.cwd(),
+  },
 });
 ```

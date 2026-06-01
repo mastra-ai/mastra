@@ -147,8 +147,10 @@ describe('ClaudeSDKAgent observability', () => {
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      agent: query,
-      model: 'claude-sonnet-4-6',
+      query,
+      options: {
+        model: 'claude-sonnet-4-6',
+      },
     });
 
     const result = await agent.generate('Generate prompt', {
@@ -199,8 +201,10 @@ describe('ClaudeSDKAgent observability', () => {
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      agent: query,
-      model: 'claude-sonnet-4-6',
+      query,
+      options: {
+        model: 'claude-sonnet-4-6',
+      },
     });
 
     const result = await agent.generate('Use the weather tool', {

@@ -26,9 +26,11 @@ export const claudeAgent = new ClaudeSDKAgent({
   id: 'claude-sdk-agent',
   name: 'Claude SDK Agent',
   description: 'Use Claude Agent SDK through Mastra.',
-  agent: query,
-  model: 'claude-sonnet-4-5',
-  cwd: process.cwd(),
+  query,
+  options: {
+    model: 'claude-sonnet-4-5',
+    cwd: process.cwd(),
+  },
 });
 ```
 
@@ -66,7 +68,7 @@ for await (const chunk of stream.fullStream) {
 
 ## Configure Claude
 
-`ClaudeSDKAgent` forwards Claude SDK options such as `cwd`, `model`, `maxTurns`, `permissionMode`, `tools`, `allowedTools`, `disallowedTools`, `mcpServers`, `env`, and `pathToClaudeCodeExecutable`.
+`ClaudeSDKAgent` forwards the `options` object to the Claude SDK `query()` call on every run.
 
 For custom tools, create a Claude SDK MCP server and pass it with `mcpServers`.
 
@@ -89,10 +91,12 @@ const weatherServer = createSdkMcpServer({
 export const claudeAgent = new ClaudeSDKAgent({
   id: 'claude-sdk-agent',
   description: 'Use Claude with weather tools.',
-  agent: query,
-  mcpServers: {
-    weather: weatherServer,
+  query,
+  options: {
+    mcpServers: {
+      weather: weatherServer,
+    },
+    allowedTools: ['mcp__weather__get_temperature'],
   },
-  allowedTools: ['mcp__weather__get_temperature'],
 });
 ```
