@@ -12,6 +12,7 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
+import { safeStringify } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
@@ -298,7 +299,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
-                errorText: String(toolCall.error?.message ?? toolCall.error),
+                errorText:
+                  toolCall.error instanceof Error
+                    ? toolCall.error.message
+                    : toolCall.error == null
+                      ? 'Tool execution failed'
+                      : safeStringify(toolCall.error),
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,

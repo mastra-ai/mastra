@@ -276,7 +276,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
           model: {
             specificationVersion: 'v2' as const,
             provider: 'mock-provider',
-            modelId: 'mock-model-id',
+            modelId: MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__,
             supportedUrls: {},
             doGenerate: vi.fn(),
             doStream: vi.fn(async () => ({
