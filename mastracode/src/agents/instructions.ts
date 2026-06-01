@@ -7,7 +7,7 @@ import { buildFullPrompt } from './prompts/index.js';
 
 export async function getDynamicInstructions({ requestContext }: { requestContext: { get(key: string): unknown } }) {
   const harnessContext = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
-  const state = harnessContext?.getState?.();
+  const state = harnessContext?.state;
   const modeId = harnessContext?.modeId ?? 'build';
   const projectPath = state?.projectPath ?? process.cwd();
 

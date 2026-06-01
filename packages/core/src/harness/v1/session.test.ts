@@ -88,10 +88,12 @@ describe('Harness.session()', () => {
       resourceId: 'resource-1',
       modeId: 'plan',
       modelId: 'test-model',
+      subagentModelId: 'test-subagent-model',
     });
 
     expect(session.getMode()).toMatchObject({ id: 'plan' });
     expect(session.getModelId()).toBe('test-model');
+    expect(session.getSubagentModelId()).toBe('test-subagent-model');
     expect(session.ownerId).toBe(harness.ownerId);
     expect([...storage.records.values()]).toEqual([
       {
@@ -102,6 +104,7 @@ describe('Harness.session()', () => {
         origin: 'top-level',
         modeId: 'plan',
         modelId: 'test-model',
+        subagentModelId: 'test-subagent-model',
         createdAt: expect.any(Date),
         lastActivityAt: expect.any(Date),
       },
@@ -160,6 +163,7 @@ describe('Harness.session()', () => {
       resourceId: 'resource-1',
       modeId: 'plan',
       modelId: 'test-model',
+      subagentModelId: 'test-subagent-model',
     });
 
     const clone = await session.clone({ threadId: 'thread-2', title: 'Clone', metadata: { forkedSubagent: true } });
@@ -169,6 +173,7 @@ describe('Harness.session()', () => {
     expect(clone.resourceId).toBe('resource-1');
     expect(clone.getMode()).toMatchObject({ id: 'plan' });
     expect(clone.getModelId()).toBe('test-model');
+    expect(clone.getSubagentModelId()).toBe('test-subagent-model');
     expect(memory.cloneThread).toHaveBeenCalledWith({
       sourceThreadId: 'thread-1',
       newThreadId: 'thread-2',
@@ -211,6 +216,7 @@ describe('Harness.session()', () => {
       resourceId: 'resource-1',
       modeId: 'plan',
       modelId: 'test-model',
+      subagentModelId: 'test-subagent-model',
     });
 
     const clone = await harness.cloneSession(session, {
@@ -221,6 +227,7 @@ describe('Harness.session()', () => {
       origin: 'subagent-tool',
       modeId: 'build',
       modelId: 'override-model',
+      subagentModelId: 'override-subagent-model',
     });
 
     expect(clone.id).toBe('session-2');
@@ -228,6 +235,7 @@ describe('Harness.session()', () => {
     expect(clone.resourceId).toBe('resource-2');
     expect(clone.getMode()).toMatchObject({ id: 'build' });
     expect(clone.getModelId()).toBe('override-model');
+    expect(clone.getSubagentModelId()).toBe('override-subagent-model');
     expect(clone.ownerId).toBe(harness.ownerId);
     expect(storage.records.get('session-2')).toEqual({
       id: 'session-2',
@@ -238,6 +246,7 @@ describe('Harness.session()', () => {
       origin: 'subagent-tool',
       modeId: 'build',
       modelId: 'override-model',
+      subagentModelId: 'override-subagent-model',
       createdAt: expect.any(Date),
       lastActivityAt: expect.any(Date),
     });
@@ -327,8 +336,10 @@ describe('Harness events', () => {
     events.length = 0;
 
     session.setModelId('model-2');
+    session.setSubagentModelId('subagent-model-2');
     session.setMode({ id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model' });
 
+    expect(session.getSubagentModelId()).toBe('subagent-model-2');
     expect(events).toEqual([
       expect.objectContaining({
         type: 'model_changed',

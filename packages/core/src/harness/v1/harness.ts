@@ -25,6 +25,7 @@ type SessionByThreadOptions = {
   resourceId: string;
   modeId?: string;
   modelId?: string;
+  subagentModelId?: string;
 };
 
 type SessionOptions = SessionByIdOptions | SessionByThreadOptions;
@@ -178,6 +179,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       resourceId: opts.resourceId ?? source.resourceId,
       mode,
       modelId: opts.modelId ?? source.modelId,
+      subagentModelId: opts.subagentModelId ?? source.subagentModelId,
     });
     const record: SessionRecord = {
       ...source,
@@ -189,6 +191,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       origin: opts.origin ?? source.origin,
       modeId: opts.modeId ?? source.modeId,
       modelId: opts.modelId ?? source.modelId,
+      subagentModelId: opts.subagentModelId ?? source.subagentModelId,
     };
 
     await storage.saveSession(record);
@@ -217,6 +220,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       origin: 'top-level',
       modeId,
       modelId: opts.modelId ?? mode.defaultModelId,
+      subagentModelId: opts.subagentModelId,
       createdAt: new Date(),
       lastActivityAt: new Date(),
     };
@@ -305,12 +309,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       resourceId: record.resourceId,
       mode: mode,
       model: record.modelId,
+      subagentModelId: record.subagentModelId,
       createdAt: record.createdAt,
       lastActivityAt: record.lastActivityAt,
       memory: this.#memory,
       events: this.#events.scoped({ sessionId: record.id }),
-      state: this.#state,
-      stateSchema: this.#stateSchema,
       getState: () => this.getState(),
       setState: updates => this.setState(updates),
       updateState: updater => this.updateState(updater),
