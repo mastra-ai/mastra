@@ -1,5 +1,6 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type {
+  AgentEditorConfig,
   AgentMessageInput,
   AgentModelManagerConfig,
   AgentSignalInput,
@@ -274,6 +275,7 @@ export interface SerializedAgent {
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
+  editor?: AgentEditorConfig;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -709,6 +711,7 @@ async function formatAgentList({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    editor: agent.__getEditorConfig?.(),
     ...(agent.toRawConfig()?.status
       ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
       : {}),
@@ -977,6 +980,7 @@ async function formatAgent({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    editor: agent.__getEditorConfig?.(),
     ...(agent.toRawConfig()?.status
       ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
       : {}),
@@ -1051,9 +1055,22 @@ export const LIST_AGENTS_ROUTE = createRoute({
           storedAgentsResult = null;
         }
 
+        // Build a set of code-defined agent IDs (keys in #agents may be config keys,
+        // not agent.id). Stored configs sharing one of these IDs are overrides and
+        // should not be hydrated as standalone stored agents.
+        const codeAgentIds = new Set<string>();
+        for (const [key, agent] of Object.entries(codeAgents)) {
+          codeAgentIds.add(key);
+          if (agent?.id) codeAgentIds.add(agent.id);
+        }
+
         if (storedAgentsResult?.agents) {
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
+            // Skip stored configs that overlay an existing code-defined agent.
+            // Those are overrides (no standalone model), not standalone stored agents,
+            // and trying to hydrate them as standalone would fail model validation.
+            if (codeAgentIds.has(storedAgentConfig.id)) continue;
             try {
               const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;
