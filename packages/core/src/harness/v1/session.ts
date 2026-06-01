@@ -29,6 +29,7 @@ export class Session<TState = {}> {
   // readonly subagentDepth: number;
 
   #modelId: string;
+  #subagentModelId: string | undefined;
   #mode: HarnessMode;
 
   constructor(config: SessionConfig<TState>) {
@@ -38,6 +39,7 @@ export class Session<TState = {}> {
     this.#threadId = config.threadId;
     this.#mode = config.mode;
     this.#modelId = config.model;
+    this.#subagentModelId = config.subagentModelId;
     this.#createdAt = config.createdAt;
     this.#lastActivityAt = config.lastActivityAt;
     this.#memory = config.memory;
@@ -90,6 +92,7 @@ export class Session<TState = {}> {
       resourceId: result.thread.resourceId,
       mode: opts.mode ?? this.#mode,
       model: opts.modelId ?? this.#modelId,
+      subagentModelId: opts.subagentModelId ?? this.#subagentModelId,
       createdAt: result.thread.createdAt,
       lastActivityAt: result.thread.updatedAt,
       memory: this.#memory,
@@ -142,6 +145,14 @@ export class Session<TState = {}> {
     }
   }
 
+  getSubagentModelId(): string | undefined {
+    return this.#subagentModelId;
+  }
+
+  setSubagentModelId(modelId: string | undefined) {
+    this.#subagentModelId = modelId;
+  }
+
   getMode(): HarnessMode {
     return this.#mode;
   }
@@ -165,6 +176,7 @@ export class Session<TState = {}> {
       resourceId: this.#resourceId,
       modeId: this.#mode.id,
       workspace: this.#workspace,
+      getSubagentModelId: () => this.getSubagentModelId() ?? null,
     };
 
     requestContext.set('harness', harnessContext);

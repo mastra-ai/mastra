@@ -601,10 +601,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (config?.omScope) {
     globalInitialState.omScope = config.omScope;
   }
-  // Seed subagent models from global settings
+  let defaultSubagentModelId: string | undefined;
+  // Seed per-agent subagent models from global settings; the default is session-scoped.
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
     if (key === 'default' || key === '_default') {
-      globalInitialState.subagentModelId = modelId;
+      defaultSubagentModelId = modelId;
     } else {
       globalInitialState[`subagentModelId_${key}`] = modelId;
     }
@@ -629,6 +630,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       const modeId = typeof meta?.currentModeId === 'string' ? meta.currentModeId : defaultModeId;
       const mode = modesV1.find(mode => mode.id === modeId) ?? modesV1.find(mode => mode.id === defaultModeId)!;
       const modelId = typeof meta?.currentModelId === 'string' ? meta.currentModelId : mode.defaultModelId;
+      const subagentModelId = typeof meta?.subagentModelId === 'string' ? meta.subagentModelId : defaultSubagentModelId;
       return harnessStorage.saveSession({
         id: `sess-${sessionHash}`,
         ownerId,
@@ -636,6 +638,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         threadId: thread.id,
         modeId: mode.id,
         modelId,
+        subagentModelId,
         origin: 'top-level',
         createdAt: thread.createdAt,
         lastActivityAt: thread.updatedAt,

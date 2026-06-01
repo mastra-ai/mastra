@@ -4,7 +4,7 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
-import type { MastraCodeState } from '../schema';
+import type { MastraCodeComposedState } from '../schema';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
 /** Minimal shape for tools passed to createDynamicTools. */
@@ -52,7 +52,7 @@ export function createDynamicTools(
   disabledTools?: string[],
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
-    const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+    const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
 
     const modelId = state?.currentModelId;

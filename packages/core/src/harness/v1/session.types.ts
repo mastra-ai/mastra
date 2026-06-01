@@ -1,5 +1,4 @@
 import type { MastraMemory } from '../../memory';
-import type { StandardSchemaWithJSON } from '../../schema';
 import type { DynamicArgument } from '../../types';
 import type { Workspace } from '../../workspace';
 import type { EventEmitter } from './events';
@@ -14,6 +13,7 @@ export type CloneSessionOptions = {
   modeId?: string;
   mode?: HarnessMode;
   modelId?: string;
+  subagentModelId?: string;
   title?: string;
   metadata?: Record<string, unknown>;
   messageLimit?: number;
@@ -22,8 +22,6 @@ export type CloneSessionOptions = {
 export interface SessionConfig<TState = {}> {
   memory: MastraMemory | DynamicArgument<MastraMemory>;
   events: EventEmitter;
-  state?: TState;
-  stateSchema?: StandardSchemaWithJSON<TState>;
   getState?: () => Readonly<TState>;
   setState?: (updates: Partial<TState>) => Promise<void>;
   updateState?: <TResult>(
@@ -49,6 +47,7 @@ export interface SessionConfig<TState = {}> {
   resourceId: string;
   threadId: string;
   model: string;
+  subagentModelId?: string;
   mode: HarnessMode;
   createdAt: Date;
   lastActivityAt: Date;
