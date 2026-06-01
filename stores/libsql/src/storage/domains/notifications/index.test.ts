@@ -315,6 +315,41 @@ describe('NotificationsLibSQL', () => {
     expect(filtered.map(record => record.id)).toEqual(['due-earliest', 'due-deliver', 'due-summary']);
   });
 
+  it('clears summaryAt while preserving deliverAt and due ordering after summary dispatch metadata updates', async () => {
+    const now = new Date('2026-01-01T12:00:00.000Z');
+    const deliverAt = new Date('2026-01-01T12:00:00.000Z');
+    const summaryAt = new Date('2026-01-01T11:55:00.000Z');
+    await store.createNotification({
+      id: 'summary-then-deliver',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      agentId: 'agent-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'Summarized then delivered',
+      deliverAt,
+      summaryAt,
+    });
+
+    const updated = await store.updateNotification({
+      id: 'summary-then-deliver',
+      threadId: 'thread-1',
+      summaryAt: null,
+      summarySignalId: 'summary-signal-1',
+    });
+
+    expect(updated.status).toBe('pending');
+    expect(updated.summaryAt).toBeUndefined();
+    expect(updated.deliverAt?.toISOString()).toBe(deliverAt.toISOString());
+    expect(updated.summarySignalId).toBe('summary-signal-1');
+
+    const due = await store.listDueNotifications({ now });
+    expect(due.map(record => record.id)).toEqual(['summary-then-deliver']);
+    expect(due[0]?.summaryAt).toBeUndefined();
+    expect(due[0]?.deliverAt?.toISOString()).toBe(deliverAt.toISOString());
+  });
+
   async function expectIds(input: Parameters<NotificationsLibSQL['listNotifications']>[0], ids: string[]) {
     const records = await store.listNotifications(input);
     expect(records.map(record => record.id)).toEqual(ids);

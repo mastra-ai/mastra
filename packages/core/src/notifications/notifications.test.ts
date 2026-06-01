@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Mastra } from '../mastra';
+import { MastraCompositeStore } from '../storage/base';
 import { InMemoryNotificationsStorage } from './storage';
 import { createNotificationDispatchWorkflow } from './workflow';
 import {
@@ -480,6 +482,34 @@ describe('notification inbox', () => {
       deliveryAttempts: 1,
       lastDeliveryError: 'agent offline',
     });
+  });
+
+  it('registers notification dispatch workflow when dispatch config is enabled', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({
+      id: 'notification-workflow-registration-storage',
+      domains: { notifications },
+    });
+    const mastra = new Mastra({
+      storage,
+      logger: false,
+      notifications: { dispatch: { enabled: true, cron: '*/5 * * * *', batchSize: 25 } },
+    });
+
+    try {
+      const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
+      expect(workflow.id).toBe('__mastra_notification_dispatcher');
+      expect(workflow.getScheduleConfigs()).toMatchObject([
+        {
+          id: 'dispatch',
+          cron: '*/5 * * * *',
+          inputData: { limit: 25 },
+          metadata: { internal: true, feature: 'notifications' },
+        },
+      ]);
+    } finally {
+      await mastra.stopWorkers();
+    }
   });
 
   it('creates a scheduled notification dispatch workflow', () => {
