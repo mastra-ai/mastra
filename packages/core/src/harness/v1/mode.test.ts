@@ -10,18 +10,20 @@
 
 import { describe, expect, it } from 'vitest';
 
+import type { Agent } from '../../agent';
 import type { MastraMemory } from '../../memory';
 import { Harness } from './harness';
 import type { HarnessConfig } from './harness.types';
 import type { HarnessMode } from './mode';
 
 const createMemory = () => ({}) as MastraMemory;
+const createAgent = () => ({ generate: async () => ({ text: 'ok', steps: [] }) }) as unknown as Agent;
 
 const setupHarness = (config: Partial<HarnessConfig<HarnessMode[]>> = {}) => {
   const harness = new Harness({
-    agents: {},
+    agents: { default: createAgent() },
     memory: createMemory(),
-    modes: [{ id: 'build', agentId: 'default' }],
+    modes: [{ id: 'build', agentId: 'default', defaultModelId: 'zai-coding-plan/glm-5-turbo' }],
     defaultModeId: 'build',
     ...config,
   } as HarnessConfig<HarnessMode[]>);
@@ -32,9 +34,9 @@ const setupHarness = (config: Partial<HarnessConfig<HarnessMode[]>> = {}) => {
 describe('Harness.listModes()', () => {
   it('returns every registered mode in declaration order', () => {
     const modes: HarnessMode[] = [
-      { id: 'build', agentId: 'default' },
-      { id: 'plan', agentId: 'default' },
-      { id: 'fast', agentId: 'default' },
+      { id: 'build', agentId: 'default', defaultModelId: 'zai-coding-plan/glm-5-turbo' },
+      { id: 'plan', agentId: 'default', defaultModelId: 'zai-coding-plan/glm-5-turbo' },
+      { id: 'fast', agentId: 'default', defaultModelId: 'zai-coding-plan/glm-5-turbo' },
     ];
     const { harness } = setupHarness({ modes, defaultModeId: 'build' });
 
@@ -57,6 +59,7 @@ describe('Harness.listModes()', () => {
       {
         id: 'build',
         agentId: 'default',
+        defaultModelId: 'zai-coding-plan/glm-5-turbo',
         description: 'Build mode',
         instructions: 'You are in build mode.',
         metadata: { color: '#abcdef' },
@@ -78,12 +81,16 @@ describe('Harness.listModes()', () => {
 describe('Harness.getMode()', () => {
   it('returns the mode object for a known id', () => {
     const modes: HarnessMode[] = [
-      { id: 'build', agentId: 'default' },
-      { id: 'plan', agentId: 'default' },
+      { id: 'build', agentId: 'default', defaultModelId: 'zai-coding-plan/glm-5-turbo' },
+      { id: 'plan', agentId: 'default', defaultModelId: 'zai-coding-plan/glm-5-turbo' },
     ];
     const { harness } = setupHarness({ modes, defaultModeId: 'build' });
 
-    expect(harness.getMode('plan')).toMatchObject({ id: 'plan', agentId: 'default' });
+    expect(harness.getMode('plan')).toMatchObject({
+      id: 'plan',
+      agentId: 'default',
+      defaultModelId: 'zai-coding-plan/glm-5-turbo',
+    });
   });
 
   it('returns undefined for an unknown id (no throw)', () => {
@@ -94,7 +101,7 @@ describe('Harness.getMode()', () => {
 
   it('returns the same reference as the entry inside listModes()', () => {
     const { harness } = setupHarness({
-      modes: [{ id: 'build', agentId: 'default' }],
+      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'zai-coding-plan/glm-5-turbo' }],
     });
 
     const fromList = harness.listModes().find(m => m.id === 'build');
