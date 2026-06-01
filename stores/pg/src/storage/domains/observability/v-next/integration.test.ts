@@ -492,6 +492,38 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await harness.close();
       }
     });
+
+    it('two concurrent init() calls against a fresh native schema both resolve without throwing', async () => {
+      // Regression for native-partition race: CREATE TABLE IF NOT EXISTS PARTITION OF is
+      // not atomic under concurrency; without isDuplicateRelationError() guard the loser
+      // surfaces 42P07 "relation already exists".
+      const schema = schemaName('obs_vnext_native_concurrent');
+      const pool = new Pool({ connectionString, max: 4 });
+      const client = new PoolAdapter(pool);
+
+      await client.none(`CREATE SCHEMA IF NOT EXISTS ${quotedIdentifier(schema)}`);
+
+      const first = new ObservabilityStoragePostgresVNext({ client, schemaName: schema });
+      const second = new ObservabilityStoragePostgresVNext({ client, schemaName: schema });
+
+      try {
+        await expect(Promise.all([first.init(), second.init()])).resolves.toHaveLength(2);
+
+        await first.createSpan({
+          span: makeSpan({
+            traceId: 'native-concurrent-trace',
+            spanId: 'native-concurrent-root',
+            startedAt: dayAt(0, 9),
+            endedAt: dayAt(0, 9, 0, 1),
+          }),
+        });
+        const trace = await second.getTrace({ traceId: 'native-concurrent-trace' });
+        expect(trace?.spans.map(span => span.spanId)).toEqual(['native-concurrent-root']);
+      } finally {
+        await client.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
+        await pool.end();
+      }
+    });
   });
 
   describe('dangerouslyClearAll() — post-condition', () => {

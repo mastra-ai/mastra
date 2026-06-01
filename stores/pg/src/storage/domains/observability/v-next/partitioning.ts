@@ -24,6 +24,19 @@
 import type { DbClient } from '../../../client';
 import { ALL_SIGNAL_TABLES, qualifiedName, qualifiedTable, SIGNAL_TIME_COLUMN } from './ddl';
 
+/**
+ * Postgres `CREATE TABLE IF NOT EXISTS` is not atomic — two concurrent
+ * backends can both pass the existence check and one will surface
+ * `42P07 — relation "…" already exists`. We swallow that specific error so
+ * concurrent `init()` calls (multi-process startup, blue/green deploy, two
+ * stores against the same schema) converge to a clean "exists" state.
+ */
+function isDuplicateRelationError(error: unknown): boolean {
+  const code = (error as { code?: string } | undefined)?.code;
+  const message = (error as { message?: string } | undefined)?.message ?? '';
+  return code === '42P07' || /already exists/i.test(message);
+}
+
 export type PartitionMode = 'timescale' | 'partman' | 'native';
 
 export interface PartitioningOptions {
@@ -127,10 +140,17 @@ export async function ensureNativePartitions(
       // resolved at execution and so are rejected here. `partStart` /
       // `partEnd` are produced by `dayBounds()` (formatted from a JS Date)
       // and never touch user input, so the template interpolation is safe.
-      await client.none(
-        `CREATE TABLE IF NOT EXISTS ${child} PARTITION OF ${parent}
-         FOR VALUES FROM ('${partStart}') TO ('${partEnd}')`,
-      );
+      try {
+        await client.none(
+          `CREATE TABLE IF NOT EXISTS ${child} PARTITION OF ${parent}
+           FOR VALUES FROM ('${partStart}') TO ('${partEnd}')`,
+        );
+      } catch (error) {
+        // `CREATE TABLE IF NOT EXISTS` is not atomic under concurrency;
+        // a parallel init() can win the race between the existence check
+        // and the create. Treat the duplicate as success.
+        if (!isDuplicateRelationError(error)) throw error;
+      }
     }
   }
 }
