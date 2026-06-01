@@ -12,6 +12,7 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
+import { safeStringify } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError } from '../errors';
@@ -276,7 +277,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // `toolCall.error` arrives as the plain {name,message,stack} the workflow step
             // serializes (Error instances become `{}` over the pubsub bus). Reify here so
             // chunk consumers see a real Error with name/message/stack intact.
-            const reifiedError = deserializeToolError(toolCall.error);
+            const 
+            = deserializeToolError(toolCall.error);
             const chunk = await transformToolChunk(
               {
                 type: 'tool-error',
@@ -299,11 +301,16 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
               toolInvocation: {
-                state: 'result' as const,
+                state: 'output-error' as const,
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
-                result: reifiedError.message,
+                errorText:
+                  toolCall.error instanceof Error
+                    ? toolCall.error.message
+                    : toolCall.error == null
+                      ? 'Tool execution failed'
+                      : safeStringify(toolCall.error),
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
