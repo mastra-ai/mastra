@@ -35,7 +35,7 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         indeterminate={indeterminate ?? isCheckedIndeterminate}
         data-slot="checkbox"
         className={cn(
-          'peer flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.3125rem]',
+          'peer flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-[0.3125rem]',
           'border border-neutral6/5 bg-neutral6/5 text-surface1 outline-hidden',
           transitions.all,
           'hover:border-border2 hover:bg-surface-overlay-strong',
