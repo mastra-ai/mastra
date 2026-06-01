@@ -120,6 +120,7 @@ describe('CursorSDKAgent', () => {
     expect(agent.id).toBe('cursor-agent');
     expect(agent.name).toBe('Cursor Agent');
     expect(agent.getDescription()).toBe('Use Cursor Agent as a Mastra agent.');
+    expect(agent.supportsMemory()).toBe(false);
     expect(isAgentCompatible(agent)).toBe(true);
   });
 

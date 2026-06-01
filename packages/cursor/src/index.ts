@@ -112,6 +112,10 @@ export class CursorSDKAgent extends Agent {
     this.#mastra = mastra;
   }
 
+  supportsMemory(): boolean {
+    return false;
+  }
+
   async generate<OUTPUT = undefined>(
     messages: MessageListInput,
     options?: SDKAgentRunOptions<OUTPUT>,

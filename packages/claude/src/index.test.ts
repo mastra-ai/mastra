@@ -119,6 +119,7 @@ describe('ClaudeSDKAgent', () => {
     expect(agent.id).toBe('claude-agent');
     expect(agent.name).toBe('Claude Agent');
     expect(agent.getDescription()).toBe('Use Claude Agent as a Mastra agent.');
+    expect(agent.supportsMemory()).toBe(false);
     expect(isAgentCompatible(agent)).toBe(true);
   });
 
