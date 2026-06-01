@@ -1138,9 +1138,9 @@ describe('Stored Agents Handlers', () => {
       });
       mockAgentsData.set('parent', {
         id: 'parent',
-        name: 'Parent with no sub-agents',
+        name: 'Parent with a real sub-agent',
         model: { name: 'gpt-4', provider: 'openai' },
-        agents: {},
+        agents: { 'some-child': { id: 'some-child', name: 'Child', model: { name: 'gpt-4', provider: 'openai' } } },
       });
 
       const result = await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({

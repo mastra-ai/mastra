@@ -95,7 +95,7 @@ export class StoredAgent extends BaseResource {
    * Lists other stored agents that reference this agent as a sub-agent.
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the list of dependent agents and a hidden count
-   *          for cross-workspace private dependents (only set when this agent is public).
+   *          for cross-workspace private dependents (only non-zero when this agent is public).
    */
   dependents(requestContext?: RequestContext | Record<string, any>): Promise<StoredAgentDependentsResponse> {
     return this.request(
