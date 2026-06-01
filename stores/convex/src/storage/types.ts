@@ -49,6 +49,11 @@ export type StorageRequest =
       keys: Record<string, any>;
     }
   | {
+      op: 'loadMany';
+      tableName: TABLE_NAMES | string;
+      ids: string[];
+    }
+  | {
       op: 'clearTable' | 'dropTable';
       tableName: TABLE_NAMES | string;
     }
