@@ -85,9 +85,15 @@ describe('Switch', () => {
     const switchEl = screen.getByRole('switch');
     const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
     expect(switchEl.className).toContain('data-[checked]:bg-neutral6');
-    expect(switchEl.className).toContain('border-transparent');
+    expect(switchEl.className).toContain('border-0');
+    expect(switchEl.className).toContain('overflow-hidden');
     expect(switchEl.className).toContain('focus-visible:outline-neutral5/55');
-    expect(thumbEl?.className).toContain('group-active/switch:w-5');
+    expect(thumbEl?.className).toContain('transition-[background-color,translate,width,scale]');
+    expect(thumbEl?.className).toContain('w-5');
+    expect(thumbEl?.className).toContain('data-[checked]:translate-x-3');
+    expect(thumbEl?.className).toContain('group-active/switch:w-6');
+    expect(thumbEl?.className).toContain('group-active/switch:scale-y-95');
+    expect(thumbEl?.className).toContain('group-active/switch:data-[checked]:translate-x-2');
     expect(switchEl.className).not.toContain('accent1');
     expect(switchEl.className).not.toContain('shadow-glow');
   });
