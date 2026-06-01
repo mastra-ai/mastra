@@ -433,7 +433,7 @@ describe('Harness.session()', () => {
   });
 });
 
-describe('Session.message() and queue()', () => {
+describe('Session.sendMessage() and queueMessage()', () => {
   it('calls agent.generate with session memory, mode defaults, and emits lifecycle events', async () => {
     const generate = vi.fn().mockResolvedValue({ text: 'generated', steps: [] });
     const agent = createAgent({ generate } as Partial<Agent>);
@@ -457,7 +457,7 @@ describe('Session.message() and queue()', () => {
     });
     events.length = 0;
 
-    const result = await session.message({
+    const result = await session.sendMessage({
       content: 'hello',
       additionalTools: { localTool: { description: 'Local tool', execute: vi.fn() } } as never,
       maxSteps: 2,
@@ -490,7 +490,7 @@ describe('Session.message() and queue()', () => {
     const { harness } = createHarness(createMemory(), new RecordingHarnessStorage(), undefined, agent);
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
 
-    const result = await session.message({ content: 'stream me', stream: true });
+    const result = await session.sendMessage({ content: 'stream me', stream: true });
 
     expect(result).toBe(streamResult);
     expect(stream).toHaveBeenCalledWith(
@@ -510,7 +510,7 @@ describe('Session.message() and queue()', () => {
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
     events.length = 0;
 
-    await expect(session.message({ content: 'fail' })).rejects.toThrow('nope');
+    await expect(session.sendMessage({ content: 'fail' })).rejects.toThrow('nope');
 
     expect(events).toEqual([
       expect.objectContaining({ type: 'agent_start', sessionId: session.id }),
@@ -534,9 +534,9 @@ describe('Session.message() and queue()', () => {
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
     events.length = 0;
 
-    const first = session.queue({ content: 'one' });
-    const second = session.queue({ content: 'two' });
-    const third = session.queue({ content: 'three' });
+    const first = session.queueMessage({ content: 'one' });
+    const second = session.queueMessage({ content: 'two' });
+    const third = session.queueMessage({ content: 'three' });
 
     await expect(first).resolves.toMatchObject({ text: 'one' });
     await expect(second).rejects.toThrow('second failed');
