@@ -1,11 +1,10 @@
 import * as React from 'react';
-import type { ThemedToken } from 'shiki';
+import type { ThemedToken } from 'shiki/core';
 
 import { highlight } from '../CodeEditor';
 import { CopyButton } from '../CopyButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { Tab, TabList, Tabs } from '../Tabs';
-import { useTheme } from '../ThemeProvider';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -110,44 +109,34 @@ interface HighlightedCodeProps {
   lang?: string;
 }
 
-// Shiki runs with dual themes (`defaultColor: false`), so each token's colors
-// arrive as `--shiki-light` / `--shiki-dark` CSS variables on `htmlStyle` rather
-// than as a concrete `color`. Nothing in the app reads those variables, so we
-// resolve them into a real `color`/`backgroundColor` here, picking the variant
-// that matches the active theme. We deliberately do not spread `htmlStyle` (which
-// would inline both variables and pin one theme regardless of the app's toggle).
-function tokenStyle(token: ThemedToken, isDark: boolean): React.CSSProperties | undefined {
+function tokenStyle(token: ThemedToken): React.CSSProperties | undefined {
   if (token.htmlStyle && typeof token.htmlStyle === 'object') {
-    const vars = token.htmlStyle as Record<string, string>;
-    const color = isDark ? vars['--shiki-dark'] : vars['--shiki-light'];
-    const background = isDark ? vars['--shiki-dark-bg'] : vars['--shiki-light-bg'];
-    const style: React.CSSProperties = {};
-    if (color) style.color = color;
-    if (background) style.backgroundColor = background;
-    return Object.keys(style).length ? style : undefined;
+    return token.htmlStyle as React.CSSProperties;
   }
-  // Single-theme fallback: Shiki put the color directly on the token.
+
   return token.color ? { color: token.color } : undefined;
 }
 
 function HighlightedCode({ code, lang }: HighlightedCodeProps) {
   const [tokens, setTokens] = React.useState<ThemedToken[][] | null>(null);
-  const isDark = useTheme().resolvedTheme === 'dark';
 
   React.useEffect(() => {
     if (!lang) {
       setTokens(null);
       return;
     }
+
     setTokens(null);
     let cancelled = false;
+
     void highlight(code, lang)
       .then(result => {
         if (!cancelled && result) setTokens(result);
       })
       .catch(() => {
-        // Highlighting failed — plain-text fallback remains visible.
+        if (!cancelled) setTokens(null);
       });
+
     return () => {
       cancelled = true;
     };
@@ -159,21 +148,34 @@ function HighlightedCode({ code, lang }: HighlightedCodeProps) {
     return <pre className={preClass}>{code}</pre>;
   }
 
+  let codeOffset = 0;
+
   return (
     <pre className={preClass}>
       <code>
-        {tokens.map((line, lineIndex) => (
-          <React.Fragment key={lineIndex}>
-            <span>
-              {line.map((token, tokenIndex) => (
-                <span key={tokenIndex} style={tokenStyle(token, isDark)}>
-                  {token.content}
-                </span>
-              ))}
-            </span>
-            {lineIndex !== tokens.length - 1 && '\n'}
-          </React.Fragment>
-        ))}
+        {tokens.map((line, lineIndex) => {
+          const lineOffset = codeOffset;
+          let tokenOffset = lineOffset;
+          const tokenSpans = line.map(token => {
+            const key = tokenOffset;
+            tokenOffset += token.content.length;
+
+            return (
+              <span key={key} className="shiki-token" style={tokenStyle(token)}>
+                {token.content}
+              </span>
+            );
+          });
+
+          codeOffset = tokenOffset + 1;
+
+          return (
+            <React.Fragment key={lineOffset}>
+              <span>{tokenSpans}</span>
+              {lineIndex !== tokens.length - 1 && '\n'}
+            </React.Fragment>
+          );
+        })}
       </code>
     </pre>
   );
