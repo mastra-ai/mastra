@@ -262,4 +262,163 @@ describe('buildFormSnapshotInstructions', () => {
 
     expect(result).toContain('- Browser enabled: true');
   });
+
+  describe('per-field setter directives', () => {
+    it('renders an authoritative header rule', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('## Current agent configuration (authoritative)');
+      expect(result).toContain('Trust these values as ground truth');
+      expect(result).toContain('Call each setter at most once per turn');
+    });
+
+    it('tells the LLM to call set-agent-name when name is empty', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('- Name: (empty)');
+      expect(result).toContain('→ Call set-agent-name once');
+    });
+
+    it('tells the LLM to skip set-agent-name when name is filled', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, name: 'Async Standup Coordinator' },
+        buildOptions(),
+      );
+
+      expect(result).toContain('- Name: "Async Standup Coordinator"');
+      expect(result).toContain('→ Already set. Do not call set-agent-name');
+    });
+
+    it('tells the LLM to call set-agent-description when description is empty', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('- Description: (empty)');
+      expect(result).toContain('→ Call set-agent-description once');
+    });
+
+    it('tells the LLM to skip set-agent-description when description is filled', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, description: 'Runs weekday Slack standups' },
+        buildOptions(),
+      );
+
+      expect(result).toContain('→ Already set. Do not call set-agent-description');
+    });
+
+    it('tells the LLM to call set-agent-instructions when instructions is empty', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('- Instructions: (empty)');
+      expect(result).toContain('→ Call set-agent-instructions once');
+    });
+
+    it('tells the LLM to skip set-agent-instructions when instructions is filled', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, instructions: 'You are a standup bot.' },
+        buildOptions(),
+      );
+
+      expect(result).toContain('→ Already set. Do not call set-agent-instructions');
+    });
+
+    it('tells the LLM to skip set-agent-model when model is preset', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, model: { provider: 'openai', name: 'gpt-4o-mini' } },
+        buildOptions({
+          features: allOn,
+          availableModels: [{ provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o-mini' }],
+        }),
+      );
+
+      expect(result).toContain('- Model: openai/gpt-4o-mini');
+      expect(result).toContain('→ Already set by the form. Do not call set-agent-model');
+    });
+
+    it('tells the LLM to call set-agent-model when no model is set', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions({ features: allOn }));
+
+      expect(result).toContain('- Model: (not set)');
+      expect(result).toContain('→ Call set-agent-model once');
+    });
+
+    it('tells the LLM to skip set-agent-workspace-id when workspace is set', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, workspaceId: 'ws_123' },
+        buildOptions({ availableWorkspaces: [{ id: 'ws_123', name: 'Acme Workspace' }] }),
+      );
+
+      expect(result).toContain('→ Already set. Do not call set-agent-workspace-id');
+    });
+
+    it('tells the LLM to call set-agent-tools only when a tool is genuinely required', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions({ features: allOn }));
+
+      expect(result).toContain('- Tools: (none selected)');
+      expect(result).toContain('→ Call set-agent-tools once');
+      expect(result).toContain('minimum set');
+    });
+
+    it('marks tools as already configured when at least one is selected', () => {
+      const tools: AgentTool[] = [{ id: 'web-search', name: 'Web Search', isChecked: false, type: 'tool' }];
+      const values: AgentBuilderEditFormValues = {
+        ...baseValues,
+        tools: { 'web-search': true },
+      };
+
+      const result = buildFormSnapshotInstructions(
+        values,
+        buildOptions({ features: allOn, availableAgentTools: tools }),
+      );
+
+      expect(result).toContain('- Tools (1):');
+      expect(result).toContain('→ Already configured. Do not call set-agent-tools again');
+    });
+
+    it('marks browser as already enabled when browserEnabled is true', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, browserEnabled: true },
+        buildOptions({ features: allOn }),
+      );
+
+      expect(result).toContain('→ Already enabled. Do not call set-agent-browser-enabled');
+    });
+
+    it('mentions visibility has no setter so the LLM does not try to change it', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('- Visibility: private');
+      expect(result).toContain('→ No setter');
+    });
+
+    it('tells the LLM to replace the auto-generated placeholder name when it still matches the starter prompt', () => {
+      const userMessage = 'Build an agent that runs an async Slack standup every weekday';
+      const placeholder = 'Build an agent that …';
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, name: placeholder },
+        buildOptions({ starterUserMessage: userMessage }),
+      );
+
+      expect(result).toContain(`- Name: "${placeholder}" (auto-generated placeholder from the starter prompt)`);
+      expect(result).toContain('The current value is a placeholder, not a real name.');
+      expect(result).not.toContain('Already set. Do not call set-agent-name');
+    });
+
+    it('treats a name that does not match the starter placeholder as already set', () => {
+      const userMessage = 'Build an agent that runs an async Slack standup every weekday';
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, name: 'Async Standup Coordinator' },
+        buildOptions({ starterUserMessage: userMessage }),
+      );
+
+      expect(result).toContain('- Name: "Async Standup Coordinator"');
+      expect(result).toContain('→ Already set. Do not call set-agent-name');
+    });
+
+    it('treats any filled name as already set when no starter prompt is available (post hard-refresh)', () => {
+      const result = buildFormSnapshotInstructions({ ...baseValues, name: 'Build an agent that …' }, buildOptions());
+
+      expect(result).toContain('→ Already set. Do not call set-agent-name');
+      expect(result).not.toContain('auto-generated placeholder');
+    });
+  });
 });
