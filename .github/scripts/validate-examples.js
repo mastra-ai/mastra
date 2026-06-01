@@ -61,11 +61,33 @@ function checkWorkspaceDependencies(packageJson, packageJsonPath) {
   return hasWorkspaceRefs;
 }
 
+// pnpm 11 no longer reads the package.json "pnpm" field, so a standalone example declares its mastra
+// overrides in pnpm-workspace.yaml instead. Read that flat overrides block (no YAML dep needed) so
+// pnpm 10 (package.json) and pnpm 11 (pnpm-workspace.yaml) examples both validate.
+function readWorkspaceOverrides(packageJsonPath) {
+  const workspacePath = join(dirname(packageJsonPath), 'pnpm-workspace.yaml');
+  if (!fs.existsSync(workspacePath)) return {};
+
+  const overrides = {};
+  let inOverrides = false;
+  for (const line of fs.readFileSync(workspacePath, 'utf-8').split(/\r?\n/)) {
+    if (!inOverrides) {
+      if (/^overrides:\s*$/.test(line)) inOverrides = true;
+      continue;
+    }
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    if (line.length - line.trimStart().length === 0) break; // dedent to a new top-level key ends the block
+    const match = line.trim().match(/^["']?(@?[^"':\s]+)["']?\s*:\s*(.+)$/);
+    if (match) overrides[match[1]] = match[2].trim().replace(/^["']|["']$/g, '');
+  }
+  return overrides;
+}
+
 function validateMastraOverrides(packageJson, packageJsonPath) {
   let hasMissingOverride = false;
   const dependencies = packageJson.dependencies || {};
   const devDependencies = packageJson.devDependencies || {};
-  const overrides = packageJson.pnpm?.overrides || {};
+  const overrides = { ...readWorkspaceOverrides(packageJsonPath), ...(packageJson.pnpm?.overrides || {}) };
 
   for (const [dep] of [...Object.entries(dependencies), ...Object.entries(devDependencies)]) {
     if (dep.startsWith('@mastra/') || dep === 'mastra') {
