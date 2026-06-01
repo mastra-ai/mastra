@@ -120,6 +120,7 @@ import type {
   AgentModelManagerConfig,
   AgentCreateOptions,
   AgentExecuteOnFinishOptions,
+  AgentEditorConfig,
   AgentInstructions,
   AgentMessageInput,
   AgentMethodType,
@@ -309,6 +310,7 @@ export class Agent<
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
   TRequestContext extends Record<string, any> | unknown = unknown,
+  TEditor extends AgentEditorConfig | undefined = AgentEditorConfig | undefined,
 >
   extends MastraBase
   implements SubAgent<TAgentId, TRequestContext>
@@ -357,6 +359,7 @@ export class Agent<
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
+  #editorConfig?: AgentEditorConfig;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -370,7 +373,7 @@ export class Agent<
   #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
-  #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
+  #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -394,7 +397,7 @@ export class Agent<
    * });
    * ```
    */
-  constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
+  constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>) {
     super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
 
     this.#config = config;
@@ -403,7 +406,8 @@ export class Agent<
     this.id = config.id ?? config.name;
     this.source = 'code';
 
-    this.#instructions = config.instructions;
+    this.#editorConfig = config.editor;
+    this.#instructions = config.instructions ?? '';
     this.#description = config.description;
     this.#metadata = config.metadata;
     this.#options = config.options;
@@ -2437,6 +2441,14 @@ export class Agent<
   }
 
   /**
+   * Returns the editor ownership config for this agent.
+   * @internal
+   */
+  __getEditorConfig() {
+    return this.#editorConfig;
+  }
+
+  /**
    * Returns a snapshot of the raw field values that may be overridden by stored config.
    * Used by the editor to save/restore code defaults externally.
    * @internal
@@ -2614,7 +2626,7 @@ export class Agent<
     const fork = new Agent<TAgentId, TTools, TOutput, TRequestContext>({
       ...this.#config,
       rawConfig: this.toRawConfig(),
-    });
+    } as AgentConfig<TAgentId, TTools, TOutput, TRequestContext>);
 
     // Preserve runtime state that may have been set after construction
     // (e.g. when Mastra registers agents via __registerMastra / __registerPrimitives).
