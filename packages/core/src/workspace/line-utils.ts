@@ -41,6 +41,14 @@ export function extractLines(
   const start = Math.max(1, startLine ?? 1);
   const end = Math.min(totalLines, endLine ?? totalLines);
 
+  if (start > end) {
+    return {
+      content: '',
+      lines: { start: 0, end: 0 },
+      totalLines,
+    };
+  }
+
   // Extract the requested range (convert to 0-indexed)
   const extractedLines = allLines.slice(start - 1, end);
 

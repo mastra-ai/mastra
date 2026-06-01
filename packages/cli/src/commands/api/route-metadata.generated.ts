@@ -154,6 +154,34 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/send-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/send-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/queue-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/queue-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/signals": {
     "method": "POST",
     "path": "/agents/:agentId/signals",
@@ -562,6 +590,29 @@ export const API_ROUTE_METADATA = {
   "POST /workflows/:workflowId/resume-async": {
     "method": "POST",
     "path": "/workflows/:workflowId/resume-async",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workflows/:workflowId/resume-no-wait": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/resume-no-wait",
     "pathParams": [
       "workflowId"
     ],
@@ -3179,6 +3230,7 @@ export const API_ROUTE_METADATA = {
       "requestContextSchema",
       "scorers",
       "skills",
+      "toolProviders",
       "tools",
       "visibility",
       "workflows",
@@ -3216,6 +3268,7 @@ export const API_ROUTE_METADATA = {
       "requestContextSchema",
       "scorers",
       "skills",
+      "toolProviders",
       "tools",
       "visibility",
       "workflows",
@@ -4321,6 +4374,164 @@ export const API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
+  "POST /tool-providers/:providerId/authorize": {
+    "method": "POST",
+    "path": "/tool-providers/:providerId/authorize",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "config",
+      "connectionId",
+      "label",
+      "scope",
+      "toolName",
+      "toolkit"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/auth-status/:authId": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/auth-status/:authId",
+    "pathParams": [
+      "providerId",
+      "authId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /tool-providers/:providerId/connection-status": {
+    "method": "POST",
+    "path": "/tool-providers/:providerId/connection-status",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "items"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/connections": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connections",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [
+      "authorId",
+      "page",
+      "perPage",
+      "scope",
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "items",
+      "paginationProperty": "pagination"
+    }
+  },
+  "GET /tool-providers/:providerId/connection-fields": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connection-fields",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "fields"
+    }
+  },
+  "DELETE /tool-providers/:providerId/connections/:connectionId": {
+    "method": "DELETE",
+    "path": "/tool-providers/:providerId/connections/:connectionId",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "force",
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /tool-providers/:providerId/connections/:connectionId": {
+    "method": "PATCH",
+    "path": "/tool-providers/:providerId/connections/:connectionId",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "label"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/connections/:connectionId/usage": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connections/:connectionId/usage",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "agents"
+    }
+  },
+  "GET /tool-providers/:providerId/health": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/health",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /processor-providers": {
     "method": "GET",
     "path": "/processor-providers",
@@ -5108,6 +5319,29 @@ export const API_ROUTE_METADATA = {
   "POST /agent-builder/:actionId/resume-async": {
     "method": "POST",
     "path": "/agent-builder/:actionId/resume-async",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/resume-no-wait": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/resume-no-wait",
     "pathParams": [
       "actionId"
     ],

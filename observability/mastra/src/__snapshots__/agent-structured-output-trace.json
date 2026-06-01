@@ -292,11 +292,11 @@
               "environment": "test"
             },
             "input": {
-              "totalChunks": 3,
+              "totalChunks": 4,
               "accumulatedText": "Mock V2 stream response"
             },
             "output": {
-              "totalChunks": 3,
+              "totalChunks": 4,
               "accumulatedText": "Mock V2 stream response"
             }
           }

@@ -1,4 +1,3 @@
-import { assertModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
 
@@ -21,7 +20,6 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
-import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
 import {
   assertReadAccess,
   assertWriteAccess,
@@ -72,6 +70,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'workflows',
   'agents',
   'integrationTools',
+  'toolProviders',
   'inputProcessors',
   'outputProcessors',
   'memory',
@@ -295,6 +294,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     workflows,
     agents,
     integrationTools,
+    toolProviders,
     mcpClients,
     inputProcessors,
     outputProcessors,
@@ -341,14 +341,11 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
 
-      // Enforce admin model allowlist before persisting. Mirrors UPDATE; when
-      // `model` is omitted the builder applies `defaults.model` server-side.
-      if (model !== undefined) {
-        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
-        if (policy.active) {
-          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
-        }
-      }
+      // Model policy enforcement is intentionally not done on save: each UI
+      // surface gates its own model picker via ModelPolicyProvider, and the
+      // policy is surface-scoped (builder vs editor). Re-introducing a single
+      // server-side check here would either over-enforce on the editor or
+      // under-enforce on the builder until per-surface enforcement lands.
 
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
@@ -366,6 +363,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,
@@ -457,6 +455,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     workflows,
     agents,
     integrationTools,
+    toolProviders,
     mcpClients,
     inputProcessors,
     outputProcessors,
@@ -505,13 +504,11 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
       const resolvedVisibility = callerAuthorId ? visibility : visibility != null ? 'public' : undefined;
 
-      // Enforce admin model allowlist (Phase 6) before persisting.
-      if (model !== undefined) {
-        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
-        if (policy.active) {
-          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
-        }
-      }
+      // Model policy enforcement is intentionally not done on save: each UI
+      // surface gates its own model picker via ModelPolicyProvider, and the
+      // policy is surface-scoped (builder vs editor). Re-introducing a single
+      // server-side check here would either over-enforce on the editor or
+      // under-enforce on the builder until per-surface enforcement lands.
 
       // Resolve boolean browser shorthand from the UI
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
@@ -538,6 +535,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,
@@ -560,6 +558,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,

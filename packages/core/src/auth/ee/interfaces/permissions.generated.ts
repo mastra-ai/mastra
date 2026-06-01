@@ -275,8 +275,12 @@ export const PERMISSION_PATTERNS = {
   'stored-workspaces:write': 'stored-workspaces:write',
   /** View system info */
   'system:read': 'system:read',
+  /** Delete tool-providers */
+  'tool-providers:delete': 'tool-providers:delete',
   /** View tool-providers */
   'tool-providers:read': 'tool-providers:read',
+  /** Create and modify tool-providers */
+  'tool-providers:write': 'tool-providers:write',
   /** Execute tools */
   'tools:execute': 'tools:execute',
   /** View tools */
@@ -396,7 +400,9 @@ export const PERMISSIONS = [
   'stored-workspaces:read',
   'stored-workspaces:write',
   'system:read',
+  'tool-providers:delete',
   'tool-providers:read',
+  'tool-providers:write',
   'tools:execute',
   'tools:read',
   'vector:delete',
@@ -551,8 +557,12 @@ export const MastraFGAPermissions = {
   STORED_WORKSPACES_WRITE: 'stored-workspaces:write',
   /** View system info */
   SYSTEM_READ: 'system:read',
+  /** Delete tool-providers */
+  TOOL_PROVIDERS_DELETE: 'tool-providers:delete',
   /** View tool-providers */
   TOOL_PROVIDERS_READ: 'tool-providers:read',
+  /** Create and modify tool-providers */
+  TOOL_PROVIDERS_WRITE: 'tool-providers:write',
   /** Execute tools */
   TOOLS_EXECUTE: 'tools:execute',
   /** View tools */
