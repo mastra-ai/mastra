@@ -57,7 +57,7 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
           keepMounted
           className={cn(
             'group/checkbox-indicator flex items-center justify-center text-current',
-            'opacity-0 scale-75 transition-[opacity,transform] duration-150 ease-out-custom',
+            'opacity-0 scale-75 transition-[opacity,transform] duration-200 ease-out-custom',
             'data-[checked]:opacity-100 data-[checked]:scale-100',
             'data-[indeterminate]:opacity-100 data-[indeterminate]:scale-100',
             'data-[starting-style]:opacity-0 data-[starting-style]:scale-75',
@@ -79,8 +79,22 @@ Checkbox.displayName = 'Checkbox';
 function CheckboxIndicatorIcon() {
   return (
     <>
-      <Check className="size-3 stroke-[3.25] group-data-[indeterminate]/checkbox-indicator:hidden" />
-      <Minus className="hidden size-3 stroke-[3.25] group-data-[indeterminate]/checkbox-indicator:block" />
+      <Check
+        className={cn(
+          'size-3 scale-95 stroke-[3.25] transition-[stroke-dashoffset,transform] duration-200 ease-out-custom',
+          '[stroke-dasharray:18] [stroke-dashoffset:18]',
+          'group-data-[checked]/checkbox-indicator:[stroke-dashoffset:0]',
+          'group-data-[checked]/checkbox-indicator:scale-100',
+          'group-data-[indeterminate]/checkbox-indicator:hidden',
+        )}
+      />
+      <Minus
+        className={cn(
+          'hidden size-3 scale-95 stroke-[3.25] transition-transform duration-200 ease-out-custom',
+          'group-data-[indeterminate]/checkbox-indicator:block',
+          'group-data-[indeterminate]/checkbox-indicator:scale-100',
+        )}
+      />
     </>
   );
 }
