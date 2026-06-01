@@ -2345,17 +2345,12 @@ export class Mastra<
     // Get all workflows with default engine type
     const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
 
-    // Collect all active runs for workflows with default engine type
-    const allRuns: WorkflowRuns['runs'] = [];
-    let allTotal = 0;
+    const activeRunsByWorkflow = await Promise.all(
+      defaultEngineWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
+    );
 
-    for (const workflow of defaultEngineWorkflows) {
-      const runningRuns = await workflow.listWorkflowRuns({ status: 'running' });
-      const waitingRuns = await workflow.listWorkflowRuns({ status: 'waiting' });
-
-      allRuns.push(...runningRuns.runs, ...waitingRuns.runs);
-      allTotal += runningRuns.total + waitingRuns.total;
-    }
+    const allRuns = activeRunsByWorkflow.flatMap(activeRuns => activeRuns.runs);
+    const allTotal = activeRunsByWorkflow.reduce((total, activeRuns) => total + activeRuns.total, 0);
 
     return {
       runs: allRuns,
