@@ -23,7 +23,9 @@ test.describe('Dataset Items List - Behavior Tests', () => {
 
     await page.getByRole('button', { name: /Test input 1/ }).click();
 
-    await expect(page.getByText(/Created May/).first()).toBeVisible({ timeout: 5000 });
+    // Items are seeded with the current date, so match any month (e.g. "Created Jun 1") rather than
+    // hardcoding one — the literal /Created May/ broke every run from June onward.
+    await expect(page.getByText(/Created \w+ \d/).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('selecting Delete Items from menu enables selection mode with checkboxes', async ({ page }) => {
