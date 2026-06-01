@@ -79,7 +79,7 @@ export const StreamChatProvider = ({
         payload.clientTools = tools;
       }
       if (instructions !== undefined && instructions.length > 0) {
-        payload.modelSettings = { instructions };
+        payload.modelSettings = { ...payload.modelSettings, instructions };
       }
 
       void sendMessage(payload);
