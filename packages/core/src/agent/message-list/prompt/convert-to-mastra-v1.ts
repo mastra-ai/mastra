@@ -4,7 +4,7 @@
  */
 import type { AssistantContent, ToolResultPart } from '@internal/ai-sdk-v4';
 import type { MastraMessageV1 } from '../../../memory/types';
-import type { MastraDBMessage, MastraMessageContentV2, MastraToolInvocation } from '../../message-list';
+import type { MastraMessageContentV2, MastraDBMessage } from '../../message-list';
 import { attachmentsToParts } from './attachments-to-parts';
 
 const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
@@ -54,21 +54,6 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
     }
   };
 };
-
-const hasTerminalToolOutput = (toolInvocation: MastraToolInvocation) =>
-  (toolInvocation.state === 'result' && 'result' in toolInvocation) ||
-  (toolInvocation.state === 'output-error' && 'errorText' in toolInvocation);
-
-const toToolResultPart = (toolInvocation: MastraToolInvocation): ToolResultPart => {
-  const { toolCallId, toolName } = toolInvocation;
-  return {
-    type: 'tool-result',
-    toolCallId,
-    toolName,
-    result: toolInvocation.state === 'output-error' ? toolInvocation.errorText || '' : toolInvocation.result,
-  };
-};
-
 export function convertToV1Messages(messages: Array<MastraDBMessage>) {
   const v1Messages: MastraMessageV1[] = [];
   const pushOrCombine = makePushOrCombine(v1Messages);
@@ -210,14 +195,22 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
               .filter(ti => ti.toolName !== 'updateWorkingMemory');
 
             // Only create tool-result message if there are actual results
-            const invocationsWithResults = stepInvocations.filter(hasTerminalToolOutput);
+            const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
 
             if (invocationsWithResults.length > 0) {
               pushOrCombine({
                 role: 'tool',
                 ...fields,
                 type: 'tool-result',
-                content: invocationsWithResults.map(toToolResultPart),
+                content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+                  const { toolCallId, toolName, result } = toolInvocation;
+                  return {
+                    type: 'tool-result',
+                    toolCallId,
+                    toolName,
+                    result,
+                  };
+                }),
               });
             }
 
@@ -307,14 +300,22 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
                 });
 
                 // Only create tool-result message if there are actual results
-                const invocationsWithResults = stepInvocations.filter(hasTerminalToolOutput);
+                const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
 
                 if (invocationsWithResults.length > 0) {
                   pushOrCombine({
                     role: 'tool',
                     ...fields,
                     type: 'tool-result',
-                    content: invocationsWithResults.map(toToolResultPart),
+                    content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+                      const { toolCallId, toolName, result } = toolInvocation;
+                      return {
+                        type: 'tool-result',
+                        toolCallId,
+                        toolName,
+                        result,
+                      };
+                    }),
                   });
                 }
               }
@@ -361,14 +362,22 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
           });
 
           // Only create tool-result message if there are actual results
-          const invocationsWithResults = stepInvocations.filter(hasTerminalToolOutput);
+          const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
 
           if (invocationsWithResults.length > 0) {
             pushOrCombine({
               role: 'tool',
               ...fields,
               type: 'tool-result',
-              content: invocationsWithResults.map(toToolResultPart),
+              content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+                const { toolCallId, toolName, result } = toolInvocation;
+                return {
+                  type: 'tool-result',
+                  toolCallId,
+                  toolName,
+                  result,
+                };
+              }),
             });
           }
         }
