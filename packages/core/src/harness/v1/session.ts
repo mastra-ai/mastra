@@ -4,6 +4,7 @@ import { RequestContext } from '@internal/core/request-context';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory, StorageThreadType } from '../../memory';
 import type { DynamicArgument } from '../../types';
+import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
 import type { CloneSessionOptions, SessionConfig } from './session.types';
 
@@ -16,6 +17,7 @@ export class Session {
   readonly #createdAt: Date;
   readonly #lastActivityAt: Date;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
+  readonly #events: EventEmitter;
   // readonly parentSessionId?: string;
   // readonly subagentDepth: number;
 
@@ -32,6 +34,7 @@ export class Session {
     this.#createdAt = config.createdAt;
     this.#lastActivityAt = config.lastActivityAt;
     this.#memory = config.memory;
+    this.#events = config.events;
   }
 
   get id(): string {
@@ -66,8 +69,9 @@ export class Session {
       options: opts.messageLimit !== undefined ? { messageLimit: opts.messageLimit } : undefined,
     });
 
-    return new Session({
-      id: opts.sessionId ?? randomUUID(),
+    const cloneId = opts.sessionId ?? randomUUID();
+    const clone = new Session({
+      id: cloneId,
       ownerId: this.#ownerId,
       threadId: result.thread.id,
       resourceId: result.thread.resourceId,
@@ -76,7 +80,18 @@ export class Session {
       createdAt: result.thread.createdAt,
       lastActivityAt: result.thread.updatedAt,
       memory: this.#memory,
+      events: this.#events.scoped({ sessionId: cloneId }),
     });
+
+    this.#events.emit({
+      type: 'thread_cloned',
+      threadId: clone.threadId,
+      resourceId: clone.resourceId,
+      sourceThreadId: this.#threadId,
+      title: opts.title,
+    });
+
+    return clone;
   }
 
   async getThread(): Promise<StorageThreadType | null> {
@@ -101,7 +116,11 @@ export class Session {
   }
 
   setModelId(modelId: string) {
+    const previousModelId = this.#modelId;
     this.#modelId = modelId;
+    if (modelId !== previousModelId) {
+      this.#events.emit({ type: 'model_changed', modelId, previousModelId });
+    }
   }
 
   getMode(): HarnessMode {
@@ -109,7 +128,11 @@ export class Session {
   }
 
   setMode(mode: HarnessMode) {
+    const previousModeId = this.#mode.id;
     this.#mode = mode;
+    if (mode.id !== previousModeId) {
+      this.#events.emit({ type: 'mode_changed', modeId: mode.id, previousModeId });
+    }
   }
 
   async #buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {

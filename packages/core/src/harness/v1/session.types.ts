@@ -1,5 +1,6 @@
 import type { MastraMemory } from '../../memory';
 import type { DynamicArgument } from '../../types';
+import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
 
 export type CloneSessionOptions = {
@@ -18,6 +19,7 @@ export type CloneSessionOptions = {
 
 export interface SessionConfig {
   memory: MastraMemory | DynamicArgument<MastraMemory>;
+  events: EventEmitter;
   // storage: HarnessStorage;
   /** Identifier of the Harness instance that owns this session. */
   ownerId: string;
