@@ -1,5 +1,5 @@
 import { CodeBlock, CodeEditor, ToolCoinIcon, formatTypeScript } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useEffect, useState } from 'react';
 import { BadgeWrapper } from './badge-wrapper';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
@@ -16,7 +16,7 @@ export interface CodeModeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   toolName: string;
   code: string;
   result?: CodeModeResult;
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   toolCalled?: boolean;
 }
 
