@@ -2717,6 +2717,38 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  async approveToolCallForThread(params: {
+    resourceId: string;
+    threadId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+    const { requestContext, ...rest } = params;
+    return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
+      `/agents/${this.agentId}/approve-tool-call-for-thread`,
+      {
+        method: 'POST',
+        body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      },
+    );
+  }
+
+  async declineToolCallForThread(params: {
+    resourceId: string;
+    threadId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+    const { requestContext, ...rest } = params;
+    return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
+      `/agents/${this.agentId}/decline-tool-call-for-thread`,
+      {
+        method: 'POST',
+        body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      },
+    );
+  }
+
   async declineToolCall(params: {
     runId: string;
     toolCallId: string;

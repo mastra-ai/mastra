@@ -6943,6 +6943,53 @@ export interface PostAgentsAgentIdApproveToolCall_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/approve-tool-call-for-thread
+// ============================================================================
+export type PostAgentsAgentIdApproveToolCallForThread_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdApproveToolCallForThread_Body = {
+  resourceId: string;
+  threadId: string;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  toolCallId: string;
+  format?: string | undefined;
+};
+
+export type PostAgentsAgentIdApproveToolCallForThread_Response = {
+  accepted: true;
+  runId: string;
+  toolCallId?: string | undefined;
+};
+
+export type PostAgentsAgentIdApproveToolCallForThread_Request = Simplify<
+  (PostAgentsAgentIdApproveToolCallForThread_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdApproveToolCallForThread_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdApproveToolCallForThread_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdApproveToolCallForThread_Body
+        ? { body?: PostAgentsAgentIdApproveToolCallForThread_Body }
+        : { body: PostAgentsAgentIdApproveToolCallForThread_Body })
+>;
+
+export interface PostAgentsAgentIdApproveToolCallForThread_RouteContract {
+  pathParams: PostAgentsAgentIdApproveToolCallForThread_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdApproveToolCallForThread_Body;
+  request: PostAgentsAgentIdApproveToolCallForThread_Request;
+  response: PostAgentsAgentIdApproveToolCallForThread_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/decline-tool-call
 // ============================================================================
 export type PostAgentsAgentIdDeclineToolCall_PathParams = {
@@ -6984,6 +7031,53 @@ export interface PostAgentsAgentIdDeclineToolCall_RouteContract {
   request: PostAgentsAgentIdDeclineToolCall_Request;
   response: PostAgentsAgentIdDeclineToolCall_Response;
   responseType: 'stream';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/decline-tool-call-for-thread
+// ============================================================================
+export type PostAgentsAgentIdDeclineToolCallForThread_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdDeclineToolCallForThread_Body = {
+  resourceId: string;
+  threadId: string;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  toolCallId: string;
+  format?: string | undefined;
+};
+
+export type PostAgentsAgentIdDeclineToolCallForThread_Response = {
+  accepted: true;
+  runId: string;
+  toolCallId?: string | undefined;
+};
+
+export type PostAgentsAgentIdDeclineToolCallForThread_Request = Simplify<
+  (PostAgentsAgentIdDeclineToolCallForThread_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdDeclineToolCallForThread_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdDeclineToolCallForThread_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdDeclineToolCallForThread_Body
+        ? { body?: PostAgentsAgentIdDeclineToolCallForThread_Body }
+        : { body: PostAgentsAgentIdDeclineToolCallForThread_Body })
+>;
+
+export interface PostAgentsAgentIdDeclineToolCallForThread_RouteContract {
+  pathParams: PostAgentsAgentIdDeclineToolCallForThread_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdDeclineToolCallForThread_Body;
+  request: PostAgentsAgentIdDeclineToolCallForThread_Request;
+  response: PostAgentsAgentIdDeclineToolCallForThread_Response;
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -84754,7 +84848,9 @@ export interface RouteTypes {
   'POST /agents/:agentId/threads/subscribe': PostAgentsAgentIdThreadsSubscribe_RouteContract;
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
+  'POST /agents/:agentId/approve-tool-call-for-thread': PostAgentsAgentIdApproveToolCallForThread_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
+  'POST /agents/:agentId/decline-tool-call-for-thread': PostAgentsAgentIdDeclineToolCallForThread_RouteContract;
   'POST /agents/:agentId/resume-stream': PostAgentsAgentIdResumeStream_RouteContract;
   'POST /agents/:agentId/approve-tool-call-generate': PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
   'POST /agents/:agentId/decline-tool-call-generate': PostAgentsAgentIdDeclineToolCallGenerate_RouteContract;
@@ -85161,6 +85257,9 @@ export interface Client {
   '/agents/:agentId/approve-tool-call': {
     POST: PostAgentsAgentIdApproveToolCall_RouteContract;
   };
+  '/agents/:agentId/approve-tool-call-for-thread': {
+    POST: PostAgentsAgentIdApproveToolCallForThread_RouteContract;
+  };
   '/agents/:agentId/approve-tool-call-generate': {
     POST: PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
   };
@@ -85172,6 +85271,9 @@ export interface Client {
   };
   '/agents/:agentId/decline-tool-call': {
     POST: PostAgentsAgentIdDeclineToolCall_RouteContract;
+  };
+  '/agents/:agentId/decline-tool-call-for-thread': {
+    POST: PostAgentsAgentIdDeclineToolCallForThread_RouteContract;
   };
   '/agents/:agentId/decline-tool-call-generate': {
     POST: PostAgentsAgentIdDeclineToolCallGenerate_RouteContract;
