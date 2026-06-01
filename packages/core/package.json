@@ -766,7 +766,6 @@
     "execa": "^9.6.1",
     "fastq": "^1.19.1",
     "gray-matter": "^4.0.3",
-    "hono": "^4.12.8",
     "hono-openapi": "^1.3.0",
     "ignore": "^7.0.5",
     "json-schema": "^0.4.0",
@@ -780,6 +779,7 @@
     "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
+    "hono": "^4.12.8",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
