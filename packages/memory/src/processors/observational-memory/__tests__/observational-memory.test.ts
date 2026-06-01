@@ -13630,6 +13630,68 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).toContain('new-after-boundary');
   });
 
+  it('T1-C: historical response messages after an inflated watermark should not replay', async () => {
+    const { messageList, threadId, resourceId } = await createReplayFixture();
+
+    const observedUserAt = new Date('2025-01-01T10:00:00.000Z');
+    const observedResponseAt = new Date('2025-01-01T10:00:01.000Z');
+    const lastObservedAt = new Date('2025-01-01T10:00:02.000Z');
+    const futurePartTimestamp = new Date('2025-01-02T10:00:00.000Z').getTime();
+
+    messageList.add(
+      {
+        id: 'observed-user',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-user' }] },
+        createdAt: observedUserAt,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'watermark-advancer',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'already-observed-watermark',
+          parts: [{ type: 'text', text: 'already-observed-watermark', createdAt: futurePartTimestamp }],
+        },
+        createdAt: lastObservedAt,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'observed-response',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'already-observed-response',
+          parts: [{ type: 'text', text: 'already-observed-response' }],
+        },
+        createdAt: observedResponseAt,
+      } as any,
+      'response',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['watermark-advancer'], lastObservedAt } as any,
+      fallbackCursor: { createdAt: lastObservedAt.toISOString(), id: 'observed-response' },
+    });
+
+    expect(messageList.get.all.db().map((m: any) => m.id)).toEqual([]);
+    expect(getModelVisibleText(messageList)).not.toContain('already-observed-response');
+  });
+
   it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
     const { messageList, threadId, resourceId } = await createReplayFixture();
 

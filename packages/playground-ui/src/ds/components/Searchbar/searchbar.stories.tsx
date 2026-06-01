@@ -8,6 +8,12 @@ const meta: Meta<typeof Searchbar> = {
   parameters: {
     layout: 'centered',
   },
+  argTypes: {
+    variant: {
+      control: { type: 'select' },
+      options: ['default', 'filled', 'outline'],
+    },
+  },
 };
 
 export default meta;
@@ -32,6 +38,31 @@ export const AgentSearch: Story = {
       <Searchbar
         label="Search agents"
         placeholder="Search agents..."
+        onSearch={value => console.log('Search:', value)}
+      />
+    </div>
+  ),
+};
+
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3 w-dropdown-max-height">
+      <Searchbar
+        variant="default"
+        label="Search"
+        placeholder="Default"
+        onSearch={value => console.log('Search:', value)}
+      />
+      <Searchbar
+        variant="filled"
+        label="Search"
+        placeholder="Filled"
+        onSearch={value => console.log('Search:', value)}
+      />
+      <Searchbar
+        variant="outline"
+        label="Search"
+        placeholder="Outline"
         onSearch={value => console.log('Search:', value)}
       />
     </div>
@@ -113,6 +144,41 @@ export const InSidebarContext: Story = {
         <div className="h-8 bg-surface3 rounded" />
         <div className="h-8 bg-surface3 rounded" />
         <div className="h-8 bg-surface3 rounded" />
+      </div>
+    </div>
+  ),
+};
+
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3 w-dropdown-max-height">
+      <Searchbar size="sm" label="Search" placeholder="Small" onSearch={value => console.log('Search:', value)} />
+      <Searchbar size="md" label="Search" placeholder="Medium" onSearch={value => console.log('Search:', value)} />
+      <Searchbar
+        size="default"
+        label="Search"
+        placeholder="Default"
+        onSearch={value => console.log('Search:', value)}
+      />
+      <Searchbar size="lg" label="Search" placeholder="Large" onSearch={value => console.log('Search:', value)} />
+    </div>
+  ),
+};
+
+export const OnDifferentSurfaces: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 w-96">
+      <div className="bg-surface1 p-4 rounded-lg border border-border1">
+        <Searchbar label="Search" placeholder="On bg-surface1" onSearch={value => console.log('Search:', value)} />
+      </div>
+      <div className="bg-surface2 p-4 rounded-lg border border-border1">
+        <Searchbar label="Search" placeholder="On bg-surface2" onSearch={value => console.log('Search:', value)} />
+      </div>
+      <div className="bg-surface3 p-4 rounded-lg border border-border1">
+        <Searchbar label="Search" placeholder="On bg-surface3" onSearch={value => console.log('Search:', value)} />
+      </div>
+      <div className="bg-surface4 p-4 rounded-lg border border-border1">
+        <Searchbar label="Search" placeholder="On bg-surface4" onSearch={value => console.log('Search:', value)} />
       </div>
     </div>
   ),

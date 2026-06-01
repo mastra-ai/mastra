@@ -542,4 +542,44 @@ describe('createToolCallAccuracyScorerCode', () => {
     expect(result.preprocessStepResult?.correctToolCalled).toBe(true);
     expect(result.preprocessStepResult?.correctOrderCalled).toBe(null); // No order checking
   });
+
+  // Regression: with observable memory enabled, tool calls are stored only in
+  // V2 content.parts (no legacy toolInvocations array). Before the fix the
+  // scorer saw zero tools and always returned 0. See issue #17297.
+  test('should score V2 content.parts tool calls (observable memory format)', async () => {
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool' });
+
+    const inputMessages = [createTestMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
+    const output = [
+      {
+        id: 'output-1',
+        role: 'assistant' as const,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'weather-tool',
+                args: { location: 'New York' },
+                result: { temperature: '20°C', condition: 'sunny' },
+              },
+            },
+            { type: 'text', text: 'The weather in New York is 20°C and sunny.' },
+          ],
+          content: 'The weather in New York is 20°C and sunny.',
+        },
+        createdAt: new Date(),
+      },
+    ] as any;
+
+    const run = createAgentTestRun({ inputMessages, output });
+    const result = await scorer.run(run);
+
+    expect(result.score).toBe(1);
+    expect(result.preprocessStepResult?.correctToolCalled).toBe(true);
+    expect(result.preprocessStepResult?.actualTools).toEqual(['weather-tool']);
+  });
 });

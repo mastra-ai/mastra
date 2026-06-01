@@ -88,6 +88,15 @@ vi.mock('@blaxel/core', () => ({
   },
 }));
 
+function restoreBlRegion(value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env.BL_REGION;
+    return;
+  }
+
+  process.env.BL_REGION = value;
+}
+
 describe('BlaxelSandbox', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -134,6 +143,26 @@ describe('BlaxelSandbox', () => {
 
       expect((sandbox as any).image).toBe('custom:latest');
       expect((sandbox as any).memory).toBe(8192);
+    });
+
+    it('uses configured region', () => {
+      const sandbox = new BlaxelSandbox({ region: 'eu-lon-1' });
+
+      expect((sandbox as any).region).toBe('eu-lon-1');
+    });
+
+    it('defaults region to BL_REGION, then auto', () => {
+      const originalBlRegion = process.env.BL_REGION;
+
+      try {
+        process.env.BL_REGION = 'us-pdx-1';
+        expect((new BlaxelSandbox() as any).region).toBe('us-pdx-1');
+
+        delete process.env.BL_REGION;
+        expect((new BlaxelSandbox() as any).region).toBe('auto');
+      } finally {
+        restoreBlRegion(originalBlRegion);
+      }
     });
   });
 
@@ -201,6 +230,59 @@ describe('BlaxelSandbox', () => {
           }),
         }),
       );
+    });
+
+    it('passes configured region to sandbox creation', async () => {
+      const { SandboxInstance } = await import('@blaxel/core');
+      const sandbox = new BlaxelSandbox({ id: 'region-id', region: 'eu-lon-1' });
+
+      await sandbox._start();
+
+      expect(SandboxInstance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          region: 'eu-lon-1',
+        }),
+      );
+    });
+
+    it('passes BL_REGION to sandbox creation when region is not configured', async () => {
+      const { SandboxInstance } = await import('@blaxel/core');
+      const originalBlRegion = process.env.BL_REGION;
+
+      try {
+        process.env.BL_REGION = 'us-was-1';
+        const sandbox = new BlaxelSandbox({ id: 'env-region-id' });
+
+        await sandbox._start();
+
+        expect(SandboxInstance.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            region: 'us-was-1',
+          }),
+        );
+      } finally {
+        restoreBlRegion(originalBlRegion);
+      }
+    });
+
+    it('passes auto to sandbox creation when no region is set', async () => {
+      const { SandboxInstance } = await import('@blaxel/core');
+      const originalBlRegion = process.env.BL_REGION;
+
+      try {
+        delete process.env.BL_REGION;
+        const sandbox = new BlaxelSandbox({ id: 'auto-region-id' });
+
+        await sandbox._start();
+
+        expect(SandboxInstance.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            region: 'auto',
+          }),
+        );
+      } finally {
+        restoreBlRegion(originalBlRegion);
+      }
     });
 
     it('reconnects to existing sandbox by name', async () => {

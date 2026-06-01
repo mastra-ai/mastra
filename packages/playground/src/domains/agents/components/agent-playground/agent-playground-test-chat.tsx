@@ -24,8 +24,14 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
   const { isDirty } = useFormState({ control: ctx.form.control });
   const handleSaveDraft = ctx.handleSaveDraft;
   const isSavingDraft = ctx.isSavingDraft ?? false;
+  const isCodeSource = ctx.isCodeSourceAgent ?? false;
 
   if (!isDirty) return null;
+
+  const saveLabel = isCodeSource ? 'Save to filesystem' : 'Save draft';
+  const message = isCodeSource
+    ? 'You have unsaved changes to the agent configuration. Save to filesystem to ensure the chat uses your latest changes.'
+    : 'You have unsaved changes to the agent configuration. Save your draft to ensure the chat uses your latest changes.';
 
   return (
     <Notice
@@ -36,15 +42,12 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
         handleSaveDraft && (
           <Button type="button" variant="default" size="sm" onClick={() => handleSaveDraft()} disabled={isSavingDraft}>
             <Save className="h-3.5 w-3.5" />
-            {isSavingDraft ? 'Saving...' : 'Save draft'}
+            {isSavingDraft ? 'Saving...' : saveLabel}
           </Button>
         )
       }
     >
-      <Notice.Message>
-        You have unsaved changes to the agent configuration. Save your draft to ensure the chat uses your latest
-        changes.
-      </Notice.Message>
+      <Notice.Message>{message}</Notice.Message>
     </Notice>
   );
 }

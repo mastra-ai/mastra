@@ -111,7 +111,11 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
     const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
     delete jsonSchema.$schema;
 
-    const wrappedSchema = toStandardSchema<{ memory: any }>({
+    // Use the JSON Schema only to describe tool input to the model, and validate with
+    // the schema's own (e.g. Zod-native) validator. Re-wrapping via toStandardSchema()
+    // routed validation through AJV, which uses `new Function`/`eval` and crashes on
+    // runtimes that forbid dynamic code generation such as Cloudflare Workers (#17301).
+    const wrappedJsonSchema: JSONSchema7 = {
       $schema: 'http://json-schema.org/draft-07/schema#',
       type: 'object',
       description: 'The JSON formatted working memory content to store.',
@@ -119,51 +123,37 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
         memory: jsonSchema,
       },
       required: ['memory'],
-    });
+    };
+
+    // Validate the inner `memory` payload with the original schema's validator and
+    // map a successful result back into the `{ memory }` shape the tool expects.
+    const validateMemory = (memoryValue: unknown) => standardSchema['~standard'].validate(memoryValue);
+    type ValidateResult = Awaited<ReturnType<typeof validateMemory>>;
+    const toWrappedResult = (result: ValidateResult) =>
+      'issues' in result && result.issues ? result : { value: { memory: result.value } };
 
     inputSchema = {
       '~standard': {
         version: 1,
         vendor: 'mastra',
         validate: (value: unknown) => {
-          const wrappedResult = wrappedSchema['~standard'].validate(value);
+          // Older models sometimes omit the top-level `memory` wrapper, so fall back to
+          // stripping nulls from the raw value and validating it as the memory payload.
+          const hasWrapper =
+            !!value && typeof value === 'object' && !Array.isArray(value) && 'memory' in (value as object);
+          const memoryValue = hasWrapper
+            ? (value as { memory: unknown }).memory
+            : stripNullsFromOptional(value, jsonSchema as Record<string, unknown>);
 
-          if (wrappedResult instanceof Promise) {
-            return wrappedResult.then(result => {
-              if (!('issues' in result) || !result.issues) {
-                return result;
-              }
-
-              if (!value || typeof value !== 'object' || Array.isArray(value) || 'memory' in value) {
-                return result;
-              }
-
-              return wrappedSchema['~standard'].validate({
-                memory: stripNullsFromOptional(value, jsonSchema as Record<string, unknown>),
-              });
-            });
-          }
-
-          if (!('issues' in wrappedResult) || !wrappedResult.issues) {
-            return wrappedResult;
-          }
-
-          // Older models, especially AI SDK v4 / LanguageModel v1, sometimes return the
-          // inner memory object without the required top-level `memory` wrapper.
-          if (!value || typeof value !== 'object' || Array.isArray(value) || 'memory' in value) {
-            return wrappedResult;
-          }
-
-          return wrappedSchema['~standard'].validate({
-            memory: stripNullsFromOptional(value, jsonSchema as Record<string, unknown>),
-          });
+          const result = validateMemory(memoryValue);
+          return result instanceof Promise ? result.then(toWrappedResult) : toWrappedResult(result);
         },
         jsonSchema: {
-          input: props => wrappedSchema['~standard'].jsonSchema.input(props),
-          output: props => wrappedSchema['~standard'].jsonSchema.output(props),
+          input: () => wrappedJsonSchema,
+          output: () => wrappedJsonSchema,
         },
       },
-    } as StandardSchemaWithJSON<{ memory: any }>;
+    } as unknown as StandardSchemaWithJSON<{ memory: any }>;
   }
 
   // For schema-based working memory, we use merge semantics
