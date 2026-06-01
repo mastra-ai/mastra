@@ -71,6 +71,18 @@ describe('buildManifest', () => {
     expect(manifest.settings?.interactivity?.is_enabled).toBe(true);
   });
 
+  it('includes assistant:write scope by default', () => {
+    const manifest = buildManifest(baseOptions);
+    const scopes = manifest.oauth_config?.scopes?.bot ?? [];
+    expect(scopes).toContain('assistant:write');
+  });
+
+  it('declares assistant_view feature (required by assistant:write scope)', () => {
+    const manifest = buildManifest(baseOptions);
+    expect(manifest.features?.assistant_view).toBeDefined();
+    expect(manifest.features?.assistant_view?.assistant_description).toBeTruthy();
+  });
+
   describe('slash commands', () => {
     it('does not include commands scope without slash commands', () => {
       const manifest = buildManifest(baseOptions);

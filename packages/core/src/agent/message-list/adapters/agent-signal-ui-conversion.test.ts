@@ -52,7 +52,8 @@ describe('agent signal UI conversion', () => {
           type: 'data-system-reminder',
           data: {
             id: 'signal-system-1',
-            type: 'system-reminder',
+            type: 'reactive',
+            tagName: 'system-reminder',
             contents: 'continue',
             createdAt: '2024-01-01T00:00:00.000Z',
             metadata: { reminderType: 'anthropic-prefill-processor-retry' },

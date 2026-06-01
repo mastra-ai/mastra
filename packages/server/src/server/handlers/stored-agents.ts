@@ -1,4 +1,3 @@
-import { assertModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
 
@@ -21,7 +20,6 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
-import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
 import {
   assertReadAccess,
   assertWriteAccess,
@@ -31,7 +29,7 @@ import {
 } from './authorship';
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
-import { prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
+import { enrichOrStripFavorites, prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
 import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
@@ -72,6 +70,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'workflows',
   'agents',
   'integrationTools',
+  'toolProviders',
   'inputProcessors',
   'outputProcessors',
   'memory',
@@ -205,7 +204,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       );
       const annotated = enrichment
         ? visibleAgents.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
-        : visibleAgents;
+        : visibleAgents.map(stripFavoriteFields);
 
       return { ...result, agents: annotated };
     } catch (error) {
@@ -253,11 +252,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       // holder, and the record isn't public/legacy-unowned.
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
-      const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'agent', [agent.id]);
-      if (enrichment) {
-        return { ...agent, isFavorited: enrichment.starredIds.has(agent.id) };
-      }
-      return stripFavoriteFields(agent);
+      return enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
     }
@@ -299,6 +294,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     workflows,
     agents,
     integrationTools,
+    toolProviders,
     mcpClients,
     inputProcessors,
     outputProcessors,
@@ -345,14 +341,11 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
 
-      // Enforce admin model allowlist before persisting. Mirrors UPDATE; when
-      // `model` is omitted the builder applies `defaults.model` server-side.
-      if (model !== undefined) {
-        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
-        if (policy.active) {
-          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
-        }
-      }
+      // Model policy enforcement is intentionally not done on save: each UI
+      // surface gates its own model picker via ModelPolicyProvider, and the
+      // policy is surface-scoped (builder vs editor). Re-introducing a single
+      // server-side check here would either over-enforce on the editor or
+      // under-enforce on the builder until per-surface enforcement lands.
 
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
@@ -370,6 +363,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,
@@ -410,7 +404,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
       }
 
-      return resolved;
+      return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
     } catch (error) {
       return handleError(error, 'Error creating stored agent');
     }
@@ -461,6 +455,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     workflows,
     agents,
     integrationTools,
+    toolProviders,
     mcpClients,
     inputProcessors,
     outputProcessors,
@@ -509,13 +504,11 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
       const resolvedVisibility = callerAuthorId ? visibility : visibility != null ? 'public' : undefined;
 
-      // Enforce admin model allowlist (Phase 6) before persisting.
-      if (model !== undefined) {
-        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
-        if (policy.active) {
-          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
-        }
-      }
+      // Model policy enforcement is intentionally not done on save: each UI
+      // surface gates its own model picker via ModelPolicyProvider, and the
+      // policy is surface-scoped (builder vs editor). Re-introducing a single
+      // server-side check here would either over-enforce on the editor or
+      // under-enforce on the builder until per-surface enforcement lands.
 
       // Resolve boolean browser shorthand from the UI
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
@@ -542,6 +535,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,
@@ -564,6 +558,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,
@@ -623,7 +618,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
       }
 
-      return resolved;
+      return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
     } catch (error) {
       return handleError(error, 'Error updating stored agent');
     }

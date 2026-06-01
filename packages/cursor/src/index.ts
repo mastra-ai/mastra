@@ -5,7 +5,6 @@ import type {
   AgentDefinition,
   AgentOptions as CursorCreateOptions,
   CloudAgentOptions,
-  CursorAgentPlatformOptions,
   InteractionUpdate,
   LocalAgentOptions,
   McpServerConfig,
@@ -115,10 +114,6 @@ export type CursorAgentOptions = {
    * Cursor idempotency key passed only when `agent` is a factory.
    */
   idempotencyKey?: string;
-  /**
-   * Cursor platform options passed only when `agent` is a factory.
-   */
-  platform?: CursorAgentPlatformOptions;
   /**
    * Options forwarded to each Cursor `agent.send()` call. `onDelta` is wrapped
    * so Mastra can collect usage while preserving your callback.
@@ -399,7 +394,6 @@ function toCursorCreateOptions(options: CursorAgentOptions): CursorCreateOptions
   if (options.agents) createOptions.agents = options.agents;
   if (options.agentId) createOptions.agentId = options.agentId;
   if (options.idempotencyKey) createOptions.idempotencyKey = options.idempotencyKey;
-  if (options.platform) createOptions.platform = options.platform;
 
   return createOptions;
 }
@@ -437,7 +431,7 @@ function createCursorUsageCollector() {
 
   return {
     record(update: InteractionUpdate) {
-      if (update.type !== 'turn-ended') {
+      if (update.type !== 'turn-ended' || !update.usage) {
         return;
       }
 

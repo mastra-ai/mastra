@@ -311,6 +311,9 @@ describe('CursorSDKAgent', () => {
 
   it('sums usage across Cursor turn-ended updates', async () => {
     const { sdkAgent } = createSDKAgent(createRun(), [
+      {
+        type: 'turn-ended',
+      } as InteractionUpdate,
       createTurnEndedUpdate({
         inputTokens: 10,
         outputTokens: 4,

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/otel-exporter",
-  "version": "1.1.2-alpha.0",
+  "version": "1.2.1-alpha.0",
   "description": "OpenTelemetry observability exporter for Mastra - supports OTLP traces and logs with multiple cloud providers",
   "type": "module",
   "main": "dist/index.js",
@@ -33,22 +33,22 @@
   "dependencies": {
     "@mastra/observability": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/api-logs": "^0.215.0",
+    "@opentelemetry/api-logs": "^0.218.0",
     "@opentelemetry/core": "^2.7.0",
     "@opentelemetry/resources": "^2.7.0",
-    "@opentelemetry/sdk-logs": "^0.215.0",
+    "@opentelemetry/sdk-logs": "^0.218.0",
     "@opentelemetry/sdk-trace-base": "^2.7.0",
     "@opentelemetry/sdk-trace-node": "^2.7.0",
     "@opentelemetry/semantic-conventions": "^1.40.0"
   },
   "optionalDependencies": {
     "@grpc/grpc-js": "^1.14.3",
-    "@opentelemetry/exporter-logs-otlp-grpc": "^0.215.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.215.0",
-    "@opentelemetry/exporter-logs-otlp-proto": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.215.0",
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.218.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.218.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
     "@opentelemetry/exporter-zipkin": "^2.7.0"
   },
   "devDependencies": {
@@ -66,12 +66,12 @@
   "peerDependencies": {
     "@grpc/grpc-js": "^1.13.4",
     "@mastra/core": ">=1.16.0-0 <2.0.0-0",
-    "@opentelemetry/exporter-logs-otlp-grpc": "^0.215.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.215.0",
-    "@opentelemetry/exporter-logs-otlp-proto": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.215.0",
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.218.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.218.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
     "@opentelemetry/exporter-zipkin": "^2.6.0"
   },
   "peerDependenciesMeta": {

@@ -1,12 +1,25 @@
-import { Button, Skeleton, StatusBadge, Txt, toast } from '@mastra/playground-ui';
+import {
+  Button,
+  DataList,
+  DataListSkeleton,
+  ListSearch,
+  NoDataPageLayout,
+  PageLayout,
+  StatusBadge,
+  Txt,
+  toast,
+} from '@mastra/playground-ui';
+import { useMemo, useState } from 'react';
 import {
   useChannelPlatforms,
   useChannelInstallations,
-  useConnectChannel,
+  useConnectChannelAction,
   useDisconnectChannel,
 } from '../../hooks/use-channels';
 import type { ChannelPlatformInfo } from '../../hooks/use-channels';
 import { PlatformIcon } from './platform-icons';
+
+const COLUMNS = '1fr auto auto';
 
 export interface AgentChannelsProps {
   agentId: string;
@@ -14,68 +27,79 @@ export interface AgentChannelsProps {
 
 export const AgentChannels = ({ agentId }: AgentChannelsProps) => {
   const { data: platforms, isLoading } = useChannelPlatforms();
+  const [search, setSearch] = useState('');
 
-  if (isLoading) {
-    return <Skeleton className="h-full" />;
-  }
-
-  if (!platforms || platforms.length === 0) {
+  if (!isLoading && (!platforms || platforms.length === 0)) {
     return (
-      <div className="py-2 overflow-y-auto h-full px-5">
+      <NoDataPageLayout>
         <Txt variant="ui-sm" className="text-neutral6">
           No channel platforms configured.
         </Txt>
-      </div>
+      </NoDataPageLayout>
     );
   }
 
   return (
-    <div className="py-2 overflow-y-auto h-full px-5 space-y-3">
-      {platforms.map(platform => (
-        <PlatformSection key={platform.id} platform={platform} agentId={agentId} />
-      ))}
-    </div>
+    <PageLayout>
+      <PageLayout.TopArea>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter channels" placeholder="Filter by platform name" />
+        </div>
+      </PageLayout.TopArea>
+
+      <ChannelsList platforms={platforms ?? []} isLoading={isLoading} agentId={agentId} search={search} />
+    </PageLayout>
   );
 };
 
-interface PlatformSectionProps {
+interface ChannelsListProps {
+  platforms: ChannelPlatformInfo[];
+  isLoading: boolean;
+  agentId: string;
+  search: string;
+}
+
+function ChannelsList({ platforms, isLoading, agentId, search }: ChannelsListProps) {
+  const filtered = useMemo(() => {
+    const term = search.toLowerCase();
+    return platforms.filter(platform => platform.name.toLowerCase().includes(term));
+  }, [platforms, search]);
+
+  if (isLoading) {
+    return <DataListSkeleton columns={COLUMNS} />;
+  }
+
+  return (
+    <DataList columns={COLUMNS}>
+      <DataList.Top>
+        <DataList.TopCell className="">Platform</DataList.TopCell>
+        <DataList.TopCell className="justify-end text-right">Status</DataList.TopCell>
+        <DataList.TopCell className="">{''}</DataList.TopCell>
+      </DataList.Top>
+
+      {filtered.length === 0 && search ? <DataList.NoMatch message="No channels match your search" /> : null}
+
+      {filtered.map(platform => (
+        <ChannelRow key={platform.id} platform={platform} agentId={agentId} />
+      ))}
+    </DataList>
+  );
+}
+
+interface ChannelRowProps {
   platform: ChannelPlatformInfo;
   agentId: string;
 }
 
-function PlatformSection({ platform, agentId }: PlatformSectionProps) {
+function ChannelRow({ platform, agentId }: ChannelRowProps) {
   const { data: installations, isLoading } = useChannelInstallations(platform.id, agentId);
-  const { mutate: connect, isPending: isConnecting } = useConnectChannel(platform.id);
+  const { connect, isConnecting } = useConnectChannelAction(platform.id);
   const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel(platform.id);
 
   const activeInstallation = installations?.find(i => i.status === 'active');
 
   const handleConnect = () => {
-    connect(
-      { agentId },
-      {
-        onSuccess: result => {
-          switch (result.type) {
-            case 'oauth':
-              window.location.href = result.authorizationUrl;
-              break;
-            case 'deep_link': {
-              const popup = window.open(result.url, '_blank', 'noopener,noreferrer');
-              if (!popup) {
-                toast.error('Popup blocked — please allow popups and try again');
-              }
-              break;
-            }
-            case 'immediate':
-              // No user action needed — just refetch installations
-              break;
-          }
-        },
-        onError: (err: Error & { body?: { error?: string } }) => {
-          toast.error(err.body?.error || err.message || 'Failed to connect channel');
-        },
-      },
-    );
+    connect(agentId);
   };
 
   const handleDisconnect = () => {
@@ -87,25 +111,35 @@ function PlatformSection({ platform, agentId }: PlatformSectionProps) {
   };
 
   return (
-    <section className="rounded-md border border-border1 p-3">
-      {isLoading ? (
-        <Skeleton className="h-10" />
-      ) : activeInstallation ? (
-        <div className="flex items-center gap-2.5">
+    <DataList.RowStatic>
+      <DataList.Cell className="text-left text-neutral4">
+        <span className="flex items-center gap-3 min-w-0">
           <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <Txt variant="ui-sm" className="text-neutral3 truncate">
-                {platform.name}
+          <span className="flex flex-col min-w-0">
+            <span className="truncate">{platform.name}</span>
+            {activeInstallation ? (
+              <Txt variant="ui-xs" className="text-neutral5 truncate">
+                {activeInstallation.displayName || 'Workspace'}
               </Txt>
-              <StatusBadge variant="success" size="sm">
-                Connected
-              </StatusBadge>
-            </div>
-            <Txt variant="ui-xs" className="text-neutral5 truncate">
-              {activeInstallation.displayName || 'Workspace'}
-            </Txt>
-          </div>
+            ) : null}
+          </span>
+        </span>
+      </DataList.Cell>
+
+      <DataList.Cell className="flex justify-end">
+        {isLoading ? null : activeInstallation ? (
+          <StatusBadge variant="success" size="sm">
+            Connected
+          </StatusBadge>
+        ) : !platform.isConfigured ? (
+          <StatusBadge variant="warning" size="sm">
+            Not configured
+          </StatusBadge>
+        ) : null}
+      </DataList.Cell>
+
+      <DataList.Cell className="justify-end text-right">
+        {isLoading ? null : activeInstallation ? (
           <button
             type="button"
             onClick={handleDisconnect}
@@ -114,24 +148,12 @@ function PlatformSection({ platform, agentId }: PlatformSectionProps) {
           >
             {isDisconnecting ? 'Removing...' : 'Remove'}
           </button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2.5">
-          <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-          <Txt variant="ui-sm" className="text-neutral3 flex-1">
-            {platform.name}
-          </Txt>
-          {!platform.isConfigured ? (
-            <StatusBadge variant="warning" size="sm">
-              Not configured
-            </StatusBadge>
-          ) : (
-            <Button size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
-              {isConnecting ? 'Connecting...' : 'Connect'}
-            </Button>
-          )}
-        </div>
-      )}
-    </section>
+        ) : platform.isConfigured ? (
+          <Button size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
+            {isConnecting ? 'Connecting...' : 'Connect'}
+          </Button>
+        ) : null}
+      </DataList.Cell>
+    </DataList.RowStatic>
   );
 }

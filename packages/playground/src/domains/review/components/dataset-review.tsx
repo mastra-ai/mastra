@@ -535,7 +535,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: toolbar + EntityList + Detail Panel */}
+      {/* Main layout: toolbar + List + Detail Panel */}
       <Columns className={featuredItem ? 'grid-cols-[1fr_1fr]' : ''}>
         <Column>
           <Column.Toolbar>
@@ -828,7 +828,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                 );
 
                 return (
-                  <DataList.Row key={item.id}>
+                  <DataList.RowWrapper key={item.id}>
                     {!showCompleted ? (
                       <DataList.SelectCell
                         checked={selectedItemIds.has(item.id)}
@@ -853,7 +853,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                     >
                       {rowCells}
                     </DataList.RowButton>
-                  </DataList.Row>
+                  </DataList.RowWrapper>
                 );
               })}
             </DataList>
