@@ -13,7 +13,6 @@ export type CloneSessionOptions = {
   modeId?: string;
   mode?: HarnessMode;
   modelId?: string;
-  subagentModelId?: string;
   title?: string;
   metadata?: Record<string, unknown>;
   messageLimit?: number;
@@ -47,7 +46,6 @@ export interface SessionConfig<TState = {}> {
   resourceId: string;
   threadId: string;
   model: string;
-  subagentModelId?: string;
   mode: HarnessMode;
   createdAt: Date;
   lastActivityAt: Date;
