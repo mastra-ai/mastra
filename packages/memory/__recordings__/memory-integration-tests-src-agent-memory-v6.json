@@ -86,7 +86,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Cats are fascinating creatures that have captivated humans for thousands of years. Here are some interesting facts about them:\n\n### Domestication\n- **History**: Cats were domesticated around 9,000 years ago, likely starting in the Middle East, as they began to coexist with humans who were farming.\n- **Behavior**: Unlike dogs, cats were not actively bred for specific traits, which is why they retain many wild behaviors.\n\n### Anatomy\n- **Physical Traits**: Cats have flexible bodies, sharp claws, and specialized teeth for hunting. Their night vision is superior to that of humans, making them excellent nocturnal hunters.\n- **Whiskers**: Cats\u2019 whiskers are highly sensitive and help them navigate their environment.\n\n### Communication\n- **Vocalizations**: Cats communicate with a variety of sounds, such as meowing, purring, hissing, and growling. They also communicate through body language, including tail position and ear orientation.\n\n### Behavior\n- **Hunting**: Cats are natural hunters, and they may bring \"gifts\" to their owners, such as small animals or insects.\n- **Grooming**: Cats spend a significant amount of time grooming themselves, which helps keep their fur clean and regulates body temperature.\n\n### Breeds\n- **Variety**: There are over 70 recognized cat breeds, ranging from the sleek Siamese to the fluffy Maine Coon. Each breed has unique characteristics and temperaments.\n\n### Health\n- **Lifespan**: On average, domestic cats live between 12 to 15 years, but many can live into their twenties with proper care.\n- **Diet**: Cats are obligate carnivores, meaning they require a diet high in meat. A balanced diet is essential for their health.\n\n### Social Behavior\n- **Social Structures**: While often seen as solitary animals, many cats can form social groups, especially when living in feral communities or in homes with multiple cats.\n- **Affection**: Cats can form strong bonds with their human companions and other animals, often displaying affection through head-butting or purring.\n\n### Cultural Significance\n- **Symbolism**: Cats have been featured prominently in various cultures and mythologies, often associated with mystery and independence. In ancient Egypt, they were revered and considered sacred.\n\nWhether you\u2019re a cat owner or simply an admirer, these creatures are known for their unique personalities and charming behaviors!"
+                  "text": "Cats are fascinating creatures that have captivated humans for thousands of years. Here are some interesting facts about them:\n\n### Domestication\n- **History**: Cats were domesticated around 9,000 years ago, likely starting in the Middle East, as they began to coexist with humans who were farming.\n- **Behavior**: Unlike dogs, cats were not actively bred for specific traits, which is why they retain many wild behaviors.\n\n### Anatomy\n- **Physical Traits**: Cats have flexible bodies, sharp claws, and specialized teeth for hunting. Their night vision is superior to that of humans, making them excellent nocturnal hunters.\n- **Whiskers**: Cats’ whiskers are highly sensitive and help them navigate their environment.\n\n### Communication\n- **Vocalizations**: Cats communicate with a variety of sounds, such as meowing, purring, hissing, and growling. They also communicate through body language, including tail position and ear orientation.\n\n### Behavior\n- **Hunting**: Cats are natural hunters, and they may bring \"gifts\" to their owners, such as small animals or insects.\n- **Grooming**: Cats spend a significant amount of time grooming themselves, which helps keep their fur clean and regulates body temperature.\n\n### Breeds\n- **Variety**: There are over 70 recognized cat breeds, ranging from the sleek Siamese to the fluffy Maine Coon. Each breed has unique characteristics and temperaments.\n\n### Health\n- **Lifespan**: On average, domestic cats live between 12 to 15 years, but many can live into their twenties with proper care.\n- **Diet**: Cats are obligate carnivores, meaning they require a diet high in meat. A balanced diet is essential for their health.\n\n### Social Behavior\n- **Social Structures**: While often seen as solitary animals, many cats can form social groups, especially when living in feral communities or in homes with multiple cats.\n- **Affection**: Cats can form strong bonds with their human companions and other animals, often displaying affection through head-butting or purring.\n\n### Cultural Significance\n- **Symbolism**: Cats have been featured prominently in various cultures and mythologies, often associated with mystery and independence. In ancient Egypt, they were revered and considered sacred.\n\nWhether you’re a cat owner or simply an admirer, these creatures are known for their unique personalities and charming behaviors!"
                 }
               ],
               "role": "assistant"
@@ -147,7 +147,7 @@
             },
             {
               "role": "system",
-              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: Tell me about catsMessage from previous conversation at 8:56 PM: Assistant: Cats are fascinating creatures that have captivated humans for thousands of years. Here are some interesting facts about them:\n\n### Domestication\n- **History**: Cats were domesticated around 9,000 years ago, likely starting in the Middle East, as they began to coexist with humans who were farming.\n- **Behavior**: Unlike dogs, cats were not actively bred for specific traits, which is why they retain many wild behaviors.\n\n### Anatomy\n- **Physical Traits**: Cats have flexible bodies, sharp claws, and specialized teeth for hunting. Their night vision is superior to that of humans, making them excellent nocturnal hunters.\n- **Whiskers**: Cats\u2019 whiskers are highly sensitive and help them navigate their environment.\n\n### Communication\n- **Vocalizations**: Cats communicate with a variety of sounds, such as meowing, purring, hissing, and growling. They also communicate through body language, including tail position and ear orientation.\n\n### Behavior\n- **Hunting**: Cats are natural hunters, and they may bring \"gifts\" to their owners, such as small animals or insects.\n- **Grooming**: Cats spend a significant amount of time grooming themselves, which helps keep their fur clean and regulates body temperature.\n\n### Breeds\n- **Variety**: There are over 70 recognized cat breeds, ranging from the sleek Siamese to the fluffy Maine Coon. Each breed has unique characteristics and temperaments.\n\n### Health\n- **Lifespan**: On average, domestic cats live between 12 to 15 years, but many can live into their twenties with proper care.\n- **Diet**: Cats are obligate carnivores, meaning they require a diet high in meat. A balanced diet is essential for their health.\n\n### Social Behavior\n- **Social Structures**: While often seen as solitary animals, many cats can form social groups, especially when living in feral communities or in homes with multiple cats.\n- **Affection**: Cats can form strong bonds with their human companions and other animals, often displaying affection through head-butting or purring.\n\n### Cultural Significance\n- **Symbolism**: Cats have been featured prominently in various cultures and mythologies, often associated with mystery and independence. In ancient Egypt, they were revered and considered sacred.\n\nWhether you\u2019re a cat owner or simply an admirer, these creatures are known for their unique personalities and charming behaviors!\n<end_remembered_from_other_conversation>"
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Mar, 10\nMessage from previous conversation at 8:56 PM: User: Tell me about catsMessage from previous conversation at 8:56 PM: Assistant: Cats are fascinating creatures that have captivated humans for thousands of years. Here are some interesting facts about them:\n\n### Domestication\n- **History**: Cats were domesticated around 9,000 years ago, likely starting in the Middle East, as they began to coexist with humans who were farming.\n- **Behavior**: Unlike dogs, cats were not actively bred for specific traits, which is why they retain many wild behaviors.\n\n### Anatomy\n- **Physical Traits**: Cats have flexible bodies, sharp claws, and specialized teeth for hunting. Their night vision is superior to that of humans, making them excellent nocturnal hunters.\n- **Whiskers**: Cats’ whiskers are highly sensitive and help them navigate their environment.\n\n### Communication\n- **Vocalizations**: Cats communicate with a variety of sounds, such as meowing, purring, hissing, and growling. They also communicate through body language, including tail position and ear orientation.\n\n### Behavior\n- **Hunting**: Cats are natural hunters, and they may bring \"gifts\" to their owners, such as small animals or insects.\n- **Grooming**: Cats spend a significant amount of time grooming themselves, which helps keep their fur clean and regulates body temperature.\n\n### Breeds\n- **Variety**: There are over 70 recognized cat breeds, ranging from the sleek Siamese to the fluffy Maine Coon. Each breed has unique characteristics and temperaments.\n\n### Health\n- **Lifespan**: On average, domestic cats live between 12 to 15 years, but many can live into their twenties with proper care.\n- **Diet**: Cats are obligate carnivores, meaning they require a diet high in meat. A balanced diet is essential for their health.\n\n### Social Behavior\n- **Social Structures**: While often seen as solitary animals, many cats can form social groups, especially when living in feral communities or in homes with multiple cats.\n- **Affection**: Cats can form strong bonds with their human companions and other animals, often displaying affection through head-butting or purring.\n\n### Cultural Significance\n- **Symbolism**: Cats have been featured prominently in various cultures and mythologies, often associated with mystery and independence. In ancient Egypt, they were revered and considered sacred.\n\nWhether you’re a cat owner or simply an admirer, these creatures are known for their unique personalities and charming behaviors!\n<end_remembered_from_other_conversation>"
             },
             {
               "role": "user",
@@ -3027,7 +3027,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The weather in London is sunny, with a temperature of 70\u00b0F and it feels like 65\u00b0F."
+                  "text": "The weather in London is sunny, with a temperature of 70°F and it feels like 65°F."
                 }
               ],
               "role": "assistant"
@@ -6364,7 +6364,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Message number 3 received. What\u2019s next on your mind?"
+                  "text": "Message number 3 received. What’s next on your mind?"
                 }
               ],
               "role": "assistant"
@@ -6670,7 +6670,7 @@
       }
     },
     {
-      "hash": "a125d4538f8b627a",
+      "hash": "8cf91289ee7d1954",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -6680,15 +6680,6 @@
             {
               "role": "system",
               "content": "You are a helpful assistant for testing thread cloning."
-            },
-            {
-              "role": "user",
-              "content": [
-                {
-                  "type": "input_text",
-                  "text": "."
-                }
-              ]
             },
             {
               "type": "item_reference",
@@ -6899,7 +6890,8 @@
           "metadata": {}
         },
         "isStreaming": false
-      }
+      },
+      "lookupHashes": ["a125d4538f8b627a"]
     },
     {
       "hash": "4ae398964c40d816",
@@ -9150,7 +9142,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Message number 3 received. What\u2019s next on your mind?"
+                  "text": "Message number 3 received. What’s next on your mind?"
                 }
               ],
               "role": "assistant"

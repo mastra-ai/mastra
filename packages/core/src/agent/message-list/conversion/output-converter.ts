@@ -7,7 +7,7 @@ import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
-import { ensureAnthropicCompatibleMessages, sanitizeOrphanedToolPairs } from '../utils/provider-compat';
+
 import { getResponseProviderItemKey } from '../utils/response-item-metadata';
 
 /**
@@ -422,10 +422,10 @@ function restoreAssistantFileProviderMetadata(
 
 /**
  * Converts AIV5 UI messages to AIV5 Model messages.
- * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
+ * Handles sanitization, step-start insertion, and provider options restoration.
  *
  * @param messages - AIV5 UI messages to convert
- * @param dbMessages - MastraDB messages used to look up tool call args for Anthropic compatibility
+ * @param dbMessages - MastraDB messages (unused, kept for backward compatibility)
  * @param filterIncompleteToolCalls - Whether to filter out incomplete tool calls
  */
 export function aiV5UIMessagesToAIV5ModelMessages(
@@ -466,12 +466,7 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   }
 
   const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
-  const withMcpContentOutputs = applyMcpContentToolResultOutputs(withFileMetadata, dbMessages);
-
-  // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
-  const anthropicCompat = ensureAnthropicCompatibleMessages(withMcpContentOutputs, dbMessages);
-
-  return filterIncompleteToolCalls ? sanitizeOrphanedToolPairs(anthropicCompat) : anthropicCompat;
+  return applyMcpContentToolResultOutputs(withFileMetadata, dbMessages);
 }
 
 /**

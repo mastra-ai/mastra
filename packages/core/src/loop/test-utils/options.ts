@@ -449,9 +449,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 {
                   "content": [
                     {
-                      "input": {
-                        "value": "value",
-                      },
                       "output": {
                         "type": "text",
                         "value": "result1",
@@ -618,9 +615,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",
@@ -660,9 +654,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",
@@ -821,9 +812,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "input": {
-                                  "value": "value",
-                                },
                                 "output": {
                                   "type": "text",
                                   "value": "result1",
@@ -1001,9 +989,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",
@@ -1057,9 +1042,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",
@@ -1232,9 +1214,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "input": {
-                                  "value": "value",
-                                },
                                 "output": {
                                   "type": "text",
                                   "value": "result1",
@@ -1356,9 +1335,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",
@@ -1412,9 +1388,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",
@@ -1587,9 +1560,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "input": {
-                                  "value": "value",
-                                },
                                 "output": {
                                   "type": "text",
                                   "value": "result1",
@@ -2347,9 +2317,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               {
                 "content": [
                   {
-                    "input": {
-                      "value": "value",
-                    },
                     "output": {
                       "type": "text",
                       "value": "result1",
@@ -8519,9 +8486,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",
@@ -8552,9 +8516,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",
@@ -8753,9 +8714,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",
@@ -8786,9 +8744,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
-                          },
                           "output": {
                             "type": "text",
                             "value": "result1",

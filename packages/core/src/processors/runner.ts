@@ -18,6 +18,11 @@ import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage } from '../stream/types';
 import {
+  sanitizeOrphanedToolPairs,
+  anthropicToolResultInput,
+  geminiEnsureFirstUserMessage,
+} from './provider-history-compat';
+import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
   summarizeProcessorResultForSpan,
@@ -1393,6 +1398,15 @@ export class ProcessorRunner {
 
     let currentPrompt = args.prompt;
     let cachedResponse: CachedLLMStepResponse | undefined;
+
+    // Auto-apply built-in compat rules before user-configured processors.
+    // Each rule is a no-op for non-matching providers.
+    for (const rule of [geminiEnsureFirstUserMessage, sanitizeOrphanedToolPairs, anthropicToolResultInput]) {
+      const result = rule.applyToPrompt!({ prompt: currentPrompt, model: args.model });
+      if (result) {
+        currentPrompt = result;
+      }
+    }
 
     for (const processorOrWorkflow of this.inputProcessors) {
       // Workflows do not currently participate in processLLMRequest.

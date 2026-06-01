@@ -584,19 +584,15 @@ describe('MessageList V5 Support', () => {
         expect(prompt).toHaveLength(0);
       });
 
-      it('prompt() should ensure proper message ordering for Gemini compatibility', () => {
+      it('prompt() should return assistant-only messages without injecting user placeholder', () => {
         const list = new MessageList({ threadId, resourceId });
         list.add({ role: 'assistant', content: 'I am ready to help' }, 'response');
 
         const prompt = list.get.all.aiV5.prompt();
 
-        // Should have 2 messages: injected user at start, assistant (no user at end)
-        expect(prompt).toHaveLength(2);
+        // Gemini compat is now handled by the ProcessorRunner, not MessageList
+        expect(prompt).toHaveLength(1);
         expect(prompt[0]).toMatchObject({
-          role: 'user',
-          content: '.',
-        });
-        expect(prompt[1]).toMatchObject({
           role: 'assistant',
           content: [{ type: 'text', text: 'I am ready to help' }],
         });
@@ -1196,15 +1192,12 @@ describe('MessageList V5 Support', () => {
       const v4Prompt = list.get.all.aiV4.prompt();
       const v5Prompt = list.get.all.aiV5.prompt();
 
-      // Should add user message before assistant for Gemini compatibility
-      // Both V4 and V5 use same behavior now (prepend only, no append)
-      expect(v4Prompt).toHaveLength(2);
-      expect(v4Prompt[0].role).toBe('user');
-      expect(v4Prompt[1].role).toBe('assistant');
+      // Gemini compat is now handled by ProcessorRunner, not MessageList
+      expect(v4Prompt).toHaveLength(1);
+      expect(v4Prompt[0].role).toBe('assistant');
 
-      expect(v5Prompt).toHaveLength(2);
-      expect(v5Prompt[0].role).toBe('user');
-      expect(v5Prompt[1].role).toBe('assistant');
+      expect(v5Prompt).toHaveLength(1);
+      expect(v5Prompt[0].role).toBe('assistant');
     });
 
     it('should handle tool invocations with missing fields gracefully', () => {

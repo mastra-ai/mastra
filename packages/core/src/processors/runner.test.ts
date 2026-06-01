@@ -545,7 +545,7 @@ describe('ProcessorRunner', () => {
       const result = await runner.runOutputProcessors(messageList);
 
       const messages = await result.get.all.prompt();
-      expect(messages).toHaveLength(2);
+      expect(messages).toHaveLength(1);
 
       const assistantMessage = messages.find(m => m.role === 'assistant');
       expect(assistantMessage).toBeDefined();
@@ -619,7 +619,7 @@ describe('ProcessorRunner', () => {
       const result = await runner.runOutputProcessors(messageList);
       const messages = await result.get.all.prompt();
 
-      expect(messages).toHaveLength(2);
+      expect(messages).toHaveLength(1);
 
       const assistantMessage = messages.find(m => m.role === 'assistant');
       expect(assistantMessage).toBeDefined();

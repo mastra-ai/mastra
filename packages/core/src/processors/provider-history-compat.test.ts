@@ -3,10 +3,14 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import {
+  sanitizeOrphanedToolPairs,
   anthropicStripForeignReasoningContent,
+  anthropicToolResultInput,
   cerebrasStripReasoningContent,
+  geminiEnsureFirstUserMessage,
   isMaybeAnthropic,
   isMaybeCerebras,
+  isMaybeGoogle,
   ProviderHistoryCompat,
 } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
@@ -520,6 +524,121 @@ describe('cerebrasStripReasoningContent', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// isMaybeGoogle
+// ---------------------------------------------------------------------------
+
+describe('isMaybeGoogle', () => {
+  it('matches google provider object', () => {
+    expect(isMaybeGoogle({ provider: 'google', modelId: 'gemini-2.0-flash' })).toBe(true);
+    expect(isMaybeGoogle({ provider: 'google.generativeai', modelId: 'gemini-2.5-flash' })).toBe(true);
+  });
+
+  it('matches google/ gateway prefix in string form', () => {
+    expect(isMaybeGoogle('google/gemini-2.0-flash')).toBe(true);
+  });
+
+  it('matches google/ gateway prefix in modelId', () => {
+    expect(isMaybeGoogle({ provider: 'openai-compatible.chat', modelId: 'google/gemini-2.0-flash' })).toBe(true);
+  });
+
+  it('does not match non-google providers', () => {
+    expect(isMaybeGoogle({ provider: 'openai.chat', modelId: 'gpt-4o' })).toBe(false);
+    expect(isMaybeGoogle({ provider: 'anthropic.messages', modelId: 'claude-haiku-4-5-20251001' })).toBe(false);
+    expect(isMaybeGoogle({ provider: 'cerebras.chat', modelId: 'zai-glm-4.7' })).toBe(false);
+  });
+
+  it('does not match null/undefined/function', () => {
+    expect(isMaybeGoogle(null)).toBe(false);
+    expect(isMaybeGoogle(undefined)).toBe(false);
+    expect(isMaybeGoogle(() => {})).toBe(false);
+  });
+
+  it('matches inside a fallback array', () => {
+    expect(isMaybeGoogle([{ model: { provider: 'google', modelId: 'gemini-2.0-flash' } }])).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// geminiEnsureFirstUserMessage
+// ---------------------------------------------------------------------------
+
+describe('geminiEnsureFirstUserMessage', () => {
+  it('inserts a user message when first non-system is assistant on Google', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] },
+    ];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'google', modelId: 'gemini-2.0-flash' },
+    });
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(3);
+    expect(result![0]!.role).toBe('system');
+    expect(result![1]!.role).toBe('user');
+    expect((result![1] as any).content).toEqual([{ type: 'text', text: '.' }]);
+    expect(result![2]!.role).toBe('assistant');
+  });
+
+  it('returns undefined when first non-system is already user', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'hey' }] },
+    ];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'google', modelId: 'gemini-2.0-flash' },
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for non-Google models', () => {
+    const prompt: LanguageModelV2Prompt = [{ role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] }];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'openai.chat', modelId: 'gpt-4o' },
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for system-only prompts', () => {
+    const prompt: LanguageModelV2Prompt = [{ role: 'system', content: 'sys' }];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'google', modelId: 'gemini-2.0-flash' },
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for empty prompts', () => {
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt: [],
+      model: { provider: 'google', modelId: 'gemini-2.0-flash' },
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('handles assistant as very first message (no system)', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    ];
+    const result = geminiEnsureFirstUserMessage.applyToPrompt!({
+      prompt,
+      model: { provider: 'google.generativeai', modelId: 'gemini-2.5-flash' },
+    });
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(3);
+    expect(result![0]!.role).toBe('user');
+    expect(result![1]!.role).toBe('assistant');
+    expect(result![2]!.role).toBe('user');
+  });
+});
+
 describe('ProviderHistoryCompat.processLLMRequest', () => {
   it('strips reasoning parts from the prompt on cerebras', async () => {
     const handler = new ProviderHistoryCompat();
@@ -564,18 +683,50 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
           },
         ],
       },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call_1',
+            toolName: 'search',
+            output: { type: 'text', value: 'results' },
+          },
+        ],
+      },
     ];
     const args = makeRequestArgs(prompt, { provider: 'cerebras.chat', modelId: 'zai-glm-4.7' });
     expect(await handler.processLLMRequest(args)).toBeUndefined();
   });
 
-  it('returns undefined for non-cerebras models even if reasoning is present', async () => {
+  it('returns undefined for non-cerebras/non-google models even if reasoning is present', async () => {
     const handler = new ProviderHistoryCompat();
     const args = makeRequestArgs(promptWithReasoning(), {
       provider: 'openai.chat',
       modelId: 'gpt-4o',
     });
     expect(await handler.processLLMRequest(args)).toBeUndefined();
+  });
+
+  it('inserts user message for Google model when first non-system is assistant', async () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'system', content: 'sys' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] },
+    ];
+    const args = makeRequestArgs(prompt, {
+      provider: 'google',
+      modelId: 'gemini-2.0-flash',
+    });
+
+    const result = await handler.processLLMRequest(args);
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    const p = (result as { prompt: LanguageModelV2Prompt }).prompt;
+    expect(p).toHaveLength(3);
+    expect(p[0]!.role).toBe('system');
+    expect(p[1]!.role).toBe('user');
+    expect(p[2]!.role).toBe('assistant');
   });
 
   it('strips reasoning when a generic provider object has a cerebras-prefixed modelId', async () => {
@@ -630,5 +781,355 @@ describe('ProcessorRunner.runProcessLLMRequest', () => {
 
     const assistant = result.prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sanitizeOrphanedToolPairs
+// ---------------------------------------------------------------------------
+
+function assistantWithToolCallsV2(...callIds: string[]): LanguageModelV2Prompt[number] {
+  return {
+    role: 'assistant' as const,
+    content: callIds.map(toolCallId => ({
+      type: 'tool-call' as const,
+      toolCallId,
+      toolName: 'fetch',
+      input: { url: `https://example.com/${toolCallId}` },
+    })),
+  };
+}
+
+function toolMessageV2(...callIds: string[]): LanguageModelV2Prompt[number] {
+  return {
+    role: 'tool' as const,
+    content: callIds.map(toolCallId => ({
+      type: 'tool-result' as const,
+      toolCallId,
+      toolName: 'fetch',
+      output: { type: 'text' as const, value: `result-${toolCallId}` },
+    })),
+  };
+}
+
+const anthropicModel = { provider: 'anthropic.messages', modelId: 'claude-haiku-4-5-20251001' };
+const openaiModel = { provider: 'openai.chat', modelId: 'gpt-4o' };
+
+describe('sanitizeOrphanedToolPairs', () => {
+  it('runs for all providers including non-Anthropic models', () => {
+    const prompt: LanguageModelV2Prompt = [
+      assistantWithToolCallsV2('orphan'),
+      { role: 'user', content: [{ type: 'text', text: 'next' }] },
+    ];
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, openaiModel));
+    expect(result).toEqual([{ role: 'user', content: [{ type: 'text', text: 'next' }] }]);
+  });
+
+  it('returns undefined when no orphans exist', () => {
+    const prompt: LanguageModelV2Prompt = [assistantWithToolCallsV2('A'), toolMessageV2('A')];
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    expect(result).toBeUndefined();
+  });
+
+  it('drops a tool_result with no preceding tool_use', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      toolMessageV2('orphan-A'),
+      { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+    ];
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    expect(result).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+    ]);
+  });
+
+  it('drops an assistant message that contains only an orphan tool_use', () => {
+    const prompt: LanguageModelV2Prompt = [
+      assistantWithToolCallsV2('lonely-A'),
+      { role: 'user', content: [{ type: 'text', text: 'next question' }] },
+    ];
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    expect(result).toEqual([{ role: 'user', content: [{ type: 'text', text: 'next question' }] }]);
+  });
+
+  it('keeps text on an assistant message after dropping its orphan tool_use', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'thinking out loud' },
+          { type: 'tool-call', toolCallId: 'orphan', toolName: 'fetch', input: {} },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'next' }] },
+    ];
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    expect(result).toEqual([
+      { role: 'assistant', content: [{ type: 'text', text: 'thinking out loud' }] },
+      { role: 'user', content: [{ type: 'text', text: 'next' }] },
+    ]);
+  });
+
+  it('keeps matched call and drops orphan in a parallel tool group', () => {
+    const prompt: LanguageModelV2Prompt = [assistantWithToolCallsV2('A', 'B'), toolMessageV2('A')];
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    expect(result).toEqual([assistantWithToolCallsV2('A'), toolMessageV2('A')]);
+  });
+
+  it('drops orphan tool_results in a tool message with a mix of valid and orphan ids', () => {
+    const prompt: LanguageModelV2Prompt = [assistantWithToolCallsV2('A'), toolMessageV2('A', 'B')];
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    expect(result).toEqual([assistantWithToolCallsV2('A'), toolMessageV2('A')]);
+  });
+
+  it('preserves a deferred provider-executed tool_use with no matching tool_result', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'srv-deferred',
+            toolName: 'web_search',
+            input: { query: 'x' },
+            providerExecuted: true,
+          },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'continue' }] },
+    ];
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    expect(result).toBeUndefined();
+  });
+
+  it('preserves inline provider-executed tool_result on assistant content', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'srv-1', toolName: 'web_search', input: { q: 'x' } } as any,
+          {
+            type: 'tool-result',
+            toolCallId: 'srv-1',
+            toolName: 'web_search',
+            output: { type: 'text', value: 'results' },
+          },
+          { type: 'text', text: 'done' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'next' }] },
+    ];
+    const result = sanitizeOrphanedToolPairs.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    expect(result).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anthropicToolResultInput
+// ---------------------------------------------------------------------------
+
+describe('anthropicToolResultInput', () => {
+  it('is a no-op for non-Anthropic models', () => {
+    const prompt: LanguageModelV2Prompt = [assistantWithToolCallsV2('A'), toolMessageV2('A')];
+    const result = anthropicToolResultInput.applyToPrompt!(makeRequestArgs(prompt, openaiModel));
+    expect(result).toBeUndefined();
+  });
+
+  it('is a no-op when there are no tool-result parts', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+    ];
+    const result = anthropicToolResultInput.applyToPrompt!(makeRequestArgs(prompt, anthropicModel));
+    expect(result).toBeUndefined();
+  });
+
+  it('adds input to tool-result parts from matching tool-call args', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'fetch this' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'fetch', input: { url: 'https://example.com' } },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'fetch', output: { type: 'text', value: 'ok' } },
+        ],
+      },
+    ];
+    const result = anthropicToolResultInput.applyToPrompt!(makeRequestArgs(prompt, anthropicModel))!;
+    expect(result).toBeDefined();
+    const toolMsg = result.find(m => m.role === 'tool')!;
+    const toolResult = (toolMsg.content as any[])[0];
+    expect(toolResult.input).toEqual({ url: 'https://example.com' });
+  });
+
+  it('adds input: {} when tool-call is not found in prompt', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'continue' }] },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'unknown-call', toolName: 'fetch', output: { type: 'text', value: 'ok' } },
+        ],
+      },
+    ];
+    const result = anthropicToolResultInput.applyToPrompt!(makeRequestArgs(prompt, anthropicModel))!;
+    expect(result).toBeDefined();
+    const toolMsg = result.find(m => m.role === 'tool')!;
+    const toolResult = (toolMsg.content as any[])[0];
+    expect(toolResult.input).toEqual({});
+  });
+
+  it('handles multiple tool calls with different args', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'do things' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'tool-a', input: { param1: 'value1' } },
+          { type: 'tool-call', toolCallId: 'call-2', toolName: 'tool-b', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'tool-a', output: { type: 'text', value: 'r1' } },
+          { type: 'tool-result', toolCallId: 'call-2', toolName: 'tool-b', output: { type: 'text', value: 'r2' } },
+        ],
+      },
+    ];
+    const result = anthropicToolResultInput.applyToPrompt!(makeRequestArgs(prompt, anthropicModel))!;
+    const toolMsg = result.find(m => m.role === 'tool')!;
+    const parts = toolMsg.content as any[];
+    expect(parts[0].input).toEqual({ param1: 'value1' });
+    expect(parts[1].input).toEqual({});
+  });
+
+  it('enriches tool-result in assistant messages (inline provider results)', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'search' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'srv-1',
+            toolName: 'web_search',
+            input: { query: 'test' },
+            providerExecuted: true,
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'srv-1',
+            toolName: 'web_search',
+            output: { type: 'text', value: 'found' },
+          },
+          { type: 'text', text: 'here is what I found' },
+        ],
+      },
+    ];
+    const result = anthropicToolResultInput.applyToPrompt!(makeRequestArgs(prompt, anthropicModel))!;
+    const assistantMsg = result.find(m => m.role === 'assistant')!;
+    const toolResult = (assistantMsg.content as any[]).find((p: any) => p.type === 'tool-result');
+    expect(toolResult.input).toEqual({ query: 'test' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ProcessorRunner auto-applies Anthropic compat rules
+// ---------------------------------------------------------------------------
+
+describe('ProcessorRunner — Anthropic compat auto-injection', () => {
+  it('auto-applies anthropicToolResultInput for Anthropic models', async () => {
+    const runner = new ProcessorRunner({
+      inputProcessors: [],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'fetch' }] },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'c1', toolName: 'fetch', input: { url: 'https://x.com' } }],
+      },
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'c1', toolName: 'fetch', output: { type: 'text', value: 'ok' } }],
+      },
+    ];
+
+    const result = await runner.runProcessLLMRequest({
+      prompt,
+      model: anthropicModel,
+      stepNumber: 0,
+      steps: [],
+    });
+
+    const toolMsg = result.prompt.find(m => m.role === 'tool')!;
+    const toolResult = (toolMsg.content as any[])[0];
+    expect(toolResult.input).toEqual({ url: 'https://x.com' });
+  });
+
+  it('does NOT add input for non-Anthropic models', async () => {
+    const runner = new ProcessorRunner({
+      inputProcessors: [],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'fetch' }] },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'c1', toolName: 'fetch', input: { url: 'https://x.com' } }],
+      },
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'c1', toolName: 'fetch', output: { type: 'text', value: 'ok' } }],
+      },
+    ];
+
+    const result = await runner.runProcessLLMRequest({
+      prompt,
+      model: openaiModel,
+      stepNumber: 0,
+      steps: [],
+    });
+
+    const toolMsg = result.prompt.find(m => m.role === 'tool')!;
+    const toolResult = (toolMsg.content as any[])[0];
+    expect(toolResult.input).toBeUndefined();
+  });
+
+  it('auto-applies sanitizeOrphanedToolPairs for all models (including non-Anthropic)', async () => {
+    const runner = new ProcessorRunner({
+      inputProcessors: [],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    const prompt: LanguageModelV2Prompt = [
+      assistantWithToolCallsV2('orphan'),
+      { role: 'user', content: [{ type: 'text', text: 'next' }] },
+    ];
+
+    const result = await runner.runProcessLLMRequest({
+      prompt,
+      model: openaiModel,
+      stepNumber: 0,
+      steps: [],
+    });
+
+    // Orphan tool call should be removed even for OpenAI
+    expect(result.prompt).toEqual([{ role: 'user', content: [{ type: 'text', text: 'next' }] }]);
   });
 });
