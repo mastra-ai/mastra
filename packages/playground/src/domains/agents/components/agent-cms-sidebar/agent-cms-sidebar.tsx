@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { isActive } from './agent-cms-is-active';
-import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
+import { AGENT_CMS_SECTIONS, getCodeAgentOverrideSections } from './agent-cms-sections';
 import type { AgentCmsSection } from './agent-cms-sections';
 import { useSidebarDescriptions } from './use-sidebar-descriptions';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
@@ -32,13 +32,13 @@ interface AgentCmsSidebarProps {
 }
 
 export function AgentCmsSidebar({ basePath, currentPath, versionId }: AgentCmsSidebarProps) {
-  const { form, isCodeAgentOverride } = useAgentEditFormContext();
+  const { form, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
   const descriptions = useSidebarDescriptions(form.control);
   const features = useBuilderAgentFeatures();
   const sections = useMemo(() => {
-    const base = isCodeAgentOverride ? CODE_AGENT_OVERRIDE_SECTIONS : AGENT_CMS_SECTIONS;
+    const base = isCodeAgentOverride ? getCodeAgentOverrideSections(editorConfig) : AGENT_CMS_SECTIONS;
     return filterByFeatures(base, features);
-  }, [isCodeAgentOverride, features]);
+  }, [isCodeAgentOverride, editorConfig, features]);
 
   return (
     <div className="h-full flex flex-col">
