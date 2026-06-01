@@ -4,6 +4,7 @@ import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
 import { ruleGroupSchema } from './rule-group';
 import { workspaceSnapshotConfigSchema } from './stored-workspaces';
+import { toolProvidersSchema } from './tool-providers';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -267,6 +268,11 @@ const snapshotConfigSchema = z.object({
   integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  toolProviders: conditionalFieldSchema(toolProvidersSchema)
+    .optional()
+    .describe(
+      'Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field.',
+    ),
   mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
@@ -408,6 +414,11 @@ export const storedAgentSchema = z.object({
   integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  toolProviders: conditionalFieldSchema(toolProvidersSchema)
+    .optional()
+    .describe(
+      'Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field.',
+    ),
   mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),

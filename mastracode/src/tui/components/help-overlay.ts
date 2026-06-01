@@ -9,6 +9,8 @@ export interface HelpTextOptions {
   modes: number;
   /** User-defined custom slash commands */
   customSlashCommands: SlashCommandMetadata[];
+  /** Active direct shell passthrough mode label */
+  shellModeLabel?: string;
 }
 
 interface HelpEntry {
@@ -112,7 +114,14 @@ export function buildHelpText(options: HelpTextOptions): string {
     sections.push(renderSection('Custom Commands', customEntries));
   }
 
-  sections.push(renderSection('Shell', [{ key: '!<cmd>', description: 'Run a shell command' }]));
+  sections.push(
+    renderSection('Shell', [
+      {
+        key: '!<cmd>',
+        description: `Run a direct shell command (${options.shellModeLabel ?? 'default shell'})`,
+      },
+    ]),
+  );
 
   sections.push(renderSection('Keyboard Shortcuts', getShortcuts(options.modes)));
 
