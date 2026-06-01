@@ -763,12 +763,18 @@ export class AgentBrowser extends MastraBrowser {
         );
       }
 
+      const timeout = input.timeout ?? this.defaultTimeout;
+
       await locator.click({
         button: input.button ?? 'left',
         clickCount: input.clickCount ?? 1,
         modifiers: input.modifiers,
-        timeout: this.defaultTimeout,
+        timeout,
       });
+
+      if (input.waitUntil) {
+        await page.waitForLoadState(input.waitUntil, { timeout });
+      }
 
       return {
         success: true,
@@ -865,6 +871,12 @@ export class AgentBrowser extends MastraBrowser {
       const page = await this.getPage(threadId);
       await page.keyboard.press(input.key);
 
+      if (input.waitUntil) {
+        await page.waitForLoadState(input.waitUntil, {
+          timeout: input.timeout ?? this.defaultTimeout,
+        });
+      }
+
       return {
         success: true,
         url: page.url(),
@@ -900,9 +912,13 @@ export class AgentBrowser extends MastraBrowser {
       if (input.label) selectValue.label = input.label;
       if (input.index !== undefined) selectValue.index = input.index;
 
-      const selected = await locator.selectOption(selectValue, {
-        timeout: this.defaultTimeout,
-      });
+      const timeout = input.timeout ?? this.defaultTimeout;
+
+      const selected = await locator.selectOption(selectValue, { timeout });
+
+      if (input.waitUntil) {
+        await page.waitForLoadState(input.waitUntil, { timeout });
+      }
 
       return {
         success: true,

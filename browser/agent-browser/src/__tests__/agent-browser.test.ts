@@ -16,6 +16,7 @@ const { mockPage, mockLocator, mockManager } = vi.hoisted(() => {
     viewportSize: () => ({ width: 1280, height: 720 }),
     content: vi.fn().mockResolvedValue('<html></html>'),
     waitForTimeout: vi.fn(),
+    waitForLoadState: vi.fn(),
     keyboard: {
       press: vi.fn(),
       type: vi.fn(),
@@ -384,6 +385,18 @@ describe('AgentBrowser', () => {
 
       expect(mockLocator.click).toHaveBeenCalledWith(expect.objectContaining({ button: 'right' }));
     });
+
+    it('waits for load state when waitUntil is set', async () => {
+      await browser.click({ ref: '@e1', waitUntil: 'networkidle' });
+
+      expect(mockPage.waitForLoadState).toHaveBeenCalledWith('networkidle', expect.any(Object));
+    });
+
+    it('does not wait for load state when waitUntil is omitted', async () => {
+      await browser.click({ ref: '@e1' });
+
+      expect(mockPage.waitForLoadState).not.toHaveBeenCalled();
+    });
   });
 
   describe('type', () => {
@@ -425,6 +438,18 @@ describe('AgentBrowser', () => {
 
       expect(mockPage.keyboard.press).toHaveBeenCalledWith('Control+a');
     });
+
+    it('waits for load state when waitUntil is set', async () => {
+      await browser.press({ key: 'Enter', waitUntil: 'load' });
+
+      expect(mockPage.waitForLoadState).toHaveBeenCalledWith('load', expect.any(Object));
+    });
+
+    it('does not wait for load state when waitUntil is omitted', async () => {
+      await browser.press({ key: 'Enter' });
+
+      expect(mockPage.waitForLoadState).not.toHaveBeenCalled();
+    });
   });
 
   describe('select', () => {
@@ -439,6 +464,18 @@ describe('AgentBrowser', () => {
       expect(result.success).toBe(true);
       expect(result.selected).toEqual(['value1']);
       expect(mockLocator.selectOption).toHaveBeenCalled();
+    });
+
+    it('waits for load state when waitUntil is set', async () => {
+      await browser.select({ ref: '@e1', value: 'option1', waitUntil: 'domcontentloaded' });
+
+      expect(mockPage.waitForLoadState).toHaveBeenCalledWith('domcontentloaded', expect.any(Object));
+    });
+
+    it('does not wait for load state when waitUntil is omitted', async () => {
+      await browser.select({ ref: '@e1', value: 'option1' });
+
+      expect(mockPage.waitForLoadState).not.toHaveBeenCalled();
     });
   });
 

@@ -87,6 +87,16 @@ describe('clickInputSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts ref with waitUntil', () => {
+    const result = clickInputSchema.safeParse({ ref: '@e5', waitUntil: 'networkidle' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid waitUntil values', () => {
+    const result = clickInputSchema.safeParse({ ref: '@e5', waitUntil: 'invalid' });
+    expect(result.success).toBe(false);
+  });
+
   it('requires ref', () => {
     const result = clickInputSchema.safeParse({});
     expect(result.success).toBe(false);
@@ -136,6 +146,16 @@ describe('pressInputSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts key with waitUntil', () => {
+    const result = pressInputSchema.safeParse({ key: 'Enter', waitUntil: 'load' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid waitUntil values', () => {
+    const result = pressInputSchema.safeParse({ key: 'Enter', waitUntil: 'invalid' });
+    expect(result.success).toBe(false);
+  });
+
   it('requires key', () => {
     const result = pressInputSchema.safeParse({});
     expect(result.success).toBe(false);
@@ -156,6 +176,16 @@ describe('selectInputSchema', () => {
   it('accepts ref with index', () => {
     const result = selectInputSchema.safeParse({ ref: '@e5', index: 0 });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts ref with value and waitUntil', () => {
+    const result = selectInputSchema.safeParse({ ref: '@e5', value: 'option1', waitUntil: 'domcontentloaded' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid waitUntil values', () => {
+    const result = selectInputSchema.safeParse({ ref: '@e5', value: 'option1', waitUntil: 'invalid' });
+    expect(result.success).toBe(false);
   });
 
   it('requires ref', () => {
