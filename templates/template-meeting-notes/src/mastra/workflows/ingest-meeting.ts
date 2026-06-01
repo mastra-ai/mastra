@@ -14,10 +14,7 @@ const fetchTranscriptStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { fetchZoomTranscript } = await import('../tools/zoom');
-    const result = await fetchZoomTranscript.execute!(
-      { meetingId: inputData.meetingId },
-      {} as any,
-    );
+    const result = await fetchZoomTranscript.execute!({ meetingId: inputData.meetingId }, {} as any);
     return { meetingId: inputData.meetingId, transcript: (result as { transcript: string }).transcript };
   },
 });

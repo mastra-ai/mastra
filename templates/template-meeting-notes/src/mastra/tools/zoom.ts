@@ -29,9 +29,7 @@ async function getZoomAccessToken(): Promise<string> {
   const clientId = process.env.ZOOM_CLIENT_ID;
   const clientSecret = process.env.ZOOM_CLIENT_SECRET;
   if (!accountId || !clientId || !clientSecret) {
-    throw new Error(
-      'Zoom S2S OAuth not configured. Set ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID and ZOOM_CLIENT_SECRET.',
-    );
+    throw new Error('Zoom S2S OAuth not configured. Set ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID and ZOOM_CLIENT_SECRET.');
   }
 
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');

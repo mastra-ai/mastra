@@ -82,7 +82,11 @@ const fetchStep = createStep({
         for (const key of Object.keys(props)) {
           const prop = props[key];
           if (prop?.type === 'title' && Array.isArray(prop.title)) {
-            title = prop.title.map((t: any) => t?.plain_text ?? '').join('').trim() || title;
+            title =
+              prop.title
+                .map((t: any) => t?.plain_text ?? '')
+                .join('')
+                .trim() || title;
             break;
           }
         }
@@ -90,15 +94,12 @@ const fetchStep = createStep({
         // Best-effort: fetch block children for page content
         let text = title;
         try {
-          const blocksRes = await fetch(
-            `https://api.notion.com/v1/blocks/${page.id}/children?page_size=50`,
-            {
-              headers: {
-                Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
-                'Notion-Version': '2022-06-28',
-              },
+          const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children?page_size=50`, {
+            headers: {
+              Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
+              'Notion-Version': '2022-06-28',
             },
-          );
+          });
           const blocksJson = (await blocksRes.json()) as any;
           text =
             (blocksJson?.results ?? [])

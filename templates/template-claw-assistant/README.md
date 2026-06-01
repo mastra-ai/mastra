@@ -56,10 +56,10 @@ The agent will pick up new skills on the next request.
 
 ## Environment variables
 
-| Variable | Purpose |
-| --- | --- |
-| `MASTRA_GATEWAY_API_KEY` | Routes the chat model and web search through the Mastra Gateway. |
-| `TURSO_DATABASE_URL` | libSQL/Turso URL. Defaults to `file:./mastra.db`. |
-| `TURSO_AUTH_TOKEN` | Turso auth token (omit for local file DB). |
-| `CLAW_WORKSPACE_DIR` | Override the workspace root directory. |
-| `BROWSER_HEADLESS` | Set to `false` to launch the browser headfully. Defaults to headless. |
+| Variable                 | Purpose                                                               |
+| ------------------------ | --------------------------------------------------------------------- |
+| `MASTRA_GATEWAY_API_KEY` | Routes the chat model and web search through the Mastra Gateway.      |
+| `TURSO_DATABASE_URL`     | libSQL/Turso URL. Defaults to `file:./mastra.db`.                     |
+| `TURSO_AUTH_TOKEN`       | Turso auth token (omit for local file DB).                            |
+| `CLAW_WORKSPACE_DIR`     | Override the workspace root directory.                                |
+| `BROWSER_HEADLESS`       | Set to `false` to launch the browser headfully. Defaults to headless. |

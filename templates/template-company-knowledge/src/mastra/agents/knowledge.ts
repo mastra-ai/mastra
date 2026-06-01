@@ -69,9 +69,7 @@ Follow this order strictly — it saves API calls and gives faster answers:
   }),
   // Guardrails: normalize unicode input, redact PII in responses (internal data may contain
   // employee emails, phone numbers, etc. that shouldn't be surfaced to all users).
-  inputProcessors: [
-    new UnicodeNormalizer({ stripControlChars: true, collapseWhitespace: true }),
-  ],
+  inputProcessors: [new UnicodeNormalizer({ stripControlChars: true, collapseWhitespace: true })],
   outputProcessors: [
     new PIIDetector({
       model: 'mastra/openai/gpt-5-nano',
