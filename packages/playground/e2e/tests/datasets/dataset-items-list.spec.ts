@@ -23,7 +23,7 @@ test.describe('Dataset Items List - Behavior Tests', () => {
 
     await page.getByRole('button', { name: /Test input 1/ }).click();
 
-    await expect(page.getByText(/Created May/).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Created [A-Z][a-z]{2} \d{1,2}, \d{4}/).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('selecting Delete Items from menu enables selection mode with checkboxes', async ({ page }) => {

@@ -9,6 +9,7 @@ export * from './mcp-servers';
 export * from './workspaces';
 export * from './skills';
 export * from './favorites';
+export * from './harness';
 export * from './blobs';
 export * from './scores';
 export * from './observability';
