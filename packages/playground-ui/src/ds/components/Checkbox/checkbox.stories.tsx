@@ -2,6 +2,42 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Label } from '../Label';
 import { Checkbox } from './checkbox';
 
+const SURFACES: { token: string; label: string; className: string }[] = [
+  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface1' },
+  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface2' },
+  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface3' },
+  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
+];
+
+function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className={`rounded-2xl border border-border1 p-5 ${className}`}>
+      <p className="mb-4 text-ui-xs uppercase tracking-wide text-neutral3">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function CheckboxStateGrid({ idPrefix }: { idPrefix: string }) {
+  return (
+    <div className="grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3 text-ui-sm text-neutral3">
+      <span />
+      <span>Default</span>
+      <span>Checked</span>
+      <span>Mixed</span>
+      <span>Disabled</span>
+      <span>Disabled on</span>
+
+      <span className="text-neutral5">State</span>
+      <Checkbox aria-label={`${idPrefix} default`} />
+      <Checkbox aria-label={`${idPrefix} checked`} checked onCheckedChange={() => {}} />
+      <Checkbox aria-label={`${idPrefix} mixed`} checked="indeterminate" onCheckedChange={() => {}} />
+      <Checkbox aria-label={`${idPrefix} disabled`} disabled />
+      <Checkbox aria-label={`${idPrefix} disabled checked`} checked disabled onCheckedChange={() => {}} />
+    </div>
+  );
+}
+
 const meta: Meta<typeof Checkbox> = {
   title: 'Elements/Checkbox',
   component: Checkbox,
@@ -87,6 +123,21 @@ export const AllStates: Story = {
           className="border-neutral5/60 outline outline-1 outline-offset-2 outline-neutral5/35"
         />
       </div>
+    </div>
+  ),
+};
+
+export const OnSurfaces: Story = {
+  parameters: {
+    layout: 'padded',
+  },
+  render: () => (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {SURFACES.map(({ token, label, className }) => (
+        <SurfaceFrame key={token} className={className} label={label}>
+          <CheckboxStateGrid idPrefix={token} />
+        </SurfaceFrame>
+      ))}
     </div>
   ),
 };

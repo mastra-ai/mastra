@@ -36,13 +36,13 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         data-slot="checkbox"
         className={cn(
           'peer flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-[0.3125rem]',
-          'border border-neutral6/5 bg-neutral6/5 text-surface1 outline-hidden',
+          'border border-neutral6/[0.16] bg-neutral6/[0.08] text-surface1 outline-hidden',
           transitions.all,
-          'hover:border-border2 hover:bg-surface-overlay-strong',
-          'active:scale-95 active:border-neutral5/35 active:bg-surface-overlay-strong',
+          'hover:border-neutral6/[0.24] hover:bg-neutral6/[0.12]',
+          'active:scale-95 active:border-neutral6/[0.3] active:bg-neutral6/[0.14]',
           'focus-visible:border-neutral5/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55',
           // Base UI's Checkbox.Root is a `<span>`, so `:disabled` never matches — target `data-disabled`.
-          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[disabled]:hover:border-neutral6/5 data-[disabled]:hover:bg-neutral6/5 data-[disabled]:active:scale-100',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[disabled]:hover:border-neutral6/[0.16] data-[disabled]:hover:bg-neutral6/[0.08] data-[disabled]:active:scale-100',
           'data-[checked]:border-neutral6 data-[checked]:bg-neutral6 data-[checked]:text-surface1',
           'data-[indeterminate]:border-neutral6 data-[indeterminate]:bg-neutral6 data-[indeterminate]:text-surface1',
           'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
