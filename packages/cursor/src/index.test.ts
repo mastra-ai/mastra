@@ -5,6 +5,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CursorSDKAgent } from './index';
 
 const createCursorAgent = vi.fn();
+const cursorCreateMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@cursor/sdk', () => ({
+  Agent: {
+    create: cursorCreateMock,
+  },
+}));
 
 function createTurnEndedUpdate({
   inputTokens = 10,
@@ -37,7 +44,7 @@ function createTaskMessage(text: string): SDKMessage {
 
 function createRun({
   id = 'cursor-run',
-  model = { id: 'gpt-5.5' },
+  model = { id: '__GATEWAY_OPENAI_MODEL__' },
   result = 'Cursor SDK result',
   streamMessages = [createTaskMessage(result)],
   supportsStream = true,
@@ -83,7 +90,7 @@ function createSDKAgent(run: Run, updates: InteractionUpdate[] = [createTurnEnde
   });
   const sdkAgent = {
     agentId: 'cursor-sdk-agent',
-    model: { id: 'gpt-5.5' },
+    model: { id: '__GATEWAY_OPENAI_MODEL__' },
     send,
     close: vi.fn(),
     reload: vi.fn(async () => undefined),
@@ -98,6 +105,7 @@ function createSDKAgent(run: Run, updates: InteractionUpdate[] = [createTurnEnde
 describe('CursorSDKAgent', () => {
   beforeEach(() => {
     createCursorAgent.mockReset();
+    cursorCreateMock.mockReset();
   });
 
   it('is compatible with the Agent/SubAgent contract', () => {
@@ -120,7 +128,7 @@ describe('CursorSDKAgent', () => {
     createCursorAgent.mockResolvedValueOnce(sdkAgent);
     const sdkAgentPromise = createCursorAgent({
       apiKey: 'cursor-key',
-      model: { id: 'gpt-5.5' },
+      model: { id: '__GATEWAY_OPENAI_MODEL__' },
       local: {
         cwd: '/repo',
       },
@@ -137,37 +145,38 @@ describe('CursorSDKAgent', () => {
     expect(result.text).toBe('promise text');
     expect(createCursorAgent).toHaveBeenCalledWith({
       apiKey: 'cursor-key',
-      model: { id: 'gpt-5.5' },
+      model: { id: '__GATEWAY_OPENAI_MODEL__' },
       local: {
         cwd: '/repo',
       },
     });
   });
 
-  it('creates a Cursor SDK agent from options and falls back to CURSOR_API_KEY', async () => {
+  it('creates a Cursor SDK agent from sdkOptions and falls back to CURSOR_API_KEY', async () => {
     const originalApiKey = process.env['CURSOR_API_KEY'];
     process.env['CURSOR_API_KEY'] = 'cursor-env-key';
     const { sdkAgent } = createSDKAgent(createRun({ id: 'created-run', result: 'created text' }));
-    createCursorAgent.mockResolvedValueOnce(sdkAgent);
+    cursorCreateMock.mockResolvedValueOnce(sdkAgent);
 
     try {
       const agent = new CursorSDKAgent({
         id: 'cursor-agent',
         name: 'Cursor Agent',
         description: 'Cursor',
-        agent: createCursorAgent,
-        model: { id: 'gpt-5.5' },
-        local: {
-          cwd: '/repo',
+        sdkOptions: {
+          model: { id: '__GATEWAY_OPENAI_MODEL__' },
+          local: {
+            cwd: '/repo',
+          },
         },
       });
 
       const result = await agent.generate('Generate prompt');
 
       expect(result.text).toBe('created text');
-      expect(createCursorAgent).toHaveBeenCalledWith({
+      expect(cursorCreateMock).toHaveBeenCalledWith({
         apiKey: 'cursor-env-key',
-        model: { id: 'gpt-5.5' },
+        model: { id: '__GATEWAY_OPENAI_MODEL__' },
         name: 'Cursor Agent',
         local: {
           cwd: '/repo',
@@ -190,7 +199,7 @@ describe('CursorSDKAgent', () => {
     const agentFactory = vi.fn(options =>
       createCursorAgent({
         ...options,
-        model: { id: 'gpt-5.5' },
+        model: { id: '__GATEWAY_OPENAI_MODEL__' },
         local: {
           cwd: '/repo',
         },
@@ -203,8 +212,10 @@ describe('CursorSDKAgent', () => {
         name: 'Cursor Agent',
         description: 'Cursor',
         agent: agentFactory,
-        mcpServers: {
-          filesystem: { command: 'node', args: ['server.js'] },
+        sdkOptions: {
+          mcpServers: {
+            filesystem: { command: 'node', args: ['server.js'] },
+          },
         },
       });
 
@@ -221,7 +232,7 @@ describe('CursorSDKAgent', () => {
       expect(createCursorAgent).toHaveBeenCalledWith({
         apiKey: 'cursor-env-key',
         name: 'Cursor Agent',
-        model: { id: 'gpt-5.5' },
+        model: { id: '__GATEWAY_OPENAI_MODEL__' },
         local: {
           cwd: '/repo',
         },
@@ -243,20 +254,23 @@ describe('CursorSDKAgent', () => {
       id: 'cursor-agent',
       description: 'Cursor',
       agent: createCursorAgent,
-      model: { id: 'gpt-5.5' },
+      sdkOptions: {
+        model: { id: '__GATEWAY_OPENAI_MODEL__' },
+      },
     });
 
-    expect((await agent.getModel()).modelId).toBe('gpt-5.5');
+    expect((await agent.getModel()).modelId).toBe('__GATEWAY_OPENAI_MODEL__');
   });
 
   it('retries inline Cursor SDK agent creation after a failure', async () => {
     const { sdkAgent } = createSDKAgent(createRun({ id: 'retry-run', result: 'retried text' }));
-    createCursorAgent.mockRejectedValueOnce(new Error('create failed')).mockResolvedValueOnce(sdkAgent);
+    cursorCreateMock.mockRejectedValueOnce(new Error('create failed')).mockResolvedValueOnce(sdkAgent);
     const agent = new CursorSDKAgent({
       id: 'cursor-agent',
       description: 'Cursor',
-      agent: createCursorAgent,
-      model: { id: 'gpt-5.5' },
+      sdkOptions: {
+        model: { id: '__GATEWAY_OPENAI_MODEL__' },
+      },
     });
 
     await expect(agent.generate('Generate prompt')).rejects.toThrow('create failed');
@@ -264,21 +278,19 @@ describe('CursorSDKAgent', () => {
     const result = await agent.generate('Generate prompt');
 
     expect(result.text).toBe('retried text');
-    expect(createCursorAgent).toHaveBeenCalledTimes(2);
+    expect(cursorCreateMock).toHaveBeenCalledTimes(2);
   });
 
   it('generate calls the provided Cursor SDK agent directly and returns Mastra output', async () => {
-    const onDelta = vi.fn();
     const { sdkAgent, send } = createSDKAgent(createRun({ id: 'generate-run', result: 'generated text' }));
     const agent = new CursorSDKAgent({
       id: 'cursor-agent',
       description: 'Cursor',
       agent: sdkAgent,
-      mcpServers: {
-        filesystem: { command: 'node', args: ['server.js'] },
-      },
-      sendOptions: {
-        onDelta,
+      sdkOptions: {
+        mcpServers: {
+          filesystem: { command: 'node', args: ['server.js'] },
+        },
       },
     });
 
@@ -293,7 +305,7 @@ describe('CursorSDKAgent', () => {
       cursor: {
         agentId: 'cursor-sdk-agent',
         runId: 'generate-run',
-        requestedModel: 'gpt-5.5',
+        requestedModel: '__GATEWAY_OPENAI_MODEL__',
         durationMs: 25,
         mcpServerNames: ['filesystem'],
       },
@@ -306,7 +318,6 @@ describe('CursorSDKAgent', () => {
         },
       }),
     );
-    expect(onDelta).toHaveBeenCalledWith({ update: createTurnEndedUpdate() });
   });
 
   it('sums usage across Cursor turn-ended updates', async () => {

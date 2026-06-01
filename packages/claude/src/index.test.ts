@@ -1,9 +1,14 @@
 import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { isAgentCompatible } from '@mastra/core/agent';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ClaudeSDKAgent } from './index';
-import type { ClaudeQueryFunction } from './index';
+
+const queryMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
+  query: queryMock,
+}));
 
 function createQuery(messages: SDKMessage[]): Query {
   return (async function* () {
@@ -44,7 +49,7 @@ function createResultMessage(result: string): SDKMessage {
       cache_creation_input_tokens: 3,
     },
     modelUsage: {
-      'claude-sonnet-4-6': {
+      __GATEWAY_ANTHROPIC_MODEL_SONNET__: {
         inputTokens: 10,
         outputTokens: 4,
         cacheReadInputTokens: 2,
@@ -86,7 +91,7 @@ function createAssistantMessage(id: string, usage: Record<string, number>): SDKM
       type: 'message',
       role: 'assistant',
       content: [],
-      model: 'claude-sonnet-4-6',
+      model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
       stop_reason: 'end_turn',
       stop_sequence: null,
       usage,
@@ -96,15 +101,18 @@ function createAssistantMessage(id: string, usage: Record<string, number>): SDKM
 }
 
 describe('ClaudeSDKAgent', () => {
+  beforeEach(() => {
+    queryMock.mockReset();
+  });
+
   it('is compatible with the Agent/SubAgent contract', () => {
-    const query = vi.fn<ClaudeQueryFunction>(() => createQuery([createResultMessage('ok')]));
+    queryMock.mockImplementationOnce(() => createQuery([createResultMessage('ok')]));
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       name: 'Claude Agent',
       description: 'Use Claude Agent as a Mastra agent.',
-      query,
-      options: {
-        model: 'claude-sonnet-4-6',
+      sdkOptions: {
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
       },
     });
 
@@ -114,16 +122,15 @@ describe('ClaudeSDKAgent', () => {
     expect(isAgentCompatible(agent)).toBe(true);
   });
 
-  it('generate calls the provided query function directly and returns Mastra output', async () => {
-    const query = vi.fn<ClaudeQueryFunction>(() => createQuery([createResultMessage('generated text')]));
+  it('generate calls Claude Agent SDK query directly and returns Mastra output', async () => {
+    queryMock.mockImplementationOnce(() => createQuery([createResultMessage('generated text')]));
     const abortController = new AbortController();
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      query,
-      options: {
+      sdkOptions: {
         cwd: '/tmp/project',
-        model: 'claude-sonnet-4-6',
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
         maxTurns: 1,
         permissionMode: 'acceptEdits',
         tools: ['Read', 'Bash'],
@@ -153,7 +160,7 @@ describe('ClaudeSDKAgent', () => {
     expect(result.providerMetadata).toMatchObject({
       claude: {
         totalCostUsd: 0.0123,
-        model: 'claude-sonnet-4-6',
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
         cwd: '/tmp/project',
         permissionMode: 'acceptEdits',
         maxTurns: 1,
@@ -161,11 +168,11 @@ describe('ClaudeSDKAgent', () => {
         disallowedTools: ['Bash'],
       },
     });
-    expect(query).toHaveBeenCalledWith({
+    expect(queryMock).toHaveBeenCalledWith({
       prompt: 'Generate prompt',
       options: expect.objectContaining({
         cwd: '/tmp/project',
-        model: 'claude-sonnet-4-6',
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
         maxTurns: 1,
         permissionMode: 'acceptEdits',
         tools: ['Read', 'Bash'],
@@ -184,7 +191,7 @@ describe('ClaudeSDKAgent', () => {
   });
 
   it('keeps assistant token usage when the result message only includes cost', async () => {
-    const query = vi.fn<ClaudeQueryFunction>(() =>
+    queryMock.mockImplementationOnce(() =>
       createQuery([
         createAssistantMessage('assistant-1', {
           input_tokens: 10,
@@ -198,9 +205,8 @@ describe('ClaudeSDKAgent', () => {
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      query,
-      options: {
-        model: 'claude-sonnet-4-6',
+      sdkOptions: {
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
       },
     });
 
@@ -224,15 +230,14 @@ describe('ClaudeSDKAgent', () => {
   });
 
   it('stream emits Mastra chunks and resolves text from Claude stream events', async () => {
-    const query = vi.fn<ClaudeQueryFunction>(() =>
+    queryMock.mockImplementationOnce(() =>
       createQuery([createStreamEvent('streamed '), createStreamEvent('text'), createResultMessage('streamed text')]),
     );
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      query,
-      options: {
-        model: 'claude-sonnet-4-6',
+      sdkOptions: {
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
       },
     });
 

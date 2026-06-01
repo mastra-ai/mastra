@@ -16,7 +16,26 @@ The package exports `CursorSDKAgent`, a Mastra `Agent` wrapper around a Cursor S
 
 ## Create a Cursor SDK agent
 
-Create the Cursor SDK agent with `Agent.create()`, then pass that promise to `CursorSDKAgent`.
+Pass Cursor SDK configuration through `sdkOptions`. `CursorSDKAgent` creates the Cursor SDK agent on first use.
+
+```typescript
+import { CursorSDKAgent } from '@mastra/cursor';
+
+export const cursorAgent = new CursorSDKAgent({
+  id: 'cursor-sdk-agent',
+  name: 'Cursor SDK Agent',
+  description: 'Use Cursor Agent SDK through Mastra.',
+  sdkOptions: {
+    apiKey: process.env.CURSOR_API_KEY,
+    model: { id: process.env.CURSOR_MODEL_ID! },
+    local: {
+      cwd: process.cwd(),
+    },
+  },
+});
+```
+
+You can also pass an existing Cursor SDK agent when your app already creates or owns it.
 
 ```typescript
 import { Agent as CursorAgent } from '@cursor/sdk';
@@ -24,29 +43,14 @@ import { CursorSDKAgent } from '@mastra/cursor';
 
 export const cursorAgent = new CursorSDKAgent({
   id: 'cursor-sdk-agent',
-  name: 'Cursor SDK Agent',
   description: 'Use Cursor Agent SDK through Mastra.',
   agent: CursorAgent.create({
     apiKey: process.env.CURSOR_API_KEY,
-    model: { id: 'gpt-5.5' },
+    model: { id: process.env.CURSOR_MODEL_ID! },
     local: {
       cwd: process.cwd(),
     },
   }),
-});
-```
-
-You can also pass the `Agent.create` factory to let the wrapper create the SDK agent. This keeps the vendor SDK import in your app while allowing `CursorSDKAgent` to hydrate defaults such as `apiKey`.
-
-```typescript
-export const cursorAgent = new CursorSDKAgent({
-  id: 'cursor-sdk-agent',
-  description: 'Use Cursor Agent SDK through Mastra.',
-  agent: CursorAgent.create,
-  model: { id: 'gpt-5.5' },
-  local: {
-    cwd: process.cwd(),
-  },
 });
 ```
 
@@ -84,29 +88,6 @@ for await (const chunk of stream.fullStream) {
 
 ## Configure Cursor
 
-When you pass `CursorAgent.create({...})` directly, put Cursor create options in that call.
-
-`CursorSDKAgent` also forwards Cursor create options when `agent` is a factory. These include `apiKey`, `model`, `local`, `cloud`, `mcpServers`, `agents`, `agentId`, `idempotencyKey`, and `platform`.
+`CursorSDKAgent` forwards `sdkOptions` to `CursorAgent.create()` when `agent` is not provided or when `agent` is a factory. These include `apiKey`, `model`, `local`, `cloud`, `mcpServers`, `agents`, `agentId`, `idempotencyKey`, and `platform`.
 
 `apiKey` defaults to `process.env.CURSOR_API_KEY` when it is not provided.
-
-Pass `sendOptions` to forward options to each Cursor `agent.send()` call. Mastra wraps `onDelta` so it can collect usage while preserving your callback.
-
-```typescript
-export const cursorAgent = new CursorSDKAgent({
-  id: 'cursor-sdk-agent',
-  description: 'Use Cursor Agent SDK through Mastra.',
-  agent: CursorAgent.create({
-    apiKey: process.env.CURSOR_API_KEY,
-    model: { id: 'gpt-5.5' },
-    local: {
-      cwd: process.cwd(),
-    },
-  }),
-  sendOptions: {
-    onDelta: ({ update }) => {
-      console.log('cursor update', update.type);
-    },
-  },
-});
-```

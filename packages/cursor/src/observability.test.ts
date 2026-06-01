@@ -5,6 +5,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { CursorSDKAgent } from './index';
 
+vi.mock('@cursor/sdk', () => ({
+  Agent: {
+    create: vi.fn(),
+  },
+}));
+
 type MockSpan = Span<SpanType> & {
   options: Record<string, unknown>;
   children: MockSpan[];
@@ -112,7 +118,7 @@ function createCursorToolCompletedUpdate(): InteractionUpdate {
 
 function createCursorRun({
   id = 'cursor-run',
-  model = { id: 'gpt-5.5' },
+  model = { id: '__GATEWAY_OPENAI_MODEL__' },
   result = 'Cursor SDK result',
 }: {
   id?: string;
@@ -144,7 +150,7 @@ function createCursorRun({
 function createCursorSDKAgent(run: Run, updates: InteractionUpdate[] = [createTurnEndedUpdate()]): SDKAgent {
   return {
     agentId: 'cursor-sdk-agent',
-    model: { id: 'gpt-5.5' },
+    model: { id: '__GATEWAY_OPENAI_MODEL__' },
     send: vi.fn(async (_message: string, options?: { onDelta?: (args: { update: InteractionUpdate }) => void }) => {
       for (const update of updates) {
         await options?.onDelta?.({ update });
@@ -184,7 +190,7 @@ describe('CursorSDKAgent observability', () => {
         attributes: expect.objectContaining({
           finishReason: 'stop',
           responseId: 'cursor-generate-run',
-          responseModel: 'gpt-5.5',
+          responseModel: '__GATEWAY_OPENAI_MODEL__',
           usage: expect.objectContaining({
             inputTokens: 15,
             outputTokens: 4,

@@ -10,25 +10,23 @@ npm install @mastra/claude @anthropic-ai/claude-agent-sdk
 
 ## Overview
 
-The package exports `ClaudeSDKAgent`, a Mastra `Agent` wrapper around the Claude Agent SDK `query` function.
+The package exports `ClaudeSDKAgent`, a Mastra `Agent` wrapper around the Claude Agent SDK run loop.
 
 `ClaudeSDKAgent` keeps the Claude SDK run loop in charge. Mastra receives compatible outputs, usage, cost estimates, and tracing data for the run.
 
 ## Create a Claude SDK agent
 
-Pass the Claude SDK `query` function directly to the wrapper.
+Pass Claude SDK configuration through `sdkOptions`.
 
 ```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
 import { ClaudeSDKAgent } from '@mastra/claude';
 
 export const claudeAgent = new ClaudeSDKAgent({
   id: 'claude-sdk-agent',
   name: 'Claude SDK Agent',
   description: 'Use Claude Agent SDK through Mastra.',
-  query,
-  options: {
-    model: 'claude-sonnet-4-5',
+  sdkOptions: {
+    model: process.env.CLAUDE_CODE_MODEL,
     cwd: process.cwd(),
   },
 });
@@ -68,12 +66,13 @@ for await (const chunk of stream.fullStream) {
 
 ## Configure Claude
 
-`ClaudeSDKAgent` forwards the `options` object to the Claude SDK `query()` call on every run.
+`ClaudeSDKAgent` forwards `sdkOptions` to the Claude SDK `query()` call on every run.
 
 For custom tools, create a Claude SDK MCP server and pass it with `mcpServers`.
 
 ```typescript
-import { createSdkMcpServer, tool, query } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { ClaudeSDKAgent } from '@mastra/claude';
 import { z } from 'zod';
 
 const weatherServer = createSdkMcpServer({
@@ -96,8 +95,7 @@ const weatherServer = createSdkMcpServer({
 export const claudeAgent = new ClaudeSDKAgent({
   id: 'claude-sdk-agent',
   description: 'Use Claude with weather tools.',
-  query,
-  options: {
+  sdkOptions: {
     mcpServers: {
       weather: weatherServer,
     },

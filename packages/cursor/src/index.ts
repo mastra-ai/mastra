@@ -1,13 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
+import { Agent as CursorAgent } from '@cursor/sdk';
 import type {
-  AgentDefinition,
   AgentOptions as CursorCreateOptions,
-  CloudAgentOptions,
   InteractionUpdate,
-  LocalAgentOptions,
-  McpServerConfig,
   ModelSelection,
   Run,
   SDKAgent,
@@ -72,59 +69,23 @@ export type CursorAgentOptions = {
   description: string;
   /**
    * Cursor SDK agent or factory. Pass a pre-created SDK agent when you manage
-   * its lifecycle elsewhere, or pass `CursorAgent.create` to let this wrapper
-   * call it with the Cursor options on this object.
+   * its lifecycle elsewhere. Omit this option to let this wrapper call
+   * `CursorAgent.create()` with `sdkOptions`.
    *
    * If you pass `CursorAgent.create({...})`, that promise has already been
    * created by the Cursor SDK and wrapper-level create options cannot be
    * merged into it. Put all Cursor create options in that call, or pass the
    * factory itself as `agent: CursorAgent.create`.
    *
-   * The factory path keeps the vendor SDK import in your app while allowing
-   * Mastra to hydrate defaults such as `apiKey`.
+   * The factory path allows Mastra to hydrate defaults such as `apiKey`.
    */
-  agent: CursorAgentInput;
+  agent?: CursorAgentInput;
   /**
-   * Cursor API key passed only when `agent` is a factory. Defaults to
-   * `process.env.CURSOR_API_KEY` when not provided.
+   * Cursor SDK options used when `agent` is omitted or when `agent` is a
+   * factory. Defaults `apiKey` to `process.env.CURSOR_API_KEY` when not
+   * provided.
    */
-  apiKey?: string;
-  /**
-   * Cursor model selection passed only when `agent` is a factory.
-   *
-   * The Cursor SDK requires an explicit model for local agents.
-   */
-  model?: ModelSelection;
-  /**
-   * Cursor local-agent options passed only when `agent` is a factory.
-   */
-  local?: LocalAgentOptions;
-  /**
-   * Cursor cloud-agent options passed only when `agent` is a factory.
-   */
-  cloud?: CloudAgentOptions;
-  /**
-   * MCP servers passed to Cursor when creating the SDK agent and when sending
-   * prompts, unless `sendOptions.mcpServers` overrides them for a run.
-   */
-  mcpServers?: Record<string, McpServerConfig>;
-  /**
-   * Cursor subagent definitions passed only when `agent` is a factory.
-   */
-  agents?: Record<string, AgentDefinition>;
-  /**
-   * Existing Cursor agent id passed only when `agent` is a factory.
-   */
-  agentId?: string;
-  /**
-   * Cursor idempotency key passed only when `agent` is a factory.
-   */
-  idempotencyKey?: string;
-  /**
-   * Options forwarded to each Cursor `agent.send()` call. `onDelta` is wrapped
-   * so Mastra can collect usage while preserving your callback.
-   */
-  sendOptions?: SendOptions;
+  sdkOptions?: CursorCreateOptions;
 };
 
 export class CursorSDKAgent extends Agent {
@@ -383,23 +344,20 @@ function runCursorAsMastraStream(
   });
 }
 
-async function resolveCursorAgent(agent: CursorAgentInput, options: CursorAgentOptions): Promise<SDKAgent> {
+async function resolveCursorAgent(agent: CursorAgentInput | undefined, options: CursorAgentOptions): Promise<SDKAgent> {
+  if (!agent) {
+    return CursorAgent.create(toCursorCreateOptions(options));
+  }
+
   return typeof agent === 'function' ? agent(toCursorCreateOptions(options)) : agent;
 }
 
 function toCursorCreateOptions(options: CursorAgentOptions): CursorCreateOptions {
-  const createOptions: CursorCreateOptions = {};
-  const apiKey = options.apiKey ?? process.env['CURSOR_API_KEY'];
+  const createOptions: CursorCreateOptions = { ...options.sdkOptions };
+  const apiKey = createOptions.apiKey ?? process.env['CURSOR_API_KEY'];
 
   if (apiKey) createOptions.apiKey = apiKey;
-  if (options.model) createOptions.model = options.model;
-  if (options.name) createOptions.name = options.name;
-  if (options.local) createOptions.local = options.local;
-  if (options.cloud) createOptions.cloud = options.cloud;
-  if (options.mcpServers) createOptions.mcpServers = options.mcpServers;
-  if (options.agents) createOptions.agents = options.agents;
-  if (options.agentId) createOptions.agentId = options.agentId;
-  if (options.idempotencyKey) createOptions.idempotencyKey = options.idempotencyKey;
+  if (options.name && !createOptions.name) createOptions.name = options.name;
 
   return createOptions;
 }
@@ -409,18 +367,11 @@ function createCursorSendOptions(
   usage: CursorUsageCollector,
   telemetry: CursorToolTelemetry,
 ): SendOptions {
-  const sendOptions = {
-    ...options.sendOptions,
-    mcpServers: options.sendOptions?.mcpServers ?? options.mcpServers,
-  };
-  const originalOnDelta = sendOptions.onDelta;
-
   return {
-    ...sendOptions,
+    mcpServers: options.sdkOptions?.mcpServers,
     onDelta: async args => {
       usage.record(args.update);
       recordCursorToolTelemetry(args.update, telemetry);
-      await originalOnDelta?.(args);
     },
   };
 }
@@ -485,7 +436,7 @@ function toV3Usage(usage: CursorUsageTotals): V3Usage {
 }
 
 function getRequestedModel(options: CursorAgentOptions): ModelSelection | undefined {
-  return options.sendOptions?.model ?? options.model;
+  return options.sdkOptions?.model;
 }
 
 function getModelId(model: ModelSelection | undefined): string {
@@ -521,7 +472,7 @@ function getCursorProviderMetadata(
 }
 
 function getMcpServerNames(options: CursorAgentOptions): string[] | undefined {
-  const servers = options.sendOptions?.mcpServers ?? options.mcpServers;
+  const servers = options.sdkOptions?.mcpServers;
   return servers ? Object.keys(servers) : undefined;
 }
 

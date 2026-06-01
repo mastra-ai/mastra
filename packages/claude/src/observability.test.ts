@@ -1,10 +1,15 @@
 import type { Query, SDKMessage as ClaudeSDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { SpanType } from '@mastra/core/observability';
 import type { Span } from '@mastra/core/observability';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ClaudeSDKAgent } from './index';
-import type { ClaudeQueryFunction } from './index';
+
+const queryMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
+  query: queryMock,
+}));
 
 type MockSpan = Span<SpanType> & {
   options: Record<string, unknown>;
@@ -102,7 +107,7 @@ function createClaudeToolUseMessage(): ClaudeSDKMessage {
           },
         },
       ],
-      model: 'claude-sonnet-4-6',
+      model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
       stop_reason: null,
       stop_sequence: null,
       usage: {
@@ -141,15 +146,18 @@ function createClaudeToolResultMessage(): ClaudeSDKMessage {
 }
 
 describe('ClaudeSDKAgent observability', () => {
+  beforeEach(() => {
+    queryMock.mockReset();
+  });
+
   it('records generate spans with cost metadata preserved in the output', async () => {
     const rootSpan = createMockSpan();
-    const query = vi.fn<ClaudeQueryFunction>(() => createClaudeQuery([createClaudeResultMessage('generated text')]));
+    queryMock.mockImplementationOnce(() => createClaudeQuery([createClaudeResultMessage('generated text')]));
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      query,
-      options: {
-        model: 'claude-sonnet-4-6',
+      sdkOptions: {
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
       },
     });
 
@@ -164,7 +172,7 @@ describe('ClaudeSDKAgent observability', () => {
     expect(result.providerMetadata).toMatchObject({
       claude: {
         totalCostUsd: 0.0123,
-        model: 'claude-sonnet-4-6',
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
       },
     });
     expect(modelSpan.end).toHaveBeenCalledWith(
@@ -172,10 +180,10 @@ describe('ClaudeSDKAgent observability', () => {
         output: { text: 'generated text' },
         attributes: expect.objectContaining({
           finishReason: 'stop',
-          responseModel: 'claude-sonnet-4-6',
+          responseModel: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
           costContext: expect.objectContaining({
             provider: 'anthropic',
-            model: 'claude-sonnet-4-6',
+            model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
             estimatedCost: 0.0123,
             costUnit: 'USD',
           }),
@@ -191,7 +199,7 @@ describe('ClaudeSDKAgent observability', () => {
 
   it('records MCP tool call spans from transcript messages', async () => {
     const rootSpan = createMockSpan();
-    const query = vi.fn<ClaudeQueryFunction>(() =>
+    queryMock.mockImplementationOnce(() =>
       createClaudeQuery([
         createClaudeToolUseMessage(),
         createClaudeToolResultMessage(),
@@ -201,9 +209,8 @@ describe('ClaudeSDKAgent observability', () => {
     const agent = new ClaudeSDKAgent({
       id: 'claude-agent',
       description: 'Claude',
-      query,
-      options: {
-        model: 'claude-sonnet-4-6',
+      sdkOptions: {
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
       },
     });
 

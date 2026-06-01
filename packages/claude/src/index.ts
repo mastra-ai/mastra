@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
-import type { ModelUsage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, type ModelUsage, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
 import { Agent } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
@@ -45,7 +45,7 @@ type ClaudeUsageTotals = {
 
 export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto';
 
-export type ClaudeQueryOptions = {
+export type ClaudeSDKOptions = {
   abortController?: AbortController;
   additionalDirectories?: string[];
   cwd?: string;
@@ -59,14 +59,6 @@ export type ClaudeQueryOptions = {
   env?: Record<string, string>;
   pathToClaudeCodeExecutable?: string;
 };
-
-type ClaudeQueryParams = {
-  prompt: string;
-  options?: ClaudeQueryOptions;
-};
-
-export type ClaudeQueryFunction = (params: { prompt: string }) => AsyncIterable<unknown>;
-type RunnableClaudeQueryFunction = (params: ClaudeQueryParams) => AsyncIterable<unknown>;
 
 export type ClaudeAgentOptions = {
   /**
@@ -82,14 +74,9 @@ export type ClaudeAgentOptions = {
    */
   description: string;
   /**
-   * Claude Agent SDK `query` function. SDK options are passed separately via
-   * `options` to avoid coupling apps to this package's installed SDK types.
-   */
-  query: ClaudeQueryFunction;
-  /**
    * Claude Agent SDK options forwarded to `query()` on every run.
    */
-  options?: ClaudeQueryOptions;
+  sdkOptions?: ClaudeSDKOptions;
 };
 
 export class ClaudeSDKAgent extends Agent {
@@ -317,17 +304,15 @@ function runClaudeAsMastraStream<OUTPUT>(
 function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSignal): AsyncIterable<SDKMessage> {
   const abortController = createAbortController(signal);
   const queryOptions = {
-    ...options.options,
+    ...options.sdkOptions,
   };
   if (abortController) {
     queryOptions.abortController = abortController;
   }
 
-  const query = options.query as RunnableClaudeQueryFunction;
-
   return query({
     prompt,
-    options: queryOptions,
+    options: queryOptions as Parameters<typeof query>[0]['options'],
   }) as AsyncIterable<SDKMessage>;
 }
 
@@ -409,7 +394,7 @@ function createAbortController(signal: AbortSignal | undefined): AbortController
 }
 
 function getModelId(options: ClaudeAgentOptions): string {
-  return options.options?.model ?? MODEL_ID;
+  return options.sdkOptions?.model ?? MODEL_ID;
 }
 
 function createClaudeUsageCollector() {
@@ -522,7 +507,7 @@ function toV3Usage(usage: ClaudeUsageTotals): V3Usage {
 }
 
 function getClaudeProviderMetadata(options: ClaudeAgentOptions, usage?: ClaudeUsageTotals): ProviderMetadata {
-  const queryOptions = options.options;
+  const queryOptions = options.sdkOptions;
 
   return createProviderMetadata('claude', {
     totalCostUsd: usage?.totalCostUsd,
