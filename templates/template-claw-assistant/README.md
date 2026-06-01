@@ -1,0 +1,71 @@
+# Claw — Autonomous Personal Assistant
+
+A Mastra template for **Claw**: an autonomous assistant that actively operates a computer to finish multi-step tasks — read/write files, run shell commands in a sandbox, browse the web, and follow reusable skills.
+
+## What it showcases
+
+- **`Workspace` + `LocalFilesystem` + `LocalSandbox`** — file IO and a sandboxed shell scoped to one directory.
+- **Skills** — reusable, versioned instructions checked into `workspace/skills/`.
+- **`@mastra/agent-browser`** — Playwright-based browsing with accessibility-tree element targeting.
+- **Provider-native web search** routed through the **Mastra Gateway** (no separate search API key).
+- **Observational + working memory** via `@mastra/memory` and `@mastra/libsql` (Turso).
+
+## Prerequisites
+
+- Node.js `>= 22.13.0`
+- A Mastra Gateway API key — get one at [gateway.mastra.ai](https://gateway.mastra.ai)
+- (Optional) A Turso database; for local dev, the default `file:./mastra.db` works.
+
+## Setup
+
+```bash
+pnpm install
+cp .env.example .env
+# fill in MASTRA_GATEWAY_API_KEY (TURSO_DATABASE_URL defaults to file:./mastra.db)
+pnpm dev
+```
+
+Then open Mastra Studio (URL printed by `pnpm dev`) and chat with the `claw` agent.
+
+## Workspace layout
+
+```
+workspace/
+├── skills/
+│   ├── general-tasks/SKILL.md
+│   └── research-tasks/SKILL.md
+└── … your files end up here
+```
+
+The agent can only read/write inside `workspace/` (or whatever `CLAW_WORKSPACE_DIR` points at). The sandboxed shell runs with that directory as its CWD.
+
+## Adding skills
+
+Create a new folder under `workspace/skills/<skill-name>/` with a `SKILL.md`:
+
+```markdown
+---
+name: my-skill
+description: Short summary the agent uses to decide when to apply this skill.
+version: 1
+metadata:
+  tags: [optional, tags]
+---
+
+# Process
+
+1. Step one.
+2. Step two.
+```
+
+The agent will pick up new skills on the next request.
+
+## Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `MASTRA_GATEWAY_API_KEY` | Routes the chat model and web search through the Mastra Gateway. |
+| `TURSO_DATABASE_URL` | libSQL/Turso URL. Defaults to `file:./mastra.db`. |
+| `TURSO_AUTH_TOKEN` | Turso auth token (omit for local file DB). |
+| `CLAW_WORKSPACE_DIR` | Override the workspace root directory. |
+| `BROWSER_HEADLESS` | Set to `false` to launch the browser headfully. Defaults to headless. |
