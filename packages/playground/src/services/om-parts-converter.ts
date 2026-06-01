@@ -205,3 +205,145 @@ export const convertOmPartsInMastraMessage = (
     },
   };
 };
+
+// -----------------------------------------------------------------------------
+// Reload / interruption helpers for OM badges.
+//
+// `useChat` returns canonical `MastraDBMessage`s, where parts live at
+// `message.content.parts` (and `content` is an object, not an array). These
+// helpers therefore read/write `content.parts` directly. They are typed against
+// `MastraDBMessage[]` on purpose: the previous in-provider versions were typed
+// `any[]` and silently no-oped on the nested shape.
+// -----------------------------------------------------------------------------
+
+const mapAssistantParts = (
+  messages: MastraDBMessage[],
+  mapParts: (parts: any[]) => { parts: any[]; changed: boolean },
+): MastraDBMessage[] =>
+  messages.map(msg => {
+    if (msg.role !== 'assistant') return msg;
+    const parts = msg.content?.parts;
+    if (!Array.isArray(parts)) return msg;
+
+    const { parts: nextParts, changed } = mapParts(parts as any[]);
+    if (!changed) return msg;
+
+    return {
+      ...msg,
+      content: { ...msg.content, parts: nextParts as MastraDBMessage['content']['parts'] },
+    };
+  });
+
+/**
+ * Mark in-progress OM markers as disconnected when a stream is interrupted
+ * (user cancel, network error, process exit). Preserves the original part type so
+ * the badge stays anchored, only adding disconnection metadata to the data payload.
+ */
+export const markOmMarkersAsDisconnected = (messages: MastraDBMessage[]): MastraDBMessage[] =>
+  mapAssistantParts(messages, parts => {
+    let changed = false;
+    const nextParts = parts.map((part: any) => {
+      // Raw start markers (keep original type for badge anchoring).
+      if (part.type === 'data-om-observation-start' || part.type === 'data-om-buffering-start') {
+        changed = true;
+        return {
+          ...part,
+          data: { ...part.data, disconnectedAt: new Date().toISOString(), _state: 'disconnected' },
+        };
+      }
+      // Already-converted tool-call format still in a loading state.
+      if (part.type === 'tool-call' && part.toolName === OM_TOOL_NAME) {
+        const omData = part.metadata?.omData || part.args;
+        if (!omData?.completedAt && !omData?.failedAt && !omData?.disconnectedAt) {
+          changed = true;
+          return {
+            ...part,
+            metadata: {
+              ...part.metadata,
+              omData: { ...omData, disconnectedAt: new Date().toISOString(), _state: 'disconnected' },
+            },
+          };
+        }
+      }
+      return part;
+    });
+    return { parts: nextParts, changed };
+  });
+
+/**
+ * Inject synthetic `data-om-buffering-end` parts after buffer-status resolves so
+ * `convertOmPartsInMastraMessage` sees a matching end for each in-progress start.
+ * Uses the record from `awaitBufferStatus` to populate token counts/observations.
+ */
+export const injectBufferingEnds = (messages: MastraDBMessage[], record?: any): MastraDBMessage[] => {
+  const chunksByCycleId = new Map<string, any>();
+  if (record?.bufferedObservationChunks) {
+    for (const chunk of record.bufferedObservationChunks) {
+      if (chunk.cycleId) chunksByCycleId.set(chunk.cycleId, chunk);
+    }
+  }
+
+  return mapAssistantParts(messages, parts => {
+    const newParts: any[] = [];
+    let changed = false;
+
+    for (const part of parts) {
+      newParts.push(part);
+      if (part.type === 'data-om-buffering-start' && part.data?.cycleId && !part.data?.disconnectedAt) {
+        const cycleId = part.data.cycleId;
+        const opType = part.data.operationType;
+
+        const endData: Record<string, any> = {
+          cycleId,
+          operationType: opType,
+          completedAt: new Date().toISOString(),
+        };
+
+        if (opType === 'observation') {
+          const chunk = chunksByCycleId.get(cycleId);
+          if (chunk) {
+            endData.tokensBuffered = chunk.messageTokens;
+            endData.bufferedTokens = chunk.tokenCount;
+            endData.observations = chunk.observations;
+          }
+        } else if (opType === 'reflection' && record) {
+          endData.tokensBuffered = record.bufferedReflectionInputTokens;
+          endData.bufferedTokens = record.bufferedReflectionTokens;
+          endData.observations = record.bufferedReflection;
+        }
+
+        newParts.push({ type: 'data-om-buffering-end', data: endData });
+        changed = true;
+      }
+    }
+
+    return { parts: newParts, changed };
+  });
+};
+
+/**
+ * Scan persisted messages on initial load for OM activation markers and the last
+ * progress part, so buffering badges show as activated and token counts are
+ * accurate after a reload.
+ */
+export const scanOmInitialState = (
+  messages: MastraDBMessage[],
+): { activatedCycleIds: string[]; lastProgress: Record<string, unknown> | null } => {
+  const activatedCycleIds: string[] = [];
+  let lastProgress: Record<string, unknown> | null = null;
+
+  for (const msg of messages) {
+    const parts = msg?.content?.parts;
+    if (!Array.isArray(parts)) continue;
+    for (const part of parts as any[]) {
+      if (part?.type === 'data-om-activation' && part?.data?.cycleId) {
+        activatedCycleIds.push(part.data.cycleId);
+      }
+      if (part?.type === 'data-om-status' && part?.data) {
+        lastProgress = part.data;
+      }
+    }
+  }
+
+  return { activatedCycleIds, lastProgress };
+};
