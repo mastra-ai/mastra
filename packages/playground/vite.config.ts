@@ -56,47 +56,48 @@ const stubNodeBuiltinsPlugin: Plugin = {
   },
 };
 
-// @mastra/core dist top-level-imports server-only npm packages AND Node builtins from
-// browser-reachable subpaths (telemetry, storage, fs). Vite externalizes Node builtins to a throwing
-// proxy and can't browser-resolve the npm packages, so these imports crash at module eval before
-// React renders. Every such usage is dead in the browser — the production build stubs them all to
-// empty (stubNodeBuiltinsPlugin, apply:'build') and the app works — so empty no-op exports are safe.
-// Dev serves native ESM, which ignores Rollup's syntheticNamedExports, so the stub must declare the
-// exact named exports each module's importers use. Names below are the union imported across the
-// linked @mastra dist; add to them if a new one surfaces. The real fix is in @mastra/core (make
-// these server-only imports lazy / split them off any browser-reachable entry).
+// In dev, @mastra/core's dist top-level-imports server-only npm packages (posthog-node, dotenv, ws,
+// @standard-schema/spec) and Node builtins (crypto, fs, stream, ...) from browser-reachable subpaths.
+// Vite externalizes builtins to a throwing proxy and can't browser-resolve the npm packages, so these
+// imports crash at module-eval before React renders. Every such usage is dead code in the browser.
+// Dev serves native ESM, which ignores the build plugin's Rollup syntheticNamedExports, so the stub
+// must expose the exact named exports each importer uses:
+//   - Node builtins: derived from the real module's own exports (load() below), so ANY named import
+//     resolves — no hand-maintained list to drift as @mastra/core evolves.
+//   - npm packages: listed explicitly (a browser can't resolve them to enumerate their exports).
+// The real fix is in @mastra/core: make these server-only imports lazy / off any browser-reachable entry.
 
-// npm package -> named exports the dev graph imports ([] = default only).
-const browserStubPackages: Record<string, string[]> = {
+// npm package -> named exports the dev graph imports ([] = default only). Exported for the regression test.
+export const browserStubPackages: Record<string, string[]> = {
   '@standard-schema/spec': [],
   'posthog-node': ['PostHog'],
   dotenv: ['config', 'parse'],
   ws: ['WebSocket'],
 };
 
-// Node builtin -> named exports the dev graph imports (default + namespace are always covered).
-const nodeBuiltinStubExports: Record<string, string[]> = {
-  crypto: ['createHash', 'randomUUID', 'randomBytes'],
-  fs: ['existsSync', 'mkdirSync', 'readFileSync', 'writeFileSync', 'renameSync', 'statSync', 'readdirSync', 'rmSync', 'realpathSync', 'constants'],
-  os: ['tmpdir'],
-  path: ['join', 'dirname', 'resolve', 'sep', 'extname', 'relative', 'normalize', 'isAbsolute', 'basename', 'parse'],
-  stream: ['Readable', 'Writable', 'Transform', 'PassThrough'],
-  events: ['EventEmitter'],
-  async_hooks: ['AsyncLocalStorage'],
-  module: ['createRequire'],
-  child_process: ['execFile', 'execFileSync'],
-  url: ['fileURLToPath', 'pathToFileURL'],
-};
-
 // A stub module: a chainable no-op (callable, constructable, every property returns itself) exported
-// as the default and under each requested name, so even a dead code path that runs cannot throw
-// (e.g. createHash(x).update(y).digest(z)).
+// as the default and under each name, so even a dead code path that runs cannot throw
+// (e.g. createHash(x).update(y).digest(z)). `names` must be valid identifiers.
 const stubModuleCode = (names: string[]) =>
   [
-    'const s = new Proxy(function () {}, { get: () => s, apply: () => s, construct: () => s });',
-    ...names.map(name => `export const ${name} = s;`),
-    'export default s;',
+    'const __stub = new Proxy(function () {}, { get: () => __stub, apply: () => __stub, construct: () => __stub });',
+    ...names.map(name => `export const ${name} = __stub;`),
+    'export default __stub;',
   ].join('\n');
+
+// Real named exports of a Node builtin specifier (e.g. 'stream/web', 'fs/promises'), minus `default`
+// and anything that isn't a plain identifier, so each generated `export const <name>` parses.
+const builtinExportNames = async (specifier: string): Promise<string[]> => {
+  try {
+    const real = await import(/* @vite-ignore */ `node:${specifier}`);
+    return Object.keys(real).filter(name => name !== 'default' && /^[A-Za-z_$][\w$]*$/.test(name));
+  } catch {
+    return [];
+  }
+};
+
+const BROWSER_STUB = '\0browser-stub:';
+const BUILTIN_STUB = '\0builtin-stub:';
 
 const stubBrowserPackagesPlugin: Plugin = {
   name: 'stub-browser-packages',
@@ -104,19 +105,20 @@ const stubBrowserPackagesPlugin: Plugin = {
   apply: 'serve',
   resolveId(source) {
     if (source in browserStubPackages) {
-      return { id: `\0browser-stub:${source}`, moduleSideEffects: false };
+      return { id: `${BROWSER_STUB}${source}`, moduleSideEffects: false };
     }
-    const builtin = (source.startsWith('node:') ? source.slice(5) : source).split('/')[0];
-    if (builtinModules.includes(builtin)) {
-      return { id: `\0builtin-stub:${builtin}`, moduleSideEffects: false };
+    // Keep the subpath (stream/web != stream, fs/promises != fs) so the stub mirrors the right module.
+    const specifier = source.startsWith('node:') ? source.slice(5) : source;
+    if (builtinModules.includes(specifier.split('/')[0])) {
+      return { id: `${BUILTIN_STUB}${specifier}`, moduleSideEffects: false };
     }
   },
-  load(id) {
-    if (id.startsWith('\0browser-stub:')) {
-      return stubModuleCode(browserStubPackages[id.slice('\0browser-stub:'.length)] ?? []);
+  async load(id) {
+    if (id.startsWith(BROWSER_STUB)) {
+      return stubModuleCode(browserStubPackages[id.slice(BROWSER_STUB.length)] ?? []);
     }
-    if (id.startsWith('\0builtin-stub:')) {
-      return stubModuleCode(nodeBuiltinStubExports[id.slice('\0builtin-stub:'.length)] ?? []);
+    if (id.startsWith(BUILTIN_STUB)) {
+      return stubModuleCode(await builtinExportNames(id.slice(BUILTIN_STUB.length)));
     }
   },
 };
@@ -293,8 +295,9 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       // esbuild can't run Vite plugins, so without exclude it pre-bundles these server-only/empty
       // packages into artifacts that crash at module-eval in the browser. Excluding them lets the
-      // stub plugin above answer the bare imports instead.
-      exclude: ['@standard-schema/spec', 'posthog-node', 'dotenv', 'ws'],
+      // stub plugin above answer the bare imports instead. Derived from the stub map so the two
+      // never drift (a package must be both excluded AND stubbed, or neither works).
+      exclude: Object.keys(browserStubPackages),
     },
     server: {
       fs: {
