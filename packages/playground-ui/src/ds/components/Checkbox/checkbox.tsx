@@ -36,19 +36,21 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         data-slot="checkbox"
         className={cn(
           'peer flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-[0.3125rem]',
-          'border border-neutral6/[0.16] bg-neutral6/[0.08] text-surface1 outline-hidden',
+          'border border-neutral6/[0.06] bg-neutral6/[0.12] text-surface1 outline-hidden',
           transitions.all,
-          'hover:border-neutral6/[0.24] hover:bg-neutral6/[0.12]',
-          'active:scale-95 active:border-neutral6/[0.3] active:bg-neutral6/[0.14]',
+          'hover:border-neutral6/[0.12] hover:bg-neutral6/[0.16]',
+          'active:scale-95 active:border-neutral6/[0.18] active:bg-neutral6/[0.18]',
           'focus-visible:border-neutral5/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55',
-          // Base UI's Checkbox.Root is a `<span>`, so `:disabled` never matches — target `data-disabled`.
-          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[disabled]:hover:border-neutral6/[0.16] data-[disabled]:hover:bg-neutral6/[0.08] data-[disabled]:active:scale-100',
           'data-[checked]:border-neutral6 data-[checked]:bg-neutral6 data-[checked]:text-surface1',
           'data-[indeterminate]:border-neutral6 data-[indeterminate]:bg-neutral6 data-[indeterminate]:text-surface1',
           'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
           'data-[indeterminate]:hover:border-neutral5 data-[indeterminate]:hover:bg-neutral5',
           'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
           'data-[indeterminate]:active:border-neutral4 data-[indeterminate]:active:bg-neutral4',
+          // Base UI's Checkbox.Root is a `<span>`, so `:disabled` never matches; target `data-disabled`.
+          'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.03] data-[disabled]:bg-neutral6/[0.05] data-[disabled]:hover:border-neutral6/[0.03] data-[disabled]:hover:bg-neutral6/[0.05] data-[disabled]:active:scale-100',
+          'data-[disabled]:data-[checked]:border-neutral6/[0.38] data-[disabled]:data-[checked]:bg-neutral6/[0.38] data-[disabled]:data-[checked]:text-neutral6',
+          'data-[disabled]:data-[indeterminate]:border-neutral6/[0.38] data-[disabled]:data-[indeterminate]:bg-neutral6/[0.38] data-[disabled]:data-[indeterminate]:text-neutral6',
           className,
         )}
         {...props}
