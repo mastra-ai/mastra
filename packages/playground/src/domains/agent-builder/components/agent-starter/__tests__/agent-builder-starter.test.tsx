@@ -185,6 +185,53 @@ describe('AgentBuilderStarter', () => {
     expect(path).toBe(`/agent-builder/agents/${capturedId}/edit`);
   });
 
+  it('prefers the admin-configured modelPolicy default over the first allowed model (PLTFRM-1017)', async () => {
+    // When the admin configures a default model on an active policy, the
+    // starter must commit to that default — not the first allowlist entry
+    // (which is what we used to pick, and which broke the configured default).
+    let capturedBody: any = null;
+    server.use(
+      http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+        HttpResponse.json({
+          enabled: true,
+          modelPolicy: {
+            active: true,
+            pickerVisible: true,
+            allowed: [{ provider: 'anthropic', modelId: 'claude-opus-4-7' }, { provider: 'openai' }],
+            default: { provider: 'openai', modelId: 'gpt-5.4' },
+          },
+        }),
+      ),
+      http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: capturedBody.id });
+      }),
+    );
+
+    const { getByTestId } = renderStarter();
+    // Wait for the builder settings query to resolve so the starter has the
+    // policy in hand before the user submits.
+    await waitFor(() => {
+      // Trigger a re-render and let React Query settle.
+      expect(getByTestId('agent-builder-starter-submit')).toBeTruthy();
+    });
+
+    fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: 'standup bot' } });
+
+    // Give React Query a tick to populate the builder-settings cache before
+    // submitting, so `useBuilderModelPolicy` returns the active policy.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    await act(async () => {
+      fireEvent.click(getByTestId('agent-builder-starter-submit'));
+    });
+
+    await waitFor(() => expect(capturedBody).not.toBeNull());
+    expect(capturedBody.model).toEqual({ provider: 'openai', name: 'gpt-5.4' });
+  });
+
   it('does not navigate when the create request fails', async () => {
     server.use(
       http.post(`${BASE_URL}/api/stored/agents`, () => HttpResponse.json({ message: 'boom' }, { status: 500 })),
