@@ -12,7 +12,6 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import { safeStringify } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
@@ -295,16 +294,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
               toolInvocation: {
-                state: 'output-error' as const,
+                state: 'result' as const,
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
-                errorText:
-                  toolCall.error instanceof Error
-                    ? toolCall.error.message
-                    : toolCall.error == null
-                      ? 'Tool execution failed'
-                      : safeStringify(toolCall.error),
+                result: toolCall.error?.message ?? toolCall.error,
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
