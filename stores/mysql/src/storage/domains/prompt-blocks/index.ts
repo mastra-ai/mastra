@@ -1,4 +1,3 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   PromptBlocksStorage,
@@ -21,6 +20,7 @@ import type {
   ListPromptBlockVersionsInput,
   ListPromptBlockVersionsOutput,
 } from '@mastra/core/storage';
+import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
@@ -50,12 +50,16 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     await this.operations.clearTable({ tableName: TABLE_PROMPT_BLOCKS });
   }
 
-  private safeParseJSON(val: unknown): any {
+  private safeParseJSON<T = unknown>(val: unknown): T | undefined {
     if (val === null || val === undefined) return undefined;
     if (typeof val === 'string') {
-      try { return JSON.parse(val); } catch { return val; }
+      try {
+        return JSON.parse(val) as T;
+      } catch {
+        return val as T;
+      }
     }
-    return val;
+    return val as T;
   }
 
   private parseBlockRow(row: Record<string, unknown>): StoragePromptBlockType {
@@ -96,7 +100,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'GET_PROMPT_BLOCK', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'GET_PROMPT_BLOCK', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -148,7 +156,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'CREATE_PROMPT_BLOCK', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'CREATE_PROMPT_BLOCK', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -182,15 +194,21 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
       if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('MYSQL', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND_AFTER_UPDATE'),
-          domain: ErrorDomain.STORAGE, category: ErrorCategory.SYSTEM,
-          text: `Prompt block ${id} not found after update`, details: { id },
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Prompt block ${id} not found after update`,
+          details: { id },
         });
       }
       return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'UPDATE_PROMPT_BLOCK', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'UPDATE_PROMPT_BLOCK', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -203,7 +221,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'DELETE_PROMPT_BLOCK', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_PROMPT_BLOCK', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -230,21 +252,28 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
           if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
             throw new MastraError({
               id: createStorageErrorId('MYSQL', 'LIST_PROMPT_BLOCKS', 'INVALID_METADATA_KEY'),
-              domain: ErrorDomain.STORAGE, category: ErrorCategory.USER,
-              text: `Invalid metadata key: ${key}`, details: { key },
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Invalid metadata key: ${key}`,
+              details: { key },
             });
           }
           if (typeof value === 'string') {
-            conditions.push(`JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`);
+            conditions.push(
+              `JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,
+            );
             queryParams.push(value);
           } else {
-            conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`);
+            conditions.push(
+              `JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`,
+            );
             queryParams.push(JSON.stringify(value));
           }
         }
       }
 
-      const whereClause = conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: queryParams } : undefined;
+      const whereClause =
+        conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: queryParams } : undefined;
       const total = await this.operations.loadTotalCount({ tableName: TABLE_PROMPT_BLOCKS, whereClause });
 
       if (total === 0) {
@@ -273,7 +302,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'LIST_PROMPT_BLOCKS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'LIST_PROMPT_BLOCKS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -306,7 +339,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'CREATE_PROMPT_BLOCK_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'CREATE_PROMPT_BLOCK_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -322,7 +359,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'GET_PROMPT_BLOCK_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'GET_PROMPT_BLOCK_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -332,14 +373,21 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     try {
       const rows = await this.operations.loadMany<Record<string, unknown>>({
         tableName: TABLE_PROMPT_BLOCK_VERSIONS,
-        whereClause: { sql: ` WHERE ${quoteIdentifier('blockId', 'column name')} = ? AND ${quoteIdentifier('versionNumber', 'column name')} = ?`, args: [blockId, versionNumber] },
+        whereClause: {
+          sql: ` WHERE ${quoteIdentifier('blockId', 'column name')} = ? AND ${quoteIdentifier('versionNumber', 'column name')} = ?`,
+          args: [blockId, versionNumber],
+        },
         limit: 1,
       });
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'GET_PROMPT_BLOCK_VERSION_BY_NUMBER', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'GET_PROMPT_BLOCK_VERSION_BY_NUMBER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -357,7 +405,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'GET_LATEST_PROMPT_BLOCK_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'GET_LATEST_PROMPT_BLOCK_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -389,13 +441,19 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
 
       return {
         versions: rows.map(row => this.parseVersionRow(row)),
-        total, page, perPage: perPageForResponse,
+        total,
+        page,
+        perPage: perPageForResponse,
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'LIST_PROMPT_BLOCK_VERSIONS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'LIST_PROMPT_BLOCK_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -407,7 +465,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'DELETE_PROMPT_BLOCK_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_PROMPT_BLOCK_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -422,7 +484,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'DELETE_PROMPT_BLOCK_VERSIONS_BY_BLOCK', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_PROMPT_BLOCK_VERSIONS_BY_BLOCK', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }
@@ -437,7 +503,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
-        { id: createStorageErrorId('MYSQL', 'COUNT_PROMPT_BLOCK_VERSIONS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+        {
+          id: createStorageErrorId('MYSQL', 'COUNT_PROMPT_BLOCK_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
         error,
       );
     }

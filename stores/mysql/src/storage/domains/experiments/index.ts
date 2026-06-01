@@ -12,9 +12,12 @@ import {
 import type {
   Experiment,
   ExperimentResult,
+  ExperimentReviewCounts,
+  ExperimentResultStatus,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
+  UpdateExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -71,6 +74,8 @@ interface ExperimentResultRow {
   completedAt: Date | string;
   retryCount: number;
   traceId: string | null;
+  status: string | null;
+  tags: string | null;
   createdAt: Date | string;
 }
 
@@ -130,6 +135,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       completedAt: parseDateTime(row.completedAt) ?? new Date(),
       retryCount: row.retryCount,
       traceId: row.traceId ?? null,
+      status: (row.status as ExperimentResultStatus | null) ?? null,
+      tags: row.tags ? (parseJSON<string[]>(row.tags) ?? null) : null,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
     };
   }
@@ -379,6 +386,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           completedAt: input.completedAt,
           retryCount: input.retryCount,
           traceId: input.traceId ?? null,
+          status: input.status ?? null,
+          tags: input.tags ? JSON.stringify(input.tags) : null,
           createdAt: now,
         },
       });
@@ -396,6 +405,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         completedAt: input.completedAt,
         retryCount: input.retryCount,
         traceId: input.traceId ?? null,
+        status: input.status ?? null,
+        tags: input.tags ?? null,
         createdAt: now,
       };
     } catch (error) {
@@ -421,6 +432,90 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       throw new MastraError(
         {
           id: 'MYSQL_GET_EXPERIMENT_RESULT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
+    try {
+      const existing = await this.operations.load<ExperimentResultRow>({
+        tableName: TABLE_EXPERIMENT_RESULTS,
+        keys: { id: input.id },
+      });
+      if (!existing) {
+        throw new Error(`Experiment result not found: ${input.id}`);
+      }
+      if (input.experimentId && existing.experimentId !== input.experimentId) {
+        throw new Error(`Experiment result ${input.id} does not belong to experiment ${input.experimentId}`);
+      }
+
+      const updateData: Record<string, unknown> = {};
+      if (input.status !== undefined) {
+        updateData.status = input.status;
+      }
+      if (input.tags !== undefined) {
+        updateData.tags = input.tags ? JSON.stringify(input.tags) : null;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await this.operations.update({
+          tableName: TABLE_EXPERIMENT_RESULTS,
+          keys: { id: input.id },
+          data: updateData,
+        });
+      }
+
+      const updated = await this.getExperimentResultById({ id: input.id });
+      if (!updated) {
+        throw new Error(`Experiment result ${input.id} not found after update`);
+      }
+      return updated;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'MYSQL_UPDATE_EXPERIMENT_RESULT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
+    try {
+      const rows = await this.operations.query<{
+        experimentId: string;
+        status: string | null;
+        count: number;
+      }>(
+        `SELECT ${quoteIdentifier('experimentId', 'column name')}, ${quoteIdentifier('status', 'column name')}, COUNT(*) as count FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} GROUP BY ${quoteIdentifier('experimentId', 'column name')}, ${quoteIdentifier('status', 'column name')}`,
+      );
+
+      const counts = new Map<string, ExperimentReviewCounts>();
+      for (const row of rows) {
+        let entry = counts.get(row.experimentId);
+        if (!entry) {
+          entry = { experimentId: row.experimentId, total: 0, needsReview: 0, reviewed: 0, complete: 0 };
+          counts.set(row.experimentId, entry);
+        }
+        const count = Number(row.count);
+        entry.total += count;
+        if (row.status === 'needs-review') entry.needsReview += count;
+        else if (row.status === 'reviewed') entry.reviewed += count;
+        else if (row.status === 'complete') entry.complete += count;
+      }
+
+      return Array.from(counts.values());
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MYSQL_GET_REVIEW_SUMMARY_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

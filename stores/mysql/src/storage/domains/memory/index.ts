@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { MessageList, type MastraDBMessage, type MastraMessageContentV2 } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
@@ -240,10 +241,10 @@ export class MemoryMySQL extends MemoryStorage {
   private mapMessage(row: MessageRow): MastraDBMessage {
     const createdAt = parseDateTime(row.createdAt) ?? new Date();
     let content: MastraMessageContentV2;
+    content = row.content as MastraMessageContentV2;
     if (typeof row.content === 'string') {
       try {
-        const parsed = JSON.parse(row.content);
-        content = parsed as MastraMessageContentV2;
+        content = JSON.parse(row.content) as MastraMessageContentV2;
       } catch {
         // Wrap legacy v1 string content into v2 shape
         content = {
@@ -252,8 +253,6 @@ export class MemoryMySQL extends MemoryStorage {
           content: row.content,
         } as MastraMessageContentV2;
       }
-    } else {
-      content = row.content as MastraMessageContentV2;
     }
 
     const message: MastraDBMessage = {
@@ -410,9 +409,8 @@ export class MemoryMySQL extends MemoryStorage {
       }
     }
 
-    const whereClause = conditions.length > 0
-      ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: params }
-      : { sql: '', args: [] };
+    const whereClause =
+      conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: params } : { sql: '', args: [] };
 
     try {
       const total = await this.operations.loadTotalCount({ tableName: TABLE_THREADS, whereClause });
@@ -469,8 +467,8 @@ export class MemoryMySQL extends MemoryStorage {
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     return this.listThreads({
       filter: { resourceId: args.resourceId },
-      page: args.page,
-      perPage: args.perPage,
+      page: args.page as number | undefined,
+      perPage: args.perPage as number | false | undefined,
       orderBy: args.orderBy || args.sortDirection ? { field: args.orderBy, direction: args.sortDirection } : undefined,
     });
   }
@@ -711,9 +709,7 @@ export class MemoryMySQL extends MemoryStorage {
     }
 
     const { messages: persisted } = await this.listMessagesById({ messageIds: insertedIds });
-    const ordered = insertedIds
-      .map(id => persisted.find(msg => msg.id === id))
-      .filter(Boolean) as MastraDBMessage[];
+    const ordered = insertedIds.map(id => persisted.find(msg => msg.id === id)).filter(Boolean) as MastraDBMessage[];
     return { messages: ordered };
   }
 
@@ -859,9 +855,11 @@ export class MemoryMySQL extends MemoryStorage {
 
   async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, filter, orderBy, page = 0, perPage: perPageInput } = args;
-    const selectBy = (args as StorageListMessagesInput & {
-      selectBy?: { include?: StorageListMessagesInput['include']; last?: number; vectorSearchString?: string };
-    }).selectBy;
+    const selectBy = (
+      args as StorageListMessagesInput & {
+        selectBy?: { include?: StorageListMessagesInput['include']; last?: number; vectorSearchString?: string };
+      }
+    ).selectBy;
     const include = args.include ?? selectBy?.include;
 
     // Normalize threadId to array
@@ -952,15 +950,12 @@ export class MemoryMySQL extends MemoryStorage {
       // last takes precedence over perPage
       const lastLimit =
         selectBy?.last !== undefined
-          ? (typeof selectBy.last === 'number' && selectBy.last > 0 ? selectBy.last : Number.MAX_SAFE_INTEGER)
+          ? typeof selectBy.last === 'number' && selectBy.last > 0
+            ? selectBy.last
+            : Number.MAX_SAFE_INTEGER
           : undefined;
 
-      const limitValue =
-        lastLimit !== undefined
-          ? lastLimit
-          : perPageInput === false
-            ? total
-            : normalizedPerPage;
+      const limitValue = lastLimit !== undefined ? lastLimit : perPageInput === false ? total : normalizedPerPage;
       const safeLimit = Math.max(0, Number(limitValue));
       const safeOffset = lastLimit !== undefined ? Math.max(0, total - safeLimit) : Math.max(0, Number(offset));
 
@@ -973,7 +968,11 @@ export class MemoryMySQL extends MemoryStorage {
       const paginatedMain = (rows as unknown as MessageRow[]).map(row => this.mapMessage(row));
       messagesByThread.set(primaryThreadId, paginatedMain);
 
-      const includeMessages = await this.collectIncludeMessages({ threadId: primaryThreadId, include, messagesByThread });
+      const includeMessages = await this.collectIncludeMessages({
+        threadId: primaryThreadId,
+        include,
+        messagesByThread,
+      });
 
       const combinedMap = new Map<string, MastraDBMessage>();
       for (const msg of paginatedMain) combinedMap.set(msg.id, msg);
@@ -986,17 +985,13 @@ export class MemoryMySQL extends MemoryStorage {
       const normalizedMessages = list.get.all.db();
       const messages = [...normalizedMessages].sort(comparator);
 
-      const baseHasMore =
-        perPageInput === false ? false : safeOffset + safeLimit < total;
+      const baseHasMore = perPageInput === false ? false : safeOffset + safeLimit < total;
 
       const threadIdSet = new Set(threadIds);
-      const mainThreadMessageCount = messages.filter(msg => msg.threadId !== undefined && threadIdSet.has(msg.threadId)).length;
-      const hasMore =
-        include && include.length
-          ? mainThreadMessageCount >= total
-            ? false
-            : baseHasMore
-          : baseHasMore;
+      const mainThreadMessageCount = messages.filter(
+        msg => msg.threadId !== undefined && threadIdSet.has(msg.threadId),
+      ).length;
+      const hasMore = include && include.length ? (mainThreadMessageCount >= total ? false : baseHasMore) : baseHasMore;
 
       return {
         messages,
@@ -1220,9 +1215,7 @@ export class MemoryMySQL extends MemoryStorage {
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
     try {
       const metadataValue =
-        resource.metadata === undefined || resource.metadata === null
-          ? null
-          : JSON.stringify(resource.metadata);
+        resource.metadata === undefined || resource.metadata === null ? null : JSON.stringify(resource.metadata);
       await this.operations.insert({
         tableName: TABLE_RESOURCES,
         record: {
@@ -1381,28 +1374,68 @@ export class MemoryMySQL extends MemoryStorage {
 
       const nowSql = transformToSqlValue(now);
       const cols = [
-        'id', 'lookupKey', 'scope', 'resourceId', 'threadId',
-        'activeObservations', 'activeObservationsPendingUpdate',
-        'originType', 'config', 'generationCount', 'lastObservedAt', 'lastReflectionAt',
-        'pendingMessageTokens', 'totalTokensObserved', 'observationTokenCount',
-        'isObserving', 'isReflecting', 'isBufferingObservation', 'isBufferingReflection', 'lastBufferedAtTokens', 'lastBufferedAtTime',
-        'observedTimezone', 'createdAt', 'updatedAt',
-      ].map(omCol).join(', ');
+        'id',
+        'lookupKey',
+        'scope',
+        'resourceId',
+        'threadId',
+        'activeObservations',
+        'activeObservationsPendingUpdate',
+        'originType',
+        'config',
+        'generationCount',
+        'lastObservedAt',
+        'lastReflectionAt',
+        'pendingMessageTokens',
+        'totalTokensObserved',
+        'observationTokenCount',
+        'isObserving',
+        'isReflecting',
+        'isBufferingObservation',
+        'isBufferingReflection',
+        'lastBufferedAtTokens',
+        'lastBufferedAtTime',
+        'observedTimezone',
+        'createdAt',
+        'updatedAt',
+      ]
+        .map(omCol)
+        .join(', ');
       const placeholders = Array.from({ length: 24 }, () => '?').join(', ');
 
-      await this.pool.execute(
-        `INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`,
-        [
-          id, lookupKey, input.scope, input.resourceId, input.threadId || null,
-          '', null, 'initial', JSON.stringify(input.config), 0, null, null,
-          0, 0, 0, false, false, false, false, 0, null,
-          input.observedTimezone || null, nowSql, nowSql,
-        ],
-      );
+      await this.pool.execute(`INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
+        id,
+        lookupKey,
+        input.scope,
+        input.resourceId,
+        input.threadId || null,
+        '',
+        null,
+        'initial',
+        JSON.stringify(input.config),
+        0,
+        null,
+        null,
+        0,
+        0,
+        0,
+        false,
+        false,
+        false,
+        false,
+        0,
+        null,
+        input.observedTimezone || null,
+        nowSql,
+        nowSql,
+      ]);
 
       return record;
     } catch (error) {
-      rethrowOrWrapOM(error, '', 'INITIALIZE_OBSERVATIONAL_MEMORY', { threadId: input.threadId, resourceId: input.resourceId });
+      rethrowOrWrapOM(error, '', 'INITIALIZE_OBSERVATIONAL_MEMORY', {
+        threadId: input.threadId,
+        resourceId: input.resourceId,
+      });
     }
   }
 
@@ -1473,31 +1506,67 @@ export class MemoryMySQL extends MemoryStorage {
 
       const nowSql = transformToSqlValue(now);
       const cols = [
-        'id', 'lookupKey', 'scope', 'resourceId', 'threadId',
-        'activeObservations', 'activeObservationsPendingUpdate',
-        'originType', 'config', 'generationCount', 'lastObservedAt', 'lastReflectionAt',
-        'pendingMessageTokens', 'totalTokensObserved', 'observationTokenCount',
-        'isObserving', 'isReflecting', 'isBufferingObservation', 'isBufferingReflection', 'lastBufferedAtTokens', 'lastBufferedAtTime',
-        'observedTimezone', 'createdAt', 'updatedAt',
-      ].map(omCol).join(', ');
+        'id',
+        'lookupKey',
+        'scope',
+        'resourceId',
+        'threadId',
+        'activeObservations',
+        'activeObservationsPendingUpdate',
+        'originType',
+        'config',
+        'generationCount',
+        'lastObservedAt',
+        'lastReflectionAt',
+        'pendingMessageTokens',
+        'totalTokensObserved',
+        'observationTokenCount',
+        'isObserving',
+        'isReflecting',
+        'isBufferingObservation',
+        'isBufferingReflection',
+        'lastBufferedAtTokens',
+        'lastBufferedAtTime',
+        'observedTimezone',
+        'createdAt',
+        'updatedAt',
+      ]
+        .map(omCol)
+        .join(', ');
       const placeholders = Array.from({ length: 24 }, () => '?').join(', ');
 
-      await this.pool.execute(
-        `INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`,
-        [
-          id, lookupKey, record.scope, record.resourceId, record.threadId || null,
-          input.reflection, null, 'reflection', JSON.stringify(record.config),
-          input.currentRecord.generationCount + 1,
-          record.lastObservedAt ? transformToSqlValue(record.lastObservedAt) : null, nowSql,
-          record.pendingMessageTokens, record.totalTokensObserved, record.observationTokenCount,
-          false, false, false, false, 0, null,
-          record.observedTimezone || null, nowSql, nowSql,
-        ],
-      );
+      await this.pool.execute(`INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
+        id,
+        lookupKey,
+        record.scope,
+        record.resourceId,
+        record.threadId || null,
+        input.reflection,
+        null,
+        'reflection',
+        JSON.stringify(record.config),
+        input.currentRecord.generationCount + 1,
+        record.lastObservedAt ? transformToSqlValue(record.lastObservedAt) : null,
+        nowSql,
+        record.pendingMessageTokens,
+        record.totalTokensObserved,
+        record.observationTokenCount,
+        false,
+        false,
+        false,
+        false,
+        0,
+        null,
+        record.observedTimezone || null,
+        nowSql,
+        nowSql,
+      ]);
 
       return record;
     } catch (error) {
-      rethrowOrWrapOM(error, input.currentRecord.id, 'CREATE_REFLECTION_GENERATION', { currentRecordId: input.currentRecord.id });
+      rethrowOrWrapOM(error, input.currentRecord.id, 'CREATE_REFLECTION_GENERATION', {
+        currentRecordId: input.currentRecord.id,
+      });
     }
   }
 
@@ -1517,12 +1586,7 @@ export class MemoryMySQL extends MemoryStorage {
         ...(lastBufferedAtTokens !== undefined ? [`${omCol('lastBufferedAtTokens')} = ?`] : []),
         `${omCol('updatedAt')} = ?`,
       ].join(', ');
-      const params = [
-        isBuffering,
-        ...(lastBufferedAtTokens !== undefined ? [lastBufferedAtTokens] : []),
-        nowSql,
-        id,
-      ];
+      const params = [isBuffering, ...(lastBufferedAtTokens !== undefined ? [lastBufferedAtTokens] : []), nowSql, id];
 
       const [result] = await this.pool.execute(
         `UPDATE ${OM_TABLE_QUOTED} SET ${sets} WHERE ${omCol('id')} = ?`,
@@ -1544,10 +1608,7 @@ export class MemoryMySQL extends MemoryStorage {
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      await this.pool.execute(
-        `DELETE FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ?`,
-        [lookupKey],
-      );
+      await this.pool.execute(`DELETE FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ?`, [lookupKey]);
     } catch (error) {
       rethrowOrWrapOM(error, '', 'CLEAR_OBSERVATIONAL_MEMORY', { threadId, resourceId });
     }
@@ -1897,8 +1958,12 @@ export class MemoryMySQL extends MemoryStorage {
       bufferedMessageIds: undefined,
       bufferedReflection: row.bufferedReflection || undefined,
       bufferedReflectionTokens: row.bufferedReflectionTokens ? Number(row.bufferedReflectionTokens) : undefined,
-      bufferedReflectionInputTokens: row.bufferedReflectionInputTokens ? Number(row.bufferedReflectionInputTokens) : undefined,
-      reflectedObservationLineCount: row.reflectedObservationLineCount ? Number(row.reflectedObservationLineCount) : undefined,
+      bufferedReflectionInputTokens: row.bufferedReflectionInputTokens
+        ? Number(row.bufferedReflectionInputTokens)
+        : undefined,
+      reflectedObservationLineCount: row.reflectedObservationLineCount
+        ? Number(row.reflectedObservationLineCount)
+        : undefined,
       totalTokensObserved: Number(row.totalTokensObserved || 0),
       observationTokenCount: Number(row.observationTokenCount || 0),
       pendingMessageTokens: Number(row.pendingMessageTokens || 0),
@@ -1906,8 +1971,11 @@ export class MemoryMySQL extends MemoryStorage {
       isObserving: parseMySQLBool(row.isObserving),
       isBufferingObservation: parseMySQLBool(row.isBufferingObservation),
       isBufferingReflection: parseMySQLBool(row.isBufferingReflection),
-      lastBufferedAtTokens: typeof row.lastBufferedAtTokens === 'number' ? row.lastBufferedAtTokens : parseInt(String(row.lastBufferedAtTokens ?? '0'), 10) || 0,
-      lastBufferedAtTime: row.lastBufferedAtTime ? parseDateTime(row.lastBufferedAtTime) ?? null : null,
+      lastBufferedAtTokens:
+        typeof row.lastBufferedAtTokens === 'number'
+          ? row.lastBufferedAtTokens
+          : parseInt(String(row.lastBufferedAtTokens ?? '0'), 10) || 0,
+      lastBufferedAtTime: row.lastBufferedAtTime ? (parseDateTime(row.lastBufferedAtTime) ?? null) : null,
       config: parseJSONColumn(row.config) ?? {},
       metadata: parseJSONColumn(row.metadata),
       observedMessageIds: parseJSONColumn<string[]>(row.observedMessageIds),

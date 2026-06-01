@@ -16,9 +16,7 @@ export function formatTableName(tableName: TABLE_NAMES, database?: string): stri
   return `${quoteIdentifier(database, 'database name')}.${tableIdent}`;
 }
 
-export function prepareWhereClause(
-  filters: Record<string, any>,
-): { sql: string; args: SqlParam[] } {
+export function prepareWhereClause(filters: Record<string, any>): { sql: string; args: SqlParam[] } {
   const conditions: string[] = [];
   const args: SqlParam[] = [];
 
@@ -82,7 +80,7 @@ export function transformToSqlValue(value: any): SqlParam {
   }
   if (value instanceof Date) {
     // MySQL DATETIME accepts 'YYYY-MM-DD HH:mm:ss.SSS' (no timezone). Preserve ms precision.
-    return value.toISOString().slice(0, 23).replace('T', ' ').replace('Z', '');
+    return value.toISOString().slice(0, 23).replace('T', ' ');
   }
   if (typeof value === 'object') {
     return JSON.stringify(value);

@@ -1,4 +1,3 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   WorkspacesStorage,
@@ -23,12 +22,22 @@ import type {
   ListWorkspaceVersionsInput,
   ListWorkspaceVersionsOutput,
 } from '@mastra/core/storage/domains/workspaces';
+import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
 
 const SNAPSHOT_FIELDS = [
-  'name', 'description', 'filesystem', 'sandbox', 'mounts', 'search', 'skills', 'tools', 'autoSync', 'operationTimeout',
+  'name',
+  'description',
+  'filesystem',
+  'sandbox',
+  'mounts',
+  'search',
+  'skills',
+  'tools',
+  'autoSync',
+  'operationTimeout',
 ] as const;
 
 export class WorkspacesMySQL extends WorkspacesStorage {
@@ -51,12 +60,16 @@ export class WorkspacesMySQL extends WorkspacesStorage {
     await this.operations.clearTable({ tableName: TABLE_WORKSPACES });
   }
 
-  private safeParseJSON(val: unknown): any {
+  private safeParseJSON<T = unknown>(val: unknown): T | undefined {
     if (val === null || val === undefined) return undefined;
     if (typeof val === 'string') {
-      try { return JSON.parse(val); } catch { return val; }
+      try {
+        return JSON.parse(val) as T;
+      } catch {
+        return val as T;
+      }
     }
-    return val;
+    return val as T;
   }
 
   private parseWorkspaceRow(row: Record<string, unknown>): StorageWorkspaceType {
@@ -95,12 +108,20 @@ export class WorkspacesMySQL extends WorkspacesStorage {
   async getById(id: string): Promise<StorageWorkspaceType | null> {
     try {
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${formatTableName(TABLE_WORKSPACES)} WHERE ${quoteIdentifier('id', 'column name')} = ?`, [id],
+        `SELECT * FROM ${formatTableName(TABLE_WORKSPACES)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [id],
       );
       return rows.length ? this.parseWorkspaceRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_WORKSPACE', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_WORKSPACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -108,24 +129,51 @@ export class WorkspacesMySQL extends WorkspacesStorage {
     const { workspace } = input;
     try {
       const now = new Date();
-      await this.operations.insert({
-        tableName: TABLE_WORKSPACES,
-        record: { id: workspace.id, status: 'draft', activeVersionId: null, authorId: workspace.authorId ?? null, metadata: workspace.metadata ?? null, createdAt: now, updatedAt: now },
+      await this.operations.withTransaction(async () => {
+        await this.operations.insert({
+          tableName: TABLE_WORKSPACES,
+          record: {
+            id: workspace.id,
+            status: 'draft',
+            activeVersionId: null,
+            authorId: workspace.authorId ?? null,
+            metadata: workspace.metadata ?? null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+
+        const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = workspace;
+        const versionId = crypto.randomUUID();
+        await this.createVersion({
+          id: versionId,
+          workspaceId: workspace.id,
+          versionNumber: 1,
+          ...snapshotConfig,
+          changedFields: Object.keys(snapshotConfig),
+          changeMessage: 'Initial version',
+        });
       });
 
-      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = workspace;
-      const versionId = crypto.randomUUID();
-      try {
-        await this.createVersion({ id: versionId, workspaceId: workspace.id, versionNumber: 1, ...snapshotConfig, changedFields: Object.keys(snapshotConfig), changeMessage: 'Initial version' });
-      } catch (versionError) {
-        await this.operations.delete({ tableName: TABLE_WORKSPACES, keys: { id: workspace.id } });
-        throw versionError;
-      }
-
-      return { id: workspace.id, status: 'draft', activeVersionId: undefined, authorId: workspace.authorId, metadata: workspace.metadata, createdAt: now, updatedAt: now };
+      return {
+        id: workspace.id,
+        status: 'draft',
+        activeVersionId: undefined,
+        authorId: workspace.authorId,
+        metadata: workspace.metadata,
+        createdAt: now,
+        updatedAt: now,
+      };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'CREATE_WORKSPACE', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'CREATE_WORKSPACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -133,7 +181,14 @@ export class WorkspacesMySQL extends WorkspacesStorage {
     const { id, ...updates } = input;
     try {
       const existing = await this.getById(id);
-      if (!existing) throw new MastraError({ id: createStorageErrorId('MYSQL', 'UPDATE_WORKSPACE', 'NOT_FOUND'), domain: ErrorDomain.STORAGE, category: ErrorCategory.USER, text: `Workspace ${id} not found`, details: { workspaceId: id } });
+      if (!existing)
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_WORKSPACE', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Workspace ${id} not found`,
+          details: { workspaceId: id },
+        });
 
       const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
       const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
@@ -141,44 +196,91 @@ export class WorkspacesMySQL extends WorkspacesStorage {
 
       const updateData: Record<string, unknown> = { updatedAt: new Date() };
       if (authorId !== undefined) updateData.authorId = authorId;
-      if (activeVersionId !== undefined) { updateData.activeVersionId = activeVersionId; if (status === undefined) updateData.status = 'published'; }
+      if (activeVersionId !== undefined) {
+        updateData.activeVersionId = activeVersionId;
+        if (status === undefined) updateData.status = 'published';
+      }
       if (status !== undefined) updateData.status = status;
       if (metadata !== undefined) updateData.metadata = { ...(existing.metadata || {}), ...metadata };
 
-      await this.operations.update({ tableName: TABLE_WORKSPACES, keys: { id }, data: updateData });
+      await this.operations.withTransaction(async () => {
+        await this.operations.update({ tableName: TABLE_WORKSPACES, keys: { id }, data: updateData });
 
-      if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion) throw new Error(`No versions found for workspace ${id}`);
+        if (hasConfigUpdate) {
+          // Read latest version inside transaction to prevent race conditions
+          const latestVersion = await this.getLatestVersion(id);
+          if (!latestVersion) throw new Error(`No versions found for workspace ${id}`);
 
-        const { id: _versionId, workspaceId: _workspaceId, versionNumber: _versionNumber, changedFields: _changedFields, changeMessage: _changeMessage, createdAt: _createdAt, ...latestConfig } = latestVersion;
-        const newConfig = { ...latestConfig, ...configFields };
-        const changedFields = configFieldNames.filter(
-          field => field in configFields && JSON.stringify(configFields[field as keyof typeof configFields]) !== JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-        );
+          const {
+            id: _versionId,
+            workspaceId: _workspaceId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...latestConfig
+          } = latestVersion;
+          const newConfig = { ...latestConfig, ...configFields };
+          const changedFields = configFieldNames.filter(
+            field =>
+              field in configFields &&
+              JSON.stringify(configFields[field as keyof typeof configFields]) !==
+                JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+          );
 
-        if (changedFields.length > 0) {
-          const newVersionId = crypto.randomUUID();
-          await this.createVersion({ id: newVersionId, workspaceId: id, versionNumber: latestVersion.versionNumber + 1, ...newConfig, changedFields, changeMessage: `Updated ${changedFields.join(', ')}` });
+          if (changedFields.length > 0) {
+            const newVersionId = crypto.randomUUID();
+            await this.createVersion({
+              id: newVersionId,
+              workspaceId: id,
+              versionNumber: latestVersion.versionNumber + 1,
+              ...newConfig,
+              changedFields,
+              changeMessage: `Updated ${changedFields.join(', ')}`,
+            });
+          }
         }
-      }
+      });
 
       const updated = await this.getById(id);
-      if (!updated) throw new MastraError({ id: createStorageErrorId('MYSQL', 'UPDATE_WORKSPACE', 'NOT_FOUND_AFTER_UPDATE'), domain: ErrorDomain.STORAGE, category: ErrorCategory.SYSTEM, text: `Workspace ${id} not found after update`, details: { id } });
+      if (!updated)
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_WORKSPACE', 'NOT_FOUND_AFTER_UPDATE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Workspace ${id} not found after update`,
+          details: { id },
+        });
       return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'UPDATE_WORKSPACE', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'UPDATE_WORKSPACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async delete(id: string): Promise<void> {
     try {
-      await this.deleteVersionsByParentId(id);
-      await this.operations.delete({ tableName: TABLE_WORKSPACES, keys: { id } });
+      await this.operations.withTransaction(async () => {
+        await this.deleteVersionsByParentId(id);
+        await this.operations.delete({ tableName: TABLE_WORKSPACES, keys: { id } });
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'DELETE_WORKSPACE', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_WORKSPACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -189,21 +291,36 @@ export class WorkspacesMySQL extends WorkspacesStorage {
 
       const conditions: string[] = [];
       const queryParams: any[] = [];
-      if (authorId !== undefined) { conditions.push(`${quoteIdentifier('authorId', 'column name')} = ?`); queryParams.push(authorId); }
+      if (authorId !== undefined) {
+        conditions.push(`${quoteIdentifier('authorId', 'column name')} = ?`);
+        queryParams.push(authorId);
+      }
       if (metadata && Object.keys(metadata).length > 0) {
         for (const [key, value] of Object.entries(metadata)) {
-          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) throw new MastraError({ id: createStorageErrorId('MYSQL', 'LIST_WORKSPACES', 'INVALID_METADATA_KEY'), domain: ErrorDomain.STORAGE, category: ErrorCategory.USER, text: `Invalid metadata key: ${key}`, details: { key } });
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key))
+            throw new MastraError({
+              id: createStorageErrorId('MYSQL', 'LIST_WORKSPACES', 'INVALID_METADATA_KEY'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Invalid metadata key: ${key}`,
+              details: { key },
+            });
           if (typeof value === 'string') {
-            conditions.push(`JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`);
+            conditions.push(
+              `JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,
+            );
             queryParams.push(value);
           } else {
-            conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`);
+            conditions.push(
+              `JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`,
+            );
             queryParams.push(JSON.stringify(value));
           }
         }
       }
 
-      const whereClause = conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: queryParams } : undefined;
+      const whereClause =
+        conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: queryParams } : undefined;
       const total = await this.operations.loadTotalCount({ tableName: TABLE_WORKSPACES, whereClause });
       if (total === 0) return { workspaces: [], total: 0, page, perPage: perPageInput ?? 100, hasMore: false };
 
@@ -212,14 +329,30 @@ export class WorkspacesMySQL extends WorkspacesStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.operations.loadMany<Record<string, unknown>>({
-        tableName: TABLE_WORKSPACES, whereClause,
-        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`, offset, limit: limitValue,
+        tableName: TABLE_WORKSPACES,
+        whereClause,
+        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`,
+        offset,
+        limit: limitValue,
       });
 
-      return { workspaces: rows.map(row => this.parseWorkspaceRow(row)), total, page, perPage: perPageForResponse, hasMore: perPageInput === false ? false : offset + perPage < total };
+      return {
+        workspaces: rows.map(row => this.parseWorkspaceRow(row)),
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'LIST_WORKSPACES', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'LIST_WORKSPACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -233,31 +366,55 @@ export class WorkspacesMySQL extends WorkspacesStorage {
       await this.operations.insert({
         tableName: TABLE_WORKSPACE_VERSIONS,
         record: {
-          id: input.id, workspaceId: input.workspaceId, versionNumber: input.versionNumber,
-          name: input.name, description: input.description ?? null,
-          filesystem: input.filesystem ?? null, sandbox: input.sandbox ?? null,
-          mounts: input.mounts ?? null, search: input.search ?? null,
-          skills: input.skills ?? null, tools: input.tools ?? null,
-          autoSync: input.autoSync ? 1 : 0, operationTimeout: input.operationTimeout ?? null,
-          changedFields: input.changedFields ?? null, changeMessage: input.changeMessage ?? null, createdAt: now,
+          id: input.id,
+          workspaceId: input.workspaceId,
+          versionNumber: input.versionNumber,
+          name: input.name,
+          description: input.description ?? null,
+          filesystem: input.filesystem ?? null,
+          sandbox: input.sandbox ?? null,
+          mounts: input.mounts ?? null,
+          search: input.search ?? null,
+          skills: input.skills ?? null,
+          tools: input.tools ?? null,
+          autoSync: input.autoSync ? 1 : 0,
+          operationTimeout: input.operationTimeout ?? null,
+          changedFields: input.changedFields ?? null,
+          changeMessage: input.changeMessage ?? null,
+          createdAt: now,
         },
       });
       return { ...input, createdAt: now };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'CREATE_WORKSPACE_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'CREATE_WORKSPACE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async getVersion(id: string): Promise<WorkspaceVersion | null> {
     try {
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${formatTableName(TABLE_WORKSPACE_VERSIONS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`, [id],
+        `SELECT * FROM ${formatTableName(TABLE_WORKSPACE_VERSIONS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [id],
       );
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_WORKSPACE_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_WORKSPACE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -265,13 +422,23 @@ export class WorkspacesMySQL extends WorkspacesStorage {
     try {
       const rows = await this.operations.loadMany<Record<string, unknown>>({
         tableName: TABLE_WORKSPACE_VERSIONS,
-        whereClause: { sql: ` WHERE ${quoteIdentifier('workspaceId', 'column name')} = ? AND ${quoteIdentifier('versionNumber', 'column name')} = ?`, args: [workspaceId, versionNumber] },
+        whereClause: {
+          sql: ` WHERE ${quoteIdentifier('workspaceId', 'column name')} = ? AND ${quoteIdentifier('versionNumber', 'column name')} = ?`,
+          args: [workspaceId, versionNumber],
+        },
         limit: 1,
       });
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_WORKSPACE_VERSION_BY_NUMBER', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_WORKSPACE_VERSION_BY_NUMBER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -280,12 +447,20 @@ export class WorkspacesMySQL extends WorkspacesStorage {
       const rows = await this.operations.loadMany<Record<string, unknown>>({
         tableName: TABLE_WORKSPACE_VERSIONS,
         whereClause: { sql: ` WHERE ${quoteIdentifier('workspaceId', 'column name')} = ?`, args: [workspaceId] },
-        orderBy: `${quoteIdentifier('versionNumber', 'column name')} DESC`, limit: 1,
+        orderBy: `${quoteIdentifier('versionNumber', 'column name')} DESC`,
+        limit: 1,
       });
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_LATEST_WORKSPACE_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_LATEST_WORKSPACE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -302,30 +477,65 @@ export class WorkspacesMySQL extends WorkspacesStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.operations.loadMany<Record<string, unknown>>({
-        tableName: TABLE_WORKSPACE_VERSIONS, whereClause,
-        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`, offset, limit: limitValue,
+        tableName: TABLE_WORKSPACE_VERSIONS,
+        whereClause,
+        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`,
+        offset,
+        limit: limitValue,
       });
 
-      return { versions: rows.map(row => this.parseVersionRow(row)), total, page, perPage: perPageForResponse, hasMore: perPageInput === false ? false : offset + perPage < total };
+      return {
+        versions: rows.map(row => this.parseVersionRow(row)),
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'LIST_WORKSPACE_VERSIONS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'LIST_WORKSPACE_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async deleteVersion(id: string): Promise<void> {
-    try { await this.operations.delete({ tableName: TABLE_WORKSPACE_VERSIONS, keys: { id } }); } catch (error) {
+    try {
+      await this.operations.delete({ tableName: TABLE_WORKSPACE_VERSIONS, keys: { id } });
+    } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'DELETE_WORKSPACE_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_WORKSPACE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
-      await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_WORKSPACE_VERSIONS)} WHERE ${quoteIdentifier('workspaceId', 'column name')} = ?`, [entityId]);
+      await this.pool.execute(
+        `DELETE FROM ${formatTableName(TABLE_WORKSPACE_VERSIONS)} WHERE ${quoteIdentifier('workspaceId', 'column name')} = ?`,
+        [entityId],
+      );
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'DELETE_WORKSPACE_VERSIONS_BY_WORKSPACE', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_WORKSPACE_VERSIONS_BY_WORKSPACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -337,7 +547,14 @@ export class WorkspacesMySQL extends WorkspacesStorage {
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'COUNT_WORKSPACE_VERSIONS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'COUNT_WORKSPACE_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 }

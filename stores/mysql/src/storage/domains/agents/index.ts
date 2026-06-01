@@ -1,4 +1,3 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -22,6 +21,7 @@ import type {
   ListVersionsOutput,
   AgentInstructionBlock,
 } from '@mastra/core/storage';
+import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
@@ -56,16 +56,16 @@ export class AgentsMySQL extends AgentsStorage {
     await this.operations.clearTable({ tableName: TABLE_AGENTS });
   }
 
-  private safeParseJSON(value: unknown): any {
+  private safeParseJSON<T = unknown>(value: unknown): T | undefined {
     if (value === null || value === undefined) return undefined;
     if (typeof value === 'string') {
       try {
-        return JSON.parse(value);
+        return JSON.parse(value) as T;
       } catch {
-        return value;
+        return value as T;
       }
     }
-    return value;
+    return value as T;
   }
 
   private parseRow(row: Record<string, unknown>): StorageAgentType {
@@ -284,16 +284,21 @@ export class AgentsMySQL extends AgentsStorage {
             });
           }
           if (typeof value === 'string') {
-            conditions.push(`JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`);
+            conditions.push(
+              `JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,
+            );
             queryParams.push(value);
           } else {
-            conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`);
+            conditions.push(
+              `JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`,
+            );
             queryParams.push(JSON.stringify(value));
           }
         }
       }
 
-      const whereClause = conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: queryParams } : undefined;
+      const whereClause =
+        conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: queryParams } : undefined;
 
       const total = await this.operations.loadTotalCount({ tableName: TABLE_AGENTS, whereClause });
 
@@ -625,22 +630,22 @@ export class AgentsMySQL extends AgentsStorage {
       name: row.name as string,
       description: (row.description as string) ?? undefined,
       instructions: this.deserializeInstructions(row.instructions as string),
-      model: this.safeParseJSON(row.model),
-      tools: this.safeParseJSON(row.tools),
-      defaultOptions: this.safeParseJSON(row.defaultOptions),
-      workflows: this.safeParseJSON(row.workflows),
-      agents: this.safeParseJSON(row.agents),
-      integrationTools: this.safeParseJSON(row.integrationTools),
-      inputProcessors: this.safeParseJSON(row.inputProcessors),
-      outputProcessors: this.safeParseJSON(row.outputProcessors),
-      memory: this.safeParseJSON(row.memory),
-      scorers: this.safeParseJSON(row.scorers),
-      mcpClients: this.safeParseJSON(row.mcpClients),
-      requestContextSchema: this.safeParseJSON(row.requestContextSchema),
-      workspace: this.safeParseJSON(row.workspace),
-      skills: this.safeParseJSON(row.skills),
+      model: this.safeParseJSON(row.model) as AgentVersion['model'],
+      tools: this.safeParseJSON(row.tools) as AgentVersion['tools'],
+      defaultOptions: this.safeParseJSON(row.defaultOptions) as AgentVersion['defaultOptions'],
+      workflows: this.safeParseJSON(row.workflows) as AgentVersion['workflows'],
+      agents: this.safeParseJSON(row.agents) as AgentVersion['agents'],
+      integrationTools: this.safeParseJSON(row.integrationTools) as AgentVersion['integrationTools'],
+      inputProcessors: this.safeParseJSON(row.inputProcessors) as AgentVersion['inputProcessors'],
+      outputProcessors: this.safeParseJSON(row.outputProcessors) as AgentVersion['outputProcessors'],
+      memory: this.safeParseJSON(row.memory) as AgentVersion['memory'],
+      scorers: this.safeParseJSON(row.scorers) as AgentVersion['scorers'],
+      mcpClients: this.safeParseJSON(row.mcpClients) as AgentVersion['mcpClients'],
+      requestContextSchema: this.safeParseJSON(row.requestContextSchema) as AgentVersion['requestContextSchema'],
+      workspace: this.safeParseJSON(row.workspace) as AgentVersion['workspace'],
+      skills: this.safeParseJSON(row.skills) as AgentVersion['skills'],
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
-      changedFields: this.safeParseJSON(row.changedFields),
+      changedFields: this.safeParseJSON(row.changedFields) as AgentVersion['changedFields'],
       changeMessage: (row.changeMessage as string) ?? undefined,
       createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt as string),
     };

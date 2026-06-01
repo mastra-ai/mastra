@@ -1,7 +1,7 @@
-import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { StoreOperations, TABLE_SPANS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import {
   formatTableName,
   prepareDeleteStatement,
@@ -9,10 +9,10 @@ import {
   prepareUpdateStatement,
   prepareWhereClause,
   quoteIdentifier,
-  type SqlParam,
   transformFromSqlRow,
   transformToSqlValue,
 } from '../utils';
+import type { SqlParam } from '../utils';
 
 type WhereClause = {
   sql: string;
@@ -65,12 +65,9 @@ export class StoreOperationsMySQL extends StoreOperations {
     return Number(rows[0]?.count ?? 0) > 0;
   }
 
-  protected getSqlType(
-    type: StorageColumn['type'],
-    opts?: { isKey?: boolean; isNullable?: boolean },
-  ): string {
+  protected getSqlType(type: StorageColumn['type'], opts?: { isKey?: boolean; isNullable?: boolean }): string {
     const isKey = Boolean(opts?.isKey);
-    const isNullable = opts?.isNullable ?? true;
+    const _isNullable = opts?.isNullable ?? true;
     switch (type) {
       case 'text':
         // Keys should remain short and indexable
@@ -153,7 +150,9 @@ export class StoreOperationsMySQL extends StoreOperations {
     } else if (tableName === TABLE_SPANS) {
       extraConstraints.push('PRIMARY KEY (traceId, spanId)');
     } else if (tableName === ('mastra_dataset_items' as TABLE_NAMES)) {
-      extraConstraints.push(`PRIMARY KEY (${quoteIdentifier('id', 'primary key column')}, ${quoteIdentifier('datasetVersion', 'primary key column')})`);
+      extraConstraints.push(
+        `PRIMARY KEY (${quoteIdentifier('id', 'primary key column')}, ${quoteIdentifier('datasetVersion', 'primary key column')})`,
+      );
     }
 
     return `CREATE TABLE IF NOT EXISTS ${tableIdent} (${[...columns, ...extraConstraints].filter(Boolean).join(', ')}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
@@ -172,7 +171,10 @@ export class StoreOperationsMySQL extends StoreOperations {
       return true;
     }
 
-    if (tableName === ('mastra_dataset_items' as TABLE_NAMES) && (columnName === 'id' || columnName === 'datasetVersion')) {
+    if (
+      tableName === ('mastra_dataset_items' as TABLE_NAMES) &&
+      (columnName === 'id' || columnName === 'datasetVersion')
+    ) {
       return true;
     }
 
@@ -186,7 +188,7 @@ export class StoreOperationsMySQL extends StoreOperations {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
-    const connection = await (this.pool).getConnection();
+    const connection = await this.pool.getConnection();
     try {
       const db = await this.getDatabase();
       const [t_rows] = await connection.query(
@@ -250,7 +252,7 @@ export class StoreOperationsMySQL extends StoreOperations {
     }
   }
 
-  private async withTransaction<T>(fn: (connection: PoolConnection) => Promise<T>): Promise<T> {
+  async withTransaction<T>(fn: (connection: PoolConnection) => Promise<T>): Promise<T> {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -362,13 +364,7 @@ export class StoreOperationsMySQL extends StoreOperations {
     }
   }
 
-  async batchDelete({
-    tableName,
-    keys,
-  }: {
-    tableName: TABLE_NAMES;
-    keys: Record<string, any>[];
-  }): Promise<void> {
+  async batchDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any>[] }): Promise<void> {
     if (keys.length === 0) return;
     try {
       await this.withTransaction(async connection => {
@@ -534,7 +530,8 @@ export class StoreOperationsMySQL extends StoreOperations {
 
     // Check if table exists first
     const db = await this.getDatabase();
-    const tableExistsSql = 'SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = ?';
+    const tableExistsSql =
+      'SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = ?';
     const [tableRows] = await this.pool.execute<RowDataPacket[]>(tableExistsSql, [db ?? '', tableName]);
     const tableExists = Array.isArray(tableRows) && tableRows.length > 0 && (tableRows[0] as any).count > 0;
 
@@ -543,8 +540,7 @@ export class StoreOperationsMySQL extends StoreOperations {
     }
 
     const params: SqlParam[] = [tableName];
-    let sql =
-      'SELECT column_name FROM information_schema.columns WHERE table_name = ?';
+    let sql = 'SELECT column_name FROM information_schema.columns WHERE table_name = ?';
     if (db) {
       sql += ' AND table_schema = ?';
       params.push(db);

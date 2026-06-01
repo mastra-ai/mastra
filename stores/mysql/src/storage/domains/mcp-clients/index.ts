@@ -1,4 +1,3 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   MCPClientsStorage,
@@ -23,6 +22,7 @@ import type {
   ListMCPClientVersionsInput,
   ListMCPClientVersionsOutput,
 } from '@mastra/core/storage/domains/mcp-clients';
+import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
@@ -47,12 +47,16 @@ export class MCPClientsMySQL extends MCPClientsStorage {
     await this.operations.clearTable({ tableName: TABLE_MCP_CLIENTS });
   }
 
-  private safeParseJSON(val: unknown): any {
+  private safeParseJSON<T = unknown>(val: unknown): T | undefined {
     if (val === null || val === undefined) return undefined;
     if (typeof val === 'string') {
-      try { return JSON.parse(val); } catch { return val; }
+      try {
+        return JSON.parse(val) as T;
+      } catch {
+        return val as T;
+      }
     }
-    return val;
+    return val as T;
   }
 
   private parseClientRow(row: Record<string, unknown>): StorageMCPClientType {
@@ -84,12 +88,20 @@ export class MCPClientsMySQL extends MCPClientsStorage {
   async getById(id: string): Promise<StorageMCPClientType | null> {
     try {
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${formatTableName(TABLE_MCP_CLIENTS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`, [id],
+        `SELECT * FROM ${formatTableName(TABLE_MCP_CLIENTS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [id],
       );
       return rows.length ? this.parseClientRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_MCP_CLIENT', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_MCP_CLIENT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -99,22 +111,52 @@ export class MCPClientsMySQL extends MCPClientsStorage {
       const now = new Date();
       await this.operations.insert({
         tableName: TABLE_MCP_CLIENTS,
-        record: { id: mcpClient.id, status: 'draft', activeVersionId: null, authorId: mcpClient.authorId ?? null, metadata: mcpClient.metadata ?? null, createdAt: now, updatedAt: now },
+        record: {
+          id: mcpClient.id,
+          status: 'draft',
+          activeVersionId: null,
+          authorId: mcpClient.authorId ?? null,
+          metadata: mcpClient.metadata ?? null,
+          createdAt: now,
+          updatedAt: now,
+        },
       });
 
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = mcpClient;
       const versionId = crypto.randomUUID();
       try {
-        await this.createVersion({ id: versionId, mcpClientId: mcpClient.id, versionNumber: 1, ...snapshotConfig, changedFields: Object.keys(snapshotConfig), changeMessage: 'Initial version' });
+        await this.createVersion({
+          id: versionId,
+          mcpClientId: mcpClient.id,
+          versionNumber: 1,
+          ...snapshotConfig,
+          changedFields: Object.keys(snapshotConfig),
+          changeMessage: 'Initial version',
+        });
       } catch (versionError) {
         await this.operations.delete({ tableName: TABLE_MCP_CLIENTS, keys: { id: mcpClient.id } });
         throw versionError;
       }
 
-      return { id: mcpClient.id, status: 'draft', activeVersionId: undefined, authorId: mcpClient.authorId, metadata: mcpClient.metadata, createdAt: now, updatedAt: now };
+      return {
+        id: mcpClient.id,
+        status: 'draft',
+        activeVersionId: undefined,
+        authorId: mcpClient.authorId,
+        metadata: mcpClient.metadata,
+        createdAt: now,
+        updatedAt: now,
+      };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'CREATE_MCP_CLIENT', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'CREATE_MCP_CLIENT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -134,11 +176,25 @@ export class MCPClientsMySQL extends MCPClientsStorage {
       await this.operations.update({ tableName: TABLE_MCP_CLIENTS, keys: { id }, data: updateData });
 
       const updated = await this.getById(id);
-      if (!updated) throw new MastraError({ id: createStorageErrorId('MYSQL', 'UPDATE_MCP_CLIENT', 'NOT_FOUND_AFTER_UPDATE'), domain: ErrorDomain.STORAGE, category: ErrorCategory.SYSTEM, text: `MCP client ${id} not found after update`, details: { id } });
+      if (!updated)
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_MCP_CLIENT', 'NOT_FOUND_AFTER_UPDATE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `MCP client ${id} not found after update`,
+          details: { id },
+        });
       return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'UPDATE_MCP_CLIENT', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'UPDATE_MCP_CLIENT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -148,7 +204,14 @@ export class MCPClientsMySQL extends MCPClientsStorage {
       await this.operations.delete({ tableName: TABLE_MCP_CLIENTS, keys: { id } });
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'DELETE_MCP_CLIENT', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_MCP_CLIENT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -161,15 +224,29 @@ export class MCPClientsMySQL extends MCPClientsStorage {
       const queryParams: any[] = [];
       conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
       queryParams.push(status);
-      if (authorId !== undefined) { conditions.push(`${quoteIdentifier('authorId', 'column name')} = ?`); queryParams.push(authorId); }
+      if (authorId !== undefined) {
+        conditions.push(`${quoteIdentifier('authorId', 'column name')} = ?`);
+        queryParams.push(authorId);
+      }
       if (metadata && Object.keys(metadata).length > 0) {
         for (const [key, value] of Object.entries(metadata)) {
-          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) throw new MastraError({ id: createStorageErrorId('MYSQL', 'LIST_MCP_CLIENTS', 'INVALID_METADATA_KEY'), domain: ErrorDomain.STORAGE, category: ErrorCategory.USER, text: `Invalid metadata key: ${key}`, details: { key } });
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key))
+            throw new MastraError({
+              id: createStorageErrorId('MYSQL', 'LIST_MCP_CLIENTS', 'INVALID_METADATA_KEY'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Invalid metadata key: ${key}`,
+              details: { key },
+            });
           if (typeof value === 'string') {
-            conditions.push(`JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`);
+            conditions.push(
+              `JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,
+            );
             queryParams.push(value);
           } else {
-            conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`);
+            conditions.push(
+              `JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`,
+            );
             queryParams.push(JSON.stringify(value));
           }
         }
@@ -184,14 +261,30 @@ export class MCPClientsMySQL extends MCPClientsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.operations.loadMany<Record<string, unknown>>({
-        tableName: TABLE_MCP_CLIENTS, whereClause,
-        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`, offset, limit: limitValue,
+        tableName: TABLE_MCP_CLIENTS,
+        whereClause,
+        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`,
+        offset,
+        limit: limitValue,
       });
 
-      return { mcpClients: rows.map(row => this.parseClientRow(row)), total, page, perPage: perPageForResponse, hasMore: perPageInput === false ? false : offset + perPage < total };
+      return {
+        mcpClients: rows.map(row => this.parseClientRow(row)),
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'LIST_MCP_CLIENTS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'LIST_MCP_CLIENTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -205,27 +298,48 @@ export class MCPClientsMySQL extends MCPClientsStorage {
       await this.operations.insert({
         tableName: TABLE_MCP_CLIENT_VERSIONS,
         record: {
-          id: input.id, mcpClientId: input.mcpClientId, versionNumber: input.versionNumber,
-          name: input.name, description: input.description ?? null, servers: input.servers ?? null,
-          changedFields: input.changedFields ?? null, changeMessage: input.changeMessage ?? null, createdAt: now,
+          id: input.id,
+          mcpClientId: input.mcpClientId,
+          versionNumber: input.versionNumber,
+          name: input.name,
+          description: input.description ?? null,
+          servers: input.servers ?? null,
+          changedFields: input.changedFields ?? null,
+          changeMessage: input.changeMessage ?? null,
+          createdAt: now,
         },
       });
       return { ...input, createdAt: now };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'CREATE_MCP_CLIENT_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'CREATE_MCP_CLIENT_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async getVersion(id: string): Promise<MCPClientVersion | null> {
     try {
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${formatTableName(TABLE_MCP_CLIENT_VERSIONS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`, [id],
+        `SELECT * FROM ${formatTableName(TABLE_MCP_CLIENT_VERSIONS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [id],
       );
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_MCP_CLIENT_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_MCP_CLIENT_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -233,13 +347,23 @@ export class MCPClientsMySQL extends MCPClientsStorage {
     try {
       const rows = await this.operations.loadMany<Record<string, unknown>>({
         tableName: TABLE_MCP_CLIENT_VERSIONS,
-        whereClause: { sql: ` WHERE ${quoteIdentifier('mcpClientId', 'column name')} = ? AND ${quoteIdentifier('versionNumber', 'column name')} = ?`, args: [mcpClientId, versionNumber] },
+        whereClause: {
+          sql: ` WHERE ${quoteIdentifier('mcpClientId', 'column name')} = ? AND ${quoteIdentifier('versionNumber', 'column name')} = ?`,
+          args: [mcpClientId, versionNumber],
+        },
         limit: 1,
       });
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_MCP_CLIENT_VERSION_BY_NUMBER', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_MCP_CLIENT_VERSION_BY_NUMBER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -248,12 +372,20 @@ export class MCPClientsMySQL extends MCPClientsStorage {
       const rows = await this.operations.loadMany<Record<string, unknown>>({
         tableName: TABLE_MCP_CLIENT_VERSIONS,
         whereClause: { sql: ` WHERE ${quoteIdentifier('mcpClientId', 'column name')} = ?`, args: [mcpClientId] },
-        orderBy: `${quoteIdentifier('versionNumber', 'column name')} DESC`, limit: 1,
+        orderBy: `${quoteIdentifier('versionNumber', 'column name')} DESC`,
+        limit: 1,
       });
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_LATEST_MCP_CLIENT_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_LATEST_MCP_CLIENT_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -270,30 +402,65 @@ export class MCPClientsMySQL extends MCPClientsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.operations.loadMany<Record<string, unknown>>({
-        tableName: TABLE_MCP_CLIENT_VERSIONS, whereClause,
-        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`, offset, limit: limitValue,
+        tableName: TABLE_MCP_CLIENT_VERSIONS,
+        whereClause,
+        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`,
+        offset,
+        limit: limitValue,
       });
 
-      return { versions: rows.map(row => this.parseVersionRow(row)), total, page, perPage: perPageForResponse, hasMore: perPageInput === false ? false : offset + perPage < total };
+      return {
+        versions: rows.map(row => this.parseVersionRow(row)),
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'LIST_MCP_CLIENT_VERSIONS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'LIST_MCP_CLIENT_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async deleteVersion(id: string): Promise<void> {
-    try { await this.operations.delete({ tableName: TABLE_MCP_CLIENT_VERSIONS, keys: { id } }); } catch (error) {
+    try {
+      await this.operations.delete({ tableName: TABLE_MCP_CLIENT_VERSIONS, keys: { id } });
+    } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'DELETE_MCP_CLIENT_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_MCP_CLIENT_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
-      await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_MCP_CLIENT_VERSIONS)} WHERE ${quoteIdentifier('mcpClientId', 'column name')} = ?`, [entityId]);
+      await this.pool.execute(
+        `DELETE FROM ${formatTableName(TABLE_MCP_CLIENT_VERSIONS)} WHERE ${quoteIdentifier('mcpClientId', 'column name')} = ?`,
+        [entityId],
+      );
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'DELETE_MCP_CLIENT_VERSIONS_BY_CLIENT', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_MCP_CLIENT_VERSIONS_BY_CLIENT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -305,7 +472,14 @@ export class MCPClientsMySQL extends MCPClientsStorage {
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'COUNT_MCP_CLIENT_VERSIONS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'COUNT_MCP_CLIENT_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 }

@@ -9,9 +9,8 @@ services:
       MYSQL_USER: ${MYSQL_USER:-mastra}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-mastra}
       MYSQL_DATABASE: ${MYSQL_DB:-mastra}
-    command: --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot']
       interval: 5s
       timeout: 5s
       retries: 10

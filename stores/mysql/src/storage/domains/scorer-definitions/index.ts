@@ -1,4 +1,3 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   ScorerDefinitionsStorage,
@@ -23,6 +22,7 @@ import type {
   ListScorerDefinitionVersionsInput,
   ListScorerDefinitionVersionsOutput,
 } from '@mastra/core/storage/domains/scorer-definitions';
+import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
@@ -39,7 +39,10 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
 
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_SCORER_DEFINITIONS, schema: SCORER_DEFINITIONS_SCHEMA });
-    await this.operations.createTable({ tableName: TABLE_SCORER_DEFINITION_VERSIONS, schema: SCORER_DEFINITION_VERSIONS_SCHEMA });
+    await this.operations.createTable({
+      tableName: TABLE_SCORER_DEFINITION_VERSIONS,
+      schema: SCORER_DEFINITION_VERSIONS_SCHEMA,
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -47,12 +50,16 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
     await this.operations.clearTable({ tableName: TABLE_SCORER_DEFINITIONS });
   }
 
-  private safeParseJSON(val: unknown): any {
+  private safeParseJSON<T = unknown>(val: unknown): T | undefined {
     if (val === null || val === undefined) return undefined;
     if (typeof val === 'string') {
-      try { return JSON.parse(val); } catch { return val; }
+      try {
+        return JSON.parse(val) as T;
+      } catch {
+        return val as T;
+      }
     }
-    return val;
+    return val as T;
   }
 
   private parseScorerRow(row: Record<string, unknown>): StorageScorerDefinitionType {
@@ -89,12 +96,20 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
   async getById(id: string): Promise<StorageScorerDefinitionType | null> {
     try {
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${formatTableName(TABLE_SCORER_DEFINITIONS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`, [id],
+        `SELECT * FROM ${formatTableName(TABLE_SCORER_DEFINITIONS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [id],
       );
       return rows.length ? this.parseScorerRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_SCORER_DEFINITION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_SCORER_DEFINITION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -104,22 +119,52 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
       const now = new Date();
       await this.operations.insert({
         tableName: TABLE_SCORER_DEFINITIONS,
-        record: { id: scorerDefinition.id, status: 'draft', activeVersionId: null, authorId: scorerDefinition.authorId ?? null, metadata: scorerDefinition.metadata ?? null, createdAt: now, updatedAt: now },
+        record: {
+          id: scorerDefinition.id,
+          status: 'draft',
+          activeVersionId: null,
+          authorId: scorerDefinition.authorId ?? null,
+          metadata: scorerDefinition.metadata ?? null,
+          createdAt: now,
+          updatedAt: now,
+        },
       });
 
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = scorerDefinition;
       const versionId = crypto.randomUUID();
       try {
-        await this.createVersion({ id: versionId, scorerDefinitionId: scorerDefinition.id, versionNumber: 1, ...snapshotConfig, changedFields: Object.keys(snapshotConfig), changeMessage: 'Initial version' });
+        await this.createVersion({
+          id: versionId,
+          scorerDefinitionId: scorerDefinition.id,
+          versionNumber: 1,
+          ...snapshotConfig,
+          changedFields: Object.keys(snapshotConfig),
+          changeMessage: 'Initial version',
+        });
       } catch (versionError) {
         await this.operations.delete({ tableName: TABLE_SCORER_DEFINITIONS, keys: { id: scorerDefinition.id } });
         throw versionError;
       }
 
-      return { id: scorerDefinition.id, status: 'draft', activeVersionId: undefined, authorId: scorerDefinition.authorId, metadata: scorerDefinition.metadata, createdAt: now, updatedAt: now };
+      return {
+        id: scorerDefinition.id,
+        status: 'draft',
+        activeVersionId: undefined,
+        authorId: scorerDefinition.authorId,
+        metadata: scorerDefinition.metadata,
+        createdAt: now,
+        updatedAt: now,
+      };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'CREATE_SCORER_DEFINITION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'CREATE_SCORER_DEFINITION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -147,21 +192,44 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
       await this.operations.update({ tableName: TABLE_SCORER_DEFINITIONS, keys: { id }, data: updateData });
 
       const updated = await this.getById(id);
-      if (!updated) throw new MastraError({ id: createStorageErrorId('MYSQL', 'UPDATE_SCORER_DEFINITION', 'NOT_FOUND_AFTER_UPDATE'), domain: ErrorDomain.STORAGE, category: ErrorCategory.SYSTEM, text: `Scorer definition ${id} not found after update`, details: { id } });
+      if (!updated)
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_SCORER_DEFINITION', 'NOT_FOUND_AFTER_UPDATE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Scorer definition ${id} not found after update`,
+          details: { id },
+        });
       return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'UPDATE_SCORER_DEFINITION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'UPDATE_SCORER_DEFINITION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async delete(id: string): Promise<void> {
     try {
-      await this.deleteVersionsByParentId(id);
-      await this.operations.delete({ tableName: TABLE_SCORER_DEFINITIONS, keys: { id } });
+      await this.operations.withTransaction(async () => {
+        await this.deleteVersionsByParentId(id);
+        await this.operations.delete({ tableName: TABLE_SCORER_DEFINITIONS, keys: { id } });
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'DELETE_SCORER_DEFINITION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_SCORER_DEFINITION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -172,22 +240,40 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
 
       const conditions: string[] = [];
       const queryParams: any[] = [];
-      if (status) { conditions.push(`${quoteIdentifier('status', 'column name')} = ?`); queryParams.push(status); }
-      if (authorId !== undefined) { conditions.push(`${quoteIdentifier('authorId', 'column name')} = ?`); queryParams.push(authorId); }
+      if (status) {
+        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        queryParams.push(status);
+      }
+      if (authorId !== undefined) {
+        conditions.push(`${quoteIdentifier('authorId', 'column name')} = ?`);
+        queryParams.push(authorId);
+      }
       if (metadata && Object.keys(metadata).length > 0) {
         for (const [key, value] of Object.entries(metadata)) {
-          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) throw new MastraError({ id: createStorageErrorId('MYSQL', 'LIST_SCORER_DEFINITIONS', 'INVALID_METADATA_KEY'), domain: ErrorDomain.STORAGE, category: ErrorCategory.USER, text: `Invalid metadata key: ${key}`, details: { key } });
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key))
+            throw new MastraError({
+              id: createStorageErrorId('MYSQL', 'LIST_SCORER_DEFINITIONS', 'INVALID_METADATA_KEY'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Invalid metadata key: ${key}`,
+              details: { key },
+            });
           if (typeof value === 'string') {
-            conditions.push(`JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`);
+            conditions.push(
+              `JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,
+            );
             queryParams.push(value);
           } else {
-            conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`);
+            conditions.push(
+              `JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`,
+            );
             queryParams.push(JSON.stringify(value));
           }
         }
       }
 
-      const whereClause = conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: queryParams } : undefined;
+      const whereClause =
+        conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: queryParams } : undefined;
       const total = await this.operations.loadTotalCount({ tableName: TABLE_SCORER_DEFINITIONS, whereClause });
       if (total === 0) return { scorerDefinitions: [], total: 0, page, perPage: perPageInput ?? 100, hasMore: false };
 
@@ -196,14 +282,30 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.operations.loadMany<Record<string, unknown>>({
-        tableName: TABLE_SCORER_DEFINITIONS, whereClause,
-        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`, offset, limit: limitValue,
+        tableName: TABLE_SCORER_DEFINITIONS,
+        whereClause,
+        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`,
+        offset,
+        limit: limitValue,
       });
 
-      return { scorerDefinitions: rows.map(row => this.parseScorerRow(row)), total, page, perPage: perPageForResponse, hasMore: perPageInput === false ? false : offset + perPage < total };
+      return {
+        scorerDefinitions: rows.map(row => this.parseScorerRow(row)),
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'LIST_SCORER_DEFINITIONS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'LIST_SCORER_DEFINITIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -217,30 +319,53 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
       await this.operations.insert({
         tableName: TABLE_SCORER_DEFINITION_VERSIONS,
         record: {
-          id: input.id, scorerDefinitionId: input.scorerDefinitionId, versionNumber: input.versionNumber,
-          name: input.name, description: input.description ?? null, type: input.type,
-          model: input.model ?? null, instructions: input.instructions ?? null,
-          scoreRange: input.scoreRange ?? null, presetConfig: input.presetConfig ?? null,
+          id: input.id,
+          scorerDefinitionId: input.scorerDefinitionId,
+          versionNumber: input.versionNumber,
+          name: input.name,
+          description: input.description ?? null,
+          type: input.type,
+          model: input.model ?? null,
+          instructions: input.instructions ?? null,
+          scoreRange: input.scoreRange ?? null,
+          presetConfig: input.presetConfig ?? null,
           defaultSampling: input.defaultSampling ?? null,
-          changedFields: input.changedFields ?? null, changeMessage: input.changeMessage ?? null, createdAt: now,
+          changedFields: input.changedFields ?? null,
+          changeMessage: input.changeMessage ?? null,
+          createdAt: now,
         },
       });
       return { ...input, createdAt: now };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'CREATE_SCORER_DEFINITION_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'CREATE_SCORER_DEFINITION_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async getVersion(id: string): Promise<ScorerDefinitionVersion | null> {
     try {
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${formatTableName(TABLE_SCORER_DEFINITION_VERSIONS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`, [id],
+        `SELECT * FROM ${formatTableName(TABLE_SCORER_DEFINITION_VERSIONS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [id],
       );
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_SCORER_DEFINITION_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_SCORER_DEFINITION_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -248,13 +373,23 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
     try {
       const rows = await this.operations.loadMany<Record<string, unknown>>({
         tableName: TABLE_SCORER_DEFINITION_VERSIONS,
-        whereClause: { sql: ` WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ? AND ${quoteIdentifier('versionNumber', 'column name')} = ?`, args: [scorerDefinitionId, versionNumber] },
+        whereClause: {
+          sql: ` WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ? AND ${quoteIdentifier('versionNumber', 'column name')} = ?`,
+          args: [scorerDefinitionId, versionNumber],
+        },
         limit: 1,
       });
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_SCORER_DEFINITION_VERSION_BY_NUMBER', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_SCORER_DEFINITION_VERSION_BY_NUMBER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -262,13 +397,24 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
     try {
       const rows = await this.operations.loadMany<Record<string, unknown>>({
         tableName: TABLE_SCORER_DEFINITION_VERSIONS,
-        whereClause: { sql: ` WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ?`, args: [scorerDefinitionId] },
-        orderBy: `${quoteIdentifier('versionNumber', 'column name')} DESC`, limit: 1,
+        whereClause: {
+          sql: ` WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ?`,
+          args: [scorerDefinitionId],
+        },
+        orderBy: `${quoteIdentifier('versionNumber', 'column name')} DESC`,
+        limit: 1,
       });
       return rows.length ? this.parseVersionRow(rows[0]!) : null;
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'GET_LATEST_SCORER_DEFINITION_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_LATEST_SCORER_DEFINITION_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -276,7 +422,10 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
     try {
       const { scorerDefinitionId, page = 0, perPage: perPageInput, orderBy } = input;
       const { field, direction } = this.parseVersionOrderBy(orderBy);
-      const whereClause = { sql: ` WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ?`, args: [scorerDefinitionId] };
+      const whereClause = {
+        sql: ` WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ?`,
+        args: [scorerDefinitionId],
+      };
       const total = await this.operations.loadTotalCount({ tableName: TABLE_SCORER_DEFINITION_VERSIONS, whereClause });
       if (total === 0) return { versions: [], total: 0, page, perPage: perPageInput ?? 20, hasMore: false };
 
@@ -285,30 +434,65 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.operations.loadMany<Record<string, unknown>>({
-        tableName: TABLE_SCORER_DEFINITION_VERSIONS, whereClause,
-        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`, offset, limit: limitValue,
+        tableName: TABLE_SCORER_DEFINITION_VERSIONS,
+        whereClause,
+        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`,
+        offset,
+        limit: limitValue,
       });
 
-      return { versions: rows.map(row => this.parseVersionRow(row)), total, page, perPage: perPageForResponse, hasMore: perPageInput === false ? false : offset + perPage < total };
+      return {
+        versions: rows.map(row => this.parseVersionRow(row)),
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'LIST_SCORER_DEFINITION_VERSIONS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'LIST_SCORER_DEFINITION_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async deleteVersion(id: string): Promise<void> {
-    try { await this.operations.delete({ tableName: TABLE_SCORER_DEFINITION_VERSIONS, keys: { id } }); } catch (error) {
+    try {
+      await this.operations.delete({ tableName: TABLE_SCORER_DEFINITION_VERSIONS, keys: { id } });
+    } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'DELETE_SCORER_DEFINITION_VERSION', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_SCORER_DEFINITION_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
-      await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_SCORER_DEFINITION_VERSIONS)} WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ?`, [entityId]);
+      await this.pool.execute(
+        `DELETE FROM ${formatTableName(TABLE_SCORER_DEFINITION_VERSIONS)} WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ?`,
+        [entityId],
+      );
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'DELETE_SCORER_DEFINITION_VERSIONS_BY_SCORER', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'DELETE_SCORER_DEFINITION_VERSIONS_BY_SCORER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -316,11 +500,21 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
     try {
       return await this.operations.loadTotalCount({
         tableName: TABLE_SCORER_DEFINITION_VERSIONS,
-        whereClause: { sql: ` WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ?`, args: [scorerDefinitionId] },
+        whereClause: {
+          sql: ` WHERE ${quoteIdentifier('scorerDefinitionId', 'column name')} = ?`,
+          args: [scorerDefinitionId],
+        },
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw new MastraError({ id: createStorageErrorId('MYSQL', 'COUNT_SCORER_DEFINITION_VERSIONS', 'FAILED'), domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY }, error);
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'COUNT_SCORER_DEFINITION_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 }
