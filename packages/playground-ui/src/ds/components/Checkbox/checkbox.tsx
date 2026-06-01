@@ -48,7 +48,7 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
           'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
           'data-[indeterminate]:active:border-neutral4 data-[indeterminate]:active:bg-neutral4',
           // Base UI's Checkbox.Root is a `<span>`, so `:disabled` never matches; target `data-disabled`.
-          'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.03] data-[disabled]:bg-neutral6/[0.05] data-[disabled]:hover:border-neutral6/[0.03] data-[disabled]:hover:bg-neutral6/[0.05] data-[disabled]:active:scale-100',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.38] data-[disabled]:bg-neutral6/[0.38] data-[disabled]:hover:border-neutral6/[0.38] data-[disabled]:hover:bg-neutral6/[0.38] data-[disabled]:active:scale-100',
           'data-[disabled]:data-[checked]:border-neutral6/[0.38] data-[disabled]:data-[checked]:bg-neutral6/[0.38] data-[disabled]:data-[checked]:text-neutral6',
           'data-[disabled]:data-[indeterminate]:border-neutral6/[0.38] data-[disabled]:data-[indeterminate]:bg-neutral6/[0.38] data-[disabled]:data-[indeterminate]:text-neutral6',
           className,
