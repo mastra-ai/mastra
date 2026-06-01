@@ -69,9 +69,7 @@ export const mastra = new Mastra({
   editor: new MastraEditor({
     sandboxes: { e2b: e2bSandboxProvider },
     toolProviders: {
-      composio: new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY ?? '',
-        allowedToolkits: ['gmail'],
-       }),
+      composio: new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY ?? '', allowedToolkits: ['gmail'] }),
     },
     browsers: {
       stagehand: {
