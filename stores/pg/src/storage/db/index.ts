@@ -22,6 +22,10 @@ import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
 import { buildConstraintName } from './constraint-utils';
 
+// PostgreSQL's extended query protocol supports at most 65,535 bind parameters.
+// Keep chunked batch inserts below that limit with some headroom.
+const BATCH_INSERT_MAX_PARAMETERS = 60_000;
+
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
 
@@ -163,6 +167,11 @@ function mapToSqlType(type: StorageColumn['type']): string {
       return getSqlType(type);
   }
 }
+
+type PreparedInsertRecord = {
+  columns: string[];
+  values: QueryValues;
+};
 
 export function generateTableSQL({
   tableName,
@@ -441,8 +450,8 @@ export class PgDB extends MastraBase {
   /**
    * Prepares values for insertion, handling JSONB columns by stringifying them
    */
-  private prepareValuesForInsert(record: Record<string, any>, tableName: TABLE_NAMES): any[] {
-    return Object.entries(record).map(([key, value]) => {
+  private prepareValuesForInsert(entries: [string, any][], tableName: TABLE_NAMES): QueryValues {
+    return entries.map(([key, value]) => {
       const schema = TABLE_SCHEMAS[tableName];
       const columnSchema = schema?.[key];
 
@@ -466,6 +475,181 @@ export class PgDB extends MastraBase {
     if (record.updatedAt) {
       record.updatedAtZ = record.updatedAt;
     }
+  }
+
+  private async prepareInsertRecord(
+    tableName: TABLE_NAMES,
+    record: Record<string, any>,
+  ): Promise<PreparedInsertRecord> {
+    this.addTimestampZColumns(record);
+
+    const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
+    const entries = Object.entries(filteredRecord).sort(([left], [right]) => left.localeCompare(right));
+    const columns = entries.map(([col]) => parseSqlIdentifier(col, 'column name'));
+    const values = this.prepareValuesForInsert(entries, tableName);
+
+    return { columns, values };
+  }
+
+  private buildInsertQuery({
+    tableName,
+    columns,
+    rowCount,
+  }: {
+    tableName: TABLE_NAMES;
+    columns: string[];
+    rowCount: number;
+  }): string {
+    const schemaName = getSchemaName(this.schemaName);
+    const fullTableName = getTableName({ indexName: tableName, schemaName });
+    const columnList = columns.map(c => `"${c}"`).join(', ');
+    const valueRows = Array.from({ length: rowCount }, (_, rowIndex) => {
+      const offset = rowIndex * columns.length;
+      return `(${columns.map((_, columnIndex) => `$${offset + columnIndex + 1}`).join(', ')})`;
+    }).join(', ');
+
+    if (tableName === TABLE_SPANS) {
+      const updateColumns = columns.filter(c => c !== 'traceId' && c !== 'spanId');
+      if (updateColumns.length > 0) {
+        const updateClause = updateColumns.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+        return `INSERT INTO ${fullTableName} (${columnList}) VALUES ${valueRows}
+             ON CONFLICT ("traceId", "spanId") DO UPDATE SET ${updateClause}`;
+      }
+
+      return `INSERT INTO ${fullTableName} (${columnList}) VALUES ${valueRows}
+             ON CONFLICT ("traceId", "spanId") DO NOTHING`;
+    }
+
+    return `INSERT INTO ${fullTableName} (${columnList}) VALUES ${valueRows}`;
+  }
+
+  private async executeBatchInsert(
+    client: Pick<TxClient, 'none'>,
+    { tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] },
+  ): Promise<void> {
+    const preparedRecords: PreparedInsertRecord[] = [];
+    for (const record of records) {
+      const preparedRecord = await this.prepareInsertRecord(tableName, record);
+      if (preparedRecord.columns.length === 0) continue;
+      preparedRecords.push(preparedRecord);
+    }
+
+    const recordGroups =
+      tableName === TABLE_SPANS
+        ? this.groupConsecutiveRecordsByColumnShape(this.sortSpanRecordsByConflictKey(preparedRecords))
+        : this.groupRecordsByColumnShape(preparedRecords);
+
+    for (const groupedRecords of recordGroups) {
+      const columns = groupedRecords[0]!.columns;
+      const maxRowsPerInsert = Math.max(1, Math.floor(BATCH_INSERT_MAX_PARAMETERS / columns.length));
+
+      for (let offset = 0; offset < groupedRecords.length; offset += maxRowsPerInsert) {
+        const batch = groupedRecords.slice(offset, offset + maxRowsPerInsert);
+        const query = this.buildInsertQuery({ tableName, columns, rowCount: batch.length });
+        const values = batch.flatMap(record => record.values);
+
+        await client.none(query, values);
+      }
+    }
+  }
+
+  private getColumnShape(record: PreparedInsertRecord): string {
+    return record.columns.join('\0');
+  }
+
+  private groupRecordsByColumnShape(records: PreparedInsertRecord[]): PreparedInsertRecord[][] {
+    const recordsByColumnShape = new Map<string, PreparedInsertRecord[]>();
+    for (const record of records) {
+      // Non-span batch inserts favor fewer statements over preserving mixed-shape input order.
+      const columnShape = this.getColumnShape(record);
+      const groupedRecords = recordsByColumnShape.get(columnShape);
+      if (groupedRecords) {
+        groupedRecords.push(record);
+      } else {
+        recordsByColumnShape.set(columnShape, [record]);
+      }
+    }
+
+    return [...recordsByColumnShape.values()];
+  }
+
+  private groupConsecutiveRecordsByColumnShape(records: PreparedInsertRecord[]): PreparedInsertRecord[][] {
+    const groups: PreparedInsertRecord[][] = [];
+    let currentGroup: PreparedInsertRecord[] = [];
+    let currentColumnShape: string | undefined;
+
+    for (const record of records) {
+      const columnShape = this.getColumnShape(record);
+      if (currentColumnShape && currentColumnShape !== columnShape) {
+        groups.push(currentGroup);
+        currentGroup = [];
+      }
+
+      currentColumnShape = columnShape;
+      currentGroup.push(record);
+    }
+
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup);
+    }
+
+    return groups;
+  }
+
+  private getPreparedValue(record: PreparedInsertRecord, columnName: string): string {
+    const columnIndex = record.columns.indexOf(columnName);
+    if (columnIndex === -1) return '';
+    return String(record.values[columnIndex] ?? '');
+  }
+
+  private getRecordValue(record: Record<string, any>, columnName: string): string {
+    return String(record[columnName] ?? '');
+  }
+
+  private comparePreparedValues(left: string, right: string): number {
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
+  }
+
+  private sortSpanRecordsByConflictKey(records: PreparedInsertRecord[]): PreparedInsertRecord[] {
+    return [...records].sort((left, right) => {
+      const leftTraceId = this.getPreparedValue(left, 'traceId');
+      const rightTraceId = this.getPreparedValue(right, 'traceId');
+      const traceCompare = this.comparePreparedValues(leftTraceId, rightTraceId);
+      if (traceCompare !== 0) return traceCompare;
+
+      const leftSpanId = this.getPreparedValue(left, 'spanId');
+      const rightSpanId = this.getPreparedValue(right, 'spanId');
+      return this.comparePreparedValues(leftSpanId, rightSpanId);
+    });
+  }
+
+  private sortSpanInputRecordsByConflictKey(records: Record<string, any>[]): Record<string, any>[] {
+    return [...records].sort((left, right) => {
+      const traceCompare = this.comparePreparedValues(
+        this.getRecordValue(left, 'traceId'),
+        this.getRecordValue(right, 'traceId'),
+      );
+      if (traceCompare !== 0) return traceCompare;
+
+      return this.comparePreparedValues(this.getRecordValue(left, 'spanId'), this.getRecordValue(right, 'spanId'));
+    });
+  }
+
+  private hasDuplicateSpanIds(records: Record<string, any>[]): boolean {
+    const spanIds = new Set<string>();
+    for (const record of records) {
+      // Missing or null span keys are left to the database constraints; this guard only avoids
+      // Postgres's multi-row ON CONFLICT error for duplicate concrete keys in one statement.
+      if (record.traceId == null || record.spanId == null) continue;
+      const spanKey = `${String(record.traceId)}\0${String(record.spanId)}`;
+      if (spanIds.has(spanKey)) {
+        return true;
+      }
+      spanIds.add(spanKey);
+    }
+    return false;
   }
 
   /**
@@ -570,42 +754,9 @@ export class PgDB extends MastraBase {
     client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'>,
     { tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> },
   ): Promise<void> {
-    this.addTimestampZColumns(record);
-
-    // Filter out columns that don't exist in the actual database table
-    const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
-
-    const schemaName = getSchemaName(this.schemaName);
-    const columns = Object.keys(filteredRecord).map(col => parseSqlIdentifier(col, 'column name'));
+    const { columns, values } = await this.prepareInsertRecord(tableName, record);
     if (columns.length === 0) return; // No known columns after filtering - skip insert
-    const values = this.prepareValuesForInsert(filteredRecord, tableName);
-    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-    const fullTableName = getTableName({ indexName: tableName, schemaName });
-    const columnList = columns.map(c => `"${c}"`).join(', ');
-
-    // For spans table, use ON CONFLICT to handle duplicate (traceId, spanId) gracefully
-    if (tableName === TABLE_SPANS) {
-      // Build update clause for all columns except the primary key columns
-      const updateColumns = columns.filter(c => c !== 'traceId' && c !== 'spanId');
-
-      if (updateColumns.length > 0) {
-        const updateClause = updateColumns.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
-        await client.none(
-          `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
-             ON CONFLICT ("traceId", "spanId") DO UPDATE SET ${updateClause}`,
-          values,
-        );
-      } else {
-        // Only PK columns provided - use DO NOTHING to avoid invalid SQL
-        await client.none(
-          `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
-             ON CONFLICT ("traceId", "spanId") DO NOTHING`,
-          values,
-        );
-      }
-    } else {
-      await client.none(`INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})`, values);
-    }
+    await client.none(this.buildInsertQuery({ tableName, columns, rowCount: 1 }), values);
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
@@ -1206,9 +1357,14 @@ export class PgDB extends MastraBase {
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     try {
       await this.client.tx(async tx => {
-        for (const record of records) {
-          await this.executeInsert(tx, { tableName, record });
+        if (tableName === TABLE_SPANS && this.hasDuplicateSpanIds(records)) {
+          for (const record of this.sortSpanInputRecordsByConflictKey(records)) {
+            await this.executeInsert(tx, { tableName, record });
+          }
+          return;
         }
+
+        await this.executeBatchInsert(tx, { tableName, records });
       });
     } catch (error) {
       throw new MastraError(

@@ -1270,6 +1270,80 @@ describe('PostgreSQL Spans ON CONFLICT Handling', () => {
     );
     expect(Number(result.count)).toBe(2);
   }, 30000);
+
+  it('should handle duplicate span ids inside the same batch insert', async () => {
+    await expect(
+      observability.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-same-batch-duplicate',
+            spanId: 'span-same-batch-2',
+            name: 'Other span',
+            spanType: SpanType.TOOL_CALL,
+            isEvent: false,
+            startedAt: new Date('2024-01-01T00:00:00Z'),
+          },
+          {
+            traceId: 'trace-same-batch-duplicate',
+            spanId: 'span-same-batch-1',
+            name: 'First duplicate write',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt: new Date('2024-01-01T00:00:00Z'),
+          },
+          {
+            traceId: 'trace-same-batch-duplicate',
+            spanId: 'span-same-batch-1',
+            name: 'Second duplicate write',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt: new Date('2024-01-01T00:00:01Z'),
+          },
+        ],
+      }),
+    ).resolves.not.toThrow();
+
+    const result = await store.db.one<{ count: string }>(
+      `SELECT COUNT(*) as count FROM ${testSchema}.${TABLE_SPANS}
+       WHERE "traceId" = 'trace-same-batch-duplicate'`,
+    );
+    expect(Number(result.count)).toBe(2);
+
+    const duplicate = await store.db.one<{ name: string }>(
+      `SELECT name FROM ${testSchema}.${TABLE_SPANS}
+       WHERE "traceId" = 'trace-same-batch-duplicate' AND "spanId" = 'span-same-batch-1'`,
+    );
+    expect(duplicate.name).toBe('Second duplicate write');
+  }, 30000);
+
+  it('should handle concurrent overlapping batch span upserts with divergent input order', async () => {
+    const batches = Array.from({ length: 5 }, (_, batchIndex) => {
+      const spans = Array.from({ length: 20 }, (_, spanIndex) => ({
+        traceId: 'trace-concurrent-conflict',
+        spanId: `span-concurrent-${spanIndex}`,
+        ...(spanIndex % 2 === 1 ? { parentSpanId: 'span-concurrent-0' } : {}),
+        name: `Concurrent span ${batchIndex}-${spanIndex}`,
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt: new Date('2024-01-01T00:00:00Z'),
+      }));
+      return batchIndex % 2 === 0 ? spans : spans.reverse();
+    });
+
+    await Promise.all(batches.map(records => observability.batchCreateSpans({ records })));
+
+    const result = await store.db.one<{ count: string }>(
+      `SELECT COUNT(*) as count FROM ${testSchema}.${TABLE_SPANS}
+       WHERE "traceId" = 'trace-concurrent-conflict'`,
+    );
+    expect(Number(result.count)).toBe(20);
+
+    const sample = await store.db.one<{ name: string }>(
+      `SELECT name FROM ${testSchema}.${TABLE_SPANS}
+       WHERE "traceId" = 'trace-concurrent-conflict' AND "spanId" = 'span-concurrent-0'`,
+    );
+    expect(sample.name).toMatch(/^Concurrent span [0-4]-0$/);
+  }, 30000);
 });
 
 /**
