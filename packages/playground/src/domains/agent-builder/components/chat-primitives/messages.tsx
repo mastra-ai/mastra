@@ -1,5 +1,7 @@
 import {
+  Button,
   Card,
+  cn,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -21,9 +23,11 @@ import {
   GlobeLockIcon,
   Building,
 } from 'lucide-react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useAgentPrimitives } from '../../contexts/agent-primitives-context';
+import { useStreamApproval } from '../../contexts/stream-chat-context';
 import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
 import { Shimmer } from './shimmer';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
@@ -43,11 +47,100 @@ interface MessageRowProps {
   message: MastraUIMessage;
 }
 
+type RequireApprovalMetadata = NonNullable<
+  Extract<MastraUIMessage['metadata'], { requireApprovalMetadata?: unknown }>['requireApprovalMetadata']
+>;
+
+type ApprovalEntry = RequireApprovalMetadata[string];
+
+const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; toolName: string }) => {
+  const { approveToolCall, declineToolCall } = useStreamApproval();
+  const [pending, setPending] = useState<'approve' | 'decline' | null>(null);
+  const decided = pending !== null;
+
+  const handleApprove = () => {
+    setPending('approve');
+    approveToolCall(toolCallId);
+  };
+
+  const handleDecline = () => {
+    setPending('decline');
+    declineToolCall(toolCallId);
+  };
+
+  return (
+    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-surface4 border-transparent">
+      <Txt variant="ui-sm" className="text-neutral5 pb-2" as="div">
+        Approval required for <span className="font-mono text-neutral6">{toolName}</span>
+      </Txt>
+      <div className="flex gap-2 items-center">
+        <Button
+          variant="default"
+          onClick={handleApprove}
+          disabled={decided}
+          data-testid="agent-builder-chat-tool-approve"
+          aria-label={`Approve ${toolName}`}
+        >
+          <Icon>{pending === 'approve' ? <Loader2 className="animate-spin" /> : <Check />}</Icon>
+          Approve
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={handleDecline}
+          disabled={decided}
+          data-testid="agent-builder-chat-tool-decline"
+          aria-label={`Decline ${toolName}`}
+        >
+          {pending === 'decline' && (
+            <Icon>
+              <Loader2 className="animate-spin" />
+            </Icon>
+          )}
+          Decline
+        </Button>
+      </div>
+    </ToolCard>
+  );
+};
+
+const getRequireApprovalMetadata = (message: MastraUIMessage): RequireApprovalMetadata | undefined => {
+  const metadata = message.metadata;
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  const mode = (metadata as { mode?: unknown }).mode;
+  if (mode !== 'stream' && mode !== 'network' && mode !== 'generate') return undefined;
+  return (metadata as { requireApprovalMetadata?: RequireApprovalMetadata }).requireApprovalMetadata;
+};
+
+const findApprovalEntry = (
+  approvals: RequireApprovalMetadata | undefined,
+  toolName: string | undefined,
+  toolCallId: string | undefined,
+): ApprovalEntry | undefined => {
+  if (!approvals) return undefined;
+  return (toolName ? approvals[toolName] : undefined) ?? (toolCallId ? approvals[toolCallId] : undefined);
+};
+
 export const MessageRow = ({ message }: MessageRowProps) => {
+  const approvals = getRequireApprovalMetadata(message);
+
   return (
     <>
       {message.parts.map((part, index) => {
         const key = `${message.id}-${index}`;
+
+        if (
+          approvals &&
+          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-')))
+        ) {
+          const toolPart = part as { toolName?: string; type: string; toolCallId?: string; state?: string };
+          const toolName =
+            toolPart.toolName ?? (toolPart.type.startsWith('tool-') ? toolPart.type.slice('tool-'.length) : undefined);
+          const entry = findApprovalEntry(approvals, toolName, toolPart.toolCallId);
+          if (entry && toolPart.state !== 'output-available') {
+            return <ToolApprovalPrompt key={key} toolCallId={entry.toolCallId} toolName={entry.toolName} />;
+          }
+        }
+
         switch (part.type) {
           case 'text':
             return <Txtmessage key={key} txt={part.text} role={message.role} />;
@@ -314,10 +407,21 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
   );
 };
 
-export const ToolCard = ({ children, testId }: { children: ReactNode; testId?: string }) => (
+export const ToolCard = ({
+  children,
+  testId,
+  className,
+}: {
+  children: ReactNode;
+  testId?: string;
+  className?: string;
+}) => (
   <Card
     data-testid={testId}
-    className="max-w-[80%] p-3 bg-surface2/60 border-border1/60 animate-in fade-in slide-in-from-left-2 duration-300"
+    className={cn(
+      'max-w-[80%] p-3 bg-surface2/60 border-border1/60 animate-in fade-in slide-in-from-left-2 duration-300',
+      className,
+    )}
   >
     {children}
   </Card>
