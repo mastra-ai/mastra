@@ -502,4 +502,15 @@ export class DuckDBStore extends MastraCompositeStore {
   get observability(): ObservabilityStorageDuckDB {
     return this.observabilityStore;
   }
+
+  /**
+   * Release the underlying DuckDB instance so the file lock is freed.
+   * Called automatically by Mastra.shutdown(). Without this, the DuckDB
+   * native write lock persists past process exit during dev hot reloads,
+   * causing "Conflicting lock is held" errors on the next start.
+   * Safe to call more than once; subsequent calls are no-ops.
+   */
+  async close(): Promise<void> {
+    await this.db.close();
+  }
 }
