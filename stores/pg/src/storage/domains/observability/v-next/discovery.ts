@@ -148,6 +148,22 @@ async function readWithRefresh(
     upsertCache(client, schema, cacheKey, values),
   );
 
+  // Force-refresh path: `ttlSeconds <= 0` is the contract used by
+  // `refreshAllDiscoveryCaches()` (and the future `mastra observability
+  // discovery refresh` CLI) to mean "block until the cache is rewritten".
+  // Without this branch a stale-but-existing row would serve immediately and
+  // resolve before the background refresh writes the new values, defeating
+  // the whole point of a manual refresh.
+  if (ttlSeconds <= 0) {
+    try {
+      return await refreshing;
+    } catch {
+      // Already logged inside startOrJoinRefresh. Fall back to whatever we
+      // had cached so the caller still gets a defined value.
+      return row?.values ?? [];
+    }
+  }
+
   if (!row) {
     // Cold path: no cached values to serve. Block on (or join) the refresh.
     try {

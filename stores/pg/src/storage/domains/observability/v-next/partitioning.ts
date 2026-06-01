@@ -127,10 +127,14 @@ export async function ensureNativePartitions(
   const futureDays = options.futureDays ?? DEFAULT_FUTURE_DAYS;
   const includeYesterday = options.includeYesterday ?? true;
   const start = includeYesterday ? -1 : 0;
+  // Freeze the base UTC day before the loop. If we recomputed `Date.now()`
+  // inside the loop, a run that crossed midnight UTC could skip one expected
+  // day for later tables and create an extra far-future partition for them.
+  const baseNowMs = Date.now();
 
   for (const table of ALL_SIGNAL_TABLES) {
     for (let i = start; i <= futureDays; i++) {
-      const d = new Date(Date.now() + i * 86_400_000);
+      const d = new Date(baseNowMs + i * 86_400_000);
       const { start: partStart, end: partEnd, suffix } = dayBounds(d);
       const childName = partitionName(table, suffix);
       const child = qualifiedName(schema, childName);
