@@ -13,6 +13,10 @@ vi.mock('@mastra/core/error', () => ({
   },
 }));
 
+vi.mock('@mastra/core/storage', () => ({
+  createVectorErrorId: vi.fn((...parts: string[]) => parts.join('_')),
+}));
+
 vi.mock('@mastra/core/utils', () => ({
   parseSqlIdentifier: (name: string) => name,
 }));
@@ -370,6 +374,115 @@ describe('PgVector custom schema sets search_path before index creation and quer
       .some(call => call.text.includes('search_path') && call.text.includes('myapp'));
 
     expect(searchPathBeforeInsert).toBe(true);
+  });
+
+  it('should upsert multiple vectors with one insert statement', async () => {
+    await vectorStore.createIndex({
+      indexName: 'bulkUpsertTest',
+      dimension: 3,
+      buildIndex: false,
+    });
+
+    queryHistory.length = 0;
+
+    await vectorStore.upsert({
+      indexName: 'bulkUpsertTest',
+      vectors: [
+        [0.1, 0.2, 0.3],
+        [0.4, 0.5, 0.6],
+        [0.7, 0.8, 0.9],
+      ],
+      metadata: [{ key: 'one' }, { key: 'two' }, { key: 'three' }],
+      ids: ['vec-1', 'vec-2', 'vec-3'],
+    });
+
+    const insertCalls = queryHistory.filter(call => call.text.includes('INSERT INTO'));
+    expect(insertCalls).toHaveLength(1);
+    expect(insertCalls[0]?.values).toHaveLength(9);
+    expect(insertCalls[0]?.text).toContain(
+      'VALUES ($1, $2::myapp.vector, $3::jsonb), ($4, $5::myapp.vector, $6::jsonb), ($7, $8::myapp.vector, $9::jsonb)',
+    );
+    expect(insertCalls[0]?.text).toContain('embedding = EXCLUDED.embedding');
+    expect(insertCalls[0]?.values).toEqual([
+      'vec-1',
+      '[0.1,0.2,0.3]',
+      '{"key":"one"}',
+      'vec-2',
+      '[0.4,0.5,0.6]',
+      '{"key":"two"}',
+      'vec-3',
+      '[0.7,0.8,0.9]',
+      '{"key":"three"}',
+    ]);
+  });
+
+  it('should split unique-id bulk upserts at the batch boundary', async () => {
+    await vectorStore.createIndex({
+      indexName: 'bulkUpsertBoundaryTest',
+      dimension: 3,
+      buildIndex: false,
+    });
+
+    queryHistory.length = 0;
+
+    const vectors = Array.from({ length: 1001 }, (_, index) => [index, index + 1, index + 2]);
+    const metadata = vectors.map((_, index) => ({ key: `value-${index}` }));
+    const ids = vectors.map((_, index) => `vec-${index}`);
+
+    await vectorStore.upsert({
+      indexName: 'bulkUpsertBoundaryTest',
+      vectors,
+      metadata,
+      ids,
+    });
+
+    const insertCalls = queryHistory.filter(call => call.text.includes('INSERT INTO'));
+    expect(insertCalls).toHaveLength(2);
+
+    expect(insertCalls[0]?.values).toHaveLength(3000);
+    expect(insertCalls[0]?.values?.slice(0, 6)).toEqual([
+      'vec-0',
+      '[0,1,2]',
+      '{"key":"value-0"}',
+      'vec-1',
+      '[1,2,3]',
+      '{"key":"value-1"}',
+    ]);
+    expect(insertCalls[0]?.values?.slice(-3)).toEqual(['vec-999', '[999,1000,1001]', '{"key":"value-999"}']);
+    expect(insertCalls[0]?.text).toContain('($2998, $2999::myapp.vector, $3000::jsonb)');
+
+    expect(insertCalls[1]?.values).toEqual(['vec-1000', '[1000,1001,1002]', '{"key":"value-1000"}']);
+    expect(insertCalls[1]?.text).toContain('VALUES ($1, $2::myapp.vector, $3::jsonb)');
+  });
+
+  it('should use serial upserts for duplicate ids', async () => {
+    await vectorStore.createIndex({
+      indexName: 'duplicateIdUpsertTest',
+      dimension: 3,
+      buildIndex: false,
+    });
+
+    queryHistory.length = 0;
+
+    const ids = await vectorStore.upsert({
+      indexName: 'duplicateIdUpsertTest',
+      vectors: [
+        [0.1, 0.2, 0.3],
+        [0.4, 0.5, 0.6],
+        [0.7, 0.8, 0.9],
+      ],
+      metadata: [{ key: 'first' }, { key: 'second' }, { key: 'last' }],
+      ids: ['same-id', 'other-id', 'same-id'],
+    });
+
+    const insertCalls = queryHistory.filter(call => call.text.includes('INSERT INTO'));
+    expect(ids).toEqual(['same-id', 'other-id', 'same-id']);
+    expect(insertCalls).toHaveLength(3);
+    expect(insertCalls.map(call => call.values)).toEqual([
+      ['same-id', '[0.1,0.2,0.3]', '{"key":"first"}'],
+      ['other-id', '[0.4,0.5,0.6]', '{"key":"second"}'],
+      ['same-id', '[0.7,0.8,0.9]', '{"key":"last"}'],
+    ]);
   });
 
   it('should set search_path before updateVector when extension is in custom schema', async () => {

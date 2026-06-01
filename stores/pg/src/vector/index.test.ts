@@ -160,6 +160,90 @@ describe('PgVector', () => {
   });
 
   describe('PgVector Specific Tests', () => {
+    it('should atomically replace filtered vectors when bulk upserting with deleteFilter', async () => {
+      const replaceIndex = 'test_bulk_upsert_delete_filter';
+
+      try {
+        await vectorDB.createIndex({ indexName: replaceIndex, dimension: 3 });
+
+        await vectorDB.upsert({
+          indexName: replaceIndex,
+          vectors: [
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+          ],
+          metadata: [
+            { source: 'doc-a', revision: 'old' },
+            { source: 'doc-a', revision: 'old' },
+            { source: 'doc-b', revision: 'old' },
+          ],
+          ids: ['old-a-1', 'old-a-2', 'keep-b'],
+        });
+
+        const ids = await vectorDB.upsert({
+          indexName: replaceIndex,
+          vectors: [
+            [0.5, 0.5, 0],
+            [0.5, 0, 0.5],
+          ],
+          metadata: [
+            { source: 'doc-a', revision: 'new' },
+            { source: 'doc-a', revision: 'new' },
+          ],
+          ids: ['new-a-1', 'new-a-2'],
+          deleteFilter: { source: 'doc-a' },
+        });
+
+        expect(ids).toEqual(['new-a-1', 'new-a-2']);
+
+        const replaced = await vectorDB.query({
+          indexName: replaceIndex,
+          filter: { source: 'doc-a' },
+          topK: 10,
+        });
+        expect(replaced.map(result => result.id).sort()).toEqual(['new-a-1', 'new-a-2']);
+        expect(replaced.every(result => result.metadata?.revision === 'new')).toBe(true);
+
+        const untouched = await vectorDB.query({
+          indexName: replaceIndex,
+          filter: { source: 'doc-b' },
+          topK: 10,
+        });
+        expect(untouched.map(result => result.id)).toEqual(['keep-b']);
+      } finally {
+        await vectorDB.deleteIndex({ indexName: replaceIndex });
+      }
+    });
+
+    it('should roll back all chunks when a later bulk upsert chunk fails', async () => {
+      const rollbackIndex = 'test_bulk_upsert_chunk_rollback';
+      const vectors = Array.from({ length: 1001 }, (_, index) => (index === 1000 ? [1, 0] : [1, 0, 0]));
+
+      try {
+        await vectorDB.createIndex({ indexName: rollbackIndex, dimension: 3 });
+
+        await expect(
+          vectorDB.upsert({
+            indexName: rollbackIndex,
+            vectors,
+            metadata: vectors.map((_, index) => ({ source: 'rollback-test', index })),
+            ids: vectors.map((_, index) => `rollback-${index}`),
+          }),
+        ).rejects.toThrow(/Vector dimension mismatch|expected 3 dimensions/);
+
+        const results = await vectorDB.query({
+          indexName: rollbackIndex,
+          filter: { source: 'rollback-test' },
+          topK: 5,
+        });
+
+        expect(results).toHaveLength(0);
+      } finally {
+        await vectorDB.deleteIndex({ indexName: rollbackIndex });
+      }
+    });
+
     describe('Public Fields Access', () => {
       let testDB: PgVector;
       beforeAll(async () => {

@@ -967,6 +967,46 @@ export function getPgStorageTests(connectionString: string) {
     });
 
     describe('Observational memory standalone repro path', () => {
+      it('indexes and retrieves observational memory vectors with PgVector', async () => {
+        const testResourceId = `test-om-vector-${randomUUID()}`;
+        const threadId = randomUUID();
+        const groupId = randomUUID();
+        const observationIndexName = 'memory_observations_384';
+
+        try {
+          await memory.indexObservation({
+            text: 'The user prefers espresso, keyboard shortcuts, and concise technical answers.',
+            groupId,
+            range: 'messages:1-2',
+            threadId,
+            resourceId: testResourceId,
+            observedAt: new Date('2026-01-01T00:00:00.000Z'),
+          });
+
+          const { results } = await memory.searchMessages({
+            query: 'espresso keyboard shortcut preferences',
+            resourceId: testResourceId,
+            topK: 5,
+          });
+
+          expect(results.length).toBeGreaterThan(0);
+          expect(results[0]).toMatchObject({
+            groupId,
+            threadId,
+            range: 'messages:1-2',
+          });
+          expect(results[0]?.text).toContain('espresso');
+          expect(results[0]?.observedAt?.toISOString()).toBe('2026-01-01T00:00:00.000Z');
+        } finally {
+          try {
+            await integrationVector.deleteVectors({
+              indexName: observationIndexName,
+              filter: { resource_id: testResourceId },
+            });
+          } catch {}
+        }
+      });
+
       // PR-added regression repro. Kept skipped by default because CI currently falls back to
       // fuzzy llm-recorder matches for this path, which makes the recorded tool-heavy run unstable.
       it.skip('splits buffered output into multiple assistant messages instead of one mega-message', async () => {

@@ -26,6 +26,8 @@ import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
 import type { IndexConfig, IndexType, PgMetric, VectorOps, VectorType } from './types';
 export type { PgMetric, VectorOps, VectorType, IndexConfig, IndexType } from './types';
 
+const VECTOR_UPSERT_BATCH_SIZE = 1000;
+
 export interface PGIndexStats extends IndexStats {
   type: IndexType;
   /**
@@ -664,19 +666,49 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
       const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 
-      for (let i = 0; i < vectors.length; i++) {
-        const vectorStr = ops.formatVector(vectors[i]!, indexInfo.dimension);
-        const query = `
-          INSERT INTO ${tableName} (vector_id, embedding, metadata)
-          VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb)
-          ON CONFLICT (vector_id)
-          DO UPDATE SET
-            embedding = $2::${qualifiedVectorType},
-            metadata = $3::jsonb
-          RETURNING embedding::text
-        `;
+      // Multi-row ON CONFLICT cannot update the same caller-provided id twice; use the old serial path for duplicates.
+      const hasDuplicateIds = ids ? new Set(vectorIds).size !== vectorIds.length : false;
+      if (hasDuplicateIds) {
+        for (let i = 0; i < vectors.length; i++) {
+          const vectorStr = ops.formatVector(vectors[i]!, indexInfo.dimension);
+          const query = `
+            INSERT INTO ${tableName} (vector_id, embedding, metadata)
+            VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb)
+            ON CONFLICT (vector_id)
+            DO UPDATE SET
+              embedding = $2::${qualifiedVectorType},
+              metadata = $3::jsonb
+            RETURNING embedding::text
+          `;
 
-        await client.query(query, [vectorIds[i], vectorStr, JSON.stringify(metadata?.[i] || {})]);
+          await client.query(query, [vectorIds[i], vectorStr, JSON.stringify(metadata?.[i] || {})]);
+        }
+      } else {
+        for (let offset = 0; offset < vectors.length; offset += VECTOR_UPSERT_BATCH_SIZE) {
+          const batchVectors = vectors.slice(offset, offset + VECTOR_UPSERT_BATCH_SIZE);
+          const values: unknown[] = [];
+          const valueRows = batchVectors.map((vector, batchIndex) => {
+            const vectorIndex = offset + batchIndex;
+            const valueIndex = values.length + 1;
+            values.push(
+              vectorIds[vectorIndex],
+              ops.formatVector(vector, indexInfo.dimension),
+              JSON.stringify(metadata?.[vectorIndex] || {}),
+            );
+            return `($${valueIndex}, $${valueIndex + 1}::${qualifiedVectorType}, $${valueIndex + 2}::jsonb)`;
+          });
+
+          const query = `
+            INSERT INTO ${tableName} (vector_id, embedding, metadata)
+            VALUES ${valueRows.join(', ')}
+            ON CONFLICT (vector_id)
+            DO UPDATE SET
+              embedding = EXCLUDED.embedding,
+              metadata = EXCLUDED.metadata
+          `;
+
+          await client.query(query, values);
+        }
       }
 
       await client.query('COMMIT');
