@@ -21,22 +21,7 @@ export const coreFeatures = new Set<string>([
   'workspaces-v1',
   'datasets',
   'observability:v1.13.2',
-  // 'observability-delta-polling' intentionally NOT enabled by default.
-  //
-  // Delta polling reads via `WHERE cursorId > $after` over a `bigserial`
-  // cursor that is assigned outside of transactions. When two writes overlap,
-  // a row with a lower cursorId can become visible AFTER a row with a higher
-  // cursorId — but the poller has already advanced past the lower id, so the
-  // late-committer is permanently skipped. Empirically the loss rate scales
-  // with concurrent writers (≈0.6%–6% at 2 writers, ≈58% at 16 writers).
-  //
-  // The fix is documented in stores/pg/src/storage/domains/observability/
-  // v-next/polling.ts: cap the cursor at a safe horizon derived from
-  // `pg_snapshot_xmin(pg_current_snapshot())` and pair it with a drain step.
-  // Until that ships, callers can still opt in explicitly:
-  //
-  //   import { coreFeatures } from '@mastra/core/features';
-  //   coreFeatures.add('observability-delta-polling');
+  'observability-delta-polling',
   'channels',
   'deploy-diagnosis',
   'model-inference-span',
