@@ -230,7 +230,7 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
       url: part.source.url,
       title: part.source.title,
       metadata: getPartMetadata(message, part),
-    } as ContentPart;
+    };
   }
 
   if (part.type === 'source-document') {
@@ -244,16 +244,25 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
   }
 
   if (part.type === 'file') {
-    if (part.mimeType?.includes('image/')) {
-      return { type: 'image', image: part.data, metadata: getPartMetadata(message, part) } as ContentPart;
+    // The stream accumulator and `fromCoreUserMessage` emit V5-shaped file parts
+    // (`{ mediaType, url }`), while persisted/reloaded parts keep the V4 shape
+    // (`{ mimeType, data }`). The stored `MastraMessagePart` type only describes
+    // V4, so read both with a fallback to render streamed and persisted
+    // files/images consistently instead of blank.
+    const filePart = part as typeof part & { mediaType?: string; url?: string };
+    const mediaType = filePart.mediaType ?? filePart.mimeType;
+    const fileData = filePart.url ?? filePart.data;
+
+    if (mediaType?.includes('image/')) {
+      return { type: 'image', image: fileData, metadata: getPartMetadata(message, part) } as ContentPart;
     }
 
     return {
       type: 'file',
-      mimeType: part.mimeType,
-      data: part.data,
+      mimeType: mediaType,
+      data: fileData,
       metadata: getPartMetadata(message, part),
-    } as ContentPart;
+    };
   }
 
   if (part.type === 'tool-invocation') {
@@ -296,7 +305,7 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
       name: part.type.substring(5),
       data: 'data' in part ? part.data : undefined,
       metadata: getPartMetadata(message, part),
-    } as ContentPart;
+    };
   }
 
   return { type: 'text', text: '', metadata: getPartMetadata(message, part) };
