@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.38.0-alpha.4",
+  "version": "1.38.0-alpha.5",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -249,6 +249,16 @@
       "require": {
         "types": "./dist/harness/index.d.ts",
         "default": "./dist/harness/index.cjs"
+      }
+    },
+    "./harness/v1": {
+      "import": {
+        "types": "./dist/harness/v1/index.d.ts",
+        "default": "./dist/harness/v1/index.js"
+      },
+      "require": {
+        "types": "./dist/harness/v1/index.d.ts",
+        "default": "./dist/harness/v1/index.cjs"
       }
     },
     "./hooks": {

@@ -1,5 +1,6 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type {
+  AgentEditorConfig,
   AgentMessageInput,
   AgentModelManagerConfig,
   AgentSignalInput,
@@ -58,6 +59,8 @@ import {
   sendAgentSignalBodySchema,
   queueAgentMessageBodySchema,
   subscribeAgentThreadBodySchema,
+  abortAgentThreadBodySchema,
+  abortAgentThreadResponseSchema,
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
@@ -274,6 +277,7 @@ export interface SerializedAgent {
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
+  editor?: AgentEditorConfig;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -709,6 +713,7 @@ async function formatAgentList({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    editor: agent.__getEditorConfig?.(),
     ...(agent.toRawConfig()?.status
       ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
       : {}),
@@ -977,6 +982,7 @@ async function formatAgent({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    editor: agent.__getEditorConfig?.(),
     ...(agent.toRawConfig()?.status
       ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
       : {}),
@@ -1051,9 +1057,22 @@ export const LIST_AGENTS_ROUTE = createRoute({
           storedAgentsResult = null;
         }
 
+        // Build a set of code-defined agent IDs (keys in #agents may be config keys,
+        // not agent.id). Stored configs sharing one of these IDs are overrides and
+        // should not be hydrated as standalone stored agents.
+        const codeAgentIds = new Set<string>();
+        for (const [key, agent] of Object.entries(codeAgents)) {
+          codeAgentIds.add(key);
+          if (agent?.id) codeAgentIds.add(agent.id);
+        }
+
         if (storedAgentsResult?.agents) {
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
+            // Skip stored configs that overlay an existing code-defined agent.
+            // Those are overrides (no standalone model), not standalone stored agents,
+            // and trying to hydrate them as standalone would fail model validation.
+            if (codeAgentIds.has(storedAgentConfig.id)) continue;
             try {
               const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;
@@ -1872,6 +1891,50 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
   },
 });
 
+export const ABORT_AGENT_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/threads/abort',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: abortAgentThreadBodySchema,
+  responseSchema: abortAgentThreadResponseSchema,
+  summary: 'Abort active agent thread run',
+  description: 'Aborts the currently active stream run for a memory thread without changing thread subscriptions',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, resourceId, threadId, requestContext: serverRequestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      if (typeof (agent as { abortThreadStream?: unknown }).abortThreadStream !== 'function') {
+        throw new HTTPException(501, {
+          message: 'agent thread aborts are not supported by this Mastra core version',
+        });
+      }
+
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
+
+      if (!effectiveThreadId) {
+        throw new HTTPException(400, { message: 'threadId is required' });
+      }
+
+      if (effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
+      }
+
+      const aborted = await agent.abortThreadStream({ resourceId: effectiveResourceId, threadId: effectiveThreadId });
+      return { aborted };
+    } catch (error) {
+      return handleError(error, 'error aborting agent thread');
+    }
+  },
+});
+
 export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/threads/subscribe',
@@ -1927,7 +1990,6 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         if (cleanedUp) return;
         cleanedUp = true;
         clearHeartbeat();
-        subscription.abort();
         subscription.unsubscribe();
         if (closeController) {
           try {

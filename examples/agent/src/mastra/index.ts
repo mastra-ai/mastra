@@ -13,6 +13,9 @@ import {
   agentThatHarassesYou,
   chefAgent,
   chefAgentResponses,
+  codeOverrideEditableAgent,
+  codeOverrideLockedAgent,
+  codeOverrideDescriptionsOnlyAgent,
   dynamicAgent,
   evalAgent,
   dynamicToolsAgent,
@@ -105,6 +108,9 @@ export const mastra = new Mastra({
     gatewayAgent,
     chefAgent,
     chefAgentResponses,
+    codeOverrideEditableAgent,
+    codeOverrideLockedAgent,
+    codeOverrideDescriptionsOnlyAgent,
     dynamicAgent,
     dynamicToolsAgent,
     agentThatHarassesYou,
@@ -157,6 +163,7 @@ export const mastra = new Mastra({
     sourcemap: true,
   },
   editor: new MastraEditor({
+    source: 'code',
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
     },

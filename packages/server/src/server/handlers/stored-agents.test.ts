@@ -13,6 +13,7 @@ import {
   UPDATE_STORED_AGENT_ROUTE,
   DELETE_STORED_AGENT_ROUTE,
   PREVIEW_INSTRUCTIONS_ROUTE,
+  EXPORT_STORED_AGENT_ROUTE,
 } from './stored-agents';
 
 // Mock handleAutoVersioning to prevent version creation in tests
@@ -252,15 +253,28 @@ interface MockMastra {
   getStorage: ReturnType<typeof vi.fn>;
   getEditor: ReturnType<typeof vi.fn>;
   getServer: ReturnType<typeof vi.fn>;
+  getAgentById: ReturnType<typeof vi.fn>;
 }
 
 function createMockMastra(
-  options: { storage?: MockStorage; editor?: MockEditor; server?: Record<string, unknown> } = {},
+  options: {
+    storage?: MockStorage;
+    editor?: MockEditor;
+    server?: Record<string, unknown>;
+    agents?: Record<string, unknown>;
+  } = {},
 ): MockMastra {
   return {
     getStorage: vi.fn().mockReturnValue(options.storage),
     getEditor: vi.fn().mockReturnValue(options.editor),
     getServer: vi.fn().mockReturnValue(options.server ?? {}),
+    getAgentById: vi.fn().mockImplementation((agentId: string) => {
+      const agent = options.agents?.[agentId];
+      if (!agent) {
+        throw new Error(`Agent ${agentId} not found`);
+      }
+      return agent;
+    }),
   };
 }
 
@@ -526,6 +540,73 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).status).toBe(404);
         expect((error as HTTPException).message).toBe('Stored agent with id non-existent not found');
       }
+    });
+  });
+
+  describe('EXPORT_STORED_AGENT_ROUTE', () => {
+    it('should export deterministic JSON for a code agent override', async () => {
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'code-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ instructions: true, tools: { description: true } }),
+          },
+        },
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'code-agent',
+        instructions: 'Stored instructions',
+        tools: { weatherTool: { description: 'Check weather' } },
+        model: { provider: 'openai', name: 'gpt-4o' },
+        name: 'Code Agent',
+      });
+
+      expect(result).toEqual({
+        agentId: 'code-agent',
+        fileName: 'code-agent.json',
+        config: {
+          instructions: 'Stored instructions',
+          tools: { weatherTool: { description: 'Check weather' } },
+        },
+        content:
+          '{\n  "instructions": "Stored instructions",\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
+      });
+    });
+
+    it('should omit fields not owned by the editor config', async () => {
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'locked-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ instructions: false, tools: false }),
+          },
+        },
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'locked-agent',
+        instructions: 'Ignored instructions',
+        tools: { weatherTool: { description: 'Ignored tool' } },
+        integrationTools: { composio: { type: 'composio' } },
+        mcpClients: { local: { type: 'mcp' } },
+        requestContextSchema: { type: 'object' },
+      });
+
+      expect(result).toMatchObject({
+        agentId: 'locked-agent',
+        fileName: 'locked-agent.json',
+        config: {
+          requestContextSchema: { type: 'object' },
+        },
+        content: '{\n  "requestContextSchema": {\n    "type": "object"\n  }\n}\n',
+      });
     });
   });
 

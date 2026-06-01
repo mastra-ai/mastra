@@ -113,6 +113,7 @@ export const ConversationPanelProvider = ({
     availableWorkspaces,
     availableModels,
     features,
+    starterUserMessage: initialUserMessage,
   });
 
   return (
