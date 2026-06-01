@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
-import { query, type ModelUsage, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import type { ModelUsage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
 import { Agent } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
