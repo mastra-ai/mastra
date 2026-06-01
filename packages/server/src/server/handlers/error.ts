@@ -1,4 +1,3 @@
-import { isModelNotAllowedError } from '@mastra/core/agent-builder/ee';
 import type { ZodError } from 'zod';
 
 import { HTTPException } from '../http-exception';
@@ -14,6 +13,29 @@ export interface ZodErrorLike {
     path: PropertyKey[];
     message: string;
   }>;
+}
+
+/**
+ * Recognition for `ModelNotAllowedError` from `@mastra/core/agent-builder/ee`.
+ *
+ * Inlined as a duck check rather than imported so that `handleError` (wired
+ * into every route) does not force a load-time dependency on the
+ * `@mastra/core/agent-builder/ee` subpath. That subpath only ships in
+ * `@mastra/core >= 1.34.0`; deploys whose bundled `@mastra/server` resolves
+ * against an older core would otherwise crash at startup with
+ * `ERR_MODULE_NOT_FOUND` on `@mastra/core/dist/agent-builder/ee/index.js`.
+ */
+const MODEL_NOT_ALLOWED_CODE = 'MODEL_NOT_ALLOWED';
+
+interface ModelNotAllowedErrorLike extends Error {
+  code: typeof MODEL_NOT_ALLOWED_CODE;
+  allowed?: unknown;
+  attempted?: unknown;
+  offendingLabel?: string;
+}
+
+function isModelNotAllowedError(error: unknown): error is ModelNotAllowedErrorLike {
+  return error instanceof Error && (error as { code?: unknown }).code === MODEL_NOT_ALLOWED_CODE;
 }
 
 /**
