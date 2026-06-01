@@ -104,10 +104,16 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     const port = await getPort();
     const baseUrl = `http://localhost:${port}`;
 
-    // Create storage
+    // Create storage. LibSQL's `:memory:` URL gives each pooled connection its own
+    // private in-memory database, so a table created by one connection is invisible
+    // to the next — which the evented agentic-loop tickles by spreading workflow
+    // snapshot reads/writes across multiple operations. Use a per-process temp file
+    // so all pooled connections open the same on-disk database (mirrors the vector
+    // store treatment already in place below).
+    const libSqlDbPath = `file:${join(tmpdir(), `mastra-libsql-${randomUUID()}.db`)}`;
     const libSqlStore = new LibSQLStore({
       id: storageId,
-      url: ':memory:',
+      url: libSqlDbPath,
     });
 
     const inMemoryStore = new InMemoryStore({
