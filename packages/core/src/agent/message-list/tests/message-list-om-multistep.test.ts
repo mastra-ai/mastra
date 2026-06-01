@@ -13,11 +13,12 @@ const resourceId = 'om-user';
 describe('MessageList — OM multi-step source handoff', () => {
   it('removes memory source when merged assistant content is promoted to response', () => {
     const assistantId = 'asst-om-1';
+    const originalCreatedAt = new Date(1);
     const step1: MastraDBMessage = {
       id: assistantId,
       role: 'assistant',
       type: 'text',
-      createdAt: new Date(1),
+      createdAt: originalCreatedAt,
       threadId,
       resourceId,
       content: {
@@ -72,6 +73,7 @@ describe('MessageList — OM multi-step source handoff', () => {
     const responseDb = list.get.response.db();
     expect(responseDb).toHaveLength(1);
     expect(responseDb[0]!.id).toBe(assistantId);
+    expect(responseDb[0]!.createdAt).toEqual(originalCreatedAt);
     expect(responseDb[0]!.content.parts?.some(p => p.type === 'text' && p.text === 'Done.')).toBe(true);
 
     // Must not still be tracked as a memory-only row for the same object identity

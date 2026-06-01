@@ -1597,14 +1597,16 @@ export class MessageList {
 
   private updateLastCreatedAt(message: MastraDBMessage): void {
     const latestMessageTime = message.createdAt.getTime();
-    const latestPartTime = Array.isArray(message.content.parts)
-      ? message.content.parts.reduce((latest, part) => {
-          if (typeof part.createdAt === 'number' && part.createdAt > latest) {
-            return part.createdAt;
-          }
-          return latest;
-        }, latestMessageTime)
-      : latestMessageTime;
+    const shouldIncludePartTimestamps = !this.stateManager.isMemoryMessage(message);
+    const latestPartTime =
+      shouldIncludePartTimestamps && Array.isArray(message.content.parts)
+        ? message.content.parts.reduce((latest, part) => {
+            if (typeof part.createdAt === 'number' && part.createdAt > latest) {
+              return part.createdAt;
+            }
+            return latest;
+          }, latestMessageTime)
+        : latestMessageTime;
 
     this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, latestPartTime);
   }
