@@ -8,7 +8,7 @@ Most meetings end with a clip of audio nobody re-listens to. This template wires
 
 - Zoom Server-to-Server OAuth (one-time setup, no per-user OAuth dance).
 - A workflow that pulls the Zoom-generated VTT transcript for a meeting, summarizes it with `gpt-5-mini` via the Mastra Gateway, and returns structured JSON.
-- Optional one-line exports to Notion and Linear, gated on env vars so they're easy to leave disabled.
+- Optional exports to Notion and Linear via MCP, gated on env vars so they're easy to leave disabled.
 - A `POST /meetings/upload` API route for transcripts that don't come from Zoom (Google Meet, Riverside, Loom, plain text).
 
 ## Demo
@@ -21,7 +21,7 @@ This demo runs in Mastra Studio. Open the `meetingNotesAgent` and ask it to summ
 - A [Turso](https://turso.tech) database URL + auth token.
 - A Zoom **Server-to-Server OAuth** app. See setup below.
 - (Optional) A [Linear](https://linear.app) API key to create issues from action items.
-- (Optional) A [Notion](https://notion.so) integration token + a parent page id to write notes to.
+- (Optional) A [Notion](https://notion.so) integration token to push notes via the Notion MCP server.
 
 ## Quickstart 🚀
 
@@ -66,11 +66,11 @@ Returns the structured notes JSON. Useful for Google Meet / Riverside / Loom / p
 
 - **Add Whisper fallback.** Drop a `transcribeAudio` tool that downloads the recording's audio file and runs it through Whisper, so meetings without Zoom AI still work.
 - **Tighten the output schema.** Edit `meetingNotesOutputSchema` to capture the fields your team actually uses (e.g. risks, blockers, follow-up meetings).
-- **Auto-create Linear issues.** Add a workflow step that loops over `actionItems` and calls `createLinearIssue` for each one.
+- **Auto-create Linear issues.** Add a workflow step that loops over `actionItems` and uses the Linear MCP tools to create issues for each one.
 - **Trigger on Zoom webhooks.** Add an API route at `/zoom/webhook` that listens for the `recording.completed` event and kicks off the `ingest-meeting` workflow automatically.
 
 ## About Mastra templates
 
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours.
 
-Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Want to contribute? See the [Mastra contributing guide](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md).

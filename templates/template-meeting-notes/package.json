@@ -19,6 +19,7 @@
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
     "zod": "^4.3.6"

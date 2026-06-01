@@ -60,4 +60,4 @@ Passing `browser` to the agent automatically registers the full browser toolset 
 
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours.
 
-Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Want to contribute? See the [Mastra contributing guide](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md).

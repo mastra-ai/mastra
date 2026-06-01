@@ -16,6 +16,6 @@ export const mastra = new Mastra({
   agents: { knowledgeAgent },
   workflows: { indexKnowledgeWorkflow },
   storage,
-  vectors: { default: vector },
+  vectors: { pgVector: vector },
   logger: new PinoLogger({ name: 'company-knowledge', level: 'info' }),
 });

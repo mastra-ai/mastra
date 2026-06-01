@@ -17,13 +17,13 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.34",
-    "@linear/sdk": "^39.0.0",
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
     "@mastra/pg": "latest",
-    "@notionhq/client": "^2.3.0",
+    "@mastra/rag": "latest",
     "ai": "^6.0.0",
     "zod": "^4.3.6"
   },

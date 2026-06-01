@@ -1,13 +1,23 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { openai } from '@ai-sdk/openai';
 import { embedMany } from 'ai';
-import { LinearClient } from '@linear/sdk';
-import { Client as NotionClient } from '@notionhq/client';
 import { z } from 'zod';
 import { KNOWLEDGE_INDEX } from '../tools/knowledge-search';
 
 const EMBEDDING_DIM = 1536;
 
+const docSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  title: z.string(),
+  url: z.string(),
+  text: z.string(),
+});
+
+/**
+ * Fetch recent Linear issues and Notion pages via their REST/GraphQL APIs.
+ * Uses plain fetch — no SDK deps needed.
+ */
 const fetchStep = createStep({
   id: 'fetch-sources',
   description: 'Pull recent Linear issues and Notion pages.',
@@ -15,24 +25,30 @@ const fetchStep = createStep({
     linearLimit: z.number().int().min(1).max(250).default(100).optional(),
     notionQuery: z.string().default('').optional(),
   }),
-  outputSchema: z.object({
-    docs: z.array(
-      z.object({
-        id: z.string(),
-        source: z.string(),
-        title: z.string(),
-        url: z.string(),
-        text: z.string(),
-      }),
-    ),
-  }),
+  outputSchema: z.object({ docs: z.array(docSchema) }),
   execute: async ({ inputData }) => {
-    const docs: Array<{ id: string; source: string; title: string; url: string; text: string }> = [];
+    const docs: Array<z.infer<typeof docSchema>> = [];
 
+    // --- Linear (GraphQL API) ---
     if (process.env.LINEAR_API_KEY) {
-      const linear = new LinearClient({ apiKey: process.env.LINEAR_API_KEY });
-      const issues = await linear.issues({ first: inputData.linearLimit ?? 100 });
-      for (const issue of issues.nodes) {
+      const limit = inputData.linearLimit ?? 100;
+      const res = await fetch('https://api.linear.app/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: process.env.LINEAR_API_KEY,
+        },
+        body: JSON.stringify({
+          query: `query($first: Int!) {
+            issues(first: $first, orderBy: updatedAt) {
+              nodes { id identifier title description url }
+            }
+          }`,
+          variables: { first: limit },
+        }),
+      });
+      const json = (await res.json()) as any;
+      for (const issue of json?.data?.issues?.nodes ?? []) {
         docs.push({
           id: `linear:${issue.id}`,
           source: 'linear',
@@ -43,13 +59,26 @@ const fetchStep = createStep({
       }
     }
 
+    // --- Notion (REST API) ---
     if (process.env.NOTION_API_KEY) {
-      const notion = new NotionClient({ auth: process.env.NOTION_API_KEY });
-      const res = await notion.search({ query: inputData.notionQuery ?? '', page_size: 50 });
-      for (const r of res.results as any[]) {
-        if (r.object !== 'page') continue;
+      const searchRes = await fetch('https://api.notion.com/v1/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
+          'Notion-Version': '2022-06-28',
+        },
+        body: JSON.stringify({
+          query: inputData.notionQuery ?? '',
+          page_size: 50,
+          filter: { value: 'page', property: 'object' },
+        }),
+      });
+      const searchJson = (await searchRes.json()) as any;
+
+      for (const page of searchJson?.results ?? []) {
         let title = '(untitled)';
-        const props = r.properties ?? {};
+        const props = page.properties ?? {};
         for (const key of Object.keys(props)) {
           const prop = props[key];
           if (prop?.type === 'title' && Array.isArray(prop.title)) {
@@ -57,26 +86,38 @@ const fetchStep = createStep({
             break;
           }
         }
+
+        // Best-effort: fetch block children for page content
         let text = title;
         try {
-          const blocks = await notion.blocks.children.list({ block_id: r.id, page_size: 50 });
-          text = blocks.results
-            .map((b: any) => {
-              const type = b.type;
-              const rich = b[type]?.rich_text;
-              if (!Array.isArray(rich)) return '';
-              return rich.map((t: any) => t.plain_text ?? '').join('');
-            })
-            .filter(Boolean)
-            .join('\n\n');
+          const blocksRes = await fetch(
+            `https://api.notion.com/v1/blocks/${page.id}/children?page_size=50`,
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
+                'Notion-Version': '2022-06-28',
+              },
+            },
+          );
+          const blocksJson = (await blocksRes.json()) as any;
+          text =
+            (blocksJson?.results ?? [])
+              .map((b: any) => {
+                const rich = b[b.type]?.rich_text;
+                if (!Array.isArray(rich)) return '';
+                return rich.map((t: any) => t.plain_text ?? '').join('');
+              })
+              .filter(Boolean)
+              .join('\n\n') || title;
         } catch {
-          // best-effort: keep title only
+          // keep title only
         }
+
         docs.push({
-          id: `notion:${r.id}`,
+          id: `notion:${page.id}`,
           source: 'notion',
           title,
-          url: r.url ?? '',
+          url: page.url ?? '',
           text,
         });
       }
@@ -89,23 +130,13 @@ const fetchStep = createStep({
 const embedAndUpsertStep = createStep({
   id: 'embed-and-upsert',
   description: 'Embed documents with OpenAI text-embedding-3-small and upsert into pgvector.',
-  inputSchema: z.object({
-    docs: z.array(
-      z.object({
-        id: z.string(),
-        source: z.string(),
-        title: z.string(),
-        url: z.string(),
-        text: z.string(),
-      }),
-    ),
-  }),
+  inputSchema: z.object({ docs: z.array(docSchema) }),
   outputSchema: z.object({ indexed: z.number() }),
   execute: async ({ inputData, mastra }) => {
     const docs = inputData.docs.filter(d => d.text.trim().length > 0);
     if (docs.length === 0) return { indexed: 0 };
 
-    const vector = mastra.getVector('default');
+    const vector = mastra.getVector('pgVector');
     await vector.createIndex({ indexName: KNOWLEDGE_INDEX, dimension: EMBEDDING_DIM }).catch(() => {});
 
     const { embeddings } = await embedMany({

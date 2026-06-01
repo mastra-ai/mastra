@@ -1,13 +1,17 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { openai } from '@ai-sdk/openai';
-import {
-  searchLinearIssues,
-  getLinearIssue,
-  listLinearProjects,
-} from '../tools/linear';
-import { searchNotionPages, getNotionPage } from '../tools/notion';
 import { searchKnowledge } from '../tools/knowledge-search';
+import { mcpClient } from '../mcp';
+
+/**
+ * Linear and Notion tools are loaded dynamically from MCP servers.
+ * Linear: hosted at mcp.linear.app (25+ tools — search, create, update issues, projects, etc.)
+ * Notion: via @notionhq/notion-mcp-server subprocess (search, read, create, update pages/databases)
+ *
+ * Tool names are namespaced: linear_<tool> and notion_<tool>.
+ */
+const mcpTools = await mcpClient.listTools();
 
 export const knowledgeAgent = new Agent({
   id: 'knowledge-agent',
@@ -21,14 +25,19 @@ export const knowledgeAgent = new Agent({
 **Indexed search (fastest, search here first):**
 - search-knowledge — semantic vector search over the pre-indexed Linear + Notion corpus. Returns scored snippets with source, title, URL. Use this for any factual question about the company.
 
-**Live Linear lookups (use when indexed results are stale or missing):**
-- search-linear-issues — free-text search by issue title. Good for finding specific bugs, features, or tasks.
-- get-linear-issue — fetch full details for one issue by identifier (e.g. "ENG-123"). Use when a user references a specific issue or you need the description/comments.
-- list-linear-projects — list all projects with status. Use when asked about project status, roadmap, or "what projects exist."
+**Live Linear lookups (via MCP — tools prefixed with \`linear_\`):**
+Linear tools are loaded from the official Linear MCP server. Key tools include:
+- linear_search_issues — search issues by query.
+- linear_get_issue — fetch full details for one issue.
+- linear_list_projects — list all projects with status.
+Use these when indexed results are stale or missing, or the user references a specific Linear issue/project.
 
-**Live Notion lookups (use when indexed results are stale or missing):**
-- search-notion-pages — search across all pages/databases the integration can access. Use when the indexed search doesn't find a doc the user is asking about.
-- get-notion-page — fetch a specific page's content as plain text. Use when you need the full text of a doc, not just a snippet.
+**Live Notion lookups (via MCP — tools prefixed with \`notion_\`):**
+Notion tools are loaded from the official Notion MCP server. Key tools include:
+- notion_search — search across all pages/databases.
+- notion_retrieve-a-page — fetch a page's content.
+- notion_create-a-page — create a new page.
+Use these when indexed results are stale or the user asks about a specific Notion doc.
 
 **Public fallback:**
 - web_search — search the public web. Only use this for questions that aren't about internal company data (e.g. "what's the latest Node.js LTS version?").
@@ -37,11 +46,10 @@ export const knowledgeAgent = new Agent({
 
 Follow this order strictly — it saves API calls and gives faster answers:
 
-1. **Start with search-knowledge.** Ask for 8–10 results. If the top results (score > 0.75) answer the question, use them and stop.
+1. **Start with search-knowledge.** If the top results (score > 0.75) answer the question, use them and stop.
 2. **If indexed results are weak (score < 0.7 or don't address the question):**
-   - For Linear questions → search-linear-issues, then get-linear-issue for detail.
-   - For Notion questions → search-notion-pages, then get-notion-page for full text.
-   - For project/roadmap questions → list-linear-projects.
+   - For Linear questions → use linear_ tools.
+   - For Notion questions → use notion_ tools.
 3. **Combine sources.** If the answer spans both Linear and Notion, say so. "According to ENG-456 and the API Design doc in Notion..."
 4. **Web search is last resort.** Only for public/external information the company tools won't have.
 
@@ -60,11 +68,7 @@ Follow this order strictly — it saves API calls and gives faster answers:
   }),
   tools: {
     searchKnowledge,
-    searchLinearIssues,
-    getLinearIssue,
-    listLinearProjects,
-    searchNotionPages,
-    getNotionPage,
+    ...mcpTools,
     web_search: openai.tools.webSearch({}),
   },
 });

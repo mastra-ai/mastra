@@ -5,7 +5,8 @@ A Mastra template that indexes your Linear issues and Notion pages into [pgvecto
 ## What it showcases
 
 - **`@mastra/pg`** — `PostgresStore` for state and `PgVector` for semantic recall.
-- **Multi-source tool agent** — Linear SDK + Notion SDK tools, semantic search, and OpenAI provider-native web search through the **Mastra Gateway**.
+- **Multi-source tool agent** — Linear and Notion via MCP, semantic vector search via `@mastra/rag`, and OpenAI provider-native web search through the **Mastra Gateway**.
+- **MCP integrations** — Linear (hosted at [mcp.linear.app](https://mcp.linear.app/mcp)) and Notion (via `@notionhq/notion-mcp-server`) for live lookups.
 - **Indexing workflow** — `index-knowledge` pulls recent Linear issues + Notion pages, embeds them with `text-embedding-3-small`, and upserts into pgvector.
 
 ## Prerequisites
@@ -31,8 +32,8 @@ On Neon, make sure `CREATE EXTENSION IF NOT EXISTS vector;` has been run on your
 
 Run the `index-knowledge` workflow from Mastra Studio (`pnpm dev` → workflows tab) or programmatically. It will:
 
-1. Pull up to N recent Linear issues (via `@linear/sdk`).
-2. Search Notion pages the integration has access to (via `@notionhq/client`).
+1. Pull up to N recent Linear issues (via the Linear MCP server).
+2. Search Notion pages the integration has access to (via the Notion MCP server).
 3. Embed each document with `text-embedding-3-small`.
 4. Upsert into the `company_knowledge` pgvector index.
 
@@ -43,7 +44,7 @@ You can re-run this on a schedule to keep the index fresh.
 The agent's instructions force this order:
 
 1. `search-knowledge` — semantic search over the indexed corpus.
-2. Live Linear / Notion tools — when fresh data is needed.
+2. Live Linear / Notion tools (via MCP) — when fresh data is needed.
 3. Provider-native `web_search` — for public information.
 
 Sources (URLs) are always cited in the response.
@@ -54,6 +55,6 @@ Sources (URLs) are always cited in the response.
 | --- | --- |
 | `MASTRA_GATEWAY_API_KEY` | Routes the chat model and provider tools through the Mastra Gateway. |
 | `DATABASE_URL` | Neon (or other) Postgres connection string with `?sslmode=require`. |
-| `LINEAR_API_KEY` | Linear personal API key. |
-| `NOTION_API_KEY` | Notion internal integration token. |
+| `LINEAR_API_KEY` | Linear personal API key (for Linear MCP server). |
+| `NOTION_API_KEY` | Notion internal integration token (for Notion MCP server). |
 | `OPENAI_API_KEY` | Used only for embeddings (`text-embedding-3-small`). |
