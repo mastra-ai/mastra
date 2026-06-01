@@ -129,6 +129,91 @@ describe('workspace_grep', () => {
     expect(result).toContain('ctx.ts:5- line5');
   });
 
+  it('should merge overlapping context windows without duplicating lines', async () => {
+    await fs.writeFile(path.join(tempDir, 'f.ts'), 'MATCH_A\nx\nMATCH_B\ny\nz');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      {
+        pattern: 'MATCH',
+        path: 'f.ts',
+        contextLines: 2,
+      },
+      { workspace },
+    );
+
+    expect(result).toBe(
+      [
+        '2 matches across 1 file',
+        '---',
+        'f.ts:1:1: MATCH_A',
+        'f.ts:2- x',
+        'f.ts:3:1: MATCH_B',
+        'f.ts:4- y',
+        'f.ts:5- z',
+      ].join('\n'),
+    );
+  });
+
+  it('should normalize fractional context lines before rendering context', async () => {
+    await fs.writeFile(path.join(tempDir, 'fractional.ts'), 'before\nTARGET\nafter\nextra');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      {
+        pattern: 'TARGET',
+        path: 'fractional.ts',
+        contextLines: 1.5,
+      },
+      { workspace },
+    );
+
+    expect(result).toBe(
+      [
+        '1 match across 1 file',
+        '---',
+        'fractional.ts:1- before',
+        'fractional.ts:2:1: TARGET',
+        'fractional.ts:3- after',
+      ].join('\n'),
+    );
+  });
+
+  it('should separate distinct context hunks without a trailing separator', async () => {
+    await fs.writeFile(path.join(tempDir, 'split.ts'), 'TARGET_A\nctxA\ngap1\ngap2\nctxB\nTARGET_B');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      {
+        pattern: 'TARGET',
+        path: 'split.ts',
+        contextLines: 1,
+      },
+      { workspace },
+    );
+
+    expect(result).toBe(
+      [
+        '2 matches across 1 file',
+        '---',
+        'split.ts:1:1: TARGET_A',
+        'split.ts:2- ctxA',
+        '--',
+        'split.ts:5- ctxB',
+        'split.ts:6:1: TARGET_B',
+      ].join('\n'),
+    );
+  });
+
   it('should limit matches per file with maxCount', async () => {
     const lines = Array.from({ length: 200 }, (_, i) => `match_${i}`).join('\n');
     await fs.writeFile(path.join(tempDir, 'big.ts'), lines);

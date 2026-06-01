@@ -3,7 +3,14 @@ import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
-import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext, ToolPayloadTransform } from './types';
+import type {
+  McpMetadata,
+  MCPToolProperties,
+  NeedsApprovalFn,
+  ToolAction,
+  ToolExecutionContext,
+  ToolPayloadTransform,
+} from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
@@ -136,6 +143,16 @@ export class Tool<
     TId,
     TRequestContext
   >['requireApproval'];
+
+  /**
+   * Runtime-resolved per-tool approval predicate, evaluated per call.
+   *
+   * This is set automatically when a tool's `requireApproval` is a function, or by the
+   * MCP client when wrapping a server-level `requireToolApproval` function — not something
+   * you normally set yourself (prefer the `requireApproval` option). When present it is the
+   * authoritative per-tool approval decision and is always evaluated by the agent runtime.
+   */
+  needsApprovalFn?: NeedsApprovalFn;
 
   /**
    * Enables strict tool input generation for providers that support it.

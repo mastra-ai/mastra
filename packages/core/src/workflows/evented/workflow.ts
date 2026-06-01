@@ -1143,7 +1143,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1169,7 +1169,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1236,6 +1236,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                systemMessages: passThrough.messageList!.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1351,7 +1352,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1377,7 +1378,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1431,7 +1432,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1457,7 +1458,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };

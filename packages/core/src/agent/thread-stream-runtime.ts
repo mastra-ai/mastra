@@ -8,12 +8,16 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal, resolveDeliveryAttributes } from './signals';
-import type { CreatedAgentSignal } from './signals';
+import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
+import type { AgentMessageInput, CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
+  QueueAgentMessageOptions,
+  QueueAgentMessageResult,
+  SendAgentMessageOptions,
+  SendAgentMessageResult,
   SendAgentSignalOptions,
   SendAgentSignalResult,
 } from './types';
@@ -783,6 +787,71 @@ export class AgentThreadStreamRuntime {
         }
       })(),
     };
+  }
+
+  sendMessage<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    message: AgentMessageInput,
+    target: SendAgentMessageOptions<OUTPUT>,
+    pubsub?: PubSub,
+  ): SendAgentMessageResult {
+    return this.sendSignal(agent, createMessageSignal(message, { acceptedAt: new Date() }), target, pubsub);
+  }
+
+  queueMessage<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    message: AgentMessageInput,
+    target: QueueAgentMessageOptions<OUTPUT>,
+    pubsub?: PubSub,
+  ): QueueAgentMessageResult {
+    const state = this.#getState(pubsub);
+    const signal = createMessageSignal(message, { acceptedAt: new Date() });
+    let key: string | undefined;
+    let runId = target.runId;
+    let activeRecord: AgentThreadRunRecord<any> | undefined;
+
+    if (target.resourceId && target.threadId) {
+      key = this.#threadKey(target.resourceId, target.threadId);
+      const activeRunId = state.activeThreadRunIds.get(key);
+      activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
+      if (activeRecord && activeRecord.output.status !== 'running') {
+        state.activeThreadRunIds.delete(key);
+        activeRecord = undefined;
+      }
+      runId ??= activeRunId;
+    }
+
+    if (runId) {
+      activeRecord ??= state.threadRunsById.get(runId);
+      if (activeRecord) {
+        key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
+      }
+    }
+
+    const resourceId = target.resourceId ?? activeRecord?.resourceId;
+    const threadId = target.threadId ?? activeRecord?.threadId;
+    if (!resourceId || !threadId) {
+      throw new Error('resourceId and threadId are required to queue a message');
+    }
+
+    key ??= this.#threadKey(resourceId, threadId);
+    const queuedRunId = randomUUID();
+    const queuedStreamOptions = target.ifIdle?.streamOptions ?? activeRecord?.streamOptions;
+
+    if (activeRecord) {
+      const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
+      idleQueue.push({ agent, signal, runId: queuedRunId, resourceId, threadId, streamOptions: queuedStreamOptions });
+      state.pendingIdleSignalsByThread.set(key, idleQueue);
+      this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      return { accepted: true, runId: queuedRunId, signal };
+    }
+
+    return this.sendSignal(
+      agent,
+      signal,
+      { ...target, runId, resourceId, threadId, ifIdle: { ...target.ifIdle, behavior: 'wake' } },
+      pubsub,
+    );
   }
 
   /**
