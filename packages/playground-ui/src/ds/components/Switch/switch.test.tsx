@@ -88,14 +88,28 @@ describe('Switch', () => {
     expect(switchEl.className).toContain('border-0');
     expect(switchEl.className).toContain('overflow-hidden');
     expect(switchEl.className).toContain('focus-visible:outline-neutral5/55');
+    expect(switchEl.className).not.toContain('active:scale');
     expect(thumbEl?.className).toContain('transition-[background-color,translate,width,scale]');
     expect(thumbEl?.className).toContain('w-5');
     expect(thumbEl?.className).toContain('data-[checked]:translate-x-3');
     expect(thumbEl?.className).toContain('group-active/switch:w-6');
-    expect(thumbEl?.className).toContain('group-active/switch:scale-y-95');
+    expect(thumbEl?.className).toContain('data-[settling]:scale-y-90');
+    expect(thumbEl?.className).not.toContain('group-active/switch:scale');
     expect(thumbEl?.className).toContain('group-active/switch:data-[checked]:translate-x-2');
     expect(switchEl.className).not.toContain('accent1');
     expect(switchEl.className).not.toContain('shadow-glow');
+  });
+
+  it('only applies the thumb settling state while the value changes', () => {
+    render(<Switch aria-label="Toggle" />);
+
+    const switchEl = screen.getByRole('switch');
+    const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
+    expect(thumbEl?.hasAttribute('data-settling')).toBe(false);
+
+    fireEvent.click(switchEl);
+
+    expect(thumbEl?.hasAttribute('data-settling')).toBe(true);
   });
 
   it('applies the id to the visible switch control, not a hidden input', () => {
