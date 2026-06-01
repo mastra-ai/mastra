@@ -89,6 +89,8 @@ describe('Switch', () => {
     expect(switchEl.className).toContain('overflow-hidden');
     expect(switchEl.className).toContain('focus-visible:outline-neutral5/55');
     expect(switchEl.className).not.toContain('active:scale');
+    expect(switchEl.className).not.toContain('hover:scale');
+    expect(switchEl.className).not.toContain('transition-[background-color,scale]');
     expect(thumbEl?.className).toContain('transition-[background-color,translate,width,transform]');
     expect(thumbEl?.className).toContain('switch-thumb-motion');
     expect(thumbEl?.className).toContain('w-5');
