@@ -36,7 +36,7 @@ const truncate = (value: string, max: number): string => {
   return `${value.slice(0, max)}… [truncated]`;
 };
 
-const isFilled = (value: string | undefined): value is string => typeof value === 'string' && value.length > 0;
+const isFilled = (value: string | undefined): value is string => typeof value === 'string' && value.trim().length > 0;
 
 const collectSelectedIds = (record: Record<string, boolean | undefined> | undefined): string[] => {
   if (!record) return [];
@@ -50,8 +50,17 @@ const collectSelectedIds = (record: Record<string, boolean | undefined> | undefi
 const renderToolEntry = (tool: AgentTool): string => `"${tool.name}" (${tool.id})`;
 const renderSkillEntry = (skill: StoredSkillResponse): string => `"${skill.name}" (${skill.id})`;
 
+// Field values can contain raw user input (agent name, description, custom
+// workspace/skill names). Since the snapshot is treated as authoritative, we
+// must prevent embedded newlines or directive-like glyphs from spoofing a fake
+// "→ already set" line and tricking the LLM into skipping a legitimate setter.
+// Collapse any newlines to a single space and replace the directive arrow with
+// an ASCII fallback before interpolation.
+const sanitizeSnapshotValue = (value: string): string =>
+  value.replaceAll('\r\n', ' ').replaceAll('\r', ' ').replaceAll('\n', ' ').replaceAll('→', '->');
+
 const renderField = (label: string, value: string, directive: string): string =>
-  `- ${label}: ${value}\n  → ${directive}`;
+  `- ${label}: ${sanitizeSnapshotValue(value)}\n  → ${directive}`;
 
 /**
  * Renders the form's current state plus a per-field directive telling the
@@ -121,15 +130,14 @@ export function buildFormSnapshotInstructions(
     );
   }
 
-  // Instructions
+  // Instructions are the only field that legitimately renders as multi-line in
+  // the snapshot, so we bypass renderField (which collapses newlines) and
+  // sanitize the user-supplied text in place — stripping the directive arrow
+  // glyph so user instructions can't spoof a "→ already set" line.
   if (isFilled(values.instructions)) {
-    const truncated = truncate(values.instructions, INSTRUCTIONS_MAX_CHARS);
+    const truncated = truncate(values.instructions, INSTRUCTIONS_MAX_CHARS).replaceAll('→', '->');
     lines.push(
-      renderField(
-        'Instructions',
-        `"""\n${truncated}\n"""`,
-        'Already set. Do not call set-agent-instructions unless the user explicitly asks to rewrite or amend the prompt.',
-      ),
+      `- Instructions: """\n${truncated}\n"""\n  → Already set. Do not call set-agent-instructions unless the user explicitly asks to rewrite or amend the prompt.`,
     );
   } else {
     lines.push(
