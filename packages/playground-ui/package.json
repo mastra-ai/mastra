@@ -41,9 +41,10 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc && vite build",
+    "build": "vite build",
     "dev": "vite build --watch",
     "test": "vitest",
+    "typecheck": "tsc",
     "lint": "eslint .",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
