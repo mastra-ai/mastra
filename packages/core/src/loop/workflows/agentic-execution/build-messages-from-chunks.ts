@@ -13,6 +13,7 @@ import type {
 } from '../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
+import { safeStringify } from '../../../utils';
 
 /**
  * A raw chunk collected during the stream.
@@ -53,10 +54,17 @@ export function buildMessagesFromChunks({
   // Collect tool results so we can match them to tool calls
   const toolResults = new Map<
     string,
-    { result: any; args: any; providerMetadata: any; providerExecuted: boolean | undefined; toolName: string }
+    {
+      result: any;
+      args: any;
+      providerMetadata: any;
+      providerExecuted: boolean | undefined;
+      toolName: string;
+      isError?: boolean;
+    }
   >();
   for (const chunk of chunks) {
-    if (chunk.type === 'tool-result' && chunk.payload.result != null) {
+    if (chunk.type === 'tool-result' && (chunk.payload.isError || chunk.payload.result != null)) {
       const p = chunk.payload as ToolResultPayload;
       toolResults.set(p.toolCallId, {
         result: p.result,
@@ -64,6 +72,7 @@ export function buildMessagesFromChunks({
         providerMetadata: withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata),
         providerExecuted: p.providerExecuted,
         toolName: p.toolName,
+        isError: p.isError,
       });
     }
   }
@@ -242,17 +251,29 @@ export function buildMessagesFromChunks({
         const result = toolResults.get(p.toolCallId);
 
         if (result) {
-          // Merge call + result into a single 'result' state part
           const resultProviderExecuted = inferProviderExecuted(result.providerExecuted, toolDef);
           parts.push({
             type: 'tool-invocation' as const,
-            toolInvocation: {
-              state: 'result' as const,
-              toolCallId: p.toolCallId,
-              toolName: p.toolName,
-              args: p.args,
-              result: result.result,
-            },
+            toolInvocation: result.isError
+              ? {
+                  state: 'output-error' as const,
+                  toolCallId: p.toolCallId,
+                  toolName: p.toolName,
+                  args: p.args,
+                  errorText:
+                    typeof result.result === 'string'
+                      ? result.result
+                      : result.result == null
+                        ? 'Tool execution failed'
+                        : safeStringify(result.result),
+                }
+              : {
+                  state: 'result' as const,
+                  toolCallId: p.toolCallId,
+                  toolName: p.toolName,
+                  args: p.args,
+                  result: result.result,
+                },
             providerMetadata: result.providerMetadata ?? providerMetadata,
             providerExecuted: resultProviderExecuted,
           } as MastraMessagePart);

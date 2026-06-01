@@ -3190,6 +3190,40 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /stored/agents/:storedAgentId/export": {
+    "method": "POST",
+    "path": "/stored/agents/:storedAgentId/export",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "agents",
+      "browser",
+      "defaultOptions",
+      "description",
+      "inputProcessors",
+      "instructions",
+      "integrationTools",
+      "mcpClients",
+      "memory",
+      "model",
+      "name",
+      "outputProcessors",
+      "requestContextSchema",
+      "scorers",
+      "skills",
+      "toolProviders",
+      "tools",
+      "workflows",
+      "workspace"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /stored/agents/:storedAgentId": {
     "method": "GET",
     "path": "/stored/agents/:storedAgentId",
