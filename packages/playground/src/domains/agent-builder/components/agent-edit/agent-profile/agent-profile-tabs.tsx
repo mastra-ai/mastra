@@ -47,6 +47,10 @@ export const AgentProfileTabs = ({
   const integrationsTabEnabled = channelPlatforms.some(platform => platform.id === 'slack' && platform.isConfigured);
 
   const tabContentClassName = 'h-full min-h-0 pb-6 pt-6';
+  // The Model/Tools tabs use a two-pane layout whose left filter pane must run
+  // the full height of the panel, so they manage their own vertical spacing
+  // instead of inheriting the shared vertical padding.
+  const twoPaneTabContentClassName = 'h-full min-h-0 !py-0';
   const isEditable = !disabled;
 
   const defaultTab = modelTabEnabled ? 'model' : toolsTabEnabled ? 'tools' : 'instructions';
@@ -65,13 +69,13 @@ export const AgentProfileTabs = ({
 
         <div className="min-h-0 overflow-y-auto h-full">
           {modelTabEnabled && (
-            <TabContent value="model" className={tabContentClassName}>
+            <TabContent value="model" className={twoPaneTabContentClassName}>
               <Models editable={isEditable} />
             </TabContent>
           )}
 
           {toolsTabEnabled && (
-            <TabContent value="tools" className={tabContentClassName}>
+            <TabContent value="tools" className={twoPaneTabContentClassName}>
               <Tools availableAgentTools={availableAgentTools} editable={isEditable} />
             </TabContent>
           )}
