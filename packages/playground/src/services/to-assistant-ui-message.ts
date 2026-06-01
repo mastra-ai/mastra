@@ -222,13 +222,18 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
     return { type: 'reasoning', text, metadata: getPartMetadata(message, part) } as ContentPart;
   }
 
-  if (part.type === 'source') {
+  if ((part.type as string) === 'source-url') {
+    // The stream accumulator emits V5-shaped, flat source parts (`source-url`
+    // with `{ sourceId, url, title }`). The stored `MastraMessagePart` union does
+    // not describe this V5 storage-boundary extension, so read the flat fields
+    // with a narrow structural cast (same pattern as the `dynamic-tool` branch).
+    const sourcePart = part as unknown as { sourceId?: string; url?: string; title?: string };
     return {
       type: 'source',
       sourceType: 'url',
-      id: part.source.id,
-      url: part.source.url,
-      title: part.source.title,
+      id: sourcePart.sourceId ?? '',
+      url: sourcePart.url ?? '',
+      title: sourcePart.title,
       metadata: getPartMetadata(message, part),
     };
   }

@@ -307,6 +307,73 @@ describe('toAssistantUIMessage file and image parts', () => {
   });
 });
 
+describe('toAssistantUIMessage source parts', () => {
+  /**
+   * The stream accumulator emits V5-shaped, flat source parts (see
+   * client-sdks/react/src/lib/mastra-db/accumulator.ts): `source-url` with
+   * `{ sourceId, url, title }` and `source-document` with
+   * `{ sourceId, mediaType, title, filename }`. These are V5 storage-boundary
+   * extensions not described by the stored `MastraMessagePart` union, so we build
+   * them with a single narrow boundary cast (mirroring the accumulator) to reflect
+   * the real runtime input the converter receives.
+   */
+  const streamedSourceUrlPart = (part: { sourceId: string; url: string; title?: string }): MastraMessagePart =>
+    ({ type: 'source-url', ...part }) as unknown as MastraMessagePart;
+
+  const streamedSourceDocumentPart = (part: {
+    sourceId: string;
+    mediaType: string;
+    title?: string;
+    filename?: string;
+  }): MastraMessagePart => ({ type: 'source-document', ...part }) as unknown as MastraMessagePart;
+
+  it('renders a streamed source-url part as a source content part', () => {
+    const { content } = toAssistantUIMessage(
+      assistantMessage([streamedSourceUrlPart({ sourceId: 's1', url: 'https://example.com', title: 'Example' })]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('source');
+    if (part.type !== 'source') throw new Error('expected source');
+    expect(part.sourceType).toBe('url');
+    expect(part.id).toBe('s1');
+    expect(part.url).toBe('https://example.com');
+    expect(part.title).toBe('Example');
+  });
+
+  it('does not emit a blank text part for a source-url part', () => {
+    const { content } = toAssistantUIMessage(
+      assistantMessage([streamedSourceUrlPart({ sourceId: 's1', url: 'https://example.com' })]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('source');
+    expect(part.type).not.toBe('text');
+  });
+
+  it('renders a streamed source-document part as a file content part', () => {
+    const { content } = toAssistantUIMessage(
+      assistantMessage([
+        streamedSourceDocumentPart({
+          sourceId: 's2',
+          mediaType: 'application/pdf',
+          title: 'Doc',
+          filename: 'doc.pdf',
+        }),
+      ]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('file');
+    if (part.type !== 'file') throw new Error('expected file');
+    expect(part.mimeType).toBe('application/pdf');
+    expect(part.filename).toBe('doc.pdf');
+  });
+});
+
 describe('toAssistantUIMessage reasoning reload', () => {
   /**
    * Persisted reasoning parts arrive from the DB with an empty `reasoning` string
