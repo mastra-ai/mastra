@@ -598,5 +598,32 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     await workerLifecycle.startEventEngine();
   }
 
+  // Graceful shutdown so storage backends release resources (e.g. DuckDB's
+  // native file lock) before the process exits. On `mastra dev` hot reloads
+  // the old process is sent SIGINT; without this the lock can linger and the
+  // restarted process fails with "Conflicting lock is held".
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    const logger = mastra.getLogger();
+    logger.info('Shutting down Mastra server', { signal });
+    server.close();
+    // Feature-detect for older @mastra/core versions without shutdown().
+    const lifecycle = mastra as unknown as { shutdown?: () => Promise<void> };
+    if (typeof lifecycle.shutdown === 'function') {
+      try {
+        await lifecycle.shutdown();
+      } catch (error) {
+        logger.error('Error during Mastra shutdown', { error });
+      }
+    }
+    process.exit(0);
+  };
+  process.once('SIGINT', () => void shutdown('SIGINT'));
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+
   return server;
 }
