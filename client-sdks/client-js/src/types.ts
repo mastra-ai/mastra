@@ -7,6 +7,7 @@ import type {
   ToolsInput,
   UIMessageWithMetadata,
   AgentInstructions,
+  AgentEditorConfig,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
@@ -490,6 +491,7 @@ export interface GetAgentResponse {
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
+  editor?: AgentEditorConfig;
 }
 
 /**
@@ -1377,6 +1379,17 @@ export interface CreateStoredAgentParams {
 /**
  * Parameters for updating a stored agent
  */
+export type ExportStoredAgentParams = Partial<
+  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
+>;
+
+export interface ExportStoredAgentResponse {
+  agentId: string;
+  fileName: string;
+  content: string;
+  config: Record<string, unknown>;
+}
+
 export interface UpdateStoredAgentParams {
   authorId?: string;
   /** Visibility of the agent. */

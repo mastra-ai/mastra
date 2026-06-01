@@ -183,6 +183,14 @@ const modelConfigSchema = z.object({
   // Additional fields from AgentModelManagerConfig can be added here
 });
 
+const agentEditorConfigSchema = z.union([
+  z.literal(false),
+  z.object({
+    instructions: z.boolean().optional(),
+    tools: z.union([z.boolean(), z.object({ description: z.boolean().optional() })]).optional(),
+  }),
+]);
+
 /**
  * Main schema for serialized agent representation
  */
@@ -203,9 +211,11 @@ export const serializedAgentSchema = z.object({
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  source: z.enum(['code', 'stored']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
   hasDraft: z.boolean().optional(),
+  editor: agentEditorConfigSchema.optional(),
 });
 
 /**
