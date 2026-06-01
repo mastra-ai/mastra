@@ -44,8 +44,8 @@ import {
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   toolCallResponseSchema,
-  toolCallSubscriptionBodySchema,
-  toolCallSubscriptionResponseSchema,
+  sendToolApprovalBodySchema,
+  sendToolApprovalResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
   updateAgentModelInModelListBodySchema,
@@ -2330,15 +2330,15 @@ async function validateSubscriptionToolCallThreadAccess({
   return { effectiveResourceId: effectiveResourceId ?? '', effectiveThreadId };
 }
 
-export const APPROVE_TOOL_CALL_FOR_THREAD_ROUTE = createRoute({
+export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   method: 'POST',
-  path: '/agents/:agentId/approve-tool-call-for-thread',
+  path: '/agents/:agentId/send-tool-approval',
   responseType: 'json' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: toolCallSubscriptionBodySchema,
-  responseSchema: toolCallSubscriptionResponseSchema,
-  summary: 'Approve tool call for subscription stream',
-  description: 'Approves a pending tool call and publishes resumed chunks to thread subscribers',
+  bodySchema: sendToolApprovalBodySchema,
+  responseSchema: sendToolApprovalResponseSchema,
+  summary: 'Send tool approval',
+  description: 'Approves or declines a pending tool call and publishes resumed chunks to thread subscribers',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
@@ -2367,7 +2367,7 @@ export const APPROVE_TOOL_CALL_FOR_THREAD_ROUTE = createRoute({
         threadId: params.threadId,
       });
 
-      return await agent.approveToolCallForThread({
+      return await agent.sendToolApproval({
         ...params,
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
@@ -2375,7 +2375,7 @@ export const APPROVE_TOOL_CALL_FOR_THREAD_ROUTE = createRoute({
         abortSignal,
       });
     } catch (error) {
-      return handleError(error, 'error approving tool call for subscription stream');
+      return handleError(error, 'error sending tool approval');
     }
   },
 });
@@ -2421,56 +2421,6 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error declining tool call');
-    }
-  },
-});
-
-export const DECLINE_TOOL_CALL_FOR_THREAD_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/decline-tool-call-for-thread',
-  responseType: 'json' as const,
-  pathParamSchema: agentIdPathParams,
-  bodySchema: toolCallSubscriptionBodySchema,
-  responseSchema: toolCallSubscriptionResponseSchema,
-  summary: 'Decline tool call for subscription stream',
-  description: 'Declines a pending tool call and publishes resumed chunks to thread subscribers',
-  tags: ['Agents', 'Tools'],
-  requiresAuth: true,
-  requiresPermission: 'agents:execute',
-  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
-    try {
-      const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
-      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
-
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions,
-        requestContext: serverRequestContext,
-      });
-
-      if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
-      }
-
-      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      sanitizeBody(params, ['tools']);
-      const { effectiveResourceId, effectiveThreadId } = await validateSubscriptionToolCallThreadAccess({
-        agent,
-        requestContext: serverRequestContext,
-        resourceId: params.resourceId,
-        threadId: params.threadId,
-      });
-
-      return await agent.declineToolCallForThread({
-        ...params,
-        resourceId: effectiveResourceId,
-        threadId: effectiveThreadId,
-        requestContext: serverRequestContext,
-        abortSignal,
-      });
-    } catch (error) {
-      return handleError(error, 'error declining tool call for subscription stream');
     }
   },
 });

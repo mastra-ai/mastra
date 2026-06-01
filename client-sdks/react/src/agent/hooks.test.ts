@@ -21,7 +21,7 @@ const approveToolCallMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: approveToolCallProcessDataStreamMock,
 }));
-const approveToolCallForThreadMock = vi.fn(async () => ({
+const sendToolApprovalMock = vi.fn(async () => ({
   accepted: true,
   runId: 'run-approval',
   toolCallId: 'tool-call-approval-1',
@@ -31,11 +31,6 @@ const declineToolCallMock = vi.fn(async () => ({
   processDataStream: async () => {
     /* no chunks */
   },
-}));
-const declineToolCallForThreadMock = vi.fn(async () => ({
-  accepted: true,
-  runId: 'run-approval',
-  toolCallId: 'tool-call-approval-1',
 }));
 const streamUntilIdleMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
@@ -90,9 +85,8 @@ vi.mock('@mastra/client-js', () => ({
       return {
         sendSignal: sendSignalMock,
         approveToolCall: approveToolCallMock,
-        approveToolCallForThread: approveToolCallForThreadMock,
+        sendToolApproval: sendToolApprovalMock,
         declineToolCall: declineToolCallMock,
-        declineToolCallForThread: declineToolCallForThreadMock,
         streamUntilIdle: streamUntilIdleMock,
         subscribeToThread: subscribeToThreadMock,
         generate: generateMock,
@@ -120,9 +114,8 @@ describe('useChat forwards clientTools', () => {
   beforeEach(() => {
     sendSignalMock.mockClear();
     approveToolCallMock.mockClear();
-    approveToolCallForThreadMock.mockClear();
+    sendToolApprovalMock.mockClear();
     declineToolCallMock.mockClear();
-    declineToolCallForThreadMock.mockClear();
     approveToolCallProcessDataStreamMock.mockClear();
     streamUntilIdleMock.mockClear();
     subscribeToThreadMock.mockClear();
@@ -284,10 +277,11 @@ describe('useChat forwards clientTools', () => {
       await result.current.approveToolCall('tool-call-approval-1');
     });
 
-    expect(approveToolCallForThreadMock).toHaveBeenCalledWith({
+    expect(sendToolApprovalMock).toHaveBeenCalledWith({
       resourceId: 'resource-1',
       threadId: 'thread-1',
       toolCallId: 'tool-call-approval-1',
+      approved: true,
       requestContext: undefined,
     });
     expect(approveToolCallMock).not.toHaveBeenCalled();
@@ -313,7 +307,7 @@ describe('useChat forwards clientTools', () => {
       },
     ];
     keepSubscriptionOpen = true;
-    approveToolCallForThreadMock.mockRejectedValueOnce(new Error('approval failed'));
+    sendToolApprovalMock.mockRejectedValueOnce(new Error('approval failed'));
 
     const { result, unmount } = renderHook(
       () =>

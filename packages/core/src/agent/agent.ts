@@ -7184,17 +7184,22 @@ export class Agent<
     return this.resumeStream({ approved: true }, options);
   }
 
-  async approveToolCallForThread<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { threadId: string; resourceId: string; toolCallId?: string },
+  async sendToolApproval<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & {
+      threadId: string;
+      resourceId: string;
+      toolCallId?: string;
+      approved: boolean;
+    },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, ...executionOptions } = options;
+    const { threadId, resourceId, approved, ...executionOptions } = options;
     const runId = this.getActiveThreadRunId({ threadId, resourceId });
     if (!runId) {
       throw new MastraError({
-        id: 'AGENT_APPROVE_TOOL_CALL_NO_ACTIVE_THREAD_RUN',
+        id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent "${this.name}" approveToolCallForThread() could not find an active run for thread "${threadId}".`,
+        text: `Agent "${this.name}" sendToolApproval() could not find an active run for thread "${threadId}".`,
         details: {
           threadId,
           resourceId,
@@ -7213,7 +7218,11 @@ export class Agent<
       },
     } as unknown as AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string };
 
-    await this.approveToolCall(approvalOptions);
+    if (approved) {
+      await this.approveToolCall(approvalOptions);
+    } else {
+      await this.declineToolCall(approvalOptions);
+    }
     return { accepted: true, runId, toolCallId: options.toolCallId };
   }
 
@@ -7237,39 +7246,6 @@ export class Agent<
   ): Promise<MastraModelOutput<OUTPUT>> {
     // @ts-expect-error - the types here are wrong
     return this.resumeStream({ approved: false }, options);
-  }
-
-  async declineToolCallForThread<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { threadId: string; resourceId: string; toolCallId?: string },
-  ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, ...executionOptions } = options;
-    const runId = this.getActiveThreadRunId({ threadId, resourceId });
-    if (!runId) {
-      throw new MastraError({
-        id: 'AGENT_DECLINE_TOOL_CALL_NO_ACTIVE_THREAD_RUN',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Agent "${this.name}" declineToolCallForThread() could not find an active run for thread "${threadId}".`,
-        details: {
-          threadId,
-          resourceId,
-          agentName: this.name,
-        },
-      });
-    }
-
-    const approvalOptions = {
-      ...executionOptions,
-      runId,
-      memory: {
-        ...(executionOptions.memory ?? {}),
-        thread: executionOptions.memory?.thread ?? threadId,
-        resource: executionOptions.memory?.resource ?? resourceId,
-      },
-    } as unknown as AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string };
-
-    await this.declineToolCall(approvalOptions);
-    return { accepted: true, runId, toolCallId: options.toolCallId };
   }
 
   /**

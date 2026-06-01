@@ -229,13 +229,7 @@ export function mockAgentMethods(agent: Agent) {
   // Mock declineToolCallGenerate method - returns same format as generate
   vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
 
-  vi.spyOn(agent, 'approveToolCallForThread').mockResolvedValue({
-    accepted: true,
-    runId: 'test-run',
-    toolCallId: 'test-tool',
-  } as any);
-
-  vi.spyOn(agent, 'declineToolCallForThread').mockResolvedValue({
+  vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
     accepted: true,
     runId: 'test-run',
     toolCallId: 'test-tool',

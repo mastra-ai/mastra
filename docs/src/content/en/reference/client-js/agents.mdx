@@ -400,15 +400,16 @@ response.processDataStream({
 })
 ```
 
-### `approveToolCallForThread()`
+### `sendToolApproval()`
 
-Approve a pending tool call for a subscribed thread. Use this with `subscribeToThread()` when the resumed chunks should arrive through the existing thread subscription instead of a separate continuation stream.
+Approve or decline a pending tool call for a subscribed thread. Use this with `subscribeToThread()` when the resumed chunks should arrive through the existing thread subscription instead of a separate continuation stream.
 
 ```typescript
-const result = await agent.approveToolCallForThread({
+const result = await agent.sendToolApproval({
   resourceId: 'user-123',
   threadId: 'thread-456',
   toolCallId: 'tool-call-456',
+  approved: true,
 })
 
 console.log(result.accepted)
@@ -432,22 +433,6 @@ response.processDataStream({
   },
 })
 ```
-
-### `declineToolCallForThread()`
-
-Decline a pending tool call for a subscribed thread. The call returns a JSON acknowledgement. The resumed chunks arrive through the existing thread subscription.
-
-```typescript
-const result = await agent.declineToolCallForThread({
-  resourceId: 'user-123',
-  threadId: 'thread-456',
-  toolCallId: 'tool-call-456',
-})
-
-console.log(result.accepted)
-```
-
-Returns `{ accepted: true, runId: string, toolCallId?: string }`.
 
 ### `resumeStream()`
 

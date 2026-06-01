@@ -231,34 +231,15 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "POST /agents/:agentId/approve-tool-call-for-thread": {
+  "POST /agents/:agentId/send-tool-approval": {
     "method": "POST",
-    "path": "/agents/:agentId/approve-tool-call-for-thread",
+    "path": "/agents/:agentId/send-tool-approval",
     "pathParams": [
       "agentId"
     ],
     "queryParams": [],
     "bodyParams": [
-      "format",
-      "requestContext",
-      "resourceId",
-      "threadId",
-      "toolCallId"
-    ],
-    "hasQuery": false,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /agents/:agentId/decline-tool-call-for-thread": {
-    "method": "POST",
-    "path": "/agents/:agentId/decline-tool-call-for-thread",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [
+      "approved",
       "format",
       "requestContext",
       "resourceId",

@@ -742,10 +742,11 @@ export const useChat = ({
     const agent = baseClient.getAgent(agentId);
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
-        await agent.approveToolCallForThread({
+        await agent.sendToolApproval({
           resourceId: resourceId || agentId,
           threadId,
           toolCallId,
+          approved: true,
           requestContext: _requestContext.current,
         });
         pendingToolApprovalIdsRef.current.delete(toolCallId);
@@ -789,10 +790,11 @@ export const useChat = ({
     const agent = baseClient.getAgent(agentId);
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
-        await agent.declineToolCallForThread({
+        await agent.sendToolApproval({
           resourceId: resourceId || agentId,
           threadId,
           toolCallId,
+          approved: false,
           requestContext: _requestContext.current,
         });
         pendingToolApprovalIdsRef.current.delete(toolCallId);

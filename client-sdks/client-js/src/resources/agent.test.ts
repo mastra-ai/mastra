@@ -94,20 +94,22 @@ describe('Agent signal routes', () => {
     const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
     agent['request'] = mockRequest as (typeof agent)['request'];
 
-    const result = await agent.approveToolCallForThread({
+    const result = await agent.sendToolApproval({
       resourceId: 'resource-123',
       threadId: 'thread-123',
       toolCallId: 'tool-call-123',
+      approved: true,
       requestContext: { userId: 'user-123' },
     });
 
     expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
-    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/approve-tool-call-for-thread', {
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-tool-approval', {
       method: 'POST',
       body: {
         resourceId: 'resource-123',
         threadId: 'thread-123',
         toolCallId: 'tool-call-123',
+        approved: true,
         requestContext: { userId: 'user-123' },
       },
     });
@@ -118,20 +120,22 @@ describe('Agent signal routes', () => {
     const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
     agent['request'] = mockRequest as (typeof agent)['request'];
 
-    const result = await agent.declineToolCallForThread({
+    const result = await agent.sendToolApproval({
       resourceId: 'resource-123',
       threadId: 'thread-123',
       toolCallId: 'tool-call-123',
+      approved: false,
       requestContext: { userId: 'user-123' },
     });
 
     expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
-    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/decline-tool-call-for-thread', {
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-tool-approval', {
       method: 'POST',
       body: {
         resourceId: 'resource-123',
         threadId: 'thread-123',
         toolCallId: 'tool-call-123',
+        approved: false,
         requestContext: { userId: 'user-123' },
       },
     });

@@ -19,7 +19,7 @@ import {
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
-  toolCallSubscriptionBodySchema,
+  sendToolApprovalBodySchema,
 } from '../schemas/agents';
 import { AGENTS_ROUTES } from '../server-adapter/routes/agents';
 import {
@@ -29,8 +29,7 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
-  APPROVE_TOOL_CALL_FOR_THREAD_ROUTE,
-  DECLINE_TOOL_CALL_FOR_THREAD_ROUTE,
+  SEND_TOOL_APPROVAL_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
@@ -975,6 +974,7 @@ describe('Agent Routes Authorization', () => {
         runId: 'test-run-id',
         resumeData: { workflowResult: 'approved' },
         toolCallId: 'tool-call-123',
+        approved: true,
       } as any);
 
       expect(capturedResumeData).toEqual({ workflowResult: 'approved' });
@@ -1112,12 +1112,7 @@ describe('Agent Routes Authorization', () => {
       expect(routeMetadata).toEqual(
         expect.arrayContaining([
           {
-            path: '/agents/:agentId/approve-tool-call-for-thread',
-            method: 'POST',
-            requiresPermission: 'agents:execute',
-          },
-          {
-            path: '/agents/:agentId/decline-tool-call-for-thread',
+            path: '/agents/:agentId/send-tool-approval',
             method: 'POST',
             requiresPermission: 'agents:execute',
           },
@@ -1350,24 +1345,25 @@ describe('Agent Routes Authorization', () => {
         resourceId: 'resource-123',
         threadId: 'thread-123',
         toolCallId: 'tool-call-123',
+        approved: true,
       };
 
       expect(subscribeAgentThreadBodySchema.safeParse(body).success).toBe(true);
       expect(abortAgentThreadBodySchema.safeParse(body).success).toBe(true);
       expect(approveToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
       expect(declineToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
-      expect(toolCallSubscriptionBodySchema.safeParse(subscriptionToolCallBody).success).toBe(true);
-      expect(toolCallSubscriptionBodySchema.safeParse(toolCallBody).success).toBe(false);
+      expect(sendToolApprovalBodySchema.safeParse(subscriptionToolCallBody).success).toBe(true);
+      expect(sendToolApprovalBodySchema.safeParse(toolCallBody).success).toBe(false);
     });
 
     it('should approve a tool call for thread subscriptions with a JSON ack', async () => {
-      (mockAgent as any).approveToolCallForThread = vi.fn(async params => ({
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
         accepted: true,
         runId: 'run-123',
         toolCallId: params.toolCallId,
       }));
 
-      const result = await APPROVE_TOOL_CALL_FOR_THREAD_ROUTE.handler({
+      const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
         mastra,
         agentId: 'test-agent',
         requestContext: new RequestContext(),
@@ -1375,26 +1371,28 @@ describe('Agent Routes Authorization', () => {
         resourceId: 'resource-123',
         threadId: 'thread-123',
         toolCallId: 'tool-call-123',
+        approved: true,
       } as any);
 
       expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
-      expect((mockAgent as any).approveToolCallForThread).toHaveBeenCalledWith(
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledWith(
         expect.objectContaining({
           resourceId: 'resource-123',
           threadId: 'thread-123',
           toolCallId: 'tool-call-123',
+          approved: true,
         }),
       );
     });
 
     it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
-      (mockAgent as any).declineToolCallForThread = vi.fn(async params => ({
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
         accepted: true,
         runId: 'run-123',
         toolCallId: params.toolCallId,
       }));
 
-      const result = await DECLINE_TOOL_CALL_FOR_THREAD_ROUTE.handler({
+      const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
         mastra,
         agentId: 'test-agent',
         requestContext: new RequestContext(),
@@ -1402,14 +1400,16 @@ describe('Agent Routes Authorization', () => {
         resourceId: 'resource-123',
         threadId: 'thread-123',
         toolCallId: 'tool-call-123',
+        approved: false,
       } as any);
 
       expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
-      expect((mockAgent as any).declineToolCallForThread).toHaveBeenCalledWith(
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledWith(
         expect.objectContaining({
           resourceId: 'resource-123',
           threadId: 'thread-123',
           toolCallId: 'tool-call-123',
+          approved: false,
         }),
       );
     });
@@ -1420,10 +1420,10 @@ describe('Agent Routes Authorization', () => {
         resourceId: 'user-b',
         title: 'Approval Thread B',
       });
-      (mockAgent as any).approveToolCallForThread = vi.fn();
+      (mockAgent as any).sendToolApproval = vi.fn();
 
       await expect(
-        APPROVE_TOOL_CALL_FOR_THREAD_ROUTE.handler({
+        SEND_TOOL_APPROVAL_ROUTE.handler({
           mastra,
           agentId: 'test-agent',
           requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
@@ -1431,9 +1431,10 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'approval-thread-owned-by-b',
           toolCallId: 'tool-call-123',
+          approved: true,
         } as any),
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
-      expect((mockAgent as any).approveToolCallForThread).not.toHaveBeenCalled();
+      expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
     });
 
     it('should reject subscription tool decline for a thread owned by another resource', async () => {
@@ -1442,10 +1443,10 @@ describe('Agent Routes Authorization', () => {
         resourceId: 'user-b',
         title: 'Decline Thread B',
       });
-      (mockAgent as any).declineToolCallForThread = vi.fn();
+      (mockAgent as any).sendToolApproval = vi.fn();
 
       await expect(
-        DECLINE_TOOL_CALL_FOR_THREAD_ROUTE.handler({
+        SEND_TOOL_APPROVAL_ROUTE.handler({
           mastra,
           agentId: 'test-agent',
           requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
@@ -1453,9 +1454,10 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'decline-thread-owned-by-b',
           toolCallId: 'tool-call-123',
+          approved: true,
         } as any),
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
-      expect((mockAgent as any).declineToolCallForThread).not.toHaveBeenCalled();
+      expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
     });
 
     it('should approve subscription tool calls using context resource and thread values', async () => {
@@ -1464,13 +1466,13 @@ describe('Agent Routes Authorization', () => {
         resourceId: 'user-a',
         title: 'Approval Thread A',
       });
-      (mockAgent as any).approveToolCallForThread = vi.fn(async params => ({
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
         accepted: true,
         runId: 'run-123',
         toolCallId: params.toolCallId,
       }));
 
-      await APPROVE_TOOL_CALL_FOR_THREAD_ROUTE.handler({
+      await SEND_TOOL_APPROVAL_ROUTE.handler({
         mastra,
         agentId: 'test-agent',
         requestContext: createContextWithReservedKeys({
@@ -1481,9 +1483,10 @@ describe('Agent Routes Authorization', () => {
         resourceId: 'user-b',
         threadId: 'client-thread-ignored',
         toolCallId: 'tool-call-123',
+        approved: true,
       } as any);
 
-      expect((mockAgent as any).approveToolCallForThread).toHaveBeenCalledWith(
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledWith(
         expect.objectContaining({
           resourceId: 'user-a',
           threadId: 'approval-thread-from-context',
