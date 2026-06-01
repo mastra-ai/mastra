@@ -12,7 +12,6 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import { safeStringify } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError } from '../errors';
@@ -304,12 +303,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
-                errorText:
-                  toolCall.error instanceof Error
-                    ? toolCall.error.message
-                    : toolCall.error == null
-                      ? 'Tool execution failed'
-                      : safeStringify(toolCall.error),
+                // Use the already-reified Error rather than `toolCall.error` (which is the
+                // plain {name,message,stack} shape after the pubsub JSON round-trip).
+                // Without reification the `instanceof Error` check below falls through to
+                // `safeStringify`, dumping the whole stringified payload into the history.
+                errorText: reifiedError.message || 'Tool execution failed',
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
