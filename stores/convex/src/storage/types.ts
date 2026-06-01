@@ -27,6 +27,23 @@ export type StorageRequest =
       record: Record<string, any>;
     }
   | {
+      op: 'updateThread';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      title: string;
+      metadata: Record<string, any>;
+      updatedAt: string;
+    }
+  | {
+      op: 'updateResource';
+      tableName: TABLE_NAMES | string;
+      resourceId: string;
+      workingMemory?: string;
+      metadata?: Record<string, any>;
+      createdAt: string;
+      updatedAt: string;
+    }
+  | {
       op: 'load';
       tableName: TABLE_NAMES | string;
       keys: Record<string, any>;
@@ -40,6 +57,10 @@ export type StorageRequest =
       tableName: TABLE_NAMES | string;
       filters?: EqualityFilter[];
       limit?: number;
+      /** Cursor pagination is currently supported for vector table reads. */
+      pageSize?: number;
+      /** Requires pageSize; currently supported for vector table reads. */
+      cursor?: string | null;
       indexHint?: IndexHint;
     }
   | {
@@ -112,8 +133,10 @@ export type StorageResponse =
   | {
       ok: true;
       result?: any;
-      /** Indicates more batches remain for bulk operations (e.g., clearTable) */
+      /** Indicates more batches or pages remain for the operation. */
       hasMore?: boolean;
+      /** Cursor for the next page when hasMore is true. */
+      continuationCursor?: string | null;
     }
   | {
       ok: false;
