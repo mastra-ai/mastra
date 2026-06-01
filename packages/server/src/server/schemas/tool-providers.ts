@@ -303,6 +303,17 @@ export const disconnectConnectionResponseSchema = z.object({
   revoked: z.boolean().describe('Whether the provider-side connection was revoked'),
 });
 
+export const updateConnectionBodySchema = z.object({
+  label: z
+    .union([labelSchema, z.literal(''), z.null()])
+    .describe('New display label for the connection. Pass null (or empty string) to clear the existing label.'),
+});
+
+export const updateConnectionResponseSchema = z.object({
+  ok: z.literal(true),
+  label: z.string().nullable().describe('The persisted label after the update (null when cleared)'),
+});
+
 export const connectionUsageResponseSchema = z.object({
   agents: z.array(
     z.object({
