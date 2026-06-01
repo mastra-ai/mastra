@@ -253,3 +253,56 @@ describe('toAssistantUIMessage network routing JSON reconstruction', () => {
     expect(invalid.content[0]).toMatchObject({ type: 'text', text: '{"isNetwork": true' });
   });
 });
+
+describe('toAssistantUIMessage file and image parts', () => {
+  /**
+   * The stream accumulator emits file parts in the V5 shape `{ mediaType, url }`
+   * (see client-sdks/react/src/lib/mastra-db/accumulator.ts, which casts to
+   * `MastraMessagePart` because the stored union describes the V4 `{ mimeType, data }`).
+   * User uploads via `fromCoreUserMessage` produce the same V5 shape. The converter
+   * receives exactly this at render time, so we build it with a single narrow
+   * boundary cast (mirroring the accumulator) to reflect the real runtime input.
+   */
+  const streamedFilePart = (part: { mediaType: string; url: string; filename?: string }): MastraMessagePart =>
+    ({ type: 'file', ...part }) as unknown as MastraMessagePart;
+
+  it('renders a streamed image file part (mediaType/url) as an image content part', () => {
+    const dataUrl =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+    const { content } = toAssistantUIMessage(
+      assistantMessage([streamedFilePart({ mediaType: 'image/png', url: dataUrl })]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('image');
+    if (part.type !== 'image') throw new Error('expected image');
+    expect(part.image).toBe(dataUrl);
+  });
+
+  it('renders a streamed non-image file part with its media type and data', () => {
+    const dataUrl = 'data:application/pdf;base64,JVBERi0xLjQ=';
+    const { content } = toAssistantUIMessage(
+      assistantMessage([streamedFilePart({ mediaType: 'application/pdf', url: dataUrl, filename: 'doc.pdf' })]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('file');
+    if (part.type !== 'file') throw new Error('expected file');
+    expect(part.mimeType).toBe('application/pdf');
+    expect(part.data).toBe(dataUrl);
+  });
+
+  it('still renders a persisted V4 image part (mimeType/data) on reload', () => {
+    const dataUrl = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+    const persistedImage = { type: 'file', mimeType: 'image/gif', data: dataUrl } as MastraMessagePart;
+    const { content } = toAssistantUIMessage(assistantMessage([persistedImage]));
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('image');
+    if (part.type !== 'image') throw new Error('expected image');
+    expect(part.image).toBe(dataUrl);
+  });
+});
