@@ -2,6 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import type { ProcessorState } from '../../../processors/runner';
 import type { MessageList } from '../../message-list';
+import type { CreatedAgentSignal } from '../../signals';
 
 /**
  * Per-run scope shared between the steps of a single `createPrepareStreamWorkflow`
@@ -23,4 +24,5 @@ export interface PrepareStreamRunScope<OUTPUT = undefined> {
   convertedTools?: Record<string, any>;
   processorStates?: Map<string, ProcessorState>;
   loopOptions?: ModelLoopStreamArgs<ToolSet, OUTPUT>;
+  initialSignalEchoes?: CreatedAgentSignal[];
 }

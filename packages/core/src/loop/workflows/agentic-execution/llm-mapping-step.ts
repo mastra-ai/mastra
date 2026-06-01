@@ -14,6 +14,7 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
+import { deserializeToolError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -272,20 +273,24 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
         if (errorResults?.length) {
           for (const toolCall of errorResults) {
+            // `toolCall.error` arrives as the plain {name,message,stack} the workflow step
+            // serializes (Error instances become `{}` over the pubsub bus). Reify here so
+            // chunk consumers see a real Error with name/message/stack intact.
+            const reifiedError = deserializeToolError(toolCall.error);
             const chunk = await transformToolChunk(
               {
                 type: 'tool-error',
                 runId: rest.runId,
                 from: ChunkFrom.AGENT,
                 payload: {
-                  error: toolCall.error,
+                  error: reifiedError,
                   args: toolCall.args,
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
                 },
               },
-              toolCall,
+              { ...toolCall, error: reifiedError },
               'error',
             );
             const processed = await processAndEnqueueChunk(chunk);
@@ -298,7 +303,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
-                result: toolCall.error?.message ?? toolCall.error,
+                result: reifiedError.message,
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,

@@ -6076,6 +6076,19 @@ export class Agent<
       // Prepare-stream is single-shot per #execute call — no resume path that
       // would need the registration to outlive this scope, so always unregister.
       effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
+      // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
+      // but the evented engine's `EventedRun.start` still writes the initial 'running' row
+      // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
+      // row in the user's storage. Best-effort: swallow errors so a delete miss doesn't mask
+      // a real failure in the surrounding run.
+      try {
+        await executionWorkflow.deleteWorkflowRunById(executionRunId);
+      } catch (err) {
+        this.logger.debug('Failed to clean up internal execution-workflow run row', {
+          runId: executionRunId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 

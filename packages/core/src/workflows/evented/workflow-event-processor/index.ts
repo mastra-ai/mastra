@@ -157,6 +157,23 @@ export class WorkflowEventProcessor extends EventProcessor {
     return undefined;
   }
 
+  /**
+   * Snapshot of the run's current span as the {traceId, spanId, parentSpanId} shape that
+   * `UpdateWorkflowStateOptions.tracingContext` expects, so a suspend's persisted snapshot
+   * can stitch the resumed AGENT_RUN/WORKFLOW_RUN span back to the original trace. Mirrors
+   * `default.ts`'s `persistTracingContext`; the evented engine holds the live span on
+   * Mastra (since it can't ride pubsub events), so we resolve it via runId here.
+   */
+  private resolveSuspendTracingContext(
+    runId: string,
+  ): { traceId?: string; spanId?: string; parentSpanId?: string } | undefined {
+    const span = this.resolveRunTracingContext(runId)?.currentSpan as
+      | { id?: string; traceId?: string; getParentSpanId?: () => string | undefined }
+      | undefined;
+    if (!span) return undefined;
+    return { traceId: span.traceId, spanId: span.id, parentSpanId: span.getParentSpanId?.() };
+  }
+
   __registerMastra(mastra: Mastra) {
     super.__registerMastra(mastra);
     this.stepExecutor.__registerMastra(mastra);
@@ -1658,6 +1675,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           result: currentState as any,
           requestContext,
         });
+        const suspendTracingContext = this.resolveSuspendTracingContext(runId);
         await workflowsStore?.updateWorkflowState({
           workflowName: workflowId,
           runId,
@@ -1666,6 +1684,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             result: { status: 'suspended' } as any,
             suspendedPaths,
             resumeLabels,
+            ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
           },
         });
       }
@@ -2038,6 +2057,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               requestContext,
             });
 
+            const suspendTracingContext = this.resolveSuspendTracingContext(runId);
             await workflowsStore?.updateWorkflowState({
               workflowName: workflowId,
               runId,
@@ -2048,6 +2068,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 resumeLabels: collectedResumeLabels,
                 activePaths: executionPath,
                 activeStepsPath,
+                ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
               },
             });
           }
@@ -2238,6 +2259,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           requestContext,
         });
 
+        const suspendTracingContext = this.resolveSuspendTracingContext(runId);
         await workflowsStore?.updateWorkflowState({
           workflowName: workflowId,
           runId,
@@ -2248,6 +2270,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeLabels,
             activePaths: executionPath,
             activeStepsPath,
+            ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
           },
         });
       }
