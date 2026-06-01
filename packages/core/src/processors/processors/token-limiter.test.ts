@@ -692,7 +692,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'memory',
+        'response',
       );
 
       await expect(
@@ -745,7 +745,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {
@@ -771,7 +771,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:03:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {
@@ -836,7 +836,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi there', parts: [{ type: 'text', text: 'Hi there' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {
@@ -894,7 +894,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi how can I help', parts: [{ type: 'text', text: 'Hi how can I help' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {
@@ -988,6 +988,43 @@ describe('TokenLimiterProcessor', () => {
       ).rejects.toThrow('System messages alone exceed token limit');
     });
 
+    it('should include tagged system messages when budgeting final prompt tokens', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 10 });
+      const messageList = new MessageList();
+
+      messageList.addSystem(
+        {
+          role: 'system',
+          content:
+            'Tagged processor context that is included in the final model prompt and must count against the token budget',
+        },
+        'observational-memory',
+      );
+
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'input',
+      );
+
+      await expect(
+        processor.processInputStep({
+          messageList,
+          stepNumber: 1,
+          model: createMockModel(),
+          steps: [],
+          systemMessages: [],
+          state: {},
+          retryCount: 0,
+          abort: mockAbort,
+        }),
+      ).rejects.toThrow('System messages alone exceed token limit');
+    });
+
     it('should throw TripWire when no messages fit within the remaining token budget', async () => {
       const processor = new TokenLimiterProcessor({ limit: 25 });
       const messageList = new MessageList();
@@ -1069,7 +1106,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'memory',
+        'response',
       );
 
       // Add tool result
@@ -1095,7 +1132,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
 
       // Add user follow-up
@@ -1158,7 +1195,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'memory',
+        'response',
       );
       messageList.add(
         {

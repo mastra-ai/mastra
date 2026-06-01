@@ -75,6 +75,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
     ctx.showInfo('No threads yet. Send a message to create one.');
     return;
   }
+  // console.log(cachedPreview);
 
   return new Promise(resolve => {
     const selector = new ThreadSelectorComponent({

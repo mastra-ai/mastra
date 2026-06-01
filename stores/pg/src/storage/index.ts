@@ -33,6 +33,7 @@ import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
+import { buildConnectionStringPoolConfig } from './pool-config';
 
 /** Default maximum number of connections in the pool */
 const DEFAULT_MAX_CONNECTIONS = 20;
@@ -194,12 +195,12 @@ export class PostgresStore extends MastraCompositeStore {
 
   private createPool(config: PostgresStoreConfig): Pool {
     if (isConnectionStringConfig(config)) {
-      return new Pool({
-        connectionString: config.connectionString,
-        ssl: config.ssl,
-        max: config.max ?? DEFAULT_MAX_CONNECTIONS,
-        idleTimeoutMillis: config.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
-      });
+      return new Pool(
+        buildConnectionStringPoolConfig(config, {
+          max: DEFAULT_MAX_CONNECTIONS,
+          idleTimeoutMillis: DEFAULT_IDLE_TIMEOUT_MS,
+        }),
+      );
     }
 
     if (isHostConfig(config)) {
