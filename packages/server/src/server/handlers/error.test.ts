@@ -15,10 +15,9 @@ describe('handleError', () => {
     // dependency on a subpath that only ships in @mastra/core >= 1.34.0,
     // causing ERR_MODULE_NOT_FOUND at server startup for deploys whose
     // bundled @mastra/server resolves against an older @mastra/core.
-    // See https://github.com/mastra-ai/mastra/issues/... (deploy bug).
     it('does not import from @mastra/core/agent-builder/ee', () => {
       const src = readFileSync(join(__dirname, 'error.ts'), 'utf8');
-      // Match only `from '...'` / `from "..."` specifiers, so the rationale
+      // Match `from '...'` specifiers (any import/export), so the rationale
       // comment in error.ts referencing the subpath is permitted.
       const importSpecifierPattern = /from\s+['"]@mastra\/core\/agent-builder\/ee['"]/;
       expect(src).not.toMatch(importSpecifierPattern);
@@ -26,15 +25,18 @@ describe('handleError', () => {
       // dynamic imports — same load-time hazard.
       const dynamicImportPattern = /import\(\s*['"]@mastra\/core\/agent-builder\/ee['"]\s*\)/;
       expect(src).not.toMatch(dynamicImportPattern);
+      // And bare side-effect imports: `import '@mastra/core/agent-builder/ee'`.
+      const sideEffectPattern = /(?:^|\n)\s*import\s+['"]@mastra\/core\/agent-builder\/ee['"]/;
+      expect(src).not.toMatch(sideEffectPattern);
     });
   });
 
   describe('MODEL_NOT_ALLOWED handling', () => {
     function makeModelNotAllowedError() {
-      return Object.assign(new Error('Model not allowed: anthropic/claude-opus-4-7 (static)'), {
+      return Object.assign(new Error('Model not allowed: __GATEWAY_ANTHROPIC_MODEL_OPUS__ (static)'), {
         code: 'MODEL_NOT_ALLOWED' as const,
-        allowed: [{ provider: 'openai', modelId: 'gpt-4o' }],
-        attempted: { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+        allowed: [{ provider: 'openai', modelId: '__GATEWAY_OPENAI_MODEL__' }],
+        attempted: { provider: 'anthropic', modelId: '__GATEWAY_ANTHROPIC_MODEL_OPUS__' },
         offendingLabel: 'static',
       });
     }

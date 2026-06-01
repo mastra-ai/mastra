@@ -34,21 +34,27 @@ describe('@mastra/server runtime imports of @mastra/core/agent-builder/ee', () =
   // If you need to add a value import from this subpath, gate it with a dynamic
   // import behind a runtime check that ensures a compatible core is installed.
   it('contains no static value imports from @mastra/core/agent-builder/ee', () => {
-    const offenders: { file: string; line: string }[] = [];
-    const staticImportPattern = /^\s*import\s+(?!type\b)[^;]*from\s+['"]@mastra\/core\/agent-builder\/ee['"]/;
+    const offenders: { file: string; match: string }[] = [];
+    // Match whole-file (not line-anchored), so multi-line static imports
+    // like `import {\n  a,\n  b,\n} from '@mastra/core/agent-builder/ee'`
+    // are caught. `[^;]*?` lazily spans newlines up to the `from` clause.
+    const staticImportPattern = /\bimport\s+(?!type\b)[^;]*?from\s+['"]@mastra\/core\/agent-builder\/ee['"]/g;
+    // Also catch bare side-effect imports: `import '@mastra/core/agent-builder/ee'`.
+    const sideEffectPattern = /(?:^|\n)\s*import\s+['"]@mastra\/core\/agent-builder\/ee['"]/g;
 
     for (const file of findTypeScriptFiles(srcRoot)) {
       const src = readFileSync(file, 'utf8');
-      for (const line of src.split('\n')) {
-        if (staticImportPattern.test(line)) {
-          offenders.push({ file: file.replace(srcRoot, '<src>'), line: line.trim() });
-        }
+      for (const match of src.matchAll(staticImportPattern)) {
+        offenders.push({ file: file.replace(srcRoot, '<src>'), match: match[0].replace(/\s+/g, ' ').trim() });
+      }
+      for (const match of src.matchAll(sideEffectPattern)) {
+        offenders.push({ file: file.replace(srcRoot, '<src>'), match: match[0].replace(/\s+/g, ' ').trim() });
       }
     }
 
     expect(
       offenders,
-      `Found static value imports from @mastra/core/agent-builder/ee that will crash deploys on @mastra/core < 1.34.0:\n${offenders.map(o => `  ${o.file}: ${o.line}`).join('\n')}`,
+      `Found static value imports from @mastra/core/agent-builder/ee that will crash deploys on @mastra/core < 1.34.0:\n${offenders.map(o => `  ${o.file}: ${o.match}`).join('\n')}`,
     ).toEqual([]);
   });
 });
