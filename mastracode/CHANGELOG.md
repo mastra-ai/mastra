@@ -1,5 +1,13 @@
 # mastracode
 
+## 0.21.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15), [`8260167`](https://github.com/mastra-ai/mastra/commit/8260167431f98400f3acef4bbb7bd6027efd7a4b)]:
+  - @mastra/core@1.38.0-alpha.5
+  - @mastra/duckdb@1.4.1-alpha.0
+
 ## 0.21.2-alpha.4
 
 ### Patch Changes

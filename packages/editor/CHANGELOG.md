@@ -1,5 +1,40 @@
 # @mastra/editor
 
+## 0.11.0-alpha.3
+
+### Minor Changes
+
+- Added agent override support to the agent and editor APIs. ([#17227](https://github.com/mastra-ai/mastra/pull/17227))
+
+  Code-defined agents can now declare which fields Studio may edit with the `editor` option:
+
+  ```ts
+  new Agent({
+    name: 'Weather Agent',
+    model,
+    editor: {
+      instructions: true,
+      tools: { description: true },
+    },
+  });
+  ```
+
+  The editor applies stored overrides only for fields the `editor` config owns, so locked fields keep their code-defined values. Per-agent `editor: false` locks an agent entirely.
+
+  `MastraEditor` accepts a `source` setting that picks the editing experience:
+
+  ```ts
+  new MastraEditor({ source: 'code' });
+  ```
+
+  - `source: 'code'` — the editor auto-wires a `FilesystemStore` (defaulting to `./mastra/editor/`, overridable with `codePath`) when no editor storage is supplied, and persists overrides as deterministic per-agent JSON files.
+  - `source: 'db'` (default) — keeps the existing storage-backed flow against whatever storage the project has configured.
+
+### Patch Changes
+
+- Updated dependencies [[`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15)]:
+  - @mastra/core@1.38.0-alpha.5
+
 ## 0.11.0-alpha.2
 
 ### Minor Changes

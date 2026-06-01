@@ -4,8 +4,18 @@ import type { MastraUIMessage, SendMessageArgs } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useDebounce } from 'use-debounce';
-import { StreamMessagesContext, StreamRunningContext, StreamSendContext } from './stream-chat-context';
-import type { MessagesContextValue, RunningContextValue, SendContextValue } from './stream-chat-context';
+import {
+  StreamApprovalContext,
+  StreamMessagesContext,
+  StreamRunningContext,
+  StreamSendContext,
+} from './stream-chat-context';
+import type {
+  ApprovalContextValue,
+  MessagesContextValue,
+  RunningContextValue,
+  SendContextValue,
+} from './stream-chat-context';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export interface StreamChatProviderProps {
@@ -43,7 +53,7 @@ export const StreamChatProvider = ({
   debounceTime = 0,
   children,
 }: StreamChatProviderProps) => {
-  const { messages, isRunning, sendMessage } = useChat({ agentId, initialMessages });
+  const { messages, isRunning, sendMessage, approveToolCall, declineToolCall } = useChat({ agentId, initialMessages });
   const { data: currentUser } = useCurrentUser();
 
   // temping the fact that client tools open and closes multiple streams making the UI flicker with isStreaming: true, then false for a few MS
@@ -79,7 +89,7 @@ export const StreamChatProvider = ({
         payload.clientTools = tools;
       }
       if (instructions !== undefined && instructions.length > 0) {
-        payload.modelSettings = { instructions };
+        payload.modelSettings = { ...payload.modelSettings, instructions };
       }
 
       void sendMessage(payload);
@@ -101,10 +111,29 @@ export const StreamChatProvider = ({
   const messagesValue = useMemo<MessagesContextValue>(() => ({ messages }), [messages]);
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
 
+  const approve = useCallback(
+    (toolCallId: string) => {
+      void approveToolCall(toolCallId);
+    },
+    [approveToolCall],
+  );
+  const decline = useCallback(
+    (toolCallId: string) => {
+      void declineToolCall(toolCallId);
+    },
+    [declineToolCall],
+  );
+  const approvalValue = useMemo<ApprovalContextValue>(
+    () => ({ approveToolCall: approve, declineToolCall: decline }),
+    [approve, decline],
+  );
+
   return (
     <StreamRunningContext.Provider value={runningValue}>
       <StreamMessagesContext.Provider value={messagesValue}>
-        <StreamSendContext.Provider value={sendValue}>{children}</StreamSendContext.Provider>
+        <StreamApprovalContext.Provider value={approvalValue}>
+          <StreamSendContext.Provider value={sendValue}>{children}</StreamSendContext.Provider>
+        </StreamApprovalContext.Provider>
       </StreamMessagesContext.Provider>
     </StreamRunningContext.Provider>
   );
