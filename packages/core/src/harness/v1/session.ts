@@ -4,11 +4,12 @@ import { RequestContext } from '@internal/core/request-context';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory, StorageThreadType } from '../../memory';
 import type { DynamicArgument } from '../../types';
+import type { Workspace } from '../../workspace';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
 import type { CloneSessionOptions, SessionConfig } from './session.types';
 
-export class Session {
+export class Session<TState = {}> {
   /** Stable identity. Frozen at construction. */
   readonly #id: string;
   readonly #ownerId: string;
@@ -18,13 +19,19 @@ export class Session {
   readonly #lastActivityAt: Date;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
+  readonly #getState?: () => Readonly<TState>;
+  readonly #setState?: (updates: Partial<TState>) => Promise<void>;
+  readonly #updateState?: SessionConfig<TState>['updateState'];
+  #workspace?: Workspace;
+  readonly #workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
+  readonly #setWorkspace?: (workspace: Workspace | undefined) => void;
   // readonly parentSessionId?: string;
   // readonly subagentDepth: number;
 
   #modelId: string;
   #mode: HarnessMode;
 
-  constructor(config: SessionConfig) {
+  constructor(config: SessionConfig<TState>) {
     this.#id = config.id;
     this.#ownerId = config.ownerId;
     this.#resourceId = config.resourceId;
@@ -35,6 +42,12 @@ export class Session {
     this.#lastActivityAt = config.lastActivityAt;
     this.#memory = config.memory;
     this.#events = config.events;
+    this.#getState = config.getState;
+    this.#setState = config.setState;
+    this.#updateState = config.updateState;
+    this.#workspace = config.workspace;
+    this.#workspaceFn = config.workspaceFn;
+    this.#setWorkspace = config.setWorkspace;
   }
 
   get id(): string {
@@ -57,7 +70,7 @@ export class Session {
     return this.#createdAt;
   }
 
-  async clone(opts: CloneSessionOptions = {}): Promise<Session> {
+  async clone(opts: CloneSessionOptions = {}): Promise<Session<TState>> {
     const result = await (
       await this.#resolveMemory()
     ).cloneThread({
@@ -70,7 +83,7 @@ export class Session {
     });
 
     const cloneId = opts.sessionId ?? randomUUID();
-    const clone = new Session({
+    const clone = new Session<TState>({
       id: cloneId,
       ownerId: this.#ownerId,
       threadId: result.thread.id,
@@ -81,6 +94,12 @@ export class Session {
       lastActivityAt: result.thread.updatedAt,
       memory: this.#memory,
       events: this.#events.scoped({ sessionId: cloneId }),
+      getState: this.#getState,
+      setState: this.#setState,
+      updateState: this.#updateState,
+      workspace: this.#workspace,
+      workspaceFn: this.#workspaceFn,
+      setWorkspace: this.#setWorkspace,
     });
 
     this.#events.emit({
@@ -138,34 +157,24 @@ export class Session {
   async #buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
     requestContext ??= new RequestContext();
     const harnessContext = {
+      state: this.#getState?.(),
+      getState: this.#getState,
+      setState: this.#setState,
+      updateState: this.#updateState,
       threadId: this.#threadId,
       resourceId: this.#resourceId,
       modeId: this.#mode.id,
-
-      // harnessId: this.id,
-      // state: this.getState(),
-      // getState: () => this.getState(),
-      // setState: updates => this.setState(updates),
-      // updateState: updater => this.updateState(updater),
-      // threadId: this.currentThreadId,
-      // resourceId: this.resourceId,
-      // modeId: this.currentModeId,
-      // abortSignal: this.abortController?.signal,
-      // workspace: this.workspace,
-      // emitEvent: event => this.emit(event),
-      // registerQuestion: params => this.registerQuestion(params),
-      // registerPlanApproval: params => this.registerPlanApproval(params),
-      // getSubagentModelId: params => this.getSubagentModelId(params),
+      workspace: this.#workspace,
     };
 
     requestContext.set('harness', harnessContext);
 
-    // if (this.workspaceFn) {
-    //   const resolved = await Promise.resolve(this.workspaceFn({ requestContext }));
-    //   harnessContext.workspace = resolved;
-    //   // Cache for getWorkspace() so callers outside request flow (e.g. /skills) can access it
-    //   this.workspace = resolved;
-    // }
+    if (this.#workspaceFn) {
+      const resolved = await Promise.resolve(this.#workspaceFn({ requestContext }));
+      harnessContext.workspace = resolved;
+      this.#workspace = resolved;
+      this.#setWorkspace?.(resolved);
+    }
 
     return requestContext;
   }

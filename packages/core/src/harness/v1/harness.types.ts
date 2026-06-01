@@ -1,11 +1,13 @@
 import type { Agent } from '../../agent';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
+import type { PublicSchema } from '../../schema';
 import type { HarnessStorage } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
+import type { Workspace, WorkspaceConfig } from '../../workspace';
 import type { HarnessMode } from './mode';
 
-export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
+export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   /**
    * Operator-managed compatibility token for the configured runtime surface:
    * agents and prompts/tools, mode-to-agent bindings, model aliases, MCP
@@ -25,6 +27,21 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
    * a generated UUID when omitted.
    */
   ownerId?: string;
+
+  /**
+   * Optional schema used to validate harness state updates.
+   */
+  stateSchema?: PublicSchema<TState>;
+
+  /**
+   * Initial harness state. Merged over schema defaults when provided.
+   */
+  initialState?: Partial<TState>;
+
+  /**
+   * Workspace instance, dynamic workspace factory, or workspace configuration.
+   */
+  workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
 
   /**
    * Operating modes. Each mode pins a backing agent and may override or
@@ -237,7 +254,7 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
   // [key: string]: unknown;
 }
 
-export type HarnessConfig<MODES extends HarnessMode[]> = HarnessConfigCommon<MODES> &
+export type HarnessConfig<MODES extends HarnessMode[], TState = {}> = HarnessConfigCommon<TState, MODES> &
   (
     | {
         /**

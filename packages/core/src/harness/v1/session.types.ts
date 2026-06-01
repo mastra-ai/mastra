@@ -1,5 +1,7 @@
 import type { MastraMemory } from '../../memory';
+import type { StandardSchemaWithJSON } from '../../schema';
 import type { DynamicArgument } from '../../types';
+import type { Workspace } from '../../workspace';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
 
@@ -17,9 +19,23 @@ export type CloneSessionOptions = {
   messageLimit?: number;
 };
 
-export interface SessionConfig {
+export interface SessionConfig<TState = {}> {
   memory: MastraMemory | DynamicArgument<MastraMemory>;
   events: EventEmitter;
+  state?: TState;
+  stateSchema?: StandardSchemaWithJSON<TState>;
+  getState?: () => Readonly<TState>;
+  setState?: (updates: Partial<TState>) => Promise<void>;
+  updateState?: <TResult>(
+    updater: (
+      state: Readonly<TState>,
+    ) =>
+      | { updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }
+      | Promise<{ updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }>,
+  ) => Promise<TResult>;
+  workspace?: Workspace;
+  workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
+  setWorkspace?: (workspace: Workspace | undefined) => void;
   // storage: HarnessStorage;
   /** Identifier of the Harness instance that owns this session. */
   ownerId: string;
