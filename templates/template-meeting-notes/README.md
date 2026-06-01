@@ -7,7 +7,7 @@ An agent + workflow that turns a Zoom cloud recording into structured meeting no
 Most meetings end with a clip of audio nobody re-listens to. This template wires the boring plumbing for you:
 
 - Zoom Server-to-Server OAuth (one-time setup, no per-user OAuth dance).
-- A workflow that pulls the Zoom-generated VTT transcript for a meeting, summarizes it with `gpt-5-mini` via the Mastra Gateway, and returns structured JSON.
+- A workflow that pulls the Zoom-generated VTT transcript for a meeting, summarizes it with `gpt-5.4` via the Mastra Gateway, and returns structured JSON.
 - Optional exports to Notion and Linear via MCP, gated on env vars so they're easy to leave disabled.
 - A `POST /meetings/upload` API route for transcripts that don't come from Zoom (Google Meet, Riverside, Loom, plain text).
 

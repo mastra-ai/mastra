@@ -7,7 +7,8 @@ A research assistant that answers questions about libraries, APIs, and documenta
 Models drift out of date the moment they're trained. Docs and APIs don't. This template shows how to wire a Mastra agent that:
 
 - Uses provider-native web search (`openai.tools.webSearch()`) — no extra search API key needed when routed through the Mastra Gateway.
-- Persists observability and observational memory to Turso (libSQL) using `@mastra/libsql`.
+- **Observational memory** — the agent learns what docs and topics you've asked about, building persistent context over time (powered by a lightweight `gpt-5-nano` observer).
+- Persists observability and memory to Turso (libSQL) using `@mastra/libsql`.
 - Demonstrates the Mastra Gateway pattern: one `MASTRA_GATEWAY_API_KEY` instead of per-provider keys.
 
 ## Demo

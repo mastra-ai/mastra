@@ -8,7 +8,7 @@ A Mastra template for **Claw**: an autonomous assistant that actively operates a
 - **Skills** — reusable, versioned instructions checked into `workspace/skills/`.
 - **`@mastra/agent-browser`** — Playwright-based browsing with accessibility-tree element targeting.
 - **Provider-native web search** routed through the **Mastra Gateway** (no separate search API key).
-- **Observational + working memory** via `@mastra/memory` and `@mastra/libsql` (Turso).
+- **Observational + working memory** via `@mastra/memory` and `@mastra/libsql` (Turso). Observational memory is **resource-scoped**, so Claw remembers your preferences and context across threads.
 
 ## Prerequisites
 

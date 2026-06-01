@@ -7,7 +7,8 @@ A Mastra template that indexes your Linear issues and Notion pages into [pgvecto
 - **`@mastra/pg`** — `PostgresStore` for state and `PgVector` for semantic recall.
 - **Multi-source tool agent** — Linear and Notion via MCP, semantic vector search via `@mastra/rag`, and OpenAI provider-native web search through the **Mastra Gateway**.
 - **MCP integrations** — Linear (hosted at [mcp.linear.app](https://mcp.linear.app/mcp)) and Notion (via `@notionhq/notion-mcp-server`) for live lookups.
-- **Indexing workflow** — `index-knowledge` pulls recent Linear issues + Notion pages, embeds them with `text-embedding-3-small`, and upserts into pgvector.
+- **Scheduled indexing workflow** — `index-knowledge` runs every 6 hours via cron, pulling recent Linear issues + Notion pages, embedding them with `text-embedding-3-small`, and upserting into pgvector.
+- **Input/output processors (guardrails)** — `UnicodeNormalizer` cleans input; `PIIDetector` automatically redacts emails, phone numbers, SSNs, credit card numbers, and API keys from agent responses so internal company data stays safe.
 
 ## Prerequisites
 
@@ -37,7 +38,7 @@ Run the `index-knowledge` workflow from Mastra Studio (`pnpm dev` → workflows 
 3. Embed each document with `text-embedding-3-small`.
 4. Upsert into the `company_knowledge` pgvector index.
 
-You can re-run this on a schedule to keep the index fresh.
+The workflow is scheduled to run every 6 hours automatically. You can also trigger it manually from Studio or programmatically.
 
 ## How the agent answers
 
