@@ -83,8 +83,11 @@ describe('Switch', () => {
     render(<Switch aria-label="Toggle" defaultChecked />);
 
     const switchEl = screen.getByRole('switch');
+    const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
     expect(switchEl.className).toContain('data-[checked]:bg-neutral6');
+    expect(switchEl.className).toContain('border-transparent');
     expect(switchEl.className).toContain('focus-visible:outline-neutral5/55');
+    expect(thumbEl?.className).toContain('group-active/switch:w-5');
     expect(switchEl.className).not.toContain('accent1');
     expect(switchEl.className).not.toContain('shadow-glow');
   });
