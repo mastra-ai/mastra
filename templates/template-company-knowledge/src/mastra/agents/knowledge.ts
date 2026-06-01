@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { PIIDetector, UnicodeNormalizer } from '@mastra/core/processors';
 import { openai } from '@ai-sdk/openai';
 import { searchKnowledge } from '../tools/knowledge-search';
 import { mcpClient } from '../mcp';
@@ -66,6 +67,19 @@ Follow this order strictly — it saves API calls and gives faster answers:
       lastMessages: 20,
     },
   }),
+  // Guardrails: normalize unicode input, redact PII in responses (internal data may contain
+  // employee emails, phone numbers, etc. that shouldn't be surfaced to all users).
+  inputProcessors: [
+    new UnicodeNormalizer({ stripControlChars: true, collapseWhitespace: true }),
+  ],
+  outputProcessors: [
+    new PIIDetector({
+      model: 'mastra/openai/gpt-5-nano',
+      strategy: 'redact',
+      redactionMethod: 'mask',
+      detectionTypes: ['email', 'phone', 'credit-card', 'ssn', 'api-key'],
+    }),
+  ],
   tools: {
     searchKnowledge,
     ...mcpTools,

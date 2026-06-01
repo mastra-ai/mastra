@@ -70,6 +70,10 @@ export const claw = new Agent({
   memory: new Memory({
     options: {
       lastMessages: 40,
+      observationalMemory: {
+        model: 'mastra/openai/gpt-5-nano',
+        scope: 'resource',
+      },
     },
   }),
   browser: new AgentBrowser({ headless }),

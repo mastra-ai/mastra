@@ -168,6 +168,11 @@ export const indexKnowledgeWorkflow = createWorkflow({
     notionQuery: z.string().default('').optional(),
   }),
   outputSchema: z.object({ indexed: z.number() }),
+  // Re-index every 6 hours. Run manually from Studio any time, or adjust the cron.
+  schedule: {
+    cron: '0 */6 * * *',
+    inputData: { linearLimit: 100, notionQuery: '' },
+  },
 })
   .then(fetchStep)
   .then(embedAndUpsertStep)
