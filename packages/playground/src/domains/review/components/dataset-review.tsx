@@ -2,8 +2,6 @@ import {
   Badge,
   Button,
   Checkbox,
-  Columns,
-  Column,
   DataList,
   DropdownMenu,
   Label,
@@ -393,18 +391,13 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
     return displayItems.find(i => i.id === featuredItemId) ?? null;
   }, [featuredItemId, displayItems]);
 
-  // Navigation
-  const toNextItem = useCallback(() => {
-    if (!featuredItemId || displayItems.length === 0) return;
-    const idx = displayItems.findIndex(i => i.id === featuredItemId);
-    if (idx < displayItems.length - 1) setFeaturedItemId(displayItems[idx + 1].id);
-  }, [featuredItemId, displayItems]);
-
-  const toPreviousItem = useCallback(() => {
-    if (!featuredItemId || displayItems.length === 0) return;
-    const idx = displayItems.findIndex(i => i.id === featuredItemId);
-    if (idx > 0) setFeaturedItemId(displayItems[idx - 1].id);
-  }, [featuredItemId, displayItems]);
+  // Navigation — undefined at the edges so the prev/next buttons disable.
+  const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
+  const toPreviousItem = featuredIndex > 0 ? () => setFeaturedItemId(displayItems[featuredIndex - 1].id) : undefined;
+  const toNextItem =
+    featuredIndex >= 0 && featuredIndex < displayItems.length - 1
+      ? () => setFeaturedItemId(displayItems[featuredIndex + 1].id)
+      : undefined;
 
   const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
 
@@ -536,9 +529,11 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
       </Dialog>
 
       {/* Main layout: toolbar + List + Detail Panel */}
-      <Columns className={featuredItem ? 'grid-cols-[1fr_1fr]' : ''}>
-        <Column>
-          <Column.Toolbar>
+      <div
+        className={cn('grid w-full h-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}
+      >
+        <div className="grid gap-8 content-start w-full overflow-y-auto">
+          <div className="flex items-center justify-between w-full flex-wrap gap-4 gap-x-6">
             {/* Filters (left) */}
             <div className="flex items-center gap-3">
               <DropdownMenu>
@@ -710,7 +705,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                 </DropdownMenu>
               </div>
             )}
-          </Column.Toolbar>
+          </div>
 
           {isLoadingDisplay ? (
             <div className="flex-1 flex items-center justify-center">
@@ -858,7 +853,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
               })}
             </DataList>
           )}
-        </Column>
+        </div>
 
         {featuredItem && (
           <ReviewItemPanel
@@ -882,7 +877,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
             onClose={() => setFeaturedItemId(null)}
           />
         )}
-      </Columns>
+      </div>
     </div>
   );
 }
