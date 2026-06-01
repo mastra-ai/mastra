@@ -1,10 +1,5 @@
 export { dispatchDueNotifications } from '../../../notifications/dispatcher';
 export { NotificationsStorage, InMemoryNotificationsStorage } from '../../../notifications/storage';
-export {
-  createNotificationDispatchWorkflow,
-  NOTIFICATION_DISPATCH_SCHEDULE_ID,
-  NOTIFICATION_DISPATCH_WORKFLOW_ID,
-} from '../../../notifications/workflow';
 export type { DispatchDueNotificationsInput, DispatchDueNotificationsResult } from '../../../notifications/dispatcher';
 export type {
   NotificationDeliveryPolicyConfig,

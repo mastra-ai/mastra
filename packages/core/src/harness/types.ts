@@ -991,6 +991,15 @@ export type HarnessMessageContent =
       attributes?: Record<string, unknown>;
       metadata?: Record<string, unknown>;
     }
+  | {
+      type: 'notification_summary';
+      id?: string;
+      message: string;
+      pending: number;
+      bySource: Record<string, number>;
+      byPriority: Record<string, number>;
+      notificationIds: string[];
+    }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {

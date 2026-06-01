@@ -88,8 +88,8 @@ export type UpdateNotificationInput = {
   payload?: unknown;
   attributes?: NotificationSignalAttributes;
   metadata?: Record<string, unknown>;
-  deliverAt?: Date;
-  summaryAt?: Date;
+  deliverAt?: Date | null;
+  summaryAt?: Date | null;
   deliveryReason?: string;
   deliveryAttempts?: number;
   lastDeliveryAttemptAt?: Date;

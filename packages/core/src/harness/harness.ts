@@ -15,7 +15,8 @@ import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
-import type { SendNotificationSignalInput } from '../notifications';
+import { dispatchDueNotifications as dispatchStoredNotifications } from '../notifications';
+import type { DispatchDueNotificationsResult, SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
@@ -81,6 +82,9 @@ type HarnessSendNotificationSignalOptions = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
 };
+
+const NOTIFICATION_DISPATCH_HEARTBEAT_ID = 'notification-dispatch';
+const NOTIFICATION_DISPATCH_INTERVAL_MS = 60_000;
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
@@ -212,7 +216,6 @@ function toStateSignalContent(
 ): Extract<HarnessMessageContent, { type: 'state_signal' }> | undefined {
   const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
   const stateId = getStringValue(stateMetadata?.id) ?? getStringValue(payload.tagName) ?? 'state';
-  const text = signalContentsToText(payload.contents);
 
   return {
     type: 'state_signal',
@@ -221,7 +224,33 @@ function toStateSignalContent(
     mode: stateMetadata?.mode === 'delta' ? 'delta' : 'snapshot',
     cacheKey: getStringValue(stateMetadata?.cacheKey),
     version: typeof stateMetadata?.version === 'number' ? stateMetadata.version : undefined,
-    message: text,
+    message: signalContentsToText(payload.contents),
+  };
+}
+
+function toNotificationSummaryContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'notification_summary' }> | undefined {
+  const metadataSummary = getRecordValue(getRecordValue(payload.metadata)?.notificationSummary);
+  const bySource = getRecordValue(metadataSummary?.bySource) ?? {};
+  const byPriority = getRecordValue(metadataSummary?.byPriority) ?? {};
+  const notificationIds = Array.isArray(metadataSummary?.notificationIds)
+    ? metadataSummary.notificationIds.filter((id): id is string => typeof id === 'string')
+    : [];
+  const pending = typeof metadataSummary?.pending === 'number' ? metadataSummary.pending : undefined;
+
+  return {
+    type: 'notification_summary',
+    id: getStringValue(payload.id),
+    message: signalContentsToText(payload.contents),
+    pending: pending ?? notificationIds.length,
+    bySource: Object.fromEntries(
+      Object.entries(bySource).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+    ),
+    byPriority: Object.fromEntries(
+      Object.entries(byPriority).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+    ),
+    notificationIds,
   };
 }
 
@@ -1737,8 +1766,11 @@ export class Harness<TState = {}> {
     return streamOptions;
   }
 
-  private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
-    if (this.followUpQueue.length === 0) return;
+  private async drainFollowUpQueue(options?: {
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<boolean> {
+    if (this.followUpQueue.length === 0) return false;
 
     const next = this.followUpQueue.shift()!;
     try {
@@ -1764,11 +1796,26 @@ export class Harness<TState = {}> {
           tracingOptions: options?.tracingOptions,
         });
       }
+      return true;
     } catch (error) {
       this.followUpQueue.unshift(next);
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
       throw error;
     }
+  }
+
+  async dispatchDueNotifications(): Promise<DispatchDueNotificationsResult | undefined> {
+    const mastra = this.#internalMastra;
+    if (!mastra) return undefined;
+
+    const notifications = await mastra.getStorage()?.getStore('notifications');
+    if (!notifications) return undefined;
+
+    return dispatchStoredNotifications({ mastra, storage: notifications });
+  }
+
+  private dispatchDueNotificationsAfterTurn(): void {
+    void this.dispatchDueNotifications().catch(() => undefined);
   }
 
   private isActiveAgentThreadSubscription(subscription: AgentThreadSubscription<any>): boolean {
@@ -1790,7 +1837,10 @@ export class Harness<TState = {}> {
     this.currentTraceId = null;
     this.abortController = null;
     this.abortRequested = false;
-    await this.drainFollowUpQueue();
+    const drainedFollowUp = await this.drainFollowUpQueue();
+    if (!drainedFollowUp) {
+      this.dispatchDueNotificationsAfterTurn();
+    }
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
@@ -2209,6 +2259,25 @@ export class Harness<TState = {}> {
         };
       }
 
+      if (signal.type === 'notification' && signal.tagName === 'notification-summary') {
+        const notificationSummary = toNotificationSummaryContent({
+          id: signal.id,
+          contents: signal.contents,
+          attributes: signal.attributes,
+          metadata: signal.metadata,
+        });
+        if (notificationSummary) {
+          content.push(notificationSummary);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
       if (signal.type === 'reactive') {
         const reactiveSignal = toReactiveSignalContent({
           id: signal.id,
@@ -2321,6 +2390,9 @@ export class Harness<TState = {}> {
           } else if (data.type === 'reactive' && data.tagName === 'system-reminder') {
             const reminder = toSystemReminderContent(data);
             if (reminder) content.push(reminder);
+          } else if (data.type === 'notification' && data.tagName === 'notification-summary') {
+            const notificationSummary = toNotificationSummaryContent(data);
+            if (notificationSummary) content.push(notificationSummary);
           } else if (data.type === 'reactive') {
             const reactiveSignal = toReactiveSignalContent(data);
             if (reactiveSignal) content.push(reactiveSignal);
@@ -2897,6 +2969,12 @@ export class Harness<TState = {}> {
           const reminder = toSystemReminderContent(payload);
           if (reminder) {
             state.currentMessage.content.push(reminder);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'notification' && payload.tagName === 'notification-summary') {
+          const notificationSummary = toNotificationSummaryContent(payload);
+          if (notificationSummary) {
+            state.currentMessage.content.push(notificationSummary);
             this.emit({ type: 'message_update', message: state.currentMessage });
           }
         } else if (payload?.type === 'reactive') {
@@ -4077,8 +4155,18 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   private startHeartbeats(): void {
-    const handlers = this.config.heartbeatHandlers;
-    if (!handlers?.length) return;
+    const handlers = [...(this.config.heartbeatHandlers ?? [])];
+    if (this.#internalMastra && !handlers.some(handler => handler.id === NOTIFICATION_DISPATCH_HEARTBEAT_ID)) {
+      handlers.push({
+        id: NOTIFICATION_DISPATCH_HEARTBEAT_ID,
+        intervalMs: NOTIFICATION_DISPATCH_INTERVAL_MS,
+        immediate: false,
+        handler: async () => {
+          await this.dispatchDueNotifications();
+        },
+      });
+    }
+    if (!handlers.length) return;
 
     for (const hb of handlers) {
       if (this.heartbeatTimers.has(hb.id)) continue;

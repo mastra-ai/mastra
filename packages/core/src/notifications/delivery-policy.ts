@@ -39,7 +39,7 @@ export function defaultNotificationDeliveryDecision(
 
   if (input.record.priority === 'high') {
     return input.threadState === 'active'
-      ? { action: 'defer', deliverAt: input.now, reason: 'active-batch-full' }
+      ? { action: 'summarize', summaryAt: input.now, deliverAt: input.now, reason: 'active-high-summary-then-full' }
       : { action: 'deliver', reason: 'idle-high' };
   }
 
@@ -49,9 +49,11 @@ export function defaultNotificationDeliveryDecision(
       : { action: 'deliver', reason: 'idle-medium' };
   }
 
-  return input.threadState === 'active'
-    ? { action: 'summarize', summaryAt: input.now, reason: 'active-batch-summary' }
-    : { action: 'persist', reason: 'low-priority-inbox' };
+  return {
+    action: 'summarize',
+    summaryAt: input.now,
+    reason: input.threadState === 'active' ? 'active-batch-summary' : 'idle-low-summary',
+  };
 }
 
 export async function resolveNotificationDeliveryDecision({

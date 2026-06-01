@@ -4,6 +4,7 @@ import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { NotificationSummaryComponent } from '../../components/notification-summary.js';
 import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
 import { StateSignalComponent } from '../../components/state-signal.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
@@ -146,6 +147,27 @@ describe('handleMessageUpdate system reminders', () => {
     ]);
     expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
     expect(state.chatContainer.children).toHaveLength(4);
+  });
+
+  it('renders a streamed notification summary as an inline component', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'notification_summary',
+          message: 'mastracode: 1',
+          pending: 1,
+          bySource: { mastracode: 1 },
+        } as never,
+      ]),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    const component = state.chatContainer.children[0];
+    expect(component).toBeInstanceOf(NotificationSummaryComponent);
+    const rendered = stripAnsi((component as NotificationSummaryComponent).render(80).join('\n'));
+    expect(rendered).toContain('Notification summary: 1 pending');
+    expect(rendered).toContain('mastracode: 1');
   });
 
   it('deduplicates repeated streamed reminders within the same assistant run', () => {

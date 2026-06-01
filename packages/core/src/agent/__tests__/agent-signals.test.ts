@@ -6,9 +6,12 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { PubSub } from '../../events/pubsub';
+import type { EventCallback } from '../../events/types';
 import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { dispatchDueNotifications } from '../../notifications/dispatcher';
 import { InMemoryNotificationsStorage } from '../../notifications/storage';
 import { MastraCompositeStore } from '../../storage/base';
 import { Agent } from '../agent';
@@ -46,6 +49,36 @@ function createTextStreamModel(responseText: string) {
 
 function nextTick() {
   return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+class AsyncCallbackPubSub extends PubSub {
+  #subscribers = new Map<string, Set<EventCallback>>();
+  #index = 0;
+
+  async publish(topic: string, event: any): Promise<void> {
+    const subscribers = [...(this.#subscribers.get(topic) ?? [])];
+    const envelope = {
+      ...event,
+      id: `event-${this.#index}`,
+      createdAt: new Date(),
+      index: this.#index++,
+    };
+    setTimeout(() => {
+      for (const subscriber of subscribers) subscriber(envelope);
+    }, 0);
+  }
+
+  async subscribe(topic: string, cb: EventCallback): Promise<void> {
+    const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
+    subscribers.add(cb);
+    this.#subscribers.set(topic, subscribers);
+  }
+
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    this.#subscribers.get(topic)?.delete(cb);
+  }
+
+  async flush(): Promise<void> {}
 }
 
 async function readNextRun(iterator: AsyncIterator<any>) {
@@ -1062,7 +1095,7 @@ describe('Agent signals', () => {
           browser: expect.objectContaining({
             currentCacheKey: 'browser:v1',
             version: 1,
-            lastSnapshotSignalId: result.signal.id,
+            lastSnapshotSignalId: result.signal!.id,
           }),
         }),
       }),
@@ -1117,7 +1150,7 @@ describe('Agent signals', () => {
       type: 'notification',
       tagName: 'notification',
       contents: 'CI failed on main',
-      attributes: { source: 'github', kind: 'ci-status', priority: 'medium' },
+      attributes: { source: 'github', kind: 'ci-status', priority: 'medium', status: 'delivered' },
     });
     await expect(
       notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
@@ -1193,9 +1226,14 @@ describe('Agent signals', () => {
 
     await nextTick();
     expect(streamCount).toBe(1);
-    expect(high.signal).toBeUndefined();
-    expect(high.decision).toMatchObject({ action: 'defer', reason: 'active-batch-full' });
-    expect(high.record).toMatchObject({ status: 'pending', deliveryReason: 'active-batch-full' });
+    expect(high.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(high.decision).toMatchObject({ action: 'summarize', reason: 'active-high-summary-then-full' });
+    expect(high.record).toMatchObject({
+      status: 'pending',
+      deliveryReason: 'active-high-summary-then-full',
+      summarySignalId: high.signal?.id,
+    });
+    expect(high.record.summaryAt).toBeUndefined();
     expect(high.record.deliverAt).toBeInstanceOf(Date);
     expect(medium.signal).toBeUndefined();
     expect(medium.decision).toMatchObject({ action: 'summarize', reason: 'active-batch-summary' });
@@ -1207,12 +1245,14 @@ describe('Agent signals', () => {
     expect(low.record.summaryAt).toBeInstanceOf(Date);
 
     releaseFirst();
-    await expect(stream.text).resolves.toBe('active response');
+    await expect(stream.text).resolves.toBe('active responseactive response');
+    expect(streamCount).toBe(2);
     subscription.unsubscribe();
   });
 
-  it('persists low-priority idle notifications without starting a run', async () => {
+  it('saves and dispatches low-priority idle notification summaries through agent subscriptions without starting a run', async () => {
     let streamCount = 0;
+    const pubsub = new AsyncCallbackPubSub();
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'low-priority-notification-storage', domains: { notifications } });
     const agent = new Agent({
@@ -1230,7 +1270,11 @@ describe('Agent signals', () => {
         },
       }),
     });
-    new Mastra({ agents: { lowPriorityNotificationAgent: agent }, storage, logger: false });
+    const mastra = new Mastra({ agents: { lowPriorityNotificationAgent: agent }, storage, logger: false, pubsub });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'notification-thread',
+      resourceId: 'notification-user',
+    });
 
     const result = await agent.sendNotificationSignal(
       { source: 'mastracode', kind: 'manual', priority: 'low', summary: 'Read when you have time' },
@@ -1242,11 +1286,84 @@ describe('Agent signals', () => {
     expect(result.signal).toBeUndefined();
     expect(result).toMatchObject({
       accepted: true,
-      decision: { action: 'persist', reason: 'low-priority-inbox' },
-      record: { status: 'pending', deliveryReason: 'low-priority-inbox' },
+      decision: { action: 'summarize', reason: 'idle-low-summary' },
+      record: { status: 'pending', deliveryReason: 'idle-low-summary' },
     });
     expect(result.record.deliverAt).toBeUndefined();
-    expect(result.record.summaryAt).toBeUndefined();
+    expect(result.record.summaryAt).toBeInstanceOf(Date);
+
+    const dispatchNow = new Date((result.record.summaryAt?.getTime() ?? Date.now()) + 1);
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const dispatchResult = await dispatchDueNotifications({ mastra, storage: notifications, now: dispatchNow });
+    const subscribedRun = await withTimeout(
+      nextRun,
+      'Timed out waiting for low-priority notification summary broadcast',
+    );
+
+    expect(dispatchResult.failed).toEqual([]);
+    expect(dispatchResult.signals[0]).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(streamCount).toBe(0);
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-signal');
+    expect(signalPart?.data).toMatchObject({
+      id: dispatchResult.signals[0]?.id,
+      type: 'notification',
+      tagName: 'notification-summary',
+      contents: 'mastracode: 1',
+      attributes: { pending: 1 },
+    });
+    await expect(
+      notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: dispatchResult.signals[0]?.id,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('dispatches low-priority idle notification summaries without subscribers', async () => {
+    let streamCount = 0;
+    const pubsub = new AsyncCallbackPubSub();
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'no-subscriber-notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'no-subscriber-notification-agent',
+      name: 'No Subscriber Notification Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+          };
+        },
+      }),
+    });
+    const mastra = new Mastra({ agents: { noSubscriberNotificationAgent: agent }, storage, logger: false, pubsub });
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'mastracode', kind: 'manual', priority: 'low', summary: 'No one is watching' },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+    const dispatchNow = new Date((result.record.summaryAt?.getTime() ?? Date.now()) + 1);
+    const dispatchResult = await withTimeout(
+      dispatchDueNotifications({ mastra, storage: notifications, now: dispatchNow }),
+      'Timed out dispatching low-priority notification summary without subscribers',
+    );
+
+    expect(dispatchResult.failed).toEqual([]);
+    expect(dispatchResult.signals[0]).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(streamCount).toBe(0);
+    await expect(
+      notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: dispatchResult.signals[0]?.id,
+    });
   });
 
   it('defers notification records without starting an idle run', async () => {
@@ -1703,20 +1820,40 @@ describe('Agent signals', () => {
       memory,
     });
 
-    const result = agent.sendSignal(
-      { type: 'user-message', contents: 'persist without waking' },
-      { resourceId: 'idle-persist-user', threadId: 'idle-persist-thread', ifIdle: { behavior: 'persist' } },
-    );
-    await expect(result.persisted).resolves.toBeUndefined();
+    const subscription = await agent.subscribeToThread({
+      resourceId: 'idle-persist-user',
+      threadId: 'idle-persist-thread',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
 
-    const recalled = await memory.recall({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
-    expect(streamCount).toBe(0);
-    expect(recalled.messages).toHaveLength(1);
-    // Stash dropped; payload lives in content.parts now.
-    expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user', tagName: 'user' });
-    expect(recalled.messages[0]?.content.parts).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'persist without waking' })]),
-    );
+    try {
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'persist without waking' },
+        { resourceId: 'idle-persist-user', threadId: 'idle-persist-thread', ifIdle: { behavior: 'persist' } },
+      );
+      await expect(result.persisted).resolves.toBeUndefined();
+
+      const subscribedRun = await withTimeout(nextRun, 'Timed out waiting for persisted signal broadcast');
+      expect(subscribedRun.value.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'data-user-message',
+            data: expect.objectContaining({ contents: 'persist without waking' }),
+          }),
+        ]),
+      );
+
+      const recalled = await memory.recall({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
+      expect(streamCount).toBe(0);
+      expect(recalled.messages).toHaveLength(1);
+      // Stash dropped; payload lives in content.parts now.
+      expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user', tagName: 'user' });
+      expect(recalled.messages[0]?.content.parts).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'persist without waking' })]),
+      );
+    } finally {
+      subscription.unsubscribe();
+    }
   });
 
   it('discards an active signal when active behavior is discard', async () => {

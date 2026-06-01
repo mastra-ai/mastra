@@ -331,9 +331,9 @@ The default delivery policy is priority-aware:
 | `urgent` | Deliver a full notification immediately | Deliver a full notification immediately |
 | `high` | Batch with `deliverAt` and later deliver each full notification | Deliver a full notification immediately |
 | `medium` | Batch with `summaryAt` and later deliver one notification summary | Deliver a full notification immediately |
-| `low` | Batch with `summaryAt` and later deliver one notification summary | Persist in the inbox only |
+| `low` | Batch with `summaryAt` and later deliver one notification summary | Batch with `summaryAt` and later deliver one notification summary |
 
-Low-priority idle notifications are intentionally silent. Give the agent the `notification-inbox` tool when it should list or read those records.
+Low-priority notifications avoid interrupting the current run, but they still schedule a summary so the agent can learn that inbox records are waiting.
 
 ```typescript title="src/mastra/notifications.ts"
 await agent.sendNotificationSignal(
