@@ -1,5 +1,108 @@
 # @mastra/core
 
+## 1.38.0-alpha.4
+
+### Minor Changes
+
+- Workflows that suspend during dataset experiments now resume automatically. Provide resume data in your dataset items and the workflow will continue execution through multiple suspend/resume cycles. ([#17378](https://github.com/mastra-ai/mastra/pull/17378))
+
+  For multi-step workflows, use `resumeSteps` keyed by step ID:
+
+  ```typescript
+  const item = {
+    input: { prompt: 'Draft a blog post' },
+    resumeSteps: { 'approval-step': { approved: true } },
+  };
+  ```
+
+  For single-step workflows, use flat `resumeData`:
+
+  ```typescript
+  const item = {
+    input: { prompt: 'Draft a blog post' },
+    resumeData: { approved: true },
+  };
+  ```
+
+  Storage-backed items can use `metadata.resumeSteps` or `metadata.resumeData` as fallback. When no resume data is provided, the suspend payload is returned as output with guidance on how to add it. ([#15382](https://github.com/mastra-ai/mastra/issues/15382))
+
+- Added the v1 ToolProvider runtime, server routes, client SDK methods, and editor wiring that power OAuth-backed integrations on stored agents. ([#17248](https://github.com/mastra-ai/mastra/pull/17248))
+
+  **Stored agents can now pin OAuth connections per toolkit**
+
+  A stored agent's config accepts a new `toolProviders` shape that tells the runtime which connection to bind for each toolkit at execution time. Connections can be scoped per-author, shared across an org, or supplied by the caller.
+
+  ```ts
+  {
+    toolProviders: {
+      composio: {
+        connections: {
+          gmail: [{ kind: 'author', toolkit: 'gmail', connectionId: 'auth_abc', scope: 'per-author' }],
+        },
+        tools: {
+          GMAIL_FETCH_EMAILS: { toolkit: 'gmail' },
+        },
+      },
+    },
+  }
+  ```
+
+  **New client SDK surface for managing connections**
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: '…' });
+  const composio = client.toolProvider('composio');
+
+  const { items } = await composio.listConnections({ toolkit: 'gmail' });
+  await composio.disconnectConnection('auth_abc');
+  ```
+
+  **New `ToolProvider` interface for custom providers**
+
+  Providers implement a VNext surface (`listToolkitsVNext`, `listToolsVNext`, `resolveToolsVNext`) plus the auth round-trip (`authorize`, `getAuthStatus`, `listConnections`, `disconnectConnection`, `listConnectionFields`, `health`). The Composio provider has been rewritten on this surface; the older catalog methods remain as `@deprecated` shims for back-compat.
+
+  Connections list responses use `page`/`perPage` pagination, matching the rest of the server surface.
+
+  Both stored agents (`editor.agent.getById(...)`) and code-defined agents with stored overrides (`editor.agent.applyStoredOverrides(...)`) resolve `toolProviders` at request time, merging provider-resolved tools alongside code/registry/MCP/integration tools.
+
+  Stored agents that don't set `toolProviders` continue to work unchanged. The Studio/Builder UI ships separately.
+
+### Patch Changes
+
+- Improved agent performance in long-running loops with many iterations. ([#17368](https://github.com/mastra-ai/mastra/pull/17368))
+
+- Fixed output processors so they receive agent step lifecycle chunks during streaming. ([#16687](https://github.com/mastra-ai/mastra/pull/16687))
+
+- Fixed `AgentExecutionOptions<undefined>` (and its public/inner variants) incorrectly requiring a `structuredOutput` property. When the output type is `undefined` or `null` — including a fully-nullish union such as `undefined | null` — `structuredOutput` is now correctly optional, regardless of the `strictNullChecks` setting. This is the shape produced by `AgentConfig.defaultOptions`, so `defaultOptions: { maxSteps: 50 }` now type-checks without a spurious `structuredOutput` requirement. Object output types still require `structuredOutput` as before. ([#17131](https://github.com/mastra-ai/mastra/pull/17131))
+
+- Fixed output processor state continuity for step lifecycle chunks during streaming. Lifecycle chunks (e.g. `step-finish`) routed through the stream `outputWriter` now share the same per-processor state map as the main model-output path, so state set in `processOutputStream` while handling content chunks is visible when the lifecycle chunk is processed (and in `processOutputResult`). Previously these chunks were handled with an isolated, empty state. ([#17370](https://github.com/mastra-ai/mastra/pull/17370))
+
+  Note: as part of routing lifecycle chunks through output processors, an aborted stream now surfaces content the model produced before the abort (e.g. a `text-start` chunk and partial `text`) instead of dropping it. Consumers that assumed an aborted result always had empty text may now observe partial output.
+
+- Improved active workflow run listing latency. ([#17374](https://github.com/mastra-ai/mastra/pull/17374))
+
+- Improved PIIDetector streaming performance. ([#17377](https://github.com/mastra-ai/mastra/pull/17377))
+  - Removed per-chunk LLM calls during streaming PII checks.
+  - Added local regex detection for common PII types (email, phone, SSN, credit card, IP address, API keys, URLs, UUIDs, crypto wallets, and IBAN).
+  - Added regex carryover buffer across chunk boundaries to catch split PII patterns.
+  - Buffered context-dependent PII types (names, addresses, dates of birth) with periodic LLM calls at configurable thresholds.
+  - Added `bufferSize` option (default: 200) to control LLM buffer flush threshold.
+  - Reduced streaming API cost, latency, and rate-limit pressure.
+
+  Closes #16466.
+
+- Improved observability and error isolation in the v1 ToolProvider runtime. ([#17248](https://github.com/mastra-ai/mastra/pull/17248))
+
+  **Better visibility into connection-scope misconfiguration**
+
+  When an agent runs with a stored ToolProvider connection whose scope cannot be resolved from the request context, the runtime now logs a one-shot warning and falls back to a shared bucket instead of silently routing every caller to the same OAuth account. Multi-tenant deployments get a clear signal when their identity wiring isn't reaching the runtime.
+
+  **One bad toolkit no longer disables sibling providers**
+
+  If a provider returns more connections for a toolkit than its declared capabilities allow, the runtime now logs and skips that toolkit instead of throwing. Other providers and other toolkits on the same agent continue to resolve normally.
+
 ## 1.38.0-alpha.3
 
 ### Minor Changes
