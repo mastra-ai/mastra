@@ -409,7 +409,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hasStoredToolProviders =
       storedConfig.toolProviders != null && Object.keys(storedConfig.toolProviders as object).length > 0;
 
-    if (toolsEditable && (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools || hasStoredToolProviders)) {
+    if (
+      toolsEditable &&
+      (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools || hasStoredToolProviders)
+    ) {
       const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
       const hasConditionalMCPClients =
         storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
