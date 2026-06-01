@@ -1,12 +1,8 @@
 # Browser Agent
 
-A browser-using agent built on [`@mastra/agent-browser`](https://mastra.ai/docs/browser/agent-browser), which uses Playwright + an accessibility-tree snapshot to give LLMs reliable, ref-based control of a real browser. The agent also has access to `web_search` as a fallback for tasks that don't need a live page.
+A browser-using agent built on [`@mastra/agent-browser`](https://mastra.ai/docs/browser/agent-browser). It wraps Playwright with a snapshot+refs pattern — the model sees a stable ID for each element instead of brittle CSS selectors — and auto-wires browser tools (`browser_goto`, `browser_click`, `browser_type`, `browser_snapshot`, etc.) onto the agent. Also has `web_search` for tasks that don't need a live page.
 
-## Why we built this
-
-`@mastra/agent-browser` is Mastra's default browser primitive: it wraps Playwright with a snapshot+refs pattern (the model sees a stable ID for each element instead of brittle CSS selectors), and it auto-wires the browser tools onto any agent you pass it to. This template shows the simplest possible setup — one agent, one browser, one storage backend.
-
-If you'd rather use [Stagehand / Browserbase](https://www.browserbase.com/) (AI-driven element detection, cloud-hosted browsers), see [`template-browsing-agent`](../template-browsing-agent/) instead. Both run the same way; only the browser provider differs.
+If you'd rather use [Stagehand / Browserbase](https://www.browserbase.com/) (AI-driven element detection, cloud-hosted browsers), see [`template-browsing-agent`](../template-browsing-agent/) instead.
 
 ## Demo
 

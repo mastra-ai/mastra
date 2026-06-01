@@ -1,14 +1,8 @@
 # Company Knowledge Agent
 
-A Mastra template that indexes your Linear issues and Notion pages into [pgvector](https://github.com/pgvector/pgvector) (on [Neon](https://neon.tech)) and exposes a single agent that answers questions over them, with live Linear/Notion lookups and provider-native web search as fallbacks.
+Indexes your Linear issues and Notion pages into [pgvector](https://github.com/pgvector/pgvector) (on [Neon](https://neon.tech)) and exposes a single agent that answers questions over them. The agent searches the indexed corpus first, falls back to live Linear/Notion lookups via MCP ([mcp.linear.app](https://mcp.linear.app/mcp) and `@notionhq/notion-mcp-server`), and uses provider-native web search through the Mastra Gateway as a last resort.
 
-## What it showcases
-
-- **`@mastra/pg`** — `PostgresStore` for state and `PgVector` for semantic recall.
-- **Multi-source tool agent** — Linear and Notion via MCP, semantic vector search via `@mastra/rag`, and OpenAI provider-native web search through the **Mastra Gateway**.
-- **MCP integrations** — Linear (hosted at [mcp.linear.app](https://mcp.linear.app/mcp)) and Notion (via `@notionhq/notion-mcp-server`) for live lookups.
-- **Scheduled indexing workflow** — `index-knowledge` runs every 6 hours via cron, pulling recent Linear issues + Notion pages, embedding them with `text-embedding-3-small`, and upserting into pgvector.
-- **Input/output processors (guardrails)** — `UnicodeNormalizer` cleans input; `PIIDetector` automatically redacts emails, phone numbers, SSNs, credit card numbers, and API keys from agent responses so internal company data stays safe.
+A scheduled workflow (`index-knowledge`) re-indexes every 6 hours automatically. Input is normalized with `UnicodeNormalizer`, and `PIIDetector` redacts emails, phone numbers, SSNs, credit card numbers, and API keys from responses before they reach the user.
 
 ## Prerequisites
 

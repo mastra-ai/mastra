@@ -1,14 +1,8 @@
 # Claw — Autonomous Personal Assistant
 
-A Mastra template for **Claw**: an autonomous assistant that actively operates a computer to finish multi-step tasks — read/write files, run shell commands in a sandbox, browse the web, and follow reusable skills.
+An autonomous assistant that operates a computer to finish multi-step tasks — read/write files, run shell commands in a sandboxed workspace, browse the web with Playwright (`@mastra/agent-browser`), search the web through the Mastra Gateway, and follow reusable skills checked into `workspace/skills/`.
 
-## What it showcases
-
-- **`Workspace` + `LocalFilesystem` + `LocalSandbox`** — file IO and a sandboxed shell scoped to one directory.
-- **Skills** — reusable, versioned instructions checked into `workspace/skills/`.
-- **`@mastra/agent-browser`** — Playwright-based browsing with accessibility-tree element targeting.
-- **Provider-native web search** routed through the **Mastra Gateway** (no separate search API key).
-- **Observational + working memory** via `@mastra/memory` and `@mastra/libsql` (Turso). Observational memory is **resource-scoped**, so Claw remembers your preferences and context across threads.
+Claw has resource-scoped observational memory, so it remembers your preferences and context across threads.
 
 ## Prerequisites
 

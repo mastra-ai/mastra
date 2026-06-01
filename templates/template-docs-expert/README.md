@@ -1,15 +1,8 @@
 # Docs Expert
 
-A research assistant that answers questions about libraries, APIs, and documentation by searching the live web and citing its sources. Built on Mastra with the OpenAI `web_search` provider tool, routed through the Mastra Gateway.
+A research assistant that answers questions about libraries, APIs, and documentation by searching the live web and citing its sources. Uses provider-native web search (`openai.tools.webSearch()`) routed through the Mastra Gateway — no extra search API key needed.
 
-## Why we built this
-
-Models drift out of date the moment they're trained. Docs and APIs don't. This template shows how to wire a Mastra agent that:
-
-- Uses provider-native web search (`openai.tools.webSearch()`) — no extra search API key needed when routed through the Mastra Gateway.
-- **Observational memory** — the agent learns what docs and topics you've asked about, building persistent context over time (powered by a lightweight `gpt-5-nano` observer).
-- Persists observability and memory to Turso (libSQL) using `@mastra/libsql`.
-- Demonstrates the Mastra Gateway pattern: one `MASTRA_GATEWAY_API_KEY` instead of per-provider keys.
+The agent has observational memory (powered by a lightweight `gpt-5-nano` observer) so it learns what docs and topics you've asked about, building persistent context over time. All state is persisted to Turso (libSQL).
 
 ## Demo
 
