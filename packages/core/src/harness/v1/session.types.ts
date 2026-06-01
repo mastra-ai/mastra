@@ -1,12 +1,9 @@
 import type { MastraMemory } from '../../memory';
-import type { PublicSchema } from '../../schema';
+import type { StandardSchemaWithJSON } from '../../schema';
 import type { DynamicArgument } from '../../types';
 import type { Workspace } from '../../workspace';
-import type { Skill } from '../../workspace/skills/types';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
-import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
 export type CloneSessionOptions = {
   sessionId?: string;
@@ -25,19 +22,20 @@ export type CloneSessionOptions = {
 export interface SessionConfig<TState = {}> {
   memory: MastraMemory | DynamicArgument<MastraMemory>;
   events: EventEmitter;
-  stateSchema?: PublicSchema<TState>;
-  initialState?: Partial<TState>;
-  workspace?: DynamicArgument<Workspace | undefined>;
-  /** Explicitly configured canonical skills exposed to this session. */
-  skills?: readonly Skill[];
-  /** Subagent registry the session can spawn through the built-in tool. */
-  subagents?: SubagentRegistryConfig;
-  /** Resolves a model id to a `LanguageModel`. Required for subagent spawn. */
-  resolveModel?: ModelResolver;
-  /** Default permission policy applied when no category rule matches. */
-  defaultPermissionPolicy?: PermissionPolicy;
-  /** Resolves a tool name to its category for permission-gate evaluation. */
-  toolCategoryResolver?: ToolCategoryResolver;
+  state?: TState;
+  stateSchema?: StandardSchemaWithJSON<TState>;
+  getState?: () => Readonly<TState>;
+  setState?: (updates: Partial<TState>) => Promise<void>;
+  updateState?: <TResult>(
+    updater: (
+      state: Readonly<TState>,
+    ) =>
+      | { updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }
+      | Promise<{ updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }>,
+  ) => Promise<TResult>;
+  workspace?: Workspace;
+  workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
+  setWorkspace?: (workspace: Workspace | undefined) => void;
   // storage: HarnessStorage;
   /** Identifier of the Harness instance that owns this session. */
   ownerId: string;

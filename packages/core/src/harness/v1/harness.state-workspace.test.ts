@@ -64,8 +64,8 @@ const createHarness = <TState extends Record<string, unknown>>(config: TestHarne
   return { harness, storage, memory };
 };
 
-describe('Harness v1 session state', () => {
-  it('initializes sessions from schema defaults and initial state', async () => {
+describe('Harness v1 state', () => {
+  it('initializes from schema defaults and initial state', () => {
     const { harness } = createHarness<{ count: number; label: string }>({
       stateSchema: {
         type: 'object',
@@ -75,10 +75,8 @@ describe('Harness v1 session state', () => {
       initialState: { count: 2, label: 'ready' },
     });
 
-    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
-
-    expect(session.getState()).toEqual({ count: 2, label: 'ready' });
-    expect(Object.isFrozen(session.getState())).toBe(true);
+    expect(harness.getState()).toEqual({ count: 2, label: 'ready' });
+    expect(Object.isFrozen(harness.getState())).toBe(true);
   });
 
   it('validates setState and emits state_changed events', async () => {
@@ -94,30 +92,28 @@ describe('Harness v1 session state', () => {
       events.push(event);
     });
 
-    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
-    await session.setState({ count: 1 });
+    await harness.setState({ count: 1 });
 
-    expect(session.getState()).toEqual({ count: 1 });
+    expect(harness.getState()).toEqual({ count: 1 });
     expect(events).toContainEqual(
       expect.objectContaining({ type: 'state_changed', state: { count: 1 }, changedKeys: ['count'] }),
     );
-    await expect(session.setState({ count: 'bad' as never })).rejects.toThrow('Invalid state update');
-    expect(session.getState()).toEqual({ count: 1 });
+    await expect(harness.setState({ count: 'bad' as never })).rejects.toThrow('Invalid state update');
+    expect(harness.getState()).toEqual({ count: 1 });
   });
 
   it('runs updateState as a serialized transaction', async () => {
     const { harness } = createHarness<{ count: number }>({
       initialState: { count: 0 },
     });
-    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
 
-    const result = await session.updateState(state => ({
+    const result = await harness.updateState(state => ({
       updates: { count: state.count + 1 },
       result: state.count,
     }));
 
     expect(result).toBe(0);
-    expect(session.getState()).toEqual({ count: 1 });
+    expect(harness.getState()).toEqual({ count: 1 });
   });
 });
 
@@ -128,5 +124,24 @@ describe('Harness v1 workspace', () => {
     expect(createHarness({ workspace: { name: 'config-workspace', skills: ['.'] } }).harness.getWorkspace()?.name).toBe(
       'config-workspace',
     );
+  });
+
+  it('resolves dynamic workspaces into request context and caches them on the harness', async () => {
+    const workspace = new Workspace({ name: 'dynamic-workspace', skills: ['.'] });
+    let harnessContext: { workspace?: Workspace } | undefined;
+    const memory = vi.fn(({ requestContext }) => {
+      harnessContext = requestContext.get('harness');
+      return createMemory();
+    });
+    const { harness } = createHarness({
+      memory,
+      workspace: vi.fn(() => workspace),
+    });
+
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    await session.getThread();
+
+    expect(harnessContext?.workspace).toBe(workspace);
+    expect(harness.getWorkspace()).toBe(workspace);
   });
 });

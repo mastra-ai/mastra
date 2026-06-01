@@ -1,20 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { Agent } from '../../agent';
 import type { MastraMemory } from '../../memory';
+import { toStandardSchema } from '../../schema';
+import type { StandardSchemaWithJSON } from '../../schema';
 import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
 import { Workspace } from '../../workspace';
-import type { Skill } from '../../workspace/skills/types';
 import { EventEmitter, sessionCreatedPayload } from './events';
 import type { HarnessEventListener, HarnessEventUnsubscribe } from './events';
 import type { HarnessConfig } from './harness.types';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategory, ToolCategoryResolver } from './permissions.types';
 import { Session } from './session';
 import type { CloneSessionOptions } from './session.types';
-import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
 type SessionByIdOptions = {
   sessionId: string;
@@ -39,16 +37,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #compositeStorage?: MastraCompositeStore;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
-  readonly #stateSchema?: HarnessConfig<MODES, TState>['stateSchema'];
-  readonly #initialState?: Partial<TState>;
-  readonly #workspace?: DynamicArgument<Workspace | undefined>;
-  readonly #agents: Record<string, Agent>;
-  readonly #mastra?: HarnessConfig<MODES, TState>['mastra'];
-  readonly #subagents?: SubagentRegistryConfig;
-  readonly #resolveModel?: ModelResolver;
-  readonly #skills: readonly Skill[];
-  readonly #defaultPermissionPolicy: PermissionPolicy;
-  readonly #toolCategoryResolver?: ToolCategoryResolver;
+  #state: TState;
+  readonly #stateSchema?: StandardSchemaWithJSON<TState>;
+  #stateUpdateQueue: Promise<void> = Promise.resolve();
+  #workspace?: Workspace;
+  readonly #workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
 
   constructor(config: HarnessConfig<MODES, TState>) {
     if (!config.modes.length) {
@@ -61,53 +54,18 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     this.#compositeStorage = config.mastra?.getStorage();
     this.#memory = config.memory;
     this.#events = new EventEmitter();
-    this.#stateSchema = config.stateSchema;
-    this.#initialState = config.initialState;
+    this.#stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
+    this.#state = {
+      ...this.#getSchemaDefaults(),
+      ...config.initialState,
+    } as TState;
 
-    if (config.workspace instanceof Workspace || typeof config.workspace === 'function') {
+    if (config.workspace instanceof Workspace) {
       this.#workspace = config.workspace;
+    } else if (typeof config.workspace === 'function') {
+      this.#workspaceFn = config.workspace;
     } else if (config.workspace) {
       this.#workspace = new Workspace(config.workspace);
-    }
-
-    this.#agents = { ...(config.agents ?? {}) };
-    this.#mastra = config.mastra;
-
-    if (config.subagents) {
-      const entries = Object.entries(config.subagents.types ?? {});
-      if (entries.length > 0 && !config.resolveModel) {
-        throw new Error('Harness "subagents" requires a "resolveModel" function to instantiate subagent models');
-      }
-      for (const [typeId, def] of entries) {
-        if (!def?.agentId) {
-          throw new Error(`Subagent "${typeId}" must declare an "agentId"`);
-        }
-        // When using an inline `agents` map, validate eagerly. When backed by
-        // a Mastra instance, the agent registry may grow over time; defer the
-        // check to resolution time.
-        if (!config.mastra && !this.#agents[def.agentId]) {
-          throw new Error(`Subagent "${typeId}" references unknown agent "${def.agentId}"`);
-        }
-      }
-      this.#subagents = config.subagents;
-    }
-    this.#resolveModel = config.resolveModel;
-
-    const seenSkillNames = new Set<string>();
-    for (const skill of config.skills ?? []) {
-      if (seenSkillNames.has(skill.name)) {
-        throw new Error(`Duplicate harness skill name "${skill.name}"`);
-      }
-      seenSkillNames.add(skill.name);
-    }
-    this.#skills = config.skills ? [...config.skills] : [];
-
-    this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
-    if (config.toolCategoryResolver) {
-      this.#toolCategoryResolver = config.toolCategoryResolver;
-    } else if (config.toolCategories) {
-      const categories = config.toolCategories;
-      this.#toolCategoryResolver = (toolName: string) => categories[toolName] ?? null;
     }
 
     const modes = config.modes ?? [];
@@ -135,60 +93,46 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     return this.#events.emit(event);
   }
 
+  getState(): Readonly<TState> {
+    return Object.freeze({ ...(this.#state as Record<string, unknown>) }) as Readonly<TState>;
+  }
+
+  async setState(updates: Partial<TState>): Promise<void> {
+    const run = this.#stateUpdateQueue.then(() => this.#applyStateUpdates(updates));
+    this.#stateUpdateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  async updateState<TResult>(
+    updater: (
+      state: Readonly<TState>,
+    ) =>
+      | { updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }
+      | Promise<{ updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }>,
+  ): Promise<TResult> {
+    const run = this.#stateUpdateQueue.then(async () => {
+      const update = await updater(this.getState());
+      if (update.updates && Object.keys(update.updates).length > 0) {
+        await this.#applyStateUpdates(update.updates);
+      }
+      for (const event of update.events ?? []) {
+        this.#events.emit(event);
+      }
+      return update.result;
+    });
+
+    this.#stateUpdateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   getWorkspace(): Workspace | undefined {
-    return typeof this.#workspace === 'function' ? undefined : this.#workspace;
-  }
-
-  /**
-   * Returns the configured subagent registry, if any. Read-only.
-   */
-  getSubagents(): SubagentRegistryConfig | undefined {
-    return this.#subagents;
-  }
-
-  /**
-   * Returns the explicitly configured skills (read-only snapshot).
-   */
-  getSkills(): readonly Skill[] {
-    return this.#skills;
-  }
-
-  /**
-   * Returns the default permission policy. Defaults to `'ask'`.
-   */
-  getDefaultPermissionPolicy(): PermissionPolicy {
-    return this.#defaultPermissionPolicy;
-  }
-
-  /**
-   * Resolves a tool name to its category, if a resolver is configured.
-   */
-  resolveToolCategory(toolName: string): ToolCategory | null {
-    return this.#toolCategoryResolver ? this.#toolCategoryResolver(toolName) : null;
-  }
-
-  /**
-   * Resolves an agent by id from the inline `agents` map or the parent Mastra.
-   * Throws when neither path knows about the id.
-   */
-  getAgentById(agentId: string): Agent {
-    const inline = this.#agents[agentId];
-    if (inline) return inline;
-    if (this.#mastra) {
-      return this.#mastra.getAgentById(agentId as never) as Agent;
-    }
-    throw new Error(`Agent "${agentId}" is not registered on this Harness`);
-  }
-
-  /**
-   * Resolves a model id via the configured {@link ModelResolver}.
-   * Throws when no resolver is configured.
-   */
-  async resolveModel(modelId: string) {
-    if (!this.#resolveModel) {
-      throw new Error('Harness was constructed without a "resolveModel" function');
-    }
-    return this.#resolveModel(modelId);
+    return this.#workspace;
   }
 
   listModes(): HarnessMode[] {
@@ -282,6 +226,49 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     return this.#sessionFromRecord(record);
   }
 
+  async #applyStateUpdates(updates: Partial<TState>): Promise<void> {
+    const changedKeys = Object.keys(updates);
+    const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
+
+    if (this.#stateSchema) {
+      const result = await this.#stateSchema['~standard'].validate(newState);
+      if (result.issues) {
+        const messages = result.issues.map((issue: { message?: string }) => issue.message).join('; ');
+        throw new Error(`Invalid state update: ${messages}`);
+      }
+      this.#state = result.value as TState;
+    } else {
+      this.#state = newState as TState;
+    }
+
+    this.#events.emit({
+      type: 'state_changed',
+      state: this.#state as Record<string, unknown>,
+      changedKeys,
+    });
+  }
+
+  #getSchemaDefaults(): Partial<TState> {
+    if (!this.#stateSchema) return {};
+
+    const defaults: Record<string, unknown> = {};
+
+    try {
+      const jsonSchema = this.#stateSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
+        properties?: Record<string, { default?: unknown }>;
+      };
+      for (const [key, prop] of Object.entries(jsonSchema.properties ?? {})) {
+        if (prop.default !== undefined) {
+          defaults[key] = prop.default;
+        }
+      }
+    } catch {
+      // Schema doesn't support JSON Schema extraction.
+    }
+
+    return defaults as Partial<TState>;
+  }
+
   async #loadSessionRecord(storage: HarnessStorage, sessionId: string, resourceId?: string): Promise<SessionRecord> {
     const record = await storage.loadSession(sessionId);
     if (!record) {
@@ -322,14 +309,16 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       lastActivityAt: record.lastActivityAt,
       memory: this.#memory,
       events: this.#events.scoped({ sessionId: record.id }),
+      state: this.#state,
       stateSchema: this.#stateSchema,
-      initialState: this.#initialState,
+      getState: () => this.getState(),
+      setState: updates => this.setState(updates),
+      updateState: updater => this.updateState(updater),
       workspace: this.#workspace,
-      skills: this.#skills,
-      subagents: this.#subagents,
-      resolveModel: this.#resolveModel,
-      defaultPermissionPolicy: this.#defaultPermissionPolicy,
-      toolCategoryResolver: this.#toolCategoryResolver,
+      workspaceFn: this.#workspaceFn,
+      setWorkspace: workspace => {
+        this.#workspace = workspace;
+      },
     });
   }
 
