@@ -79,6 +79,16 @@ describe('Switch', () => {
     expect(screen.getByRole('switch').classList.contains('custom-switch')).toBe(true);
   });
 
+  it('uses neutral switch states without the old accent glow', () => {
+    render(<Switch aria-label="Toggle" defaultChecked />);
+
+    const switchEl = screen.getByRole('switch');
+    expect(switchEl.className).toContain('data-[checked]:bg-neutral6');
+    expect(switchEl.className).toContain('focus-visible:outline-neutral5/55');
+    expect(switchEl.className).not.toContain('accent1');
+    expect(switchEl.className).not.toContain('shadow-glow');
+  });
+
   it('applies the id to the visible switch control, not a hidden input', () => {
     render(<Switch aria-label="Toggle" id="my-switch" />);
 

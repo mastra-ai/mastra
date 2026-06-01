@@ -1,8 +1,6 @@
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
 
-import { formElementFocus } from '@/ds/primitives/form-element';
-import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 type SwitchProps = Omit<SwitchPrimitive.Root.Props, 'className'> & {
@@ -25,13 +23,16 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(({ className, as
       ref={ref}
       data-slot="switch"
       className={cn(
-        'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent',
-        transitions.all,
-        formElementFocus,
-        'hover:brightness-110',
-        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100',
-        'data-[checked]:bg-accent1 data-[checked]:shadow-glow-accent1',
-        'data-[unchecked]:bg-neutral2',
+        'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-neutral6/[0.08] bg-neutral6/[0.12] p-0.5 outline-hidden',
+        'transition-[background-color,border-color,transform] duration-normal ease-out-custom motion-reduce:transition-none',
+        'hover:scale-[1.02] hover:border-neutral6/[0.12] hover:bg-neutral6/[0.16]',
+        'active:scale-[0.98] active:border-neutral6/[0.18] active:bg-neutral6/[0.18]',
+        'focus-visible:border-neutral5/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55',
+        'data-[checked]:border-neutral6 data-[checked]:bg-neutral6',
+        'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
+        'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
+        'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.2] data-[disabled]:bg-neutral6/[0.14] data-[disabled]:hover:scale-100 data-[disabled]:hover:border-neutral6/[0.2] data-[disabled]:hover:bg-neutral6/[0.14] data-[disabled]:active:scale-100',
+        'data-[disabled]:data-[checked]:border-neutral6/[0.38] data-[disabled]:data-[checked]:bg-neutral6/[0.38] data-[disabled]:data-[checked]:hover:border-neutral6/[0.38] data-[disabled]:data-[checked]:hover:bg-neutral6/[0.38]',
         className,
       )}
       {...renderProps}
@@ -39,11 +40,13 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(({ className, as
     >
       {asChild ? undefined : children}
       <SwitchPrimitive.Thumb
+        data-slot="switch-thumb"
         className={cn(
-          'pointer-events-none block h-4 w-4 rounded-full bg-white shadow-md',
-          'transition-all duration-normal ease-out-custom',
-          'data-[checked]:translate-x-4 data-[unchecked]:translate-x-0',
-          'data-[checked]:shadow-lg',
+          'pointer-events-none block size-4 rounded-full bg-neutral6',
+          'transition-[background-color,transform] duration-normal ease-out-custom motion-reduce:transition-none',
+          'group-hover/switch:scale-105 group-active/switch:scale-95 group-data-[disabled]/switch:scale-100',
+          'data-[checked]:translate-x-4 data-[checked]:bg-surface1 data-[unchecked]:translate-x-0',
+          'data-[disabled]:data-[unchecked]:bg-neutral6/[0.5] data-[disabled]:data-[checked]:bg-surface1/80',
         )}
       />
     </SwitchPrimitive.Root>
