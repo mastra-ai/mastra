@@ -42,6 +42,40 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
+/**
+ * Post-processes converted UI messages to merge non-user signal data parts into the
+ * preceding assistant message. This matches the behavior of active streaming, where
+ * signal data parts are written to the current assistant message via writer.custom().
+ *
+ * Non-user signals (system-reminder, reactive, notification, state, etc.) are stored as
+ * separate role:'signal' DB messages. The per-message adapters convert them to role:'system'
+ * UI messages with data-* parts, but assistant-ui rejects system messages with non-text parts.
+ *
+ * This function moves those data parts onto the preceding assistant message and removes
+ * the standalone signal message. User-type signals (already converted to role:'user' by
+ * the adapters) are left untouched.
+ */
+function mergeSignalDataParts<T extends { role: string; parts: Array<{ type: string }> }>(messages: T[]): T[] {
+  const result: T[] = [];
+  for (const message of messages) {
+    if (
+      message.role === 'system' &&
+      message.parts.length > 0 &&
+      message.parts.every(part => part.type.startsWith('data-'))
+    ) {
+      for (let i = result.length - 1; i >= 0; i--) {
+        if (result[i]!.role === 'assistant') {
+          result[i] = { ...result[i]!, parts: [...result[i]!.parts, ...message.parts] };
+          break;
+        }
+      }
+      continue;
+    }
+    result.push(message);
+  }
+  return result;
+}
+
 export class MessageList {
   private messages: MastraDBMessage[] = [];
 
@@ -87,11 +121,15 @@ export class MessageList {
   private logger?: IMastraLogger;
 
   private toAIV5UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
-    return messages.map(message => AIV5Adapter.toUIMessage(message, options));
+    return mergeSignalDataParts(messages.map(message => AIV5Adapter.toUIMessage(message, options)));
   }
 
   private toAIV4UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
-    return messages.map(message => AIV4Adapter.toUIMessage(message, options));
+    return mergeSignalDataParts(messages.map(message => AIV4Adapter.toUIMessage(message, options)));
+  }
+
+  private toAIV6UIMessages(messages: MastraDBMessage[]) {
+    return mergeSignalDataParts(messages.map(AIV6Adapter.toUIMessage));
   }
 
   // Event recording for observability
@@ -615,7 +653,7 @@ export class MessageList {
       },
     },
     aiV6: {
-      ui: () => this.all.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.all.db()),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */
@@ -667,7 +705,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.remembered.db()),
     },
     aiV6: {
-      ui: () => this.remembered.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.remembered.db()),
     },
 
     /* @deprecated use list.get.remembered.aiV4.ui() */
@@ -694,7 +732,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.rememberedPersisted.db()),
     },
     aiV6: {
-      ui: () => this.rememberedPersisted.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.rememberedPersisted.db()),
     },
 
     /* @deprecated use list.getPersisted.remembered.aiV4.ui() */
@@ -726,7 +764,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.input.db()),
     },
     aiV6: {
-      ui: () => this.input.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.input.db()),
     },
 
     /* @deprecated use list.get.input.aiV4.ui() instead */
@@ -753,7 +791,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.inputPersisted.db()),
     },
     aiV6: {
-      ui: () => this.inputPersisted.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.inputPersisted.db()),
     },
 
     /* @deprecated use list.getPersisted.input.aiV4.ui() */
@@ -803,7 +841,7 @@ export class MessageList {
       },
     },
     aiV6: {
-      ui: () => this.response.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.response.db()),
     },
 
     aiV4: {
@@ -824,7 +862,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.responsePersisted.db()),
     },
     aiV6: {
-      ui: () => this.responsePersisted.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.responsePersisted.db()),
     },
 
     /* @deprecated use list.getPersisted.response.aiV4.ui() */
