@@ -74,10 +74,16 @@ async function initializePackageJson(pm: PackageManager): Promise<void> {
     node: '>=22.13.0',
   };
 
-  // pnpm v11+ writes a range (e.g. "pnpm@^11.3.0") into the packageManager
-  // field, but the spec requires an exact semver version. Strip any range prefix.
+  // pnpm v11+ may write a semver range into packageManager or devEngines that
+  // corepack rejects. Strip range prefixes so the version is exact.
   if (typeof packageJson.packageManager === 'string') {
     packageJson.packageManager = packageJson.packageManager.replace(/@[~^>=<]*(\d)/, '@$1');
+  }
+  if (packageJson.devEngines?.packageManager?.version) {
+    packageJson.devEngines.packageManager.version = packageJson.devEngines.packageManager.version.replace(
+      /^[~^>=<]*/,
+      '',
+    );
   }
 
   await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
