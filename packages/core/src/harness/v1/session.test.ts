@@ -327,7 +327,7 @@ describe('Harness events', () => {
     events.length = 0;
 
     session.setModelId('model-2');
-    session.setMode({ id: 'plan', agentId: 'default', defaultModelId: 'zai-coding-plan/glm-5-turbo' });
+    session.setMode({ id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model' });
 
     expect(events).toEqual([
       expect.objectContaining({

@@ -1,6 +1,5 @@
 ---
 '@mastra/core': minor
-'mastracode': patch
 ---
 
 Added harness events for session lifecycle updates, mode changes, model changes, and cloned threads.
