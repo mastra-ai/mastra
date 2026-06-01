@@ -65,6 +65,64 @@ function ThreadRow({ agentId, threadId }: { agentId: string; threadId: string })
   );
 }
 
+function NameRow({ heartbeat }: { heartbeat: Heartbeat }) {
+  const update = useUpdateHeartbeat(heartbeat.agentId, heartbeat.id);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(heartbeat.name ?? '');
+
+  const startEdit = () => {
+    setValue(heartbeat.name ?? '');
+    setEditing(true);
+  };
+  const cancel = () => {
+    setValue(heartbeat.name ?? '');
+    setEditing(false);
+  };
+  const save = () => {
+    const trimmed = value.trim();
+    if (trimmed === (heartbeat.name ?? '')) {
+      cancel();
+      return;
+    }
+    update.mutate(
+      { name: trimmed },
+      {
+        onSuccess: () => setEditing(false),
+      },
+    );
+  };
+
+  return (
+    <MetaItem
+      label="Name"
+      action={!editing ? <EditIconButton onClick={startEdit} label="Edit name" testId="heartbeat-name-edit" /> : null}
+    >
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <Input
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            disabled={update.isPending}
+            placeholder="optional label"
+            data-testid="heartbeat-name-input"
+            autoFocus
+          />
+          <Button onClick={save} disabled={update.isPending} size="sm" data-testid="heartbeat-name-save">
+            <CheckIcon className="h-3.5 w-3.5" />
+          </Button>
+          <Button onClick={cancel} disabled={update.isPending} size="sm" variant="ghost">
+            <XIcon className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : heartbeat.name ? (
+        <span className="text-ui-md">{heartbeat.name}</span>
+      ) : (
+        <span className="text-neutral4 text-ui-sm">Unnamed</span>
+      )}
+    </MetaItem>
+  );
+}
+
 function CronRow({ heartbeat }: { heartbeat: Heartbeat }) {
   const update = useUpdateHeartbeat(heartbeat.agentId, heartbeat.id);
   const [editing, setEditing] = useState(false);
@@ -285,6 +343,8 @@ export function HeartbeatMetaCard({ heartbeat }: { heartbeat: Heartbeat }) {
           {heartbeat.agentId}
         </Link>
       </MetaItem>
+
+      <NameRow heartbeat={heartbeat} />
 
       {heartbeat.threadId ? <ThreadRow agentId={heartbeat.agentId} threadId={heartbeat.threadId} /> : null}
 

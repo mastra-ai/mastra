@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import type { AgentSignalActiveBehavior, AgentSignalIdleBehavior } from '../types';
+import type { AgentSignalAttributes } from '../signals';
 
 export const HeartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
 
@@ -46,8 +46,9 @@ export const HEARTBEAT_SCHEDULE_PREFIX = 'hb_';
 
 /**
  * Status reported by a single heartbeat run. The {@link HeartbeatWorker}
- * derives the scheduler trigger row's `outcome` (`published`/`failed`)
- * from this; the status is also surfaced on the trigger row's metadata.
+ * derives the scheduler trigger row's `outcome` (`succeeded`, `delivered`,
+ * `persisted`, `discarded`, `skipped`, `aborted`, or `failed`) from this;
+ * the status is also surfaced on the trigger row's metadata.
  *
  * Distinct from `ScheduleTriggerOutcome` (which describes scheduler-level
  * dispatch results); this describes what the heartbeat tick itself did.
@@ -113,65 +114,119 @@ export const HeartbeatOutputSchema = z.object({
 
 export type HeartbeatOutput = z.infer<typeof HeartbeatOutputSchema>;
 
-/**
- * @experimental Agent heartbeats are experimental and may change in a future release.
- *
- * Options accepted by {@link Agent.setHeartbeat}.
- */
-export interface SetHeartbeatOptions {
-  /** Cron expression (5-, 6-, or 7-part — croner syntax). Required. */
-  cron: string;
-  /** IANA timezone for the cron expression. Defaults to UTC. */
-  timezone?: string;
-  /**
-   * Override the deterministic schedule id. Defaults to
-   * `hb_<agentId>` (threadless) or `hb_<agentId>_<threadId>` (threaded).
-   */
-  id?: string;
-  metadata?: Record<string, unknown>;
+// ---------------------------------------------------------------------------
+// Lifecycle hooks
+//
+// User-defined callbacks on `new Agent({ heartbeat: { ... } })`. Mirror the
+// `agent.stream` `onFinish`/`onError`/`onAbort` conventions so users learn one
+// mental model. `prepare` lets users compute fire-time parameters (e.g. create
+// a Slack thread per fire) or skip the fire entirely by returning null.
+// ---------------------------------------------------------------------------
 
-  /** When provided, runs the heartbeat against this thread via `agent.sendSignal`. */
+/** Effective parameters the heartbeat worker uses on a single fire. */
+export type HeartbeatEffective = {
   threadId?: string;
-  /** Required when `threadId` is provided. Passed to `sendSignal`. */
   resourceId?: string;
-  /** Prompt sent to the agent on each fire. */
   prompt: string;
-
-  /**
-   * Type of signal sent in threaded mode. Defaults to `'system-reminder'`,
-   * so heartbeat-driven turns are surfaced as a system reminder rather than
-   * appearing in the thread as a user message. Set to `'user-message'` if
-   * you want the heartbeat to look like the user said something.
-   * Ignored when `threadId` is not provided.
-   */
-  signalType?: string;
-  /**
-   * Behavior when the target thread already has an active run.
-   * Defaults to `'discard'`. Ignored when `threadId` is not provided.
-   */
-  ifActive?: AgentSignalActiveBehavior;
-  /**
-   * Behavior when the target thread is idle.
-   * Defaults to `'wake'`. Ignored when `threadId` is not provided.
-   */
-  ifIdle?: AgentSignalIdleBehavior;
-
-  /** Only fire during this daily window. */
-  activeHours?: { start: string; end: string; timezone?: string };
-  /**
-   * Skip the fire if the thread's `updatedAt` is within this many milliseconds.
-   * Only meaningful in threaded mode; rejected otherwise.
-   */
-  idleThresholdMs?: number;
-  /**
-   * Broadcast policy for the chunks produced by this heartbeat-driven run.
-   * Defaults to `'live'`.
-   */
   broadcast?: HeartbeatBroadcastMode;
-  /**
-   * Schedule status. On create, omitting defaults to `'active'`. On update
-   * of an existing heartbeat, omitting preserves the current status; pass
-   * `'paused'` or `'active'` to flip it.
-   */
-  status?: 'active' | 'paused';
+  signalType?: string;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  attributes?: AgentSignalAttributes;
+  providerOptions?: Record<string, unknown>;
+};
+
+/** Trigger context passed to every hook. */
+export type HeartbeatTriggerInfo = {
+  kind: 'cron' | 'manual';
+  firedAt: Date;
+};
+
+/** Limited terminal-state snapshot for a heartbeat-driven agent run. */
+export type HeartbeatRunResultSnapshot = {
+  text?: string;
+  usage?: Record<string, unknown>;
+  finishReason?: string;
+};
+
+/** Forward-declared so this file does not import from `./heartbeats`. */
+interface HeartbeatRef {
+  id: string;
+  agentId: string;
+  name?: string;
+  [key: string]: unknown;
 }
+
+/** Argument passed to `heartbeat.prepare`. */
+export type HeartbeatPrepareContext<TMastra = unknown> = {
+  mastra: TMastra;
+  heartbeat: HeartbeatRef;
+  trigger: HeartbeatTriggerInfo;
+};
+
+/**
+ * Return value from `heartbeat.prepare`.
+ *
+ * - object    → merged into the row defaults; missing fields fall back to the row
+ * - `null`    → skip this fire (outcome: 'skipped'); the worker records the trigger
+ *               row and fires `onFinish({ outcome: 'skipped' })`
+ * - `undefined` → use row defaults verbatim
+ */
+export type HeartbeatPrepareResult = Partial<HeartbeatEffective>;
+
+/** Argument passed to `heartbeat.onFinish` for any non-error, non-abort outcome. */
+export type HeartbeatFinishContext<TMastra = unknown> = {
+  mastra: TMastra;
+  heartbeat: HeartbeatRef;
+  trigger: HeartbeatTriggerInfo;
+  outcome: 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped';
+  /** Present for `succeeded` and `delivered` outcomes. */
+  runId?: string;
+  /** True when `outcome === 'delivered'` and the signal joined an active run. */
+  joinedExistingRun?: boolean;
+  /** Best-effort terminal snapshot; populated for `succeeded` runs. */
+  result?: HeartbeatRunResultSnapshot;
+  effective: HeartbeatEffective;
+};
+
+/** Argument passed to `heartbeat.onError` whenever `prepare`, `sendSignal`, or the agent run threw. */
+export type HeartbeatErrorContext<TMastra = unknown> = {
+  mastra: TMastra;
+  heartbeat: HeartbeatRef;
+  trigger: HeartbeatTriggerInfo;
+  phase: 'prepare' | 'run';
+  error: Error;
+  runId?: string;
+  /** Best-effort effective view; may be partial if `prepare` threw before merging. */
+  effective?: HeartbeatEffective;
+};
+
+/** Argument passed to `heartbeat.onAbort` when the run was aborted mid-stream. */
+export type HeartbeatAbortContext<TMastra = unknown> = {
+  mastra: TMastra;
+  heartbeat: HeartbeatRef;
+  trigger: HeartbeatTriggerInfo;
+  runId: string;
+  effective: HeartbeatEffective;
+};
+
+/**
+ * Bundle of lifecycle hooks accepted by `new Agent({ heartbeat: { ... } })`.
+ *
+ * `onFinish` fires once per heartbeat trigger when the trigger reached a
+ * non-error, non-abort terminal state. `onError` fires when `prepare`,
+ * `sendSignal`, or the agent run threw. `onAbort` fires when the run was
+ * aborted mid-stream. `prepare` can return overrides, `null` to skip, or
+ * `undefined` to use row defaults.
+ *
+ * Hook exceptions are caught and logged; they never re-route the worker or
+ * recurse into another hook.
+ */
+export type HeartbeatHooks<TMastra = unknown> = {
+  prepare?: (
+    ctx: HeartbeatPrepareContext<TMastra>,
+  ) => Promise<HeartbeatPrepareResult | null | undefined> | HeartbeatPrepareResult | null | undefined;
+  onFinish?: (ctx: HeartbeatFinishContext<TMastra>) => Promise<void> | void;
+  onError?: (ctx: HeartbeatErrorContext<TMastra>) => Promise<void> | void;
+  onAbort?: (ctx: HeartbeatAbortContext<TMastra>) => Promise<void> | void;
+};

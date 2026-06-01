@@ -52,7 +52,7 @@ import type {
   ListHeartbeatTriggersParams,
   ListHeartbeatTriggersResponse,
   RunHeartbeatResponse,
-  SetHeartbeatOptions,
+  CreateHeartbeatInput,
   UpdateHeartbeatOptions,
 } from '../types';
 
@@ -3211,17 +3211,22 @@ export class Agent extends BaseResource {
   // -------------------------------------------------------------------------
   // Heartbeats
   //
-  // Mirrors the public Agent.setHeartbeat / clearHeartbeat / getHeartbeat /
-  // listHeartbeats API. The server flattens the underlying schedule into a
-  // `Heartbeat` view model so callers never have to know about the workflow
-  // or schedule that backs it.
+  // Mirrors the public `mastra.heartbeats.*` service, scoped to this agent.
+  // Heartbeats are persisted as `Schedule` rows with `target.type === 'heartbeat'`;
+  // the server flattens that representation into a `Heartbeat` view model.
   // -------------------------------------------------------------------------
 
   /**
-   * Lists all heartbeats owned by this agent.
+   * Lists heartbeats owned by this agent, optionally filtered by
+   * `threadId`, `resourceId`, or `name`.
    */
-  listHeartbeats(): Promise<Heartbeat[]> {
-    return this.request<{ heartbeats: Heartbeat[] }>(`/agents/${this.agentId}/heartbeats`).then(
+  listHeartbeats(params: { threadId?: string; resourceId?: string; name?: string } = {}): Promise<Heartbeat[]> {
+    const search = new URLSearchParams();
+    if (params.threadId) search.set('threadId', params.threadId);
+    if (params.resourceId) search.set('resourceId', params.resourceId);
+    if (params.name) search.set('name', params.name);
+    const qs = search.toString();
+    return this.request<{ heartbeats: Heartbeat[] }>(`/agents/${this.agentId}/heartbeats${qs ? `?${qs}` : ''}`).then(
       response => response.heartbeats,
     );
   }
@@ -3234,9 +3239,11 @@ export class Agent extends BaseResource {
   }
 
   /**
-   * Creates (or upserts) a heartbeat on this agent.
+   * Creates a heartbeat on this agent. Each call creates a new heartbeat
+   * with a random `hb_<uuid>` id — multiple heartbeats per agent/thread are
+   * supported. Use `name` to label distinct heartbeats.
    */
-  setHeartbeat(options: SetHeartbeatOptions): Promise<Heartbeat> {
+  createHeartbeat(options: CreateHeartbeatInput): Promise<Heartbeat> {
     return this.request(`/agents/${this.agentId}/heartbeats`, {
       method: 'POST',
       body: options,

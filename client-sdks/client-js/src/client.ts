@@ -2230,6 +2230,9 @@ export class MastraClient extends BaseResource {
   public listHeartbeats(params: ListHeartbeatsParams = {}): Promise<Heartbeat[]> {
     const searchParams = new URLSearchParams();
     if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.name) searchParams.set('name', params.name);
     const qs = searchParams.toString();
     return this.request<{ heartbeats: Heartbeat[] }>(`/heartbeats${qs ? `?${qs}` : ''}`).then(
       response => response.heartbeats,

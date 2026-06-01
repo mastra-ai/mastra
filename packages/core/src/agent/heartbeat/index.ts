@@ -10,5 +10,22 @@ export {
   type HeartbeatInput,
   type HeartbeatOutput,
   type HeartbeatRunStatus,
-  type SetHeartbeatOptions,
+  type HeartbeatHooks,
+  type HeartbeatPrepareContext,
+  type HeartbeatPrepareResult,
+  type HeartbeatFinishContext,
+  type HeartbeatErrorContext,
+  type HeartbeatAbortContext,
+  type HeartbeatTriggerInfo,
+  type HeartbeatEffective,
+  type HeartbeatRunResultSnapshot,
 } from './types';
+export {
+  Heartbeats,
+  toHeartbeat,
+  type CreateHeartbeatInput,
+  type Heartbeat,
+  type HeartbeatTriggerRow,
+  type ListHeartbeatsFilter,
+  type UpdateHeartbeatInput,
+} from './heartbeats';

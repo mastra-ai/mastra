@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { Heartbeats } from '../agent/heartbeat/heartbeats';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -566,13 +567,14 @@ export class Mastra<
   #hasScheduledWorkflow = false;
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
+  #heartbeats?: Heartbeats;
   #environment?: string;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
   /**
    * Tracks whether `startWorkers()` has already run. Used to decide whether
-   * lazy scheduler injection (e.g. from `agent.setHeartbeat()` after boot)
+   * lazy scheduler injection (e.g. from `mastra.heartbeats.create()` after boot)
    * needs to also `init`/`start` the worker, or whether the normal
    * `startWorkers()` path will pick it up.
    */
@@ -719,6 +721,32 @@ export class Mastra<
    */
   public get channels(): TChannels {
     return (this.#channels ?? {}) as TChannels;
+  }
+
+  /**
+   * Canonical entrypoint for heartbeats — recurring agent runs persisted as
+   * schedule rows with `target.type === 'heartbeat'`. Use to create, list,
+   * update, pause/resume, manually fire, or inspect trigger history for
+   * heartbeats across any agent.
+   *
+   * Lazily constructed. Operates against `getStorage()?.getStore('schedules')`.
+   *
+   * @example
+   * ```ts
+   * const hb = await mastra.heartbeats.create({
+   *   agentId: 'pinger',
+   *   name: 'morning-checkin',
+   *   cron: '0 9 * * *',
+   *   prompt: 'good morning, anything to report?',
+   *   threadId: 't1',
+   *   resourceId: 'u1',
+   * });
+   * await mastra.heartbeats.list({ agentId: 'pinger' });
+   * ```
+   */
+  public get heartbeats(): Heartbeats {
+    this.#heartbeats ??= new Heartbeats(this as unknown as Mastra);
+    return this.#heartbeats;
   }
 
   /**
@@ -3295,7 +3323,7 @@ export class Mastra<
 
   /**
    * Signal that a heartbeat has been registered imperatively at runtime
-   * (e.g. `agent.setHeartbeat()` after `startWorkers()`). Flips the
+   * (e.g. `mastra.heartbeats.create()` after `startWorkers()`). Flips the
    * scheduler-requested flag and, if workers are already running,
    * lazily injects + starts both the scheduler and heartbeat workers.
    *
@@ -3312,7 +3340,7 @@ export class Mastra<
    * Lazily inject and start the SchedulerWorker (and HeartbeatWorker when
    * needed) after `startWorkers()` has already run. Used by features that
    * surface a need for the scheduler at runtime (e.g.
-   * `agent.setHeartbeat()`). No-op when the scheduler is disabled, no
+   * `mastra.heartbeats.create()`). No-op when the scheduler is disabled, no
    * storage is configured, or the workers are already present.
    *
    * @internal
@@ -4014,7 +4042,7 @@ export class Mastra<
     // Flip the scheduler-requested flag if any heartbeat schedule rows
     // exist in storage from a previous boot. Without this, a process
     // that boots with only DB-side heartbeats (no in-code declarative
-    // schedules and no imperative `setHeartbeat()` calls yet) would
+    // schedules and no imperative `heartbeats.create()` calls yet) would
     // skip injecting the scheduler + heartbeat workers entirely.
     if (!name) {
       await this.#detectExistingHeartbeats();
@@ -4115,7 +4143,7 @@ export class Mastra<
     }
 
     // Track that the boot path has executed at least once so subsequent
-    // runtime signals (e.g. `agent.setHeartbeat()`) know whether they need
+    // runtime signals (e.g. `mastra.heartbeats.create()`) know whether they need
     // to lazily inject + start additional workers themselves.
     this.#workersStarted = true;
   }

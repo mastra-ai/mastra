@@ -87,6 +87,42 @@ describe('HeartbeatMetaCard', () => {
     expect(link.textContent).toBe('thread-untitled');
   });
 
+  it('inline-edits name and PATCHes to the heartbeats route', async () => {
+    const heartbeat = makeHeartbeat({
+      agentId: 'chef',
+      id: 'hb_chef_thread-1',
+      name: 'morning-checkin',
+    });
+    let receivedBody: Record<string, unknown> | undefined;
+
+    server.use(
+      http.get(`${BASE_URL}/api/memory/threads/:threadId`, () =>
+        HttpResponse.json({
+          id: 'thread-1',
+          resourceId: 'chef',
+          title: 'A',
+          metadata: {},
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }),
+      ),
+      http.patch(`${BASE_URL}/api/agents/chef/heartbeats/hb_chef_thread-1`, async ({ request }) => {
+        receivedBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...heartbeat, name: 'evening-checkin' });
+      }),
+    );
+
+    render(<HeartbeatMetaCard heartbeat={heartbeat} />, { wrapper: makeWrapper() });
+
+    fireEvent.click(screen.getByTestId('heartbeat-name-edit'));
+
+    const input = await screen.findByTestId<HTMLInputElement>('heartbeat-name-input');
+    fireEvent.change(input, { target: { value: 'evening-checkin' } });
+    fireEvent.click(screen.getByTestId('heartbeat-name-save'));
+
+    await waitFor(() => expect(receivedBody).toEqual({ name: 'evening-checkin' }));
+  });
+
   it('inline-edits cron and PATCHes to the dedicated heartbeats route', async () => {
     const heartbeat = makeHeartbeat({ agentId: 'chef', id: 'hb_chef_thread-1', cron: '*/30 * * * * *' });
     let receivedBody: Record<string, unknown> | undefined;

@@ -18,35 +18,29 @@ function makeMastra(agents: Record<string, Agent>) {
   return new Mastra({ logger: false, storage: new MockStore(), agents });
 }
 
-describe('Agent.setHeartbeat / clearHeartbeat / getHeartbeat / listHeartbeats', () => {
-  it('creates a threadless heartbeat with deterministic id', async () => {
+describe('agent.heartbeats sugar', () => {
+  it('creates a threadless heartbeat with a random hb_ id', async () => {
     const agent = makeAgent('pinger');
     makeMastra({ pinger: agent });
 
-    const schedule = await agent.setHeartbeat({
+    const hb = await agent.heartbeats.create({
       cron: '*/5 * * * *',
       prompt: 'ping',
     });
 
-    expect(schedule.id).toBe(`${HEARTBEAT_SCHEDULE_PREFIX}pinger`);
-    expect(schedule.ownerType).toBe('agent');
-    expect(schedule.ownerId).toBe('pinger');
-    expect(schedule.target.type).toBe('heartbeat');
-    expect(schedule.target as any).toMatchObject({
-      type: 'heartbeat',
-      agentId: 'pinger',
-      prompt: 'ping',
-    });
-    expect((schedule.target as any).threadId).toBeUndefined();
-    expect(schedule.status).toBe('active');
-    expect(typeof schedule.nextFireAt).toBe('number');
+    expect(hb.id.startsWith(HEARTBEAT_SCHEDULE_PREFIX)).toBe(true);
+    expect(hb.agentId).toBe('pinger');
+    expect(hb.prompt).toBe('ping');
+    expect(hb.threadId).toBeUndefined();
+    expect(hb.status).toBe('active');
+    expect(typeof hb.nextFireAt).toBe('number');
   });
 
-  it('creates a threaded heartbeat with deterministic per-thread id', async () => {
+  it('creates a threaded heartbeat with the threaded knobs', async () => {
     const agent = makeAgent('pinger');
     makeMastra({ pinger: agent });
 
-    const schedule = await agent.setHeartbeat({
+    const hb = await agent.heartbeats.create({
       cron: '*/5 * * * *',
       prompt: 'check in',
       threadId: 't1',
@@ -56,44 +50,50 @@ describe('Agent.setHeartbeat / clearHeartbeat / getHeartbeat / listHeartbeats', 
       ifIdle: 'wake',
     });
 
-    expect(schedule.id).toBe(`${HEARTBEAT_SCHEDULE_PREFIX}pinger_t1`);
-    expect(schedule.target as any).toMatchObject({
-      type: 'heartbeat',
-      threadId: 't1',
-      resourceId: 'u1',
-      signalType: 'system-reminder',
-      ifActive: 'persist',
-      ifIdle: 'wake',
-    });
+    expect(hb.threadId).toBe('t1');
+    expect(hb.resourceId).toBe('u1');
+    expect(hb.signalType).toBe('system-reminder');
+    expect(hb.ifActive).toBe('persist');
+    expect(hb.ifIdle).toBe('wake');
   });
 
-  it('upserts when called twice with the same id', async () => {
+  it('supports multiple heartbeats per agent/thread with distinct ids', async () => {
     const agent = makeAgent('pinger');
     makeMastra({ pinger: agent });
 
-    const first = await agent.setHeartbeat({ cron: '*/5 * * * *', prompt: 'a' });
-    const second = await agent.setHeartbeat({ cron: '*/10 * * * *', prompt: 'b' });
+    const a = await agent.heartbeats.create({
+      cron: '*/5 * * * *',
+      prompt: 'a',
+      name: 'morning',
+      threadId: 't1',
+      resourceId: 'u1',
+    });
+    const b = await agent.heartbeats.create({
+      cron: '*/10 * * * *',
+      prompt: 'b',
+      name: 'evening',
+      threadId: 't1',
+      resourceId: 'u1',
+    });
 
-    expect(second.id).toBe(first.id);
-    expect(second.cron).toBe('*/10 * * * *');
-    expect((second.target as any).prompt).toBe('b');
-
-    const list = await agent.listHeartbeats();
-    expect(list).toHaveLength(1);
+    expect(a.id).not.toBe(b.id);
+    const list = await agent.heartbeats.list();
+    expect(list).toHaveLength(2);
+    expect(list.map(h => h.name).sort()).toEqual(['evening', 'morning']);
   });
 
   it('rejects invalid cron', async () => {
     const agent = makeAgent('pinger');
     makeMastra({ pinger: agent });
 
-    await expect(agent.setHeartbeat({ cron: 'not-a-cron', prompt: 'p' })).rejects.toThrow();
+    await expect(agent.heartbeats.create({ cron: 'not-a-cron', prompt: 'p' })).rejects.toThrow();
   });
 
   it('rejects threadId without resourceId', async () => {
     const agent = makeAgent('pinger');
     makeMastra({ pinger: agent });
 
-    await expect(agent.setHeartbeat({ cron: '*/5 * * * *', prompt: 'p', threadId: 't1' })).rejects.toThrow(
+    await expect(agent.heartbeats.create({ cron: '*/5 * * * *', prompt: 'p', threadId: 't1' })).rejects.toThrow(
       /resourceId/,
     );
   });
@@ -102,72 +102,108 @@ describe('Agent.setHeartbeat / clearHeartbeat / getHeartbeat / listHeartbeats', 
     const agent = makeAgent('pinger');
     makeMastra({ pinger: agent });
 
-    await expect(agent.setHeartbeat({ cron: '*/5 * * * *', prompt: 'p', ifIdle: 'wake' }) as any).rejects.toThrow(
+    await expect(agent.heartbeats.create({ cron: '*/5 * * * *', prompt: 'p', ifIdle: 'wake' } as any)).rejects.toThrow(
       /threadId/,
     );
   });
 
   it('refuses heartbeats when no Mastra storage adapter exists', async () => {
     const agent = makeAgent('pinger');
-    // Mastra registered without storage.
     new Mastra({ logger: false, agents: { pinger: agent } });
-    await expect(agent.setHeartbeat({ cron: '*/5 * * * *', prompt: 'p' })).rejects.toThrow(/schedules/);
+    await expect(agent.heartbeats.create({ cron: '*/5 * * * *', prompt: 'p' })).rejects.toThrow(/schedules/);
   });
 
   it('refuses heartbeats when agent is unregistered', async () => {
     const agent = makeAgent('pinger');
-    await expect(agent.setHeartbeat({ cron: '*/5 * * * *', prompt: 'p' })).rejects.toThrow(/Mastra/);
+    await expect(agent.heartbeats.create({ cron: '*/5 * * * *', prompt: 'p' })).rejects.toThrow(/Mastra/);
   });
 
-  it('clearHeartbeat removes the heartbeat by threadId', async () => {
+  it('delete removes the heartbeat by id', async () => {
     const agent = makeAgent('pinger');
     makeMastra({ pinger: agent });
 
-    await agent.setHeartbeat({ cron: '*/5 * * * *', prompt: 'p', threadId: 't1', resourceId: 'u1' });
-    expect(await agent.getHeartbeat('t1')).not.toBeNull();
+    const hb = await agent.heartbeats.create({
+      cron: '*/5 * * * *',
+      prompt: 'p',
+      threadId: 't1',
+      resourceId: 'u1',
+    });
+    expect(await agent.heartbeats.get(hb.id)).not.toBeNull();
 
-    await agent.clearHeartbeat('t1');
-    expect(await agent.getHeartbeat('t1')).toBeNull();
+    await agent.heartbeats.delete(hb.id);
+    expect(await agent.heartbeats.get(hb.id)).toBeNull();
   });
 
-  it('clearHeartbeat is a no-op for unknown ids', async () => {
+  it('delete is a no-op for unknown ids', async () => {
     const agent = makeAgent('pinger');
     makeMastra({ pinger: agent });
-    await expect(agent.clearHeartbeat('nope')).resolves.toBeUndefined();
+    await expect(agent.heartbeats.delete('hb_does-not-exist')).resolves.toBeUndefined();
   });
 
-  it('clearHeartbeat refuses to delete heartbeats owned by other agents', async () => {
+  it('delete refuses to delete heartbeats owned by other agents', async () => {
     const a = makeAgent('a');
     const b = makeAgent('b');
     makeMastra({ a, b });
-    await a.setHeartbeat({ cron: '*/5 * * * *', prompt: 'p' });
-    // Try to delete a's heartbeat by spoofing its full id from b
-    await expect(b.clearHeartbeat(`${HEARTBEAT_SCHEDULE_PREFIX}a`)).rejects.toThrow(/not owned/);
+    const aHb = await a.heartbeats.create({ cron: '*/5 * * * *', prompt: 'p' });
+    await expect(b.heartbeats.delete(aHb.id)).rejects.toThrow(/owned/);
   });
 
-  it('getHeartbeat returns null for non-owned schedules', async () => {
+  it('get returns null for non-owned heartbeats', async () => {
     const a = makeAgent('a');
     const b = makeAgent('b');
     makeMastra({ a, b });
-    await a.setHeartbeat({ cron: '*/5 * * * *', prompt: 'p' });
-    expect(await b.getHeartbeat(`${HEARTBEAT_SCHEDULE_PREFIX}a`)).toBeNull();
+    const aHb = await a.heartbeats.create({ cron: '*/5 * * * *', prompt: 'p' });
+    // mastra.heartbeats.get returns it (canonical), but agent.heartbeats.list
+    // filters by agentId, so it never surfaces on b.
+    const bList = await b.heartbeats.list();
+    expect(bList.find(h => h.id === aHb.id)).toBeUndefined();
   });
 
-  it('listHeartbeats only returns this agent`s heartbeats', async () => {
+  it('list only returns this agent`s heartbeats', async () => {
     const a = makeAgent('a');
     const b = makeAgent('b');
     makeMastra({ a, b });
 
-    await a.setHeartbeat({ cron: '*/5 * * * *', prompt: 'A' });
-    await a.setHeartbeat({ cron: '*/5 * * * *', prompt: 'A2', threadId: 't', resourceId: 'r' });
-    await b.setHeartbeat({ cron: '*/5 * * * *', prompt: 'B' });
+    await a.heartbeats.create({ cron: '*/5 * * * *', prompt: 'A' });
+    await a.heartbeats.create({ cron: '*/5 * * * *', prompt: 'A2', threadId: 't', resourceId: 'r' });
+    await b.heartbeats.create({ cron: '*/5 * * * *', prompt: 'B' });
 
-    const aList = await a.listHeartbeats();
+    const aList = await a.heartbeats.list();
     expect(aList).toHaveLength(2);
-    expect(aList.every(s => s.ownerId === 'a')).toBe(true);
+    expect(aList.every(h => h.agentId === 'a')).toBe(true);
 
-    const bList = await b.listHeartbeats();
+    const bList = await b.heartbeats.list();
     expect(bList).toHaveLength(1);
-    expect(bList[0]!.ownerId).toBe('b');
+    expect(bList[0]!.agentId).toBe('b');
+  });
+
+  it('list supports filtering by threadId and name', async () => {
+    const agent = makeAgent('pinger');
+    makeMastra({ pinger: agent });
+
+    await agent.heartbeats.create({
+      cron: '*/5 * * * *',
+      prompt: 'a',
+      name: 'morning',
+      threadId: 't1',
+      resourceId: 'u1',
+    });
+    await agent.heartbeats.create({
+      cron: '*/5 * * * *',
+      prompt: 'b',
+      name: 'evening',
+      threadId: 't1',
+      resourceId: 'u1',
+    });
+    await agent.heartbeats.create({
+      cron: '*/5 * * * *',
+      prompt: 'c',
+      threadId: 't2',
+      resourceId: 'u1',
+    });
+
+    expect(await agent.heartbeats.list({ threadId: 't1' })).toHaveLength(2);
+    expect(await agent.heartbeats.list({ name: 'morning' })).toHaveLength(1);
+    expect(await agent.heartbeats.list({ threadId: 't2' })).toHaveLength(1);
   });
 });

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { Agent } from '../agent';
-import { HEARTBEAT_SCHEDULE_PREFIX } from './types';
 
 async function waitUntil(
   predicate: () => boolean | Promise<boolean>,
@@ -41,7 +40,7 @@ function makeAgent(id: string): Agent {
 }
 
 describe('Agent heartbeats — scheduler integration', () => {
-  it('auto-enables the scheduler when setHeartbeat() is called before startWorkers()', async () => {
+  it('auto-enables the scheduler when create() is called before startWorkers()', async () => {
     const agent = makeAgent('beat');
     const storage = new MockStore();
     const mastra = new Mastra({
@@ -50,38 +49,36 @@ describe('Agent heartbeats — scheduler integration', () => {
       agents: { beat: agent },
       // Heartbeats are imperative — there is no declarative scheduled
       // workflow here. The scheduler should still come up because
-      // setHeartbeat() registers the built-in heartbeat workflow, which
-      // signals that the scheduler is needed.
+      // creating a heartbeat signals that the scheduler is needed.
       scheduler: { tickIntervalMs: 50 },
     });
 
-    await agent.setHeartbeat({ cron: '* * * * * *', prompt: 'ping' });
+    const hb = await agent.heartbeats.create({ cron: '* * * * * *', prompt: 'ping' });
     await mastra.startWorkers();
     await waitForScheduler(mastra);
 
     const schedulesStore = (await storage.getStore('schedules'))!;
-    const scheduleId = `${HEARTBEAT_SCHEDULE_PREFIX}beat`;
 
-    const initial = (await schedulesStore.getSchedule(scheduleId))!;
+    const initial = (await schedulesStore.getSchedule(hb.id))!;
     await waitUntil(async () => {
-      const current = await schedulesStore.getSchedule(scheduleId);
+      const current = await schedulesStore.getSchedule(hb.id);
       return !!current && current.nextFireAt !== initial.nextFireAt;
     });
     // HeartbeatWorker records the trigger after the agent dispatch
     // completes, which races with nextFireAt advancement in the scheduler.
     await waitUntil(async () => {
-      const t = await schedulesStore.listTriggers(scheduleId);
+      const t = await schedulesStore.listTriggers(hb.id);
       return t.length > 0;
     });
 
-    const triggers = await schedulesStore.listTriggers(scheduleId);
+    const triggers = await schedulesStore.listTriggers(hb.id);
     expect(triggers.length).toBeGreaterThan(0);
-    expect(triggers[0]!.outcome).toBe('published');
+    expect(triggers[0]!.outcome).toBe('succeeded');
 
     await mastra.shutdown();
   }, 10_000);
 
-  it('lazily injects + starts the scheduler when setHeartbeat() is called after startWorkers()', async () => {
+  it('lazily injects + starts the scheduler when create() is called after startWorkers()', async () => {
     const agent = makeAgent('beat-late');
     const storage = new MockStore();
     const mastra = new Mastra({
@@ -96,28 +93,27 @@ describe('Agent heartbeats — scheduler integration', () => {
     // workflows, no heartbeats, no explicit enabled flag.
     expect(mastra.scheduler).toBeUndefined();
 
-    await agent.setHeartbeat({ cron: '* * * * * *', prompt: 'ping' });
+    const hb = await agent.heartbeats.create({ cron: '* * * * * *', prompt: 'ping' });
 
-    // setHeartbeat() should have lazily injected + started the scheduler
+    // create() should have lazily injected + started the scheduler
     // and heartbeat workers via __ensureHeartbeatRuntimeReady().
     await waitForScheduler(mastra);
 
     const schedulesStore = (await storage.getStore('schedules'))!;
-    const scheduleId = `${HEARTBEAT_SCHEDULE_PREFIX}beat-late`;
 
-    const initial = (await schedulesStore.getSchedule(scheduleId))!;
+    const initial = (await schedulesStore.getSchedule(hb.id))!;
     await waitUntil(async () => {
-      const current = await schedulesStore.getSchedule(scheduleId);
+      const current = await schedulesStore.getSchedule(hb.id);
       return !!current && current.nextFireAt !== initial.nextFireAt;
     });
     await waitUntil(async () => {
-      const t = await schedulesStore.listTriggers(scheduleId);
+      const t = await schedulesStore.listTriggers(hb.id);
       return t.length > 0;
     });
 
-    const triggers = await schedulesStore.listTriggers(scheduleId);
+    const triggers = await schedulesStore.listTriggers(hb.id);
     expect(triggers.length).toBeGreaterThan(0);
-    expect(triggers[0]!.outcome).toBe('published');
+    expect(triggers[0]!.outcome).toBe('succeeded');
 
     await mastra.shutdown();
   }, 10_000);
@@ -135,7 +131,7 @@ describe('Agent heartbeats — scheduler integration', () => {
         agents: { 'beat-rehydrate': agent },
         scheduler: { tickIntervalMs: 50 },
       });
-      await agent.setHeartbeat({ cron: '* * * * * *', prompt: 'ping' });
+      await agent.heartbeats.create({ cron: '* * * * * *', prompt: 'ping' });
       await mastra.startWorkers();
       await waitForScheduler(mastra);
       await mastra.shutdown();
@@ -143,7 +139,7 @@ describe('Agent heartbeats — scheduler integration', () => {
 
     // Boot 2: fresh Mastra instance reusing the same storage. The scheduler
     // and heartbeat worker must start automatically because storage already
-    // has a heartbeat row, without anyone calling setHeartbeat() again.
+    // has a heartbeat row, without anyone calling create() again.
     const agent2 = makeAgent('beat-rehydrate');
     const mastra2 = new Mastra({
       logger: false,
@@ -171,10 +167,10 @@ describe('Agent heartbeats — scheduler integration', () => {
     });
 
     await mastra.startWorkers();
-    await agent.setHeartbeat({ cron: '* * * * * *', prompt: 'ping' });
+    await agent.heartbeats.create({ cron: '* * * * * *', prompt: 'ping' });
 
     // Scheduler stays off because the user explicitly disabled it,
-    // even though setHeartbeat() would normally signal "scheduler needed".
+    // even though create() would normally signal "scheduler needed".
     expect(mastra.scheduler).toBeUndefined();
 
     await mastra.shutdown();

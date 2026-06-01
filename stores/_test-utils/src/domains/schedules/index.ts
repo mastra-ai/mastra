@@ -250,7 +250,7 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
             scheduleId: 's1',
             runId: 'r1',
             id: 'fire_1',
-            outcome: 'deferred',
+            outcome: 'persisted',
           }),
         );
         await scheduleStore.recordTrigger(
@@ -258,7 +258,7 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
             scheduleId: 's1',
             id: 'drain_1',
             runId: null,
-            outcome: 'appended-from-queue',
+            outcome: 'delivered',
             triggerKind: 'queue-drain',
             parentTriggerId: 'fire_1',
             actualFireAt: Date.now() + 1_000,

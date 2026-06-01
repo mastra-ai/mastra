@@ -30,7 +30,7 @@ function makeTrigger(overrides: Partial<ScheduleTrigger> = {}): ScheduleTrigger 
     runId: overrides.runId ?? 'run_1',
     scheduledFireAt: overrides.scheduledFireAt ?? Date.now(),
     actualFireAt: overrides.actualFireAt ?? Date.now(),
-    outcome: overrides.outcome ?? 'published',
+    outcome: overrides.outcome ?? 'succeeded',
     triggerKind: overrides.triggerKind ?? 'schedule-fire',
     error: overrides.error,
   };

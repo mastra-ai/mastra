@@ -1,6 +1,14 @@
-import type { HeartbeatTrigger } from '@mastra/client-js';
+import type { HeartbeatTrigger, ScheduleTriggerOutcome } from '@mastra/client-js';
 import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, Txt } from '@mastra/playground-ui';
-import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react';
+import {
+  AlertTriangleIcon,
+  CheckCircle2Icon,
+  CircleSlashIcon,
+  InboxIcon,
+  MoveRightIcon,
+  PauseCircleIcon,
+  SkipForwardIcon,
+} from 'lucide-react';
 import { formatRelativeTime, formatScheduleTimestamp } from '@/domains/schedules/utils/format';
 
 export interface HeartbeatTriggersListProps {
@@ -27,6 +35,40 @@ function formatDriftValue(driftMs: number): string {
 // the row is almost certainly stale (paused schedule, long downtime, clock skew).
 const DRIFT_WARN_MIN_MS = 30_000;
 const DRIFT_WARN_MAX_MS = 5 * 60_000;
+
+type StatusDisplay = {
+  label: string;
+  icon: React.ReactNode;
+  tone: 'success' | 'info' | 'muted' | 'error';
+};
+
+function statusDisplay(outcome: ScheduleTriggerOutcome): StatusDisplay {
+  switch (outcome) {
+    case 'succeeded':
+      return { label: 'succeeded', icon: <CheckCircle2Icon size={14} />, tone: 'success' };
+    case 'delivered':
+      return { label: 'delivered', icon: <MoveRightIcon size={14} />, tone: 'info' };
+    case 'persisted':
+      return { label: 'persisted', icon: <InboxIcon size={14} />, tone: 'info' };
+    case 'discarded':
+      return { label: 'discarded', icon: <CircleSlashIcon size={14} />, tone: 'muted' };
+    case 'skipped':
+      return { label: 'skipped', icon: <SkipForwardIcon size={14} />, tone: 'muted' };
+    case 'aborted':
+      return { label: 'aborted', icon: <PauseCircleIcon size={14} />, tone: 'muted' };
+    case 'failed':
+      return { label: 'failed', icon: <AlertTriangleIcon size={14} />, tone: 'error' };
+    default:
+      return { label: outcome, icon: <CheckCircle2Icon size={14} />, tone: 'success' };
+  }
+}
+
+const TONE_CLASS: Record<StatusDisplay['tone'], string> = {
+  success: 'text-accent1',
+  info: 'text-icon3',
+  muted: 'text-neutral4',
+  error: 'text-accent2',
+};
 
 export function HeartbeatTriggersList({
   triggers,
@@ -60,6 +102,7 @@ export function HeartbeatTriggersList({
         const driftValue = formatDriftValue(driftMs);
         const startedTooltip = `Scheduled ${formatScheduleTimestamp(t.scheduledFireAt)} — published ${formatScheduleTimestamp(t.actualFireAt)} (drift ${driftValue})`;
         const isPublishFailure = t.outcome === 'failed';
+        const display = statusDisplay(t.outcome);
         const absDrift = Math.abs(driftMs);
         const showDriftWarning = !isPublishFailure && absDrift > DRIFT_WARN_MIN_MS && absDrift <= DRIFT_WARN_MAX_MS;
         const rowKey = `${t.scheduleId}-${t.actualFireAt}-${t.runId ?? 'none'}`;
@@ -81,17 +124,23 @@ export function HeartbeatTriggersList({
                 {isPublishFailure ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent2">
-                        <AlertTriangleIcon size={14} />
-                        failed
+                      <span
+                        className={`inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm ${TONE_CLASS[display.tone]}`}
+                        data-testid="heartbeat-trigger-outcome"
+                      >
+                        {display.icon}
+                        {display.label}
                       </span>
                     </TooltipTrigger>
                     {t.error ? <TooltipContent>{t.error}</TooltipContent> : null}
                   </Tooltip>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent1">
-                    <CheckCircle2Icon size={14} />
-                    fired
+                  <span
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm ${TONE_CLASS[display.tone]}`}
+                    data-testid="heartbeat-trigger-outcome"
+                  >
+                    {display.icon}
+                    {display.label}
                   </span>
                 )}
                 {t.triggerKind === 'manual' ? (

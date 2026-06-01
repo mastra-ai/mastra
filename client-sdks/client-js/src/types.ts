@@ -2814,15 +2814,13 @@ export interface ScheduleResponse {
 
 export type ScheduleTriggerOutcome =
   | 'published'
-  | 'failed'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
   | 'skipped'
-  | 'acked'
-  | 'alerted'
-  | 'deferred'
-  | 'appended-from-queue'
-  | 'dropped-stale'
-  | 'dropped-superseded'
-  | 'dropped-busy';
+  | 'aborted'
+  | 'failed';
 
 export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
@@ -2886,6 +2884,7 @@ export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
 export interface Heartbeat {
   id: string;
   agentId: string;
+  name?: string;
   threadId?: string;
   resourceId?: string;
   prompt: string;
@@ -2922,13 +2921,13 @@ export interface HeartbeatTrigger {
 }
 
 /**
- * Options for `agent.setHeartbeat(...)`. Mirrors the public
- * `SetHeartbeatOptions` shape on the core Agent class.
+ * Options for `agent.createHeartbeat(...)`. Mirrors the public
+ * `CreateHeartbeatInput` shape on the core Heartbeats service.
  */
-export interface SetHeartbeatOptions {
+export interface CreateHeartbeatInput {
   cron: string;
   prompt: string;
-  id?: string;
+  name?: string;
   timezone?: string;
   threadId?: string;
   resourceId?: string;
@@ -2949,6 +2948,7 @@ export interface SetHeartbeatOptions {
 export interface UpdateHeartbeatOptions {
   cron?: string;
   prompt?: string;
+  name?: string;
   timezone?: string;
   signalType?: string;
   ifActive?: 'deliver' | 'persist' | 'discard';
@@ -2961,6 +2961,9 @@ export interface UpdateHeartbeatOptions {
 
 export interface ListHeartbeatsParams {
   agentId?: string;
+  threadId?: string;
+  resourceId?: string;
+  name?: string;
 }
 
 export interface ListHeartbeatsResponse {

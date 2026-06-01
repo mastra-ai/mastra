@@ -5,7 +5,14 @@ import { PullTransport } from '../../worker/transport/pull-transport';
 import type { WorkerTransport } from '../../worker/transport/transport';
 import { MastraWorker } from '../../worker/worker';
 import type { WorkerDeps } from '../../worker/worker';
-import type { HeartbeatRunStatus } from './types';
+import type {
+  HeartbeatEffective,
+  HeartbeatHooks,
+  HeartbeatPrepareContext,
+  HeartbeatPrepareResult,
+  HeartbeatRunStatus,
+  HeartbeatTriggerInfo,
+} from './types';
 
 /** PubSub topic on which the scheduler publishes `heartbeat.fire` events. */
 export const TOPIC_HEARTBEATS = 'heartbeats';
@@ -145,14 +152,18 @@ export class HeartbeatWorker extends MastraWorker {
     const { scheduleId, claimId, scheduledFireAt, target } = data;
     const actualFireAt = Date.now();
 
-    const result = await executeHeartbeat(mastra, scheduleId, target);
+    const result = await executeHeartbeat(mastra, scheduleId, target, {
+      triggerKind: data.triggerKind ?? 'schedule-fire',
+      firedAt: new Date(actualFireAt),
+      logger: this.deps?.logger,
+    });
 
     await this.#recordTrigger({
       scheduleId,
       claimId,
       scheduledFireAt,
       actualFireAt,
-      status: result.status,
+      outcome: result.outcome,
       runId: result.runId,
       error: result.reason,
       triggerKind: data.triggerKind ?? 'schedule-fire',
@@ -164,7 +175,7 @@ export class HeartbeatWorker extends MastraWorker {
     claimId: string;
     scheduledFireAt: number;
     actualFireAt: number;
-    status: HeartbeatRunStatus;
+    outcome: HeartbeatTriggerOutcome;
     runId?: string;
     error?: string;
     triggerKind: 'schedule-fire' | 'manual';
@@ -177,7 +188,7 @@ export class HeartbeatWorker extends MastraWorker {
         runId: args.runId ?? args.claimId,
         scheduledFireAt: args.scheduledFireAt,
         actualFireAt: args.actualFireAt,
-        outcome: deriveTriggerOutcome(args.status),
+        outcome: args.outcome,
         error: args.error,
         triggerKind: args.triggerKind,
       });
@@ -191,20 +202,19 @@ export class HeartbeatWorker extends MastraWorker {
   }
 }
 
-function deriveTriggerOutcome(status: HeartbeatRunStatus): 'published' | 'failed' {
-  switch (status) {
-    case 'agent-missing':
-    case 'thread-missing':
-    case 'invalid-input':
-      return 'failed';
-    default:
-      return 'published';
-  }
-}
+/** Outcome union written to the schedule trigger row for a heartbeat fire. */
+export type HeartbeatTriggerOutcome =
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
+  | 'skipped'
+  | 'aborted'
+  | 'failed';
 
 /**
  * Best-effort delete of the schedule row. Self-clean is best-effort —
- * an explicit `clearHeartbeat()` may have raced us. Swallow errors.
+ * an explicit `heartbeats.delete()` may have raced us. Swallow errors.
  */
 async function selfClean(mastra: Mastra, scheduleId: string): Promise<void> {
   try {
@@ -216,28 +226,38 @@ async function selfClean(mastra: Mastra, scheduleId: string): Promise<void> {
   }
 }
 
+type LooseLogger = { error?: (message: string, ...args: any[]) => void };
+
+/** Optional context the `HeartbeatWorker` passes to `executeHeartbeat`. */
+export interface ExecuteHeartbeatContext {
+  triggerKind?: 'schedule-fire' | 'manual';
+  firedAt?: Date;
+  logger?: LooseLogger;
+}
+
 /**
- * Resolves the agent, applies activeHours/idle filters, and either
- * `sendSignal`s into the target thread or runs `agent.generate`. The
- * returned `runId` is the agent run id from the SDK call (when a run
- * was actually started), suitable for trigger-row linkability.
+ * Resolves the agent, runs the user `prepare` hook (if any), applies
+ * activeHours/idle filters, and either `sendSignal`s into the target
+ * thread or runs `agent.generate`. The returned `runId` is the agent
+ * run id from the SDK call (when a run was actually started), suitable
+ * for trigger-row linkability.
+ *
+ * `outcome` is the final outcome for the schedule trigger row and is
+ * also the one that drove the `onFinish`/`onError`/`onAbort` hook
+ * selection. `status` is retained for back-compat with existing tests.
  */
 export async function executeHeartbeat(
   mastra: Mastra,
   scheduleId: string,
   target: Extract<ScheduleTarget, { type: 'heartbeat' }>,
-): Promise<{ status: HeartbeatRunStatus; reason?: string; runId?: string }> {
-  const { agentId, prompt, threadId, resourceId, activeHours, idleThresholdMs, broadcast } = target;
-  const broadcastMode = broadcast ?? 'live';
-  // Run-level marker carried on the signal / agent run so consumers (typing
-  // status, AgentChannels broadcast policy, UI badges) can detect that this
-  // run was heartbeat-driven. Threaded runs ride along on the signal's
-  // `providerOptions`; threadless runs stamp it directly on `agent.generate`.
-  const heartbeatRunMeta = {
-    scheduleId,
-    broadcast: broadcastMode,
-    ...(threadId ? { threadId } : {}),
+  ctx: ExecuteHeartbeatContext = {},
+): Promise<{ status: HeartbeatRunStatus; outcome: HeartbeatTriggerOutcome; reason?: string; runId?: string }> {
+  const { agentId } = target;
+  const trigger: HeartbeatTriggerInfo = {
+    kind: ctx.triggerKind === 'manual' ? 'manual' : 'cron',
+    firedAt: ctx.firedAt ?? new Date(),
   };
+  const log = ctx.logger ?? mastra.getLogger?.();
 
   const agent = (() => {
     try {
@@ -248,58 +268,357 @@ export async function executeHeartbeat(
   })();
   if (!agent) {
     await selfClean(mastra, scheduleId);
-    return { status: 'agent-missing', reason: `agent "${agentId}" no longer registered` };
+    return {
+      status: 'agent-missing',
+      outcome: 'failed',
+      reason: `agent "${agentId}" no longer registered`,
+    };
   }
 
-  if (activeHours && !isWithinActiveHours(activeHours, Date.now())) {
-    return { status: 'skipped-outside-hours' };
-  }
+  const hooks =
+    (
+      agent as unknown as {
+        __getHeartbeatHooks?: () => HeartbeatHooks | null | undefined;
+      }
+    ).__getHeartbeatHooks?.() ?? undefined;
 
-  if (threadId) {
-    if (!resourceId) {
-      return { status: 'invalid-input', reason: 'resourceId required when threadId is set' };
+  // Build a partial `Heartbeat` view for hook contexts. Best-effort —
+  // pulls from the live schedule row when available, otherwise from the
+  // event target. Either way the hook gets `id`, `agentId`, and `name`.
+  const heartbeatRef = await loadHeartbeatRef(mastra, scheduleId, target);
+
+  const rowDefaults: HeartbeatEffective = buildEffectiveFromTarget(target);
+
+  // 1. prepare hook
+  let prepared: HeartbeatPrepareResult | null | undefined;
+  if (hooks?.prepare) {
+    try {
+      const prepareCtx: HeartbeatPrepareContext = {
+        mastra,
+        heartbeat: heartbeatRef,
+        trigger,
+      };
+      prepared = await hooks.prepare(prepareCtx);
+    } catch (err) {
+      await safeHookCall(log, () =>
+        hooks.onError?.({
+          mastra,
+          heartbeat: heartbeatRef,
+          trigger,
+          phase: 'prepare',
+          error: err instanceof Error ? err : new Error(String(err)),
+          effective: rowDefaults,
+        }),
+      );
+      return {
+        status: 'invalid-input',
+        outcome: 'failed',
+        reason: err instanceof Error ? err.message : String(err),
+      };
     }
+  }
+
+  if (prepared === null) {
+    // Hook explicitly asked to skip this fire.
+    await safeHookCall(log, () =>
+      hooks?.onFinish?.({
+        mastra,
+        heartbeat: heartbeatRef,
+        trigger,
+        outcome: 'skipped',
+        effective: rowDefaults,
+      }),
+    );
+    return { status: 'fired', outcome: 'skipped' };
+  }
+
+  const effective: HeartbeatEffective = mergeEffective(rowDefaults, prepared);
+  const broadcastMode = effective.broadcast ?? 'live';
+
+  // Run-level marker carried on the signal / agent run so consumers
+  // (typing status, AgentChannels broadcast policy, UI badges) can detect
+  // that this run was heartbeat-driven.
+  const heartbeatRunMeta = {
+    scheduleId,
+    broadcast: broadcastMode,
+    ...(effective.threadId ? { threadId: effective.threadId } : {}),
+  };
+
+  // 2. activeHours filter (post-prepare so `prepare` can override the row).
+  const activeHours = target.activeHours; // currently not overridable via hook
+  if (activeHours && !isWithinActiveHours(activeHours, Date.now())) {
+    await safeHookCall(log, () =>
+      hooks?.onFinish?.({
+        mastra,
+        heartbeat: heartbeatRef,
+        trigger,
+        outcome: 'skipped',
+        effective,
+      }),
+    );
+    return { status: 'skipped-outside-hours', outcome: 'skipped' };
+  }
+
+  // 3. threaded vs threadless
+  if (effective.threadId) {
+    if (!effective.resourceId) {
+      const reason = 'resourceId required when threadId is set';
+      await safeHookCall(log, () =>
+        hooks?.onError?.({
+          mastra,
+          heartbeat: heartbeatRef,
+          trigger,
+          phase: 'run',
+          error: new Error(reason),
+          effective,
+        }),
+      );
+      return { status: 'invalid-input', outcome: 'failed', reason };
+    }
+
     const memory = await agent.getMemory();
     if (memory) {
-      const thread = await memory.getThreadById({ threadId });
+      const thread = await memory.getThreadById({ threadId: effective.threadId });
       if (!thread) {
         await selfClean(mastra, scheduleId);
-        return { status: 'thread-missing', reason: `thread "${threadId}" not found` };
+        const reason = `thread "${effective.threadId}" not found`;
+        await safeHookCall(log, () =>
+          hooks?.onError?.({
+            mastra,
+            heartbeat: heartbeatRef,
+            trigger,
+            phase: 'run',
+            error: new Error(reason),
+            effective,
+          }),
+        );
+        return { status: 'thread-missing', outcome: 'failed', reason };
       }
-      if (idleThresholdMs !== undefined) {
+      if (target.idleThresholdMs !== undefined) {
         const updatedAt = thread.updatedAt instanceof Date ? thread.updatedAt.getTime() : Number(thread.updatedAt);
-        if (Number.isFinite(updatedAt) && Date.now() - updatedAt < idleThresholdMs) {
-          return { status: 'skipped-idle-threshold' };
+        if (Number.isFinite(updatedAt) && Date.now() - updatedAt < target.idleThresholdMs) {
+          await safeHookCall(log, () =>
+            hooks?.onFinish?.({
+              mastra,
+              heartbeat: heartbeatRef,
+              trigger,
+              outcome: 'skipped',
+              effective,
+            }),
+          );
+          return { status: 'skipped-idle-threshold', outcome: 'skipped' };
         }
       }
     }
 
-    const result = agent.sendSignal(
-      {
-        type: target.signalType ?? 'system-reminder',
-        contents: prompt,
-        providerOptions: { mastra: { heartbeat: heartbeatRunMeta } },
-      },
-      {
-        resourceId,
-        threadId,
-        ifActive: { behavior: target.ifActive ?? 'discard' },
-        ifIdle: { behavior: target.ifIdle ?? 'wake' },
-      },
+    let signalResult;
+    try {
+      signalResult = agent.sendSignal(
+        {
+          type: effective.signalType ?? 'system-reminder',
+          contents: effective.prompt,
+          ...(effective.attributes ? { attributes: effective.attributes } : {}),
+          providerOptions: mergeProviderOptions(effective.providerOptions, heartbeatRunMeta),
+        },
+        {
+          resourceId: effective.resourceId,
+          threadId: effective.threadId,
+          ifActive: { behavior: effective.ifActive ?? 'discard' },
+          ifIdle: { behavior: effective.ifIdle ?? 'wake' },
+        },
+      );
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      await safeHookCall(log, () =>
+        hooks?.onError?.({
+          mastra,
+          heartbeat: heartbeatRef,
+          trigger,
+          phase: 'run',
+          error,
+          effective,
+        }),
+      );
+      return { status: 'invalid-input', outcome: 'failed', reason: error.message };
+    }
+
+    const action = signalResult.action;
+    const runId = signalResult.runId;
+
+    if (action === 'delivered') {
+      await safeHookCall(log, () =>
+        hooks?.onFinish?.({
+          mastra,
+          heartbeat: heartbeatRef,
+          trigger,
+          outcome: 'delivered',
+          runId,
+          joinedExistingRun: true,
+          effective,
+        }),
+      );
+      return { status: 'signal-accepted', outcome: 'delivered', runId };
+    }
+    if (action === 'persisted') {
+      // Wait briefly for persist write so the trigger row reflects the truth.
+      if (signalResult.persisted) {
+        try {
+          await signalResult.persisted;
+        } catch {
+          // Persist write failure is surfaced via the signal's own machinery.
+        }
+      }
+      await safeHookCall(log, () =>
+        hooks?.onFinish?.({
+          mastra,
+          heartbeat: heartbeatRef,
+          trigger,
+          outcome: 'persisted',
+          runId,
+          effective,
+        }),
+      );
+      return { status: 'signal-accepted', outcome: 'persisted', runId };
+    }
+    if (action === 'discarded') {
+      await safeHookCall(log, () =>
+        hooks?.onFinish?.({
+          mastra,
+          heartbeat: heartbeatRef,
+          trigger,
+          outcome: 'discarded',
+          runId,
+          effective,
+        }),
+      );
+      return { status: 'signal-accepted', outcome: 'discarded', runId };
+    }
+
+    // action === 'wake' — a new run was started for this signal.
+    await safeHookCall(log, () =>
+      hooks?.onFinish?.({
+        mastra,
+        heartbeat: heartbeatRef,
+        trigger,
+        outcome: 'succeeded',
+        runId,
+        effective,
+      }),
     );
-    return {
-      status: 'signal-accepted',
-      runId: extractRunId(result),
-    };
+    return { status: 'signal-accepted', outcome: 'succeeded', runId };
   }
 
-  const result = await agent.generate(prompt, {
-    providerOptions: { mastra: { heartbeat: heartbeatRunMeta } },
-  });
+  // 4. threadless path: agent.generate
+  try {
+    const result = await agent.generate(effective.prompt, {
+      providerOptions: mergeProviderOptions(effective.providerOptions, heartbeatRunMeta),
+    });
+    const runId = extractRunId(result);
+    await safeHookCall(log, () =>
+      hooks?.onFinish?.({
+        mastra,
+        heartbeat: heartbeatRef,
+        trigger,
+        outcome: 'succeeded',
+        runId,
+        result: extractRunSnapshot(result),
+        effective,
+      }),
+    );
+    return { status: 'fired', outcome: 'succeeded', runId };
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    if (isAbortError(error)) {
+      await safeHookCall(log, () =>
+        hooks?.onAbort?.({
+          mastra,
+          heartbeat: heartbeatRef,
+          trigger,
+          runId: extractRunId(error) ?? scheduleId,
+          effective,
+        }),
+      );
+      return { status: 'fired', outcome: 'aborted' };
+    }
+    await safeHookCall(log, () =>
+      hooks?.onError?.({
+        mastra,
+        heartbeat: heartbeatRef,
+        trigger,
+        phase: 'run',
+        error,
+        effective,
+      }),
+    );
+    return { status: 'invalid-input', outcome: 'failed', reason: error.message };
+  }
+}
+
+function buildEffectiveFromTarget(target: Extract<ScheduleTarget, { type: 'heartbeat' }>): HeartbeatEffective {
   return {
-    status: 'fired',
-    runId: extractRunId(result),
+    threadId: target.threadId,
+    resourceId: target.resourceId,
+    prompt: target.prompt,
+    broadcast: target.broadcast,
+    signalType: target.signalType,
+    ifActive: target.ifActive,
+    ifIdle: target.ifIdle,
   };
+}
+
+function mergeEffective(base: HeartbeatEffective, overrides: HeartbeatPrepareResult | undefined): HeartbeatEffective {
+  if (!overrides) return base;
+  return {
+    ...base,
+    ...overrides,
+  };
+}
+
+function mergeProviderOptions(
+  fromHook: Record<string, unknown> | undefined,
+  heartbeatRunMeta: Record<string, unknown>,
+): Record<string, any> {
+  const base = (fromHook ?? {}) as Record<string, any>;
+  const baseMastra = (base.mastra ?? {}) as Record<string, unknown>;
+  return {
+    ...base,
+    mastra: {
+      ...baseMastra,
+      heartbeat: heartbeatRunMeta,
+    },
+  };
+}
+
+async function loadHeartbeatRef(
+  mastra: Mastra,
+  scheduleId: string,
+  target: Extract<ScheduleTarget, { type: 'heartbeat' }>,
+): Promise<{ id: string; agentId: string; name?: string; [key: string]: unknown }> {
+  try {
+    const hb = await mastra.heartbeats.get(scheduleId);
+    if (hb) return { ...hb };
+  } catch {
+    // ignore — fall back to a minimal projection from the event target
+  }
+  return {
+    id: scheduleId,
+    agentId: target.agentId,
+    ...(target.name !== undefined ? { name: target.name } : {}),
+  };
+}
+
+async function safeHookCall(logger: LooseLogger | undefined, fn: () => unknown): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    logger?.error?.('HeartbeatWorker: hook threw, ignoring', { error: err });
+  }
+}
+
+function isAbortError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const name = (err as { name?: unknown }).name;
+  return name === 'AbortError';
 }
 
 function extractRunId(value: unknown): string | undefined {
@@ -308,4 +627,16 @@ function extractRunId(value: unknown): string | undefined {
     if (typeof runId === 'string') return runId;
   }
   return undefined;
+}
+
+function extractRunSnapshot(
+  value: unknown,
+): { text?: string; usage?: Record<string, unknown>; finishReason?: string } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const v = value as { text?: unknown; usage?: unknown; finishReason?: unknown };
+  const snapshot: { text?: string; usage?: Record<string, unknown>; finishReason?: string } = {};
+  if (typeof v.text === 'string') snapshot.text = v.text;
+  if (v.usage && typeof v.usage === 'object') snapshot.usage = v.usage as Record<string, unknown>;
+  if (typeof v.finishReason === 'string') snapshot.finishReason = v.finishReason;
+  return Object.keys(snapshot).length > 0 ? snapshot : undefined;
 }

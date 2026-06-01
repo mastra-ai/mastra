@@ -52,6 +52,7 @@ import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { HeartbeatHooks } from './heartbeat/types';
 import type { MessageList } from './message-list/index';
 import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
@@ -124,11 +125,29 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
+ *
+ * Action the runtime actually took for the signal. Lets callers (e.g.
+ * the heartbeat worker) record outcome rows without re-deriving from
+ * input options.
+ *
+ * - `delivered` — joined an active same-agent run on the thread
+ *                 (signal was queued for in-loop draining)
+ * - `persisted` — written to memory but did not start or join a run
+ * - `discarded` — neither joined a run nor persisted (e.g. `ifActive:
+ *                 'discard'` / `ifIdle: 'discard'`)
+ * - `wake`      — no active run; started a new agent run for this signal
+ */
+export type SendAgentSignalAction = 'delivered' | 'persisted' | 'discarded' | 'wake';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface SendAgentSignalResult {
   accepted: true;
   runId: string;
   signal: CreatedAgentSignal;
+  /** Concrete action the runtime took. See {@link SendAgentSignalAction}. */
+  action: SendAgentSignalAction;
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
 }
@@ -518,6 +537,24 @@ export interface AgentConfig<
    * serialized into display streams or user-visible transcripts.
    */
   transform?: ToolPayloadTransformPolicy;
+  /**
+   * Lifecycle hooks invoked by the {@link HeartbeatWorker} for heartbeats
+   * owned by this agent.
+   *
+   * - `prepare` resolves fire-time parameters (e.g. create a Slack thread
+   *   per fire and return `threadId`/`resourceId`), or returns `null` to
+   *   skip the fire entirely.
+   * - `onFinish` fires once per heartbeat trigger when the trigger reached
+   *   a non-error, non-abort terminal state (`succeeded`, `delivered`,
+   *   `persisted`, `discarded`, or `skipped`).
+   * - `onError` fires when `prepare`, `sendSignal`, or the agent run threw.
+   * - `onAbort` fires when the run was aborted mid-stream.
+   *
+   * User code branches on `heartbeat.name` for per-heartbeat behavior.
+   * Hook exceptions are caught and logged; they never re-route the worker
+   * or recurse into another hook.
+   */
+  heartbeat?: HeartbeatHooks<Mastra>;
 }
 
 export type AgentMemoryOption = {

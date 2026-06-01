@@ -46,6 +46,12 @@ export type HeartbeatScheduleTarget = {
   type: 'heartbeat';
   agentId: string;
   prompt: string;
+  /**
+   * Free-form label for distinguishing multiple heartbeats on the same
+   * agent/thread (e.g. `'morning-checkin'`). Optional; filterable via
+   * `mastra.heartbeats.list({ name })`.
+   */
+  name?: string;
   /** Threaded heartbeats send a signal into this thread. */
   threadId?: string;
   /** Required when `threadId` is set. */
@@ -73,7 +79,7 @@ export type ScheduleStatus = 'active' | 'paused';
 /**
  * Polymorphic owner of a schedule. Workflow schedules created via
  * `createWorkflow({ schedule })` leave both fields null. Heartbeat
- * schedules created via `agent.setHeartbeat(...)` set
+ * schedules created via `mastra.heartbeats.create(...)` set
  * `ownerType: 'agent'` and `ownerId` to the agent id. Future schedule
  * types (tenant-owned, workflow-owned, etc.) can use the same shape
  * without a migration.
@@ -108,23 +114,35 @@ export type Schedule = {
 /**
  * Outcome of an individual schedule trigger attempt.
  *
- * `published` and `failed` cover scheduler tick fires. Heartbeat
- * outcomes (`acked`, `alerted`, `deferred`, `appended-from-queue`,
- * `dropped-stale`, `dropped-superseded`, `dropped-busy`, `skipped`)
- * are recorded by the heartbeat workflow. `failed` covers any
- * unhandled error during a fire or drain.
+ * Shared across all schedule target types (workflows, heartbeats, …).
+ *
+ * Workflow outcomes:
+ * - `published`  — workflow run was successfully dispatched to the workflow
+ *                  engine. Write-once at dispatch time; the trigger row is
+ *                  not updated when the run later completes.
+ * - `failed`     — dispatch threw (workflow or heartbeat).
+ *
+ * Heartbeat outcomes (terminal — written after the run/signal resolves):
+ * - `succeeded`  — the heartbeat agent run finished without error.
+ * - `delivered`  — the heartbeat signal joined an active run on the target
+ *                  thread instead of starting a new one (`ifActive: 'deliver'`).
+ * - `persisted`  — the signal was saved to memory without triggering a run
+ *                  (`ifActive: 'persist'` or `ifIdle: 'persist'`).
+ * - `discarded`  — the signal was dropped without effect
+ *                  (`ifActive: 'discard'` or `ifIdle: 'discard'`).
+ * - `skipped`    — the user `prepare` hook returned `null`, asking the worker
+ *                  to skip this fire entirely.
+ * - `aborted`    — the agent run was aborted mid-stream.
  */
 export type ScheduleTriggerOutcome =
   | 'published'
-  | 'failed'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
   | 'skipped'
-  | 'acked'
-  | 'alerted'
-  | 'deferred'
-  | 'appended-from-queue'
-  | 'dropped-stale'
-  | 'dropped-superseded'
-  | 'dropped-busy';
+  | 'aborted'
+  | 'failed';
 
 /**
  * Distinguishes a tick-loop schedule fire from a deferred drain event or a

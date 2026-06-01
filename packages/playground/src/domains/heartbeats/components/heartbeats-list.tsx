@@ -33,6 +33,7 @@ export function HeartbeatsList({ heartbeats, isLoading, search = '', mode = 'all
         if (h.id.toLowerCase().includes(term)) return true;
         if (h.agentId.toLowerCase().includes(term)) return true;
         if (h.threadId?.toLowerCase().includes(term)) return true;
+        if (h.name?.toLowerCase().includes(term)) return true;
         return false;
       });
   }, [heartbeats, search, mode]);

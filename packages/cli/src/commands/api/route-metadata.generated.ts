@@ -5250,7 +5250,10 @@ export const API_ROUTE_METADATA = {
     "path": "/heartbeats",
     "pathParams": [],
     "queryParams": [
-      "agentId"
+      "agentId",
+      "name",
+      "resourceId",
+      "threadId"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5266,9 +5269,14 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "agentId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "agentId",
+      "name",
+      "resourceId",
+      "threadId"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
@@ -5301,11 +5309,11 @@ export const API_ROUTE_METADATA = {
       "activeHours",
       "broadcast",
       "cron",
-      "id",
       "idleThresholdMs",
       "ifActive",
       "ifIdle",
       "metadata",
+      "name",
       "prompt",
       "resourceId",
       "signalType",
@@ -5334,6 +5342,7 @@ export const API_ROUTE_METADATA = {
       "ifActive",
       "ifIdle",
       "metadata",
+      "name",
       "prompt",
       "signalType",
       "timezone"

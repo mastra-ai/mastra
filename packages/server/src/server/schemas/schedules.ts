@@ -72,15 +72,13 @@ export const scheduleResponseSchema = z.object({
 
 export const scheduleTriggerOutcomeSchema = z.enum([
   'published',
-  'failed',
+  'succeeded',
+  'delivered',
+  'persisted',
+  'discarded',
   'skipped',
-  'acked',
-  'alerted',
-  'deferred',
-  'appended-from-queue',
-  'dropped-stale',
-  'dropped-superseded',
-  'dropped-busy',
+  'aborted',
+  'failed',
 ]);
 
 export const scheduleTriggerKindSchema = z.enum(['schedule-fire', 'queue-drain', 'manual']);

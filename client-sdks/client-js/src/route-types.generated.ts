@@ -77821,17 +77821,7 @@ export type GetSchedulesScheduleIdTriggers_Response = {
     runId: string | null;
     scheduledFireAt: number;
     actualFireAt: number;
-    outcome:
-      | 'published'
-      | 'failed'
-      | 'skipped'
-      | 'acked'
-      | 'alerted'
-      | 'deferred'
-      | 'appended-from-queue'
-      | 'dropped-stale'
-      | 'dropped-superseded'
-      | 'dropped-busy';
+    outcome: 'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
     error?: string | undefined;
     triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
     parentTriggerId?: string | undefined;
@@ -78080,12 +78070,16 @@ export interface PostSchedulesScheduleIdResume_RouteContract {
 // ============================================================================
 export type GetHeartbeats_QueryParams = {
   agentId?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  name?: string | undefined;
 };
 
 export type GetHeartbeats_Response = {
   heartbeats: {
     id: string;
     agentId: string;
+    name?: string | undefined;
     threadId?: string | undefined;
     resourceId?: string | undefined;
     prompt: string;
@@ -78162,10 +78156,18 @@ export type GetAgentsAgentIdHeartbeats_PathParams = {
   agentId: string;
 };
 
+export type GetAgentsAgentIdHeartbeats_QueryParams = {
+  agentId?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  name?: string | undefined;
+};
+
 export type GetAgentsAgentIdHeartbeats_Response = {
   heartbeats: {
     id: string;
     agentId: string;
+    name?: string | undefined;
     threadId?: string | undefined;
     resourceId?: string | undefined;
     prompt: string;
@@ -78218,13 +78220,17 @@ export type GetAgentsAgentIdHeartbeats_Response = {
 
 export type GetAgentsAgentIdHeartbeats_Request = Simplify<
   (GetAgentsAgentIdHeartbeats_PathParams extends never ? {} : { params: GetAgentsAgentIdHeartbeats_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentsAgentIdHeartbeats_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdHeartbeats_QueryParams
+        ? { query?: GetAgentsAgentIdHeartbeats_QueryParams }
+        : { query: GetAgentsAgentIdHeartbeats_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentsAgentIdHeartbeats_RouteContract {
   pathParams: GetAgentsAgentIdHeartbeats_PathParams;
-  queryParams: never;
+  queryParams: GetAgentsAgentIdHeartbeats_QueryParams;
   body: never;
   request: GetAgentsAgentIdHeartbeats_Request;
   response: GetAgentsAgentIdHeartbeats_Response;
@@ -78242,6 +78248,7 @@ export type GetAgentsAgentIdHeartbeatsHeartbeatId_PathParams = {
 export type GetAgentsAgentIdHeartbeatsHeartbeatId_Response = {
   id: string;
   agentId: string;
+  name?: string | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
@@ -78316,10 +78323,10 @@ export type PostAgentsAgentIdHeartbeats_PathParams = {
 };
 
 export type PostAgentsAgentIdHeartbeats_Body = {
-  id?: string | undefined;
   cron: string;
   timezone?: string | undefined;
   prompt: string;
+  name?: string | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   signalType?: string | undefined;
@@ -78344,6 +78351,7 @@ export type PostAgentsAgentIdHeartbeats_Body = {
 export type PostAgentsAgentIdHeartbeats_Response = {
   id: string;
   agentId: string;
+  name?: string | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
@@ -78424,6 +78432,7 @@ export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Body = {
   cron?: string | undefined;
   timezone?: string | undefined;
   prompt?: string | undefined;
+  name?: string | undefined;
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
@@ -78446,6 +78455,7 @@ export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Body = {
 export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Response = {
   id: string;
   agentId: string;
+  name?: string | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
@@ -78556,6 +78566,7 @@ export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_PathParams = {
 export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Response = {
   id: string;
   agentId: string;
+  name?: string | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
@@ -78633,6 +78644,7 @@ export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_PathParams = {
 export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Response = {
   id: string;
   agentId: string;
+  name?: string | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
@@ -78751,17 +78763,7 @@ export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Response = {
     runId: string | null;
     scheduledFireAt: number;
     actualFireAt: number;
-    outcome:
-      | 'published'
-      | 'failed'
-      | 'skipped'
-      | 'acked'
-      | 'alerted'
-      | 'deferred'
-      | 'appended-from-queue'
-      | 'dropped-stale'
-      | 'dropped-superseded'
-      | 'dropped-busy';
+    outcome: 'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
     error?: string | undefined;
     triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
     parentTriggerId?: string | undefined;

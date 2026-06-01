@@ -34,7 +34,7 @@ export function makeHeartbeatTrigger(overrides: Partial<HeartbeatTrigger> = {}):
     runId: `sched_hb_chef_thread-1_${fired}`,
     scheduledFireAt: fired,
     actualFireAt: fired,
-    outcome: 'published',
+    outcome: 'succeeded',
     run: {
       status: 'success',
       startedAt: fired,

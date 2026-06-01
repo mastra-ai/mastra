@@ -47,7 +47,7 @@ const makeTrigger = (overrides: Partial<ScheduleTrigger> = {}): ScheduleTrigger 
   runId: 'run-1',
   scheduledFireAt: 1_000_000,
   actualFireAt: 1_000_001,
-  outcome: 'published',
+  outcome: 'succeeded',
   triggerKind: 'schedule-fire',
   ...overrides,
 });
@@ -369,7 +369,7 @@ describe('Heartbeats handlers', () => {
   });
 
   describe('CREATE_HEARTBEAT_ROUTE', () => {
-    it('creates a heartbeat via agent.setHeartbeat', async () => {
+    it('creates a heartbeat via mastra.heartbeats.create', async () => {
       const result = await CREATE_HEARTBEAT_ROUTE.handler({
         mastra,
         agentId: 'agent-1',

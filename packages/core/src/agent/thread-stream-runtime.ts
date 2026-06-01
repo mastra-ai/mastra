@@ -831,9 +831,9 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions?.requestContext,
         );
         void persisted.catch(() => {});
-        return { accepted: true, runId: runId!, signal, persisted };
+        return { accepted: true, runId: runId!, signal, action: 'persisted', persisted };
       }
-      return { accepted: true, runId: runId!, signal };
+      return { accepted: true, runId: runId!, signal, action: 'discarded' };
     }
 
     if (runId) {
@@ -853,7 +853,7 @@ export class AgentThreadStreamRuntime {
             sourceId: this.#getSourceId(),
           });
           this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
-          return { accepted: true, runId, signal };
+          return { accepted: true, runId, signal, action: 'delivered' };
         }
       }
 
@@ -871,7 +871,7 @@ export class AgentThreadStreamRuntime {
           signal: this.#serializeSignal(signal),
           sourceId: this.#getSourceId(),
         });
-        return { accepted: true, runId, signal };
+        return { accepted: true, runId, signal, action: 'delivered' };
       }
     }
 
@@ -890,9 +890,9 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions?.requestContext,
         );
         void persisted.catch(() => {});
-        return { accepted: true, runId, signal, persisted };
+        return { accepted: true, runId, signal, action: 'persisted', persisted };
       }
-      return { accepted: true, runId, signal };
+      return { accepted: true, runId, signal, action: 'discarded' };
     }
 
     key ??= this.#threadKey(resourceId, threadId);
@@ -905,7 +905,7 @@ export class AgentThreadStreamRuntime {
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       }
-      return { accepted: true, runId, signal };
+      return { accepted: true, runId, signal, action: 'wake' };
     }
 
     // No active same-agent run accepted the signal. Reserve the thread before starting
@@ -926,7 +926,7 @@ export class AgentThreadStreamRuntime {
         }
       });
 
-    return { accepted: true, runId, signal };
+    return { accepted: true, runId, signal, action: 'wake' };
   }
 }
 

@@ -82,7 +82,7 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
   });
 
   it('calls sendSignal with defaults when threaded', async () => {
-    const sendSignal = vi.fn();
+    const sendSignal: any = vi.fn(() => ({ accepted: true, runId: 'run-1', signal: {}, action: 'wake' }));
     const agent = {
       sendSignal,
       generate: vi.fn(),
@@ -116,7 +116,7 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
   });
 
   it('forwards signalType, ifActive, ifIdle to sendSignal', async () => {
-    const sendSignal = vi.fn();
+    const sendSignal: any = vi.fn(() => ({ accepted: true, runId: 'run-2', signal: {}, action: 'delivered' }));
     const agent = {
       sendSignal,
       generate: vi.fn(),

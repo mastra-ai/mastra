@@ -121,4 +121,18 @@ describe('HeartbeatTriggersList', () => {
     expect(screen.queryByRole('link')).toBeNull();
     expect(screen.getByTestId('heartbeat-trigger-run-id').textContent).toBe('agent_run_xyz');
   });
+
+  it.each([
+    ['succeeded' as const, 'succeeded'],
+    ['delivered' as const, 'delivered'],
+    ['persisted' as const, 'persisted'],
+    ['discarded' as const, 'discarded'],
+    ['skipped' as const, 'skipped'],
+    ['aborted' as const, 'aborted'],
+    ['failed' as const, 'failed'],
+  ])('renders %s outcome label', (outcome, label) => {
+    const trigger = makeHeartbeatTrigger({ id: `trg_${outcome}`, outcome });
+    renderList(<HeartbeatTriggersList triggers={[trigger]} isLoading={false} />);
+    expect(screen.getByTestId('heartbeat-trigger-outcome').textContent).toContain(label);
+  });
 });

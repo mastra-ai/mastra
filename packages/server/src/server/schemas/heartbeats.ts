@@ -22,6 +22,7 @@ export const heartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'neve
 export const heartbeatSchema = z.object({
   id: z.string(),
   agentId: z.string(),
+  name: z.string().optional(),
   threadId: z.string().optional(),
   resourceId: z.string().optional(),
   prompt: z.string(),
@@ -55,6 +56,9 @@ export const listHeartbeatsResponseSchema = z.object({
 
 export const listHeartbeatsQuerySchema = z.object({
   agentId: z.string().optional(),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  name: z.string().optional(),
 });
 
 export const heartbeatAgentPathParams = z.object({
@@ -71,12 +75,12 @@ const activeHoursBodySchema = z.object({
   timezone: z.string().optional(),
 });
 
-/** Body for POST /agents/:agentId/heartbeats — creates (or upserts by id) a heartbeat. */
+/** Body for POST /agents/:agentId/heartbeats — creates a heartbeat. */
 export const createHeartbeatBodySchema = z.object({
-  id: z.string().optional(),
   cron: z.string(),
   timezone: z.string().optional(),
   prompt: z.string(),
+  name: z.string().optional(),
   threadId: z.string().optional(),
   resourceId: z.string().optional(),
   signalType: z.string().optional(),
@@ -92,13 +96,13 @@ export const createHeartbeatBodySchema = z.object({
  * Body for PATCH /agents/:agentId/heartbeats/:heartbeatId — partial update.
  *
  * `threadId` / `resourceId` are intentionally not editable; they are part of
- * the heartbeat's identity (the deterministic id is derived from them).
- * To re-target, delete and recreate.
+ * the heartbeat's identity. To re-target, delete and recreate.
  */
 export const updateHeartbeatBodySchema = z.object({
   cron: z.string().optional(),
   timezone: z.string().optional(),
   prompt: z.string().optional(),
+  name: z.string().optional(),
   signalType: z.string().optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
