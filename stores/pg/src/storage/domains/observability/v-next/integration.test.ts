@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { coreFeatures } from '@mastra/core/features';
-import { ConsoleLogger } from '@mastra/core/logger';
 import { SpanType } from '@mastra/core/observability';
 import { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -800,7 +799,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
 
   describe('PostgresStoreVNext — collision warning', () => {
     it('warns when observability shares the primary connectionString', async () => {
-      const warnSpy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const store = new PostgresStoreVNext({
         id: 'collision-conn-string',
         connectionString,
@@ -815,7 +814,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
     });
 
     it('warns when observability shares the primary pool instance', async () => {
-      const warnSpy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const pool = new Pool({ connectionString, max: 2 });
       const store = new PostgresStoreVNext({
         id: 'collision-pool',
@@ -831,7 +830,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
     });
 
     it('warns when observability shares the primary host+port+database', async () => {
-      const warnSpy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const hostConfig = TEST_CONFIG as {
         host: string;
         port: number;
@@ -859,7 +858,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
     });
 
     it('does NOT warn when observability points at a different target', async () => {
-      const warnSpy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const store = new PostgresStoreVNext({
         ...TEST_CONFIG,
         id: 'collision-none',

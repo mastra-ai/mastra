@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { PoolAdapter } from './client';
 import { ObservabilityPG } from './domains/observability';
@@ -38,6 +38,10 @@ const observabilityFromTestConfig: Parameters<typeof PostgresStoreVNext>[0]['obs
 };
 const primaryTestConfig = { ...TEST_CONFIG, max: 2 };
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 function parseConnectionString(url: string) {
   const parsed = new URL(url);
   return {
@@ -52,7 +56,10 @@ function parseConnectionString(url: string) {
 
 describe('PostgresStoreVNext', () => {
   describe('domain wiring', () => {
-    const store = new PostgresStoreVNext({ ...primaryTestConfig, observability: observabilityFromTestConfig });
+    const store = new PostgresStoreVNext({
+      ...primaryTestConfig,
+      observability: { ...observabilityFromTestConfig, port: hostConfig.port + 100 },
+    });
 
     afterAll(async () => {
       await store.close();
@@ -88,8 +95,30 @@ describe('PostgresStoreVNext', () => {
     });
   });
 
+  describe('lifecycle', () => {
+    it('allows PostgresStore.close() to be called multiple times', async () => {
+      const store = new PostgresStore({ ...primaryTestConfig, id: 'pg-close-idempotency-test' });
+
+      await store.close();
+      await expect(store.close()).resolves.toBeUndefined();
+    });
+
+    it('allows PostgresStoreVNext.close() to be called multiple times', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const store = new PostgresStoreVNext({
+        ...primaryTestConfig,
+        id: 'pgvnext-close-idempotency-test',
+        observability: observabilityFromTestConfig,
+      });
+
+      await store.close();
+      await expect(store.close()).resolves.toBeUndefined();
+    });
+  });
+
   describe('initialization', () => {
     it('runs init() end-to-end without throwing', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
       const store = new PostgresStoreVNext({
         ...primaryTestConfig,
         id: 'pgvnext-init-test',
@@ -106,6 +135,7 @@ describe('PostgresStoreVNext', () => {
     });
 
     it('honors an explicit partitioning.mode override', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
       const store = new PostgresStoreVNext({
         ...primaryTestConfig,
         id: 'pgvnext-explicit-mode-test',
