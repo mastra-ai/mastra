@@ -387,9 +387,12 @@ describe('AgentBrowser', () => {
     });
 
     it('waits for load state when waitUntil is set', async () => {
-      await browser.click({ ref: '@e1', waitUntil: 'networkidle' });
+      await browser.click({ ref: '@e1', waitUntil: 'networkidle', timeout: 1234 });
 
-      expect(mockPage.waitForNavigation).toHaveBeenCalledWith(expect.objectContaining({ waitUntil: 'networkidle' }));
+      expect(mockPage.waitForNavigation).toHaveBeenCalledWith(
+        expect.objectContaining({ waitUntil: 'networkidle', timeout: 1234 }),
+      );
+      expect(mockLocator.click).toHaveBeenCalledWith(expect.objectContaining({ timeout: 1234 }));
     });
 
     it('does not wait for load state when waitUntil is omitted', async () => {
@@ -440,9 +443,11 @@ describe('AgentBrowser', () => {
     });
 
     it('waits for load state when waitUntil is set', async () => {
-      await browser.press({ key: 'Enter', waitUntil: 'load' });
+      await browser.press({ key: 'Enter', waitUntil: 'load', timeout: 1234 });
 
-      expect(mockPage.waitForNavigation).toHaveBeenCalledWith(expect.objectContaining({ waitUntil: 'load' }));
+      expect(mockPage.waitForNavigation).toHaveBeenCalledWith(
+        expect.objectContaining({ waitUntil: 'load', timeout: 1234 }),
+      );
     });
 
     it('does not wait for load state when waitUntil is omitted', async () => {
@@ -467,10 +472,14 @@ describe('AgentBrowser', () => {
     });
 
     it('waits for load state when waitUntil is set', async () => {
-      await browser.select({ ref: '@e1', value: 'option1', waitUntil: 'domcontentloaded' });
+      await browser.select({ ref: '@e1', value: 'option1', waitUntil: 'domcontentloaded', timeout: 1234 });
 
       expect(mockPage.waitForNavigation).toHaveBeenCalledWith(
-        expect.objectContaining({ waitUntil: 'domcontentloaded' }),
+        expect.objectContaining({ waitUntil: 'domcontentloaded', timeout: 1234 }),
+      );
+      expect(mockLocator.selectOption).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ timeout: 1234 }),
       );
     });
 

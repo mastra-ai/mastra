@@ -53,7 +53,7 @@ export const clickInputSchema = z.object({
     .enum(['load', 'domcontentloaded', 'networkidle'])
     .optional()
     .describe('If the click triggers a navigation, wait for this page load state before returning'),
-  timeout: z.number().optional().describe('Timeout in milliseconds for the click and optional waitUntil'),
+  timeout: z.number().nonnegative().optional().describe('Timeout in milliseconds for the click and optional waitUntil'),
 });
 export type ClickInput = z.output<typeof clickInputSchema>;
 
@@ -81,7 +81,7 @@ export const pressInputSchema = z.object({
     .enum(['load', 'domcontentloaded', 'networkidle'])
     .optional()
     .describe('If the key press triggers a navigation, wait for this page load state before returning'),
-  timeout: z.number().optional().describe('Timeout in milliseconds for the optional waitUntil'),
+  timeout: z.number().nonnegative().optional().describe('Timeout in milliseconds for the optional waitUntil'),
 });
 export type PressInput = z.output<typeof pressInputSchema>;
 
@@ -98,7 +98,11 @@ export const selectInputSchema = z
       .enum(['load', 'domcontentloaded', 'networkidle'])
       .optional()
       .describe('If the selection triggers a navigation, wait for this page load state before returning'),
-    timeout: z.number().optional().describe('Timeout in milliseconds for the selection and optional waitUntil'),
+    timeout: z
+      .number()
+      .nonnegative()
+      .optional()
+      .describe('Timeout in milliseconds for the selection and optional waitUntil'),
   })
   .superRefine((data, ctx) => {
     if (data.value === undefined && data.label === undefined && data.index === undefined) {
