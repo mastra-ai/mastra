@@ -277,8 +277,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // `toolCall.error` arrives as the plain {name,message,stack} the workflow step
             // serializes (Error instances become `{}` over the pubsub bus). Reify here so
             // chunk consumers see a real Error with name/message/stack intact.
-            const 
-            = deserializeToolError(toolCall.error);
+            const reifiedError = deserializeToolError(toolCall.error);
             const chunk = await transformToolChunk(
               {
                 type: 'tool-error',
