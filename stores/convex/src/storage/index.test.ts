@@ -4,6 +4,7 @@ import {
   createClientAcceptanceTests,
   createDomainDirectTests,
 } from '@internal/storage-test-utils';
+import { TABLE_MESSAGES } from '@mastra/core/storage';
 import dotenv from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -386,6 +387,42 @@ describe('ConvexDB schedule operations', () => {
     await expect(db.recordScheduleTrigger({ schedule_id: 'schedule-1' })).rejects.toThrow(
       'Schedule trigger is missing an id',
     );
+
+    expect(callStorage).not.toHaveBeenCalled();
+  });
+});
+
+describe('ConvexDB loadMany', () => {
+  it('dedupes and chunks ids before calling storage', async () => {
+    const callStorage = vi.fn(async request => request.ids.map((id: string) => ({ id })));
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+    const ids = [...Array.from({ length: 205 }, (_, index) => `message-${index}`), 'message-0', 'message-100'];
+
+    await expect(db.loadMany(TABLE_MESSAGES, ids)).resolves.toHaveLength(205);
+
+    expect(callStorage).toHaveBeenCalledTimes(21);
+    expect(callStorage).toHaveBeenNthCalledWith(1, {
+      op: 'loadMany',
+      tableName: TABLE_MESSAGES,
+      ids: ids.slice(0, 10),
+    });
+    expect(callStorage).toHaveBeenNthCalledWith(20, {
+      op: 'loadMany',
+      tableName: TABLE_MESSAGES,
+      ids: ids.slice(190, 200),
+    });
+    expect(callStorage).toHaveBeenNthCalledWith(21, {
+      op: 'loadMany',
+      tableName: TABLE_MESSAGES,
+      ids: ids.slice(200, 205),
+    });
+  });
+
+  it('skips storage calls for empty id lists', async () => {
+    const callStorage = vi.fn();
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+
+    await expect(db.loadMany(TABLE_MESSAGES, [])).resolves.toEqual([]);
 
     expect(callStorage).not.toHaveBeenCalled();
   });
