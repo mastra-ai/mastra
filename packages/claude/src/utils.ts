@@ -7,11 +7,19 @@ import { MessageList } from '@mastra/core/agent/message-list';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import { EntityType, executeWithContext, getOrCreateSpan, SpanType } from '@mastra/core/observability';
-import type { AIModelGenerationSpan, CostContext, IModelSpanTracker, Span, UsageStats } from '@mastra/core/observability';
+import type {
+  AIModelGenerationSpan,
+  CostContext,
+  IModelSpanTracker,
+  Span,
+  UsageStats,
+} from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, FullOutput, JSONValue, LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 import { ChunkFrom, MastraModelOutput } from '@mastra/core/stream';
-type MastraModelOutputOptions<OUTPUT = undefined> = ConstructorParameters<typeof MastraModelOutput<OUTPUT>>[0]['options'];
+type MastraModelOutputOptions<OUTPUT = undefined> = ConstructorParameters<
+  typeof MastraModelOutput<OUTPUT>
+>[0]['options'];
 
 export type SDKAgentRunOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   signal?: AbortSignal;

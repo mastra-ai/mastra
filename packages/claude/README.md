@@ -80,11 +80,16 @@ const weatherServer = createSdkMcpServer({
   name: 'weather',
   version: '1.0.0',
   tools: [
-    tool('get_temperature', 'Get the current temperature.', {
-      location: z.string(),
-    }, async ({ location }) => ({
-      content: [{ type: 'text', text: `Temperature for ${location}: 72F` }],
-    })),
+    tool(
+      'get_temperature',
+      'Get the current temperature.',
+      {
+        location: z.string(),
+      },
+      async ({ location }) => ({
+        content: [{ type: 'text', text: `Temperature for ${location}: 72F` }],
+      }),
+    ),
   ],
 });
 

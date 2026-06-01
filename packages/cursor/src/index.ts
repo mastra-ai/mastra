@@ -19,7 +19,13 @@ import { Agent } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import type { ChunkType, FullOutput, LanguageModelUsage, ProviderMetadata, MastraModelOutput } from '@mastra/core/stream';
+import type {
+  ChunkType,
+  FullOutput,
+  LanguageModelUsage,
+  ProviderMetadata,
+  MastraModelOutput,
+} from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import {
   createMastraOutput,
