@@ -1515,3 +1515,166 @@ describe('createLLMMappingStep toModelOutput', () => {
     expect(span.errorOptions).toEqual({ error: failure, endSpan: true });
   });
 });
+
+describe('createLLMMappingStep tool approval persistence', () => {
+  let controller: { enqueue: Mock };
+  let messageList: MessageList;
+  let llmExecutionStep: any;
+  let bail: Mock;
+  let getStepResult: Mock;
+  let llmMappingStep: ReturnType<typeof createLLMMappingStep>;
+
+  const createExecuteParams = (
+    inputData: ToolCallOutput[],
+  ): ExecuteFunctionParams<{}, ToolCallOutput[], any, any, any> => ({
+    runId: 'test-run',
+    workflowId: 'test-workflow',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult,
+    suspend: vi.fn(),
+    bail,
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'test-call-id',
+      name: 'test-tool',
+      runId: 'test-run',
+    }),
+    validateSchemas: false,
+    inputData,
+    [PUBSUB_SYMBOL]: {} as any,
+    [STREAM_FORMAT_SYMBOL]: undefined,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    messageList = {
+      get: {
+        all: { aiV5: { model: () => [] } },
+        input: { aiV5: { model: () => [] } },
+        response: { aiV5: { model: () => [] } },
+      },
+      add: vi.fn(),
+      updateToolInvocation: vi.fn(),
+    } as unknown as MessageList;
+
+    llmExecutionStep = createStep({
+      id: 'test-llm-execution',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({
+        stepResult: { isContinued: true, reason: undefined },
+        metadata: {},
+      }),
+    });
+
+    bail = vi.fn(data => data);
+    getStepResult = vi.fn(() => ({
+      stepResult: {
+        isContinued: true,
+        reason: undefined,
+      },
+      metadata: {},
+    }));
+
+    llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: {
+          generateId: () => 'test-message-id',
+        },
+      } as any,
+      llmExecutionStep,
+    );
+  });
+
+  it('should persist declined tool call as output-denied and not bail', async () => {
+    // Arrange: declined tool call has approval.approved === false and no result
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-declined',
+        toolName: 'someApprovalTool',
+        args: { value: 'test' },
+        result: undefined,
+        approval: {
+          id: 'call-declined',
+          approved: false,
+          reason: 'Tool call was not approved by the user',
+        },
+      } as any,
+    ];
+
+    // Act
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: should NOT bail (declined approval bypasses the HITL bail path)
+    expect(bail).not.toHaveBeenCalled();
+
+    // Assert: updateToolInvocation called with output-denied state
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'output-denied',
+          toolCallId: 'call-declined',
+          approval: expect.objectContaining({
+            approved: false,
+            reason: 'Tool call was not approved by the user',
+          }),
+        }),
+      }),
+    );
+
+    // Assert: no tool-result chunk emitted for denied call
+    expect(controller.enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'tool-result' }),
+    );
+  });
+
+  it('should persist approval metadata in mixed turn (one approved success + one error)', async () => {
+    // Arrange: one tool approved+succeeded, one tool errored
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-approved',
+        toolName: 'approvedTool',
+        args: { value: 'test' },
+        result: { success: true },
+        approval: { id: 'call-approved', approved: true },
+      } as any,
+      {
+        toolCallId: 'call-error',
+        toolName: 'errorTool',
+        args: { value: 'bad' },
+        result: undefined,
+        error: new Error('tool-not-found'),
+      } as any,
+    ];
+
+    // Act
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: approved tool persisted with approval metadata intact
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'result',
+          toolCallId: 'call-approved',
+          result: { success: true },
+          approval: expect.objectContaining({ approved: true }),
+        }),
+      }),
+    );
+  });
+});
