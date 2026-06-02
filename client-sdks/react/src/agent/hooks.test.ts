@@ -242,7 +242,7 @@ describe('useChat forwards clientTools', () => {
     );
 
     await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
-    sendSignalMock.mockClear();
+    sendMessageMock.mockClear();
 
     await act(async () => {
       await result.current.sendMessage({
@@ -252,9 +252,7 @@ describe('useChat forwards clientTools', () => {
       });
     });
 
-    expect(sendSignalMock).toHaveBeenCalledWith(
-      expect.objectContaining({ signal: expect.objectContaining({ contents: 'paris' }), threadId: 'thread-1' }),
-    );
+    expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({ message: 'paris', threadId: 'thread-1' }));
     expect(result.current.isRunning).toBe(false);
     expect(result.current.isAwaitingToolApproval).toBe(true);
   });
