@@ -456,19 +456,23 @@ describe('useChat forwards clientTools', () => {
       {
         id: 'msg-approval',
         role: 'assistant',
-        parts: [],
-        metadata: {
-          mode: 'stream',
-          requireApprovalMetadata: {
-            weatherTool: {
-              runId: 'run-approval',
-              toolCallId: 'tool-call-approval-1',
-              toolName: 'weatherTool',
-            },
-            locationTool: {
-              runId: 'run-approval',
-              toolCallId: 'tool-call-approval-2',
-              toolName: 'locationTool',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [],
+          metadata: {
+            mode: 'stream',
+            requireApprovalMetadata: {
+              weatherTool: {
+                runId: 'run-approval',
+                toolCallId: 'tool-call-approval-1',
+                toolName: 'weatherTool',
+              },
+              locationTool: {
+                runId: 'run-approval',
+                toolCallId: 'tool-call-approval-2',
+                toolName: 'locationTool',
+              },
             },
           },
         },
