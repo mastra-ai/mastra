@@ -19,6 +19,7 @@ import type {
   BackgroundTasksStorage,
   SchedulesStorage,
   ChannelsStorage,
+  HarnessStorage,
   ToolProviderConnectionsStorage,
 } from './domains';
 
@@ -42,6 +43,7 @@ export type StorageDomains = {
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
+  harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
 };
 
@@ -235,7 +237,7 @@ export interface MastraCompositeStoreConfig {
  */
 export interface StorageMastraRef {
   getAgentById?: (id: string) => { source?: string; __getEditorConfig?: () => unknown } | undefined;
-  getEditor?: () => { getMode?: () => 'code' | 'db' | undefined } | undefined;
+  getEditor?: () => { getSource?: () => 'code' | 'db' | undefined } | undefined;
 }
 
 export class MastraCompositeStore extends MastraBase {
@@ -327,6 +329,7 @@ export class MastraCompositeStore extends MastraBase {
         backgroundTasks: resolve('backgroundTasks'),
         schedules: resolve('schedules'),
         channels: resolve('channels'),
+        harness: resolve('harness'),
         toolProviderConnections: resolve('toolProviderConnections'),
       } as StorageDomains;
     }
@@ -454,6 +457,7 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.backgroundTasks);
       maybeInit(this.stores.schedules);
       maybeInit(this.stores.channels);
+      maybeInit(this.stores.harness);
       maybeInit(this.stores.toolProviderConnections);
     }
 

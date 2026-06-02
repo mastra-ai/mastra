@@ -1,5 +1,51 @@
 # @mastra/playground-ui
 
+## 31.0.0-alpha.5
+
+### Patch Changes
+
+- Improved studio load time by only bundling the CodeMirror and Shiki languages the editor actually uses, and removed a redundant TypeScript pass from the playground-ui build. ([#17406](https://github.com/mastra-ai/mastra/pull/17406))
+
+- Improved RadioGroup styling with neutral selected states, cleaner focus outlines, and surface-aware disabled states. ([#17401](https://github.com/mastra-ai/mastra/pull/17401))
+
+- Removed the unused `ElementSelect` export from `@mastra/playground-ui`. Use the `Select` primitives instead. ([#17417](https://github.com/mastra-ai/mastra/pull/17417))
+
+  ```tsx
+  // Before
+  import { ElementSelect } from '@mastra/playground-ui';
+
+  <ElementSelect name="status" value={status} onChange={setStatus} options={['Draft', 'Published']} />;
+
+  // After
+  import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui';
+
+  <Select name="status" value={status} onValueChange={setStatus}>
+    <SelectTrigger>
+      <SelectValue placeholder="Select..." />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="draft">Draft</SelectItem>
+      <SelectItem value="published">Published</SelectItem>
+    </SelectContent>
+  </Select>;
+  ```
+
+- Improved Checkbox styling with neutral selected states, cleaner focus outlines, and smoother state transitions. ([#17400](https://github.com/mastra-ai/mastra/pull/17400))
+
+- Updated dependencies [[`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15), [`309f7c9`](https://github.com/mastra-ai/mastra/commit/309f7c9899ee6870a07a16690a091c6ba7af4e1e), [`66d65f5`](https://github.com/mastra-ai/mastra/commit/66d65f58e4b1f862c7f7928866a4426f8de9d583)]:
+  - @mastra/core@1.38.0-alpha.5
+  - @mastra/client-js@1.22.0-alpha.5
+  - @mastra/react@0.4.3-alpha.5
+
+## 31.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`50ed00c`](https://github.com/mastra-ai/mastra/commit/50ed00caa914a85969b33de83f26b48e328ef641), [`9283971`](https://github.com/mastra-ai/mastra/commit/928397157009b4aef4d5fdf3a0a273cb371beb55), [`0bf2d93`](https://github.com/mastra-ai/mastra/commit/0bf2d932d20e2936f2d9abb8c0a86e24fbc97ec6), [`94dfef6`](https://github.com/mastra-ai/mastra/commit/94dfef6e2bf19a88467ea3940afcbce88a433f0f), [`a122f79`](https://github.com/mastra-ai/mastra/commit/a122f79427ae225ec79c7b2ed46278da48d04b17), [`4c02027`](https://github.com/mastra-ai/mastra/commit/4c020277235eaa6b1dc957c90ad0639eef213992), [`6855012`](https://github.com/mastra-ai/mastra/commit/685501247cc4717506f3e89beed03509d63a5370), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23)]:
+  - @mastra/core@1.38.0-alpha.4
+  - @mastra/client-js@1.22.0-alpha.4
+  - @mastra/react@0.4.3-alpha.4
+
 ## 31.0.0-alpha.3
 
 ### Minor Changes

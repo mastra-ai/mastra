@@ -196,6 +196,23 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/threads/abort": {
+    "method": "POST",
+    "path": "/agents/:agentId/threads/abort",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/tools/:toolId/execute": {
     "method": "POST",
     "path": "/agents/:agentId/tools/:toolId/execute",
@@ -207,6 +224,27 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "data",
       "requestContext"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/send-tool-approval": {
+    "method": "POST",
+    "path": "/agents/:agentId/send-tool-approval",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "approved",
+      "format",
+      "requestContext",
+      "resourceId",
+      "threadId",
+      "toolCallId"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -3190,6 +3228,40 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /stored/agents/:storedAgentId/export": {
+    "method": "POST",
+    "path": "/stored/agents/:storedAgentId/export",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "agents",
+      "browser",
+      "defaultOptions",
+      "description",
+      "inputProcessors",
+      "instructions",
+      "integrationTools",
+      "mcpClients",
+      "memory",
+      "model",
+      "name",
+      "outputProcessors",
+      "requestContextSchema",
+      "scorers",
+      "skills",
+      "toolProviders",
+      "tools",
+      "workflows",
+      "workspace"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /stored/agents/:storedAgentId": {
     "method": "GET",
     "path": "/stored/agents/:storedAgentId",
@@ -4479,6 +4551,23 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [],
     "hasQuery": true,
     "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /tool-providers/:providerId/connections/:connectionId": {
+    "method": "PATCH",
+    "path": "/tool-providers/:providerId/connections/:connectionId",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "label"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
     "responseShape": {
       "kind": "single"
     }

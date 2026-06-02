@@ -1,5 +1,29 @@
 # mastra
 
+## 1.11.0-alpha.5
+
+### Minor Changes
+
+- Added the agent override editing experience to Studio for the `code` editor source. ([#17229](https://github.com/mastra-ai/mastra/pull/17229))
+
+  When the project uses `MastraEditor({ source: 'code' })`, the agent Editor tab swaps Save/Publish for Download JSON and Save to filesystem (and Open PR when platform wiring is available), and surfaces git commits of per-agent JSON files as read-only version history. Fields locked by an agent's `editor` config render read-only with an "owned by code" notice, and the unsaved-changes prompt matches the active source.
+
+  The default `source: 'db'` flow is unchanged. Also fixed the Editor test chat so saved draft changes are reflected without a page refresh.
+
+### Patch Changes
+
+- Updated dependencies [[`8260167`](https://github.com/mastra-ai/mastra/commit/8260167431f98400f3acef4bbb7bd6027efd7a4b), [`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15)]:
+  - @mastra/deployer@1.38.0-alpha.5
+  - @mastra/core@1.38.0-alpha.5
+
+## 1.10.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`50ed00c`](https://github.com/mastra-ai/mastra/commit/50ed00caa914a85969b33de83f26b48e328ef641), [`9283971`](https://github.com/mastra-ai/mastra/commit/928397157009b4aef4d5fdf3a0a273cb371beb55), [`0bf2d93`](https://github.com/mastra-ai/mastra/commit/0bf2d932d20e2936f2d9abb8c0a86e24fbc97ec6), [`94dfef6`](https://github.com/mastra-ai/mastra/commit/94dfef6e2bf19a88467ea3940afcbce88a433f0f), [`a122f79`](https://github.com/mastra-ai/mastra/commit/a122f79427ae225ec79c7b2ed46278da48d04b17), [`4c02027`](https://github.com/mastra-ai/mastra/commit/4c020277235eaa6b1dc957c90ad0639eef213992), [`6855012`](https://github.com/mastra-ai/mastra/commit/685501247cc4717506f3e89beed03509d63a5370), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23)]:
+  - @mastra/core@1.38.0-alpha.4
+  - @mastra/deployer@1.38.0-alpha.4
+
 ## 1.10.3-alpha.3
 
 ### Patch Changes

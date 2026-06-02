@@ -34,7 +34,7 @@ export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, 
  */
 export function safeStringify(value: unknown, space?: string | number): string {
   const stack: unknown[] = [];
-  const result = JSON.stringify(
+  return JSON.stringify(
     value,
     function (this: unknown, _key: string, val: unknown) {
       if (typeof val === 'bigint') return val.toString();
@@ -51,8 +51,6 @@ export function safeStringify(value: unknown, space?: string | number): string {
     },
     space,
   );
-
-  return result ?? String(value);
 }
 
 /**

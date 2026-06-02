@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.10.3-alpha.3",
+  "version": "1.11.0-alpha.5",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -49,7 +49,6 @@
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.5.0",
-    "@codemirror/language-data": "^6.5.2",
     "@codemirror/view": "^6.40.0",
     "@dagrejs/dagre": "^1.1.8",
     "@hello-pangea/dnd": "^18.0.1",

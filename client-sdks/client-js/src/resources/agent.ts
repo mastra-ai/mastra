@@ -560,6 +560,8 @@ export class Agent extends BaseResource {
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
     Response & {
       processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      abort: () => Promise<boolean>;
+      unsubscribe: () => void;
     }
   > {
     const { resourceId, threadId } = params;
@@ -572,6 +574,8 @@ export class Agent extends BaseResource {
 
     const streamResponse = (await requestSubscription()) as Response & {
       processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      abort: () => Promise<boolean>;
+      unsubscribe: () => void;
     };
 
     if (!streamResponse.body) {
@@ -579,231 +583,279 @@ export class Agent extends BaseResource {
     }
 
     const agent = this;
+    streamResponse.abort = async () => (await agent.abortThread({ resourceId, threadId })).aborted;
+
+    let unsubscribed = false;
+    let processAbortController: AbortController | undefined;
+    let processStarted = false;
+
+    streamResponse.unsubscribe = () => {
+      if (unsubscribed) return;
+      unsubscribed = true;
+      processAbortController?.abort();
+      if (!processStarted) {
+        void streamResponse.body?.cancel().catch(() => {});
+      }
+    };
 
     streamResponse.processDataStream = async ({ onChunk, reconnect }: ProcessAgentThreadStreamOptions) => {
-      const pendingToolCallsByRunId = new Map<
-        string,
-        Array<{
-          toolCallId: string;
-          toolName: string;
-          args?: unknown;
-          observability?: ClientToolObservabilityContext;
-        }>
-      >();
+      if (unsubscribed) return;
+      processStarted = true;
+      processAbortController = new AbortController();
+      const abortProcessStream = () => processAbortController?.abort();
+      const isClosed = () =>
+        unsubscribed || processAbortController?.signal.aborted || this.options.abortSignal?.aborted;
 
-      const handleSubscribedChunk = async (chunk: ChunkType) => {
-        if (chunk.type === 'tool-call') {
-          const payload = (
-            chunk as {
-              payload?: {
-                toolCallId?: string;
-                toolName?: string;
-                args?: unknown;
-                observability?: ClientToolObservabilityContext;
-              };
-            }
-          ).payload;
-          const toolCallId = payload?.toolCallId;
-          const toolName = payload?.toolName;
+      if (this.options.abortSignal?.aborted) {
+        abortProcessStream();
+      } else {
+        this.options.abortSignal?.addEventListener('abort', abortProcessStream, { once: true });
+      }
+
+      try {
+        const pendingToolCallsByRunId = new Map<
+          string,
+          Array<{
+            toolCallId: string;
+            toolName: string;
+            args?: unknown;
+            observability?: ClientToolObservabilityContext;
+          }>
+        >();
+
+        const handleSubscribedChunk = async (chunk: ChunkType) => {
+          if (chunk.type === 'tool-call') {
+            const payload = (
+              chunk as {
+                payload?: {
+                  toolCallId?: string;
+                  toolName?: string;
+                  args?: unknown;
+                  observability?: ClientToolObservabilityContext;
+                };
+              }
+            ).payload;
+            const toolCallId = payload?.toolCallId;
+            const toolName = payload?.toolName;
+            const runId = (chunk as { runId?: string }).runId;
+            if (!toolCallId || !toolName || !runId) return;
+
+            const pendingToolCalls = pendingToolCallsByRunId.get(runId) ?? [];
+            pendingToolCalls.push({ toolCallId, toolName, args: payload.args, observability: payload.observability });
+            pendingToolCallsByRunId.set(runId, pendingToolCalls);
+            return;
+          }
+
+          if (chunk.type !== 'finish') return;
+
           const runId = (chunk as { runId?: string }).runId;
-          if (!toolCallId || !toolName || !runId) return;
-
-          const pendingToolCalls = pendingToolCallsByRunId.get(runId) ?? [];
-          pendingToolCalls.push({ toolCallId, toolName, args: payload.args, observability: payload.observability });
-          pendingToolCallsByRunId.set(runId, pendingToolCalls);
-          return;
-        }
-
-        if (chunk.type !== 'finish') return;
-
-        const runId = (chunk as { runId?: string }).runId;
-        const finishPayload = chunk as {
-          payload?: {
-            stepResult?: { reason?: string };
-            messages?: { nonUser?: CoreMessage[] };
+          const finishPayload = chunk as {
+            payload?: {
+              stepResult?: { reason?: string };
+              messages?: { nonUser?: CoreMessage[] };
+            };
           };
-        };
-        if (!runId) return;
-        if (finishPayload.payload?.stepResult?.reason !== 'tool-calls') {
-          agent.deleteSignalRuntimeOptions(runId);
-          return;
-        }
+          if (!runId) return;
+          if (finishPayload.payload?.stepResult?.reason !== 'tool-calls') {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
 
-        const pendingToolCalls = pendingToolCallsByRunId.get(runId);
-        pendingToolCallsByRunId.delete(runId);
-        if (!pendingToolCalls?.length) {
-          agent.deleteSignalRuntimeOptions(runId);
-          return;
-        }
+          const pendingToolCalls = pendingToolCallsByRunId.get(runId);
+          pendingToolCallsByRunId.delete(runId);
+          if (!pendingToolCalls?.length) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
 
-        const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
-        const activeClientTools = activeRuntimeOptions?.clientTools;
-        if (!activeClientTools) {
-          agent.deleteSignalRuntimeOptions(runId);
-          return;
-        }
+          const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
+          const activeClientTools = activeRuntimeOptions?.clientTools;
+          if (!activeClientTools) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
 
-        const activeRequestContext = activeRuntimeOptions.requestContext;
-        const processedClientTools = processClientTools(activeClientTools);
-        const processedRequestContext = parseClientRequestContext(activeRequestContext);
+          const activeRequestContext = activeRuntimeOptions.requestContext;
+          const processedClientTools = processClientTools(activeClientTools);
+          const processedRequestContext = parseClientRequestContext(activeRequestContext);
 
-        const toolResultMessages: CoreMessage[] = [];
-        for (const toolCall of pendingToolCalls) {
-          const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
-          if (!clientTool || typeof clientTool.execute !== 'function') continue;
+          const toolResultMessages: CoreMessage[] = [];
+          for (const toolCall of pendingToolCalls) {
+            const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
+            if (!clientTool || typeof clientTool.execute !== 'function') continue;
 
-          let result: unknown;
-          let observability: ClientToolObservabilityEnvelope | undefined;
-          try {
-            const execution = await executeClientToolWithObservability({
-              clientTool,
-              args: toolCall.args,
-              toolName: toolCall.toolName,
-              parentContext: toolCall.observability,
-              executeContext: {
-                requestContext: activeRequestContext as RequestContext,
-                tracingContext: { currentSpan: undefined },
-                agent: {
-                  agentId: agent.agentId,
-                  messages: finishPayload.payload?.messages?.nonUser ?? [],
-                  toolCallId: toolCall.toolCallId,
-                  suspend: async () => {},
-                  threadId,
-                  resourceId,
+            let result: unknown;
+            let observability: ClientToolObservabilityEnvelope | undefined;
+            try {
+              const execution = await executeClientToolWithObservability({
+                clientTool,
+                args: toolCall.args,
+                toolName: toolCall.toolName,
+                parentContext: toolCall.observability,
+                executeContext: {
+                  requestContext: activeRequestContext as RequestContext,
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
+                    agentId: agent.agentId,
+                    messages: finishPayload.payload?.messages?.nonUser ?? [],
+                    toolCallId: toolCall.toolCallId,
+                    suspend: async () => {},
+                    threadId,
+                    resourceId,
+                  },
                 },
-              },
+              });
+              result = execution.result;
+              observability = execution.observability;
+            } catch (error) {
+              result = { error: String(error) };
+            }
+
+            const toolResultContent: Record<string, unknown> = {
+              type: 'tool-result',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              result,
+            };
+
+            if (observability) {
+              toolResultContent.__mastraObservability = observability;
+            }
+
+            await onChunk({
+              type: 'tool-result',
+              runId,
+              payload: toolResultContent,
+            } as never);
+
+            toolResultMessages.push({
+              role: 'tool',
+              content: [toolResultContent],
+            } as unknown as CoreMessage);
+          }
+
+          if (toolResultMessages.length === 0) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
+
+          try {
+            const continuation = await agent.streamUntilIdle(
+              [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
+              {
+                ...activeRuntimeOptions,
+                runId: uuid(),
+                requestContext: processedRequestContext,
+                memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+                clientTools: processedClientTools,
+              } as never,
+            );
+            try {
+              void continuation.body?.cancel?.();
+            } catch {
+              // ignore
+            }
+          } catch (error) {
+            console.error('Error running client-tool continuation:', error);
+          } finally {
+            agent.deleteSignalRuntimeOptions(runId);
+          }
+        };
+
+        const reconnectOptions =
+          reconnect === true
+            ? { maxRetries: Infinity, delayMs: 1000 }
+            : reconnect
+              ? { maxRetries: reconnect.maxRetries ?? Infinity, delayMs: reconnect.delayMs ?? 1000 }
+              : null;
+        let response: Response = streamResponse;
+        let attempts = 0;
+
+        // Sentinel used to distinguish errors thrown by the caller's `onChunk`
+        // callback from transport errors. Callback errors should not trigger a
+        // reconnect — we'd otherwise mask user bugs by resubscribing forever.
+        // The sentinel never escapes this method: we unwrap and rethrow the
+        // original error so consumers see exactly what they threw.
+        const onChunkErrorSentinel = Symbol('onChunkErrorSentinel');
+        const guardedOnChunk = async (chunk: ChunkType) => {
+          try {
+            await onChunk(chunk);
+            await handleSubscribedChunk(chunk);
+          } catch (cause) {
+            throw { [onChunkErrorSentinel]: true, cause };
+          }
+        };
+
+        while (true) {
+          if (!response.body) {
+            throw new Error('No response body');
+          }
+
+          try {
+            await processMastraStream({
+              stream: response.body as ReadableStream<Uint8Array>,
+              onChunk: guardedOnChunk,
+              signal: processAbortController.signal,
             });
-            result = execution.result;
-            observability = execution.observability;
           } catch (error) {
-            result = { error: String(error) };
-          }
-
-          const toolResultContent: Record<string, unknown> = {
-            type: 'tool-result',
-            toolCallId: toolCall.toolCallId,
-            toolName: toolCall.toolName,
-            result,
-          };
-
-          if (observability) {
-            toolResultContent.__mastraObservability = observability;
-          }
-
-          await onChunk({
-            type: 'tool-result',
-            runId,
-            payload: toolResultContent,
-          } as never);
-
-          toolResultMessages.push({
-            role: 'tool',
-            content: [toolResultContent],
-          } as unknown as CoreMessage);
-        }
-
-        if (toolResultMessages.length === 0) {
-          agent.deleteSignalRuntimeOptions(runId);
-          return;
-        }
-
-        try {
-          const continuation = await agent.streamUntilIdle(
-            [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
-            {
-              ...activeRuntimeOptions,
-              runId: uuid(),
-              requestContext: processedRequestContext,
-              memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
-              clientTools: processedClientTools,
-            } as never,
-          );
-          try {
-            void continuation.body?.cancel?.();
-          } catch {
-            // ignore
-          }
-        } catch (error) {
-          console.error('Error running client-tool continuation:', error);
-        } finally {
-          agent.deleteSignalRuntimeOptions(runId);
-        }
-      };
-
-      const reconnectOptions =
-        reconnect === true
-          ? { maxRetries: Infinity, delayMs: 1000 }
-          : reconnect
-            ? { maxRetries: reconnect.maxRetries ?? Infinity, delayMs: reconnect.delayMs ?? 1000 }
-            : null;
-      let response: Response = streamResponse;
-      let attempts = 0;
-
-      // Sentinel used to distinguish errors thrown by the caller's `onChunk`
-      // callback from transport errors. Callback errors should not trigger a
-      // reconnect — we'd otherwise mask user bugs by resubscribing forever.
-      // The sentinel never escapes this method: we unwrap and rethrow the
-      // original error so consumers see exactly what they threw.
-      const onChunkErrorSentinel = Symbol('onChunkErrorSentinel');
-      const guardedOnChunk = async (chunk: ChunkType) => {
-        try {
-          await onChunk(chunk);
-          await handleSubscribedChunk(chunk);
-        } catch (cause) {
-          throw { [onChunkErrorSentinel]: true, cause };
-        }
-      };
-
-      while (true) {
-        if (!response.body) {
-          throw new Error('No response body');
-        }
-
-        try {
-          await processMastraStream({
-            stream: response.body as ReadableStream<Uint8Array>,
-            onChunk: guardedOnChunk,
-            signal: this.options.abortSignal,
-          });
-        } catch (error) {
-          if (typeof error === 'object' && error !== null && (error as any)[onChunkErrorSentinel]) {
-            throw (error as { cause: unknown }).cause;
-          }
-          if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
-            throw error;
-          }
-        }
-
-        if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
-          return;
-        }
-
-        while (attempts < reconnectOptions.maxRetries) {
-          attempts++;
-
-          if (this.options.abortSignal?.aborted) {
-            return;
-          }
-
-          await new Promise(resolve => setTimeout(resolve, reconnectOptions.delayMs));
-
-          if (this.options.abortSignal?.aborted) {
-            return;
-          }
-
-          try {
-            response = await requestSubscription();
-            break;
-          } catch (error) {
-            if (this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+            if (typeof error === 'object' && error !== null && (error as any)[onChunkErrorSentinel]) {
+              throw (error as { cause: unknown }).cause;
+            }
+            if (!reconnectOptions || isClosed() || attempts >= reconnectOptions.maxRetries) {
+              if (isClosed()) return;
               throw error;
             }
           }
+
+          if (!reconnectOptions || isClosed() || attempts >= reconnectOptions.maxRetries) {
+            return;
+          }
+
+          while (attempts < reconnectOptions.maxRetries) {
+            attempts++;
+
+            if (isClosed()) {
+              return;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, reconnectOptions.delayMs));
+
+            if (isClosed()) {
+              return;
+            }
+
+            try {
+              response = await requestSubscription();
+              break;
+            } catch (error) {
+              if (isClosed() || attempts >= reconnectOptions.maxRetries) {
+                if (isClosed()) return;
+                throw error;
+              }
+            }
+          }
         }
+      } finally {
+        this.options.abortSignal?.removeEventListener('abort', abortProcessStream);
+        if (processAbortController?.signal.aborted) {
+          unsubscribed = true;
+        }
+        processAbortController = undefined;
       }
     };
 
     return streamResponse;
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async abortThread(params: SubscribeAgentThreadParams): Promise<{ aborted: boolean }> {
+    const { resourceId, threadId } = params;
+    return this.request<{ aborted: boolean }>(`/agents/${this.agentId}/threads/abort`, {
+      method: 'POST',
+      body: { resourceId, threadId },
+    });
   }
 
   /**
@@ -2663,6 +2715,23 @@ export class Agent extends BaseResource {
     };
 
     return streamResponse;
+  }
+
+  async sendToolApproval(params: {
+    resourceId: string;
+    threadId: string;
+    toolCallId: string;
+    approved: boolean;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+    const { requestContext, ...rest } = params;
+    return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
+      `/agents/${this.agentId}/send-tool-approval`,
+      {
+        method: 'POST',
+        body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      },
+    );
   }
 
   async declineToolCall(params: {

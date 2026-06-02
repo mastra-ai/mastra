@@ -462,8 +462,33 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     description:
       'Standard JSON Schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
   },
+  {
+    name: 'editor',
+    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean } }',
+    isOptional: true,
+    description:
+      'Controls which fields the editor can override for this code-defined agent. Omit to allow editing instructions and tools. See Editor overrides below.',
+  },
 ]}
 />
+
+## Editor overrides
+
+When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `editor` field controls which parts of a code-defined agent can be changed through the editor. Fields owned by code are read-only in Studio and are stripped from saved overrides.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'editor',
+    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean } }',
+    isOptional: true,
+    description:
+      'Omit to allow editing instructions and tools. Set to `false` to lock the agent. Set `instructions: true` to allow instruction edits. Set `tools: true` to allow tool membership and description edits, or `tools: { description: true }` to allow only description edits.',
+  },
+]}
+/>
+
+The agent's `id`, `name`, and `model` always come from code and can't be overridden through the editor. See the [Editor overview](/docs/editor/overview#controlling-what-is-editable) for usage.
 
 ## Returns
 
