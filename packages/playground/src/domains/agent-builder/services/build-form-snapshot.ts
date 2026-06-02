@@ -30,6 +30,15 @@ export interface BuildFormSnapshotOptions {
 }
 
 const INSTRUCTIONS_MAX_CHARS = 1500;
+/**
+ * Hard cap on the generated `instructions` field. Surfaced to the builder LLM
+ * via the empty-instructions directive AND enforced server-side by
+ * `useSetAgentInstructionsTool`, so a single `set-agent-instructions` tool call
+ * always stays under the stream output cap (`maxTokens` in
+ * `stream-chat-provider.tsx`). Anything past the cap is truncated before it
+ * lands in the form — the LLM is told this is a strict, not aspirational, limit.
+ */
+export const MAX_GENERATED_INSTRUCTIONS_CHARS = 3000;
 const EMPTY_TEXT = '(empty)';
 const NOT_SET_TEXT = '(not set)';
 
@@ -83,7 +92,7 @@ export function buildFormSnapshotInstructions(
   lines.push('## Current agent configuration (authoritative)');
   lines.push('');
   lines.push(
-    "This snapshot reflects the agent's current form state. Trust these values as ground truth. Call each setter at most once per turn, with the final value. Do not re-call a setter to confirm or re-check a value the snapshot already shows — that is a bug. Skip any setter whose field is not listed below (the feature is disabled for this agent).",
+    'Trust these values as ground truth. Call each setter at most once per turn, with the final value. Do not re-call a setter to confirm a value the snapshot already shows. Skip any field not listed below — its feature is disabled.',
   );
   lines.push('');
 
@@ -105,7 +114,7 @@ export function buildFormSnapshotInstructions(
       renderField(
         'Name',
         `${renderQuoted(values.name)} (auto-generated placeholder from the starter prompt)`,
-        'Call set-agent-name once with a short, memorable name anchored to the outcome. The current value is a placeholder, not a real name.',
+        'Call set-agent-name once with a real, short, memorable name anchored to the outcome.',
       ),
     );
   } else {
@@ -128,7 +137,7 @@ export function buildFormSnapshotInstructions(
       renderField(
         'Description',
         EMPTY_TEXT,
-        'Call set-agent-description once with a single plain-language sentence explaining what the agent helps with.',
+        'Call set-agent-description once with one plain-language sentence explaining what the agent helps with.',
       ),
     );
   }
@@ -139,7 +148,7 @@ export function buildFormSnapshotInstructions(
       renderField(
         'Instructions',
         renderInstructions(values.instructions),
-        'Already set. Do not call set-agent-instructions unless the user explicitly asks to rewrite or amend the prompt.',
+        'Already set (see the """...""" block above — that is the persisted, final text). Do NOT call set-agent-instructions again to refine, tighten, polish, or extend the wording. Re-call only if the user explicitly asks for a change.',
       ),
     );
   } else {
@@ -147,7 +156,7 @@ export function buildFormSnapshotInstructions(
       renderField(
         'Instructions',
         EMPTY_TEXT,
-        'Call set-agent-instructions once with the full system prompt for the produced agent. Follow the quality bar in the main instructions.',
+        `Call set-agent-instructions EXACTLY ONCE with your final, complete system prompt. Do not call it again to revise — write the final version on the first call. Strict ${MAX_GENERATED_INSTRUCTIONS_CHARS.toLocaleString()}-character limit; content past that is truncated server-side and the agent will lose context.`,
       ),
     );
   }
@@ -170,7 +179,7 @@ export function buildFormSnapshotInstructions(
         renderField(
           'Model',
           NOT_SET_TEXT,
-          'Call set-agent-model once with a provider/name pair from the available models list (see the set-agent-model tool description). Prefer the strongest model for coding/reasoning work, or a cheaper/faster model for simple high-volume tasks.',
+          'Call set-agent-model once with a provider/name pair from the available models list. Prefer a strong model for coding/reasoning, a cheaper/faster one for simple high-volume tasks.',
         ),
       );
     }
@@ -192,15 +201,13 @@ export function buildFormSnapshotInstructions(
       renderField(
         'Workspace',
         NOT_SET_TEXT,
-        'Call set-agent-workspace-id only if the requested outcome needs CLI or local-machine actions and an applicable workspace exists. Otherwise skip it.',
+        'Call set-agent-workspace-id only if the agent needs CLI or local-machine actions and a workspace is available.',
       ),
     );
   }
 
-  // Visibility (no setter — just informational; included so the LLM doesn't try to change it via tools).
-  lines.push(
-    `- Visibility: ${values.visibility ?? 'private'}\n  No setter; managed outside the builder. Do not attempt to change it.`,
-  );
+  // Visibility (no setter — informational only).
+  lines.push(`- Visibility: ${values.visibility ?? 'private'}`);
 
   // Browser
   if (features.browser) {
@@ -217,7 +224,7 @@ export function buildFormSnapshotInstructions(
         renderField(
           'Browser enabled',
           'false',
-          'Call set-agent-browser-enabled(true) only if the requested outcome clearly needs the agent to operate a browser. Otherwise leave it off.',
+          'Call set-agent-browser-enabled(true) only if the agent needs to operate a browser.',
         ),
       );
     }
@@ -236,7 +243,7 @@ export function buildFormSnapshotInstructions(
         renderField(
           'Tools',
           '(none selected)',
-          'Call set-agent-tools once with the minimum set of existing tools/agents/workflows that satisfies the outcome. Skip if nothing in the available catalog is genuinely required — adding irrelevant tools makes the agent worse.',
+          'Call set-agent-tools once with the minimum tools/agents/workflows needed for the outcome. Skip if nothing in the catalog applies.',
         ),
       );
     } else {
@@ -259,7 +266,7 @@ export function buildFormSnapshotInstructions(
         renderField(
           'Skills',
           '(none selected)',
-          'Call set-agent-skills once with any available stored skills the outcome genuinely needs. Use createSkillTool only when no existing skill matches and a reusable operating instruction is genuinely required.',
+          'Call set-agent-skills once with any stored skills the outcome needs. Use createSkillTool only when no existing skill fits.',
         ),
       );
     } else {

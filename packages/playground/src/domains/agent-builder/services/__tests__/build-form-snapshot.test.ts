@@ -305,20 +305,32 @@ describe('buildFormSnapshotInstructions', () => {
       expect(result).toContain('Already set. Do not call set-agent-description');
     });
 
-    it('tells the LLM to call set-agent-instructions when instructions is empty', () => {
+    it('tells the LLM to call set-agent-instructions exactly once when instructions is empty', () => {
       const result = buildFormSnapshotInstructions(baseValues, buildOptions());
 
       expect(result).toContain('- Instructions: (empty)');
-      expect(result).toContain('Call set-agent-instructions once');
+      expect(result).toContain('Call set-agent-instructions EXACTLY ONCE');
+      expect(result).toMatch(/Do not call it again to revise/);
     });
 
-    it('tells the LLM to skip set-agent-instructions when instructions is filled', () => {
+    it('caps the generated instructions length so a single tool call serializes safely', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      // Hard cap surfaced to the LLM AND enforced server-side in
+      // useSetAgentInstructionsTool, so set-agent-instructions args stay
+      // under the stream output token cap.
+      expect(result).toMatch(/[Ss]trict [\d,]+-character limit/);
+      expect(result).toMatch(/truncated server-side/);
+    });
+
+    it('tells the LLM not to revise instructions once they are filled', () => {
       const result = buildFormSnapshotInstructions(
         { ...baseValues, instructions: 'You are a standup bot.' },
         buildOptions(),
       );
 
-      expect(result).toContain('Already set. Do not call set-agent-instructions');
+      expect(result).toMatch(/Do NOT call set-agent-instructions again/);
+      expect(result).toMatch(/refine, tighten, polish, or extend/);
     });
 
     it('tells the LLM to skip set-agent-model when model is preset', () => {
@@ -355,7 +367,7 @@ describe('buildFormSnapshotInstructions', () => {
 
       expect(result).toContain('- Tools: (none selected)');
       expect(result).toContain('Call set-agent-tools once');
-      expect(result).toContain('minimum set');
+      expect(result).toContain('minimum tools');
     });
 
     it('marks tools as already configured when at least one is selected', () => {
@@ -383,11 +395,11 @@ describe('buildFormSnapshotInstructions', () => {
       expect(result).toContain('Already enabled. Do not call set-agent-browser-enabled');
     });
 
-    it('mentions visibility has no setter so the LLM does not try to change it', () => {
+    it('lists visibility as an informational value with no directive', () => {
       const result = buildFormSnapshotInstructions(baseValues, buildOptions());
 
       expect(result).toContain('- Visibility: private');
-      expect(result).toContain('No setter');
+      expect(result).not.toContain('No setter');
     });
 
     it('tells the LLM to replace the auto-generated placeholder name when it still matches the starter prompt', () => {
@@ -399,7 +411,7 @@ describe('buildFormSnapshotInstructions', () => {
       );
 
       expect(result).toContain(`- Name: "${placeholder}" (auto-generated placeholder from the starter prompt)`);
-      expect(result).toContain('The current value is a placeholder, not a real name.');
+      expect(result).toContain('Call set-agent-name once with a real');
       expect(result).not.toContain('Already set. Do not call set-agent-name');
     });
 
@@ -439,7 +451,7 @@ describe('buildFormSnapshotInstructions', () => {
       const result = buildFormSnapshotInstructions({ ...baseValues, instructions: '   \n  ' }, buildOptions());
 
       expect(result).toContain('- Instructions: (empty)');
-      expect(result).toContain('Call set-agent-instructions once');
+      expect(result).toContain('Call set-agent-instructions EXACTLY ONCE');
     });
 
     it('wraps short-form values in quotes so user input is visually contained', () => {
