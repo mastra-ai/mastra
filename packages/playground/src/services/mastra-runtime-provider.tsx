@@ -861,7 +861,13 @@ export function MastraRuntimeProvider({
   // tracked in `streamErrors` (which survives the post-stream initialMessages
   // refresh). Without filtering here we would briefly render duplicate errors
   // during the streaming window.
-  const vnextmessages = [...messages.filter(msg => msg.metadata?.status !== 'error'), ...streamErrors].map(msg => {
+  const vnextmessages = [
+    // Filter out signal-role messages (e.g. system-reminder from @mastra/agent-browser)
+    // before passing to toAssistantUIMessage. @assistant-ui/react only accepts
+    // 'user' | 'assistant' | 'system' roles and throws on unknown roles like 'signal'.
+    ...messages.filter(msg => msg.metadata?.status !== 'error' && msg.role !== 'signal'),
+    ...streamErrors,
+  ].map(msg => {
     const converted = convertOmPartsInMastraMessage(msg, globalOmParts);
     return toAssistantUIMessage(converted);
   });
