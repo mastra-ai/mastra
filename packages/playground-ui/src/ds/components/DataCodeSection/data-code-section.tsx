@@ -14,6 +14,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import {
   Dialog,
   DialogClose,
@@ -244,15 +245,7 @@ export function DataCodeSection({
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       <div className="flex items-center justify-between">
-        <div
-          className={cn(
-            'flex items-center gap-1.5 text-ui-sm uppercase tracking-widest text-neutral2',
-            '[&>svg]:size-3.5',
-          )}
-        >
-          {icon}
-          {title}
-        </div>
+        <DataPanelSectionHeading icon={icon}>{title}</DataPanelSectionHeading>
         <div className="flex items-center gap-2">
           {!usePlainTextView && (
             <SearchFieldBlock
