@@ -18,6 +18,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.34",
     "@mastra/core": "latest",
+    "@mastra/editor": "latest",
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",

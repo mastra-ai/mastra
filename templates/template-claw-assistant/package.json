@@ -21,6 +21,7 @@
     "@ai-sdk/openai": "^3.0.34",
     "@mastra/agent-browser": "latest",
     "@mastra/core": "latest",
+    "@mastra/editor": "latest",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",

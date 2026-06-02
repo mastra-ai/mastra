@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core';
+import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
 import { PostgresStore, PgVector } from '@mastra/pg';
 import { knowledgeAgent } from './agents/knowledge';
@@ -17,5 +18,6 @@ export const mastra = new Mastra({
   workflows: { indexKnowledgeWorkflow },
   storage,
   vectors: { pgVector: vector },
+  editor: new MastraEditor(),
   logger: new PinoLogger({ name: 'company-knowledge', level: 'info' }),
 });

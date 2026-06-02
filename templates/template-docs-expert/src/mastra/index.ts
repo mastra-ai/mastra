@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
+import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 import { PinoLogger } from '@mastra/loggers';
 import {
@@ -16,6 +17,7 @@ export const mastra = new Mastra({
     authToken: process.env.TURSO_AUTH_TOKEN,
   }),
   agents: { docsExpert },
+  editor: new MastraEditor(),
   logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
   observability: new Observability({
     configs: {

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@mastra/core": "latest",
+    "@mastra/editor": "latest",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",

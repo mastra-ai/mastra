@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
+import { MastraEditor } from '@mastra/editor';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
 import { PinoLogger } from '@mastra/loggers';
@@ -28,5 +29,6 @@ export const mastra = new Mastra({
     url: tursoUrl,
     authToken: process.env.TURSO_AUTH_TOKEN,
   }),
+  editor: new MastraEditor(),
   logger: new PinoLogger({ name: 'claw', level: 'info' }),
 });
