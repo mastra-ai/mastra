@@ -54,19 +54,28 @@ describe('useSetAgentInstructionsTool', () => {
     const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS);
     const result: any = await tool.execute!({ instructions: body } as any);
     expect(form().getValues('instructions')).toBe(body);
-    expect(result.truncated).toBe(false);
+    expect(result.success).toBe(true);
+    expect(result.rejected).toBe(false);
     expect(result.finalLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS);
   });
 
-  it('truncates instructions past the hard cap with a notice the LLM can read back', async () => {
+  it('rejects instructions past the hard cap without persisting (and leaves existing value intact)', async () => {
     const { tool, form } = renderTool();
+    // Seed an already-valid instructions value so we can prove rejection does
+    // not clobber existing content (the "nothing is persisted" contract).
+    const seeded = 'Existing valid instructions.';
+    form().setValue('instructions', seeded);
+
     const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
     const result: any = await tool.execute!({ instructions: body } as any);
-    const stored = form().getValues('instructions');
-    expect(stored.length).toBeLessThanOrEqual(MAX_GENERATED_INSTRUCTIONS_CHARS);
-    expect(stored).toMatch(/\[…truncated to fit length limit\]$/);
-    expect(result.truncated).toBe(true);
-    expect(result.originalLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
-    expect(result.finalLength).toBeLessThanOrEqual(MAX_GENERATED_INSTRUCTIONS_CHARS);
+    // The seeded value survives — over-limit calls write nothing.
+    expect(form().getValues('instructions')).toBe(seeded);
+    expect(result.success).toBe(false);
+    expect(result.rejected).toBe(true);
+    expect(result.currentLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
+    expect(result.limit).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS);
+    // Tool result message tells the LLM exactly what to do.
+    expect(result.message).toMatch(/REJECTED/);
+    expect(result.message).toMatch(/whole section/i);
   });
 });
