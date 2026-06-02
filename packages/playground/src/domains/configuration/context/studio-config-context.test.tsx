@@ -36,7 +36,7 @@ afterEach(() => {
 });
 
 describe('StudioConfigProvider auth header URL handoff', () => {
-  it('reads auth_header once, removes it from the URL, and persists it as Authorization', async () => {
+  it('reads auth_header once, removes it from the URL, and keeps it out of localStorage', async () => {
     const statusRequest = vi.fn<(header: string | null) => void>();
     server.use(
       http.get(BASE_URL, ({ request }) => {
@@ -49,19 +49,25 @@ describe('StudioConfigProvider auth header URL handoff', () => {
     renderProvider();
 
     await waitFor(() => expect(statusRequest).toHaveBeenCalledWith('Bearer external-token'));
-    expect(window.location.search).toBe('?keep=1');
+    await waitFor(() => expect(window.location.search).toBe('?keep=1'));
 
     await waitFor(() => {
       const storedConfig = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) ?? '{}');
-      expect(storedConfig.headers.Authorization).toBe('Bearer external-token');
+      expect(storedConfig.headers.Authorization).toBeUndefined();
     });
 
     const config = JSON.parse(screen.getByTestId('config').textContent ?? '{}');
     expect(config.headers.Authorization).toBe('Bearer external-token');
   });
 
-  it('overrides only Authorization when stored config already exists', async () => {
-    server.use(http.get(BASE_URL, () => HttpResponse.text('ok')));
+  it('uses URL Authorization in memory but does not persist it over stored config', async () => {
+    const statusRequest = vi.fn<(header: string | null) => void>();
+    server.use(
+      http.get(BASE_URL, ({ request }) => {
+        statusRequest(request.headers.get('Authorization'));
+        return HttpResponse.text('ok');
+      }),
+    );
     window.localStorage.setItem(
       LOCAL_STORAGE_KEY,
       JSON.stringify({
@@ -74,13 +80,20 @@ describe('StudioConfigProvider auth header URL handoff', () => {
 
     renderProvider();
 
+    await waitFor(() => expect(statusRequest).toHaveBeenCalledWith('Bearer new-token'));
+
     await waitFor(() => {
       const storedConfig = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) ?? '{}');
       expect(storedConfig).toMatchObject({
         baseUrl: 'http://stored.example',
-        headers: { Authorization: 'Bearer new-token', 'X-Trace': 'trace-1' },
+        headers: { 'X-Trace': 'trace-1' },
         apiPrefix: '/stored-api',
       });
+      expect(storedConfig.headers.Authorization).toBeUndefined();
     });
+
+    const config = JSON.parse(screen.getByTestId('config').textContent ?? '{}');
+    expect(config.headers.Authorization).toBe('Bearer new-token');
+    expect(config.headers['X-Trace']).toBe('trace-1');
   });
 });

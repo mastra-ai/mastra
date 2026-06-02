@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 
 import { useMastraInstanceStatus } from '../hooks/use-mastra-instance-status';
 import type { StudioConfig } from '../types';
@@ -14,17 +14,26 @@ const LOCAL_STORAGE_KEY = 'mastra-studio-config';
 const AUTH_HEADER_PARAM = 'auth_header';
 const AUTH_HEADER_NAME = 'Authorization';
 
-const consumeUrlAuthHeader = (): Record<string, string> => {
+const readUrlAuthHeader = (): Record<string, string> => {
   if (typeof window === 'undefined') return {};
 
+  const authHeader = new URL(window.location.href).searchParams.get(AUTH_HEADER_PARAM);
+  return authHeader ? { [AUTH_HEADER_NAME]: authHeader } : {};
+};
+
+const removeUrlAuthHeader = () => {
+  if (typeof window === 'undefined') return;
+
   const url = new URL(window.location.href);
-  const authHeader = url.searchParams.get(AUTH_HEADER_PARAM);
-  if (!authHeader) return {};
+  if (!url.searchParams.has(AUTH_HEADER_PARAM)) return;
 
   url.searchParams.delete(AUTH_HEADER_PARAM);
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+};
 
-  return { [AUTH_HEADER_NAME]: authHeader };
+const getPersistentConfig = (config: StudioConfig): StudioConfig => {
+  const { [AUTH_HEADER_NAME]: _authorization, ...headers } = config.headers;
+  return { ...config, headers };
 };
 
 export const StudioConfigProvider = ({
@@ -32,7 +41,7 @@ export const StudioConfigProvider = ({
   endpoint = 'http://localhost:4111',
   defaultApiPrefix = '/api',
 }: StudioConfigProviderProps) => {
-  const [urlHeaders] = useState<Record<string, string>>(consumeUrlAuthHeader);
+  const [urlHeaders] = useState<Record<string, string>>(readUrlAuthHeader);
   const hasUrlHeaders = Object.keys(urlHeaders).length > 0;
   const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint, urlHeaders);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
@@ -41,6 +50,10 @@ export const StudioConfigProvider = ({
     apiPrefix: undefined,
     isLoading: true,
   });
+
+  useEffect(() => {
+    removeUrlAuthHeader();
+  }, []);
 
   useLayoutEffect(() => {
     // Handle error case - stop loading but don't configure
@@ -63,7 +76,7 @@ export const StudioConfigProvider = ({
           apiPrefix: parsedConfig.apiPrefix ?? defaultApiPrefix,
         };
         if (hasUrlHeaders) {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedConfig));
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(getPersistentConfig(normalizedConfig)));
         }
         return setConfig({ ...normalizedConfig, isLoading: false });
       }
@@ -72,7 +85,7 @@ export const StudioConfigProvider = ({
     if (instanceStatus.status === 'active') {
       const nextConfig = { baseUrl: endpoint, headers: urlHeaders, apiPrefix: defaultApiPrefix };
       if (hasUrlHeaders) {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(nextConfig));
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(getPersistentConfig(nextConfig)));
       }
       return setConfig({ ...nextConfig, isLoading: false });
     }
@@ -83,7 +96,8 @@ export const StudioConfigProvider = ({
   const doSetConfig = (partialNewConfig: Partial<StudioConfig>) => {
     setConfig(prev => {
       const nextConfig = { ...prev, ...partialNewConfig };
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(nextConfig));
+      const persistentConfig = hasUrlHeaders ? getPersistentConfig(nextConfig) : nextConfig;
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(persistentConfig));
       return nextConfig;
     });
   };
