@@ -1218,4 +1218,191 @@ describe('GeminiLiveVoice', () => {
       expect(['audio', 'text', 'video']).toContain(usage.modality);
     });
   });
+
+  describe('Native-audio behavioral signals (#17021)', () => {
+    describe('Setup payload', () => {
+      // Setup-level flags are required by the Gemini Live wire protocol: the server only emits
+      // transcription frames when `input_audio_transcription` / `output_audio_transcription` are
+      // present, and only emits `serverContent.interrupted = true` when `realtime_input_config`
+      // declares `activity_handling: 'START_OF_ACTIVITY_INTERRUPTS'`. These tests pin the wire
+      // shape so we cannot regress these flags without breaking the build.
+      it('enables input/output transcription unconditionally in the setup payload', async () => {
+        const v = new GeminiLiveVoice({ apiKey: 'k', model: 'gemini-2.5-flash-native-audio-preview-12-2025' });
+        vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+        (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+        await v.connect();
+
+        const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+        const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+        const setupMsg = payloads.find((p: any) => p.setup);
+        expect(setupMsg.setup.input_audio_transcription).toEqual({});
+        expect(setupMsg.setup.output_audio_transcription).toEqual({});
+      });
+
+      it('enables activity-based interrupts in the setup payload', async () => {
+        const v = new GeminiLiveVoice({ apiKey: 'k' });
+        vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+        (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+        await v.connect();
+
+        const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+        const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+        const setupMsg = payloads.find((p: any) => p.setup);
+        expect(setupMsg.setup.realtime_input_config).toEqual({
+          activity_handling: 'START_OF_ACTIVITY_INTERRUPTS',
+        });
+      });
+
+      it('uses snake_case keys for all native-audio setup fields', async () => {
+        // Native-audio models reject camelCase setup keys at the wire level (1007 close code).
+        // Guard explicitly against accidental drift back to camelCase.
+        const v = new GeminiLiveVoice({ apiKey: 'k' });
+        vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+        (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+        await v.connect();
+
+        const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+        const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+        const setupMsg = payloads.find((p: any) => p.setup);
+        const json = JSON.stringify(setupMsg.setup);
+        expect(json).not.toContain('inputAudioTranscription');
+        expect(json).not.toContain('outputAudioTranscription');
+        expect(json).not.toContain('realtimeInputConfig');
+        expect(json).not.toContain('activityHandling');
+      });
+    });
+
+    describe('Transcription routing', () => {
+      it('emits writing { role: "user" } for inputTranscription frames', async () => {
+        const writingPromise = new Promise<any>(resolve => voice.on('writing', resolve));
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: {
+            inputTranscription: { text: "What's the weather?" },
+          },
+        });
+
+        const ev = await writingPromise;
+        expect(ev).toEqual({ text: "What's the weather?", role: 'user' });
+      });
+
+      it('emits writing { role: "assistant" } for outputTranscription frames', async () => {
+        const writingPromise = new Promise<any>(resolve => voice.on('writing', resolve));
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: {
+            outputTranscription: { text: "It's sunny today." },
+          },
+        });
+
+        const ev = await writingPromise;
+        expect(ev).toEqual({ text: "It's sunny today.", role: 'assistant' });
+      });
+    });
+
+    describe('Interrupt routing', () => {
+      it('emits interrupt event when serverContent.interrupted is true', async () => {
+        const interruptPromise = new Promise<any>(resolve => voice.on('interrupt', resolve));
+        const before = Date.now();
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: { interrupted: true },
+        });
+
+        const ev = await interruptPromise;
+        expect(ev.type).toBe('user');
+        expect(ev.timestamp).toBeGreaterThanOrEqual(before);
+      });
+
+      it('does not emit interrupt when serverContent.interrupted is absent', async () => {
+        const onInterrupt = vi.fn();
+        voice.on('interrupt', onInterrupt);
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: {
+            modelTurn: { parts: [{ text: 'hello' }] },
+          },
+        });
+
+        expect(onInterrupt).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('Thinking vs. writing routing for modelTurn.parts.text', () => {
+      it('routes modelTurn.parts.text to writing on non-native-audio models', async () => {
+        const v = new GeminiLiveVoice({
+          apiKey: 'k',
+          model: 'gemini-3.1-flash-live-preview', // half-cascade, not native-audio
+        });
+        const onWriting = vi.fn();
+        const onThinking = vi.fn();
+        v.on('writing', onWriting);
+        v.on('thinking', onThinking);
+
+        await (v as any).handleGeminiMessage({
+          serverContent: {
+            modelTurn: { parts: [{ text: 'spoken response' }] },
+          },
+        });
+
+        expect(onWriting).toHaveBeenCalledWith({ text: 'spoken response', role: 'assistant' });
+        expect(onThinking).not.toHaveBeenCalled();
+
+        v.disconnect();
+      });
+
+      it('routes modelTurn.parts.text to thinking on native-audio models', async () => {
+        const v = new GeminiLiveVoice({
+          apiKey: 'k',
+          model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        });
+        const onWriting = vi.fn();
+        const onThinking = vi.fn();
+        v.on('writing', onWriting);
+        v.on('thinking', onThinking);
+
+        await (v as any).handleGeminiMessage({
+          serverContent: {
+            modelTurn: { parts: [{ text: 'internal reasoning' }] },
+          },
+        });
+
+        expect(onThinking).toHaveBeenCalledWith({ text: 'internal reasoning' });
+        // Critically: `writing` must NOT fire for reasoning text on native-audio. If it did, the
+        // consumer would render reasoning as the assistant's spoken response.
+        expect(onWriting).not.toHaveBeenCalled();
+
+        v.disconnect();
+      });
+
+      it('on native-audio, spoken response comes through outputTranscription as writing { role: "assistant" }', async () => {
+        // End-to-end shape test: a single native-audio turn produces (a) `thinking` from
+        // modelTurn.parts.text and (b) `writing { role: "assistant" }` from outputTranscription.
+        // These channels must remain distinct.
+        const v = new GeminiLiveVoice({
+          apiKey: 'k',
+          model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        });
+        const writings: any[] = [];
+        const thinkings: any[] = [];
+        v.on('writing', e => writings.push(e));
+        v.on('thinking', e => thinkings.push(e));
+
+        await (v as any).handleGeminiMessage({
+          serverContent: {
+            modelTurn: { parts: [{ text: 'Let me check the forecast...' }] },
+            outputTranscription: { text: "It's sunny." },
+          },
+        });
+
+        expect(thinkings).toEqual([{ text: 'Let me check the forecast...' }]);
+        expect(writings).toEqual([{ text: "It's sunny.", role: 'assistant' }]);
+
+        v.disconnect();
+      });
+    });
+  });
 });
