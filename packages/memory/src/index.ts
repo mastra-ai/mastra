@@ -46,11 +46,7 @@ import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { recallTool } from './tools/om-tools';
-import {
-  updateWorkingMemoryTool,
-  __experimental_updateWorkingMemoryToolVNext,
-  deepMergeWorkingMemory,
-} from './tools/working-memory';
+import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 
 export {
   ModelByInputTokens,
@@ -2095,9 +2091,10 @@ Notes:
     const tools: Record<string, ToolAction<any, any, any>> = {};
 
     if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
-      tools.updateWorkingMemory = this.isVNextWorkingMemoryConfig(mergedConfig)
-        ? __experimental_updateWorkingMemoryToolVNext(mergedConfig)
-        : updateWorkingMemoryTool(mergedConfig);
+      const { name, tool } = createWorkingMemoryTool(mergedConfig, {
+        vNext: this.isVNextWorkingMemoryConfig(mergedConfig),
+      });
+      tools[name] = tool;
     }
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);

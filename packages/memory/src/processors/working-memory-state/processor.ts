@@ -95,7 +95,7 @@ export function renderWorkingMemoryAsSignalContents({
 }): string {
   const body = data ?? 'No working memory data stored yet.';
   return [
-    'Current working memory for this conversation. Update it via the updateWorkingMemory tool when relevant information changes.',
+    'Current working memory for this conversation. Update it via the setWorkingMemory tool when relevant information changes.',
     '',
     `<working_memory_template>`,
     template.content,

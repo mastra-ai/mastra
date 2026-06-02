@@ -254,7 +254,7 @@ describe('Working memory via state signals (opt-in)', () => {
   });
 
   describe('agent stream end-to-end (the path Studio hits)', () => {
-    it('keeps updateWorkingMemory tool-invocation parts after agent.stream completes', async () => {
+    it('keeps setWorkingMemory tool-invocation parts after agent.stream completes (useStateSignals: true)', async () => {
       const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
       const { Agent } = await import('@mastra/core/agent');
 
@@ -275,7 +275,7 @@ describe('Working memory via state signals (opt-in)', () => {
                 {
                   type: 'tool-call',
                   toolCallId: 'wm-call-1',
-                  toolName: 'updateWorkingMemory',
+                  toolName: 'setWorkingMemory',
                   input: JSON.stringify({ memory: '# User\n- name: Caleb\n- color: orange' }),
                 },
                 {
@@ -310,7 +310,7 @@ describe('Working memory via state signals (opt-in)', () => {
       const agent = new Agent({
         id: 'wm-state-signal-stream-agent',
         name: 'WM State Signal Stream Agent',
-        instructions: 'Use updateWorkingMemory when learning new facts.',
+        instructions: 'Use setWorkingMemory when learning new facts.',
         model: model as any,
         memory,
       });
@@ -330,17 +330,18 @@ describe('Working memory via state signals (opt-in)', () => {
         perPage: 50,
       });
 
+      // With useStateSignals: true the tool is registered under the `setWorkingMemory`
+      // wire name, so legacy `updateWorkingMemory` strip filters skip it and the
+      // tool-call part persists as a normal audit trail (Studio UI tool-call cards
+      // survive a page refresh).
       const wmCallParts = persisted.flatMap((m: any) =>
         Array.isArray(m.content?.parts)
           ? m.content.parts.filter(
-              (p: any) => p?.type === 'tool-invocation' && p.toolInvocation?.toolName === 'updateWorkingMemory',
+              (p: any) => p?.type === 'tool-invocation' && p.toolInvocation?.toolName === 'setWorkingMemory',
             )
           : [],
       );
 
-      // This is the regression we're locking in: in default behavior, this would
-      // be 0 (stripped). With useStateSignals: true, the tool-invocation part is
-      // preserved so the Studio UI tool-call card survives a page refresh.
       expect(wmCallParts.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -427,6 +428,77 @@ describe('Working memory via state signals (opt-in)', () => {
       );
 
       // Default behavior: stripped.
+      expect(wmCallParts.length).toBe(0);
+    });
+  });
+
+  describe('Memory.saveMessages direct (covers network agents and other write paths)', () => {
+    const buildAssistantMessage = (threadId: string, resourceId: string, toolName: string) => ({
+      id: 'asst-1',
+      role: 'assistant' as const,
+      threadId,
+      resourceId,
+      createdAt: new Date(),
+      content: {
+        format: 2 as const,
+        content: '',
+        parts: [
+          {
+            type: 'tool-invocation' as const,
+            toolInvocation: {
+              state: 'result' as const,
+              toolCallId: 'wm-1',
+              toolName,
+              args: { memory: '# User\n- name: Caleb' },
+              result: { success: true },
+            },
+          },
+          { type: 'text' as const, text: 'Saved.' },
+        ],
+      },
+    });
+
+    it('preserves setWorkingMemory tool-invocation parts when useStateSignals: true', async () => {
+      const memory = await createMemory({ useStateSignals: true, dbPath });
+      const threadId = 'thread-direct-save-signals';
+      const resourceId = 'resource-direct-save-signals';
+      await memory.createThread({ threadId, resourceId });
+
+      await memory.saveMessages({
+        messages: [buildAssistantMessage(threadId, resourceId, 'setWorkingMemory')],
+      });
+
+      const { messages: persisted } = await memory.recall({ threadId, resourceId, perPage: 50 });
+      const wmCallParts = persisted.flatMap((m: any) =>
+        Array.isArray(m.content?.parts)
+          ? m.content.parts.filter(
+              (p: any) => p?.type === 'tool-invocation' && p.toolInvocation?.toolName === 'setWorkingMemory',
+            )
+          : [],
+      );
+
+      expect(wmCallParts.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('strips updateWorkingMemory tool-invocation parts when useStateSignals is omitted (default behavior preserved)', async () => {
+      const memory = await createMemory({ useStateSignals: false, dbPath });
+      const threadId = 'thread-direct-save-default';
+      const resourceId = 'resource-direct-save-default';
+      await memory.createThread({ threadId, resourceId });
+
+      await memory.saveMessages({
+        messages: [buildAssistantMessage(threadId, resourceId, 'updateWorkingMemory')],
+      });
+
+      const { messages: persisted } = await memory.recall({ threadId, resourceId, perPage: 50 });
+      const wmCallParts = persisted.flatMap((m: any) =>
+        Array.isArray(m.content?.parts)
+          ? m.content.parts.filter(
+              (p: any) => p?.type === 'tool-invocation' && p.toolInvocation?.toolName === 'updateWorkingMemory',
+            )
+          : [],
+      );
+
       expect(wmCallParts.length).toBe(0);
     });
   });
