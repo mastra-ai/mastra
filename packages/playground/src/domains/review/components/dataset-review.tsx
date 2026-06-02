@@ -108,7 +108,14 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   const [localItems, setLocalItems] = useState<ReviewItem[] | null>(null);
   const items = useMemo(() => localItems ?? reviewItems ?? [], [localItems, reviewItems]);
 
-  // Sync server data to local on initial load
+  // Reset the local cache when the scope changes (different experiment or dataset)
+  // so it re-hydrates from the new queue below, instead of keeping the previous
+  // experiment's rows and running mutations against the wrong results.
+  useEffect(() => {
+    setLocalItems(null);
+  }, [datasetId, experimentId]);
+
+  // Sync server data to local on initial load (and after a scope reset above)
   useEffect(() => {
     if (reviewItems && localItems === null) {
       setLocalItems(reviewItems);
