@@ -6,7 +6,7 @@ import { MCPClient } from '@mastra/mcp';
  * Linear — hosted remote MCP server at https://mcp.linear.app/mcp
  *   Used to create issues from action items. Needs LINEAR_API_KEY.
  *
- * Notion — local stdio subprocess via @notionhq/notion-mcp-server
+ * Notion — local stdio subprocess via the installed @notionhq/notion-mcp-server package.
  *   Used to push meeting notes to Notion pages. Needs NOTION_API_KEY.
  *
  * Both are gated: if the env var is missing, the server isn't connected.
@@ -29,8 +29,8 @@ export const mcpClient = new MCPClient({
     ...(process.env.NOTION_API_KEY
       ? {
           notion: {
-            command: 'npx',
-            args: ['-y', '@notionhq/notion-mcp-server'],
+            command: 'node',
+            args: ['./node_modules/@notionhq/notion-mcp-server/bin/cli.mjs'],
             env: {
               OPENAPI_MCP_HEADERS: JSON.stringify({
                 Authorization: `Bearer ${process.env.NOTION_API_KEY}`,

@@ -8,7 +8,7 @@ import { mcpClient } from '../mcp';
 /**
  * Linear and Notion tools are loaded dynamically from MCP servers.
  * Linear: hosted at mcp.linear.app (25+ tools — search, create, update issues, projects, etc.)
- * Notion: via @notionhq/notion-mcp-server subprocess (search, read, create, update pages/databases)
+ * Notion: via the installed @notionhq/notion-mcp-server subprocess (search, read, create, update pages/databases)
  *
  * Tool names are namespaced: linear_<tool> and notion_<tool>.
  */

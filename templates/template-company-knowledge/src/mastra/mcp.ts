@@ -6,7 +6,7 @@ import { MCPClient } from '@mastra/mcp';
  * Linear — hosted remote MCP server at https://mcp.linear.app/mcp
  *   Supports Bearer token auth with a Linear API key.
  *
- * Notion — local stdio subprocess via @notionhq/notion-mcp-server
+ * Notion — local stdio subprocess via the installed @notionhq/notion-mcp-server package.
  *   Reads NOTION_API_KEY from OPENAPI_MCP_HEADERS env.
  */
 export const mcpClient = new MCPClient({
@@ -27,8 +27,8 @@ export const mcpClient = new MCPClient({
     ...(process.env.NOTION_API_KEY
       ? {
           notion: {
-            command: 'npx',
-            args: ['-y', '@notionhq/notion-mcp-server'],
+            command: 'node',
+            args: ['./node_modules/@notionhq/notion-mcp-server/bin/cli.mjs'],
             env: {
               OPENAPI_MCP_HEADERS: JSON.stringify({
                 Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
