@@ -1,5 +1,5 @@
-Build from root: pnpm --filter ./packages/cursor build:lib
-Test from root: pnpm --filter ./packages/cursor test
+Build from root: pnpm --filter ./agent-sdks/cursor build:lib
+Test from root: pnpm --filter ./agent-sdks/cursor test
 
 This package exposes `CursorSDKAgent`, a Mastra Agent wrapper around the Cursor SDK.
 

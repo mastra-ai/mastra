@@ -1,5 +1,5 @@
-Build from root: pnpm --filter ./packages/acp build:lib
-Test from root: pnpm --filter ./packages/acp test
+Build from root: pnpm --filter ./agent-sdks/acp build:lib
+Test from root: pnpm --filter ./agent-sdks/acp test
 
 This package exposes `createACPTool`, a helper that wraps a single ACP-compatible coding agent process as a Mastra tool.
 
