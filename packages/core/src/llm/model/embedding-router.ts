@@ -5,6 +5,14 @@ import type { EmbeddingModel } from '@internal/ai-sdk-v5';
 
 type EmbeddingModelV2<VALUE> = Exclude<EmbeddingModel<VALUE>, string>;
 
+const MASTRA_GATEWAY_ID = 'mastra';
+
+function getMastraGatewayBaseUrl(): string {
+  const raw = process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
+  return `${raw.replace(/\/+$/, '').replace(/\/v1$/, '')}/v1`;
+}
+
+import { MASTRA_USER_AGENT } from './gateways/constants.js';
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';
 
@@ -109,13 +117,20 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
     };
 
     if (typeof config === 'string') {
-      // Parse provider/model from string (e.g., "openai/text-embedding-3-small")
+      // Parse provider/model or gateway/provider/model from string.
       const parts = config.split('/');
-      if (parts.length !== 2) {
-        throw new Error(`Invalid model string format: "${config}". Expected format: "provider/model"`);
+      if (parts[0] === MASTRA_GATEWAY_ID) {
+        if (parts.length < 3) {
+          throw new Error(`Invalid model string format: "${config}". Expected format: "mastra/provider/model"`);
+        }
+        normalizedConfig = { providerId: MASTRA_GATEWAY_ID, modelId: parts.slice(1).join('/') };
+      } else {
+        if (parts.length !== 2) {
+          throw new Error(`Invalid model string format: "${config}". Expected format: "provider/model"`);
+        }
+        const [providerId, modelId] = parts as [string, string];
+        normalizedConfig = { providerId, modelId };
       }
-      const [providerId, modelId] = parts as [string, string];
-      normalizedConfig = { providerId, modelId };
     } else if ('providerId' in config && 'modelId' in config) {
       normalizedConfig = {
         providerId: config.providerId,
@@ -127,25 +142,53 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
     } else {
       // config has 'id' field
       const parts = config.id.split('/');
-      if (parts.length !== 2) {
-        throw new Error(`Invalid model string format: "${config.id}". Expected format: "provider/model"`);
+      if (parts[0] === MASTRA_GATEWAY_ID) {
+        if (parts.length < 3) {
+          throw new Error(`Invalid model string format: "${config.id}". Expected format: "mastra/provider/model"`);
+        }
+        normalizedConfig = {
+          providerId: MASTRA_GATEWAY_ID,
+          modelId: parts.slice(1).join('/'),
+          url: config.url,
+          apiKey: config.apiKey,
+          headers: config.headers,
+        };
+      } else {
+        if (parts.length !== 2) {
+          throw new Error(`Invalid model string format: "${config.id}". Expected format: "provider/model"`);
+        }
+        const [providerId, modelId] = parts as [string, string];
+        normalizedConfig = {
+          providerId,
+          modelId,
+          url: config.url,
+          apiKey: config.apiKey,
+          headers: config.headers,
+        };
       }
-      const [providerId, modelId] = parts as [string, string];
-      normalizedConfig = {
-        providerId,
-        modelId,
-        url: config.url,
-        apiKey: config.apiKey,
-        headers: config.headers,
-      };
     }
 
     this.provider = normalizedConfig.providerId;
     this.modelId = normalizedConfig.modelId;
 
-    // If custom URL is provided, skip provider registry validation
-    // and use the provided API key (or empty string if not provided)
-    if (normalizedConfig.url) {
+    if (normalizedConfig.providerId === MASTRA_GATEWAY_ID) {
+      const apiKey = normalizedConfig.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
+      if (!apiKey) {
+        throw new Error('API key not found for provider mastra. Set MASTRA_GATEWAY_API_KEY');
+      }
+
+      this.providerModel = createOpenAICompatible({
+        name: MASTRA_GATEWAY_ID,
+        apiKey,
+        baseURL: normalizedConfig.url ?? getMastraGatewayBaseUrl(),
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+          ...normalizedConfig.headers,
+        },
+      }).textEmbeddingModel(normalizedConfig.modelId) as EmbeddingModelV2<VALUE>;
+    } else if (normalizedConfig.url) {
+      // If custom URL is provided, skip provider registry validation
+      // and use the provided API key (or empty string if not provided)
       const apiKey = normalizedConfig.apiKey || '';
       this.providerModel = createOpenAICompatible({
         name: normalizedConfig.providerId,

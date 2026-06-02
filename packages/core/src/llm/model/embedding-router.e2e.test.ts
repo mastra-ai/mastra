@@ -63,6 +63,60 @@ describe('ModelRouterEmbeddingModel Integration', () => {
     });
   });
 
+  describe('Mastra Gateway embedding routing', () => {
+    beforeEach(() => {
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-gateway-key';
+      process.env.MASTRA_GATEWAY_URL = 'https://gateway.example.com';
+      vi.mocked(createOpenAICompatible).mockReturnValue({
+        textEmbeddingModel: vi.fn((_modelId: string) => ({
+          specificationVersion: 'v2',
+          modelId: _modelId,
+          maxEmbeddingsPerCall: 2048,
+          supportsParallelCalls: true,
+          doEmbed: vi.fn(async ({ values }: { values: string[] }) => ({
+            embeddings: values.map(() => new Array(1536).fill(0.1)),
+          })),
+        })),
+      } as any);
+    });
+
+    afterEach(() => {
+      delete process.env.MASTRA_GATEWAY_API_KEY;
+      delete process.env.MASTRA_GATEWAY_URL;
+      vi.clearAllMocks();
+    });
+
+    it('routes mastra-prefixed embedding models through the Mastra Gateway', async () => {
+      const model = new ModelRouterEmbeddingModel('mastra/openai/text-embedding-3-small');
+
+      expect(model.provider).toBe('mastra');
+      expect(model.modelId).toBe('openai/text-embedding-3-small');
+      expect(createOpenAICompatible).toHaveBeenCalledWith({
+        name: 'mastra',
+        apiKey: 'test-gateway-key',
+        baseURL: 'https://gateway.example.com/v1',
+        headers: {
+          'User-Agent': 'mastra',
+        },
+      });
+
+      const mockInstance = vi.mocked(createOpenAICompatible).mock.results[0].value;
+      expect(mockInstance.textEmbeddingModel).toHaveBeenCalledWith('openai/text-embedding-3-small');
+
+      const result = await model.doEmbed({ values: ['hello gateway'] });
+      expect(result.embeddings).toHaveLength(1);
+      expect(result.embeddings[0]).toHaveLength(1536);
+    });
+
+    it('requires MASTRA_GATEWAY_API_KEY for mastra-prefixed embedding models', () => {
+      delete process.env.MASTRA_GATEWAY_API_KEY;
+
+      expect(() => new ModelRouterEmbeddingModel('mastra/openai/text-embedding-3-small')).toThrow(
+        'API key not found for provider mastra. Set MASTRA_GATEWAY_API_KEY',
+      );
+    });
+  });
+
   describe('OpenAI embedding (with real API)', () => {
     it('should successfully embed text using OpenAI', async () => {
       if (!process.env.OPENAI_API_KEY) {
