@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import { useChat } from '@mastra/react';
-import type { SendMessageArgs } from '@mastra/react';
+import type { ClientToolsInput, SendMessageArgs } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useDebounce } from 'use-debounce';
@@ -32,7 +32,7 @@ export interface StreamChatProviderProps {
    * ordering.
    */
   initialUserMessage?: string;
-  clientTools?: Record<string, unknown>;
+  clientTools?: ClientToolsInput;
   /**
    * Optional per-call system-prompt augmentation forwarded to the agent on
    * every send via `modelSettings.instructions`. Read fresh at send time so the
