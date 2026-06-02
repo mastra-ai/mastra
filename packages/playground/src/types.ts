@@ -1,4 +1,4 @@
-import type { GetAgentResponse, UIMessageWithMetadata } from '@mastra/client-js';
+import type { GetAgentResponse } from '@mastra/client-js';
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { AiMessageType } from '@mastra/core/memory';
 import type { MastraUIMessage } from '@mastra/react';
@@ -44,6 +44,7 @@ export interface ModelSettings {
   providerOptions?: LLMStepResult['providerMetadata'];
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
+  chatWithLegacyStream?: boolean;
   chatWithNetwork?: boolean;
   requireToolApproval?: boolean;
 }
@@ -59,8 +60,6 @@ export interface ChatProps {
   agentVersionId?: string;
   threadId: string;
   initialMessages?: MastraUIMessage[];
-  initialLegacyMessages?: UIMessageWithMetadata[];
-  memory?: boolean;
   refreshThreadList?: () => void;
   settings?: AgentSettingsType;
   requestContext?: Record<string, any>;

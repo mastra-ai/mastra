@@ -459,7 +459,7 @@ export async function createHonoServer(
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
       const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
-      const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'true' ? 'true' : 'false';
+      const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
@@ -597,6 +597,45 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   } else {
     await workerLifecycle.startEventEngine();
   }
+
+  // Graceful shutdown so storage backends release resources (e.g. DuckDB's
+  // native file lock) before the process exits. On `mastra dev` hot reloads
+  // the old process is sent SIGINT; without this the lock can linger and the
+  // restarted process fails with "Conflicting lock is held".
+  const SHUTDOWN_TIMEOUT_MS = 5000;
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    const logger = mastra.getLogger();
+    logger.info('Shutting down Mastra server', { signal });
+    server.close();
+    // Feature-detect for older @mastra/core versions without shutdown().
+    const lifecycle = mastra as unknown as { shutdown?: () => Promise<void> };
+    if (typeof lifecycle.shutdown === 'function') {
+      // Bound the wait so a hanging shutdown can't block process exit.
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = Symbol('shutdown-timeout');
+      const timeoutPromise = new Promise<typeof timedOut>(resolve => {
+        timeout = setTimeout(() => resolve(timedOut), SHUTDOWN_TIMEOUT_MS);
+      });
+      try {
+        const result = await Promise.race([lifecycle.shutdown(), timeoutPromise]);
+        if (result === timedOut) {
+          logger.warn('Mastra shutdown timed out; forcing exit', { timeoutMs: SHUTDOWN_TIMEOUT_MS });
+        }
+      } catch (error) {
+        logger.error('Error during Mastra shutdown', { error });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    process.exit(0);
+  };
+  process.once('SIGINT', () => void shutdown('SIGINT'));
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
   return server;
 }

@@ -38,6 +38,8 @@ export const init = async ({
   observabilityProject,
   observabilityMode = 'pick',
   observabilityToken,
+  observabilityOrgId,
+  observabilityOrgName,
 }: {
   directory?: string;
   components: Component[];
@@ -51,10 +53,12 @@ export const init = async ({
   observability?: boolean;
   observabilityProject?: string;
   observabilityToken?: string;
+  observabilityOrgId?: string;
+  observabilityOrgName?: string;
   /**
-   * `'create'` skips the picker and always provisions a new platform project
-   * named after the local one (used by `create-mastra`). `'pick'` shows the
-   * existing-or-new picker (used by `mastra init`).
+   * `'create'` skips the project picker and always provisions a new platform
+   * project named after the local one (used by `create-mastra`). `'pick'`
+   * shows the existing-or-new project picker (used by `mastra init`).
    */
   observabilityMode?: 'create' | 'pick';
 }) => {
@@ -205,6 +209,10 @@ export const init = async ({
           observabilityProject,
           mode: observabilityMode,
           token: observabilityToken,
+          org:
+            observabilityOrgId && observabilityOrgName
+              ? { orgId: observabilityOrgId, orgName: observabilityOrgName }
+              : undefined,
         });
         await writeObservabilityEnv({
           token: result.token,

@@ -1,4 +1,3 @@
-import { assertModelAllowed } from '@mastra/core/agent-builder/ee';
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
 
@@ -14,6 +13,8 @@ import {
   createStoredAgentResponseSchema,
   updateStoredAgentResponseSchema,
   deleteStoredAgentResponseSchema,
+  exportStoredAgentBodySchema,
+  exportStoredAgentResponseSchema,
   previewInstructionsBodySchema,
   previewInstructionsResponseSchema,
 } from '../schemas/stored-agents';
@@ -32,7 +33,7 @@ import {
 } from './authorship';
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
-import { prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
+import { enrichOrStripFavorites, prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
 import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
@@ -73,6 +74,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'workflows',
   'agents',
   'integrationTools',
+  'toolProviders',
   'inputProcessors',
   'outputProcessors',
   'memory',
@@ -83,6 +85,93 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'workspace',
   'browser',
 ] as const;
+
+const CODE_AGENT_OVERRIDE_FIELDS = [
+  'instructions',
+  'tools',
+  'integrationTools',
+  'mcpClients',
+  'requestContextSchema',
+] as const;
+
+/**
+ * Derive ownership flags from a code agent's editor config.
+ * Mirrors the semantics of `editor.agent.applyStoredOverrides` so that
+ * client save payloads, persisted snapshots, and export output all agree
+ * on which fields Studio is allowed to own.
+ */
+function getCodeAgentOwnership(editorConfig: unknown): {
+  ownsInstructions: boolean;
+  ownsTools: boolean;
+  ownsToolDescriptionsOnly: boolean;
+} {
+  if (editorConfig === false) {
+    return { ownsInstructions: false, ownsTools: false, ownsToolDescriptionsOnly: false };
+  }
+  if (editorConfig === undefined || editorConfig === null) {
+    // Legacy default: code agents without explicit editor config behave as fully editable.
+    return { ownsInstructions: true, ownsTools: true, ownsToolDescriptionsOnly: false };
+  }
+  if (typeof editorConfig !== 'object') {
+    return { ownsInstructions: false, ownsTools: false, ownsToolDescriptionsOnly: false };
+  }
+  const cfg = editorConfig as { instructions?: unknown; tools?: unknown };
+  const ownsInstructions = cfg.instructions === true;
+  const toolsCfg = cfg.tools;
+  const ownsTools = toolsCfg === true;
+  const ownsToolDescriptionsOnly =
+    typeof toolsCfg === 'object' && toolsCfg !== null && (toolsCfg as { description?: unknown }).description === true;
+  return { ownsInstructions, ownsTools, ownsToolDescriptionsOnly };
+}
+
+function sortForStableJson(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortForStableJson);
+  }
+
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, sortForStableJson(entry)]),
+    );
+  }
+
+  return value;
+}
+
+function buildExportConfig(
+  input: Record<string, unknown>,
+  agent?: { __getEditorConfig?: () => unknown; source?: string },
+) {
+  const editorConfig = agent?.__getEditorConfig?.();
+  const isCodeAgent = agent?.source === 'code';
+  const allowedFields = isCodeAgent ? CODE_AGENT_OVERRIDE_FIELDS : AGENT_SNAPSHOT_CONFIG_FIELDS;
+  const ownership = isCodeAgent ? getCodeAgentOwnership(editorConfig) : null;
+  const config: Record<string, unknown> = {};
+
+  for (const field of allowedFields) {
+    if (input[field] === undefined) continue;
+    if (ownership) {
+      if (field === 'instructions' && !ownership.ownsInstructions) continue;
+      if (
+        (field === 'tools' || field === 'integrationTools' || field === 'mcpClients') &&
+        !ownership.ownsTools &&
+        !ownership.ownsToolDescriptionsOnly
+      ) {
+        continue;
+      }
+    }
+    config[field] = input[field];
+  }
+
+  return sortForStableJson(config) as Record<string, unknown>;
+}
+
+function agentExportFilename(agentId: string) {
+  return `${agentId}.json`;
+}
 
 // ============================================================================
 // Route Definitions
@@ -220,12 +309,59 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       );
       const annotated = enrichment
         ? visibleAgents.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
-        : visibleAgents;
+        : visibleAgents.map(stripFavoriteFields);
       const withAuthors = authors ? annotated.map(record => attachAuthor(record, authors)) : annotated;
 
       return { ...result, agents: withAuthors };
     } catch (error) {
       return handleError(error, 'Error listing stored agents');
+    }
+  },
+});
+
+export const EXPORT_STORED_AGENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/stored/agents/:storedAgentId/export',
+  responseType: 'json',
+  pathParamSchema: storedAgentIdPathParams,
+  bodySchema: exportStoredAgentBodySchema,
+  responseSchema: exportStoredAgentResponseSchema,
+  summary: 'Export stored agent override JSON',
+  description: 'Returns deterministic JSON for an agent configuration or code-agent override without mutating storage',
+  tags: ['Stored Agents'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, storedAgentId, ...body }) => {
+    try {
+      const storage = mastra.getStorage();
+      const agentsStore = storage ? await storage.getStore('agents') : undefined;
+      const storedAgent = await agentsStore?.getByIdResolved(storedAgentId, { status: 'draft' });
+      if (storedAgent) {
+        assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
+        assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: storedAgent });
+      }
+
+      let codeAgent: { __getEditorConfig?: () => unknown; source?: string } | undefined;
+      try {
+        codeAgent = mastra.getAgentById?.(storedAgentId) as typeof codeAgent;
+      } catch {
+        codeAgent = undefined;
+      }
+
+      if (!storedAgent && !codeAgent) {
+        throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
+      }
+
+      const config = buildExportConfig(body, codeAgent);
+      const content = `${JSON.stringify(config, null, 2)}\n`;
+
+      return {
+        agentId: storedAgentId,
+        fileName: agentExportFilename(storedAgentId),
+        content,
+        config,
+      };
+    } catch (error) {
+      return handleError(error, 'Error exporting stored agent');
     }
   },
 });
@@ -269,11 +405,8 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       // holder, and the record isn't public/legacy-unowned.
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
-      const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'agent', [agent.id]);
       const authors = await prepareAuthorEnrichment(mastra, requestContext, [agent.authorId]);
-      const withFavorite = enrichment
-        ? { ...agent, isFavorited: enrichment.starredIds.has(agent.id) }
-        : stripFavoriteFields(agent);
+      const withFavorite = await enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
       return attachAuthor(withFavorite, authors);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
@@ -316,6 +449,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     workflows,
     agents,
     integrationTools,
+    toolProviders,
     mcpClients,
     inputProcessors,
     outputProcessors,
@@ -362,14 +496,11 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
 
-      // Enforce admin model allowlist before persisting. Mirrors UPDATE; when
-      // `model` is omitted the builder applies `defaults.model` server-side.
-      if (model !== undefined) {
-        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
-        if (policy.active) {
-          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
-        }
-      }
+      // Model policy enforcement is intentionally not done on save: each UI
+      // surface gates its own model picker via ModelPolicyProvider, and the
+      // policy is surface-scoped (builder vs editor). Re-introducing a single
+      // server-side check here would either over-enforce on the editor or
+      // under-enforce on the builder until per-surface enforcement lands.
 
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
@@ -387,6 +518,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,
@@ -427,7 +559,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
       }
 
-      return resolved;
+      return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
     } catch (error) {
       return handleError(error, 'Error creating stored agent');
     }
@@ -478,6 +610,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     workflows,
     agents,
     integrationTools,
+    toolProviders,
     mcpClients,
     inputProcessors,
     outputProcessors,
@@ -526,21 +659,38 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
       const resolvedVisibility = callerAuthorId ? visibility : visibility != null ? 'public' : undefined;
 
-      // Enforce admin model allowlist (Phase 6) before persisting.
-      if (model !== undefined) {
-        const policy = await resolveBuilderModelPolicy(mastra.getEditor?.());
-        if (policy.active) {
-          assertModelAllowed(policy.allowed, model as Parameters<typeof assertModelAllowed>[1]);
-        }
-      }
+      // Model policy enforcement is intentionally not done on save: each UI
+      // surface gates its own model picker via ModelPolicyProvider, and the
+      // policy is surface-scoped (builder vs editor). Re-introducing a single
+      // server-side check here would either over-enforce on the editor or
+      // under-enforce on the builder until per-surface enforcement lands.
 
       // Resolve boolean browser shorthand from the UI
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
-      const scopedMetadata =
-        metadata !== undefined
-          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
-          : undefined;
+      // For code-defined agents, strip fields the editor config does not allow
+      // Studio to own. This keeps stored snapshots (and the per-entity files
+      // they get persisted to) free of fields the server never reads back.
+      let codeAgentForUpdate: { __getEditorConfig?: () => unknown; source?: string } | undefined;
+      try {
+        codeAgentForUpdate = mastra.getAgentById?.(storedAgentId) as typeof codeAgentForUpdate;
+      } catch {
+        codeAgentForUpdate = undefined;
+      }
+      if (codeAgentForUpdate?.source === 'code') {
+        const ownership = getCodeAgentOwnership(codeAgentForUpdate.__getEditorConfig?.());
+        if (!ownership.ownsInstructions) {
+          instructions = undefined;
+        }
+        if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
+          tools = undefined;
+          integrationTools = undefined;
+          mcpClients = undefined;
+        }
+      }
+
+      const mergedMetadata: Record<string, unknown> = { ...(existing.metadata ?? {}), ...(metadata ?? {}) };
+      const scopedMetadata = scopeStoredResourceMetadata(mergedMetadata, scope);
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
@@ -548,7 +698,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       const updatedAgent = await agentsStore.update({
         id: storedAgentId,
         authorId,
-        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
+        metadata: scopedMetadata,
         visibility: resolvedVisibility,
         name,
         description,
@@ -559,6 +709,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,
@@ -581,6 +732,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools,
+        toolProviders,
         mcpClients,
         inputProcessors,
         outputProcessors,
@@ -612,6 +764,22 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new Error('handleAutoVersioning returned undefined');
       }
 
+      // In code mode, local saves should overwrite the most recent saved
+      // snapshot rather than creating new draft versions on every keystroke
+      // batch. Version history is intended to track commits, not raw saves.
+      // We collapse the freshly created version onto the previous one by
+      // deleting the prior latest version, leaving a single rolling snapshot.
+      // When the user explicitly provides a changeMessage we treat that as a
+      // commit and keep the new version as a discrete history entry.
+      const isCodeSource = mastra.getEditor?.()?.getSource?.() === 'code';
+      if (isCodeSource && autoVersionResult.versionCreated && !changeMessage) {
+        const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 2 });
+        const previousVersion = versions[1];
+        if (previousVersion) {
+          await agentsStore.deleteVersion(previousVersion.id);
+        }
+      }
+
       // Auto-publish: activate the latest version so the update is immediately
       // visible in list views. The Agent Builder UI has no separate "Publish"
       // button, so without this every edit after creation would create orphaned
@@ -640,7 +808,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
       }
 
-      return resolved;
+      return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
     } catch (error) {
       return handleError(error, 'Error updating stored agent');
     }

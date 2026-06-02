@@ -119,7 +119,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   constructor(config: PgVectorConfig & { id: string }) {
     try {
       validateConfig('PgVector', config);
-      super({ id: config.id });
+      super({ id: config.id, disableInit: config.disableInit });
 
       this.schema = config.schemaName;
 
@@ -865,6 +865,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       );
       this.logger?.trackException(mastraError);
       throw mastraError;
+    }
+
+    // Skip all DDL when init is disabled - caller manages schema/extension/tables/indexes externally
+    if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+      return;
     }
 
     const indexCacheKey = await this.getIndexCacheKey({

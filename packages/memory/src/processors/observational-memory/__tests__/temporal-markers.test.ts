@@ -260,7 +260,8 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     });
     expect(markers[0]!.content.metadata?.signal).toMatchObject({
       id: markers[0]!.id,
-      type: 'system-reminder',
+      type: 'reactive',
+      tagName: 'system-reminder',
       attributes: {
         type: 'temporal-gap',
         gapText: '30 minutes later',
@@ -291,7 +292,8 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       expect.objectContaining({
         type: 'data-system-reminder',
         data: expect.objectContaining({
-          type: 'system-reminder',
+          type: 'reactive',
+          tagName: 'system-reminder',
           contents: `30 minutes later — ${expectedTimestamp}`,
           attributes: expect.objectContaining({
             type: 'temporal-gap',

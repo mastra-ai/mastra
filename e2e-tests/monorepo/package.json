@@ -15,16 +15,7 @@
   "scripts": {
     "test": "vitest run"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
   "dependencies": {
     "form-data": "^2.5.5"
-  },
-  "resolutions": {
-    "ssri": ">=6.0.2",
-    "qs": "^6.15.1"
   }
 }
