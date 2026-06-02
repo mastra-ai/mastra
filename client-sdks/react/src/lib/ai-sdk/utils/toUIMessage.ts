@@ -281,7 +281,11 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
   // Handle data-* chunks (custom data chunks from writer.custom())
   if (chunk.type.startsWith('data-')) {
-    if (chunk.type === 'data-user-message' && 'data' in chunk && chunk.data?.type === 'user-message') {
+    if (
+      chunk.type === 'data-user-message' &&
+      'data' in chunk &&
+      (chunk.data?.type === 'user-message' || chunk.data?.type === 'user')
+    ) {
       const signalId = chunk.data.id;
       if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
         return result;

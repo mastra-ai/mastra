@@ -95,7 +95,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
             Mastra
           </Txt>
           <span className="flex flex-col items-end gap-1 shrink-0">
-            {isLoadingUpdates && <Spinner className="w-3 h-3 text-neutral3" color="currentColor" />}
+            {isLoadingUpdates && <Spinner className="size-3 text-neutral3" />}
             {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
             {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
             <span className={versionBadgeClassName}>

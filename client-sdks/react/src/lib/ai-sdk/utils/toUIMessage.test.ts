@@ -620,6 +620,31 @@ describe('toUIMessage', () => {
       ]);
     });
 
+    it('should append echoed canonical user signals as user messages', () => {
+      const chunk: ChunkType = {
+        type: 'data-user-message',
+        data: {
+          id: 'signal-1',
+          type: 'user',
+          tagName: 'user',
+          contents: { role: 'user', content: [{ type: 'text', text: 'hello from signal' }] },
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const result = toUIMessage({ chunk, conversation: [], metadata: baseMetadata });
+
+      expect(result).toEqual([
+        {
+          id: 'signal-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'hello from signal' }],
+          metadata: baseMetadata,
+        },
+      ]);
+    });
+
     it('should dedupe echoed user-message signals by signal id', () => {
       const chunk: ChunkType = {
         type: 'data-user-message',

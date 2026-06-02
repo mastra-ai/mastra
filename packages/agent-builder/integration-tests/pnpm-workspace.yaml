@@ -16,5 +16,4 @@ overrides:
   '@internal/llm-recorder': link:../../_llm-recorder
 
 allowBuilds:
-  esbuild: false
-  sharp: false
+  esbuild: set this to true or false

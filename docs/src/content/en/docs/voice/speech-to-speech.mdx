@@ -6,6 +6,7 @@ packages:
   - "@mastra/node-audio"
   - "@mastra/voice-aws-nova-sonic"
   - "@mastra/voice-google-gemini-live"
+  - "@mastra/voice-inworld"
   - "@mastra/voice-openai-realtime"
 ---
 
@@ -156,3 +157,54 @@ Note:
 - Available regions: `us-east-1`, `us-west-2`, and `ap-northeast-1`.
 - Authenticates through the standard AWS credential provider chain. Pass `credentials` to override.
 - Events: `speaking` (Int16Array audio), `writing` (text with `generationStage`), `toolCall`, `interrupt`, `turnComplete`, `usage`, `session`, and `error`.
+
+## Inworld Realtime
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { InworldRealtimeVoice } from '@mastra/voice-inworld'
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
+
+const agent = new Agent({
+  id: 'agent',
+  name: 'Inworld Realtime Agent',
+  instructions: 'You are a helpful assistant with real-time voice capabilities.',
+  // Model used for text generation; voice provider handles realtime audio
+  model: '__GATEWAY_OPENAI_MODEL__',
+  voice: new InworldRealtimeVoice({
+    apiKey: process.env.INWORLD_API_KEY,
+    model: 'inworld/models/gemma-4-26b-a4b-it',
+    speaker: 'Sarah',
+    // Typed Inworld realtime knobs (semantic VAD, playback speed, etc.)
+    // session: {
+    //   audio: {
+    //     output: { speed: 1.1 },
+    //     input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
+    //   },
+    // },
+  }),
+})
+
+await agent.voice.connect()
+
+agent.voice.on('speaker', stream => {
+  playAudio(stream)
+})
+
+agent.voice.on('writing', ({ role, text }) => {
+  console.log(`${role}: ${text}`)
+})
+
+await agent.voice.speak('How can I help you today?')
+
+const micStream = getMicrophoneStream()
+await agent.voice.send(micStream)
+```
+
+Note:
+
+- Requires `INWORLD_API_KEY`. Inworld API keys ship pre-Basic-encoded — paste them verbatim.
+- The WebSocket URL appends a client-generated `?key=...&protocol=realtime`. The model is configured via the initial `session.update`, not in the URL.
+- Inworld's wire protocol is the OpenAI Realtime GA spec, so event names match `@mastra/voice-openai-realtime`.
+- Typed Inworld realtime knobs (MCP tool routing, semantic VAD eagerness, playback speed, transcription model, output modalities, …) are exposed through the `session` constructor field; an untyped `providerData` escape hatch is also deep-merged for forward compatibility with new Inworld features.
+- Events: `speaker` (PCM audio stream), `speaking` (audio Buffer per delta), `writing` (text), `conversation.item.added`, `conversation.item.done`, `function_call.arguments`, `tool-call-start`, `tool-call-result`, and `error`.

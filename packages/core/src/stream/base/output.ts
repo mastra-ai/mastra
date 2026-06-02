@@ -388,21 +388,47 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 0,
                 streamWriter,
               );
-              if (blocked) {
-                // Emit a tripwire chunk so downstream knows about the abort
+              const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
                 controller.enqueue({
                   type: 'tripwire',
                   payload: {
-                    reason: reason || 'Output processor blocked content',
-                    retry: tripwireOptions?.retry,
-                    metadata: tripwireOptions?.metadata,
-                    processorId,
+                    reason: r || 'Output processor blocked content',
+                    retry: opts?.retry,
+                    metadata: opts?.metadata,
+                    processorId: pid,
                   },
                 } as ChunkType<OUTPUT>);
+              };
+
+              if (blocked) {
+                // Emit a tripwire chunk so downstream knows about the abort
+                enqueueTripwire(reason, tripwireOptions, processorId);
                 return;
               }
               if (processed) {
                 controller.enqueue(processed as ChunkType<OUTPUT>);
+              }
+
+              // Emit any parts a processor stashed for reprocessing (e.g. the
+              // non-text part that triggered a BatchPartsProcessor flush),
+              // pushing each back through the whole chain for downstream
+              // processing.
+              const reprocessed = await processorRunner.drainReprocessParts(
+                processorStates,
+                resolveObservabilityContext(options),
+                options.requestContext,
+                self.messageList,
+                0,
+                streamWriter,
+              );
+              for (const r of reprocessed) {
+                if (r.blocked) {
+                  enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
+                  return;
+                }
+                if (r.part != null) {
+                  controller.enqueue(r.part as ChunkType<OUTPUT>);
+                }
               }
             }
           },

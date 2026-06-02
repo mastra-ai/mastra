@@ -1,3 +1,4 @@
+import type { AgentEditorConfig } from '../../context/agent-edit-form-context';
 import type { useSidebarDescriptions } from './use-sidebar-descriptions';
 
 export interface AgentCmsSection {
@@ -20,8 +21,14 @@ export const AGENT_CMS_SECTIONS: AgentCmsSection[] = [
 ];
 
 /** Sections available when editing a code-defined agent (override mode) */
-const CODE_AGENT_OVERRIDE_SECTION_NAMES = new Set(['Instructions', 'Tools', 'Variables']);
+export function getCodeAgentOverrideSections(editorConfig?: AgentEditorConfig): AgentCmsSection[] {
+  if (editorConfig === false) return [];
 
-export const CODE_AGENT_OVERRIDE_SECTIONS: AgentCmsSection[] = AGENT_CMS_SECTIONS.filter(s =>
-  CODE_AGENT_OVERRIDE_SECTION_NAMES.has(s.name),
-);
+  const sections = AGENT_CMS_SECTIONS.filter(section => {
+    if (section.name === 'Instructions') return editorConfig?.instructions !== false;
+    if (section.name === 'Tools') return editorConfig?.tools !== false;
+    return section.name === 'Variables';
+  });
+
+  return sections;
+}

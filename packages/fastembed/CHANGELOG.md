@@ -1,5 +1,17 @@
 # @mastra/fastembed
 
+## 1.1.2
+
+### Patch Changes
+
+- Fixed FastEmbed so repeated embedding calls reuse loaded models instead of loading a new model each time. ([#17303](https://github.com/mastra-ai/mastra/pull/17303))
+
+## 1.1.2-alpha.0
+
+### Patch Changes
+
+- Fixed FastEmbed so repeated embedding calls reuse loaded models instead of loading a new model each time. ([#17303](https://github.com/mastra-ai/mastra/pull/17303))
+
 ## 1.1.1
 
 ### Patch Changes

@@ -423,7 +423,7 @@ describe('buildMessagesFromChunks', () => {
     expect(msgs[0]!.id).toBe('msg-1');
     expect(msgs[0]!.role).toBe('assistant');
     expect(msgs[0]!.content.format).toBe(2);
-    expect(msgs[0]!.createdAt).toBeInstanceOf(Date);
+    expect(msgs[0]).not.toHaveProperty('createdAt');
   });
 
   it('should include responseModelMetadata in content', () => {
