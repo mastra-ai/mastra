@@ -743,6 +743,7 @@ export class CoreToolBuilder extends MastraBase {
           resource: { type: 'tool', id: toolResourceId },
           permission: MastraFGAPermissions.TOOLS_EXECUTE,
           requestContext: toolRequestContext,
+          systemActor: execOptions?.systemActor,
           context: {
             resourceId: options.resourceId,
           },

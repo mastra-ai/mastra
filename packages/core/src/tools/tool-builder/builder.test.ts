@@ -146,6 +146,51 @@ describe('CoreToolBuilder FGA', () => {
     expect(fgaProvider.require).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it('bypasses membership resolution for a tenant-scoped system actor', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        requestContext,
+        mastra: {
+          getServer: () => ({ fga: fgaProvider }),
+        } as any,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!(
+      { query: 'docs' },
+      {
+        toolCallId: 'call-1',
+        messages: [],
+        systemActor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+      },
+    );
+
+    expect(fgaProvider.require).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalled();
+  });
 });
 
 describe('MCP Tool Tracing', () => {
