@@ -1,6 +1,5 @@
 import type { Mastra } from '@mastra/core';
 
-import { builderToModelPolicy, resolvePickerVisibility } from '@mastra/core/agent-builder/ee';
 import { HTTPException } from '../http-exception';
 import {
   agentFeaturesSchema,
@@ -126,6 +125,12 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
       const toolKeyMap = toResponseKey(toolAliases, 'key');
       const agentKeyMap = toResponseKey(agentAliases, 'id');
       const workflowKeyMap = toResponseKey(workflowAliases, 'key');
+
+      // Lazy-load the EE subpath so this module remains importable on
+      // `@mastra/core` versions that pre-date it (added in core 1.34.0).
+      // We only reach here after `builder.enabled` is true, which guarantees
+      // a compatible core.
+      const { builderToModelPolicy, resolvePickerVisibility } = await import('@mastra/core/agent-builder/ee');
 
       const picker = resolvePickerVisibility({
         config: configuration?.agent,

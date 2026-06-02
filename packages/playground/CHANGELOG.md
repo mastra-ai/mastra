@@ -1,5 +1,41 @@
 # @internal/playground
 
+## 1.11.0-alpha.7
+
+### Patch Changes
+
+- Reworked the dataset experiment detail view in Studio. The experiment page is now organized into tabs with a top area showing the experiment target (e.g. the scorer) and summary stats, redesigned result and score panels, and an integrated review flow — flagging a result for review jumps straight to that item in the Reviews tab. ([#17464](https://github.com/mastra-ai/mastra/pull/17464))
+
+- Reworked the dataset Review tab in Studio. Items now open in a consistent detail panel with previous/next navigation, positive/negative rating shown as status badges, and a mark-as-complete action, and the input preview shows more text before truncating. ([#17462](https://github.com/mastra-ai/mastra/pull/17462))
+
+- Updated dependencies [[`5fd6ad6`](https://github.com/mastra-ai/mastra/commit/5fd6ad6b48b372e03e5fb16dbce8d2c65de07351), [`f44d9cc`](https://github.com/mastra-ai/mastra/commit/f44d9cc9cf29e43471482e99d86452748ddb464f), [`93791a7`](https://github.com/mastra-ai/mastra/commit/93791a7267c2ca91028de7e0d6141f873a38ee33)]:
+  - @mastra/playground-ui@31.0.0-alpha.7
+  - @mastra/core@1.38.0-alpha.7
+  - @mastra/client-js@1.22.0-alpha.7
+  - @mastra/react@0.4.3-alpha.7
+
+## 1.11.0-alpha.6
+
+### Patch Changes
+
+- Added an explicit legacy Stream chat method in Playground agent settings so users can fall back from stream subscriptions while debugging. ([#17312](https://github.com/mastra-ai/mastra/pull/17312))
+
+- Updated dependencies [[`860ec4e`](https://github.com/mastra-ai/mastra/commit/860ec4edf6aa508edfd4f34c312c141209eb0dbf), [`bb3fce8`](https://github.com/mastra-ai/mastra/commit/bb3fce8f8d80079170c0f98cb2efbb29ae34375d), [`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3), [`27fa3bc`](https://github.com/mastra-ai/mastra/commit/27fa3bcff928a66a0de8b8339ba6f1b2679e3f17), [`05d61e1`](https://github.com/mastra-ai/mastra/commit/05d61e18aa014a012a32ee9cb79cdcf3210dbe9d), [`dd4e420`](https://github.com/mastra-ai/mastra/commit/dd4e4205d91108b6c4e18c2650c43ece6a516c07)]:
+  - @mastra/react@0.4.3-alpha.6
+  - @mastra/client-js@1.22.0-alpha.6
+  - @mastra/core@1.38.0-alpha.6
+  - @mastra/playground-ui@31.0.0-alpha.6
+
+## 1.11.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`3135435`](https://github.com/mastra-ai/mastra/commit/31354357cc70c93c76ac09ed3a3938827c09c042), [`fea7293`](https://github.com/mastra-ai/mastra/commit/fea7293bc72a91e0d283002332bcd94446b01a2b), [`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15), [`309f7c9`](https://github.com/mastra-ai/mastra/commit/309f7c9899ee6870a07a16690a091c6ba7af4e1e), [`ba3d01c`](https://github.com/mastra-ai/mastra/commit/ba3d01c04fd5d6172b202ae76be9c9f3dd215fc0), [`21f4c88`](https://github.com/mastra-ai/mastra/commit/21f4c8886c728d270091a07cd59ee25370dfe0f8), [`66d65f5`](https://github.com/mastra-ai/mastra/commit/66d65f58e4b1f862c7f7928866a4426f8de9d583)]:
+  - @mastra/playground-ui@31.0.0-alpha.5
+  - @mastra/core@1.38.0-alpha.5
+  - @mastra/client-js@1.22.0-alpha.5
+  - @mastra/react@0.4.3-alpha.5
+
 ## 1.10.3-alpha.4
 
 ### Patch Changes

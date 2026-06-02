@@ -1,5 +1,103 @@
 # @mastra/playground-ui
 
+## 31.0.0-alpha.7
+
+### Patch Changes
+
+- Added a `DataPanel.SectionHeading` component for small-caps section labels (with an optional leading icon) inside a `DataPanel.Content`. `DataCodeSection` now renders through it, and `DataPanel.Header` hides its bottom border when the panel is collapsed (header-only) so an empty panel no longer shows a stray divider. ([#17464](https://github.com/mastra-ai/mastra/pull/17464))
+
+  ```tsx
+  <DataPanel.SectionHeading icon={<FileInputIcon />}>Input</DataPanel.SectionHeading>
+  ```
+
+- Changed `Spinner` to render the new compact loader by default and added `variant="pulse"` for longer data-loading states. Removed the `color` prop so the loader defaults to the neutral text token and color overrides go through `className`. ([#17455](https://github.com/mastra-ai/mastra/pull/17455))
+
+  **Migration note**
+
+  Before:
+
+  ```tsx
+  <Spinner color={Colors.neutral3} />
+  ```
+
+  After:
+
+  ```tsx
+  <Spinner className="text-neutral3" />
+  <Spinner variant="pulse" className="text-neutral1" />
+  ```
+
+- Added an `is404NotFoundError` helper to detect 404 Not Found responses from the Mastra client, alongside the existing `is401UnauthorizedError` and `is403ForbiddenError` helpers. Use it to show a clear not-found state when a resource no longer exists. ([#17460](https://github.com/mastra-ai/mastra/pull/17460))
+
+  ```ts
+  import { is404NotFoundError } from '@mastra/playground-ui';
+
+  try {
+    await client.getDataset(id);
+  } catch (error) {
+    if (is404NotFoundError(error)) {
+      // show a not-found state instead of a generic error
+    }
+  }
+  ```
+
+- Updated dependencies:
+  - @mastra/core@1.38.0-alpha.7
+  - @mastra/client-js@1.22.0-alpha.7
+  - @mastra/react@0.4.3-alpha.7
+
+## 31.0.0-alpha.6
+
+### Patch Changes
+
+- Agent Builder starter agents now use the admin-configured default model when the model policy has one set. Previously, the starter ignored the admin default and always picked the first entry from the picker allowlist, which surfaced as "default model gets over-written by agent builder" on agents created from starter cards or the freeform prompt. ([#17424](https://github.com/mastra-ai/mastra/pull/17424))
+
+  When no admin default is set, behavior is unchanged: the starter falls back to the first allowed model, then to the hardcoded fallback.
+
+- Improved switch focus, disabled, and motion states. ([#17416](https://github.com/mastra-ai/mastra/pull/17416))
+
+- Updated dependencies [[`860ec4e`](https://github.com/mastra-ai/mastra/commit/860ec4edf6aa508edfd4f34c312c141209eb0dbf), [`bb3fce8`](https://github.com/mastra-ai/mastra/commit/bb3fce8f8d80079170c0f98cb2efbb29ae34375d), [`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3), [`05d61e1`](https://github.com/mastra-ai/mastra/commit/05d61e18aa014a012a32ee9cb79cdcf3210dbe9d)]:
+  - @mastra/react@0.4.3-alpha.6
+  - @mastra/client-js@1.22.0-alpha.6
+  - @mastra/core@1.38.0-alpha.6
+
+## 31.0.0-alpha.5
+
+### Patch Changes
+
+- Improved studio load time by only bundling the CodeMirror and Shiki languages the editor actually uses, and removed a redundant TypeScript pass from the playground-ui build. ([#17406](https://github.com/mastra-ai/mastra/pull/17406))
+
+- Improved RadioGroup styling with neutral selected states, cleaner focus outlines, and surface-aware disabled states. ([#17401](https://github.com/mastra-ai/mastra/pull/17401))
+
+- Removed the unused `ElementSelect` export from `@mastra/playground-ui`. Use the `Select` primitives instead. ([#17417](https://github.com/mastra-ai/mastra/pull/17417))
+
+  ```tsx
+  // Before
+  import { ElementSelect } from '@mastra/playground-ui';
+
+  <ElementSelect name="status" value={status} onChange={setStatus} options={['Draft', 'Published']} />;
+
+  // After
+  import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui';
+
+  <Select name="status" value={status} onValueChange={setStatus}>
+    <SelectTrigger>
+      <SelectValue placeholder="Select..." />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="draft">Draft</SelectItem>
+      <SelectItem value="published">Published</SelectItem>
+    </SelectContent>
+  </Select>;
+  ```
+
+- Improved Checkbox styling with neutral selected states, cleaner focus outlines, and smoother state transitions. ([#17400](https://github.com/mastra-ai/mastra/pull/17400))
+
+- Updated dependencies [[`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15), [`309f7c9`](https://github.com/mastra-ai/mastra/commit/309f7c9899ee6870a07a16690a091c6ba7af4e1e), [`66d65f5`](https://github.com/mastra-ai/mastra/commit/66d65f58e4b1f862c7f7928866a4426f8de9d583)]:
+  - @mastra/core@1.38.0-alpha.5
+  - @mastra/client-js@1.22.0-alpha.5
+  - @mastra/react@0.4.3-alpha.5
+
 ## 31.0.0-alpha.4
 
 ### Patch Changes

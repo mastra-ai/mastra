@@ -99,6 +99,19 @@ const agent = new Agent({
     description: 'Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var.',
     isOptional: true,
   },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Custom metadata attached to the sandbox instance.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)',
+    description:
+      'Custom instructions returned by `getInstructions()`. A string fully replaces the defaults; a function receives the defaults and can extend or customize them per-request. Pass an empty string to suppress instructions entirely.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -124,12 +137,8 @@ const agent = new Agent({
   {
     name: 'status',
     type: 'ProviderStatus',
-    description: "'pending' | 'initializing' | 'ready' | 'error'",
-  },
-  {
-    name: 'supportsMounting',
-    type: 'boolean',
-    description: 'Always true - E2B sandboxes support mounting cloud filesystems',
+    description:
+      "'pending' | 'initializing' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
   },
   {
     name: 'processes',
@@ -173,7 +182,7 @@ See [`SandboxProcessManager` reference](/reference/workspace/process-manager) fo
 
 ## Mounting cloud storage
 
-E2B sandboxes can mount S3 or GCS filesystems, making cloud storage accessible as local directories inside the sandbox. This is useful for:
+E2B sandboxes can mount S3, GCS, and Azure Blob filesystems, making cloud storage accessible as local directories inside the sandbox. This is useful for:
 
 - Processing large datasets stored in cloud buckets
 - Writing output files directly to cloud storage
@@ -215,6 +224,7 @@ E2B sandboxes use FUSE (Filesystem in Userspace) to mount cloud storage:
 
 - **S3/R2**: Mounted via [s3fs-fuse](https://github.com/s3fs-fuse/s3fs-fuse)
 - **GCS**: Mounted via [gcsfuse](https://github.com/GoogleCloudPlatform/gcsfuse)
+- **Azure Blob**: Mounted via [blobfuse2](https://github.com/Azure/azure-storage-fuse)
 
 The E2B sandbox automatically installs the required FUSE tools when mounting is used. For best performance, pre-build a custom template with the tools installed.
 
@@ -305,4 +315,5 @@ This is optional—`gcsfuse` is installed automatically at mount time if not pre
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
 - [S3Filesystem reference](/reference/workspace/s3-filesystem)
 - [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
+- [Azure Blob Filesystem reference](/reference/workspace/azure-blob-filesystem)
 - [Workspace overview](/docs/workspace/overview)

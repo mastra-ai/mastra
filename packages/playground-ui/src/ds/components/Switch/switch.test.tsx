@@ -79,6 +79,41 @@ describe('Switch', () => {
     expect(screen.getByRole('switch').classList.contains('custom-switch')).toBe(true);
   });
 
+  it('uses neutral switch states without the old accent glow', () => {
+    render(<Switch aria-label="Toggle" defaultChecked />);
+
+    const switchEl = screen.getByRole('switch');
+    const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
+    expect(switchEl.className).toContain('data-[checked]:bg-neutral6');
+    expect(switchEl.className).toContain('border-0');
+    expect(switchEl.className).toContain('overflow-hidden');
+    expect(switchEl.className).toContain('focus-visible:outline-neutral5/55');
+    expect(switchEl.className).not.toContain('active:scale');
+    expect(switchEl.className).not.toContain('hover:scale');
+    expect(switchEl.className).not.toContain('transition-[background-color,scale]');
+    expect(thumbEl?.className).toContain('transition-[background-color,translate,width,transform]');
+    expect(thumbEl?.className).toContain('switch-thumb-motion');
+    expect(thumbEl?.className).toContain('w-5');
+    expect(thumbEl?.className).toContain('data-[checked]:translate-x-3');
+    expect(thumbEl?.className).toContain('group-active/switch:w-6');
+    expect(thumbEl?.className).not.toContain('group-active/switch:scale');
+    expect(thumbEl?.className).toContain('group-active/switch:data-[checked]:translate-x-2');
+    expect(switchEl.className).not.toContain('accent1');
+    expect(switchEl.className).not.toContain('shadow-glow');
+  });
+
+  it('keeps switch motion CSS-only without transient React data attributes', () => {
+    render(<Switch aria-label="Toggle" />);
+
+    const switchEl = screen.getByRole('switch');
+    const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
+    expect(thumbEl?.hasAttribute('data-settling')).toBe(false);
+
+    fireEvent.click(switchEl);
+
+    expect(thumbEl?.hasAttribute('data-settling')).toBe(false);
+  });
+
   it('applies the id to the visible switch control, not a hidden input', () => {
     render(<Switch aria-label="Toggle" id="my-switch" />);
 
