@@ -37,6 +37,7 @@ import type {
   ChannelContext,
   ChannelHandlers,
   PostableMessage,
+  ResolveResourceId,
   StreamingConfig,
   ThreadHistoryMessage,
   ToolDisplay,
@@ -77,6 +78,8 @@ export class AgentChannels {
   private inlineLinkRules: InlineLinkRule[] | undefined;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
+  /** Optional hook to resolve the memory resourceId (owner) for newly-created channel threads. */
+  private resolveResourceId: ResolveResourceId | undefined;
   /**
    * The original `ChannelConfig` passed to the constructor.
    *
@@ -157,6 +160,7 @@ export class AgentChannels {
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
     this.toolsEnabled = config.tools !== false;
+    this.resolveResourceId = config.resolveResourceId;
     this.channelConfig = config;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
   }
@@ -862,11 +866,16 @@ export class AgentChannels {
     // each Slack thread (including top-level DM, DM thread reply, channel mention, and
     // channel thread reply) gets its own mastra thread.
     const externalThreadId = chatThread.id;
+    const defaultResourceId = `${platform}:${message.author.userId}`;
     const mastraThread = await this.getOrCreateThread({
       externalThreadId,
       channelId: chatThread.channelId,
       platform,
-      resourceId: `${platform}:${message.author.userId}`,
+      // Lazily resolved: the hook only runs when we're actually creating a new
+      // thread, never when reusing an existing one (which keeps its stored owner).
+      resourceId: this.resolveResourceId
+        ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId })
+        : defaultResourceId,
       mastra,
     });
 
@@ -1334,7 +1343,12 @@ export class AgentChannels {
     externalThreadId: string;
     channelId: string;
     platform: string;
-    resourceId: string;
+    /**
+     * The owner for a newly-created thread. Pass a function to defer resolution
+     * until we know a new thread is actually needed; it is never called when an
+     * existing thread is reused.
+     */
+    resourceId: string | (() => string | Promise<string>);
     mastra: Mastra;
   }): Promise<StorageThreadType> {
     const storage = mastra.getStorage();
@@ -1364,11 +1378,13 @@ export class AgentChannels {
       return threads[0]!;
     }
 
+    const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
+
     return memoryStore.saveThread({
       thread: {
         id: crypto.randomUUID(),
         title: `${platform} conversation`,
-        resourceId,
+        resourceId: resolvedResourceId,
         createdAt: new Date(),
         updatedAt: new Date(),
         metadata,

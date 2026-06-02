@@ -1,5 +1,21 @@
 # @mastra/server
 
+## 1.38.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`0c1ed1d`](https://github.com/mastra-ai/mastra/commit/0c1ed1d00c7d87b5ac99ca95896211a2fa9189fa), [`849efb9`](https://github.com/mastra-ai/mastra/commit/849efb9fca6dc976589c1f90a303fea618769109)]:
+  - @mastra/core@1.38.0-alpha.8
+
+## 1.38.0-alpha.7
+
+### Patch Changes
+
+- Fixed memory status reporting for agents that do not support Mastra memory. The memory status endpoint now preserves storage fallback for regular agents while allowing integrations to opt out of memory UI. ([#16906](https://github.com/mastra-ai/mastra/pull/16906))
+
+- Updated dependencies:
+  - @mastra/core@1.38.0-alpha.7
+
 ## 1.38.0-alpha.6
 
 ### Patch Changes

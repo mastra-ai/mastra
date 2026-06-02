@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/cursor",
-  "version": "0.1.0-alpha.0",
-  "description": "Cursor SDK package for Mastra",
+  "name": "@mastra/acp",
+  "version": "0.2.0",
+  "description": "ACP package for Mastra",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -34,7 +34,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@cursor/sdk": "^1.0.13",
+    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -44,22 +44,25 @@
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "homepage": "https://mastra.ai",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "packages/cursor"
+    "directory": "agent-sdks/acp"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@cursor/sdk": "^1.0.13",
     "@mastra/core": ">=1.34.0-0 <2.0.0-0"
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^0.21.0"
   }
 }
