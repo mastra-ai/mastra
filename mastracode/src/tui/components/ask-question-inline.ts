@@ -12,7 +12,15 @@
  * 3. **Answered** — After the user responds, the box freezes with ✓/✗ icons.
  */
 
-import { Container, getKeybindings, Input, Spacer, visibleWidth, wrapTextWithAnsi } from '@mariozechner/pi-tui';
+import {
+  Container,
+  getKeybindings,
+  Input,
+  Spacer,
+  truncateToWidth,
+  visibleWidth,
+  wrapTextWithAnsi,
+} from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import { MultilineInput } from './multiline-input.js';
@@ -144,10 +152,16 @@ class AskQuestionBorderedBox {
     // Top border: ╭──...──╮
     lines.push(BOX_INDENT_STR + border(`╭${'─'.repeat(boxWidth - 2)}╮`));
 
-    // Helper to add a bordered line
+    // Helper to add a bordered line (truncates content that exceeds innerWidth)
     const addLine = (content: string, contentVisWidth: number) => {
-      const pad = Math.max(0, innerWidth - contentVisWidth);
-      lines.push(BOX_INDENT_STR + border('│') + ' ' + content + ' '.repeat(pad) + ' ' + border('│'));
+      let finalContent = content;
+      let finalWidth = contentVisWidth;
+      if (finalWidth > innerWidth) {
+        finalContent = truncateToWidth(content, innerWidth);
+        finalWidth = visibleWidth(finalContent);
+      }
+      const pad = Math.max(0, innerWidth - finalWidth);
+      lines.push(BOX_INDENT_STR + border('│') + ' ' + finalContent + ' '.repeat(pad) + ' ' + border('│'));
     };
 
     // Question header

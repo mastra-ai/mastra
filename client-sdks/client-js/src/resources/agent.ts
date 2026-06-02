@@ -2717,6 +2717,23 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  async sendToolApproval(params: {
+    resourceId: string;
+    threadId: string;
+    toolCallId: string;
+    approved: boolean;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+    const { requestContext, ...rest } = params;
+    return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
+      `/agents/${this.agentId}/send-tool-approval`,
+      {
+        method: 'POST',
+        body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      },
+    );
+  }
+
   async declineToolCall(params: {
     runId: string;
     toolCallId: string;

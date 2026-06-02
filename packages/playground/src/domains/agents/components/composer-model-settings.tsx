@@ -111,8 +111,12 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
     if (isSupportedModel) {
       if (settings?.modelSettings?.chatWithNetwork) {
         radioValue = 'network';
+      } else if (settings?.modelSettings?.chatWithGenerate) {
+        radioValue = 'generate';
+      } else if (settings?.modelSettings?.chatWithLegacyStream) {
+        radioValue = 'stream';
       } else {
-        radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
+        radioValue = 'streamSubscription';
       }
     } else {
       radioValue = settings?.modelSettings?.chatWithGenerateLegacy ? 'generateLegacy' : 'streamLegacy';
@@ -167,6 +171,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         ...settings?.modelSettings,
                         chatWithGenerateLegacy: value === 'generateLegacy',
                         chatWithGenerate: value === 'generate',
+                        chatWithLegacyStream: value === 'stream',
                         chatWithNetwork: value === 'network',
                       },
                     })
@@ -209,6 +214,19 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       />
                       <Label className="text-neutral6 text-ui-md" htmlFor="streamLegacy">
                         Stream (Legacy)
+                      </Label>
+                    </div>
+                  )}
+                  {isSupportedModel && (
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem
+                        value="streamSubscription"
+                        id="streamSubscription"
+                        className="text-neutral6"
+                        disabled={!canEditSettings}
+                      />
+                      <Label className="text-neutral6 text-ui-md" htmlFor="streamSubscription">
+                        Stream subscription (default)
                       </Label>
                     </div>
                   )}

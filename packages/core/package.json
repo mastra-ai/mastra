@@ -793,6 +793,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
+    "@ai-sdk/alibaba-v6": "npm:@ai-sdk/alibaba@1.0.25",
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.79",
     "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@3.0.76",
     "@ai-sdk/azure": "^2.0.108",
