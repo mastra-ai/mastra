@@ -1,23 +1,8 @@
-import { createContext, useContext, useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
+
 import { useMastraInstanceStatus } from '../hooks/use-mastra-instance-status';
 import type { StudioConfig } from '../types';
-
-export type StudioConfigContextType = StudioConfig & {
-  isLoading: boolean;
-  setConfig: (partialNewConfig: Partial<StudioConfig>) => void;
-};
-
-export const StudioConfigContext = createContext<StudioConfigContextType>({
-  baseUrl: '',
-  headers: {},
-  apiPrefix: undefined,
-  isLoading: false,
-  setConfig: () => {},
-});
-
-export const useStudioConfig = () => {
-  return useContext(StudioConfigContext);
-};
+import { StudioConfigContext } from './studio-config-state';
 
 export interface StudioConfigProviderProps {
   children: React.ReactNode;
@@ -26,16 +11,33 @@ export interface StudioConfigProviderProps {
 }
 
 const LOCAL_STORAGE_KEY = 'mastra-studio-config';
+const AUTH_HEADER_PARAM = 'auth_header';
+const AUTH_HEADER_NAME = 'Authorization';
+
+const consumeUrlAuthHeader = (): Record<string, string> => {
+  if (typeof window === 'undefined') return {};
+
+  const url = new URL(window.location.href);
+  const authHeader = url.searchParams.get(AUTH_HEADER_PARAM);
+  if (!authHeader) return {};
+
+  url.searchParams.delete(AUTH_HEADER_PARAM);
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+
+  return { [AUTH_HEADER_NAME]: authHeader };
+};
 
 export const StudioConfigProvider = ({
   children,
   endpoint = 'http://localhost:4111',
   defaultApiPrefix = '/api',
 }: StudioConfigProviderProps) => {
-  const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint);
+  const [urlHeaders] = useState<Record<string, string>>(consumeUrlAuthHeader);
+  const hasUrlHeaders = Object.keys(urlHeaders).length > 0;
+  const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint, urlHeaders);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
-    headers: {},
+    headers: urlHeaders,
     apiPrefix: undefined,
     isLoading: true,
   });
@@ -43,7 +45,7 @@ export const StudioConfigProvider = ({
   useLayoutEffect(() => {
     // Handle error case - stop loading but don't configure
     if (error && !isStatusLoading) {
-      return setConfig({ baseUrl: '', headers: {}, apiPrefix: undefined, isLoading: false });
+      return setConfig({ baseUrl: '', headers: urlHeaders, apiPrefix: undefined, isLoading: false });
     }
 
     // Don't run the effect during the fetch request
@@ -57,18 +59,26 @@ export const StudioConfigProvider = ({
         // Use stored apiPrefix if set, otherwise fall back to CLI default for back-compat
         const normalizedConfig = {
           ...parsedConfig,
+          headers: { ...(parsedConfig.headers ?? {}), ...urlHeaders },
           apiPrefix: parsedConfig.apiPrefix ?? defaultApiPrefix,
         };
+        if (hasUrlHeaders) {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedConfig));
+        }
         return setConfig({ ...normalizedConfig, isLoading: false });
       }
     }
 
     if (instanceStatus.status === 'active') {
-      return setConfig(prev => ({ ...prev, baseUrl: endpoint, apiPrefix: defaultApiPrefix, isLoading: false }));
+      const nextConfig = { baseUrl: endpoint, headers: urlHeaders, apiPrefix: defaultApiPrefix };
+      if (hasUrlHeaders) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(nextConfig));
+      }
+      return setConfig({ ...nextConfig, isLoading: false });
     }
 
-    return setConfig({ baseUrl: '', headers: {}, apiPrefix: undefined, isLoading: false });
-  }, [instanceStatus, endpoint, defaultApiPrefix, isStatusLoading, error]);
+    return setConfig({ baseUrl: '', headers: urlHeaders, apiPrefix: undefined, isLoading: false });
+  }, [instanceStatus, endpoint, defaultApiPrefix, isStatusLoading, error, urlHeaders, hasUrlHeaders]);
 
   const doSetConfig = (partialNewConfig: Partial<StudioConfig>) => {
     setConfig(prev => {
