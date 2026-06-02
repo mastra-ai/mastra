@@ -86,13 +86,36 @@ describe('notification inbox', () => {
       tagName: 'notification',
       contents: 'CI failed on main: 3 tests',
       attributes: { source: 'github', type: 'ci-status', kind: 'ci-status', priority: 'high', status: 'pending' },
+      metadata: {
+        notification: {
+          signal: 'notification',
+          recordId: 'n1',
+          source: 'github',
+          kind: 'ci-status',
+          priority: 'high',
+          status: 'pending',
+        },
+      },
     });
 
     const summarySignal = createNotificationSummarySignal(summarizeNotifications([github, slack]));
     expect(summarySignal).toMatchObject({
       type: 'notification',
       tagName: 'notification-summary',
-      attributes: { pending: 2 },
+      attributes: { pending: 2, priority: 'high' },
+      metadata: {
+        notification: {
+          signal: 'summary',
+          pending: 2,
+          groups: [
+            { source: 'github', count: 1 },
+            { source: 'slack', count: 1 },
+          ],
+          byPriority: { high: 1, medium: 1 },
+          notificationIds: ['n1', 'n2'],
+          priority: 'high',
+        },
+      },
     });
     expect(summarySignal.metadata?.notificationSummary).toMatchObject({
       notificationIds: ['n1', 'n2'],
