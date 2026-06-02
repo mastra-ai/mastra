@@ -25,9 +25,9 @@ export class Session<TState = {}> {
   readonly #stateSchema?: StandardSchemaWithJSON<TState>;
   #state: TState;
   #stateUpdateQueue: Promise<void> = Promise.resolve();
-  #workspace?: Workspace;
-  readonly #workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
-  readonly #setWorkspace?: (workspace: Workspace | undefined) => void;
+  readonly #workspace?: DynamicArgument<Workspace | undefined>;
+  #resolvedWorkspace?: Workspace;
+  #workspaceResolved = false;
   // readonly parentSessionId?: string;
   // readonly subagentDepth: number;
 
@@ -52,8 +52,6 @@ export class Session<TState = {}> {
       ...config.initialState,
     } as TState;
     this.#workspace = config.workspace;
-    this.#workspaceFn = config.workspaceFn;
-    this.#setWorkspace = config.setWorkspace;
   }
 
   get id(): string {
@@ -103,8 +101,6 @@ export class Session<TState = {}> {
       stateSchema: this.#stateSchemaInput,
       initialState: this.getState() as Partial<TState>,
       workspace: this.#workspace,
-      workspaceFn: this.#workspaceFn,
-      setWorkspace: this.#setWorkspace,
     });
 
     this.#events.emit({
@@ -242,6 +238,7 @@ export class Session<TState = {}> {
 
   async #buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
     requestContext ??= new RequestContext();
+    const workspace = typeof this.#workspace === 'function' ? this.#resolvedWorkspace : this.#workspace;
     const harnessContext = {
       state: this.getState(),
       getState: () => this.getState(),
@@ -256,16 +253,16 @@ export class Session<TState = {}> {
       threadId: this.#threadId,
       resourceId: this.#resourceId,
       modeId: this.#mode.id,
-      workspace: this.#workspace,
+      workspace,
     };
 
     requestContext.set('harness', harnessContext);
 
-    if (this.#workspaceFn) {
-      const resolved = await Promise.resolve(this.#workspaceFn({ requestContext }));
+    if (typeof this.#workspace === 'function' && !this.#workspaceResolved) {
+      const resolved = await this.#workspace({ requestContext });
+      this.#resolvedWorkspace = resolved;
+      this.#workspaceResolved = true;
       harnessContext.workspace = resolved;
-      this.#workspace = resolved;
-      this.#setWorkspace?.(resolved);
     }
 
     return requestContext;

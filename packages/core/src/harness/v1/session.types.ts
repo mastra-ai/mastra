@@ -24,9 +24,7 @@ export interface SessionConfig<TState = {}> {
   events: EventEmitter;
   stateSchema?: PublicSchema<TState>;
   initialState?: Partial<TState>;
-  workspace?: Workspace;
-  workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
-  setWorkspace?: (workspace: Workspace | undefined) => void;
+  workspace?: DynamicArgument<Workspace | undefined>;
   // storage: HarnessStorage;
   /** Identifier of the Harness instance that owns this session. */
   ownerId: string;
