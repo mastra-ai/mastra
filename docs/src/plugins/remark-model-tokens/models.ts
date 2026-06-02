@@ -15,12 +15,14 @@ export const MODEL_TOKENS: Record<string, string> = {
   __GATEWAY_OPENAI_MODEL_MINI__: 'openai/gpt-5-mini',
   __GATEWAY_OPENAI_MODEL_NANO__: 'openai/gpt-5-nano',
   __GATEWAY_OPENAI_MODEL_BASE__: 'openai/gpt-5',
+  __AI_SDK_OPENAI_MODEL_BASE__: 'gpt-5.5',
   __AI_SDK_OPENAI_MODEL_REALTIME__: 'gpt-5.1-realtime',
 
   // ── Anthropic ─────────────────────────────────────────────
   __GATEWAY_ANTHROPIC_MODEL_SONNET__: 'anthropic/claude-sonnet-4-6',
   __GATEWAY_ANTHROPIC_MODEL_OPUS__: 'anthropic/claude-opus-4-6',
   __GATEWAY_ANTHROPIC_MODEL_HAIKU__: 'anthropic/claude-haiku-4-5',
+  __AI_SDK_ANTHROPIC_MODEL_SONNET__: 'claude-sonnet-4-6',
 
   // ── Google ────────────────────────────────────────────────
   __GATEWAY_GOOGLE_MODEL__: 'google/gemini-2.5-flash',

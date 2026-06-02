@@ -1,0 +1,230 @@
+---
+title: "SDK agents | Agents"
+description: "Use Claude Agent SDK and Cursor Agent SDK agents from Mastra."
+packages:
+  - "@mastra/claude"
+  - "@mastra/cursor"
+  - "@mastra/core"
+---
+
+# SDK agents
+
+SDK agents let you use other agent SDK frameworks inside Mastra. Use them to register SDK-backed agents in a Mastra project while the provider SDK keeps its own runtime, tools, permissions, and agent loop.
+
+## When to use SDK agents
+
+- A vendor SDK already owns the agent loop, tools, permissions, or local runtime.
+- You want to register that SDK-backed agent in a Mastra project.
+- You need Mastra-compatible `generate()` and `stream()` outputs.
+- You want usage, cost, and tool activity from the SDK run to appear in Mastra observability.
+
+## Supported SDK agents
+
+- [Claude Agent SDK](#claude-agent-sdk): Use `@mastra/claude` to register a Claude SDK agent and call it with Mastra `generate()` and `stream()`.
+- [Cursor Agent SDK](#cursor-agent-sdk): Use `@mastra/cursor` to register a Cursor SDK agent and call it with Mastra `generate()` and `stream()`.
+
+## Claude Agent SDK
+
+Use `@mastra/claude` for Claude Code runtime configuration, permissions, tools, and agent-loop behavior.
+
+### Install Claude packages
+
+Install the Mastra package and the Claude Agent SDK peer dependency:
+
+```bash npm2yarn
+npm install @mastra/claude @anthropic-ai/claude-agent-sdk
+```
+
+Set the Claude SDK credential:
+
+```bash
+export ANTHROPIC_API_KEY="..."
+```
+
+### Create a Claude SDK agent
+
+Configure Claude Agent SDK through `sdkOptions`.
+
+```typescript title="src/mastra/agents/claude-sdk-agent.ts"
+import { ClaudeSDKAgent } from '@mastra/claude'
+
+export const claudeSDKAgent = new ClaudeSDKAgent({
+  id: 'claude-sdk-agent',
+  name: 'Claude SDK Agent',
+  description: 'Use Claude Agent SDK through Mastra.',
+  sdkOptions: {
+    model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
+    cwd: process.cwd(),
+  },
+})
+```
+
+### Add Claude SDK tools
+
+Claude Agent SDK tools are provided through Claude SDK Model Context Protocol (MCP) servers. Create the server with the Claude SDK, then pass it through `sdkOptions.mcpServers`.
+
+```typescript title="src/mastra/agents/claude-sdk-agent.ts"
+import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
+import { ClaudeSDKAgent } from '@mastra/claude'
+import { getTemperature } from '../tools/get-temperature'
+
+const weatherServer = createSdkMcpServer({
+  name: 'weather',
+  version: '1.0.0',
+  tools: [getTemperature],
+})
+
+export const claudeSDKAgent = new ClaudeSDKAgent({
+  id: 'claude-sdk-agent',
+  name: 'Claude SDK Agent',
+  description: 'Use Claude Agent SDK through Mastra.',
+  sdkOptions: {
+    model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
+    cwd: process.cwd(),
+    mcpServers: {
+      weather: weatherServer,
+    },
+    allowedTools: ['mcp__weather__get_temperature'],
+  },
+})
+```
+
+The `allowedTools` value uses Claude Agent SDK MCP tool naming: `mcp__<server name>__<tool name>`.
+
+## Cursor Agent SDK
+
+Use `@mastra/cursor` to register a Cursor SDK agent in Mastra while keeping Cursor-specific setup in Cursor SDK options.
+
+### Install Cursor packages
+
+Install the Mastra package and the Cursor SDK peer dependency:
+
+```bash npm2yarn
+npm install @mastra/cursor @cursor/sdk
+```
+
+Set the Cursor SDK credential:
+
+```bash
+export CURSOR_API_KEY="..."
+```
+
+### Create a Cursor SDK agent
+
+Configure Cursor Agent SDK through `sdkOptions`.
+
+```typescript title="src/mastra/agents/cursor-sdk-agent.ts"
+import { CursorSDKAgent } from '@mastra/cursor'
+
+export const cursorSDKAgent = new CursorSDKAgent({
+  id: 'cursor-sdk-agent',
+  name: 'Cursor SDK Agent',
+  description: 'Use Cursor Agent SDK through Mastra.',
+  sdkOptions: {
+    apiKey: process.env.CURSOR_API_KEY,
+    model: {
+      id: '__AI_SDK_OPENAI_MODEL_BASE__',
+    },
+    local: {
+      cwd: process.cwd(),
+    },
+  },
+})
+```
+
+Cursor local agents require an explicit model. Set it in `sdkOptions.model`.
+
+### Use an existing Cursor SDK agent
+
+If your app already creates a Cursor SDK agent, pass that agent to `CursorSDKAgent` instead:
+
+```typescript title="src/mastra/agents/cursor-sdk-agent.ts"
+import { Agent as CursorAgent } from '@cursor/sdk'
+import { CursorSDKAgent } from '@mastra/cursor'
+
+const cursorAgent = CursorAgent.create({
+  apiKey: process.env.CURSOR_API_KEY,
+  model: {
+    id: '__AI_SDK_OPENAI_MODEL_BASE__',
+  },
+  local: {
+    cwd: process.cwd(),
+  },
+})
+
+export const cursorSDKAgent = new CursorSDKAgent({
+  id: 'cursor-sdk-agent',
+  name: 'Cursor SDK Agent',
+  description: 'Use Cursor Agent SDK through Mastra.',
+  agent: cursorAgent,
+})
+```
+
+### Add Cursor SDK tools
+
+Cursor Agent SDK tools are configured with Cursor SDK options. Pass Model Context Protocol (MCP) servers through `sdkOptions.mcpServers`:
+
+```typescript title="src/mastra/agents/cursor-sdk-agent.ts"
+import { CursorSDKAgent } from '@mastra/cursor'
+import { mcpServers } from '../mcp/cursor'
+
+export const cursorSDKAgent = new CursorSDKAgent({
+  id: 'cursor-sdk-agent',
+  name: 'Cursor SDK Agent',
+  description: 'Use Cursor Agent SDK through Mastra.',
+  sdkOptions: {
+    apiKey: process.env.CURSOR_API_KEY,
+    model: {
+      id: '__AI_SDK_OPENAI_MODEL_BASE__',
+    },
+    local: {
+      cwd: process.cwd(),
+    },
+    mcpServers,
+  },
+})
+```
+
+## Register SDK agents
+
+Register SDK agents in the Mastra instance like other agents:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { claudeSDKAgent } from './agents/claude-sdk-agent'
+import { cursorSDKAgent } from './agents/cursor-sdk-agent'
+
+export const mastra = new Mastra({
+  agents: {
+    claudeSDKAgent,
+    cursorSDKAgent,
+  },
+})
+```
+
+After registration, call them with `mastra.getAgentById()`:
+
+```typescript title="src/mastra/run-sdk-agent.ts"
+import { mastra } from './index'
+
+const agent = mastra.getAgentById('cursor-sdk-agent')
+const stream = await agent.stream('Inspect this project and describe the test setup.')
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+## Observability
+
+SDK agents create Mastra agent and model spans for `generate()` and `stream()` calls. Mastra records SDK-provided usage, tool activity, and provider metadata when the vendor SDK exposes those events.
+
+Claude SDK runs can include SDK-estimated cost from the Claude result message. Cursor SDK runs include token usage from Cursor interaction updates.
+
+For storage and dashboard setup, see [Observability](/docs/observability/overview).
+
+## Related
+
+- [Agents overview](/docs/agents/overview)
+- [Tools](/docs/agents/using-tools)
+- [Observability](/docs/observability/overview)
