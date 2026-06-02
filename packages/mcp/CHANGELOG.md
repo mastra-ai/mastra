@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 1.9.0-alpha.1
+
+### Patch Changes
+
+- Fixed FGA-enabled MCP servers so OAuth authInfo can be mapped to a Mastra user before tools/list and tools/call authorization. ([#17475](https://github.com/mastra-ai/mastra/pull/17475))
+
+- Updated dependencies [[`0c1ed1d`](https://github.com/mastra-ai/mastra/commit/0c1ed1d00c7d87b5ac99ca95896211a2fa9189fa), [`849efb9`](https://github.com/mastra-ai/mastra/commit/849efb9fca6dc976589c1f90a303fea618769109)]:
+  - @mastra/core@1.38.0-alpha.8
+
 ## 1.9.0-alpha.0
 
 ### Minor Changes

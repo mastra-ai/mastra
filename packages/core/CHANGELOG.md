@@ -1,5 +1,28 @@
 # @mastra/core
 
+## 1.38.0-alpha.8
+
+### Minor Changes
+
+- Added `channels.resolveResourceId` to control which `resourceId` owns a channel thread's memory, separately from who sent the message. Useful for SSO apps that want a user's memory shared across web and a Feishu/Lark DM, or group chats scoped to the conversation instead of the sender. Only affects newly-created threads; return the provided default to keep current behavior. ([#17471](https://github.com/mastra-ai/mastra/pull/17471))
+
+  ```ts
+  new Agent({
+    // ...
+    channels: {
+      adapters: { slack: createSlackAdapter() },
+      resolveResourceId: async ({ thread, message }) => {
+        if (thread.isDM) return resolveSsoUserId(message); // shared with web
+        return thread.channelId; // group owns the memory
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed FGA-enabled MCP servers so OAuth authInfo can be mapped to a Mastra user before tools/list and tools/call authorization. ([#17475](https://github.com/mastra-ai/mastra/pull/17475))
+
 ## 1.38.0-alpha.7
 
 ## 1.38.0-alpha.6
