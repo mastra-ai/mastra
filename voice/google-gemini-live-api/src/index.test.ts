@@ -1404,5 +1404,89 @@ describe('GeminiLiveVoice', () => {
         v.disconnect();
       });
     });
+
+    describe('Per-turn aggregation of assistant context', () => {
+      it('aggregates assistant text across frames and commits to context once per turn', async () => {
+        // Live API streams assistant text across many `serverContent` frames within a single
+        // turn. Each fragment must NOT be committed as its own context entry — otherwise the
+        // conversation history fragments into per-frame chunks. Verify the buffer accumulates
+        // and flushes exactly once on `turnComplete`.
+        const v = new GeminiLiveVoice({
+          apiKey: 'k',
+          model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        });
+        const addToContext = vi.spyOn(v, 'addToContext');
+
+        await (v as any).handleGeminiMessage({
+          serverContent: { outputTranscription: { text: 'Hello' } },
+        });
+        await (v as any).handleGeminiMessage({
+          serverContent: { outputTranscription: { text: ', world' } },
+        });
+        await (v as any).handleGeminiMessage({
+          serverContent: { outputTranscription: { text: '.' } },
+        });
+        expect(addToContext).not.toHaveBeenCalled();
+
+        await (v as any).handleGeminiMessage({
+          serverContent: { turnComplete: true },
+        });
+
+        expect(addToContext).toHaveBeenCalledTimes(1);
+        expect(addToContext).toHaveBeenCalledWith('assistant', 'Hello, world.');
+
+        v.disconnect();
+      });
+
+      it('resets pending assistant text between turns', async () => {
+        const v = new GeminiLiveVoice({ apiKey: 'k' });
+        const addToContext = vi.spyOn(v, 'addToContext');
+
+        await (v as any).handleGeminiMessage({
+          serverContent: { modelTurn: { parts: [{ text: 'first' }] } },
+        });
+        await (v as any).handleGeminiMessage({ serverContent: { turnComplete: true } });
+        await (v as any).handleGeminiMessage({
+          serverContent: { modelTurn: { parts: [{ text: 'second' }] } },
+        });
+        await (v as any).handleGeminiMessage({ serverContent: { turnComplete: true } });
+
+        expect(addToContext).toHaveBeenNthCalledWith(1, 'assistant', 'first');
+        expect(addToContext).toHaveBeenNthCalledWith(2, 'assistant', 'second');
+
+        v.disconnect();
+      });
+    });
+
+    describe('Barge-in cleanup', () => {
+      it('ends active speaker streams and clears pending text when interrupted', async () => {
+        // The cancelled turn will not be followed by `turnComplete`, so the interrupt handler
+        // must end any in-flight speaker streams itself. Otherwise stream counters never drop
+        // and playback hangs on the cancelled audio. The partial assistant text from the
+        // cancelled turn is also discarded — it never reached the user as a completed reply.
+        const v = new GeminiLiveVoice({ apiKey: 'k' });
+        const cleanup = vi.spyOn((v as any).audioStreamManager, 'cleanupSpeakerStreams');
+        const addToContext = vi.spyOn(v, 'addToContext');
+
+        // Buffer some assistant text into the in-flight turn.
+        await (v as any).handleGeminiMessage({
+          serverContent: { modelTurn: { parts: [{ text: 'partial reply' }] } },
+        });
+
+        // Server cancels the turn.
+        await (v as any).handleGeminiMessage({
+          serverContent: { interrupted: true },
+        });
+
+        expect(cleanup).toHaveBeenCalledTimes(1);
+
+        // A subsequent `turnComplete` (if it arrives at all) must not commit the discarded
+        // partial reply to context history.
+        await (v as any).handleGeminiMessage({ serverContent: { turnComplete: true } });
+        expect(addToContext).not.toHaveBeenCalled();
+
+        v.disconnect();
+      });
+    });
   });
 });

@@ -131,6 +131,11 @@ export class GeminiLiveVoice extends MastraVoice<
   // Store the configuration options
   private options: GeminiLiveVoiceConfig;
 
+  // Accumulates assistant text across `serverContent` frames for the current
+  // turn. Live API streams responses over many frames; we aggregate here and
+  // flush to context history once on `turnComplete`.
+  private pendingAssistantResponse = '';
+
   /**
    * Normalize configuration to ensure proper VoiceConfig format
    * Handles backward compatibility with direct GeminiLiveVoiceConfig
@@ -1369,8 +1374,15 @@ export class GeminiLiveVoice extends MastraVoice<
     // user started speaking. Surface this as the `interrupt` event so consumers
     // can drop queued TTS audio. Matches the `interrupt` shape emitted by
     // `@mastra/voice-aws-nova-sonic`.
+    //
+    // The cancelled turn will not necessarily be followed by `turnComplete`, so
+    // end any in-flight speaker streams here. Otherwise stream counters never
+    // decrement and downstream playback hangs on the cancelled audio. Discard
+    // the partial assistant text — it does not represent a completed turn.
     if (data.interrupted) {
       this.log('Model response interrupted by user activity');
+      this.audioStreamManager.cleanupSpeakerStreams();
+      this.pendingAssistantResponse = '';
       this.emit('interrupt', { type: 'user', timestamp: Date.now() });
     }
 
@@ -1388,9 +1400,8 @@ export class GeminiLiveVoice extends MastraVoice<
     // authoritative source for the spoken response — emit it as `writing` with
     // `role: 'assistant'`. On non-native-audio models this field is not sent
     // (the spoken response comes from `modelTurn.parts.text` below).
-    let assistantResponse = '';
     if (data.outputTranscription?.text) {
-      assistantResponse += data.outputTranscription.text;
+      this.pendingAssistantResponse += data.outputTranscription.text;
       this.emit('writing', {
         text: data.outputTranscription.text,
         role: 'assistant',
@@ -1412,7 +1423,7 @@ export class GeminiLiveVoice extends MastraVoice<
           if (nativeAudio) {
             this.emit('thinking', { text: part.text });
           } else {
-            assistantResponse += part.text;
+            this.pendingAssistantResponse += part.text;
             this.emit('writing', {
               text: part.text,
               role: 'assistant',
@@ -1517,14 +1528,18 @@ export class GeminiLiveVoice extends MastraVoice<
       }
     }
 
-    // Add assistant response to context if there was text content
-    if (assistantResponse.trim()) {
-      this.addToContext('assistant', assistantResponse);
-    }
-
     // Check for turn completion
     if (data.turnComplete) {
       this.log('Turn completed');
+
+      // Flush the assistant text accumulated across this turn's `serverContent`
+      // frames as a single context entry. Doing this once per turn (rather than
+      // once per frame) keeps the conversation history coherent even when the
+      // Live API streams a response over many incremental frames.
+      if (this.pendingAssistantResponse.trim()) {
+        this.addToContext('assistant', this.pendingAssistantResponse);
+      }
+      this.pendingAssistantResponse = '';
 
       // End all active speaker streams for this turn
       this.audioStreamManager.cleanupSpeakerStreams();
