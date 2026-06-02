@@ -6638,6 +6638,10 @@ export class Agent<
     );
   }
 
+  getActiveThreadRunId(options: AgentSubscribeToThreadOptions): string | undefined {
+    return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+  }
+
   abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
@@ -7009,6 +7013,15 @@ export class Agent<
     const runId = streamOptions?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
+
+    if (snapshotMemoryInfo?.threadId) {
+      mergedStreamOptions.memory = {
+        ...(mergedStreamOptions.memory ?? {}),
+        thread: mergedStreamOptions.memory?.thread ?? snapshotMemoryInfo.threadId,
+        resource: mergedStreamOptions.memory?.resource ?? snapshotMemoryInfo.resourceId,
+      };
+    }
+
     await this.#requireAgentExecutionFGA({
       requestContext: mergedStreamOptions.requestContext,
       memory: mergedStreamOptions.memory,
@@ -7261,6 +7274,48 @@ export class Agent<
   ): Promise<MastraModelOutput<OUTPUT>> {
     // @ts-expect-error - the types here are wrong
     return this.resumeStream({ approved: true }, options);
+  }
+
+  async sendToolApproval<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & {
+      threadId: string;
+      resourceId: string;
+      toolCallId?: string;
+      approved: boolean;
+    },
+  ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+    const { threadId, resourceId, approved, ...executionOptions } = options;
+    const runId = this.getActiveThreadRunId({ threadId, resourceId });
+    if (!runId) {
+      throw new MastraError({
+        id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" sendToolApproval() could not find an active run for thread "${threadId}".`,
+        details: {
+          threadId,
+          resourceId,
+          agentName: this.name,
+        },
+      });
+    }
+
+    const approvalOptions = {
+      ...executionOptions,
+      runId,
+      memory: {
+        ...(executionOptions.memory ?? {}),
+        thread: executionOptions.memory?.thread ?? threadId,
+        resource: executionOptions.memory?.resource ?? resourceId,
+      },
+    } as unknown as AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string };
+
+    if (approved) {
+      await this.approveToolCall(approvalOptions);
+    } else {
+      await this.declineToolCall(approvalOptions);
+    }
+    return { accepted: true, runId, toolCallId: options.toolCallId };
   }
 
   /**

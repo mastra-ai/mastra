@@ -17,6 +17,33 @@ import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
 
 type ToolsInput = any;
+
+const extractPendingToolApprovalIdsFromMessages = (messages: MastraUIMessage[]) => {
+  const pendingToolApprovalIds = new Set<string>();
+
+  for (const message of messages) {
+    const metadata = message.metadata as any;
+    const metadataSources = [
+      metadata?.pendingToolApprovals,
+      metadata?.requireApprovalMetadata,
+      metadata?.suspendedTools,
+    ] as Array<Record<string, any> | undefined>;
+
+    for (const source of metadataSources) {
+      if (!source || typeof source !== 'object') continue;
+
+      for (const suspensionData of Object.values(source)) {
+        const toolCallId = (suspensionData as { toolCallId?: unknown })?.toolCallId;
+        if (typeof toolCallId === 'string' && toolCallId.length > 0) {
+          pendingToolApprovalIds.add(toolCallId);
+        }
+      }
+    }
+  }
+
+  return pendingToolApprovalIds;
+};
+
 type SignalContinuationOptions = {
   maxSteps?: number;
   modelSettings?: {
@@ -51,9 +78,8 @@ export interface MastraChatProps {
   onSignalEcho?: (signalId: string) => void;
   onThreadSignalsUnsupported?: () => void;
   /**
-   * Opt into the agent-signals streaming path (sendSignal + subscribeToThread).
-   * Defaults to `false` so consumers stay on the legacy `streamUntilIdle` route
-   * unless they explicitly enable the signals path.
+   * Use the agent-signals streaming path (sendSignal + subscribeToThread).
+   * Defaults to `false`; set to `true` to opt into thread signals.
    */
   enableThreadSignals?: boolean;
 }
@@ -137,6 +163,8 @@ export const useChat = ({
   const [networkToolCallApprovals, setNetworkToolCallApprovals] = useState<{
     [toolName: string]: { status: 'approved' | 'declined' };
   }>({});
+  const pendingToolApprovalIdsRef = useRef(new Set<string>());
+  const [isAwaitingToolApproval, setIsAwaitingToolApproval] = useState(false);
 
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
@@ -144,6 +172,8 @@ export const useChat = ({
   useEffect(() => {
     const formattedMessages = resolveInitialMessages(initialMessages || []);
     setMessages(formattedMessages);
+    pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
+    setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
   }, [initialMessages]);
 
@@ -246,7 +276,18 @@ export const useChat = ({
         }
       }
 
+      if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+        const toolCallId = chunk.payload?.toolCallId;
+        if (typeof toolCallId === 'string') {
+          pendingToolApprovalIdsRef.current.add(toolCallId);
+          setIsAwaitingToolApproval(true);
+        }
+        setIsRunning(false);
+      }
+
       if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
+        pendingToolApprovalIdsRef.current.clear();
+        setIsAwaitingToolApproval(false);
         setIsRunning(false);
       }
 
@@ -590,6 +631,9 @@ export const useChat = ({
           },
         },
       });
+      if (pendingToolApprovalIdsRef.current.size > 0) {
+        setIsRunning(false);
+      }
     } catch (error) {
       onSignalEcho?.(resolvedSignalId);
       if (isThreadSignalUnsupportedError(error)) {
@@ -674,6 +718,8 @@ export const useChat = ({
     });
     closeThreadSubscription();
     setMessages(prev => finishStreamingAssistantMessage(prev));
+    pendingToolApprovalIdsRef.current.clear();
+    setIsAwaitingToolApproval(false);
     setIsRunning(false);
     _currentRunId.current = undefined;
     _onChunk.current = undefined;
@@ -693,23 +739,39 @@ export const useChat = ({
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
+    if (_threadSubscriptionKeyRef.current && threadId) {
+      try {
+        await agent.sendToolApproval({
+          resourceId: resourceId || agentId,
+          threadId,
+          toolCallId,
+          approved: true,
+          requestContext: _requestContext.current,
+        });
+        pendingToolApprovalIdsRef.current.delete(toolCallId);
+        setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+        setIsRunning(false);
+      } catch (error) {
+        setToolCallApprovals(prev => {
+          const next = { ...prev };
+          delete next[toolCallId];
+          return next;
+        });
+        setIsRunning(false);
+        throw error;
+      }
+      return;
+    }
+
     const response = await agent.approveToolCall({
       runId: currentRunId,
       toolCallId,
       requestContext: _requestContext.current,
     });
 
-    if (_threadSubscriptionKeyRef.current) {
-      return;
-    }
-
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
-        void (onChunk ?? _onChunk.current)?.(chunk);
+        await processStreamChunk(chunk, onChunk);
       },
     });
     setIsRunning(false);
@@ -725,23 +787,39 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
     const agent = baseClient.getAgent(agentId);
+    if (_threadSubscriptionKeyRef.current && threadId) {
+      try {
+        await agent.sendToolApproval({
+          resourceId: resourceId || agentId,
+          threadId,
+          toolCallId,
+          approved: false,
+          requestContext: _requestContext.current,
+        });
+        pendingToolApprovalIdsRef.current.delete(toolCallId);
+        setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+        setIsRunning(false);
+      } catch (error) {
+        setToolCallApprovals(prev => {
+          const next = { ...prev };
+          delete next[toolCallId];
+          return next;
+        });
+        setIsRunning(false);
+        throw error;
+      }
+      return;
+    }
+
     const response = await agent.declineToolCall({
       runId: currentRunId,
       toolCallId,
       requestContext: _requestContext.current,
     });
 
-    if (_threadSubscriptionKeyRef.current) {
-      return;
-    }
-
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
-        void (onChunk ?? _onChunk.current)?.(chunk);
+        await processStreamChunk(chunk, onChunk);
       },
     });
     setIsRunning(false);
@@ -907,6 +985,7 @@ export const useChat = ({
     setMessages,
     sendMessage,
     isRunning,
+    isAwaitingToolApproval,
     messages,
     approveToolCall,
     declineToolCall,

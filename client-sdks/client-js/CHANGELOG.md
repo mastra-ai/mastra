@@ -1,5 +1,25 @@
 # @mastra/client-js
 
+## 1.22.0-alpha.6
+
+### Patch Changes
+
+- Separated thread subscription cleanup from active-run aborts so closing or switching a listener only unsubscribes that listener, while explicit cancel still aborts the active run. ([#17310](https://github.com/mastra-ai/mastra/pull/17310))
+
+- Added subscription-native tool approval APIs so approving or declining a tool call resumes through the active thread subscription instead of requiring a separate continuation stream. New messages are queued while a tool approval is waiting, preventing overlapping runs from duplicating approval requests. ([#17311](https://github.com/mastra-ai/mastra/pull/17311))
+
+  ```ts
+  await agent.sendToolApproval({
+    resourceId: 'user-123',
+    threadId: 'thread-123',
+    toolCallId: 'tool-call-123',
+    approved: true,
+  });
+  ```
+
+- Updated dependencies [[`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3)]:
+  - @mastra/core@1.38.0-alpha.6
+
 ## 1.22.0-alpha.5
 
 ### Minor Changes

@@ -1,3 +1,4 @@
+import { createAlibaba } from '@ai-sdk/alibaba-v6';
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createCerebras } from '@ai-sdk/cerebras-v5';
 import { createDeepInfra } from '@ai-sdk/deepinfra-v5';
@@ -309,6 +310,12 @@ export class ModelsDevGateway extends MastraModelGateway {
         // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic)
         const config = this.providerConfigs[providerId];
         const npm = config?.npm;
+
+        // Pattern match for any alibaba variant (alibaba, alibaba-cn, alibaba-coding-plan, etc.)
+        if (providerId.includes('alibaba')) {
+          if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+          return createAlibaba({ apiKey, baseURL, headers: mastraHeaders })(modelId);
+        }
 
         if (npm === '@ai-sdk/anthropic') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);

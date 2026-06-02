@@ -1,5 +1,15 @@
 # mastracode
 
+## 0.21.2-alpha.6
+
+### Patch Changes
+
+- Fixed TUI crash on narrow terminals when prompt dialogs render lines wider than terminal width ([#17431](https://github.com/mastra-ai/mastra/pull/17431))
+
+- Updated dependencies [[`b0771a4`](https://github.com/mastra-ai/mastra/commit/b0771a48b46e46d270fca208a587922f3b7104a8), [`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3)]:
+  - @mastra/agent-browser@0.3.0-alpha.1
+  - @mastra/core@1.38.0-alpha.6
+
 ## 0.21.2-alpha.5
 
 ### Patch Changes
