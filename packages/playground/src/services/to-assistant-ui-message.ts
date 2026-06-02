@@ -19,6 +19,28 @@ type ContentPart = { metadata?: Record<string, unknown> } & (Exclude<
   ? T
   : never);
 
+/**
+ * Resolve the signal type for a persisted `role: 'signal'` message, mirroring
+ * core's `getSignalType` (`AIV4Adapter.ts` / `AIV5Adapter.ts`). The type is
+ * stored under `content.metadata.signal.type`, falling back to the top-level
+ * `message.type`.
+ */
+const getSignalType = (message: MastraDBMessage): string | undefined => {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const type = (signal as Record<string, unknown>).type;
+    return typeof type === 'string' ? type : message.type;
+  }
+  return message.type;
+};
+
+/**
+ * User-message signals (the persisted echo of a user turn sent via `sendSignal`)
+ * use `type: 'user'` or `'user-message'`. They must render as a user bubble on
+ * reload, matching core's adapters; all other signals stay `system`.
+ */
+const isUserSignalType = (type: string | undefined): boolean => type === 'user' || type === 'user-message';
+
 const getPartMetadata = (message: MastraDBMessage, part: MastraMessagePart) => ({
   ...message.content.metadata,
   ...('providerMetadata' in part && part.providerMetadata ? { providerMetadata: part.providerMetadata } : {}),
@@ -342,7 +364,7 @@ const toStatus = (message: MastraDBMessage): MessageStatus | undefined => {
 export const toAssistantUIMessage = (message: MastraDBMessage): ThreadMessageLike =>
   ({
     id: message.id,
-    role: message.role === 'signal' ? 'system' : message.role,
+    role: message.role === 'signal' ? (isUserSignalType(getSignalType(message)) ? 'user' : 'system') : message.role,
     content: message.content.parts.map(part => toContentPart(message, part)),
     status: toStatus(message),
     createdAt: message.createdAt,

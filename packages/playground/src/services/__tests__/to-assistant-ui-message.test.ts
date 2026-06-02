@@ -408,3 +408,52 @@ describe('toAssistantUIMessage reasoning reload', () => {
     expect(part.text).toBe('thinking out loud');
   });
 });
+
+describe('toAssistantUIMessage signal role mapping', () => {
+  const signalMessage = (metadata: Record<string, unknown>, text: string, topLevelType?: string): MastraDBMessage => ({
+    id: 'signal-1',
+    role: 'signal',
+    ...(topLevelType !== undefined ? { type: topLevelType } : {}),
+    createdAt: new Date('2026-05-29T00:00:00.000Z'),
+    threadId: 'thread-1',
+    resourceId: 'resource-1',
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata,
+    },
+  });
+
+  it('renders a persisted user-message signal as a user message', () => {
+    const message = signalMessage({ signal: { type: 'user-message' } }, 'Continue with this');
+    const result = toAssistantUIMessage(message);
+
+    expect(result.role).toBe('user');
+    const { content } = result;
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+    const part = content[0];
+    expect(part.type).toBe('text');
+    if (part.type !== 'text') throw new Error('expected text');
+    expect(part.text).toBe('Continue with this');
+  });
+
+  it('renders a signal with signal.type "user" as a user message', () => {
+    const message = signalMessage({ signal: { type: 'user' } }, 'active hello');
+
+    expect(toAssistantUIMessage(message).role).toBe('user');
+  });
+
+  it('renders a signal with top-level type "user-message" as a user message', () => {
+    const message = signalMessage({}, 'top-level type', 'user-message');
+
+    expect(toAssistantUIMessage(message).role).toBe('user');
+  });
+
+  it('renders a non-user signal as a system message', () => {
+    const tagSignal = signalMessage({ signal: { type: 'tag' } }, 'tagged');
+    const noTypeSignal = signalMessage({}, 'no type');
+
+    expect(toAssistantUIMessage(tagSignal).role).toBe('system');
+    expect(toAssistantUIMessage(noTypeSignal).role).toBe('system');
+  });
+});
