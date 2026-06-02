@@ -16,6 +16,8 @@ export type ZodNumber = z4.ZodNumber | z3.ZodNumber;
 export type ZodDate = z4.ZodDate | z3.ZodDate;
 export type ZodDefault = z4.ZodDefault<any> | z3.ZodDefault<any>;
 
+export type AISdkSchemaLike<Output = unknown> = { _type: Output };
+
 export type PublicSchema<Output = unknown, Input = Output> =
   | z4.ZodType<Output, Input>
   | z3.Schema<Output, z3.ZodTypeDef, Input>
@@ -23,6 +25,7 @@ export type PublicSchema<Output = unknown, Input = Output> =
   | SchemaV5<Output>
   | SchemaV6<Output>
   | JSONSchema7
-  | StandardSchemaWithJSON<Input, Output>;
+  | StandardSchemaWithJSON<Input, Output>
+  | AISdkSchemaLike<Output>;
 
 export type InferPublicSchema<T extends PublicSchema> = T extends PublicSchema<infer Output> ? Output : never;
