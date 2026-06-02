@@ -4,6 +4,7 @@ packages:
   - packages/_vendored/*
   - packages/_internals/*
   - packages/*
+  - agent-sdks/*
   - deployers/*
   - stores/*
   - browser/*
@@ -132,6 +133,7 @@ allowBuilds:
   onnxruntime-node: false
   protobufjs: false
   sharp: false
+  sqlite3: false
   ssh2: false
   unrs-resolver: false
   workerd: false

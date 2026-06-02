@@ -9,8 +9,6 @@ const EXCLUDED_DIRS = new Set([
   'packages/_config',
   'packages/_types-builder',
   'packages/_vendored',
-  'packages/playground',
-  'packages/playground-ui',
   'server-adapters/_test-utils',
   'observability/_examples',
 ]);

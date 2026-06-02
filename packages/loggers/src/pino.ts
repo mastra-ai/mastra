@@ -74,7 +74,7 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
         redact: options.redact,
         mixin: options.mixin,
         customLevels: options.customLevels,
-        messageKey: options.messageKey,
+        messageKey: options.messageKey ?? 'msg',
       },
       options.overrideDefaultTransports
         ? options?.transports?.default

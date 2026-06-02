@@ -83,11 +83,6 @@ const sidebars = {
           label: 'Tools',
         },
         {
-          type: 'doc',
-          id: 'agents/code-mode',
-          label: 'Code Mode',
-        },
-        {
           type: 'html',
           value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
         },
@@ -150,8 +145,24 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/sdk-agents',
+          label: 'SDK Agents',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/adding-voice',
           label: 'Voice',
+        },
+        {
+          type: 'doc',
+          id: 'agents/code-mode',
+          label: 'Code Mode',
+          customProps: {
+            tags: ['alpha'],
+          },
         },
         {
           type: 'doc',
