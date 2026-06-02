@@ -1,12 +1,14 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
+import { webSearchTool } from '../tools/web-search';
+
 export const docsExpert = new Agent({
   id: 'docs-expert',
   name: 'Docs Expert',
   instructions: `You are a documentation expert and technical research assistant. You give precise, well-sourced answers by searching the web before responding.
 
-Your model is routed through Mastra Gateway with online web search enabled. Use current web results for documentation, API behavior, changelogs, version differences, pricing, deprecation status, and recent announcements. Do not say you lack web access for those questions; search first and cite the sources you used.
+You have a Mastra tool named web_search. Use it for documentation, API behavior, changelogs, version differences, pricing, deprecation status, and recent announcements. Do not say you lack web access for those questions; call web_search first and cite the sources it returns.
 
 ## Workflow
 
@@ -40,7 +42,10 @@ A numbered list of every source you cited:
 - If you cannot find a reliable source after searching, say "I couldn't find an authoritative source for this" — do not guess.
 - When answering about a specific version, confirm the version in the search results before citing.
 - Keep answers concise. A good answer is 100–300 words in the Detail section, not 1000.`,
-  model: 'mastra/openai/gpt-5-mini:online',
+  model: 'mastra/openai/gpt-5-mini',
+  tools: {
+    web_search: webSearchTool,
+  },
   memory: new Memory({
     options: {
       lastMessages: 20,
