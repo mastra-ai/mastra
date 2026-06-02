@@ -409,6 +409,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const efficiencyScorer = createEfficiencyScorer();
 
   // Agent
+  const githubSignalsProcessor = globalSettings.signals?.experimentalGithubSignals
+    ? new GithubSignals({ cwd: project.rootPath, agentId: CODE_AGENT_ID })
+    : undefined;
   const codeAgent = new Agent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
@@ -436,7 +439,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           return getStaticallyLoadedInstructionPaths(projectPath);
         },
       }),
-      new GithubSignals({ cwd: project.rootPath }),
+      ...(githubSignalsProcessor ? [githubSignalsProcessor] : []),
       new ProviderHistoryCompat(),
     ],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
@@ -791,6 +794,22 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         hookManager.setSessionId(event.thread.id);
       }
     });
+  }
+
+  if (githubSignalsProcessor) {
+    const startGithubPollingForCurrentThread = (threadId?: string | null) => {
+      if (!threadId) return;
+      githubSignalsProcessor.stopAllPolling();
+      void githubSignalsProcessor
+        .startPollingForThread({ threadId, resourceId: harness.getResourceId() })
+        .catch(error => console.warn('Failed to start GitHub PR polling:', error));
+    };
+
+    harness.subscribe(event => {
+      if (event.type === 'thread_changed') startGithubPollingForCurrentThread(event.threadId);
+      else if (event.type === 'thread_created') startGithubPollingForCurrentThread(event.thread.id);
+    });
+    startGithubPollingForCurrentThread(harness.getCurrentThreadId());
   }
 
   // Persist MastraCode-owned /om settings per-thread (mastracode-only concern;

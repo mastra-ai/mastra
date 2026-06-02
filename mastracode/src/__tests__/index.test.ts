@@ -92,6 +92,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
   };
 }
 
@@ -523,6 +524,10 @@ describe('createMastraCode', () => {
   });
 
   it('configures GitHubSignals as an input processor for local PR subscriptions', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+    });
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();

@@ -231,6 +231,8 @@ export interface GlobalSettings {
 export interface SignalSettings {
   /** Opt into local Unix socket PubSub for cross-process signal routing. */
   unixSocketPubSub: boolean;
+  /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
+  experimentalGithubSignals: boolean;
 }
 
 export interface ObservabilityResourceConfig {
@@ -302,7 +304,7 @@ const DEFAULTS: GlobalSettings = {
     stagehand: { env: 'LOCAL' },
   },
   shellPassthrough: { mode: 'default' },
-  signals: { unixSocketPubSub: false },
+  signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
   observability: { resources: {}, localTracing: false },
 };
 
@@ -329,6 +331,18 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
+  };
+}
+
+function parseSignalSettings(rawSignals: unknown): SignalSettings {
+  const raw = rawSignals && typeof rawSignals === 'object' ? (rawSignals as Record<string, unknown>) : {};
+  return {
+    unixSocketPubSub:
+      typeof raw.unixSocketPubSub === 'boolean' ? raw.unixSocketPubSub : DEFAULTS.signals.unixSocketPubSub,
+    experimentalGithubSignals:
+      typeof raw.experimentalGithubSignals === 'boolean'
+        ? raw.experimentalGithubSignals
+        : DEFAULTS.signals.experimentalGithubSignals,
   };
 }
 
@@ -555,12 +569,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
-        signals: {
-          unixSocketPubSub:
-            raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
-              ? raw.signals.unixSocketPubSub
-              : DEFAULTS.signals.unixSocketPubSub,
-        },
+        signals: parseSignalSettings(raw.signals),
         observability: parseObservabilitySettings(raw.observability),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
@@ -682,12 +691,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
-      signals: {
-        unixSocketPubSub:
-          raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
-            ? raw.signals.unixSocketPubSub
-            : DEFAULTS.signals.unixSocketPubSub,
-      },
+      signals: parseSignalSettings(raw.signals),
       observability: parseObservabilitySettings(raw.observability),
     };
 
