@@ -81,12 +81,15 @@ const FormWrapper = ({
   return <FormProvider {...methods}>{children}</FormProvider>;
 };
 
-const renderRow = (parts: ToolPart[], defaultValues?: Partial<AgentBuilderEditFormValues>) =>
+const renderMessage = (message: MastraDBMessage, defaultValues?: Partial<AgentBuilderEditFormValues>) =>
   render(
     <FormWrapper defaultValues={defaultValues}>
-      <MessageRow message={buildMessage(parts)} />
+      <MessageRow message={message} />
     </FormWrapper>,
   );
+
+const renderRow = (parts: ToolPart[], defaultValues?: Partial<AgentBuilderEditFormValues>) =>
+  renderMessage(buildMessage(parts), defaultValues);
 
 const buildMessage = (parts: ToolPart[]): MastraDBMessage =>
   ({
@@ -112,6 +115,57 @@ describe('MessageRow dynamic-tool rendering', () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it('renders persisted signal user text as a user message', () => {
+    const prompt =
+      'Build an agent that reviews TypeScript pull requests on GitHub. Look for type-safety issues, missing tests, and inconsistent patterns. Leave inline review comments with concrete suggestions.';
+
+    const { container } = renderMessage({
+      id: 'user-1780417120014-jvuzgio',
+      role: 'signal',
+      type: 'user',
+      createdAt: new Date('2026-06-02T16:18:41.310Z'),
+      threadId: 'agent-builder-rgyY_adhrsPtX7KSaaCsU',
+      resourceId: 'builder-agent',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: prompt,
+            createdAt: 1780417121310,
+          },
+        ],
+        metadata: {
+          signal: {
+            id: 'user-1780417120014-jvuzgio',
+            type: 'user',
+            tagName: 'user',
+            createdAt: '2026-06-02T16:18:41.310Z',
+            acceptedAt: '2026-06-02T16:18:41.295Z',
+          },
+        },
+      },
+    });
+
+    expect(container.textContent).toContain(prompt);
+    expect(container.querySelector('.justify-end')).not.toBeNull();
+  });
+
+  it('does not render non-user signal text messages', () => {
+    const { container } = renderMessage({
+      id: 'signal-1',
+      role: 'signal',
+      type: 'internal',
+      createdAt: new Date('2026-06-02T16:18:41.310Z'),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Internal signal' }],
+      },
+    });
+
+    expect(container.textContent).not.toContain('Internal signal');
   });
 
   it('renders the generic shimmer for non-builder dynamic tools', () => {

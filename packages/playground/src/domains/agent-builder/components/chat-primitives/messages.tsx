@@ -51,6 +51,19 @@ interface MessageRowProps {
 type RequireApprovalMetadata = Record<string, RequireApprovalEntry>;
 
 type ApprovalEntry = RequireApprovalEntry;
+type MessageDisplayRole = 'user' | 'assistant' | 'system' | null;
+
+const getMessageDisplayRole = (message: MastraDBMessage): MessageDisplayRole => {
+  if (message.role === 'user' || message.role === 'assistant' || message.role === 'system') {
+    return message.role;
+  }
+
+  if (message.role === 'signal' && message.type === 'user') {
+    return 'user';
+  }
+
+  return null;
+};
 
 const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; toolName: string }) => {
   const { approveToolCall, declineToolCall } = useStreamApproval();
@@ -122,6 +135,7 @@ const findApprovalEntry = (
 export const MessageRow = ({ message }: MessageRowProps) => {
   const parts = message.content?.parts ?? [];
   const approvals = getRequireApprovalMetadata(message);
+  const displayRole = getMessageDisplayRole(message);
 
   return (
     <>
@@ -137,7 +151,7 @@ export const MessageRow = ({ message }: MessageRowProps) => {
         }
 
         if (part.type === 'text') {
-          return <Txtmessage key={key} txt={part.text} role={message.role} />;
+          return <Txtmessage key={key} txt={part.text} role={displayRole} />;
         }
 
         if (part.type === 'reasoning') {
@@ -182,7 +196,7 @@ export const MessageRow = ({ message }: MessageRowProps) => {
   );
 };
 
-export const Txtmessage = ({ txt, role }: { txt: string; role: MastraDBMessage['role'] }) => {
+export const Txtmessage = ({ txt, role }: { txt: string; role: MessageDisplayRole }) => {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
