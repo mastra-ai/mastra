@@ -4,6 +4,7 @@ import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
@@ -95,6 +96,26 @@ describe('handleMessageUpdate system reminders', () => {
 
     expect(rendered).toContain('  loaded /repo/src/agents/nested/AGENTS.md');
     expect(rendered).not.toContain('Loading instruction file contents');
+  });
+
+  it('renders streamed generic reactive signals', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'reactive_signal',
+          tagName: 'build-status',
+          message: 'Build is still running',
+        } as never,
+      ]),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(ReactiveSignalComponent);
+
+    const rendered = stripAnsi((state.chatContainer.children[0] as ReactiveSignalComponent).render(80).join('\n'));
+    expect(rendered).toContain('Signal: build-status');
+    expect(rendered).toContain('Build is still running');
   });
 
   it('keeps spacing when a streamed reminder is inserted before pending assistant text', () => {

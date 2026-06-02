@@ -183,21 +183,21 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
   };
 }
 
+function signalContentsToText(contents: unknown): string {
+  if (typeof contents === 'string') return contents;
+  if (!Array.isArray(contents)) return '';
+  return contents
+    .filter((part): part is { type: 'text'; text: string } => getRecordValue(part)?.type === 'text')
+    .map(part => part.text)
+    .join('\n');
+}
+
 function toStateSignalContent(
   payload: Record<string, unknown>,
 ): Extract<HarnessMessageContent, { type: 'state_signal' }> | undefined {
   const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
   const stateId = getStringValue(stateMetadata?.id) ?? getStringValue(payload.tagName) ?? 'state';
-  const contents = payload.contents;
-  const text =
-    typeof contents === 'string'
-      ? contents
-      : Array.isArray(contents)
-        ? contents
-            .filter((part): part is { type: 'text'; text: string } => getRecordValue(part)?.type === 'text')
-            .map(part => part.text)
-            .join('\n')
-        : '';
+  const text = signalContentsToText(payload.contents);
 
   return {
     type: 'state_signal',
@@ -207,6 +207,22 @@ function toStateSignalContent(
     cacheKey: getStringValue(stateMetadata?.cacheKey),
     version: typeof stateMetadata?.version === 'number' ? stateMetadata.version : undefined,
     message: text,
+  };
+}
+
+function toReactiveSignalContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'reactive_signal' }> | undefined {
+  const tagName = getStringValue(payload.tagName);
+  if (!tagName) return undefined;
+
+  return {
+    type: 'reactive_signal',
+    id: getStringValue(payload.id),
+    tagName,
+    message: signalContentsToText(payload.contents),
+    attributes: getRecordValue(payload.attributes),
+    metadata: getRecordValue(payload.metadata),
   };
 }
 
@@ -2123,18 +2139,33 @@ export class Harness<TState = {}> {
       if (signal.type === 'reactive' && signal.tagName === 'system-reminder') {
         const reminder = toSystemReminderContent({
           type: signal.type,
-          contents:
-            typeof signal.contents === 'string'
-              ? signal.contents
-              : signal.contents
-                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-                  .map(p => p.text)
-                  .join('\n'),
+          contents: signalContentsToText(signal.contents),
           attributes: signal.attributes ?? msg.content.metadata,
           metadata: signal.metadata,
         });
         if (reminder) {
           content.push(reminder);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
+      if (signal.type === 'reactive') {
+        const reactiveSignal = toReactiveSignalContent({
+          id: signal.id,
+          type: signal.type,
+          tagName: signal.tagName,
+          contents: signal.contents,
+          attributes: signal.attributes,
+          metadata: signal.metadata,
+        });
+        if (reactiveSignal) {
+          content.push(reactiveSignal);
         }
 
         return {
@@ -2236,6 +2267,9 @@ export class Harness<TState = {}> {
           } else if (data.type === 'reactive' && data.tagName === 'system-reminder') {
             const reminder = toSystemReminderContent(data);
             if (reminder) content.push(reminder);
+          } else if (data.type === 'reactive') {
+            const reactiveSignal = toReactiveSignalContent(data);
+            if (reactiveSignal) content.push(reactiveSignal);
           }
           break;
         }
@@ -2808,6 +2842,12 @@ export class Harness<TState = {}> {
           const reminder = toSystemReminderContent(payload);
           if (reminder) {
             state.currentMessage.content.push(reminder);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'reactive') {
+          const reactiveSignal = toReactiveSignalContent(payload);
+          if (reactiveSignal) {
+            state.currentMessage.content.push(reactiveSignal);
             this.emit({ type: 'message_update', message: state.currentMessage });
           }
         }

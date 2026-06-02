@@ -983,6 +983,14 @@ export type HarnessMessageContent =
       version?: number;
       message: string;
     }
+  | {
+      type: 'reactive_signal';
+      id?: string;
+      tagName: string;
+      message: string;
+      attributes?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { ReactiveSignalComponent } from '../components/reactive-signal.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { StateSignalComponent } from '../components/state-signal.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
@@ -77,6 +78,26 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(true);
     expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
+  });
+
+  it('renders generic reactive signals as inline signal components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'reactive-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'reactive_signal',
+          tagName: 'build-status',
+          message: 'Build is still running',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(true);
+    expect(state.messageComponentsById.get('reactive-signal-1')).toBeInstanceOf(ReactiveSignalComponent);
   });
 
   it('dedupes echoed slash command messages against the optimistic slash component', () => {
