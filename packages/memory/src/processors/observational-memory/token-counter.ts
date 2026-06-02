@@ -51,7 +51,18 @@ const IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-const TOKEN_ESTIMATE_CACHE_VERSION = 6;
+const TOKEN_ESTIMATE_CACHE_VERSION = 7;
+
+/**
+ * Cache `source` marker for token estimates supplied by the caller via
+ * `part.providerMetadata.mastra.tokenEstimate`. Pipelines that strip the real
+ * binary payload before persistence (e.g. uploading files to cloud storage and
+ * leaving only a reference token in `data`) cannot rely on the on-device file
+ * size, so they can stamp an authoritative estimate here. Entries marked with
+ * this source survive cache-version rotations and are honored ahead of
+ * provider fetches and the default descriptor estimator.
+ */
+const CLIENT_TOKEN_ESTIMATE_SOURCE = 'client';
 
 const DEFAULT_IMAGE_ESTIMATOR: ImageTokenEstimatorConfig = {
   baseTokens: 85,
@@ -150,7 +161,7 @@ function ensureMessageMastraMetadata(message: MastraDBMessage): NonNullable<Mast
 }
 
 function buildEstimateKey(kind: string, text: string): string {
-  const payloadHash = createHash('sha1').update(text).digest('hex');
+  const payloadHash = createHash('sha256').update(text).digest('hex');
   return `${kind}:${payloadHash}`;
 }
 
@@ -212,6 +223,39 @@ function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCache
 function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
   const mastraMetadata = ensurePartMastraMetadata(part);
   mastraMetadata.tokenEstimate = mergeCacheEntry(mastraMetadata.tokenEstimate, key, entry);
+}
+
+/**
+ * Extracts a caller-supplied token estimate stamped on a part via
+ * `part.providerMetadata.mastra.tokenEstimate`. Used by pipelines that strip
+ * the binary payload from file parts (e.g. cloud-storage references) and
+ * therefore cannot rely on the on-device file size. Returns the entry only
+ * when `source === 'client'` and `tokens` is a finite non-negative number.
+ *
+ * Public contract for callers:
+ *   part.providerMetadata = {
+ *     mastra: {
+ *       tokenEstimate: { v: 0, source: 'client', key: 'client', tokens: N }
+ *     }
+ *   }
+ */
+function getClientPartTokenEstimate(part: CacheablePart): TokenEstimateCacheEntry | undefined {
+  const cache = getPartMastraMetadata(part)?.tokenEstimate;
+  if (!cache || typeof cache !== 'object') return undefined;
+
+  const matches = (entry: unknown): entry is TokenEstimateCacheEntry =>
+    isTokenEstimateEntry(entry) &&
+    entry.source === CLIENT_TOKEN_ESTIMATE_SOURCE &&
+    Number.isFinite(entry.tokens) &&
+    entry.tokens >= 0;
+
+  if (matches(cache)) return cache;
+
+  for (const value of Object.values(cache as Record<string, unknown>)) {
+    if (matches(value)) return value;
+  }
+
+  return undefined;
 }
 
 function getMessageCacheEntry(message: MastraDBMessage, key: string): TokenEstimateCacheEntry | undefined {
@@ -764,6 +808,82 @@ function estimateAnthropicImageTokens(
   return 1600;
 }
 
+/**
+ * Maps a non-image file part's byte size to a token estimate, using a
+ * provider-aware heuristic. This is the non-image-file equivalent of
+ * {@link estimateAnthropicImageTokens} / {@link estimateOpenAIHighDetailTiles}:
+ * it doesn't try to be exact, just close enough that the Observational Memory
+ * threshold check trips on large attachments.
+ *
+ * - Anthropic PDFs: ~1500–3000 tokens/page, ~5KB/page average → `bytes / 3`.
+ * - Google PDFs: 258 tokens/page (Gemini docs), ~5KB/page → `bytes / 20`.
+ * - OpenAI / unknown provider PDFs: `bytes / 4` (conservative).
+ * - Text-ish mime types (`text/*`, JSON, XML, YAML): `bytes / 4`.
+ * - Unknown binary: `bytes / 4` — conservative-upward so OM still fires.
+ *
+ * Floors guarantee a one-page file still produces a meaningful count even when
+ * the underlying bytes are heavily compressed.
+ */
+function estimateFileTokensFromBytes(provider: string | undefined, mimeType: string, sizeBytes: number): number {
+  // MIME types are case-insensitive (RFC 2045) and may carry parameters like
+  // `application/pdf; charset=binary` — normalize before branching.
+  const normalizedMime = (mimeType ?? '').toLowerCase().split(';', 1)[0]!.trim();
+  const isPdf = normalizedMime === 'application/pdf';
+  const isTextish =
+    normalizedMime.startsWith('text/') ||
+    ['application/json', 'application/xml', 'application/x-yaml', 'application/yaml'].includes(normalizedMime);
+
+  if (isPdf) {
+    if (provider === 'google') return Math.max(258, Math.ceil(sizeBytes / 20));
+    if (provider === 'anthropic') return Math.max(1500, Math.ceil(sizeBytes / 3));
+    return Math.max(500, Math.ceil(sizeBytes / 4));
+  }
+
+  if (isTextish) return Math.max(1, Math.ceil(sizeBytes / 4));
+
+  return Math.max(1, Math.ceil(sizeBytes / 4));
+}
+
+/**
+ * Builds a fixed token estimate for a non-image file part from its byte size.
+ * Returns `undefined` when the part has no measurable body (e.g. a remote URL
+ * with no fetched content) — in that case the caller falls back to the
+ * descriptor-only estimate, which preserves prior behavior for URL-only parts.
+ *
+ * Mirrors {@link estimateImageAssetTokens} so non-image files share the same
+ * cache shape as images and benefit from the same persistence path via
+ * `readOrPersistFixedPartEstimate`.
+ */
+function estimateNonImageFileTokens(
+  modelContext: TokenCounterModelContext | undefined,
+  part: CacheablePart,
+): { tokens: number; cachePayload: string } | undefined {
+  const sourceStats = resolveImageSourceStats(getObjectValue(part, 'data'));
+  if (sourceStats.sizeBytes === undefined) {
+    return undefined;
+  }
+
+  const provider = resolveProviderId(modelContext);
+  const modelId = modelContext?.modelId ?? null;
+  const mimeType = getAttachmentMimeType(part, 'application/octet-stream');
+  const filename = getAttachmentFilename(part) ?? null;
+  const tokens = estimateFileTokensFromBytes(provider, mimeType, sourceStats.sizeBytes);
+
+  return {
+    tokens,
+    cachePayload: JSON.stringify({
+      kind: 'non-image-file',
+      provider: provider ?? 'fallback',
+      modelId,
+      estimator: 'bytes',
+      source: sourceStats.source,
+      sizeBytes: sourceStats.sizeBytes,
+      mimeType,
+      filename,
+    }),
+  };
+}
+
 function estimateGoogleImageTokens(
   modelContext: TokenCounterModelContext | undefined,
   part: CacheablePart,
@@ -842,7 +962,7 @@ function getAttachmentFingerprint(asset: unknown): { url?: string; contentHash?:
 
   const base64 = encodeAttachmentBase64(asset);
   if (base64) {
-    return { contentHash: createHash('sha1').update(base64).digest('hex') };
+    return { contentHash: createHash('sha256').update(base64).digest('hex') };
   }
 
   return {};
@@ -1188,6 +1308,136 @@ export class TokenCounter {
     return resolveToolResultValue(part as { providerMetadata?: Record<string, any> }, invocationResult);
   }
 
+  private countMultimodalToolResultContent(part: CacheablePart, toolResult: unknown): number | undefined {
+    if (!toolResult || typeof toolResult !== 'object') {
+      return undefined;
+    }
+
+    const output = toolResult as Record<string, unknown>;
+    const content = output.type === 'content' && Array.isArray(output.value) ? output.value : output.content;
+    if (!Array.isArray(content)) {
+      return undefined;
+    }
+
+    let hasAttachment = false;
+    let tokens = 0;
+    const cacheParts: unknown[] = [];
+    const countJsonContentPart = (contentPart: Record<string, unknown>) => {
+      const formatted = formatToolResultForObserver(contentPart);
+      tokens += this.countString(formatted);
+      cacheParts.push({ type: 'json', valueHash: createHash('sha256').update(formatted).digest('hex') });
+    };
+
+    for (const item of content) {
+      if (!item || typeof item !== 'object') {
+        continue;
+      }
+
+      const contentPart = item as Record<string, unknown>;
+      const partType = contentPart.type;
+
+      if (partType === 'text') {
+        const text = typeof contentPart.text === 'string' ? contentPart.text : String(contentPart.value ?? '');
+        tokens += this.countString(text);
+        cacheParts.push({ type: 'text', textHash: createHash('sha256').update(text).digest('hex') });
+        continue;
+      }
+
+      if (
+        partType === 'image' ||
+        partType === 'image-data' ||
+        (partType === 'media' && String(contentPart.mediaType ?? '').startsWith('image/'))
+      ) {
+        if (typeof contentPart.data !== 'string') {
+          countJsonContentPart(contentPart);
+          continue;
+        }
+        hasAttachment = true;
+        const imagePart = {
+          type: 'image',
+          image: contentPart.data,
+          mimeType: contentPart.mediaType ?? contentPart.mimeType,
+          providerOptions: contentPart.providerOptions,
+          providerMetadata: contentPart.providerMetadata,
+        };
+        const clientEstimate = getClientPartTokenEstimate(imagePart);
+        if (clientEstimate) {
+          tokens += clientEstimate.tokens;
+          cacheParts.push({
+            type: 'image-data-client-estimate',
+            key: clientEstimate.key,
+            tokens: clientEstimate.tokens,
+          });
+          continue;
+        }
+
+        const estimate = this.estimateImageTokens(imagePart);
+        tokens += estimate.tokens;
+        cacheParts.push({ type: 'image-data', estimate: JSON.parse(estimate.cachePayload) });
+        continue;
+      }
+
+      if (partType === 'audio' || partType === 'file-data' || partType === 'media') {
+        if (typeof contentPart.data !== 'string') {
+          countJsonContentPart(contentPart);
+          continue;
+        }
+        hasAttachment = true;
+        const filePart = {
+          type: 'file',
+          data: contentPart.data,
+          mimeType: contentPart.mediaType ?? contentPart.mimeType,
+          filename: contentPart.filename,
+          providerOptions: contentPart.providerOptions,
+          providerMetadata: contentPart.providerMetadata,
+        };
+
+        const clientEstimate = getClientPartTokenEstimate(filePart);
+        if (clientEstimate) {
+          tokens += clientEstimate.tokens;
+          cacheParts.push({
+            type: 'file-data-client-estimate',
+            key: clientEstimate.key,
+            tokens: clientEstimate.tokens,
+          });
+          continue;
+        }
+
+        if (isImageLikeFilePart(filePart)) {
+          const estimate = this.estimateImageLikeFileTokens(filePart);
+          tokens += estimate.tokens;
+          cacheParts.push({ type: 'image-like-file-data', estimate: JSON.parse(estimate.cachePayload) });
+          continue;
+        }
+
+        const byteEstimate = estimateNonImageFileTokens(this.getModelContext(), filePart);
+        if (byteEstimate) {
+          tokens += byteEstimate.tokens;
+          cacheParts.push({ type: 'file-data', estimate: JSON.parse(byteEstimate.cachePayload) });
+          continue;
+        }
+
+        const descriptor = serializeNonImageFilePartForTokenCounting(filePart);
+        tokens += this.countString(descriptor);
+        cacheParts.push({ type: 'file-data-descriptor', descriptor });
+        continue;
+      }
+
+      countJsonContentPart(contentPart);
+    }
+
+    if (!hasAttachment) {
+      return undefined;
+    }
+
+    return this.readOrPersistFixedPartEstimate(
+      part,
+      'tool-result-multimodal-content',
+      JSON.stringify({ type: 'content', value: cacheParts }),
+      tokens,
+    );
+  }
+
   private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {
     const modelContext = this.getModelContext();
     const provider = resolveProviderId(modelContext);
@@ -1267,6 +1517,13 @@ export class TokenCounter {
   }
 
   private countAttachmentPartSync(part: CacheablePart): number | undefined {
+    if (part.type === 'image' || part.type === 'file') {
+      const clientEstimate = getClientPartTokenEstimate(part);
+      if (clientEstimate) {
+        return clientEstimate.tokens;
+      }
+    }
+
     if (part.type === 'image') {
       const estimate = this.estimateImageTokens(part);
       return this.readOrPersistFixedPartEstimate(part, 'image', estimate.cachePayload, estimate.tokens);
@@ -1278,6 +1535,15 @@ export class TokenCounter {
     }
 
     if (part.type === 'file') {
+      const byteEstimate = estimateNonImageFileTokens(this.getModelContext(), part);
+      if (byteEstimate) {
+        return this.readOrPersistFixedPartEstimate(
+          part,
+          'non-image-file',
+          byteEstimate.cachePayload,
+          byteEstimate.tokens,
+        );
+      }
       return this.readOrPersistPartEstimate(part, 'file-descriptor', serializeNonImageFilePartForTokenCounting(part));
     }
 
@@ -1343,6 +1609,13 @@ export class TokenCounter {
   }
 
   private async countAttachmentPartAsync(part: CacheablePart): Promise<number | undefined> {
+    if (part.type === 'image' || part.type === 'file') {
+      const clientEstimate = getClientPartTokenEstimate(part);
+      if (clientEstimate) {
+        return clientEstimate.tokens;
+      }
+    }
+
     const isImageAttachment = part.type === 'image' || (part.type === 'file' && isImageLikeFilePart(part));
     const remotePayload = this.buildRemoteAttachmentCachePayload(part);
 
@@ -1465,12 +1738,19 @@ export class TokenCounter {
         );
 
         if (resultForCounting !== undefined) {
-          const formattedResult = formatToolResultForObserver(resultForCounting);
-          tokens += this.readOrPersistPartEstimate(
-            part,
-            usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
-            formattedResult,
-          );
+          const contentTokens = this.countMultimodalToolResultContent(part, resultForCounting);
+
+          if (contentTokens !== undefined) {
+            tokens += contentTokens;
+          } else {
+            const formattedResult = formatToolResultForObserver(resultForCounting);
+            tokens += this.readOrPersistPartEstimate(
+              part,
+              usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
+              formattedResult,
+            );
+          }
+
           if (typeof resultForCounting !== 'string') {
             overheadDelta -= 12;
           }

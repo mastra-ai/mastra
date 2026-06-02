@@ -3,10 +3,25 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { PIIDetectionResult, PIIDetection } from './pii-detector';
 import { PIIDetector } from './pii-detector';
+
+/** Detection types that are handled by regex only (no LLM buffering) */
+const REGEX_ONLY_TYPES = [
+  'email',
+  'phone',
+  'credit-card',
+  'ssn',
+  'api-key',
+  'ip-address',
+  'url',
+  'uuid',
+  'crypto-wallet',
+  'iban',
+];
 
 function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraDBMessage {
   return {
@@ -875,19 +890,9 @@ describe('PIIDetector', () => {
       expect(result).toEqual(part);
     });
 
-    it('should detect and redact PII in text chunks', async () => {
-      const detections: PIIDetection[] = [
-        {
-          type: 'email',
-          value: 'test@example.com',
-          confidence: 0.9,
-          start: 12,
-          end: 28,
-          redacted_value: null,
-        },
-      ];
-      const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is j***.d**@e******.com'));
-      const detector = new PIIDetector({ model });
+    it('should detect and redact PII in text chunks using regex (no LLM call)', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, detectionTypes: REGEX_ONLY_TYPES });
 
       const part: ChunkType = {
         type: 'text-delta',
@@ -906,20 +911,148 @@ describe('PIIDetector', () => {
         abort: vi.fn() as any,
       });
 
-      expect(result).toEqual({
+      expect(result).not.toBeNull();
+      const redactedText = (result as any).payload.text;
+      // Regex-based redaction uses the built-in maskValue method
+      expect(redactedText).not.toContain('test@example.com');
+      expect(redactedText).toContain('@');
+      expect(redactedText).toContain('.com');
+    });
+
+    it('should not make LLM calls during streaming (regex-only types)', async () => {
+      let llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      const detector = new PIIDetector({ model, detectionTypes: REGEX_ONLY_TYPES });
+
+      const chunks = ['Hello, my email is ', 'test@example.com', ' and my phone is ', '555-123-4567'];
+
+      for (const text of chunks) {
+        await detector.processOutputStream({
+          part: {
+            type: 'text-delta',
+            payload: { id: 'test-id', text },
+            runId: 'test-run-id',
+            from: ChunkFrom.AGENT,
+          },
+          streamParts: [],
+          state: {},
+          abort: vi.fn() as any,
+        });
+      }
+
+      expect(llmCallCount).toBe(0);
+    });
+
+    it('should detect phone numbers via regex during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
+
+      const part: ChunkType = {
         type: 'text-delta',
         payload: {
           id: 'test-id',
-          text: 'My email is j***.d**@e******.com',
+          text: 'Call me at 555-123-4567',
         },
         runId: 'test-run-id',
-        from: ChunkFrom.USER,
+        from: ChunkFrom.AGENT,
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
       });
+
+      expect(result).toBeNull();
+    });
+
+    it('should detect SSN via regex during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
+
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: {
+          id: 'test-id',
+          text: 'SSN: 123-45-6789',
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('should detect credit card numbers via regex during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
+
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: {
+          id: 'test-id',
+          text: 'Card: 4111-1111-1111-1111',
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('should pass through text without regex-detectable PII', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, detectionTypes: REGEX_ONLY_TYPES });
+
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: {
+          id: 'test-id',
+          text: 'Hello, how are you today?',
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual(part);
     });
 
     it('should block streaming content when strategy is block and PII is detected', async () => {
-      const model = setupMockModel(createMockPIIResult(['email']));
-      const detector = new PIIDetector({ model, strategy: 'block' });
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'block', detectionTypes: REGEX_ONLY_TYPES });
 
       const part: ChunkType = {
         type: 'text-delta',
@@ -949,8 +1082,8 @@ describe('PIIDetector', () => {
     });
 
     it('should filter streaming chunks when strategy is filter and PII is detected', async () => {
-      const model = setupMockModel(createMockPIIResult(['email']));
-      const detector = new PIIDetector({ model, strategy: 'filter' });
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
 
       const part: ChunkType = {
         type: 'text-delta',
@@ -976,8 +1109,8 @@ describe('PIIDetector', () => {
     it('should warn but allow content when strategy is warn and PII is detected', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const model = setupMockModel(createMockPIIResult(['email']));
-      const detector = new PIIDetector({ model, strategy: 'warn' });
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'warn', detectionTypes: REGEX_ONLY_TYPES });
 
       const part: ChunkType = {
         type: 'text-delta',
@@ -1003,21 +1136,16 @@ describe('PIIDetector', () => {
       consoleSpy.mockRestore();
     });
 
-    it('should handle streaming detection failures gracefully', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          throw new Error('Detection failed');
-        },
-      });
-      const detector = new PIIDetector({ model });
+    it('should buffer chunks when LLM-only types (name, address) are configured', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, detectionTypes: ['name', 'address'] });
 
+      const state: Record<string, any> = {};
       const part: ChunkType = {
         type: 'text-delta',
         payload: {
           id: 'test-id',
-          text: 'My email is test@example.com',
-          providerMetadata: {},
+          text: 'John Smith lives at 123 Main St',
         },
         runId: 'test-run-id',
         from: ChunkFrom.AGENT,
@@ -1026,11 +1154,694 @@ describe('PIIDetector', () => {
       const result = await detector.processOutputStream({
         part,
         streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+
+      // LLM-only types trigger buffering — chunk is held back
+      expect(result).toBeNull();
+      expect(state._piiBuffer).toBe('John Smith lives at 123 Main St');
+    });
+
+    it('should detect IP addresses via regex during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
+
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'Server IP is 192.168.1.100' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
         state: {},
         abort: vi.fn() as any,
       });
 
-      expect(result).toEqual(part); // Should return original part on failure
+      expect(result).toBeNull();
+    });
+
+    it('should detect UUIDs via regex during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
+
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'User ID: 550e8400-e29b-41d4-a716-446655440000' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('should detect URLs via regex during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
+
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'Visit https://example.com/user/profile?id=123' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('should redact multiple PII types in a single chunk', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'redact', detectionTypes: REGEX_ONLY_TYPES });
+
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'Email: user@test.com, SSN: 123-45-6789' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).not.toBeNull();
+      const text = (result as any).payload.text;
+      expect(text).not.toContain('user@test.com');
+      expect(text).not.toContain('123-45-6789');
+    });
+
+    it('should use placeholder redaction method during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: REGEX_ONLY_TYPES,
+      });
+
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'Call 555-123-4567 now' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).not.toBeNull();
+      expect((result as any).payload.text).toContain('[PHONE]');
+    });
+
+    it('should use hash redaction method during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        redactionMethod: 'hash',
+        detectionTypes: REGEX_ONLY_TYPES,
+      });
+
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'Email: hash@test.com' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).not.toBeNull();
+      expect((result as any).payload.text).toContain('[HASH:');
+    });
+
+    it('should use remove redaction method during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        redactionMethod: 'remove',
+        detectionTypes: REGEX_ONLY_TYPES,
+      });
+
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'SSN is 123-45-6789 here' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).not.toBeNull();
+      expect((result as any).payload.text).not.toContain('123-45-6789');
+      expect((result as any).payload.text).toBe('SSN is  here');
+    });
+  });
+
+  describe('regression: issue #16466 — streaming cost/latency/accuracy', () => {
+    it('should make zero LLM calls with regex-only types (cost regression)', async () => {
+      let llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      const detector = new PIIDetector({ model, detectionTypes: REGEX_ONLY_TYPES });
+      const state: Record<string, any> = {};
+
+      // Simulate 100 streaming chunks (typical response)
+      for (let i = 0; i < 100; i++) {
+        await detector.processOutputStream({
+          part: {
+            type: 'text-delta',
+            payload: { id: 'test-id', text: `chunk ${i} with data ` },
+            runId: 'test-run-id',
+            from: ChunkFrom.AGENT,
+          },
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        });
+      }
+
+      // Regex-only types: zero LLM calls (before fix: 100).
+      expect(llmCallCount).toBe(0);
+    });
+
+    it('should make far fewer LLM calls with LLM-only types via buffering', async () => {
+      let llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      // Include 'name' (LLM-only) to trigger buffering
+      const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'] });
+      const state: Record<string, any> = {};
+
+      // Simulate 100 streaming chunks (~20 chars each = ~2000 chars total)
+      // With buffer size 200, expect ~10 flushes instead of 100 calls
+      for (let i = 0; i < 100; i++) {
+        await detector.processOutputStream({
+          part: {
+            type: 'text-delta',
+            payload: { id: 'test-id', text: `chunk ${i} with data ` },
+            runId: 'test-run-id',
+            from: ChunkFrom.AGENT,
+          },
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        });
+      }
+
+      // Before fix: 100 LLM calls. After fix: ~10 (buffered flushes).
+      expect(llmCallCount).toBeGreaterThan(0);
+      expect(llmCallCount).toBeLessThan(20);
+    });
+
+    it('should still use LLM for processOutputResult after streaming (accuracy)', async () => {
+      let llmCallCount = 0;
+      const detections: PIIDetection[] = [
+        { type: 'name', value: 'John Smith', confidence: 0.9, start: 0, end: 10, redacted_value: null },
+      ];
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult(['name'], detections, '[REDACTED] is a person')),
+          };
+        },
+      });
+      const detector = new PIIDetector({ model, detectionTypes: REGEX_ONLY_TYPES });
+
+      // Stream chunks — no LLM calls (regex-only mode)
+      const streamChunks = ['John', ' Smith', ' is a person'];
+      const state: Record<string, any> = {};
+      for (const text of streamChunks) {
+        await detector.processOutputStream({
+          part: {
+            type: 'text-delta',
+            payload: { id: 'test-id', text },
+            runId: 'test-run-id',
+            from: ChunkFrom.AGENT,
+          },
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        });
+      }
+      expect(llmCallCount).toBe(0);
+
+      // processOutputResult SHOULD use LLM for context-dependent detection
+      const messages = [createTestMessage('John Smith is a person', 'assistant')];
+      await detector.processOutputResult({ messages, abort: vi.fn() as any });
+      expect(llmCallCount).toBe(1);
+    });
+
+    it('should process chunks without latency-inducing async calls (regex-only)', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'redact', detectionTypes: REGEX_ONLY_TYPES });
+      const state: Record<string, any> = {};
+
+      // Process 50 chunks — should complete without LLM calls (no async latency)
+      for (let i = 0; i < 50; i++) {
+        await detector.processOutputStream({
+          part: {
+            type: 'text-delta',
+            payload: { id: 'test-id', text: `word${i} ` },
+            runId: 'test-run-id',
+            from: ChunkFrom.AGENT,
+          },
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        });
+      }
+    });
+
+    it('should only scan configured detection types during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      // Only configure email detection (regex-only, no buffering)
+      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: ['email'] });
+
+      // Phone should NOT be detected
+      const phoneResult = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'Call 555-123-4567' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+      expect(phoneResult).not.toBeNull();
+
+      // Email SHOULD be detected
+      const emailResult = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'Email: user@test.com' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+      expect(emailResult).toBeNull();
+    });
+
+    it('should respect threshold for regex detections (always 1.0 confidence)', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      // Set threshold very high — regex detections have confidence 1.0 so they should still flag
+      const detector = new PIIDetector({
+        model,
+        strategy: 'filter',
+        threshold: 0.99,
+        detectionTypes: REGEX_ONLY_TYPES,
+      });
+
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'Email: user@test.com' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      // Regex confidence is 1.0, which exceeds threshold 0.99
+      expect(result).toBeNull();
+    });
+
+    it('should flush LLM buffer on non-text chunk and catch PII', async () => {
+      let llmCallCount = 0;
+      const detections: PIIDetection[] = [
+        { type: 'name', value: 'John Smith', confidence: 0.9, start: 18, end: 28, redacted_value: '[REDACTED]' },
+      ];
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult(['name'], detections, 'The user is named [REDACTED]')),
+          };
+        },
+      });
+      // Include 'name' to trigger buffering
+      const detector = new PIIDetector({ model, strategy: 'block', detectionTypes: ['email', 'name'] });
+      const state: Record<string, any> = {};
+
+      // Buffer some text
+      await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'test-id', text: 'The user is named John Smith' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      // Not flushed yet (under threshold, no sentence boundary)
+      expect(llmCallCount).toBe(0);
+
+      // Finish chunk triggers flush
+      const mockAbort = vi.fn().mockImplementation(() => {
+        throw new TripWire('PII detected');
+      });
+      await expect(
+        detector.processOutputStream({
+          part: {
+            type: 'step-finish' as any,
+            payload: {},
+            runId: 'test-run-id',
+            from: ChunkFrom.AGENT,
+          },
+          streamParts: [],
+          state,
+          abort: mockAbort as any,
+        }),
+      ).rejects.toThrow('PII detected');
+
+      // LLM was called once on flush
+      expect(llmCallCount).toBe(1);
+    });
+
+    it('should flush buffer on sentence boundary during streaming', async () => {
+      let llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'] });
+      const state: Record<string, any> = {};
+
+      // First chunk: no sentence boundary, gets buffered
+      const result1 = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-0', text: 'Hello there' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      expect(result1).toBeNull();
+      expect(llmCallCount).toBe(0);
+
+      // Second chunk ends with period — triggers flush
+      const result2 = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-1', text: ', how are you.' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      // Flush emits combined text
+      expect(result2).not.toBeNull();
+      expect((result2 as any).payload.text).toBe('Hello there, how are you.');
+      expect(llmCallCount).toBe(1);
+    });
+
+    it('should respect custom bufferSize option', async () => {
+      let llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      // Small buffer size of 50 chars
+      const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'], bufferSize: 50 });
+      const state: Record<string, any> = {};
+
+      // Send chunks totaling ~60 chars — should trigger flush with bufferSize=50
+      await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-0', text: 'This is some text that is longer than fifty chars okay' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+
+      // Buffer exceeded 50 chars, should have flushed
+      expect(llmCallCount).toBe(1);
+      expect(state._piiBuffer).toBe('');
+    });
+
+    it('should catch PII split across chunk boundaries via regex carryover', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
+      const state: Record<string, any> = {};
+
+      // First chunk: email prefix only
+      const result1 = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-0', text: 'Contact test@' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      // No full email yet — should pass through
+      expect(result1).not.toBeNull();
+
+      // Second chunk: completes the email
+      const result2 = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-1', text: 'example.com is here' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      // Now the carryover + new chunk forms "test@example.com" — should filter
+      expect(result2).toBeNull();
+    });
+
+    it('should redact PII split across chunks correctly', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: REGEX_ONLY_TYPES,
+      });
+      const state: Record<string, any> = {};
+
+      // First chunk: partial SSN
+      await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-0', text: 'SSN is 123-' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+
+      // Second chunk: completes SSN
+      const result2 = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-1', text: '45-6789 end' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+
+      // The redacted output should not contain the raw SSN
+      expect(result2).not.toBeNull();
+      expect((result2 as any).payload.text).not.toContain('45-6789');
+    });
+
+    it('should drain queued non-text parts in FIFO order', async () => {
+      let _llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          _llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'], strategy: 'block' });
+      const state: Record<string, any> = {};
+
+      // Buffer some text first
+      await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-0', text: 'Hello world' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      expect(state._piiBuffer).toBe('Hello world');
+
+      // Non-text part triggers flush — gets queued
+      const nonText1 = {
+        type: 'step-finish' as any,
+        payload: { stepId: 'step-1' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+      const flushed = await detector.processOutputStream({
+        part: nonText1,
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      // Flushed buffer returned
+      expect(flushed).not.toBeNull();
+      // Non-text part queued
+      expect(state._piiPendingNonText).toEqual([nonText1]);
+
+      // Next text-delta should drain the queued non-text part
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-1', text: 'more text' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      // Returns the queued non-text part
+      expect(result).toEqual(nonText1);
+      // Queue is drained
+      expect(state._piiPendingNonText).toBeUndefined();
+      // Text was re-buffered
+      expect(state._piiBuffer).toBe('more text');
+    });
+
+    it('should use default bufferSize of 200 when not specified', async () => {
+      let llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'] });
+      const state: Record<string, any> = {};
+
+      // Send 100 chars — under default 200 threshold, no sentence boundary
+      await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          payload: { id: 'text-0', text: 'A'.repeat(100) },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+
+      // Should NOT have flushed (100 < 200 default)
+      expect(llmCallCount).toBe(0);
+      expect(state._piiBuffer).toBe('A'.repeat(100));
     });
   });
 
@@ -1137,6 +1948,75 @@ describe('PIIDetector', () => {
 
       const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
       expect(result).toEqual(messages); // Should return original messages on failure
+    });
+  });
+
+  describe('structured output schema compatibility', () => {
+    it('should not send number bounds to Anthropic in score or confidence schemas', async () => {
+      const mockResult = createMockPIIResult();
+      const mockModel = new MastraLanguageModelV2Mock({
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify(mockResult) }],
+          warnings: [],
+        }),
+      });
+
+      const detector = new PIIDetector({ model: mockModel });
+
+      await detector.processInput({ messages: [createTestMessage('Hello world')], abort: vi.fn() as any });
+
+      const responseFormat = mockModel.doGenerateCalls[0].responseFormat;
+      expect(responseFormat?.type).toBe('json');
+      const schema = responseFormat?.type === 'json' ? responseFormat.schema : undefined;
+      const schemaJson = JSON.stringify(schema);
+      expect(schemaJson).toContain('score');
+      expect(schemaJson).toContain('confidence');
+      expect(schemaJson).not.toContain('minimum');
+      expect(schemaJson).not.toContain('maximum');
+    });
+
+    it('should reject scores outside the 0-1 range at runtime', async () => {
+      const model = setupMockModel({
+        categories: [{ type: 'email', score: 1.2 }],
+        detections: null,
+      });
+      const detector = new PIIDetector({ model, strategy: 'warn', threshold: 1.1 });
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await detector.processInput({
+        messages: [createTestMessage('Hello world')],
+        abort: vi.fn() as any,
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PIIDetector] Detection agent failed, allowing content:',
+        expect.any(Error),
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should reject confidence values outside the 0-1 range at runtime', async () => {
+      const model = setupMockModel({
+        categories: null,
+        detections: [{ type: 'email', value: 'test@example.com', confidence: -0.2, start: 0, end: 16 }],
+      });
+      const detector = new PIIDetector({ model, strategy: 'warn', threshold: 0 });
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await detector.processInput({ messages: [createTestMessage('Hello world')], abort: vi.fn() as any });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PIIDetector] Detection agent failed, allowing content:',
+        expect.any(Error),
+      );
+
+      consoleSpy.mockRestore();
     });
   });
 });

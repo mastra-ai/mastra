@@ -10,7 +10,8 @@ import { BROWSER_TOOLS } from './constants';
 export function createClickTool(browser: AgentBrowser) {
   return createTool({
     id: BROWSER_TOOLS.CLICK,
-    description: 'Click an element using its ref from a snapshot. Use clickCount: 2 for double-click.',
+    description:
+      'Click an element using its ref from a snapshot. Use clickCount: 2 for double-click. Pass waitUntil when the click triggers navigation so the page settles before the next snapshot.',
     inputSchema: clickInputSchema,
     execute: async (input, { agent }) => {
       const threadId = agent?.threadId;

@@ -1,11 +1,11 @@
 import {
-  SelectField,
+  CodeBlock,
+  CopyButton,
   Spinner,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
   Txt,
-  useCopyToClipboard,
   cn,
   Dialog,
   DialogContent,
@@ -15,7 +15,7 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui';
-import { Copy, Check, MoveRight, Info, ExternalLink } from 'lucide-react';
+import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
 import { usePackageUpdates } from '../hooks/use-package-updates';
@@ -25,7 +25,11 @@ export interface MastraVersionFooterProps {
   collapsed?: boolean;
 }
 
-type PackageManager = 'pnpm' | 'npm' | 'yarn' | 'bun';
+const PACKAGE_MANAGERS = ['pnpm', 'npm', 'yarn', 'bun'] as const;
+type PackageManager = (typeof PACKAGE_MANAGERS)[number];
+
+const isPackageManager = (value: string): value is PackageManager =>
+  (PACKAGE_MANAGERS as readonly string[]).includes(value);
 
 const packageManagerCommands: Record<PackageManager, string> = {
   pnpm: 'pnpm add',
@@ -33,6 +37,10 @@ const packageManagerCommands: Record<PackageManager, string> = {
   yarn: 'yarn add',
   bun: 'bun add',
 };
+
+const versionBadgeClassName =
+  'inline-flex h-[1.375rem] items-center gap-1.5 rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs font-semibold leading-none tracking-normal text-black/80 tabular-nums whitespace-nowrap dark:text-neutral6';
+const versionBadgeRailClassName = 'h-3.5 w-1 rounded-full bg-positive1';
 
 export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => {
   const { data, isLoading: isLoadingPackages } = useMastraPackages();
@@ -59,8 +67,9 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   if (isLoadingPackages) {
     return (
-      <div className="px-3 py-2">
-        <div className="animate-pulse h-4 bg-surface2 rounded w-16"></div>
+      <div className="flex items-center justify-between gap-2 px-3 h-9">
+        <div className="animate-pulse h-3 w-12 bg-surface4 rounded" />
+        <div className="animate-pulse h-[1.125rem] w-20 bg-surface4 rounded-full" />
       </div>
     );
   }
@@ -78,22 +87,21 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button className="px-3 py-2 hover:bg-surface2 transition-colors rounded w-full text-left">
-          <div className="flex items-center gap-1.5">
-            <Txt as="span" variant="ui-sm" className="text-accent1 font-mono">
-              mastra version:
-            </Txt>
-          </div>
-          <div className="flex items-center gap-2">
-            <Txt as="span" variant="ui-sm" className="text-neutral3 font-mono">
-              {mainVersion}
-            </Txt>
-            {isLoadingUpdates && <Spinner className="w-3 h-3" color="currentColor" />}
-            <span className="flex items-center -space-x-1.5">
-              {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
-              {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
+        <button
+          type="button"
+          className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 w-full px-3 py-1.5 min-h-9 rounded-lg text-left hover:bg-sidebar-nav-hover transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring"
+        >
+          <Txt as="span" variant="ui-sm" className="text-neutral3 font-serif mr-auto">
+            Mastra
+          </Txt>
+          <span className="flex flex-col items-end gap-1 shrink-0">
+            {isLoadingUpdates && <Spinner className="w-3 h-3 text-neutral3" color="currentColor" />}
+            {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
+            {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
+            <span className={versionBadgeClassName}>
+              <span className={versionBadgeRailClassName} />v{mainVersion}
             </span>
-          </div>
+          </span>
         </button>
       </DialogTrigger>
       <PackagesModalContent
@@ -168,14 +176,6 @@ const PackagesModalContent = ({
   const hasUpdates = outdatedCount > 0 || deprecatedCount > 0;
 
   const packagesText = packages.map(pkg => `${pkg.name}@${pkg.version}`).join('\n');
-  const { isCopied: isCopiedAll, handleCopy: handleCopyAll } = useCopyToClipboard({
-    text: packagesText,
-    copyMessage: 'Copied package versions!',
-  });
-  const { isCopied: isCopiedCommand, handleCopy: handleCopyCommand } = useCopyToClipboard({
-    text: updateCommand ?? '',
-    copyMessage: 'Copied update command!',
-  });
 
   return (
     <DialogContent className="max-w-2xl">
@@ -186,7 +186,7 @@ const PackagesModalContent = ({
 
       <DialogBody>
         {/* Status summary */}
-        <div className="text-sm text-neutral3 py-2">
+        <div className="flex items-center justify-between gap-3 text-sm text-neutral3 py-2">
           {isLoadingUpdates ? (
             <span className="text-neutral3">Checking for updates...</span>
           ) : !hasUpdates ? (
@@ -207,6 +207,12 @@ const PackagesModalContent = ({
               )}
             </div>
           )}
+          <CopyButton
+            content={packagesText}
+            copyMessage="Copied package versions!"
+            tooltip="Copy current versions"
+            size="sm"
+          />
         </div>
 
         {/* Package list */}
@@ -261,51 +267,30 @@ const PackagesModalContent = ({
           </div>
         </div>
 
-        {/* Copy current versions button - always visible */}
-        <button
-          onClick={handleCopyAll}
-          className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-neutral3 hover:text-neutral1 transition-colors"
-        >
-          {isCopiedAll ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
-          <Txt as="span" variant="ui-sm">
-            {isCopiedAll ? 'Copied!' : 'Copy current versions'}
-          </Txt>
-        </button>
-
         {/* Update command section */}
         {hasUpdates && updateCommand && (
-          <div className="space-y-3 pt-2 border-t border-border1">
-            <div className="flex items-center gap-2 text-sm text-neutral3 pt-3">
-              <Info className="w-4 h-4" />
-              <span>Use the command below to update your packages</span>
-            </div>
-
-            <div className="flex gap-2 items-center">
-              <SelectField
-                value={packageManager}
-                onValueChange={value => onPackageManagerChange(value as PackageManager)}
-                options={[
-                  { label: 'pnpm', value: 'pnpm' },
-                  { label: 'npm', value: 'npm' },
-                  { label: 'yarn', value: 'yarn' },
-                  { label: 'bun', value: 'bun' },
-                ]}
-              />
-
-              <pre className="flex-1 text-sm text-neutral3 bg-surface2 rounded-md px-3 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
-                {updateCommand}
-              </pre>
-            </div>
-
-            <button
-              onClick={handleCopyCommand}
-              className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-neutral3 hover:text-neutral1 transition-colors"
-            >
-              {isCopiedCommand ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
-              <Txt as="span" variant="ui-sm">
-                {isCopiedCommand ? 'Copied!' : 'Copy command'}
+          <div className="space-y-2 pt-2 border-t border-border1">
+            <div className="flex items-center gap-2 pt-3">
+              <Info className="w-4 h-4 text-neutral3" />
+              <Txt as="span" variant="ui-sm" className="text-neutral3">
+                Use the command below to update your packages
               </Txt>
-            </button>
+            </div>
+            <CodeBlock
+              code={updateCommand}
+              options={[
+                { label: 'pnpm', value: 'pnpm' },
+                { label: 'npm', value: 'npm' },
+                { label: 'yarn', value: 'yarn' },
+                { label: 'bun', value: 'bun' },
+              ]}
+              value={packageManager}
+              onValueChange={value => {
+                if (isPackageManager(value)) onPackageManagerChange(value);
+              }}
+              copyMessage="Copied update command!"
+              copyTooltip="Copy command"
+            />
           </div>
         )}
       </DialogBody>

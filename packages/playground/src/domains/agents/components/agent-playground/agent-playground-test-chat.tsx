@@ -1,8 +1,13 @@
 import { v4 as uuid } from '@lukeed/uuid';
+import { Notice, Button } from '@mastra/playground-ui';
+import { Save } from 'lucide-react';
 import { useMemo } from 'react';
+import { useFormState } from 'react-hook-form';
 
 import { AgentSettingsProvider } from '../../context/agent-context';
-import { BrowserSessionProvider } from '../../context/browser-session-context';
+import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { BrowserSessionProvider } from '../../context/browser-session-provider';
+import { useAgent } from '../../hooks/use-agent';
 import { AgentChat } from '../agent-chat';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
@@ -15,6 +20,38 @@ interface AgentPlaygroundTestChatProps {
   hasMemory: boolean;
 }
 
+function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useOptionalAgentEditFormContext>> }) {
+  const { isDirty } = useFormState({ control: ctx.form.control });
+  const handleSaveDraft = ctx.handleSaveDraft;
+  const isSavingDraft = ctx.isSavingDraft ?? false;
+  const isCodeSource = ctx.isCodeSourceAgent ?? false;
+
+  if (!isDirty) return null;
+
+  const saveLabel = isCodeSource ? 'Save to filesystem' : 'Save draft';
+  const message = isCodeSource
+    ? 'You have unsaved changes to the agent configuration. Save to filesystem to ensure the chat uses your latest changes.'
+    : 'You have unsaved changes to the agent configuration. Save your draft to ensure the chat uses your latest changes.';
+
+  return (
+    <Notice
+      variant="warning"
+      title="Unsaved changes"
+      className="mx-4 mt-3 mb-0"
+      action={
+        handleSaveDraft && (
+          <Button type="button" variant="default" size="sm" onClick={() => handleSaveDraft()} disabled={isSavingDraft}>
+            <Save className="h-3.5 w-3.5" />
+            {isSavingDraft ? 'Saving...' : saveLabel}
+          </Button>
+        )
+      }
+    >
+      <Notice.Message>{message}</Notice.Message>
+    </Notice>
+  );
+}
+
 export function AgentPlaygroundTestChat({
   agentId,
   agentName,
@@ -23,13 +60,17 @@ export function AgentPlaygroundTestChat({
   hasMemory,
 }: AgentPlaygroundTestChatProps) {
   // Generate a stable ephemeral thread ID for test chat sessions
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: regenerate thread ID when agent changes
   const testThreadId = useMemo(() => uuid(), [agentId]);
   const mergedRequestContext = useMergedRequestContext();
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
+  const editFormCtx = useOptionalAgentEditFormContext();
+  const { data: agent } = useAgent(agentId);
+
   return (
     <AgentSettingsProvider agentId={agentId} defaultSettings={{ modelSettings: {} }}>
-      <BrowserSessionProvider agentId={agentId} threadId={testThreadId}>
+      <BrowserSessionProvider agentId={agentId} threadId={testThreadId} enabled={Boolean(agent?.browserTools?.length)}>
         <DatasetSaveProvider
           enabled
           threadId={testThreadId}
@@ -37,6 +78,7 @@ export function AgentPlaygroundTestChat({
           requestContext={hasRequestContext ? mergedRequestContext : undefined}
         >
           <div className="flex flex-col h-full">
+            {editFormCtx && <UnsavedChangesBanner ctx={editFormCtx} />}
             <div className="flex-1 min-h-0">
               <AgentChat
                 key={testThreadId}

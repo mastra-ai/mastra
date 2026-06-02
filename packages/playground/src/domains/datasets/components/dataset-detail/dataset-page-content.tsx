@@ -1,5 +1,5 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { AlertDialog, Chip, Tabs, Tab, TabList, TabContent, transitions, toast, cn } from '@mastra/playground-ui';
+import { AlertDialog, Chip, Tabs, Tab, TabList, TabContent, toast } from '@mastra/playground-ui';
 import { useState } from 'react';
 import { useDebounce } from 'use-debounce';
 import { useDatasetExperiments } from '../../hooks/use-dataset-experiments';
@@ -200,92 +200,83 @@ export function DatasetPageContent({
 
   return (
     <>
-      <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div className={cn('h-full w-full', transitions.allSlow)}>
-          <div
-            className={cn(
-              'grid grid-rows-[auto_1fr] mx-auto h-full w-full m-auto',
-              featuredItemId ? 'max-w-[120rem]' : 'max-w-[90rem]',
-            )}
+      <div className="grid grid-rows-[auto_1fr] mx-auto h-full w-full max-w-[120rem] px-12 pb-4">
+        <DatasetHeader
+          dataset={dataset}
+          isLoading={isDatasetLoading}
+          onEditClick={onEditClick}
+          onDuplicateClick={() => setDuplicateDialogOpen(true)}
+          onDeleteClick={onDeleteClick}
+          experimentTriggerSlot={experimentTriggerSlot}
+          disableExperimentTrigger={!isUnfilteredLoading && unfilteredItems.length === 0}
+          onExperimentClick={onExperimentClick}
+        />
+
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <Tabs
+            defaultTab="items"
+            value={activeTab}
+            onValueChange={handleTabChange}
+            className="grid grid-rows-[auto_1fr] h-full"
           >
-            <DatasetHeader
-              dataset={dataset}
-              isLoading={isDatasetLoading}
-              onEditClick={onEditClick}
-              onDuplicateClick={() => setDuplicateDialogOpen(true)}
-              onDeleteClick={onDeleteClick}
-              experimentTriggerSlot={experimentTriggerSlot}
-              disableExperimentTrigger={!isUnfilteredLoading && unfilteredItems.length === 0}
-              onExperimentClick={onExperimentClick}
-            />
+            <TabList>
+              <Tab value="items">
+                Items <Chip color="gray">{itemsTabCount}</Chip>
+              </Tab>
+              <Tab value="experiments">
+                Experiments
+                <Chip color="gray">{experiments.length}</Chip>
+              </Tab>
+              <Tab value="review">
+                Review
+                {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
+              </Tab>
+            </TabList>
 
-            <div className="flex-1 overflow-hidden flex flex-col">
-              <Tabs
-                defaultTab="items"
-                value={activeTab}
-                onValueChange={handleTabChange}
-                className="grid grid-rows-[auto_1fr] h-full"
-              >
-                <TabList>
-                  <Tab value="items">
-                    Items <Chip color="gray">{itemsTabCount}</Chip>
-                  </Tab>
-                  <Tab value="experiments">
-                    Experiments
-                    <Chip color="gray">{experiments.length}</Chip>
-                  </Tab>
-                  <Tab value="review">
-                    Review
-                    {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
-                  </Tab>
-                </TabList>
+            <TabContent value="items" className="grid overflow-auto mt-5">
+              <DatasetItems
+                datasetId={datasetId}
+                items={items}
+                isLoading={isItemsLoading}
+                featuredItemId={featuredItemId}
+                onItemSelect={handleItemSelect}
+                onItemClose={handleItemClose}
+                onAddClick={onAddItemClick ?? (() => {})}
+                onImportClick={() => setImportDialogOpen(true)}
+                onImportJsonClick={() => setImportJsonDialogOpen(true)}
+                onBulkDeleteClick={handleBulkDeleteClick}
+                onCreateDatasetClick={handleCreateDatasetClick}
+                onAddToDatasetClick={handleAddToDatasetClick}
+                onCompareItemsClick={handleCompareItemsClick}
+                datasetName={dataset?.name}
+                clearSelectionTrigger={clearSelectionTrigger}
+                setEndOfListElement={setEndOfListElement}
+                isFetchingNextPage={isFetchingNextPage}
+                hasNextPage={hasNextPage}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                activeDatasetVersion={activeDatasetVersion}
+                currentDatasetVersion={dataset?.version}
+                onVersionSelect={handleVersionSelect}
+                onCompareVersionsClick={handleCompareVersionsClick}
+              />
+            </TabContent>
 
-                <TabContent value="items" className="grid overflow-auto mt-5">
-                  <DatasetItems
-                    datasetId={datasetId}
-                    items={items}
-                    isLoading={isItemsLoading}
-                    featuredItemId={featuredItemId}
-                    onItemSelect={handleItemSelect}
-                    onItemClose={handleItemClose}
-                    onAddClick={onAddItemClick ?? (() => {})}
-                    onImportClick={() => setImportDialogOpen(true)}
-                    onImportJsonClick={() => setImportJsonDialogOpen(true)}
-                    onBulkDeleteClick={handleBulkDeleteClick}
-                    onCreateDatasetClick={handleCreateDatasetClick}
-                    onAddToDatasetClick={handleAddToDatasetClick}
-                    onCompareItemsClick={handleCompareItemsClick}
-                    datasetName={dataset?.name}
-                    clearSelectionTrigger={clearSelectionTrigger}
-                    setEndOfListElement={setEndOfListElement}
-                    isFetchingNextPage={isFetchingNextPage}
-                    hasNextPage={hasNextPage}
-                    searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
-                    activeDatasetVersion={activeDatasetVersion}
-                    currentDatasetVersion={dataset?.version}
-                    onVersionSelect={handleVersionSelect}
-                    onCompareVersionsClick={handleCompareVersionsClick}
-                  />
-                </TabContent>
+            <TabContent value="experiments" className="grid overflow-auto mt-5">
+              <DatasetExperiments
+                experiments={experiments}
+                allExperiments={allExperiments}
+                isLoading={isExperimentsLoading}
+                datasetId={datasetId}
+                filters={experimentsFilters}
+                onFiltersChange={setExperimentsFilters}
+              />
+            </TabContent>
 
-                <TabContent value="experiments" className="grid overflow-auto mt-5">
-                  <DatasetExperiments
-                    experiments={experiments}
-                    allExperiments={allExperiments}
-                    isLoading={isExperimentsLoading}
-                    datasetId={datasetId}
-                    filters={experimentsFilters}
-                    onFiltersChange={setExperimentsFilters}
-                  />
-                </TabContent>
-
-                <TabContent value="review" className="overflow-auto mt-0">
-                  <DatasetReview datasetId={datasetId} />
-                </TabContent>
-              </Tabs>
-            </div>
-          </div>
+            <TabContent value="review" className="overflow-auto mt-0">
+              <DatasetReview datasetId={datasetId} />
+            </TabContent>
+          </Tabs>
         </div>
       </div>
       {/* CSV Import Dialog */}

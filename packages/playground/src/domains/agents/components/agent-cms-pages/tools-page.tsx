@@ -4,6 +4,7 @@ import {
   EntityDescription,
   EntityContent,
   Entity,
+  Notice,
   Popover,
   PopoverTrigger,
   PopoverContent,
@@ -27,12 +28,20 @@ import { IntegrationToolsSection } from '@/domains/tool-providers/components';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 export function ToolsPage() {
-  const { form, readOnly } = useAgentEditFormContext();
+  const { form, readOnly, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
   const { control } = form;
   const { data: tools } = useTools();
   const selectedTools = useWatch({ control, name: 'tools' });
   const selectedIntegrationTools = useWatch({ control, name: 'integrationTools' });
   const variables = useWatch({ control, name: 'variables' });
+  const toolsConfig = editorConfig === false ? false : editorConfig?.tools;
+  const descriptionsOnly = isCodeAgentOverride && typeof toolsConfig === 'object' && toolsConfig.description === true;
+  const isToolsLocked = isCodeAgentOverride && (editorConfig === false || toolsConfig === false);
+  const canEditToolMembership = !readOnly && !descriptionsOnly && !isToolsLocked;
+  const canEditToolDescriptions = !readOnly && !isToolsLocked && (!isCodeAgentOverride || toolsConfig !== false);
+  // MCP clients and integration tools are tool-membership additions, so they
+  // are hidden whenever tool membership cannot be edited (locked or descriptions-only).
+  const hideToolMembershipSections = isToolsLocked || descriptionsOnly;
 
   const options = useMemo(() => {
     const opts: { value: string; label: string; description: string }[] = [];
@@ -119,8 +128,14 @@ export function ToolsPage() {
   );
 
   const selectedOptions = useMemo(() => {
-    return options.filter(opt => selectedToolIds.includes(opt.value));
-  }, [options, selectedToolIds]);
+    // Include all selected tools, even agent-level tools not in the global list.
+    // Tools registered on the agent (not at the Mastra instance level) won't
+    // appear in useTools() but are still valid selections in the stored config.
+    return selectedToolIds.map(id => {
+      const existing = options.find(opt => opt.value === id);
+      return existing || { value: id, label: id, description: selectedTools?.[id]?.description || '' };
+    });
+  }, [options, selectedToolIds, selectedTools]);
 
   const unselectedOptions = useMemo(() => {
     return options.filter(opt => !selectedToolIds.includes(opt.value));
@@ -146,10 +161,10 @@ export function ToolsPage() {
             <input
               type="text"
               aria-label={`Description for ${tool.label}`}
-              disabled={readOnly}
+              disabled={!canEditToolDescriptions}
               className={cn(
                 'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
-                !readOnly && 'hover:bg-surface4 focus:bg-surface4',
+                canEditToolDescriptions && 'hover:bg-surface4 focus:bg-surface4',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
               onChange={e => handleDescriptionChange(tool.value, e.target.value)}
@@ -157,7 +172,7 @@ export function ToolsPage() {
           </EntityDescription>
         </EntityContent>
 
-        {!readOnly && (
+        {canEditToolMembership && (
           <DisplayConditionsDialog
             entityName={tool.label}
             schema={variables}
@@ -166,7 +181,7 @@ export function ToolsPage() {
           />
         )}
 
-        {!readOnly && (
+        {canEditToolMembership && (
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
@@ -185,11 +200,27 @@ export function ToolsPage() {
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6 pt-4">
+        {isToolsLocked && (
+          <Notice variant="info" title="Tools are owned by code">
+            <Notice.Message>
+              This code-defined agent has disabled tools editing from Studio. Update the agent definition in code to
+              change its tools.
+            </Notice.Message>
+          </Notice>
+        )}
+        {!isToolsLocked && descriptionsOnly && (
+          <Notice variant="info" title="Tool membership is owned by code">
+            <Notice.Message>
+              This code-defined agent only allows editing tool descriptions from Studio. Update the agent definition in
+              code to add or remove tools.
+            </Notice.Message>
+          </Notice>
+        )}
         <SubSectionRoot>
           <Section.Header>
             <SubSectionHeader title="Tools" icon={<ToolsIcon />} />
 
-            {!readOnly && unselectedOptions.length > 0 && (
+            {canEditToolMembership && unselectedOptions.length > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="sm">
@@ -221,12 +252,14 @@ export function ToolsPage() {
           )}
         </SubSectionRoot>
 
-        <MCPClientList />
+        {!hideToolMembershipSections && <MCPClientList />}
 
-        <IntegrationToolsSection
-          selectedToolIds={selectedIntegrationTools}
-          onSubmitTools={readOnly ? undefined : handleIntegrationToolsSubmit}
-        />
+        {!hideToolMembershipSections && (
+          <IntegrationToolsSection
+            selectedToolIds={selectedIntegrationTools}
+            onSubmitTools={canEditToolMembership ? handleIntegrationToolsSubmit : undefined}
+          />
+        )}
       </div>
     </ScrollArea>
   );

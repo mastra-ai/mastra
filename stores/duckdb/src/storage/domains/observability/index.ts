@@ -4,12 +4,17 @@ import type {
   CreateSpanArgs,
   GetSpanArgs,
   GetSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetRootSpanArgs,
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -23,6 +28,7 @@ import type {
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -75,7 +81,8 @@ import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logOps from './logs';
 import * as metricOps from './metrics';
-import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
+import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSignalTables } from './migration';
+import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
 import * as tracingOps from './tracing';
 
@@ -140,13 +147,8 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       });
     }
 
-    for (const ddl of ALL_DDL) {
-      await this.db.execute(ddl);
-    }
-
-    for (const migration of ALL_MIGRATIONS) {
-      await this.db.execute(migration);
-    }
+    await this.db.executeBatch([...ALL_DDL, ...ALL_MIGRATIONS]);
+    await dropLegacyCursorIdDefaults(this.db);
   }
 
   /**
@@ -198,6 +200,14 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     };
   }
 
+  override getFeatures() {
+    if (!deltaPollingFeatureEnabled()) {
+      return undefined;
+    }
+
+    return ['delta-polling'] as const;
+  }
+
   // Tracing
   async createSpan(args: CreateSpanArgs): Promise<void> {
     return tracingOps.createSpan(this.db, args);
@@ -211,6 +221,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
     return tracingOps.getSpan(this.db, args);
   }
+  async getSpans(args: GetSpansArgs): Promise<GetSpansResponse> {
+    return tracingOps.getSpans(this.db, args);
+  }
   async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
     return tracingOps.getRootSpan(this.db, args);
   }
@@ -222,6 +235,12 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
+  }
+  async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    return tracingOps.listTracesLight(this.db, args);
+  }
+  async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
+    return tracingOps.listBranches(this.db, args);
   }
 
   // Logs
@@ -288,6 +307,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     return scoreOps.listScores(this.db, args);
+  }
+  async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
+    return scoreOps.getScoreById(this.db, scoreId);
   }
   async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return scoreOps.getScoreAggregate(this.db, args);

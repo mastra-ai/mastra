@@ -40,7 +40,7 @@ function isV3RawUsage(raw: unknown): raw is V3RawUsage {
 
 /**
  * AI SDK aggregated input token details.
- * Available on totalUsage in multi-step runs — properly summed across all steps.
+ * Available on totalUsage in multi-step runs - properly summed across all steps.
  */
 interface AISdkInputTokenDetails {
   cacheReadTokens?: number;
@@ -60,8 +60,9 @@ function isDefined(value: unknown): value is number {
  *
  * Cache token extraction priority (highest to lowest):
  * 1. AI SDK aggregated inputTokenDetails (properly summed across all steps in multi-step runs)
- * 2. Provider-specific providerMetadata (accurate for single-step, last step only in multi-step)
- * 3. usage.cachedInputTokens (OpenAI/OpenRouter direct field)
+ * 2. Mastra-aggregated top-level usage fields (usage.cachedInputTokens, usage.cacheCreationInputTokens) -
+ *    summed across steps by RunOutput, so they are correct for multi-step runs.
+ * 3. Provider-specific providerMetadata (accurate for single-step, LAST STEP ONLY in multi-step).
  *
  * Handles:
  * - OpenAI: cachedInputTokens in usage object
@@ -97,11 +98,12 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     inputDetails.cacheWrite = aiSdkDetails.cacheWriteTokens;
   }
 
-  // ===== OpenAI / OpenRouter =====
-  // cachedInputTokens is already in the usage object
-  // inputTokens INCLUDES cached tokens (no adjustment needed)
+  // Mastra-aggregated fields — summed across steps by RunOutput; prefer over per-step providerMetadata.
   if (!isDefined(inputDetails.cacheRead) && isDefined(usage.cachedInputTokens)) {
     inputDetails.cacheRead = usage.cachedInputTokens;
+  }
+  if (!isDefined(inputDetails.cacheWrite) && isDefined(usage.cacheCreationInputTokens)) {
+    inputDetails.cacheWrite = usage.cacheCreationInputTokens;
   }
 
   // reasoningTokens from usage (OpenAI o1 models)
@@ -127,10 +129,11 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
       inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
     }
 
-    // Skip adjustment when inputTokens already includes cache tokens.
-    // Detected via V3 raw structure or a positive cachedInputTokens field.
+    // Skip adjustment when inputTokens already includes cache tokens (V3 raw or any positive Mastra-aggregated cache field).
     const inputAlreadyIncludesCache =
-      hasV3CachedTotals || (isDefined(usage.cachedInputTokens) && usage.cachedInputTokens > 0);
+      hasV3CachedTotals ||
+      (isDefined(usage.cachedInputTokens) && usage.cachedInputTokens > 0) ||
+      (isDefined(usage.cacheCreationInputTokens) && usage.cacheCreationInputTokens > 0);
 
     if (!inputAlreadyIncludesCache && (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite))) {
       inputTokens = (usage.inputTokens ?? 0) + (inputDetails.cacheRead ?? 0) + (inputDetails.cacheWrite ?? 0);
@@ -181,4 +184,60 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
 
 function sumDefinedValues<T extends object, K extends keyof T>(obj: T, keys: K[]): number {
   return keys.reduce((sum, key) => sum + ((obj[key] as number | undefined) ?? 0), 0);
+}
+
+function addOptional(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined && b === undefined) return undefined;
+  return (a ?? 0) + (b ?? 0);
+}
+
+function mergeInputDetails(
+  a: InputTokenDetails | undefined,
+  b: InputTokenDetails | undefined,
+): InputTokenDetails | undefined {
+  if (!a) return b ? { ...b } : undefined;
+  if (!b) return { ...a };
+  return {
+    text: addOptional(a.text, b.text),
+    cacheRead: addOptional(a.cacheRead, b.cacheRead),
+    cacheWrite: addOptional(a.cacheWrite, b.cacheWrite),
+    audio: addOptional(a.audio, b.audio),
+    image: addOptional(a.image, b.image),
+  };
+}
+
+function mergeOutputDetails(
+  a: OutputTokenDetails | undefined,
+  b: OutputTokenDetails | undefined,
+): OutputTokenDetails | undefined {
+  if (!a) return b ? { ...b } : undefined;
+  if (!b) return { ...a };
+  return {
+    text: addOptional(a.text, b.text),
+    reasoning: addOptional(a.reasoning, b.reasoning),
+    audio: addOptional(a.audio, b.audio),
+    image: addOptional(a.image, b.image),
+  };
+}
+
+/**
+ * Sum two UsageStats into a new one. Treats undefined fields as zero when
+ * the other side has a value, and preserves undefined when both are absent.
+ * Used to roll up internal model-generation usage onto a visible ancestor
+ * span so cost / token attribution survives internal-span filtering.
+ */
+export function addUsageStats(a: UsageStats | undefined, b: UsageStats): UsageStats {
+  if (!a) {
+    return {
+      ...b,
+      inputDetails: b.inputDetails ? { ...b.inputDetails } : undefined,
+      outputDetails: b.outputDetails ? { ...b.outputDetails } : undefined,
+    };
+  }
+  return {
+    inputTokens: addOptional(a.inputTokens, b.inputTokens),
+    outputTokens: addOptional(a.outputTokens, b.outputTokens),
+    inputDetails: mergeInputDetails(a.inputDetails, b.inputDetails),
+    outputDetails: mergeOutputDetails(a.outputDetails, b.outputDetails),
+  };
 }

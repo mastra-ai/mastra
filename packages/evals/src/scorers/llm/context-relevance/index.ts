@@ -1,8 +1,16 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
-import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import { z } from 'zod/v4';
+import {
+  roundToTwoDecimals,
+  getAssistantMessageFromRunOutput,
+  getUserMessageFromRunInput,
+  isScorerRunInputForAgent,
+  isScorerRunOutputForAgent,
+} from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { CONTEXT_RELEVANCE_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface ContextRelevanceOptions {
@@ -16,19 +24,21 @@ export interface ContextRelevanceOptions {
   };
 }
 
-const analyzeOutputSchema = z.object({
-  evaluations: z.array(
-    z.object({
-      context_index: z.number(),
-      contextPiece: z.string(),
-      relevanceLevel: z.enum(['high', 'medium', 'low', 'none']),
-      wasUsed: z.boolean(),
-      reasoning: z.string(),
-    }),
-  ),
-  missingContext: z.array(z.string()).optional().default([]),
-  overallAssessment: z.string(),
-});
+const analyzeOutputSchema = compileSchema(
+  z.object({
+    evaluations: z.array(
+      z.object({
+        context_index: z.number(),
+        contextPiece: z.string(),
+        relevanceLevel: z.enum(['high', 'medium', 'low', 'none']),
+        wasUsed: z.boolean(),
+        reasoning: z.string(),
+      }),
+    ),
+    missingContext: z.array(z.string()).optional().default([]),
+    overallAssessment: z.string(),
+  }),
+);
 
 // Default penalty constants for maintainability and clarity
 const DEFAULT_PENALTIES = {
@@ -36,6 +46,22 @@ const DEFAULT_PENALTIES = {
   MISSING_CONTEXT_PER_ITEM: 0.15, // 15% penalty per missing context item
   MAX_MISSING_CONTEXT_PENALTY: 0.5, // Maximum 50% penalty for missing context
 } as const;
+
+const getContext = ({
+  input,
+  output,
+  options,
+}: {
+  input?: ScorerRunInputForLLMJudge;
+  output: ScorerRunOutputForLLMJudge;
+  options: ContextRelevanceOptions;
+}) => {
+  if (options.contextExtractor && isScorerRunInputForAgent(input) && isScorerRunOutputForAgent(output)) {
+    return options.contextExtractor(input, output);
+  }
+
+  return options.context ?? [];
+};
 
 export function createContextRelevanceScorerLLM({
   model,
@@ -51,7 +77,7 @@ export function createContextRelevanceScorerLLM({
     throw new Error('Context array cannot be empty if provided');
   }
 
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'context-relevance-scorer',
     name: 'Context Relevance (LLM)',
     description: 'Evaluates how relevant and useful the provided context was for generating the agent response',
@@ -69,7 +95,7 @@ export function createContextRelevanceScorerLLM({
         const agentResponse = getAssistantMessageFromRunOutput(run.output) ?? '';
 
         // Get context either from options or extractor
-        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+        const context = getContext({ input: run.input, output: run.output, options });
 
         if (context.length === 0) {
           // Create a minimal prompt that will trigger empty context handling
@@ -92,7 +118,7 @@ export function createContextRelevanceScorerLLM({
       const evaluations = results.analyzeStepResult?.evaluations || [];
 
       // Check if this is the "no context" case
-      const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+      const context = getContext({ input: run.input, output: run.output, options });
       if (context.length === 0) {
         // Default score when no context is available
         // Return 1.0 since the agent had to work without any context
@@ -167,7 +193,7 @@ export function createContextRelevanceScorerLLM({
         const userQuery = getUserMessageFromRunInput(run.input) ?? '';
 
         // Check if this is the "no context" case
-        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+        const context = getContext({ input: run.input, output: run.output, options });
         if (context.length === 0) {
           // Return a special reason for no context
           return `No context was available for evaluation. The agent response was generated without any supporting context. Score: ${score}`;

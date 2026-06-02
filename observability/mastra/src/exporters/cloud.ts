@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { LogLevel } from '@mastra/core/logger';
-import { TracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type {
   TracingEvent,
   AnyExportedSpan,
@@ -9,10 +9,15 @@ import type {
   ScoreEvent,
   FeedbackEvent,
 } from '@mastra/core/observability';
-import { fetchWithRetry } from '@mastra/core/utils';
+import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 
+/**
+ * @deprecated Use `MastraPlatformExporterConfig` from `@mastra/observability`
+ * instead. This type is kept for backward compatibility and will be removed in
+ * a future major version.
+ */
 export interface CloudExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
@@ -38,6 +43,8 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
   scores: '/scores/publish',
   feedback: '/feedback/publish',
 };
+
+const DEFAULT_CLOUD_SPAN_FILTER = (span: AnyExportedSpan): boolean => span.type !== SpanType.MODEL_CHUNK;
 
 const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
   traces: 'spans',
@@ -216,10 +223,18 @@ type ResolvedCloudConfig = {
   feedbackEndpoint: string;
 };
 
+/**
+ * @deprecated Use `MastraPlatformExporter` from `@mastra/observability` instead.
+ * This class is preserved unchanged so existing integrations (including code
+ * that matches on the `CLOUD_EXPORTER_*` error IDs or the
+ * `mastra-cloud-observability-exporter` exporter name) keep working. It will
+ * be removed in a future major version.
+ */
 export class CloudExporter extends BaseExporter {
   name = 'mastra-cloud-observability-exporter';
 
   private readonly cloudConfig: Readonly<ResolvedCloudConfig>;
+  private readonly authFailureCooldown: AuthFailureCooldown;
   private buffer: MastraCloudBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
@@ -235,7 +250,7 @@ export class CloudExporter extends BaseExporter {
     const rawProjectId = config.projectId ?? process.env.MASTRA_PROJECT_ID;
     const projectId = rawProjectId && VALID_PROJECT_ID.test(rawProjectId) ? rawProjectId : undefined;
     if (!accessToken) {
-      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.');
+      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.', 'debug');
     }
 
     const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;
@@ -278,6 +293,8 @@ export class CloudExporter extends BaseExporter {
       feedbackEndpoint: resolveConfiguredSignalEndpoint('feedback', config.feedbackEndpoint),
     };
 
+    this.authFailureCooldown = new AuthFailureCooldown('CloudExporter', () => this.logger);
+
     this.buffer = {
       spans: [],
       logs: [],
@@ -294,6 +311,14 @@ export class CloudExporter extends BaseExporter {
       return;
     }
 
+    if (!DEFAULT_CLOUD_SPAN_FILTER(event.exportedSpan)) {
+      return;
+    }
+
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      return;
+    }
+
     this.addToBuffer(event);
 
     await this.handleBufferedEvent();
@@ -301,6 +326,10 @@ export class CloudExporter extends BaseExporter {
 
   async onLogEvent(event: LogEvent): Promise<void> {
     if (this.isDisabled) {
+      return;
+    }
+
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -313,6 +342,10 @@ export class CloudExporter extends BaseExporter {
       return;
     }
 
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      return;
+    }
+
     this.addMetricToBuffer(event);
     await this.handleBufferedEvent();
   }
@@ -322,12 +355,20 @@ export class CloudExporter extends BaseExporter {
       return;
     }
 
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      return;
+    }
+
     this.addScoreToBuffer(event);
     await this.handleBufferedEvent();
   }
 
   async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
     if (this.isDisabled) {
+      return;
+    }
+
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -476,6 +517,11 @@ export class CloudExporter extends BaseExporter {
       return; // Nothing to flush
     }
 
+    if (this.authFailureCooldown.dropEventsIfCoolingDown(this.buffer.totalSize)) {
+      this.resetBuffer();
+      return;
+    }
+
     const startTime = Date.now();
     const spansCopy = [...this.buffer.spans];
     const logsCopy = [...this.buffer.logs];
@@ -497,16 +543,32 @@ export class CloudExporter extends BaseExporter {
     ]);
 
     const failedSignals = results.filter(result => !result.succeeded).map(result => result.signal);
+    const authFailure = results.find(result => result.authFailureStatus !== undefined);
 
     const elapsed = Date.now() - startTime;
 
     if (failedSignals.length === 0) {
-      this.logger.debug('Batch flushed successfully', {
+      const droppedEventsDuringAuthCooldown = this.authFailureCooldown.reset();
+      const logData: Record<string, number | string> = {
         batchSize,
         flushReason,
         durationMs: elapsed,
-      });
+      };
+
+      if (droppedEventsDuringAuthCooldown > 0) {
+        logData.droppedEventsDuringAuthCooldown = droppedEventsDuringAuthCooldown;
+      }
+
+      this.logger.debug('Batch flushed successfully', logData);
       return;
+    }
+
+    if (authFailure?.authFailureStatus !== undefined) {
+      this.authFailureCooldown.recordFailure({
+        status: authFailure.authFailureStatus,
+        failedSignals,
+        droppedBatchSize: batchSize,
+      });
     }
 
     this.logger.warn('Batch flush completed with dropped signal batches', {
@@ -540,13 +602,13 @@ export class CloudExporter extends BaseExporter {
       body: JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records }),
     };
 
-    await fetchWithRetry(endpointMap[signal], options, this.cloudConfig.maxRetries);
+    await fetchWithAuthFailureHandling(endpointMap[signal], options, this.cloudConfig.maxRetries);
   }
 
   private async flushSignalBatch<T>(
     signal: CloudSignal,
     records: T[],
-  ): Promise<{ signal: CloudSignal; succeeded: boolean }> {
+  ): Promise<{ signal: CloudSignal; succeeded: boolean; authFailureStatus?: number }> {
     if (records.length === 0) {
       return { signal, succeeded: true };
     }
@@ -555,6 +617,10 @@ export class CloudExporter extends BaseExporter {
       await this.batchUpload(signal, records);
       return { signal, succeeded: true };
     } catch (error) {
+      if (isAuthFailureError(error)) {
+        return { signal, succeeded: false, authFailureStatus: error.status };
+      }
+
       const errorId = `CLOUD_EXPORTER_FAILED_TO_BATCH_UPLOAD_${signal.toUpperCase()}` as Uppercase<string>;
       const mastraError = new MastraError(
         {

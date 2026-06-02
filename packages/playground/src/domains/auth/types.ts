@@ -11,6 +11,7 @@ export type SSOConfig = {
   provider: string;
   text: string;
   icon?: string;
+  description?: string;
   url: string;
 };
 
@@ -21,6 +22,8 @@ export type LoginConfig = {
   type: 'sso' | 'credentials' | 'both';
   /** Whether sign-up is enabled (defaults to true) */
   signUpEnabled?: boolean;
+  /** Optional description explaining the auth requirement and what credentials to use */
+  description?: string;
   sso?: SSOConfig;
 } | null;
 
@@ -68,6 +71,8 @@ export type AuthenticatedCapabilities = PublicAuthCapabilities & {
   user: AuthenticatedUser;
   capabilities: CapabilityFlags;
   access: UserAccess;
+  /** Available roles in the system (only present for admin users) */
+  availableRoles?: { id: string; name: string }[];
 };
 
 /**

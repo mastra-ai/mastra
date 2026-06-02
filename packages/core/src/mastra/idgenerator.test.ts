@@ -5,7 +5,22 @@ import { MessageList } from '../agent/message-list';
 import { MastraError } from '../error';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
+import { InMemoryStore } from '../storage';
 import { Mastra } from './index';
+
+class RegisteredMemory extends MockMemory {
+  registeredMastra?: Mastra;
+
+  constructor() {
+    super();
+    this._hasOwnStorage = false;
+  }
+
+  override __registerMastra(mastra: Mastra): void {
+    super.__registerMastra(mastra);
+    this.registeredMastra = mastra;
+  }
+}
 
 // Helper function to create a Mastra instance with proper memory registration
 function createMastraWithMemory(idGenerator?: () => string) {
@@ -50,6 +65,46 @@ describe('Mastra ID Generator', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('Memory registration', () => {
+    it('registers Mastra and shared storage when memory is added dynamically', () => {
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ logger: false, storage });
+      const memory = new RegisteredMemory();
+
+      mastra.addMemory(memory, 'coworker');
+
+      expect(memory.registeredMastra).toBe(mastra);
+      expect(memory.storage).toBe(mastra.getStorage());
+      expect(mastra.getMemory('coworker')).toBe(memory);
+    });
+
+    it('registers Mastra and shared storage for memory provided in config', () => {
+      const storage = new InMemoryStore();
+      const memory = new RegisteredMemory();
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        memory: { coworker: memory },
+      });
+
+      expect(memory.registeredMastra).toBe(mastra);
+      expect(memory.storage).toBe(mastra.getStorage());
+      expect(mastra.getMemory('coworker')).toBe(memory);
+    });
+
+    it('does not replace memory-owned storage when memory is added dynamically', () => {
+      const mastra = new Mastra({ logger: false, storage: new InMemoryStore() });
+      const memory = new MockMemory({ storage: new InMemoryStore() });
+      const originalStorage = memory.storage;
+
+      mastra.addMemory(memory, 'coworker');
+
+      expect(memory.storage).toBe(originalStorage);
+      expect(memory.storage).not.toBe(mastra.getStorage());
+      expect(mastra.getMemory('coworker')).toBe(memory);
+    });
   });
 
   describe('Core ID Generator Functionality', () => {

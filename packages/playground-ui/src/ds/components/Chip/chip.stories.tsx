@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Chip } from './chip';
 import { StarIcon, ZapIcon, FlameIcon } from 'lucide-react';
+import { Chip } from './chip';
 
 const meta: Meta<typeof Chip> = {
   title: 'Elements/Chip',
@@ -8,7 +8,6 @@ const meta: Meta<typeof Chip> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     color: {
       control: { type: 'select' },

@@ -5,6 +5,8 @@
  * semantic (vector), and combined hybrid search across indexed content.
  */
 
+import pMap from 'p-map';
+
 import type { MastraVector, VectorFilter } from '../../vector';
 import type { LineRange } from '../line-utils';
 
@@ -21,10 +23,61 @@ export type SearchMode = 'vector' | 'bm25' | 'hybrid';
 // =============================================================================
 
 /**
- * Embedder interface - any function that takes text and returns embeddings
+ * Single-text embedder - takes one text and returns its embedding.
+ *
+ * This is the legacy embedder shape and remains the default. Each document is
+ * embedded with a separate call.
  */
-export interface Embedder {
+export interface SingleEmbedder {
   (text: string): Promise<number[]>;
+}
+
+/**
+ * Batch-capable embedder - takes an array of texts and returns their embeddings
+ * in the same order.
+ *
+ * Branded with `batch: true` so {@link SearchEngine} can detect batch support at
+ * runtime and dispatch to a single batched embedder call instead of one call
+ * per document. This dramatically speeds up large index rebuilds against
+ * providers that support batch embedding (e.g. OpenAI's `embedMany`).
+ *
+ * @example
+ * ```ts
+ * import { embedMany } from 'ai';
+ * import { openai } from '@ai-sdk/openai';
+ *
+ * const model = openai.embedding('text-embedding-3-small');
+ * const embedder: BatchEmbedder = Object.assign(
+ *   async (texts: string[]) => {
+ *     const { embeddings } = await embedMany({ model, values: texts });
+ *     return embeddings;
+ *   },
+ *   { batch: true as const, maxBatchSize: 2048 },
+ * );
+ * ```
+ */
+export interface BatchEmbedder {
+  (texts: string[]): Promise<number[][]>;
+  /** Brand that marks this embedder as batch-capable. */
+  readonly batch: true;
+  /**
+   * Maximum number of texts the underlying provider accepts per call. When
+   * unset, all pending texts are sent in a single request.
+   */
+  readonly maxBatchSize?: number;
+}
+
+/**
+ * Embedder interface - either a legacy single-text embedder or a batch-capable
+ * embedder branded with `batch: true`.
+ */
+export type Embedder = SingleEmbedder | BatchEmbedder;
+
+/**
+ * Type guard: returns true when the embedder is the batch-capable variant.
+ */
+export function isBatchEmbedder(embedder: Embedder): embedder is BatchEmbedder {
+  return typeof embedder === 'function' && (embedder as Partial<BatchEmbedder>).batch === true;
 }
 
 /**
@@ -103,6 +156,24 @@ export interface SearchOptions {
   /** Filter for vector search */
   filter?: Record<string, unknown>;
 }
+
+/** Options for batch indexing */
+export interface IndexManyOptions {
+  /**
+   * Maximum number of documents to index concurrently (embedder + vector upsert).
+   * Must be a safe integer ≥ 1 (same rule as `p-map`).
+   * @default 8
+   */
+  concurrency?: number;
+  /**
+   * When `true` (default), the first rejected `index` rejects the whole `indexMany` call.
+   * When `false`, all documents are processed; if any failed, the promise rejects with an `AggregateError`.
+   */
+  stopOnError?: boolean;
+}
+
+/** Default `indexMany` / lazy-vector flush concurrency (embedder + upsert). */
+const DEFAULT_INDEX_MANY_CONCURRENCY = 8;
 
 /**
  * Configuration for SearchEngine
@@ -287,12 +358,15 @@ export class SearchEngine {
   }
 
   /**
-   * Index multiple documents
+   * Index multiple documents (up to `concurrency` at a time when async vector work runs).
+   *
+   * @param docs - Documents to index
+   * @param options - `p-map` options; `concurrency` defaults to 8
    */
-  async indexMany(docs: IndexDocument[]): Promise<void> {
-    for (const doc of docs) {
-      await this.index(doc);
-    }
+  async indexMany(docs: IndexDocument[], options?: IndexManyOptions): Promise<void> {
+    const stopOnError = options?.stopOnError;
+    const concurrency = options?.concurrency ?? DEFAULT_INDEX_MANY_CONCURRENCY;
+    await pMap(docs, doc => this.index(doc), { stopOnError, concurrency });
   }
 
   /**
@@ -478,14 +552,71 @@ export class SearchEngine {
   }
 
   /**
-   * Index a single document in the vector store
+   * Embed a single text, dispatching to the batch path with a one-element array
+   * when the configured embedder is batch-capable.
+   */
+  async #embedOne(text: string): Promise<number[]> {
+    if (!this.#vectorConfig) {
+      throw new Error('Vector configuration is required to embed text.');
+    }
+    const { embedder } = this.#vectorConfig;
+    if (isBatchEmbedder(embedder)) {
+      const [embedding] = await embedder([text]);
+      if (!embedding) {
+        throw new Error('Batch embedder returned no embedding for input text.');
+      }
+      return embedding;
+    }
+    return embedder(text);
+  }
+
+  /**
+   * Embed many texts. Uses a single batched call (chunked by `maxBatchSize`)
+   * when the embedder is batch-capable; otherwise falls back to parallel
+   * single-text calls.
+   */
+  async #embedAll(texts: string[]): Promise<number[][]> {
+    if (!this.#vectorConfig) {
+      throw new Error('Vector configuration is required to embed texts.');
+    }
+    if (texts.length === 0) return [];
+
+    const { embedder } = this.#vectorConfig;
+
+    if (isBatchEmbedder(embedder)) {
+      const max = embedder.maxBatchSize;
+      if (max === undefined || texts.length <= max) {
+        return embedder(texts);
+      }
+      // Chunk by maxBatchSize and run chunks in parallel up to DEFAULT_INDEX_MANY_CONCURRENCY.
+      const chunks: string[][] = [];
+      for (let i = 0; i < texts.length; i += max) {
+        chunks.push(texts.slice(i, i + max));
+      }
+      const results = await pMap(chunks, chunk => embedder(chunk), {
+        concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
+      });
+      return results.flat();
+    }
+
+    return pMap(texts, text => embedder(text), {
+      concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
+    });
+  }
+
+  /**
+   * Index a single document in the vector store.
+   *
+   * Used by the eager (non-lazy) write path. The lazy flush path embeds all
+   * pending docs together via {@link SearchEngine.#flushVectorBatch} for true
+   * batch embedding when supported.
    */
   async #indexVector(doc: IndexDocument): Promise<void> {
     if (!this.#vectorConfig) return;
 
-    const { vectorStore, embedder, indexName } = this.#vectorConfig;
+    const { vectorStore, indexName } = this.#vectorConfig;
 
-    const embedding = await embedder(doc.content);
+    const embedding = await this.#embedOne(doc.content);
 
     if (!this.#vectorIndexReady) {
       // Some backends (e.g. LibSQLVector) require createIndex before upsert.
@@ -517,18 +648,95 @@ export class SearchEngine {
   }
 
   /**
-   * Ensure vector index is built (for lazy mode)
+   * Embed and upsert a batch of documents in as few provider calls as possible.
+   *
+   * - If the embedder is batch-capable, all texts go through a single embedder
+   *   call (chunked by `maxBatchSize`), then a single `upsert` with all vectors.
+   * - Otherwise falls back to per-doc embedding via {@link SearchEngine.#indexVector}.
    */
-  async #ensureVectorIndex(): Promise<void> {
-    if (!this.#lazyVectorIndex || this.#vectorIndexBuilt || this.#pendingVectorDocs.length === 0) {
+  async #flushVectorBatch(docs: IndexDocument[]): Promise<void> {
+    if (!this.#vectorConfig || docs.length === 0) return;
+
+    const { vectorStore, embedder, indexName } = this.#vectorConfig;
+
+    if (!isBatchEmbedder(embedder)) {
+      // Single-text embedder: parallelize per-doc work, preserving prior semantics.
+      await pMap(docs, doc => this.#indexVector(doc), {
+        concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
+      });
       return;
     }
 
-    for (const doc of this.#pendingVectorDocs) {
-      await this.#indexVector(doc);
+    const embeddings = await this.#embedAll(docs.map(d => d.content));
+    if (embeddings.length !== docs.length) {
+      throw new Error(`Batch embedder returned ${embeddings.length} embeddings for ${docs.length} inputs.`);
     }
 
-    this.#pendingVectorDocs = [];
+    if (!this.#vectorIndexReady) {
+      const dim = embeddings[0]!.length;
+      try {
+        await vectorStore.createIndex({ indexName, dimension: dim });
+      } catch {
+        // Already exists, temporarily unavailable, or not required by backend.
+      }
+    }
+
+    await vectorStore.upsert({
+      indexName,
+      vectors: embeddings,
+      metadata: docs.map(doc => ({
+        id: doc.id,
+        text: doc.content,
+        ...doc.metadata,
+      })),
+      ids: docs.map(d => d.id),
+    });
+
+    this.#vectorIndexReady = true;
+  }
+
+  /**
+   * Collapse duplicate document ids so a single deterministic upsert runs per id (last queue entry wins).
+   */
+  #dedupePendingVectorDocsLastWins(docs: readonly IndexDocument[]): IndexDocument[] {
+    const byId = new Map<string, IndexDocument>();
+    for (const doc of docs) {
+      byId.set(doc.id, doc);
+    }
+    return [...byId.values()];
+  }
+
+  /**
+   * Ensure vector index is built (for lazy mode).
+   *
+   * Drains the pending queue into a local batch before awaiting upserts so concurrent `index()` calls
+   * append to a fresh queue and are not wiped by a blanket clear. Loops until the queue is empty so
+   * documents added mid-flush are indexed before search runs. Re-queues the batch on flush failure.
+   */
+  async #ensureVectorIndex(): Promise<void> {
+    if (!this.#lazyVectorIndex) {
+      return;
+    }
+
+    if (this.#pendingVectorDocs.length === 0) {
+      this.#vectorIndexBuilt = true;
+      return;
+    }
+
+    while (this.#pendingVectorDocs.length > 0) {
+      const batch = this.#pendingVectorDocs;
+      this.#pendingVectorDocs = [];
+
+      const uniqueDocs = this.#dedupePendingVectorDocsLastWins(batch);
+
+      try {
+        await this.#flushVectorBatch(uniqueDocs);
+      } catch (error) {
+        this.#pendingVectorDocs = [...uniqueDocs, ...this.#pendingVectorDocs];
+        throw error;
+      }
+    }
+
     this.#vectorIndexBuilt = true;
   }
 
@@ -575,9 +783,9 @@ export class SearchEngine {
     // Ensure lazy index is built
     await this.#ensureVectorIndex();
 
-    const { vectorStore, embedder, indexName } = this.#vectorConfig;
+    const { vectorStore, indexName } = this.#vectorConfig;
 
-    const queryEmbedding = await embedder(query);
+    const queryEmbedding = await this.#embedOne(query);
 
     const vectorResults = await vectorStore.query({
       indexName,

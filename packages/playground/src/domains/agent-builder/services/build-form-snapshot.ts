@@ -1,0 +1,266 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
+
+import { isPlaceholderAgentName } from '../components/agent-starter/utils';
+import type { useBuilderAgentFeatures } from '../hooks/use-builder-agent-features';
+import type { AgentBuilderEditFormValues } from '../schemas';
+import type { AgentTool } from '../types/agent-tool';
+import type { ModelInfo } from '@/domains/llm';
+
+export interface AvailableWorkspaceLike {
+  id: string;
+  name: string;
+}
+
+export interface BuildFormSnapshotOptions {
+  availableAgentTools: AgentTool[];
+  availableSkills: StoredSkillResponse[];
+  availableWorkspaces: AvailableWorkspaceLike[];
+  availableModels: ModelInfo[];
+  features: ReturnType<typeof useBuilderAgentFeatures>;
+  /**
+   * The original free-form prompt that seeded the agent through the starter.
+   * Used to recognise the auto-truncated placeholder name (e.g.
+   * "Build an agent that …") so the snapshot can tell the LLM that
+   * `set-agent-name` still needs to be called once with a real name.
+   *
+   * Undefined when the page was hard-refreshed or the agent was created
+   * outside the starter flow; in that case we trust whatever the form holds.
+   */
+  starterUserMessage?: string;
+}
+
+const INSTRUCTIONS_MAX_CHARS = 1500;
+
+const truncate = (value: string, max: number): string => {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}… [truncated]`;
+};
+
+const isFilled = (value: string | undefined): value is string => typeof value === 'string' && value.length > 0;
+
+const collectSelectedIds = (record: Record<string, boolean | undefined> | undefined): string[] => {
+  if (!record) return [];
+  const ids: string[] = [];
+  for (const [id, selected] of Object.entries(record)) {
+    if (selected) ids.push(id);
+  }
+  return ids;
+};
+
+const renderToolEntry = (tool: AgentTool): string => `"${tool.name}" (${tool.id})`;
+const renderSkillEntry = (skill: StoredSkillResponse): string => `"${skill.name}" (${skill.id})`;
+
+const renderField = (label: string, value: string, directive: string): string =>
+  `- ${label}: ${value}\n  → ${directive}`;
+
+/**
+ * Renders the form's current state plus a per-field directive telling the
+ * builder LLM whether to call the corresponding setter. All rules about which
+ * setter to call (and when to skip it) live next to the field value the LLM
+ * reads. This keeps the contract in a single place — see the agent builder
+ * agent's instructions for the rest of the authoring loop.
+ */
+export function buildFormSnapshotInstructions(
+  values: AgentBuilderEditFormValues,
+  options: BuildFormSnapshotOptions,
+): string {
+  const { availableAgentTools, availableSkills, availableWorkspaces, availableModels, features, starterUserMessage } =
+    options;
+
+  const lines: string[] = [];
+  lines.push('## Current agent configuration (authoritative)');
+  lines.push('');
+  lines.push(
+    "This snapshot reflects the agent's current form state. Trust these values as ground truth. Call each setter at most once per turn, with the final value. Do not re-call a setter to confirm or re-check a value the snapshot already shows — that is a bug. Skip any setter whose field is not listed below (the feature is disabled for this agent).",
+  );
+  lines.push('');
+
+  // Name. The starter persists a truncated copy of the user's prompt as a
+  // placeholder so the agent has *some* name in the list view. When the
+  // current name still matches that placeholder we ask the LLM to replace it
+  // with a real name; otherwise we treat any filled value as already set.
+  const namePlaceholder = isPlaceholderAgentName(values.name, starterUserMessage);
+  if (isFilled(values.name) && !namePlaceholder) {
+    lines.push(
+      renderField(
+        'Name',
+        `"${values.name}"`,
+        'Already set. Do not call set-agent-name unless the user explicitly asks to rename the agent.',
+      ),
+    );
+  } else if (namePlaceholder) {
+    lines.push(
+      renderField(
+        'Name',
+        `"${values.name}" (auto-generated placeholder from the starter prompt)`,
+        'Call set-agent-name once with a short, memorable name anchored to the outcome. The current value is a placeholder, not a real name.',
+      ),
+    );
+  } else {
+    lines.push(
+      renderField('Name', '(empty)', 'Call set-agent-name once with a short, memorable name anchored to the outcome.'),
+    );
+  }
+
+  // Description
+  if (isFilled(values.description)) {
+    lines.push(
+      renderField(
+        'Description',
+        `"${values.description}"`,
+        'Already set. Do not call set-agent-description unless the user explicitly asks to change it.',
+      ),
+    );
+  } else {
+    lines.push(
+      renderField(
+        'Description',
+        '(empty)',
+        'Call set-agent-description once with a single plain-language sentence explaining what the agent helps with.',
+      ),
+    );
+  }
+
+  // Instructions
+  if (isFilled(values.instructions)) {
+    const truncated = truncate(values.instructions, INSTRUCTIONS_MAX_CHARS);
+    lines.push(
+      renderField(
+        'Instructions',
+        `"""\n${truncated}\n"""`,
+        'Already set. Do not call set-agent-instructions unless the user explicitly asks to rewrite or amend the prompt.',
+      ),
+    );
+  } else {
+    lines.push(
+      renderField(
+        'Instructions',
+        '(empty)',
+        'Call set-agent-instructions once with the full system prompt for the produced agent. Follow the quality bar in the main instructions.',
+      ),
+    );
+  }
+
+  // Model
+  if (features.model) {
+    if (values.model && values.model.provider && values.model.name) {
+      const known = availableModels.find(m => m.provider === values.model!.provider && m.model === values.model!.name);
+      const label = `${values.model.provider}/${values.model.name}`;
+      const value = known ? label : `${label} (not in available models list)`;
+      lines.push(
+        renderField(
+          'Model',
+          value,
+          'Already set by the form. Do not call set-agent-model unless the user explicitly asks to change the model.',
+        ),
+      );
+    } else {
+      lines.push(
+        renderField(
+          'Model',
+          '(not set)',
+          'Call set-agent-model once with a provider/name pair from the available models list (see the set-agent-model tool description). Prefer the strongest model for coding/reasoning work, or a cheaper/faster model for simple high-volume tasks.',
+        ),
+      );
+    }
+  }
+
+  // Workspace
+  if (isFilled(values.workspaceId)) {
+    const workspace = availableWorkspaces.find(w => w.id === values.workspaceId);
+    const name = workspace?.name ?? '(unknown)';
+    lines.push(
+      renderField(
+        'Workspace',
+        `"${name}" (id: ${values.workspaceId})`,
+        'Already set. Do not call set-agent-workspace-id unless the user explicitly asks to change the workspace.',
+      ),
+    );
+  } else {
+    lines.push(
+      renderField(
+        'Workspace',
+        '(not set)',
+        'Call set-agent-workspace-id only if the requested outcome needs CLI or local-machine actions and an applicable workspace exists. Otherwise skip it.',
+      ),
+    );
+  }
+
+  // Visibility (no setter — just informational; included so the LLM doesn't try to change it via tools).
+  lines.push(
+    `- Visibility: ${values.visibility ?? 'private'}\n  → No setter; managed outside the builder. Do not attempt to change it.`,
+  );
+
+  // Browser
+  if (features.browser) {
+    if (values.browserEnabled === true) {
+      lines.push(
+        renderField(
+          'Browser enabled',
+          'true',
+          'Already enabled. Do not call set-agent-browser-enabled unless the user explicitly asks to disable it.',
+        ),
+      );
+    } else {
+      lines.push(
+        renderField(
+          'Browser enabled',
+          'false',
+          'Call set-agent-browser-enabled(true) only if the requested outcome clearly needs the agent to operate a browser. Otherwise leave it off.',
+        ),
+      );
+    }
+  }
+
+  // Tools
+  if (features.tools) {
+    const selectedToolIds = new Set([
+      ...collectSelectedIds(values.tools),
+      ...collectSelectedIds(values.agents),
+      ...collectSelectedIds(values.workflows),
+    ]);
+    const selected = availableAgentTools.filter(t => selectedToolIds.has(t.id));
+    if (selected.length === 0) {
+      lines.push(
+        renderField(
+          'Tools',
+          '(none selected)',
+          'Call set-agent-tools once with the minimum set of existing tools/agents/workflows that satisfies the outcome. Skip if nothing in the available catalog is genuinely required — adding irrelevant tools makes the agent worse.',
+        ),
+      );
+    } else {
+      lines.push(
+        renderField(
+          `Tools (${selected.length})`,
+          selected.map(renderToolEntry).join(', '),
+          'Already configured. Do not call set-agent-tools again unless the requested outcome needs different capabilities.',
+        ),
+      );
+    }
+  }
+
+  // Skills
+  if (features.skills) {
+    const selectedSkillIds = new Set(collectSelectedIds(values.skills));
+    const selected = availableSkills.filter(s => selectedSkillIds.has(s.id));
+    if (selected.length === 0) {
+      lines.push(
+        renderField(
+          'Skills',
+          '(none selected)',
+          'Call set-agent-skills once with any available stored skills the outcome genuinely needs. Use createSkillTool only when no existing skill matches and a reusable operating instruction is genuinely required.',
+        ),
+      );
+    } else {
+      lines.push(
+        renderField(
+          `Skills (${selected.length})`,
+          selected.map(renderSkillEntry).join(', '),
+          'Already configured. Do not call set-agent-skills again unless the outcome needs different operating instructions.',
+        ),
+      );
+    }
+  }
+
+  return lines.join('\n');
+}

@@ -5568,24 +5568,6 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
         },
         "type": "file",
       },
-      {
-        "file": DefaultGeneratedFileWithType {
-          "base64Data": "Hello World",
-          "mediaType": "text/plain",
-          "type": "file",
-          "uint8ArrayData": undefined,
-        },
-        "type": "file",
-      },
-      {
-        "file": DefaultGeneratedFileWithType {
-          "base64Data": "QkFVRw==",
-          "mediaType": "image/jpeg",
-          "type": "file",
-          "uint8ArrayData": undefined,
-        },
-        "type": "file",
-      },
     ],
     "dynamicToolCalls": [],
     "dynamicToolResults": [],
@@ -5642,28 +5624,6 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
                 "createdAt": 1704067200000,
                 "data": "QkFVRw==",
                 "mimeType": "image/jpeg",
-                "type": "file",
-              },
-              {
-                "createdAt": 1704067200000,
-                "data": "data:text/plain;base64,Hello World",
-                "mimeType": "text/plain",
-                "providerMetadata": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
-                "type": "file",
-              },
-              {
-                "createdAt": 1704067200000,
-                "data": "data:image/jpeg;base64,QkFVRw==",
-                "mimeType": "image/jpeg",
-                "providerMetadata": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "type": "file",
               },
             ],
@@ -5749,26 +5709,6 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
               },
               "text": "Hello!",
               "type": "text",
-            },
-            {
-              "mediaType": "image/jpeg",
-              "providerMetadata": {
-                "mastra": {
-                  "createdAt": 1704067200000,
-                },
-              },
-              "type": "file",
-              "url": "data:image/jpeg;base64,QkFVRw==",
-            },
-            {
-              "mediaType": "text/plain",
-              "providerMetadata": {
-                "mastra": {
-                  "createdAt": 1704067200000,
-                },
-              },
-              "type": "file",
-              "url": "data:text/plain;base64,Hello World",
             },
             {
               "mediaType": "image/jpeg",
@@ -12729,24 +12669,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
         },
         "type": "file",
       },
-      {
-        "file": DefaultGeneratedFileWithType {
-          "base64Data": "Hello World",
-          "mediaType": "text/plain",
-          "type": "file",
-          "uint8ArrayData": undefined,
-        },
-        "type": "file",
-      },
-      {
-        "file": DefaultGeneratedFileWithType {
-          "base64Data": "QkFVRw==",
-          "mediaType": "image/jpeg",
-          "type": "file",
-          "uint8ArrayData": undefined,
-        },
-        "type": "file",
-      },
     ],
     "dynamicToolCalls": [],
     "dynamicToolResults": [],
@@ -12803,28 +12725,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
                 "createdAt": 1704067200000,
                 "data": "QkFVRw==",
                 "mimeType": "image/jpeg",
-                "type": "file",
-              },
-              {
-                "createdAt": 1704067200000,
-                "data": "data:text/plain;base64,Hello World",
-                "mimeType": "text/plain",
-                "providerMetadata": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
-                "type": "file",
-              },
-              {
-                "createdAt": 1704067200000,
-                "data": "data:image/jpeg;base64,QkFVRw==",
-                "mimeType": "image/jpeg",
-                "providerMetadata": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "type": "file",
               },
             ],
@@ -12910,26 +12810,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
               },
               "text": "Hello!",
               "type": "text",
-            },
-            {
-              "mediaType": "image/jpeg",
-              "providerMetadata": {
-                "mastra": {
-                  "createdAt": 1704067200000,
-                },
-              },
-              "type": "file",
-              "url": "data:image/jpeg;base64,QkFVRw==",
-            },
-            {
-              "mediaType": "text/plain",
-              "providerMetadata": {
-                "mastra": {
-                  "createdAt": 1704067200000,
-                },
-              },
-              "type": "file",
-              "url": "data:text/plain;base64,Hello World",
             },
             {
               "mediaType": "image/jpeg",

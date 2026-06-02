@@ -1,8 +1,16 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
-import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import { z } from 'zod/v4';
+import {
+  roundToTwoDecimals,
+  getAssistantMessageFromRunOutput,
+  getUserMessageFromRunInput,
+  isScorerRunInputForAgent,
+  isScorerRunOutputForAgent,
+} from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
   createContextRelevancePrompt,
   createContextPrecisionReasonPrompt,
@@ -15,15 +23,33 @@ export interface ContextPrecisionMetricOptions {
   contextExtractor?: (input: ScorerRunInputForAgent, output: ScorerRunOutputForAgent) => string[];
 }
 
-const contextRelevanceOutputSchema = z.object({
-  verdicts: z.array(
-    z.object({
-      context_index: z.number(),
-      verdict: z.string(),
-      reason: z.string(),
-    }),
-  ),
-});
+const contextRelevanceOutputSchema = compileSchema(
+  z.object({
+    verdicts: z.array(
+      z.object({
+        context_index: z.number(),
+        verdict: z.string(),
+        reason: z.string(),
+      }),
+    ),
+  }),
+);
+
+const getContext = ({
+  input,
+  output,
+  options,
+}: {
+  input?: ScorerRunInputForLLMJudge;
+  output: ScorerRunOutputForLLMJudge;
+  options: ContextPrecisionMetricOptions;
+}) => {
+  if (options.contextExtractor && isScorerRunInputForAgent(input) && isScorerRunOutputForAgent(output)) {
+    return options.contextExtractor(input, output);
+  }
+
+  return options.context ?? [];
+};
 
 export function createContextPrecisionScorer({
   model,
@@ -39,7 +65,7 @@ export function createContextPrecisionScorer({
     throw new Error('Context array cannot be empty if provided');
   }
 
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'context-precision-scorer',
     name: 'Context Precision Scorer',
     description:
@@ -58,7 +84,7 @@ export function createContextPrecisionScorer({
         const output = getAssistantMessageFromRunOutput(run.output) ?? '';
 
         // Get context either from options or extractor
-        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+        const context = getContext({ input: run.input, output: run.output, options });
 
         if (context.length === 0) {
           throw new Error('No context available for evaluation');
@@ -115,7 +141,7 @@ export function createContextPrecisionScorer({
         const output = getAssistantMessageFromRunOutput(run.output) ?? '';
 
         // Get context either from options or extractor (same as in analyze)
-        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+        const context = getContext({ input: run.input, output: run.output, options });
 
         return createContextPrecisionReasonPrompt({
           input,

@@ -4,12 +4,14 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { RegisteredLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
+  ClientObservabilityProxy,
   CorrelationContext,
   ConfigSelector,
   ConfigSelectorOptions,
   FeedbackInput,
   FeedbackEvent,
   ObservabilityEntrypoint,
+  ObservabilityDropEvent,
   ObservabilityInstance,
   RecordedTrace,
   ScoreInput,
@@ -17,9 +19,10 @@ import type {
 } from '@mastra/core/observability';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { routeToHandler } from './bus/route-event';
+import { createClientObservabilityProxy } from './client';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
-import { CloudExporter, DefaultExporter } from './exporters';
+import { MastraPlatformExporter, MastraStorageExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import {
   buildFeedbackEvent,
@@ -30,6 +33,7 @@ import {
 } from './recorded';
 import { ObservabilityRegistry } from './registry';
 import { SensitiveDataFilter } from './span_processors';
+import type { SensitiveDataFilterOptions } from './span_processors';
 
 /**
  * Type guard to check if an object is a BaseObservability instance
@@ -47,6 +51,7 @@ function isInstance(
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();
   #mastra?: Mastra;
+  #clientObservabilityProxy?: ClientObservabilityProxy;
 
   constructor(config: ObservabilityRegistryConfig) {
     super({
@@ -105,20 +110,37 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       }
     }
 
+    // Resolve sensitive data filter setting (defaults to enabled).
+    const sensitiveDataFilterSetting = config.sensitiveDataFilter ?? true;
+    const shouldAutoApplySensitiveFilter = sensitiveDataFilterSetting !== false;
+    const sensitiveDataFilterOptions: SensitiveDataFilterOptions | undefined =
+      typeof sensitiveDataFilterSetting === 'object' && sensitiveDataFilterSetting !== null
+        ? sensitiveDataFilterSetting
+        : undefined;
+
+    const buildAutoSensitiveFilter = (): SensitiveDataFilter | undefined => {
+      if (!shouldAutoApplySensitiveFilter) {
+        return undefined;
+      }
+      return new SensitiveDataFilter(sensitiveDataFilterOptions);
+    };
+
     // Setup default config if enabled (deprecated)
     if (config.default?.enabled) {
       console.warn(
         '[Mastra Observability] The "default: { enabled: true }" configuration is deprecated and will be removed in a future version. ' +
-          'Please use explicit configs with DefaultExporter, CloudExporter, and SensitiveDataFilter instead. ' +
+          'Please use explicit configs with MastraStorageExporter and MastraPlatformExporter instead. ' +
+          'Sensitive data filtering is applied by default and can be controlled via the top-level "sensitiveDataFilter" option. ' +
           'See https://mastra.ai/docs/observability/tracing/overview for the recommended configuration.',
       );
 
+      const autoFilter = buildAutoSensitiveFilter();
       const defaultInstance = new DefaultObservabilityInstance({
         serviceName: 'mastra',
         name: 'default',
         sampling: { type: SamplingStrategyType.ALWAYS },
-        exporters: [new DefaultExporter(), new CloudExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+        spanOutputProcessors: autoFilter ? [autoFilter] : [],
       });
 
       // Register as default with high priority
@@ -130,9 +152,38 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       const instances = Object.entries(config.configs);
 
       instances.forEach(([name, tracingDef], index) => {
-        const instance = isInstance(tracingDef)
-          ? tracingDef // Pre-instantiated custom implementation
-          : new DefaultObservabilityInstance({ ...tracingDef, name }); // Config -> Observability with instance name
+        let instance: ObservabilityInstance;
+        if (isInstance(tracingDef)) {
+          // Pre-instantiated custom implementation. We don't mutate it since
+          // the caller already owns it; warn if no SensitiveDataFilter is
+          // present and auto-apply is enabled.
+          instance = tracingDef;
+          if (shouldAutoApplySensitiveFilter) {
+            const processors = instance.getSpanOutputProcessors?.() ?? [];
+            const hasFilter = processors.some(p => p instanceof SensitiveDataFilter);
+            if (!hasFilter) {
+              this.logger?.warn(
+                '[Mastra Observability] Pre-instantiated observability instance does not include a SensitiveDataFilter. ' +
+                  'Auto-applied filtering is skipped for pre-instantiated instances. ' +
+                  'Add a SensitiveDataFilter to spanOutputProcessors when constructing the instance to redact sensitive data.',
+                { instanceName: name },
+              );
+            }
+          }
+        } else {
+          const userProcessors = tracingDef.spanOutputProcessors ?? [];
+          const hasFilter = userProcessors.some(p => p instanceof SensitiveDataFilter);
+          const autoFilter = !hasFilter ? buildAutoSensitiveFilter() : undefined;
+          // Auto-applied filter runs LAST so any sensitive data introduced by
+          // user processors (e.g. enrichment that copies headers/config into
+          // attributes) is still redacted before export.
+          const spanOutputProcessors = autoFilter ? [...userProcessors, autoFilter] : userProcessors;
+          instance = new DefaultObservabilityInstance({
+            ...tracingDef,
+            name,
+            spanOutputProcessors,
+          });
+        }
 
         // First user-provided instance becomes default only if no default config
         const isDefault = !config.default?.enabled && index === 0;
@@ -152,14 +203,24 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     const { mastra } = options;
     this.#mastra = mastra;
 
+    const mastraEnvironment = mastra.getEnvironment?.();
+
     instances.forEach(instance => {
+      // Propagate the Mastra-level environment so spans can fall back to it
+      // when `metadata.environment` isn't set on a specific span.
+      instance.__setMastraEnvironment?.(mastraEnvironment);
+
       const config = instance.getConfig();
       const exporters = instance.getExporters();
+      const emitDropEvent =
+        instance instanceof BaseObservabilityInstance
+          ? (event: ObservabilityDropEvent) => instance.getObservabilityBus().emitDropEvent(event)
+          : undefined;
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
           try {
-            exporter.init({ mastra, config });
+            exporter.init({ mastra, config, emitDropEvent });
           } catch (error) {
             this.logger?.warn('Failed to initialize observability exporter', {
               exporterName: exporter.name,
@@ -302,6 +363,13 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   /** Register a named observability instance, optionally marking it as default. */
   registerInstance(name: string, instance: ObservabilityInstance, isDefault = false): void {
     this.#registry.register(name, instance, isDefault);
+
+    // If Mastra context has already been set, propagate the environment to
+    // this late-registered instance so it auto-tags spans like instances
+    // registered before setMastraContext.
+    if (this.#mastra) {
+      instance.__setMastraEnvironment?.(this.#mastra.getEnvironment?.());
+    }
   }
 
   /** Get a registered instance by name. */
@@ -342,6 +410,25 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   /** Shut down all registered instances, flushing any pending data. */
   async shutdown(): Promise<void> {
     await this.#registry.shutdown();
+  }
+
+  /**
+   * Returns the proxy responsible for client observability (W3C trace
+   * context injection + OTLP/JSON payload reception for spans/logs
+   * returned from client-side execution).
+   *
+   * Lazily constructed on first call. Resolves the target observability
+   * instance per receive call so config selection works the same way
+   * as for server-side spans.
+   */
+  getClientObservabilityProxy(): ClientObservabilityProxy | undefined {
+    if (!this.#clientObservabilityProxy) {
+      this.#clientObservabilityProxy = createClientObservabilityProxy({
+        resolveInstance: () => this.getDefaultInstance(),
+        logger: this.logger,
+      });
+    }
+    return this.#clientObservabilityProxy;
   }
 
   async #getObservabilityStorage(): Promise<ObservabilityStorage | null> {

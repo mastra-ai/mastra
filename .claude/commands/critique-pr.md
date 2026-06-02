@@ -1,0 +1,1 @@
+../../.mastracode/commands/critique-pr.md

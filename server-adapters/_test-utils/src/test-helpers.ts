@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
@@ -10,6 +10,7 @@ import { MockMemory } from '@mastra/core/memory';
 import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
@@ -177,6 +178,9 @@ export function mockAgentMethods(agent: Agent) {
   // Mock stream method - returns object with fullStream property
   vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
+  // Mock resumeStream method - returns object with fullStream property
+  vi.spyOn(agent, 'resumeStream').mockResolvedValue({ fullStream: createMockStream() } as any);
+
   // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
     text: 'test response',
@@ -225,8 +229,50 @@ export function mockAgentMethods(agent: Agent) {
   // Mock declineToolCallGenerate method - returns same format as generate
   vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
 
+  vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
+    accepted: true,
+    runId: 'test-run',
+    toolCallId: 'test-tool',
+  } as any);
+
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
+
+  vi.spyOn(agent, 'sendSignal').mockImplementation((signal: any, target: any) => {
+    const createdSignal = createSignal(signal);
+    return {
+      accepted: true,
+      runId: target?.runId ?? 'test-run',
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'sendMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
+    return {
+      accepted: true,
+      runId: target?.runId ?? 'test-run',
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'queueMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
+    return {
+      accepted: true,
+      runId: target?.runId ?? 'test-run',
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+    stream: (async function* () {
+      yield { type: 'text-delta', textDelta: 'test' };
+    })(),
+    activeRunId: () => 'test-run',
+    abort: vi.fn(() => true),
+    unsubscribe: vi.fn(),
+  } as any);
 
   // Mock getVoice to return the voice object that the handler expects
   const mockVoice = createMockVoice();
@@ -410,7 +456,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
-  // Create real MCP servers with tools
+  // Create real MCP servers with tools and app resources
   const mcpServer1 = new MCPServer({
     name: 'Test Server 1',
     version: '1.0.0',
@@ -418,6 +464,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     tools: {
       getWeather: weatherTool,
       calculate: calculatorTool,
+    },
+    appResources: {
+      'ui://test/app': {
+        name: 'Test App',
+        html: '<html><body>Test</body></html>',
+      },
     },
   });
 
@@ -428,12 +480,44 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     tools: {
       failingTool: failingTool,
     },
+    appResources: {
+      'ui://test/app2': {
+        name: 'Test App 2',
+        html: '<html><body>Test 2</body></html>',
+      },
+    },
   });
 
   // Create test workspace with local filesystem and mock files
   const workspace = await createTestWorkspace();
 
   // Create Mastra instance with all test entities
+  // Mock channel provider for channel route tests
+  const mockChannelProvider = {
+    id: 'test-platform',
+    getRoutes: () => [],
+    getInfo: () => ({
+      id: 'test-platform',
+      name: 'Test Platform',
+      isConfigured: true,
+    }),
+    connect: async () => ({
+      type: 'immediate' as const,
+      installationId: 'test-installation',
+    }),
+    disconnect: async () => {},
+    listInstallations: async () => [
+      {
+        id: 'test-installation',
+        platform: 'test-platform',
+        agentId: 'test-agent',
+        status: 'active' as const,
+        displayName: 'Test Installation',
+        installedAt: new Date(),
+      },
+    ],
+  };
+
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
     storage: new InMemoryStore(),
@@ -456,6 +540,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     backgroundTasks: {
       enabled: true,
     },
+    channels: {
+      'test-platform': mockChannelProvider as any,
+    },
   });
 
   // Mock getEditor to return an object with namespaced methods for stored agents routes
@@ -472,6 +559,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     createProcessor: vi.fn(),
   };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
+    hasEnabledBuilderConfig: () => true,
+    resolveBuilder: async () => ({
+      enabled: true,
+      getFeatures: () => ({ agent: { favorites: true } }),
+      getConfiguration: () => undefined,
+      getModelPolicyWarnings: () => [],
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
@@ -482,6 +576,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     agent: {
       list: vi.fn().mockResolvedValue({ agents: [] }),
       clearCache: vi.fn(),
+      create: vi.fn().mockImplementation(async (input: any) => {
+        // Delegate to storage directly, mirroring what editor.agent.create does
+        const agents = await mastra.getStorage()!.getStore('agents');
+        return agents!.create({ agent: input });
+      }),
       clone: vi.fn().mockResolvedValue({
         id: 'cloned-agent',
         name: 'Test Agent (Clone)',
@@ -500,6 +599,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     getToolProvider: vi
       .fn()
       .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
+    getToolProviderOrThrow: vi.fn().mockImplementation((id: string) => {
+      if (id === 'test-provider') return mockToolProvider;
+      throw new UnknownToolProviderError(id, ['test-provider']);
+    }),
     getProcessorProviders: vi.fn().mockReturnValue({ 'test-provider': mockProcessorProvider }),
     getProcessorProvider: vi
       .fn()
@@ -679,6 +782,20 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       await backgroundTasks.updateTask('test-background-task-id', {
         status: 'running',
         startedAt: new Date(),
+      });
+    }
+
+    const schedules = await storage.getStore('schedules');
+    if (schedules) {
+      const now = Date.now();
+      await schedules.createSchedule({
+        id: 'test-schedule',
+        target: { type: 'workflow', workflowId: 'test-workflow' },
+        cron: '* * * * *',
+        status: 'active',
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
       });
     }
 

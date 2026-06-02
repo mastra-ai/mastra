@@ -23,7 +23,7 @@ export function WorkflowCombobox({
   emptyText = 'No workflows found.',
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant = 'default',
 }: WorkflowComboboxProps) {
   const { data: workflows = {}, isLoading, isError, error } = useWorkflows();
   const { navigate, paths } = useLinkComponent();

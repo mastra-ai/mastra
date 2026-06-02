@@ -221,6 +221,64 @@ describe('ProcessorRunner', () => {
       expect(executionOrder).toEqual(['processor1']);
     });
 
+    it('should call onViolation when a processor triggers abort()', async () => {
+      const onViolation = vi.fn();
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Cost exceeded', { metadata: { limit: 5, usage: 7 } });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalledWith({
+        processorId: 'guard-processor',
+        message: 'Cost exceeded',
+        detail: { limit: 5, usage: 7 },
+      });
+    });
+
+    it('should not fail if onViolation throws', async () => {
+      const onViolation = vi.fn().mockRejectedValue(new Error('callback error'));
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard',
+          onViolation,
+          processInput: async ({ abort }) => {
+            abort('Blocked');
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalled();
+    });
+
     it('should skip processors that do not implement processInput', async () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
@@ -317,44 +375,71 @@ describe('ProcessorRunner', () => {
         expect(receivedMessages).toHaveLength(1);
         expect(receivedMessages[0].role).toBe('user');
 
-        // NEW: systemMessages parameter should be provided and contain all system messages
+        // systemMessages parameter exposes the untagged system message bucket only.
+        // Tagged buckets remain owned by the processors that added them and reach the
+        // model via messageList.getAllSystemMessages() at final assembly.
         expect(receivedSystemMessages).toBeDefined();
-        expect(receivedSystemMessages).toHaveLength(3);
+        expect(receivedSystemMessages).toHaveLength(1);
 
-        // Verify system messages content
         const systemTexts = receivedSystemMessages!.map((m: any) => {
           if (typeof m.content === 'string') return m.content;
-          // Handle structured content format with parts array
           if (m.content?.parts?.[0]?.text) return m.content.parts[0].text;
           return m.content;
         });
-        expect(systemTexts).toContain('You are a helpful assistant.');
-        expect(systemTexts).toContain('Remember the user prefers formal language.');
-        expect(systemTexts).toContain('Relevant context from previous conversations.');
+        expect(systemTexts).toEqual(['You are a helpful assistant.']);
+
+        const allSystemTexts = messageList.getAllSystemMessages().map((m: any) => m.content);
+        expect(allSystemTexts).toContain('You are a helpful assistant.');
+        expect(allSystemTexts).toContain('Remember the user prefers formal language.');
+        expect(allSystemTexts).toContain('Relevant context from previous conversations.');
       });
 
-      it('should allow InputProcessor to modify system messages via return value', async () => {
-        // Add system messages
-        messageList.addSystem('Original system prompt with verbose instructions.');
-        messageList.addSystem('Memory context that is too long and needs trimming.', 'memory');
-
-        // Add a user message
+      it('should preserve tagged system messages when InputProcessor returns systemMessages', async () => {
+        messageList.addSystem('Original system prompt.');
+        messageList.addSystem('Memory context.', 'memory');
         messageList.add([createMessage('Hello', 'user')], 'input');
 
         const inputProcessors: Processor[] = [
           {
-            id: 'system-trimmer',
-            name: 'System Trimmer',
+            id: 'system-appender',
+            name: 'System Appender',
             processInput: async ({ messages, systemMessages }) => {
-              // Modify system messages - trim them for smaller models
-              if (systemMessages) {
-                const modifiedSystemMessages = systemMessages.map((msg: any) => ({
-                  ...msg,
-                  content: typeof msg.content === 'string' ? msg.content.substring(0, 20) + '...' : msg.content,
-                }));
-                // Return modified system messages somehow (this is what the fix should enable)
-                return { messages, systemMessages: modifiedSystemMessages };
-              }
+              return {
+                messages,
+                systemMessages: [...systemMessages, { role: 'system' as const, content: 'Appended instruction.' }],
+              };
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        const result = await runner.runInputProcessors(messageList);
+
+        expect(result.getSystemMessages().map(m => m.content)).toEqual([
+          'Original system prompt.',
+          'Appended instruction.',
+        ]);
+        expect(result.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context.']);
+      });
+
+      it('should not pass tagged system messages into processor args.systemMessages', async () => {
+        let seenSystemMessages: any[] = [];
+        messageList.addSystem('Original system prompt.');
+        messageList.addSystem('Memory context.', 'memory');
+        messageList.add([createMessage('Hello', 'user')], 'input');
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-inspector',
+            name: 'System Inspector',
+            processInput: async ({ messages, systemMessages }) => {
+              seenSystemMessages = systemMessages;
               return messages;
             },
           },
@@ -369,16 +454,11 @@ describe('ProcessorRunner', () => {
 
         const result = await runner.runInputProcessors(messageList);
 
-        // After processing, the system messages should be modified
-        const allMessages = await result.get.all.aiV5.prompt();
-        const systemMessages = allMessages.filter((m: any) => m.role === 'system');
-
-        // Verify system messages were trimmed
-        expect(systemMessages).toHaveLength(2);
-        systemMessages.forEach((msg: any) => {
-          const content = typeof msg.content === 'string' ? msg.content : msg.content[0]?.text;
-          expect(content.length).toBeLessThanOrEqual(24); // 20 chars + '...'
-        });
+        expect(seenSystemMessages.map(m => m.content)).toEqual(['Original system prompt.']);
+        expect(result.getAllSystemMessages().map(m => m.content)).toEqual([
+          'Original system prompt.',
+          'Memory context.',
+        ]);
       });
 
       it('should continue to allow adding new system messages via return array (existing behavior)', async () => {
@@ -917,6 +997,137 @@ describe('ProcessorRunner', () => {
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('HELLO WORLD');
+    });
+  });
+
+  describe('drainReprocessParts', () => {
+    const makeTextDelta = (text: string): ChunkType => ({
+      type: 'text-delta',
+      payload: { text, id: 'text-1' },
+      runId: '1',
+      from: ChunkFrom.AGENT,
+    });
+
+    it('re-drives a stashed part through the whole chain and emits the result', async () => {
+      const seenByDownstream: string[] = [];
+      const outputProcessors: Processor[] = [
+        // Upstream processor that (in real usage) stashes a part for reprocessing.
+        {
+          id: 'stasher',
+          name: 'Stasher',
+          processOutputStream: async ({ part }) => part,
+        },
+        // Downstream processor that uppercases text-delta parts.
+        {
+          id: 'uppercaser',
+          name: 'Uppercaser',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'text-delta') {
+              seenByDownstream.push(part.payload.text);
+              return { ...part, payload: { ...part.payload, text: part.payload.text.toUpperCase() } } as ChunkType;
+            }
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      // Seed the chain so the stasher's state exists, then stash a part on it.
+      await runner.processPart(makeTextDelta('primary'), processorStates);
+      const stasherState = processorStates.get('stasher')!;
+      stasherState.customState.__mastraReprocessPart = makeTextDelta('stashed');
+
+      const results = await runner.drainReprocessParts(processorStates);
+
+      // The stashed part was re-driven through the downstream uppercaser.
+      expect(seenByDownstream).toContain('stashed');
+      expect(results).toHaveLength(1);
+      expect(results[0]!.blocked).toBe(false);
+      expect((results[0]!.part as any)?.payload?.text).toBe('STASHED');
+      // The stash key is consumed.
+      expect(stasherState.customState.__mastraReprocessPart).toBeUndefined();
+    });
+
+    it('drains parts stashed by multiple processors in processor order', async () => {
+      const outputProcessors: Processor[] = [
+        { id: 'first', name: 'First', processOutputStream: async ({ part }) => part },
+        { id: 'second', name: 'Second', processOutputStream: async ({ part }) => part },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      // Seed both processor states.
+      await runner.processPart(makeTextDelta('primary'), processorStates);
+
+      // Stash a part on each processor; drain should emit them in processor order
+      // (first processor's stash before second processor's stash).
+      processorStates.get('first')!.customState.__mastraReprocessPart = makeTextDelta('from-first');
+      processorStates.get('second')!.customState.__mastraReprocessPart = makeTextDelta('from-second');
+
+      const results = await runner.drainReprocessParts(processorStates);
+
+      expect(results.map(r => (r.part as any)?.payload?.text)).toEqual(['from-first', 'from-second']);
+      expect(processorStates.get('first')!.customState.__mastraReprocessPart).toBeUndefined();
+      expect(processorStates.get('second')!.customState.__mastraReprocessPart).toBeUndefined();
+    });
+
+    it('returns an empty array when nothing is stashed', async () => {
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [{ id: 'noop', name: 'Noop', processOutputStream: async ({ part }) => part }],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      await runner.processPart(makeTextDelta('primary'), processorStates);
+
+      const results = await runner.drainReprocessParts(processorStates);
+      expect(results).toEqual([]);
+    });
+
+    it('stops draining and reports the blocked result when a reprocessed part is aborted', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'blocker',
+          name: 'Blocker',
+          processOutputStream: async ({ part, abort }) => {
+            if (part.type === 'text-delta' && part.payload.text === 'stashed') {
+              abort('blocked on reprocess');
+            }
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      await runner.processPart(makeTextDelta('primary'), processorStates);
+      processorStates.get('blocker')!.customState.__mastraReprocessPart = makeTextDelta('stashed');
+
+      const results = await runner.drainReprocessParts(processorStates);
+      expect(results).toHaveLength(1);
+      expect(results[0]!.blocked).toBe(true);
+      expect(results[0]!.reason).toBe('blocked on reprocess');
     });
   });
 
@@ -2365,6 +2576,64 @@ describe('ProcessorRunner', () => {
       // Should swallow the error and return retry: false
       expect(result).toEqual({ retry: false });
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('processor sendSignal', () => {
+    it('adds a signal message, rotates the response id, and writes a data part', async () => {
+      const rotateResponseMessageId = vi.fn(() => 'response-2');
+      const chunks: unknown[] = [];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'signal-processor',
+            processInputStep: async ({ sendSignal }) => {
+              await sendSignal?.({
+                type: 'system-reminder',
+                contents: 'remember this',
+                metadata: { type: 'test-reminder' },
+              });
+            },
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        messageId: 'response-1',
+        rotateResponseMessageId,
+        writer: {
+          custom: async chunk => {
+            chunks.push(chunk);
+          },
+        },
+      });
+
+      const signalMessage = messageList.get.all.db().at(-1);
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+      expect(signalMessage?.role).toBe('signal');
+      expect(signalMessage?.content.parts[0]).toEqual(expect.objectContaining({ type: 'text', text: 'remember this' }));
+      expect(chunks).toEqual([
+        expect.objectContaining({
+          type: 'data-system-reminder',
+          data: expect.objectContaining({
+            type: 'reactive',
+            tagName: 'system-reminder',
+            contents: 'remember this',
+            metadata: { type: 'test-reminder' },
+          }),
+          transient: true,
+        }),
+      ]);
     });
   });
 });

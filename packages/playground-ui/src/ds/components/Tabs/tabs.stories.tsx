@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Tabs } from './tabs-root';
-import { TabList } from './tabs-list';
-import { Tab } from './tabs-tab';
 import { TabContent } from './tabs-content';
+import { TabList } from './tabs-list';
+import { Tabs } from './tabs-root';
+import { Tab } from './tabs-tab';
 
 const meta: Meta<typeof Tabs> = {
   title: 'Navigation/Tabs',
@@ -10,7 +10,6 @@ const meta: Meta<typeof Tabs> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -80,6 +79,88 @@ export const ManyTabs: Story = {
         <div className="p-4 text-neutral5">Content 5</div>
       </TabContent>
     </Tabs>
+  ),
+};
+
+export const PillVariant: Story = {
+  render: () => (
+    <Tabs defaultTab="overview" className="w-[500px]">
+      <TabList variant="pill">
+        <Tab value="overview">Overview</Tab>
+        <Tab value="projects">Projects</Tab>
+        <Tab value="account">Account</Tab>
+      </TabList>
+      <TabContent value="overview">
+        <div className="p-4 text-neutral5">Overview content</div>
+      </TabContent>
+      <TabContent value="projects">
+        <div className="p-4 text-neutral5">Projects content</div>
+      </TabContent>
+      <TabContent value="account">
+        <div className="p-4 text-neutral5">Account content</div>
+      </TabContent>
+    </Tabs>
+  ),
+};
+
+export const PillGhostVariant: Story = {
+  render: () => (
+    <Tabs defaultTab="overview" className="w-[500px]">
+      <TabList variant="pill-ghost">
+        <Tab value="overview">Overview</Tab>
+        <Tab value="projects">Projects</Tab>
+        <Tab value="account">Account</Tab>
+      </TabList>
+      <TabContent value="overview">
+        <div className="p-4 text-neutral5">Overview content</div>
+      </TabContent>
+      <TabContent value="projects">
+        <div className="p-4 text-neutral5">Projects content</div>
+      </TabContent>
+      <TabContent value="account">
+        <div className="p-4 text-neutral5">Account content</div>
+      </TabContent>
+    </Tabs>
+  ),
+};
+
+export const CustomIndicatorColor: Story = {
+  render: () => (
+    <div className="flex flex-col gap-8">
+      <Tabs defaultTab="tab1" className="w-[400px]">
+        <TabList style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}>
+          <Tab value="tab1">Overview</Tab>
+          <Tab value="tab2">Details</Tab>
+          <Tab value="tab3">Settings</Tab>
+        </TabList>
+        <TabContent value="tab1">
+          <div className="p-4 text-neutral5">Line variant with accent indicator</div>
+        </TabContent>
+        <TabContent value="tab2">
+          <div className="p-4 text-neutral5">Details content</div>
+        </TabContent>
+        <TabContent value="tab3">
+          <div className="p-4 text-neutral5">Settings content</div>
+        </TabContent>
+      </Tabs>
+
+      <Tabs defaultTab="overview" className="w-[400px]">
+        <TabList variant="pill" style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}>
+          <Tab value="overview">Overview</Tab>
+          <Tab value="projects">Projects</Tab>
+          <Tab value="account">Account</Tab>
+        </TabList>
+        <TabContent value="overview">
+          <div className="p-4 text-neutral5">Pill variant with accent indicator</div>
+        </TabContent>
+        <TabContent value="projects">
+          <div className="p-4 text-neutral5">Projects content</div>
+        </TabContent>
+        <TabContent value="account">
+          <div className="p-4 text-neutral5">Account content</div>
+        </TabContent>
+      </Tabs>
+    </div>
   ),
 };
 

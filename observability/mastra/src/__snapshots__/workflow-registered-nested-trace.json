@@ -21,7 +21,8 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": {
           "input": "nested test"
@@ -47,7 +48,8 @@
               "status": "success"
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "input": "nested test"
@@ -73,7 +75,8 @@
                   "status": "success"
                 },
                 "metadata": {
-                  "runId": "<runId-2>"
+                  "runId": "<runId-2>",
+                  "environment": "test"
                 },
                 "input": {
                   "input": "nested test"
@@ -99,7 +102,8 @@
                       "status": "success"
                     },
                     "metadata": {
-                      "runId": "<runId-2>"
+                      "runId": "<runId-2>",
+                      "environment": "test"
                     },
                     "input": {
                       "input": "nested test"

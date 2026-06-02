@@ -85,6 +85,13 @@ const scorer = createScorer({
             isOptional: false,
             description: 'System prompt/instructions for the LLM.',
           },
+          {
+            name: 'jsonPromptInjection',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              "When true, inject the JSON schema into the prompt instead of using the provider's native `response_format` API. Set this for models that don't support native structured output (e.g. some Groq Llama models) to avoid a wasted 400 call.",
+          },
         ],
       },
     ],
@@ -95,6 +102,13 @@ const scorer = createScorer({
     isOptional: true,
     description:
       "Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
+  },
+  {
+    name: 'prepareRun',
+    type: '(run: ScorerRun) => ScorerRun | Promise<ScorerRun>',
+    isOptional: true,
+    description:
+      "Transform the scorer run data before the pipeline executes. Use this to filter messages, limit context size, or drop fields the scorer doesn't need. The [`filterRun()`](/reference/evals/filter-run) utility creates this function from declarative options. Can be async.",
   },
 ]}
 />

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MainContentLayout, MainContentContent } from './main-content';
 import { PageHeader } from '../PageHeader';
+import { MainContentLayout, MainContentContent } from './main-content';
 
 const meta: Meta<typeof MainContentLayout> = {
   title: 'Layout/MainContent',
@@ -8,7 +8,6 @@ const meta: Meta<typeof MainContentLayout> = {
   parameters: {
     layout: 'fullscreen',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

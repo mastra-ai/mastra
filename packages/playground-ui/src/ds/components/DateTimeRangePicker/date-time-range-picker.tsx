@@ -35,7 +35,7 @@ export interface DateTimeRangePickerProps {
   disabled?: boolean;
   /** Subset of presets to show. If omitted, all presets are shown. */
   presets?: readonly DateRangePreset[];
-  /** Size passed through to the trigger Button. Defaults to 'md'. */
+  /** Size passed through to the trigger Button. Defaults to 'default'. */
   size?: ButtonProps['size'];
 }
 
@@ -47,7 +47,7 @@ export function DateTimeRangePicker({
   onDateChange,
   disabled,
   presets,
-  size = 'md',
+  size = 'default',
 }: DateTimeRangePickerProps) {
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
   const fallbackPreset: DateRangePreset = visiblePresets.find(p => p.value !== 'custom')?.value ?? 'all';

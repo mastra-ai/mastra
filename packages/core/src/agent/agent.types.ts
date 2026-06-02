@@ -9,7 +9,8 @@ import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { OutputWriter } from '../workflows/types';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
+import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
   AgentMemoryOption,
@@ -142,6 +143,14 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /** Aggregate token usage from the sub-agent's execution */
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      reasoningTokens?: number;
+      cachedInputTokens?: number;
+    };
   };
   /** Duration of the delegation in milliseconds */
   duration: number;
@@ -274,6 +283,15 @@ export interface DelegationConfig {
   onDelegationComplete?: OnDelegationCompleteHandler;
 
   /**
+   * Include the full subagent result in the supervisor model context.
+   *
+   * By default, the supervisor model receives only the subagent's text response
+   * in later iterations. Set this to true to also include nested subagent tool
+   * results in the supervisor model context.
+   */
+  includeSubAgentToolResultsInModelContext?: boolean;
+
+  /**
    * Callback that controls which parent messages are passed to each subagent as conversation
    * context. Receives the full parent message history along with delegation metadata, and
    * returns the messages that should be forwarded.
@@ -292,7 +310,6 @@ export interface DelegationConfig {
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
 }
-
 /**
  * Configuration for the routing agent's behavior.
  */
@@ -551,8 +568,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   isTaskComplete?: StreamIsTaskCompleteConfig;
 
-  /** Require approval for all tool calls */
-  requireToolApproval?: boolean;
+  /**
+   * Require approval for tool calls. Pass `true` to require approval for every tool call,
+   * or a function evaluated per call (with the tool name, args, and request context) to
+   * decide conditionally — e.g. to gate approval by a regex on the tool name.
+   */
+  requireToolApproval?: RequireToolApproval;
 
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
@@ -562,6 +583,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
+
+  /** Per-invocation transform policy for tool payloads in display and transcript serializers. */
+  transform?: ToolPayloadTransformPolicy;
 
   /**
    * Callback fired after each iteration (LLM call) completes.
@@ -613,6 +637,14 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to disable background tasks for this execution */
   disableBackgroundTasks?: boolean;
+
+  /**
+   * @internal
+   * When true, the in-loop `backgroundTaskCheckStep` returns immediately
+   * without waiting for running tasks to complete. Set by
+   * `agent.streamUntilIdle`, which drives continuation from outside the loop.
+   */
+  _skipBgTaskWait?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**
@@ -620,14 +652,22 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
  * Use this type for public method signatures.
  */
 export type PublicAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  ([NonNullable<OUTPUT>] extends [never]
+    ? { structuredOutput?: never }
+    : OUTPUT extends {}
+      ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> }
+      : { structuredOutput?: never });
 
 /**
  * Internal agent execution options that require StandardSchemaWithJSON.
  * Use this type internally after converting from PublicSchema.
  */
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  ([NonNullable<OUTPUT>] extends [never]
+    ? { structuredOutput?: never }
+    : OUTPUT extends {}
+      ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
+      : { structuredOutput?: never });
 
 export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   outputWriter?: OutputWriter;
@@ -638,7 +678,11 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   /** Internal: Whether the execution is a resume */
   resumeContext?: {
     resumeData: any;
-    snapshot: any;
+    snapshot: WorkflowRunState;
   };
   toolCallId?: string;
-} & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+} & ([NonNullable<OUTPUT>] extends [never]
+    ? { structuredOutput?: never }
+    : OUTPUT extends {}
+      ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
+      : { structuredOutput?: never });

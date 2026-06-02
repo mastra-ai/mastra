@@ -1,0 +1,100 @@
+{
+  "meta": {
+    "name": "test-b843af0f",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle messages with only assistant role",
+    "createdAt": "2026-05-18T10:50:53.466Z",
+    "updatedAt": "2026-05-28T17:33:44.094Z"
+  },
+  "recordings": [
+    {
+      "hash": "c6b966d34047c976",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "I can help you with that task."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You help users with their queries"
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989622883
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 28 May 2026 17:33:44 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1103",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": " What is your query? I'm ready to assist you with information, creative content, problem-solving, and more. Just let me know what you need!\n"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.23845274308148554
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 15,
+            "candidatesTokenCount": 34,
+            "totalTokenCount": 49,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 15
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 34
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "d3wYavDHCque_uMP8N6uwQI"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

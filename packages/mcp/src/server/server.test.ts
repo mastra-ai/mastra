@@ -251,6 +251,38 @@ describe('MCPServer', () => {
       // @ts-expect-error - accessing internal for testing - accessing private property for testing
       expect(sdkServer._instructions).toBe(instructions);
     });
+
+    it('should forward jsonSchemaValidator to underlying SDK Server', () => {
+      const customValidator = {
+        getValidator: vi.fn(() => (input: unknown) => ({
+          valid: true as const,
+          data: input,
+          errorMessage: undefined,
+        })),
+      };
+
+      const server = new MCPServer({
+        ...minimalConfig,
+        jsonSchemaValidator: customValidator,
+      });
+
+      const sdkServer = server.getServer();
+
+      // @ts-expect-error - accessing internal SDK property for testing
+      expect(sdkServer._jsonSchemaValidator).toBe(customValidator);
+    });
+
+    it('should not set jsonSchemaValidator on the SDK Server when omitted', () => {
+      const server = new MCPServer(minimalConfig);
+      const sdkServer = server.getServer();
+
+      // When omitted, the SDK falls back to its default (AJV) validator. The
+      // important assertion is that we do not pass undefined through, which
+      // would force a default-import of the AJV provider in environments
+      // (Cloudflare Workers) that cannot evaluate it.
+      // @ts-expect-error - accessing internal SDK property for testing
+      expect(sdkServer._jsonSchemaValidator).not.toBeUndefined();
+    });
   });
 
   describe('getServerInfo()', () => {
@@ -515,7 +547,7 @@ describe('MCPServer', () => {
     let notificationTestServer: MCPServer;
     let notificationTestInternalClient: InternalMastraMCPClient;
     let notificationHttpServer: http.Server;
-    const NOTIFICATION_PORT = 9400 + Math.floor(Math.random() * 1000);
+    let notificationPort: number;
 
     const mockInitialResources: Resource[] = [
       {
@@ -567,7 +599,7 @@ describe('MCPServer', () => {
       notificationTestServer = new MCPServer(serverOptions);
 
       notificationHttpServer = http.createServer(async (req, res) => {
-        const url = new URL(req.url || '', `http://localhost:${NOTIFICATION_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${notificationPort}`);
         await notificationTestServer.startSSE({
           url,
           ssePath: '/sse',
@@ -576,12 +608,22 @@ describe('MCPServer', () => {
           res,
         });
       });
-      await new Promise<void>(resolve => notificationHttpServer.listen(NOTIFICATION_PORT, resolve));
+      notificationPort = await new Promise<number>((resolve, reject) => {
+        notificationHttpServer.once('error', reject);
+        notificationHttpServer.listen(0, () => {
+          const address = notificationHttpServer.address();
+          if (address && typeof address === 'object') {
+            resolve(address.port);
+            return;
+          }
+          reject(new Error('Failed to obtain notification test port'));
+        });
+      });
 
       notificationTestInternalClient = new InternalMastraMCPClient({
         name: 'notification-internal-client',
         server: {
-          url: new URL(`http://localhost:${NOTIFICATION_PORT}/sse`),
+          url: new URL(`http://localhost:${notificationPort}/sse`),
           logger: logMessage =>
             console.log(
               `[${logMessage.serverName} - ${logMessage.level.toUpperCase()}]: ${logMessage.message}`,
@@ -593,7 +635,7 @@ describe('MCPServer', () => {
     });
 
     afterAll(async () => {
-      await notificationTestInternalClient.disconnect();
+      await notificationTestInternalClient?.disconnect();
       if (notificationHttpServer) {
         await new Promise<void>((resolve, reject) =>
           notificationHttpServer.close(err => {
@@ -602,7 +644,7 @@ describe('MCPServer', () => {
           }),
         );
       }
-      await notificationTestServer.close();
+      await notificationTestServer?.close();
     });
 
     beforeEach(() => {
@@ -951,6 +993,34 @@ describe('MCPServer', () => {
       });
       expect(res.status).toBe(503);
     });
+
+    it('should close previous SSE transport when a new client connects', async () => {
+      // First SSE connection
+      const firstRes = await fetch(`http://localhost:${PORT}/sse`, {
+        headers: { Accept: 'text/event-stream' },
+      });
+      expect(firstRes.status).toBe(200);
+      const firstTransport = (server as any).sseTransport;
+      expect(firstTransport).toBeDefined();
+
+      // Spy on close of the first transport
+      const closeSpy = vi.spyOn(firstTransport, 'close');
+
+      // Second SSE connection — should close the first transport
+      const secondRes = await fetch(`http://localhost:${PORT}/sse`, {
+        headers: { Accept: 'text/event-stream' },
+      });
+      expect(secondRes.status).toBe(200);
+
+      expect(closeSpy).toHaveBeenCalled();
+      expect((server as any).sseTransport).not.toBe(firstTransport);
+
+      // Clean up: close the active transport so the protocol is reset for subsequent tests
+      await (server as any).sseTransport?.close?.();
+      (server as any).sseTransport = undefined;
+      await firstRes.body?.cancel().catch(() => {});
+      await secondRes.body?.cancel().catch(() => {});
+    });
   });
 
   describe('MCPServer stdio transport', () => {
@@ -1212,13 +1282,28 @@ describe('MCPServer', () => {
   });
 
   describe('MCPServer Session Management', () => {
+    // These tests boot a real HTTP server and complete an MCP handshake over it.
+    // Default 20s vitest timeout is tight on shared CI runners, so bump it.
+    vi.setConfig({ testTimeout: 30_000 });
+
     let sessionServer: MCPServer;
     let sessionHttpServer: http.Server;
     let currentTestPort: number;
 
-    beforeEach(() => {
-      currentTestPort = 9600 + Math.floor(Math.random() * 1000);
-    });
+    // Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
+    // Avoids the random-port collisions that were flaking these tests on CI.
+    const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
+      new Promise<number>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, () => {
+          const address = server.address();
+          if (address && typeof address === 'object') {
+            resolve(address.port);
+          } else {
+            reject(new Error('Failed to obtain ephemeral port'));
+          }
+        });
+      });
 
     afterEach(async () => {
       if (sessionHttpServer) {
@@ -1253,7 +1338,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'default-session-client',
@@ -1292,7 +1377,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'no-session-client',
@@ -1331,7 +1416,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'serverless-client',
@@ -1379,7 +1464,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'custom-session-client',
@@ -1419,7 +1504,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'override-test-client',
@@ -1455,7 +1540,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
 
       // Send a POST request with a session ID that doesn't exist on the server
       const response = await fetch(`http://localhost:${currentTestPort}/http`, {
@@ -2075,7 +2160,22 @@ describe('MCPServer - Elicitation', () => {
   let elicitationServer: MCPServer;
   let elicitationClient: InternalMastraMCPClient;
   let elicitationHttpServer: http.Server;
-  const ELICITATION_PORT = 9600 + Math.floor(Math.random() * 1000);
+  let ELICITATION_PORT: number;
+
+  // Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
+  // Avoids the random-port collisions that were flaking these tests on CI.
+  const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
+    new Promise<number>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, () => {
+        const address = server.address();
+        if (address && typeof address === 'object') {
+          resolve(address.port);
+        } else {
+          reject(new Error('Failed to obtain ephemeral port'));
+        }
+      });
+    });
 
   beforeAll(async () => {
     elicitationServer = new MCPServer({
@@ -2138,7 +2238,7 @@ describe('MCPServer - Elicitation', () => {
       });
     });
 
-    await new Promise<void>(resolve => elicitationHttpServer.listen(ELICITATION_PORT, () => resolve()));
+    ELICITATION_PORT = await listenOnEphemeralPort(elicitationHttpServer);
   });
 
   afterAll(async () => {

@@ -5,11 +5,12 @@
  * Handles git worktrees by finding the main repository.
  */
 
-import { execSync } from 'node:child_process';
+import { execFile, execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 export interface ProjectInfo {
   /** Unique resource ID for this project (used for thread grouping) */
   resourceId: string;
@@ -161,6 +162,23 @@ export function getCurrentGitBranch(cwd: string): string | undefined {
 }
 
 /**
+ * Async version of getCurrentGitBranch — avoids blocking the event loop
+ * with execSync.  Falls back to undefined on any failure.
+ */
+export function getCurrentGitBranchAsync(cwd: string): Promise<string | undefined> {
+  return new Promise(resolve => {
+    execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, encoding: 'utf-8' }, (err, stdout) => {
+      if (err) {
+        resolve(undefined);
+        return;
+      }
+      const branch = stdout.trim();
+      resolve(branch || undefined);
+    });
+  });
+}
+
+/**
  * Get the application data directory for mastracode
  * - macOS: ~/Library/Application Support/mastracode
  * - Linux: ~/.local/share/mastracode
@@ -205,6 +223,18 @@ export function getDatabasePath(): string {
  */
 export function getVectorDatabasePath(): string {
   return path.join(getAppDataDir(), 'mastra-vectors.db');
+}
+
+/**
+ * Get the observability DuckDB database path for mastracode.
+ * Separate from the main DB — DuckDB is used for OLAP-style trace/score/feedback queries.
+ * Can be overridden with the MASTRA_OBSERVABILITY_DB_PATH environment variable.
+ */
+export function getObservabilityDatabasePath(): string {
+  if (process.env.MASTRA_OBSERVABILITY_DB_PATH) {
+    return process.env.MASTRA_OBSERVABILITY_DB_PATH;
+  }
+  return path.join(getAppDataDir(), 'observability.duckdb');
 }
 
 import type { StorageBackend, StorageSettings } from '../onboarding/settings.js';
@@ -257,7 +287,11 @@ export type StorageConfig = LibSQLStorageConfig | PgStorageConfig;
  * For LibSQL, the legacy env vars still work:
  *   MASTRA_DB_URL + MASTRA_DB_AUTH_TOKEN
  */
-export function getStorageConfig(projectDir?: string, storageSettings?: StorageSettings): StorageConfig {
+export function getStorageConfig(
+  projectDir?: string,
+  storageSettings?: StorageSettings,
+  configDirName = DEFAULT_CONFIG_DIR,
+): StorageConfig {
   // 1. Environment variable — explicit backend selection
   const envBackend = process.env.MASTRA_STORAGE_BACKEND as StorageBackend | undefined;
 
@@ -286,10 +320,10 @@ export function getStorageConfig(projectDir?: string, storageSettings?: StorageS
 
   // 3. Legacy project/global config files (.mastracode/database.json)
   if (projectDir) {
-    const projectConfig = loadDatabaseConfig(path.join(projectDir, '.mastracode', 'database.json'));
+    const projectConfig = loadDatabaseConfig(path.join(projectDir, configDirName, 'database.json'));
     if (projectConfig) return projectConfig;
   }
-  const globalConfig = loadDatabaseConfig(path.join(os.homedir(), '.mastracode', 'database.json'));
+  const globalConfig = loadDatabaseConfig(path.join(os.homedir(), configDirName, 'database.json'));
   if (globalConfig) return globalConfig;
 
   // 4. Default: local LibSQL file database
@@ -397,6 +431,22 @@ export function getUserId(projectDir?: string): string {
 }
 
 /**
+ * Get the current user's display name.
+ *
+ * Priority:
+ *   1. git config user.name
+ *   2. OS username as fallback
+ */
+export function getUserName(projectDir?: string): string {
+  const cwd = projectDir || process.cwd();
+  const name = git('config user.name', cwd);
+  if (name) {
+    return name;
+  }
+  return os.userInfo().username || 'unknown';
+}
+
+/**
  * Observational memory scope: "thread" (per-conversation) or "resource" (shared across threads).
  */
 export type OmScope = 'thread' | 'resource';
@@ -410,7 +460,7 @@ export type OmScope = 'thread' | 'resource';
  *   3. Global config: ~/.mastracode/database.json → omScope
  *   4. Default: "thread"
  */
-export function getOmScope(projectDir?: string): OmScope {
+export function getOmScope(projectDir?: string, configDirName = DEFAULT_CONFIG_DIR): OmScope {
   // 1. Environment variable
   const envScope = process.env.MASTRA_OM_SCOPE;
   if (envScope === 'thread' || envScope === 'resource') {
@@ -419,12 +469,12 @@ export function getOmScope(projectDir?: string): OmScope {
 
   // 2. Project-level config
   if (projectDir) {
-    const scope = loadOmScopeFromConfig(path.join(projectDir, '.mastracode', 'database.json'));
+    const scope = loadOmScopeFromConfig(path.join(projectDir, configDirName, 'database.json'));
     if (scope) return scope;
   }
 
   // 3. Global config
-  const scope = loadOmScopeFromConfig(path.join(os.homedir(), '.mastracode', 'database.json'));
+  const scope = loadOmScopeFromConfig(path.join(os.homedir(), configDirName, 'database.json'));
   if (scope) return scope;
 
   // 4. Default
@@ -457,7 +507,7 @@ function loadOmScopeFromConfig(filePath: string): OmScope | null {
  *   3. Global config: ~/.mastracode/database.json → resourceId
  *   4. null (use auto-detected value)
  */
-export function getResourceIdOverride(projectDir?: string): string | null {
+export function getResourceIdOverride(projectDir?: string, configDirName = DEFAULT_CONFIG_DIR): string | null {
   // 1. Environment variable
   if (process.env.MASTRA_RESOURCE_ID) {
     return process.env.MASTRA_RESOURCE_ID;
@@ -465,12 +515,12 @@ export function getResourceIdOverride(projectDir?: string): string | null {
 
   // 2. Project-level config
   if (projectDir) {
-    const rid = loadStringField(path.join(projectDir, '.mastracode', 'database.json'), 'resourceId');
+    const rid = loadStringField(path.join(projectDir, configDirName, 'database.json'), 'resourceId');
     if (rid) return rid;
   }
 
   // 3. Global config
-  const rid = loadStringField(path.join(os.homedir(), '.mastracode', 'database.json'), 'resourceId');
+  const rid = loadStringField(path.join(os.homedir(), configDirName, 'database.json'), 'resourceId');
   if (rid) return rid;
 
   return null;

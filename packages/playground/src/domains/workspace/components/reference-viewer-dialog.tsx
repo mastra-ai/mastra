@@ -59,7 +59,7 @@ export function ReferenceViewerDialog({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="md" variant="light" onClick={handleCopy} disabled={!content || isLoading}>
+            <Button size="md" variant="default" onClick={handleCopy} disabled={!content || isLoading}>
               <Icon>
                 {isCopied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
               </Icon>

@@ -283,19 +283,33 @@ export class Run extends BaseResource {
   }
 
   /**
-   * Observes workflow stream for a workflow run
-   * @returns Promise containing the workflow execution results
+   * Observe (reconnect to) an existing workflow stream.
+   * Use this to resume receiving events after a disconnection.
+   *
+   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @returns Promise containing a ReadableStream of workflow events
+   *
+   * @example
+   * ```typescript
+   * // Reconnect to a workflow stream from a specific position
+   * const stream = await run.observe({ offset: 42 });
+   *
+   * for await (const event of stream) {
+   *   console.log('Received:', event);
+   * }
+   * ```
    */
-  async observeStream(): Promise<globalThis.ReadableStream<StreamVNextChunkType>> {
+  async observe(params?: { offset?: number }): Promise<globalThis.ReadableStream<StreamVNextChunkType>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', this.runId);
-    const response: Response = await this.request(
-      `/workflows/${this.workflowId}/observe-stream?${searchParams.toString()}`,
-      {
-        method: 'POST',
-        stream: true,
-      },
-    );
+    if (params?.offset !== undefined) {
+      searchParams.set('offset', String(params.offset));
+    }
+
+    const response: Response = await this.request(`/workflows/${this.workflowId}/observe?${searchParams.toString()}`, {
+      method: 'POST',
+      stream: true,
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to observe workflow stream: ${response.statusText}`);
@@ -307,6 +321,15 @@ export class Run extends BaseResource {
 
     // Pipe the response body through the transform stream
     return response.body.pipeThrough(this.createChunkTransformStream());
+  }
+
+  /**
+   * Observes workflow stream for a workflow run
+   * @deprecated Use `observe()` instead for better control over replay position
+   * @returns Promise containing the workflow execution results
+   */
+  async observeStream() {
+    return this.observe();
   }
 
   /**
@@ -334,6 +357,43 @@ export class Run extends BaseResource {
         forEachIndex: params.forEachIndex,
       },
     }).then(deserializeWorkflowError);
+  }
+
+  /**
+   * Resumes a suspended workflow step without waiting for the workflow to complete (fire-and-forget)
+   * and returns immediately with the runId. The workflow continues executing in the background.
+   *
+   * Use this when you want to dispatch a resume and return immediately (e.g. an HTTP handler that
+   * never needs the resolved result inline). For Inngest-backed workflows this also avoids the
+   * `getRunOutput()` polling race that `resumeAsync()` can hit.
+   *
+   * TODO(v2): in Mastra v2 this fire-and-forget behavior should become the behavior of
+   * `resumeAsync()` (to mirror `start`/`resume` fire-and-forget semantics), and this method
+   * should be removed. Kept as a separate method in v1 to avoid a breaking contract change.
+   *
+   * @param params - Object containing the step, resumeData and requestContext
+   * @returns Promise containing the runId of the resumed workflow run
+   */
+  resumeNoWait(params: {
+    step?: string | string[];
+    resumeData?: Record<string, any>;
+    requestContext?: RequestContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+    perStep?: boolean;
+    forEachIndex?: number;
+  }): Promise<{ runId: string }> {
+    const requestContext = parseClientRequestContext(params.requestContext);
+    return this.request<{ runId: string }>(`/workflows/${this.workflowId}/resume-no-wait?runId=${this.runId}`, {
+      method: 'POST',
+      body: {
+        step: params.step,
+        resumeData: params.resumeData,
+        requestContext,
+        tracingOptions: params.tracingOptions,
+        perStep: params.perStep,
+        forEachIndex: params.forEachIndex,
+      },
+    });
   }
 
   /**

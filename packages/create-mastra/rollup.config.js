@@ -1,15 +1,15 @@
+import * as fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
-import fsExtra from 'fs-extra/esm';
 import { defineConfig } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 import nodeExternals from 'rollup-plugin-node-externals';
 import pkgJson from './package.json' with { type: 'json' };
 
-const external = ['commander', 'fs-extra', 'execa', 'prettier', 'posthog-node', 'pino', 'pino-pretty'];
+const external = ['commander', 'tinyexec', 'posthog-node', 'pino', 'pino-pretty'];
 external.forEach(pkg => {
   if (!pkgJson.dependencies[pkg]) {
     throw new Error(`${pkg} is not in the dependencies of create-mastra`);
@@ -31,7 +31,7 @@ export default defineConfig({
       exportConditions: ['node'],
     }),
     esbuild({
-      target: 'node20',
+      target: 'node22',
       sourceMap: true,
     }),
     nodeExternals(),
@@ -42,8 +42,10 @@ export default defineConfig({
         const mastraPath = path.dirname(fileURLToPath(import.meta.resolve('mastra/package.json')));
 
         // Copy to dist directory instead of root
-        await fsExtra.copy(path.join(mastraPath, 'dist', 'starter-files'), './dist/starter-files');
-        await fsExtra.copy(path.join(mastraPath, 'dist', 'templates'), './dist/templates');
+        await fsPromises.cp(path.join(mastraPath, 'dist', 'starter-files'), './dist/starter-files', {
+          recursive: true,
+        });
+        await fsPromises.cp(path.join(mastraPath, 'dist', 'templates'), './dist/templates', { recursive: true });
       },
     },
   ],

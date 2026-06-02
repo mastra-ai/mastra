@@ -10,7 +10,7 @@ export interface WorkflowLayoutProps {
 
 export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: WorkflowLayoutProps) => {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `workflow-layout-${workflowId}`,
+    id: `workflow-layout-v2-${workflowId}`,
     storage: localStorage,
   });
 

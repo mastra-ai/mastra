@@ -5,8 +5,8 @@ import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { createWorkflow } from '../../../workflows';
-import type { OutputWriter } from '../../../workflows';
+import type { OutputWriter } from '../../../workflows/types';
+import { createWorkflow } from '../../../workflows/workflow';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
@@ -81,6 +81,18 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
 
+      const pendingSignals = _internal.drainPendingSignals?.(runId) ?? [];
+      if (pendingSignals.length > 0) {
+        typedInputData.messageId = _internal?.generateId?.() ?? randomUUID();
+        for (const pendingSignal of pendingSignals) {
+          messageList.add(pendingSignal.toLLMMessage(), 'input');
+          safeEnqueue(controller, pendingSignal.toDataPart() as any);
+        }
+        if (typedInputData.stepResult) {
+          typedInputData.stepResult.isContinued = true;
+        }
+      }
+
       if (pendingFeedbackStop) {
         hasFinishedSteps = true;
         pendingFeedbackStop = false;
@@ -145,7 +157,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       // Call onIterationComplete hook if provided (call for every iteration, not just continued ones)
-      if (rest.onIterationComplete) {
+      if (rest.onIterationComplete && !typedInputData.backgroundTaskPending) {
         const isFinal = !typedInputData.stepResult?.isContinued || hasFinishedSteps;
         const iterationContext = {
           iteration: accumulatedSteps.length,
@@ -245,12 +257,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
 
       if (shouldEmitStepFinish) {
-        // Only enqueue if controller is still open
-        safeEnqueue(controller, {
+        await outputWriter({
           type: 'step-finish',
           runId,
           from: ChunkFrom.AGENT,
-          // @ts-expect-error TODO: Look into the proper types for this
           payload: typedInputData,
         });
       }

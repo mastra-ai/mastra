@@ -26,6 +26,9 @@
     "noEmit": true,
 
     /* If your code doesn't run in the DOM: */
-    "lib": ["ES2023"]
+    "lib": ["ES2023"],
+
+    /* TS 6 no longer auto-discovers @types; list globals explicitly: */
+    "types": ["node"]
   }
 }

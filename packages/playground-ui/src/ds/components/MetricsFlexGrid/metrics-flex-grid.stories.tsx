@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MetricsFlexGrid } from './metrics-flex-grid';
 import { DashboardCard } from '../DashboardCard';
+import { MetricsFlexGrid } from './metrics-flex-grid';
 
 const meta: Meta<typeof MetricsFlexGrid> = {
   title: 'Metrics/MetricsFlexGrid',
@@ -8,7 +8,6 @@ const meta: Meta<typeof MetricsFlexGrid> = {
   parameters: {
     layout: 'padded',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

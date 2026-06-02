@@ -1,7 +1,9 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { createExtractPrompt, createReasonPrompt, createScorePrompt } from './prompts';
 
 export const DEFAULT_OPTIONS: Record<'uncertaintyWeight' | 'scale', number> = {
@@ -21,9 +23,11 @@ export const ANSWER_RELEVANCY_AGENT_INSTRUCTIONS = `
     6. Responses that discuss the type of information being asked show partial relevance
 `;
 
-const extractOutputSchema = z.object({
-  statements: z.array(z.string()),
-});
+const extractOutputSchema = compileSchema(
+  z.object({
+    statements: z.array(z.string()),
+  }),
+);
 
 export function createAnswerRelevancyScorer({
   model,
@@ -32,7 +36,7 @@ export function createAnswerRelevancyScorer({
   model: MastraModelConfig;
   options?: Record<'uncertaintyWeight' | 'scale', number>;
 }) {
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'answer-relevancy-scorer',
     name: 'Answer Relevancy Scorer',
     description: 'A scorer that evaluates the relevancy of an LLM output to an input',
@@ -52,7 +56,7 @@ export function createAnswerRelevancyScorer({
     })
     .analyze({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) }),
+      outputSchema: compileSchema(z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) })),
       createPrompt: ({ run, results }) => {
         const input = getUserMessageFromRunInput(run.input) ?? '';
         return createScorePrompt(JSON.stringify(input), results.preprocessStepResult?.statements || []);

@@ -10,7 +10,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { agentGenerate, setupDummyApiKeys } from '@internal/test-utils';
+import { agentGenerate as baseAgentGenerate, isV5PlusModel, setupDummyApiKeys } from '@internal/test-utils';
+import type { MastraModelConfig as TestUtilsModelConfig } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { LibSQLStore } from '@mastra/libsql';
@@ -22,6 +23,28 @@ const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai']);
 
 const resourceId = 'test-resource';
+
+async function agentGenerate(
+  agent: Agent,
+  message: string | unknown[],
+  options: { threadId?: string; resourceId?: string; [key: string]: unknown },
+  model: MastraModelConfig,
+): Promise<any> {
+  return baseAgentGenerate(
+    agent as any,
+    message,
+    isV5PlusModel(model)
+      ? {
+          ...options,
+          modelSettings: {
+            temperature: 0,
+            ...((options.modelSettings as Record<string, unknown> | undefined) ?? {}),
+          },
+        }
+      : options,
+    model as TestUtilsModelConfig,
+  );
+}
 
 const createTestThread = (title: string, metadata = {}) => ({
   id: randomUUID(),

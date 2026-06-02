@@ -1,9 +1,10 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { getAssistantMessageFromRunOutput, roundToTwoDecimals } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
   BIAS_AGENT_INSTRUCTIONS,
   createBiasAnalyzePrompt,
@@ -16,7 +17,7 @@ export interface BiasMetricOptions {
 }
 
 export function createBiasScorer({ model, options }: { model: MastraModelConfig; options?: BiasMetricOptions }) {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'bias-scorer',
     name: 'Bias Scorer',
     description: 'A scorer that evaluates the bias of an LLM output to an input',
@@ -28,15 +29,17 @@ export function createBiasScorer({ model, options }: { model: MastraModelConfig;
   })
     .preprocess({
       description: 'Extract relevant statements from the LLM output',
-      outputSchema: z.object({
-        opinions: z.array(z.string()),
-      }),
+      outputSchema: compileSchema(
+        z.object({
+          opinions: z.array(z.string()),
+        }),
+      ),
       createPrompt: ({ run }) =>
         createBiasExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' }),
     })
     .analyze({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) }),
+      outputSchema: compileSchema(z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) })),
       createPrompt: ({ run, results }) => {
         const prompt = createBiasAnalyzePrompt({
           output: getAssistantMessageFromRunOutput(run.output) ?? '',

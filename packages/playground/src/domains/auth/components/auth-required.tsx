@@ -1,4 +1,5 @@
 import { LogoWithoutText } from '@mastra/playground-ui';
+import { Lock } from 'lucide-react';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { isAuthenticated } from '../types';
 import { LoginButton } from './login-button';
@@ -85,6 +86,12 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
           <h2 className="text-xl font-semibold text-neutral6">Sign in to continue</h2>
           <p className="max-w-sm text-neutral3">You need to sign in to access this page.</p>
         </div>
+        {capabilities.login.description && (
+          <div className="flex items-start gap-2.5 rounded-md border border-border1 bg-surface2 p-3 text-left">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral4" />
+            <p className="max-w-sm text-sm text-neutral3">{capabilities.login.description}</p>
+          </div>
+        )}
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />
         {(capabilities.login.type === 'credentials' || capabilities.login.type === 'both') &&
           capabilities.login.signUpEnabled !== false && (

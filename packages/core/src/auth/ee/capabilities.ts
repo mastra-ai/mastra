@@ -3,11 +3,13 @@
  */
 
 import type { MastraAuthProvider } from '../../server';
+import { captureEEEvent, getEETelemetryFallbackDistinctId } from '../../telemetry/posthog';
 import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '../interfaces';
 import type { IACLProvider } from './interfaces/acl';
+import type { IFGAProvider } from './interfaces/fga';
 import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
-import { isLicenseValid, isDevEnvironment } from './license';
+import { isLicenseValid, isDevEnvironment, getSafeLicenseSummary } from './license';
 
 /**
  * Public capabilities response (no authentication required).
@@ -22,6 +24,8 @@ export interface PublicAuthCapabilities {
     type: 'sso' | 'credentials' | 'both';
     /** Whether sign-up is enabled (defaults to true) */
     signUpEnabled?: boolean;
+    /** Optional description explaining the auth requirement and what credentials to use */
+    description?: string;
     /** SSO configuration */
     sso?: {
       /** Provider name */
@@ -30,6 +34,8 @@ export interface PublicAuthCapabilities {
       text: string;
       /** Icon URL */
       icon?: string;
+      /** Description of the auth requirement */
+      description?: string;
       /** Login URL */
       url: string;
     };
@@ -64,6 +70,8 @@ export interface CapabilityFlags {
   rbac: boolean;
   /** IACLProvider is implemented and licensed */
   acl: boolean;
+  /** IFGAProvider is implemented and licensed */
+  fga: boolean;
 }
 
 /**
@@ -87,6 +95,8 @@ export interface AuthenticatedCapabilities extends PublicAuthCapabilities {
   capabilities: CapabilityFlags;
   /** User's access (if RBAC available) */
   access: UserAccess | null;
+  /** Available roles in the system (only present for admin users) */
+  availableRoles?: { id: string; name: string }[];
 }
 
 /**
@@ -102,7 +112,7 @@ export function isAuthenticated(
  * Check if an auth provider implements a specific interface.
  */
 function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
-  return auth !== null && typeof auth === 'object' && method in auth;
+  return auth !== null && typeof auth === 'object' && typeof (auth as any)[method] === 'function';
 }
 
 /**
@@ -124,6 +134,60 @@ function isSimpleAuth(auth: unknown): boolean {
 }
 
 /**
+ * Check if a set of permissions includes admin bypass (`*` or `*:*`).
+ */
+function hasAdminBypassPermissions(permissions: string[]): boolean {
+  return permissions.some(p => p === '*' || p === '*:*');
+}
+
+function getRequestIp(request: Request): string | undefined {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    return forwardedFor.split(',')[0]?.trim();
+  }
+
+  return request.headers.get('x-real-ip') ?? undefined;
+}
+
+function captureLicenseCheck({
+  request,
+  user,
+  hasLicense,
+  isDev,
+  isCloud,
+  isSimple,
+  capabilities,
+}: {
+  request: Request;
+  user?: EEUser | null;
+  hasLicense: boolean;
+  isDev: boolean;
+  isCloud: boolean;
+  isSimple: boolean;
+  capabilities?: CapabilityFlags;
+}): void {
+  const license = getSafeLicenseSummary();
+
+  try {
+    const ip = getRequestIp(request);
+    captureEEEvent('ee_license_check', user?.id || license.anonymousId || getEETelemetryFallbackDistinctId(), {
+      license_valid: hasLicense,
+      license_hash: license.licenseHash,
+      is_dev_environment: isDev,
+      is_cloud: isCloud,
+      is_simple_auth: isSimple,
+      capabilities,
+      user_id: user?.id,
+      $ip: ip,
+      license_features: license.features,
+      license_tier: license.tier,
+    });
+  } catch {
+    // Telemetry must never affect auth or EE feature behavior.
+  }
+}
+
+/**
  * Options for building capabilities.
  */
 export interface BuildCapabilitiesOptions {
@@ -142,6 +206,12 @@ export interface BuildCapabilitiesOptions {
    * ```
    */
   rbac?: IRBACProvider<EEUser>;
+
+  /**
+   * FGA provider for fine-grained authorization (EE feature).
+   * Separate from the auth provider to allow mixing different providers.
+   */
+  fga?: IFGAProvider<EEUser>;
 
   /**
    * API route prefix used to construct SSO login URLs.
@@ -207,6 +277,7 @@ export async function buildCapabilities(
     login = {
       type: 'both',
       signUpEnabled,
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
         url: ssoLoginUrl,
@@ -216,6 +287,7 @@ export async function buildCapabilities(
     const ssoConfig = (auth as ISSOProvider).getLoginButtonConfig();
     login = {
       type: 'sso',
+      description: ssoConfig.description,
       sso: {
         ...ssoConfig,
         url: ssoLoginUrl,
@@ -242,12 +314,16 @@ export async function buildCapabilities(
 
   // If no user, return public response only
   if (!user) {
+    captureLicenseCheck({ request, user, hasLicense, isDev, isCloud, isSimple });
     return { enabled: true, login };
   }
 
   // Get RBAC provider from options (if configured)
   const rbacProvider = options?.rbac;
   const hasRBAC = !!rbacProvider && isLicensedOrCloud;
+
+  // Get FGA provider from options (if configured)
+  const hasFGA = !!options?.fga && isLicensedOrCloud;
 
   // Build capability flags
   const capabilities: CapabilityFlags = {
@@ -256,6 +332,7 @@ export async function buildCapabilities(
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,
     acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
+    fga: hasFGA,
   };
 
   // Get roles/permissions from RBAC provider (if available)
@@ -265,11 +342,65 @@ export async function buildCapabilities(
       const roles = await rbacProvider.getRoles(user);
       const permissions = await rbacProvider.getPermissions(user);
       access = { roles, permissions };
+      const license = getSafeLicenseSummary();
+      try {
+        const ip = getRequestIp(request);
+        captureEEEvent('ee_feature_used', user.id || license.anonymousId || getEETelemetryFallbackDistinctId(), {
+          feature: 'rbac',
+          user_id: user.id,
+          organization_membership_id: user.metadata?.['organizationMembershipId'],
+          role_count: roles.length,
+          permission_count: permissions.length,
+          $ip: ip,
+          license_valid: license.valid,
+          license_hash: license.licenseHash,
+          is_dev_environment: license.isDevEnvironment,
+        });
+      } catch {
+        // Telemetry must never affect auth or EE feature behavior.
+      }
     } catch {
       // RBAC failed, continue without access info
       access = null;
     }
   }
+
+  // Expose available roles for admin users (for "View as role" feature).
+  // Exclude roles with admin-bypass permissions since previewing as admin
+  // is the same as the current experience.
+  let availableRoles: { id: string; name: string }[] | undefined;
+  if (access && rbacProvider?.getAvailableRoles) {
+    if (hasAdminBypassPermissions(access.permissions)) {
+      try {
+        const allRoles = await rbacProvider.getAvailableRoles();
+        const getPermissionsForRole = rbacProvider.getPermissionsForRole?.bind(rbacProvider);
+        if (getPermissionsForRole) {
+          // Use allSettled so one failing role lookup doesn't drop the whole picker.
+          const rolePermissions = await Promise.allSettled(
+            allRoles.map(async role => ({
+              role,
+              perms: await getPermissionsForRole(role.id),
+            })),
+          );
+          availableRoles = rolePermissions.flatMap(result => {
+            if (result.status !== 'fulfilled') {
+              console.warn('[auth/ee] failed to list permissions for role:', result.reason);
+              return [];
+            }
+            return hasAdminBypassPermissions(result.value.perms) ? [] : [result.value.role];
+          });
+        } else {
+          availableRoles = allRoles;
+        }
+      } catch (error) {
+        // Degrade gracefully: omit availableRoles so the "View as role" feature
+        // simply doesn't show options. Log so operators can diagnose RBAC issues.
+        console.warn('[auth/ee] failed to list available roles for admin user:', error);
+      }
+    }
+  }
+
+  captureLicenseCheck({ request, user, hasLicense, isDev, isCloud, isSimple, capabilities });
 
   return {
     enabled: true,
@@ -282,5 +413,6 @@ export async function buildCapabilities(
     },
     capabilities,
     access,
+    availableRoles,
   };
 }

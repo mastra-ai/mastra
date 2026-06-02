@@ -24,7 +24,8 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": {
           "input": "test unregistered workflow as step"
@@ -51,7 +52,8 @@
               "totalIterations": 1
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "input": "test unregistered workflow as step"
@@ -77,7 +79,8 @@
                   "status": "success"
                 },
                 "metadata": {
-                  "runId": "<runId-1>"
+                  "runId": "<runId-1>",
+                  "environment": "test"
                 },
                 "input": {
                   "input": "test unregistered workflow as step"
@@ -103,7 +106,8 @@
                       "status": "success"
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "input": {
                       "input": "test unregistered workflow as step"
@@ -129,7 +133,8 @@
                           "status": "success"
                         },
                         "metadata": {
-                          "runId": "<runId-1>"
+                          "runId": "<runId-1>",
+                          "environment": "test"
                         },
                         "input": {
                           "input": "test unregistered workflow as step"
@@ -159,7 +164,8 @@
                   "conditionIndex": 0
                 },
                 "metadata": {
-                  "runId": "<runId-1>"
+                  "runId": "<runId-1>",
+                  "environment": "test"
                 },
                 "input": {},
                 "output": false
@@ -183,7 +189,8 @@
               "status": "success"
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "output": "test unregistered workflow as step processed"

@@ -447,6 +447,145 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('listBranches()', () => {
+    it('should fetch branches without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listBranches();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/branches`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should fetch branches with pagination parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listBranches({
+        pagination: { page: 2, perPage: 10 },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('page=2');
+      expect(url).toContain('perPage=10');
+    });
+
+    it('should fetch branches with spanType filter', async () => {
+      mockSuccessfulResponse();
+
+      await client.listBranches({
+        filters: { spanType: SpanType.AGENT_RUN },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('spanType=agent_run');
+    });
+
+    it('should fetch branches with entity filters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listBranches({
+        filters: {
+          entityId: 'observer-1',
+          entityType: EntityType.AGENT,
+          entityName: 'Observer',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('entityId=observer-1');
+      expect(url).toContain('entityType=agent');
+      expect(url).toContain('entityName=Observer');
+    });
+
+    it('should fetch branches with orderBy parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listBranches({
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('field=startedAt');
+      expect(url).toContain('direction=DESC');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.listBranches()).rejects.toThrow();
+    });
+  });
+
+  describe('getBranch()', () => {
+    it('should fetch a branch by trace ID and span ID', async () => {
+      mockSuccessfulResponse();
+
+      await client.getBranch({ traceId: 'trace-123', spanId: 'span-456' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/trace-123/branches/span-456`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should include depth as a query param when provided', async () => {
+      mockSuccessfulResponse();
+
+      await client.getBranch({ traceId: 'trace-123', spanId: 'span-456', depth: 1 });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/trace-123/branches/span-456?depth=1`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should send depth=0 (anchor only) when explicitly requested', async () => {
+      mockSuccessfulResponse();
+
+      await client.getBranch({ traceId: 'trace-123', spanId: 'span-456', depth: 0 });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/trace-123/branches/span-456?depth=0`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should properly encode trace ID and span ID in URL', async () => {
+      mockSuccessfulResponse();
+
+      await client.getBranch({ traceId: 'trace with spaces', spanId: 'span/with/slashes' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/trace%20with%20spaces/branches/span%2Fwith%2Fslashes`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getBranch({ traceId: 'invalid-trace', spanId: 'invalid-span' })).rejects.toThrow();
+    });
+  });
+
   describe('listScoresBySpan()', () => {
     it('should fetch scores by trace ID and span ID without pagination', async () => {
       mockSuccessfulResponse();
