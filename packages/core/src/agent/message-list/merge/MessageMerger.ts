@@ -85,7 +85,11 @@ export class MessageMerger {
   }
 
   /**
-   * Merge an incoming assistant message into the latest assistant message
+   * Merge an incoming assistant message into the latest assistant message.
+   *
+   * This preserves the existing message-level createdAt. OM uses that timestamp
+   * as its observation boundary, so moving it forward can make an already
+   * observed message look unobserved and eligible for reprocessing.
    *
    * This handles:
    * - Updating tool invocations with their results

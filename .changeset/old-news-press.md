@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed prompt cache invalidation caused by recalled memory message timestamps changing across turns.
+Fixed message part timestamps affecting transcript ordering by ensuring only message-level timestamps advance the ordering watermark.

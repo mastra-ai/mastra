@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../../memory';
+import { createSignal } from '../../signals';
 import { MessageList } from '../index';
 
 const threadId = 'om-thread';
@@ -82,5 +83,75 @@ describe('MessageList — OM multi-step source handoff', () => {
     const secondClear = list.clear.response.db();
     expect(secondClear).toHaveLength(1);
     expect(secondClear[0]!.content.parts?.some(p => p.type === 'text' && p.text === 'Done.')).toBe(true);
+  });
+
+  it('does not let promoted memory part timestamps advance signal timestamps', () => {
+    const now = Date.now();
+    const assistantId = 'asst-om-late-part';
+    const messageCreatedAt = new Date(now);
+    const latePartCreatedAt = now + 30_000;
+
+    const list = new MessageList({ threadId, resourceId });
+    list.add(
+      {
+        id: assistantId,
+        role: 'assistant',
+        type: 'text',
+        createdAt: messageCreatedAt,
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Observed response start' },
+            {
+              type: 'tool-invocation',
+              createdAt: latePartCreatedAt,
+              toolInvocation: { state: 'call', toolCallId: 'tc-late', toolName: 'noop', args: {} },
+            },
+          ],
+        },
+      },
+      'memory',
+    );
+
+    list.add(
+      {
+        id: assistantId,
+        role: 'assistant',
+        type: 'text',
+        createdAt: new Date(now + 2_000),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-late',
+                toolName: 'noop',
+                args: {},
+                result: { ok: true },
+              },
+            },
+            { type: 'text', text: 'Observed response complete' },
+          ],
+        },
+      },
+      'response',
+    );
+
+    const signalForTranscript = list.addSignal(
+      createSignal({
+        id: 'next-signal',
+        type: 'user-message',
+        contents: 'Next signal',
+        createdAt: new Date(now + 3_000),
+      }),
+    );
+
+    expect(signalForTranscript.createdAt.getTime()).toBeLessThan(latePartCreatedAt);
   });
 });
