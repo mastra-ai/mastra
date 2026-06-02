@@ -89,6 +89,58 @@ describe('Agent signal routes', () => {
     });
   });
 
+  it('approves tool calls through the subscription-native route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const result = await agent.sendToolApproval({
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      toolCallId: 'tool-call-123',
+      approved: true,
+      requestContext: { userId: 'user-123' },
+    });
+
+    expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-tool-approval', {
+      method: 'POST',
+      body: {
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+        toolCallId: 'tool-call-123',
+        approved: true,
+        requestContext: { userId: 'user-123' },
+      },
+    });
+  });
+
+  it('declines tool calls through the subscription-native route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const result = await agent.sendToolApproval({
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      toolCallId: 'tool-call-123',
+      approved: false,
+      requestContext: { userId: 'user-123' },
+    });
+
+    expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-tool-approval', {
+      method: 'POST',
+      body: {
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+        toolCallId: 'tool-call-123',
+        approved: false,
+        requestContext: { userId: 'user-123' },
+      },
+    });
+  });
+
   it('sends thread-targeted signals with active and idle behavior unchanged', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
@@ -242,6 +294,72 @@ describe('Agent signal routes', () => {
     } as SubscribeAgentThreadParams);
 
     expect(mockRequest.mock.calls[0][1].body).toEqual({ resourceId: 'resource-123', threadId: 'thread-123' });
+  });
+
+  it('aborts active thread runs through the abort route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ aborted: true });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } satisfies SubscribeAgentThreadParams;
+    const routeBody: Body<'POST /agents/:agentId/threads/abort'> = params;
+
+    await expect(agent.abortThread(params)).resolves.toEqual({ aborted: true });
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/abort', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('unsubscribes a thread subscription without aborting the shared client signal', async () => {
+    const sharedAbort = new AbortController();
+    const agent = new Agent({ ...mockClientOptions, abortSignal: sharedAbort.signal }, 'test-agent');
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        cancel,
+      }),
+    );
+    const mockRequest = vi.fn().mockResolvedValue(response);
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const subscription = await agent.subscribeToThread({
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } as SubscribeAgentThreadParams);
+    const processing = subscription.processDataStream({ onChunk: vi.fn() });
+
+    subscription.unsubscribe();
+
+    await expect(processing).resolves.toBeUndefined();
+    expect(sharedAbort.signal.aborted).toBe(false);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps abort separate from unsubscribe on thread subscriptions', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const response = new Response(new ReadableStream());
+    const mockRequest = vi.fn(async (path: string) => {
+      if (path.endsWith('/threads/subscribe')) return response;
+      if (path.endsWith('/threads/abort')) return { aborted: true };
+      throw new Error(`Unexpected request path: ${path}`);
+    });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const subscription = await agent.subscribeToThread({
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } as SubscribeAgentThreadParams);
+
+    await expect(subscription.abort()).resolves.toBe(true);
+    expect(mockRequest).toHaveBeenLastCalledWith('/agents/test-agent/threads/abort', {
+      method: 'POST',
+      body: { resourceId: 'resource-123', threadId: 'thread-123' },
+    });
   });
 
   it('executes clientTools after tool-calls finish and continues with tool-result messages', async () => {

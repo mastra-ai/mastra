@@ -247,9 +247,24 @@ Existing stored signal rows and older clients continue to load through the compa
 Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
 :::
 
+## Approve tool calls
+
+When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The call returns a JSON acknowledgement. The resumed chunks arrive through the existing thread subscription.
+
+```typescript title="src/app/chat.ts"
+await agent.sendToolApproval({
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+  toolCallId: 'tool-call_456',
+  approved: true,
+})
+```
+
+Pass `approved: false` to decline the same pending tool call. Use the older `approveToolCall()` and `declineToolCall()` methods only when you are rendering the separate continuation stream directly.
+
 ## Use HTTP routes
 
-If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-message` for immediate messages and `POST /api/agents/:agentId/queue-message` for next-turn messages. See [Server routes reference](/reference/server/routes#agent-message-routes) for request and response schemas.
+If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-message` for immediate messages and `POST /api/agents/:agentId/queue-message` for next-turn messages. For subscription-native tool approval, use `POST /api/agents/:agentId/send-tool-approval`. See [Server routes reference](/reference/server/routes#agent-message-routes) for request and response schemas.
 
 ## Use the client SDK
 
@@ -309,3 +324,4 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 - [Server agent routes](/reference/server/routes#agent-message-routes)
 - [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)
+- [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval)

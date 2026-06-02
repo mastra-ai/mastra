@@ -1648,6 +1648,7 @@ export class Workflow<
 {
   public id: TWorkflowId;
   public description?: string | undefined;
+  public metadata?: Record<string, unknown> | undefined;
   public inputSchema: StandardSchemaWithJSON<TInput>;
   public outputSchema: StandardSchemaWithJSON<TOutput>;
   public stateSchema?: StandardSchemaWithJSON<TState>;
@@ -1682,6 +1683,7 @@ export class Workflow<
     stateSchema,
     requestContextSchema,
     description,
+    metadata,
     executionEngine,
     retryConfig,
     steps,
@@ -1691,6 +1693,7 @@ export class Workflow<
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;
+    this.metadata = metadata;
     this.inputSchema = inputSchema ? toStandardSchema(inputSchema) : inputSchema;
     this.outputSchema = outputSchema ? toStandardSchema(outputSchema) : outputSchema;
     this.stateSchema = stateSchema ? toStandardSchema(stateSchema) : undefined;
@@ -2763,8 +2766,10 @@ export class Workflow<
   }
 
   public async listActiveWorkflowRuns() {
-    const runningRuns = await this.listWorkflowRuns({ status: 'running' });
-    const waitingRuns = await this.listWorkflowRuns({ status: 'waiting' });
+    const [runningRuns, waitingRuns] = await Promise.all([
+      this.listWorkflowRuns({ status: 'running' }),
+      this.listWorkflowRuns({ status: 'waiting' }),
+    ]);
 
     return {
       runs: [...runningRuns.runs, ...waitingRuns.runs],

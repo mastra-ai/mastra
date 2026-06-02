@@ -1032,19 +1032,9 @@ export class AgentChannels {
       platform,
     });
 
-    // Subscribe BEFORE sending the signal so the subscription metadata write
-    // happens before the agent run loads the thread snapshot. Otherwise the
-    // in-flight agent run can read the thread pre-subscribe and later
-    // overwrite the `channel_subscribed` field via its own thread persistence.
-    await chatThread.subscribe();
-
-    // Refresh the thread snapshot so the agent run sees the post-subscribe
-    // metadata. Without this, `prepareMemoryStep`'s deepEqual would detect a
-    // metadata mismatch and overwrite the freshly-written `channel_subscribed`
-    // with the stale pre-subscribe value.
-    const memoryStore = await mastra.getStorage()?.getStore('memory');
-    const refreshedThread = memoryStore ? await memoryStore.getThreadById({ threadId: mastraThread.id }) : null;
-    const threadForRun = refreshedThread ?? mastraThread;
+    void chatThread.subscribe().catch(err => {
+      this.log('debug', 'chatThread.subscribe failed', err);
+    });
 
     // When the message is text-only, pass the bare string to the signal pipeline.
     // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
@@ -1064,7 +1054,7 @@ export class AgentChannels {
           streamOptions: {
             requestContext,
             memory: {
-              thread: threadForRun,
+              thread: mastraThread.id,
               resource: threadResourceId,
             },
             // Without approval-button rendering, auto-approve tools to

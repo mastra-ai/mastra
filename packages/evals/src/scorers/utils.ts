@@ -728,19 +728,28 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
 
   for (let messageIndex = 0; messageIndex < output.length; messageIndex++) {
     const message = output[messageIndex];
-    // Tool invocations are now nested under content
-    if (message?.content?.toolInvocations) {
-      for (let invocationIndex = 0; invocationIndex < message.content.toolInvocations.length; invocationIndex++) {
-        const invocation = message.content.toolInvocations[invocationIndex];
-        if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
-          toolCalls.push(invocation.toolName);
-          toolCallInfos.push({
-            toolName: invocation.toolName,
-            toolCallId: invocation.toolCallId || `${messageIndex}-${invocationIndex}`,
-            messageIndex,
-            invocationIndex,
-          });
-        }
+    // Prefer the legacy toolInvocations array when present; fall back to
+    // V2 content.parts for messages that only store tool calls there.
+    const legacy = message?.content?.toolInvocations;
+    const fromParts = legacy
+      ? undefined
+      : message?.content?.parts
+          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
+          .map(p => p.toolInvocation);
+    const toolInvocations = legacy ?? fromParts;
+
+    if (!toolInvocations?.length) continue;
+
+    for (let invocationIndex = 0; invocationIndex < toolInvocations.length; invocationIndex++) {
+      const invocation = toolInvocations[invocationIndex];
+      if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
+        toolCalls.push(invocation.toolName);
+        toolCallInfos.push({
+          toolName: invocation.toolName,
+          toolCallId: invocation.toolCallId || `${messageIndex}-${invocationIndex}`,
+          messageIndex,
+          invocationIndex,
+        });
       }
     }
   }
@@ -831,8 +840,17 @@ export function extractToolResults(output: ScorerRunOutputForAgent): ToolResultI
   const results: ToolResultInfo[] = [];
 
   for (const message of output) {
-    const toolInvocations = message?.content?.toolInvocations;
-    if (!toolInvocations) continue;
+    // Prefer the legacy toolInvocations array when present; fall back to
+    // V2 content.parts for messages that only store tool calls there.
+    const legacy = message?.content?.toolInvocations;
+    const fromParts = legacy
+      ? undefined
+      : message?.content?.parts
+          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
+          .map(p => p.toolInvocation);
+    const toolInvocations = legacy ?? fromParts;
+
+    if (!toolInvocations?.length) continue;
 
     for (const invocation of toolInvocations) {
       if (invocation.state === 'result' && invocation.result !== undefined) {
