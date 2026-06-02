@@ -439,6 +439,9 @@ jobs:
           echo "Finished updating workspace dependencies. $changed_count files updated."
         shell: bash
 
+      - name: Update lockfile
+        run: pnpm install --no-frozen-lockfile --lockfile-only
+
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
 
