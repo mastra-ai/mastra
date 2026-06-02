@@ -9,6 +9,29 @@ import { z } from 'zod/v3';
 // getAgent(). This lets us assert what the React hook actually forwards to the
 // underlying client-js Agent methods.
 const sendSignalMock = vi.fn(async () => ({ accepted: true, runId: 'run-mock' }));
+let nextApproveToolCallChunks: Array<any> = [];
+const approveToolCallProcessDataStreamMock = vi.fn(
+  async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
+    for (const chunk of nextApproveToolCallChunks) {
+      await onChunk(chunk);
+    }
+  },
+);
+const approveToolCallMock = vi.fn(async () => ({
+  body: { cancel: vi.fn() },
+  processDataStream: approveToolCallProcessDataStreamMock,
+}));
+const sendToolApprovalMock = vi.fn(async () => ({
+  accepted: true,
+  runId: 'run-approval',
+  toolCallId: 'tool-call-approval-1',
+}));
+const declineToolCallMock = vi.fn(async () => ({
+  body: { cancel: vi.fn() },
+  processDataStream: async () => {
+    /* no chunks */
+  },
+}));
 const streamUntilIdleMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: async () => {
@@ -61,6 +84,9 @@ vi.mock('@mastra/client-js', () => ({
     getAgent() {
       return {
         sendSignal: sendSignalMock,
+        approveToolCall: approveToolCallMock,
+        sendToolApproval: sendToolApprovalMock,
+        declineToolCall: declineToolCallMock,
         streamUntilIdle: streamUntilIdleMock,
         subscribeToThread: subscribeToThreadMock,
         generate: generateMock,
@@ -87,12 +113,17 @@ describe('useChat forwards clientTools', () => {
 
   beforeEach(() => {
     sendSignalMock.mockClear();
+    approveToolCallMock.mockClear();
+    sendToolApprovalMock.mockClear();
+    declineToolCallMock.mockClear();
+    approveToolCallProcessDataStreamMock.mockClear();
     streamUntilIdleMock.mockClear();
     subscribeToThreadMock.mockClear();
     threadSubscriptionAbortMock.mockClear();
     threadSubscriptionUnsubscribeMock.mockClear();
     generateMock.mockClear();
     nextSubscribeChunks = [];
+    nextApproveToolCallChunks = [];
     keepSubscriptionOpen = false;
     omitThreadSubscriptionUnsubscribe = false;
     constructedClientOptions.length = 0;
@@ -100,6 +131,317 @@ describe('useChat forwards clientTools', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('marks subscription streams idle while waiting for tool approval', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { messageId: 'msg-approval' },
+      },
+      {
+        type: 'tool-call',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      expect(lastMessage?.metadata?.mode).toBe('stream');
+      if (lastMessage?.metadata?.mode !== 'stream') throw new Error('expected stream metadata');
+      expect(lastMessage.metadata.requireApprovalMetadata?.weatherTool).toEqual({
+        toolCallId: 'tool-call-approval-1',
+        toolName: 'weatherTool',
+        args: { city: 'London' },
+      });
+    });
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+  });
+
+  it('sends a new message for server-side queueing while waiting for subscription tool approval', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { messageId: 'msg-approval' },
+      },
+      {
+        type: 'tool-call',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'Vancouver' } },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'Vancouver' } },
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+    sendSignalMock.mockClear();
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'paris',
+        threadId: 'thread-1',
+      });
+    });
+
+    expect(sendSignalMock).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.objectContaining({ contents: 'paris' }), threadId: 'thread-1' }),
+    );
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+  });
+
+  it('uses subscription-native approval while subscribed to the thread', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { messageId: 'msg-approval' },
+      },
+      {
+        type: 'tool-call',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+    ];
+    keepSubscriptionOpen = true;
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      expect(lastMessage?.metadata?.mode).toBe('stream');
+      if (lastMessage?.metadata?.mode !== 'stream') throw new Error('expected stream metadata');
+      expect(lastMessage.metadata.requireApprovalMetadata?.weatherTool).toBeDefined();
+    });
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(sendToolApprovalMock).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolCallId: 'tool-call-approval-1',
+      approved: true,
+      requestContext: undefined,
+    });
+    expect(approveToolCallMock).not.toHaveBeenCalled();
+    expect(approveToolCallProcessDataStreamMock).not.toHaveBeenCalled();
+    expect(result.current.isAwaitingToolApproval).toBe(false);
+
+    unmount();
+  });
+
+  it('keeps subscription approval pending when the server ACK fails', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { messageId: 'msg-approval' },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+    ];
+    keepSubscriptionOpen = true;
+    sendToolApprovalMock.mockRejectedValueOnce(new Error('approval failed'));
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+
+    await expect(
+      act(async () => {
+        await result.current.approveToolCall('tool-call-approval-1');
+      }),
+    ).rejects.toThrow('approval failed');
+
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+
+    unmount();
+  });
+
+  it('keeps remaining parallel subscription approvals clickable after approving one tool call', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { messageId: 'msg-approval' },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'locationTool', toolCallId: 'tool-call-approval-2', args: { city: 'Paris' } },
+      },
+    ];
+    keepSubscriptionOpen = true;
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-2');
+    });
+
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.isAwaitingToolApproval).toBe(false);
+
+    unmount();
+  });
+
+  it('restores parallel pending approval state from initial messages', async () => {
+    keepSubscriptionOpen = true;
+    const initialMessages = [
+      {
+        id: 'msg-approval',
+        role: 'assistant',
+        parts: [],
+        metadata: {
+          mode: 'stream',
+          requireApprovalMetadata: {
+            weatherTool: {
+              runId: 'run-approval',
+              toolCallId: 'tool-call-approval-1',
+              toolName: 'weatherTool',
+            },
+            locationTool: {
+              runId: 'run-approval',
+              toolCallId: 'tool-call-approval-2',
+              toolName: 'locationTool',
+            },
+          },
+        },
+      },
+    ] as any;
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-2');
+    });
+
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.isAwaitingToolApproval).toBe(false);
+
+    unmount();
   });
 
   it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
