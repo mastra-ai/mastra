@@ -1,5 +1,41 @@
 # @mastra/core
 
+## 1.38.0-alpha.6
+
+### Patch Changes
+
+- Added subscription-native tool approval APIs so approving or declining a tool call resumes through the active thread subscription instead of requiring a separate continuation stream. New messages are queued while a tool approval is waiting, preventing overlapping runs from duplicating approval requests. ([#17311](https://github.com/mastra-ai/mastra/pull/17311))
+
+  ```ts
+  await agent.sendToolApproval({
+    resourceId: 'user-123',
+    threadId: 'thread-123',
+    toolCallId: 'tool-call-123',
+    approved: true,
+  });
+  ```
+
+- Fixed a render crash when loading stored threads containing signal messages (such as system reminders). Non-user signal data parts are now merged onto the neighboring assistant message instead of becoming standalone system messages that break assistant-ui. ([#17429](https://github.com/mastra-ai/mastra/pull/17429))
+
+- Added Alibaba provider support for Qwen models. You can now use Qwen, DashScope, and other Alibaba models with automatic provider detection. ([#17433](https://github.com/mastra-ai/mastra/pull/17433))
+
+  **Example usage:**
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+
+  const mastra = new Mastra();
+
+  // Use any Alibaba variant - automatically detected
+  const agent = mastra.getAgent('myAgent');
+  const result = await agent.generate({
+    model: '__GATEWAY_ALIBABA_MODEL__',
+    messages: [{ role: 'user', content: 'Hello' }],
+  });
+  ```
+
+  Works with all Alibaba variants (alibaba, alibaba-cn, alibaba-coding-plan, etc.) and future variants like alibaba-coding-plan-cn-v2.
+
 ## 1.38.0-alpha.5
 
 ### Minor Changes

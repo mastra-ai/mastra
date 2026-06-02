@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 31.0.0-alpha.6
+
+### Patch Changes
+
+- Agent Builder starter agents now use the admin-configured default model when the model policy has one set. Previously, the starter ignored the admin default and always picked the first entry from the picker allowlist, which surfaced as "default model gets over-written by agent builder" on agents created from starter cards or the freeform prompt. ([#17424](https://github.com/mastra-ai/mastra/pull/17424))
+
+  When no admin default is set, behavior is unchanged: the starter falls back to the first allowed model, then to the hardcoded fallback.
+
+- Improved switch focus, disabled, and motion states. ([#17416](https://github.com/mastra-ai/mastra/pull/17416))
+
+- Updated dependencies [[`860ec4e`](https://github.com/mastra-ai/mastra/commit/860ec4edf6aa508edfd4f34c312c141209eb0dbf), [`bb3fce8`](https://github.com/mastra-ai/mastra/commit/bb3fce8f8d80079170c0f98cb2efbb29ae34375d), [`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3), [`05d61e1`](https://github.com/mastra-ai/mastra/commit/05d61e18aa014a012a32ee9cb79cdcf3210dbe9d)]:
+  - @mastra/react@0.4.3-alpha.6
+  - @mastra/client-js@1.22.0-alpha.6
+  - @mastra/core@1.38.0-alpha.6
+
 ## 31.0.0-alpha.5
 
 ### Patch Changes
