@@ -284,10 +284,10 @@ export function ExperimentPageTabs({
         <DatasetReview datasetId={datasetId} experimentId={experimentId} featuredItemId={reviewFeaturedItemId} />
       </TabContent>
 
-      <TabContent value="results" className="grid grid-rows-[auto_1fr] overflow-hidden mt-5">
-        <div>
+      <TabContent value="results" className="grid grid-rows-[auto_1fr] overflow-hidden mt-2">
+        <div className="mb-4">
           {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-surface3 border-b border-border1 rounded-t">
+            <div className="flex items-center gap-2 px-4 py-2 bg-surface3">
               <Txt variant="ui-xs" className="text-neutral5 font-medium">
                 {selectedIds.size} selected
               </Txt>
@@ -304,7 +304,7 @@ export function ExperimentPageTabs({
             </div>
           )}
           {results.length > 0 && selectedIds.size === 0 && !isLoading && (
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-border1">
+            <div className="flex items-center gap-2 px-4 py-2">
               <Button variant="ghost" size="sm" onClick={selectLoadedFailed}>
                 Select loaded failures
               </Button>
