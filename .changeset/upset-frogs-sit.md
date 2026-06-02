@@ -1,5 +1,6 @@
 ---
 'mastra': patch
+'@internal/playground': patch
 '@mastra/react': patch
 '@mastra/deployer': patch
 '@mastra/deployer-vercel': patch
