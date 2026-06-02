@@ -47,7 +47,7 @@ describe('agent signal UI conversion', () => {
       AIV5Adapter.toUIMessage(dbMessage),
       AIV6Adapter.toUIMessage(dbMessage),
     ]) {
-      expect(uiMessage.role).toBe('system');
+      expect(uiMessage.role).toBe('user');
       expect(uiMessage.parts).toEqual([
         {
           type: 'data-system-reminder',
