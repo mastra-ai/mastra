@@ -372,6 +372,8 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
       .describe('Optional message describing the changes for the auto-created version'),
   });
 
+export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();
+
 // ============================================================================
 // Response Schemas
 // ============================================================================
@@ -498,6 +500,13 @@ export const updateStoredAgentResponseSchema = z.union([
 export const deleteStoredAgentResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
+});
+
+export const exportStoredAgentResponseSchema = z.object({
+  agentId: z.string(),
+  fileName: z.string(),
+  content: z.string(),
+  config: z.record(z.string(), z.unknown()),
 });
 
 // ============================================================================

@@ -13,6 +13,8 @@ import type {
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
   FavoriteToggleResponse,
+  ExportStoredAgentParams,
+  ExportStoredAgentResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
 
@@ -62,6 +64,16 @@ export class StoredAgent extends BaseResource {
         body: params,
       },
     );
+  }
+
+  /**
+   * Exports deterministic JSON for this agent without mutating storage.
+   */
+  export(params: ExportStoredAgentParams): Promise<ExportStoredAgentResponse> {
+    return this.request(`/stored/agents/${encodeURIComponent(this.storedAgentId)}/export`, {
+      method: 'POST',
+      body: params,
+    });
   }
 
   /**

@@ -40,7 +40,6 @@ catalog:
   zod: ^4.4.3
 
 patchedDependencies:
-  '@changesets/get-dependents-graph@2.1.3': patches/@changesets__get-dependents-graph.patch
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   tsup@8.5.1: patches/tsup@8.5.1.patch
 

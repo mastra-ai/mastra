@@ -23,6 +23,14 @@ export interface PinoLoggerOptions<CustomLevels extends string = never> {
    * @default true
    */
   prettyPrint?: boolean;
+  /**
+   * Override the key used for the log message.
+   * Defaults to Pino's built-in 'msg' key.
+   * Set to 'message' for compatibility with Google Cloud Logging,
+   * Elastic Common Schema (ECS), Datadog, and AWS CloudWatch.
+   * @example 'message'
+   */
+  messageKey?: string;
 }
 
 interface PinoLoggerInternalOptions<CustomLevels extends string = never> extends PinoLoggerOptions<CustomLevels> {
@@ -66,6 +74,7 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
         redact: options.redact,
         mixin: options.mixin,
         customLevels: options.customLevels,
+        messageKey: options.messageKey ?? 'msg',
       },
       options.overrideDefaultTransports
         ? options?.transports?.default

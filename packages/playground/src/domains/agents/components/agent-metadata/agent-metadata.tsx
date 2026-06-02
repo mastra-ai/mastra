@@ -1,7 +1,7 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { languages } from '@codemirror/language-data';
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import {
+  codeLanguages,
   Notice,
   Badge,
   useCodemirrorTheme,
@@ -230,7 +230,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           className="border border-border1 rounded-md"
           value={extractPrompt(agent.instructions)}
           editable={false}
-          extensions={[markdown({ base: markdownLanguage, codeLanguages: languages }), EditorView.lineWrapping]}
+          extensions={[markdown({ base: markdownLanguage, codeLanguages }), EditorView.lineWrapping]}
           theme={codemirrorTheme}
         />
         {!isCmsLoading && !isCmsAvailable && (

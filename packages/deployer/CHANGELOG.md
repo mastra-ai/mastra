@@ -1,5 +1,30 @@
 # @mastra/deployer
 
+## 1.38.0-alpha.6
+
+### Patch Changes
+
+- dependencies updates: ([#17146](https://github.com/mastra-ai/mastra/pull/17146))
+  - Updated dependency [`@babel/core@^7.29.7` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.29.7) (from `^7.29.0`, in `dependencies`)
+  - Updated dependency [`@babel/preset-typescript@^7.29.7` ↗︎](https://www.npmjs.com/package/@babel/preset-typescript/v/7.29.7) (from `^7.28.5`, in `dependencies`)
+  - Updated dependency [`@babel/traverse@^7.29.7` ↗︎](https://www.npmjs.com/package/@babel/traverse/v/7.29.7) (from `^7.29.0`, in `dependencies`)
+
+- Enabled Studio via the CLI and deployers to use agent signal subscriptions by default while preserving `MASTRA_AGENT_SIGNALS=false`, `enableThreadSignals: false`, and explicit legacy Stream as opt-outs. The React `useChat()` hook remains opt-in for SDK consumers via `enableThreadSignals: true`. ([#17313](https://github.com/mastra-ai/mastra/pull/17313))
+
+- Updated dependencies [[`bb3fce8`](https://github.com/mastra-ai/mastra/commit/bb3fce8f8d80079170c0f98cb2efbb29ae34375d), [`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`1a97509`](https://github.com/mastra-ai/mastra/commit/1a975099596faf8c3d7e19f6235d5b2969cc39a9), [`1fad344`](https://github.com/mastra-ai/mastra/commit/1fad344c6554142b2061f480ae0b336164ab5efb), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3)]:
+  - @mastra/server@1.38.0-alpha.6
+  - @mastra/core@1.38.0-alpha.6
+
+## 1.38.0-alpha.5
+
+### Patch Changes
+
+- The server now installs SIGINT/SIGTERM handlers and runs `mastra.shutdown()` before exiting, allowing storage backends to release resources cleanly instead of being terminated mid-flight. ([#17413](https://github.com/mastra-ai/mastra/pull/17413))
+
+- Updated dependencies [[`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15), [`309f7c9`](https://github.com/mastra-ai/mastra/commit/309f7c9899ee6870a07a16690a091c6ba7af4e1e), [`66d65f5`](https://github.com/mastra-ai/mastra/commit/66d65f58e4b1f862c7f7928866a4426f8de9d583)]:
+  - @mastra/core@1.38.0-alpha.5
+  - @mastra/server@1.38.0-alpha.5
+
 ## 1.38.0-alpha.4
 
 ### Patch Changes
