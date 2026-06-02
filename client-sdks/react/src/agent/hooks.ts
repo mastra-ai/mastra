@@ -17,9 +17,7 @@ import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import { useMastraClient } from '../mastra-client-context';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
-import type { ModelSettings } from './types';
-
-type ToolsInput = any;
+import type { ClientToolsInput, ModelSettings } from './types';
 
 const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) => {
   const pendingToolApprovalIds = new Set<string>();
@@ -141,7 +139,7 @@ export interface MastraChatProps {
    * the client-js subscription drives the full client-tool execution loop
    * (execute, emit tool-result, continuation) without any logic in React.
    */
-  clientTools?: Record<string, unknown>;
+  clientTools?: ClientToolsInput;
   onSignalSent?: (signalId: string, preview: string) => void;
   onSignalEcho?: (signalId: string) => void;
   onThreadSignalsUnsupported?: () => void;
@@ -170,12 +168,12 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
 
 export type GenerateArgs = SharedArgs & {
   onFinish?: (messages: MastraDBMessage[]) => Promise<void>;
-  clientTools?: ToolsInput;
+  clientTools?: ClientToolsInput;
 };
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
-  clientTools?: ToolsInput;
+  clientTools?: ClientToolsInput;
   signalId?: string;
 };
 
@@ -183,14 +181,25 @@ export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const getErrorName = (error: unknown) => (isObject(error) && typeof error.name === 'string' ? error.name : undefined);
+
+const isAbortError = (error: unknown) => getErrorName(error) === 'AbortError';
+
 const isThreadSignalUnsupportedError = (error: unknown) => {
-  const candidate = error as { status?: number; message?: string; body?: unknown } | undefined;
-  const status = candidate?.status;
+  if (!isObject(error)) return false;
+
+  const status = error.status;
   if (status === 404 || status === 405 || status === 501) {
     return true;
   }
 
-  return status === 400 && candidate?.message?.includes('No active agent run found for signal target');
+  return (
+    status === 400 &&
+    typeof error.message === 'string' &&
+    error.message.includes('No active agent run found for signal target')
+  );
 };
 
 type DataChunk = Extract<ChunkType, DataChunkType>;
@@ -415,13 +424,9 @@ export const useChat = ({
       _threadSubscriptionPromiseRef.current = subscriptionAgent
         .subscribeToThread({ resourceId, threadId })
         .then(response => {
-          const subscription = response as typeof response & { unsubscribe?: () => void };
+          const subscription = response;
           if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
-            if (subscription.unsubscribe) {
-              subscription.unsubscribe();
-            } else {
-              subscriptionAbort.abort();
-            }
+            subscription.unsubscribe();
             return;
           }
 
@@ -431,7 +436,7 @@ export const useChat = ({
               onChunk: chunk => processStreamChunk(chunk),
             })
             .catch(error => {
-              if ((error as { name?: string }).name !== 'AbortError') {
+              if (!isAbortError(error)) {
                 console.error('[useChat] Thread subscription failed', error);
                 setIsRunning(false);
               }
@@ -459,7 +464,7 @@ export const useChat = ({
             return;
           }
 
-          if ((error as { name?: string }).name !== 'AbortError') {
+          if (!isAbortError(error)) {
             console.error('[useChat] Thread subscription failed', error);
             setIsRunning(false);
           }
@@ -483,7 +488,7 @@ export const useChat = ({
     }
 
     void ensureThreadSubscription({ threadId, resourceId: resourceId || agentId }).catch(error => {
-      if ((error as { name?: string }).name !== 'AbortError') {
+      if (!isAbortError(error)) {
         console.error('[useChat] Thread subscription failed', error);
       }
     });
@@ -542,7 +547,7 @@ export const useChat = ({
       instructions,
       requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
-      providerOptions: providerOptions as any,
+      providerOptions,
       tracingOptions,
       requireToolApproval,
       clientTools: resolvedClientTools,
@@ -618,7 +623,7 @@ export const useChat = ({
         topP,
       },
       instructions,
-      providerOptions: providerOptions as any,
+      providerOptions,
       requireToolApproval,
       tracingOptions,
     };
@@ -658,7 +663,7 @@ export const useChat = ({
         instructions,
         requestContext: resolvedRequestContext,
         ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
-        providerOptions: providerOptions as any,
+        providerOptions,
         requireToolApproval,
         tracingOptions,
         clientTools: resolvedClientTools,
@@ -707,7 +712,7 @@ export const useChat = ({
           streamOptions: {
             ...signalContinuationOptions,
             requestContext: resolvedRequestContext,
-            clientTools: resolvedClientTools as any,
+            clientTools: resolvedClientTools,
           },
         },
       });

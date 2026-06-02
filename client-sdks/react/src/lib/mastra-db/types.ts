@@ -14,25 +14,27 @@ export type TripwireMetadata = {
   processorId?: string;
 };
 
+export type ToolApprovalArgs = Record<string, unknown>;
+
 export type RequireApprovalEntry = {
   toolCallId: string;
   toolName: string;
-  args: Record<string, any>;
+  args: ToolApprovalArgs;
   runId?: string;
 };
 
 export type SuspendedToolEntry = {
   toolCallId: string;
   toolName: string;
-  args: Record<string, any>;
-  suspendPayload: any;
+  args: ToolApprovalArgs;
+  suspendPayload: unknown;
   runId?: string;
 };
 
 export type PendingToolApprovalEntry = {
   toolCallId: string;
   toolName: string;
-  args: Record<string, any>;
+  args: ToolApprovalArgs;
   runId?: string;
 };
 

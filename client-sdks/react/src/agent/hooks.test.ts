@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod/v3';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
+import type { ClientToolsInput } from './types';
 
 // Capture spies that every constructed MastraClient instance will expose via
 // getAgent(). This lets us assert what the React hook actually forwards to the
@@ -133,11 +134,10 @@ const toolExecutionEndChunk = (toolCallId: string, result: unknown) => ({
 });
 
 describe('useChat forwards clientTools', () => {
-  const clientTools = {
+  const clientTools: ClientToolsInput = {
     testTool: {
       id: 'testTool',
       description: 'A test tool',
-      inputSchema: z.object({ input: z.string() }),
       execute: vi.fn(),
     },
   };
@@ -467,17 +467,19 @@ describe('useChat forwards clientTools', () => {
                 runId: 'run-approval',
                 toolCallId: 'tool-call-approval-1',
                 toolName: 'weatherTool',
+                args: {},
               },
               locationTool: {
                 runId: 'run-approval',
                 toolCallId: 'tool-call-approval-2',
                 toolName: 'locationTool',
+                args: {},
               },
             },
           },
         },
       },
-    ] as any;
+    ] satisfies MastraDBMessage[];
 
     const { result, unmount } = renderHook(
       () =>
@@ -532,7 +534,7 @@ describe('useChat forwards clientTools', () => {
           },
         },
       },
-    ] as any;
+    ] satisfies MastraDBMessage[];
 
     const { result } = renderHook(
       () =>
@@ -591,7 +593,7 @@ describe('useChat forwards clientTools', () => {
           },
         },
       },
-    ] as any;
+    ] satisfies MastraDBMessage[];
 
     const { result } = renderHook(
       () =>
@@ -638,7 +640,7 @@ describe('useChat forwards clientTools', () => {
           },
         },
       },
-    ] as any;
+    ] satisfies MastraDBMessage[];
 
     const { result } = renderHook(
       () =>
