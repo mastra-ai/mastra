@@ -13,6 +13,7 @@ import {
   SelectList,
   Spacer,
   Text,
+  truncateToWidth,
   visibleWidth,
 } from '@mariozechner/pi-tui';
 import type { Component, Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
@@ -45,8 +46,14 @@ class PlanContentBox implements Component {
     const top = `${border('╭')}${border('─'.repeat(innerWidth + 2))}${border('╮')}`;
     const bottom = `${border('╰')}${border('─'.repeat(innerWidth + 2))}${border('╯')}`;
     const body = rendered.map(line => {
-      const padding = ' '.repeat(Math.max(0, innerWidth - visibleWidth(line)));
-      return `${border('│')} ${line}${padding} ${border('│')}`;
+      let content = line;
+      let contentVis = visibleWidth(content);
+      if (contentVis > innerWidth) {
+        content = truncateToWidth(content, innerWidth);
+        contentVis = visibleWidth(content);
+      }
+      const padding = ' '.repeat(Math.max(0, innerWidth - contentVis));
+      return `${border('│')} ${content}${padding} ${border('│')}`;
     });
     return [top, ...body, bottom];
   }

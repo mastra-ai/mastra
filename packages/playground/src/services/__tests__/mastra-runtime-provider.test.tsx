@@ -6,7 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   cancelRun: vi.fn(),
   runtimeProps: undefined as any,
+  threadRuntimeState: undefined as any,
   sendMessage: vi.fn(),
+  chatState: {
+    isAwaitingToolApproval: false,
+    isRunning: false,
+  },
 }));
 
 vi.mock('@assistant-ui/react', () => ({
@@ -49,7 +54,8 @@ vi.mock('@mastra/react', () => ({
     declineNetworkToolCall: vi.fn(),
     declineToolCall: vi.fn(),
     declineToolCallGenerate: vi.fn(),
-    isRunning: false,
+    isRunning: mocks.chatState.isRunning,
+    isAwaitingToolApproval: mocks.chatState.isAwaitingToolApproval,
     messages: [],
     networkToolCallApprovals: {},
     sendMessage: mocks.sendMessage,
@@ -107,7 +113,10 @@ vi.mock('@/lib/ai-ui/hooks/use-adapters', () => ({
 }));
 
 vi.mock('@/lib/ai-ui/thread-runtime-state', () => ({
-  ThreadRuntimeStateProvider: ({ children }: { children: ReactNode }) => children,
+  ThreadRuntimeStateProvider: ({ children, value }: { children: ReactNode; value: any }) => {
+    mocks.threadRuntimeState = value;
+    return children;
+  },
 }));
 
 vi.mock('../tool-call-provider', () => ({
@@ -120,6 +129,9 @@ describe('MastraRuntimeProvider', () => {
   beforeEach(() => {
     mocks.cancelRun.mockReset();
     mocks.runtimeProps = undefined;
+    mocks.threadRuntimeState = undefined;
+    mocks.chatState.isAwaitingToolApproval = false;
+    mocks.chatState.isRunning = false;
     mocks.sendMessage.mockReset();
     (window as any).MASTRA_AGENT_SIGNALS = 'false';
   });

@@ -795,6 +795,79 @@ describe('Agent signals', () => {
     }
   });
 
+  it('delivers resumed runs with the same run id to thread subscribers', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'resumed-thread-agent' } as Agent<any, any, any, any>;
+    const threadId = 'resumed-thread';
+    const resourceId = 'resumed-user';
+    const runId = 'resumed-run';
+
+    const createRun = (parts: any[]) => {
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const fullStream = new ReadableStream({
+        start(controller) {
+          setTimeout(() => {
+            for (const part of parts) controller.enqueue(part);
+            controller.close();
+            finish();
+          }, 5);
+        },
+      });
+
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+    };
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      createRun([
+        { type: 'start', runId },
+        {
+          type: 'tool-call-suspended',
+          runId,
+          payload: { toolCallId: 'tool-call-1', toolName: 'testTool' },
+        },
+      ]);
+
+      await withTimeout(iterator.next(), 'Timed out waiting for initial resumed-run start');
+      const suspended = await withTimeout(iterator.next(), 'Timed out waiting for suspended chunk');
+      expect(suspended.value).toMatchObject({ type: 'tool-call-suspended', runId });
+      await waitForCondition(() => subscription.activeRunId() === null);
+
+      const resumedRun = readNextRun(iterator);
+      createRun([
+        { type: 'start', runId },
+        { type: 'text-start', runId, payload: { id: 'text-1' } },
+        { type: 'text-delta', runId, payload: { id: 'text-1', text: 'approved response' } },
+        { type: 'text-end', runId, payload: { id: 'text-1' } },
+        {
+          type: 'finish',
+          runId,
+          payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+        },
+      ]);
+
+      await expect(withTimeout(resumedRun, 'Timed out waiting for resumed run')).resolves.toMatchObject({
+        value: { runId, text: 'approved response' },
+      });
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
   it('keeps multicast thread streams alive when one subscriber unsubscribes mid-run', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const agent = { id: 'subscriber-cancel-agent' } as Agent<any, any, any, any>;
@@ -1004,6 +1077,58 @@ describe('Agent signals', () => {
     expect(JSON.stringify(prompts[1])).toContain('Hello while active');
 
     subscription.unsubscribe();
+  });
+
+  it('queues sendMessage behind a suspended same-agent approval run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = {
+      id: 'suspended-message-agent',
+      stream: vi.fn(),
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'suspended-message-run';
+    const threadId = 'suspended-message-thread';
+    const resourceId = 'suspended-message-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-approval',
+                runId,
+                payload: { toolCallId: 'tool-call-1', toolName: 'testTool' },
+              });
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      await withTimeout(iterator.next(), 'Timed out waiting for approval run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for approval chunk');
+
+      const result = runtime.sendMessage(agent, 'Queued behind approval', { resourceId, threadId });
+
+      expect(result).toEqual(expect.objectContaining({ accepted: true, runId }));
+      expect((agent as any).stream).not.toHaveBeenCalled();
+      const [signal] = runtime.drainPendingSignals(runId);
+      expect(signal).toMatchObject({ type: 'user', contents: 'Queued behind approval' });
+    } finally {
+      finishRun();
+      subscription.unsubscribe();
+    }
   });
 
   it('queues queueMessage until the active run completes', async () => {
