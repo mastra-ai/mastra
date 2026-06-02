@@ -1,5 +1,14 @@
 # @mastra/loggers
 
+## 1.1.2-alpha.0
+
+### Patch Changes
+
+- Added messageKey option to PinoLogger for compatibility with structured-log aggregators. Set messageKey: 'message' to emit log messages under the message field expected by Google Cloud Logging, Datadog, ECS, and AWS CloudWatch. ([#17450](https://github.com/mastra-ai/mastra/pull/17450))
+
+- Updated dependencies:
+  - @mastra/core@1.38.0-alpha.7
+
 ## 1.1.1
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @mastra/deployer-cloud
 
+## 1.38.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`d2b728c`](https://github.com/mastra-ai/mastra/commit/d2b728c0e6da55901c8dd191692fa4adb668bbd8)]:
+  - @mastra/loggers@1.1.2-alpha.0
+  - @mastra/deployer@1.38.0-alpha.7
+  - @mastra/core@1.38.0-alpha.7
+
 ## 1.38.0-alpha.6
 
 ### Patch Changes

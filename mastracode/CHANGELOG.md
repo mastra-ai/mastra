@@ -1,5 +1,13 @@
 # mastracode
 
+## 0.21.2-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`e36253f`](https://github.com/mastra-ai/mastra/commit/e36253f0cbe1900f84e6eeaa3e0343d66ec1fce3)]:
+  - @mastra/observability@1.14.1-alpha.1
+  - @mastra/core@1.38.0-alpha.7
+
 ## 0.21.2-alpha.6
 
 ### Patch Changes

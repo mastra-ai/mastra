@@ -1,5 +1,13 @@
 # @mastra/react
 
+## 0.4.3-alpha.7
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.38.0-alpha.7
+  - @mastra/client-js@1.22.0-alpha.7
+
 ## 0.4.3-alpha.6
 
 ### Patch Changes

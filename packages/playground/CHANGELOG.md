@@ -1,5 +1,19 @@
 # @internal/playground
 
+## 1.11.0-alpha.7
+
+### Patch Changes
+
+- Reworked the dataset experiment detail view in Studio. The experiment page is now organized into tabs with a top area showing the experiment target (e.g. the scorer) and summary stats, redesigned result and score panels, and an integrated review flow — flagging a result for review jumps straight to that item in the Reviews tab. ([#17464](https://github.com/mastra-ai/mastra/pull/17464))
+
+- Reworked the dataset Review tab in Studio. Items now open in a consistent detail panel with previous/next navigation, positive/negative rating shown as status badges, and a mark-as-complete action, and the input preview shows more text before truncating. ([#17462](https://github.com/mastra-ai/mastra/pull/17462))
+
+- Updated dependencies [[`5fd6ad6`](https://github.com/mastra-ai/mastra/commit/5fd6ad6b48b372e03e5fb16dbce8d2c65de07351), [`f44d9cc`](https://github.com/mastra-ai/mastra/commit/f44d9cc9cf29e43471482e99d86452748ddb464f), [`93791a7`](https://github.com/mastra-ai/mastra/commit/93791a7267c2ca91028de7e0d6141f873a38ee33)]:
+  - @mastra/playground-ui@31.0.0-alpha.7
+  - @mastra/core@1.38.0-alpha.7
+  - @mastra/client-js@1.22.0-alpha.7
+  - @mastra/react@0.4.3-alpha.7
+
 ## 1.11.0-alpha.6
 
 ### Patch Changes
