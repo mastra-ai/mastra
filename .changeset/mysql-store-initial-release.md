@@ -1,5 +1,5 @@
 ---
-'@mastra/mysql': patch
+'@mastra/mysql': minor
 ---
 
 Added the MySQL storage adapter for Mastra. Use it as a storage backend with the same domain coverage as the other first-party adapters (memory, threads, workflows, observability, agents, and more).
