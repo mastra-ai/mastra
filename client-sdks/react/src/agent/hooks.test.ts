@@ -133,7 +133,7 @@ describe('useChat forwards clientTools', () => {
     vi.clearAllMocks();
   });
 
-  it('uses thread signals by default when threadId is provided', async () => {
+  it('uses the legacy stream path by default when threadId is provided', async () => {
     const { result } = renderHook(
       () =>
         useChat({
@@ -152,9 +152,9 @@ describe('useChat forwards clientTools', () => {
       });
     });
 
-    expect(subscribeToThreadMock).toHaveBeenCalledTimes(1);
-    expect(sendSignalMock).toHaveBeenCalledTimes(1);
-    expect(streamUntilIdleMock).not.toHaveBeenCalled();
+    expect(subscribeToThreadMock).not.toHaveBeenCalled();
+    expect(sendSignalMock).not.toHaveBeenCalled();
+    expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
   });
 
   it('marks subscription streams idle while waiting for tool approval', async () => {
