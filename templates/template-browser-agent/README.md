@@ -16,11 +16,9 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 ## Quickstart 🚀
 
-1. **Clone the template**
-   - Run `npx create-mastra@latest --template browser-agent`.
-2. **Add your API keys**
+1. **Add your API keys**
    - Copy `.env.example` to `.env` and fill it in. Set `BROWSER_HEADLESS=false` if you want to watch the agent click around.
-3. **Start the dev server**
+2. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111).
 
 Ask things like:
@@ -52,6 +50,6 @@ Passing `browser` to the agent automatically registers the full browser toolset 
 
 ## About Mastra templates
 
-[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.
 
 Want to contribute? See the [Mastra contributing guide](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md).

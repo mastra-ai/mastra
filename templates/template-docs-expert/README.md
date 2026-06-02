@@ -15,11 +15,9 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 ## Quickstart 🚀
 
-1. **Clone the template**
-   - Run `npx create-mastra@latest --template docs-expert` to scaffold the project locally.
-2. **Add your API keys**
+1. **Add your API keys**
    - Copy `.env.example` to `.env` and fill in your keys.
-3. **Start the dev server**
+2. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
 Ask things like:
@@ -37,6 +35,6 @@ Ask things like:
 
 ## About Mastra templates
 
-[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.
 
 Want to contribute? See the [Mastra contributing guide](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md).

@@ -22,8 +22,6 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 ## Quick start
 
-1. **Clone the template**
-   - Run `npx create-mastra@latest --template csv-to-questions` to scaffold the project locally.
 2. **Add your API key**
    - Copy `.env.example` to `.env` and fill in your OpenAI API key.
 3. **Start the dev server**
@@ -39,6 +37,6 @@ Swap in a different model, or wire the agent into your app using the [Mastra Cli
 
 ## About Mastra templates
 
-[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.
 
 Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-csv-to-questions/CONTRIBUTING.md).

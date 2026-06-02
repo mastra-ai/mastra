@@ -21,18 +21,16 @@ This demo runs in Mastra Studio. Open the `meetingNotesAgent` and ask it to summ
 
 ## Quickstart 🚀
 
-1. **Clone the template**
-   - Run `npx create-mastra@latest --template meeting-notes`.
-2. **Set up a Zoom Server-to-Server OAuth app**
+1. **Set up a Zoom Server-to-Server OAuth app**
    - At https://marketplace.zoom.us → "Develop" → "Build App" → choose "Server-to-Server OAuth".
    - Add these scopes:
      - `cloud_recording:read:list_user_recordings:admin`
      - `cloud_recording:read:recording:admin`
      - `user:read:user:admin`
    - Activate the app and copy the **Account ID**, **Client ID**, and **Client Secret** into `.env`.
-3. **Add your API keys**
+2. **Add your API keys**
    - Copy `.env.example` to `.env` and fill it in.
-4. **Start the dev server**
+3. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111).
 
 Then try:
@@ -67,6 +65,6 @@ Returns the structured notes JSON. Useful for Google Meet / Riverside / Loom / p
 
 ## About Mastra templates
 
-[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.
 
 Want to contribute? See the [Mastra contributing guide](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md).

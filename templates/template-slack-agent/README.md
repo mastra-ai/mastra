@@ -14,18 +14,16 @@ Connecting AI agents to Slack is one of the most common integration patterns —
 
 ## Quickstart 🚀
 
-1. **Clone the template**
-   - Run `npx create-mastra@latest --template slack-agent` to scaffold the project locally.
-2. **Add your API keys**
+1. **Add your API keys**
    - Copy `.env.example` to `.env` and fill in your OpenAI API key and Slack credentials.
-3. **Create Slack apps**
+2. **Create Slack apps**
    - For each agent, create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**.
    - **OAuth & Permissions** → add scopes: `app_mentions:read`, `channels:history`, `chat:write`, `im:history`. Copy the Bot User OAuth Token to `.env`.
    - **Event Subscriptions** → enable and set the Request URL to `https://your-server.com/slack/{agentName}/events`.
    - Subscribe to bot events: `app_mention`, `message.im`.
    - **Agents & AI Apps** → toggle on.
    - **Basic Information** → copy Signing Secret to `.env`.
-4. **Start the dev server**
+3. **Start the dev server**
    - Run `ngrok http 4111` to get a public URL, then `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
 ## Making it yours
@@ -39,6 +37,6 @@ This template is a starting point. Here are some ideas to make it your own:
 
 ## About Mastra templates
 
-[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.
 
 Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-slack-agent/CONTRIBUTING.md).

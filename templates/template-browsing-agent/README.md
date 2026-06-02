@@ -22,11 +22,9 @@ This project enables AI agents to interact with web pages through the Mastra fra
 
 ## Quickstart 🚀
 
-1. **Clone the template**
-   - Run `npx create-mastra@latest --template browsing-agent` to scaffold the project locally.
-2. **Add your API keys**
+1. **Add your API keys**
    - Copy `.env.example` to `.env` and fill in your keys.
-3. **Start the dev server**
+2. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
 ## Making it yours
@@ -35,6 +33,6 @@ Open Studio and select the "Web Assistant" agent.
 
 ## About Mastra templates
 
-[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.
 
 Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-browsing-agent/CONTRIBUTING.md).
