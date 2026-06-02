@@ -111,23 +111,8 @@ export class FavoritesMySQL extends FavoritesStorage {
       schema: FAVORITES_SCHEMA,
     });
 
-    // Ensure unique constraint exists for idempotency (MySQL doesn't allow TEXT in PK without key length)
-    const tableName = formatTableName(TABLE_FAVORITES);
-    const [idxCheck] = await this.pool.execute<RowDataPacket[]>(
-      `SELECT INDEX_NAME FROM information_schema.STATISTICS 
-       WHERE TABLE_SCHEMA = DATABASE() 
-         AND TABLE_NAME = ? 
-         AND INDEX_NAME = 'unique_favorite'`,
-      [TABLE_FAVORITES],
-    );
-
-    if (idxCheck.length === 0) {
-      // Add unique index with key lengths (MySQL requires this for TEXT columns)
-      // Using 255 chars per column (255 * 4 bytes for utf8mb4 = 1020 bytes each)
-      await this.pool.execute(
-        `CREATE UNIQUE INDEX unique_favorite ON ${tableName} (${quoteIdentifier('userId', 'index column')}(255), ${quoteIdentifier('entityType', 'index column')}(255), ${quoteIdentifier('entityId', 'index column')}(255))`,
-      );
-    }
+    // The composite PRIMARY KEY (userId, entityType, entityId) created by createTable
+    // already enforces uniqueness for INSERT IGNORE idempotency. No extra unique index needed.
 
     await this.createDefaultIndexes();
     await this.createCustomIndexes();

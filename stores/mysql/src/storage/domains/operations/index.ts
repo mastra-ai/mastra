@@ -284,15 +284,41 @@ export class StoreOperationsMySQL extends StoreOperations {
         return; // Index already exists
       }
 
+      // Look up column data types so we can add prefix lengths for TEXT/BLOB
+      // columns, which MySQL cannot index without an explicit key length.
+      const [columnMeta] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+        [db, table],
+      );
+      const dataTypeByColumn = new Map<string, string>(
+        columnMeta.map(row => [String(row.COLUMN_NAME).toLowerCase(), String(row.DATA_TYPE).toLowerCase()]),
+      );
+      const PREFIX_TYPES = new Set([
+        'tinytext',
+        'text',
+        'mediumtext',
+        'longtext',
+        'blob',
+        'tinyblob',
+        'mediumblob',
+        'longblob',
+      ]);
+      const indexColumn = (colName: string): string => {
+        const quoted = quoteIdentifier(colName, 'column name');
+        const dataType = dataTypeByColumn.get(colName.toLowerCase());
+        return dataType && PREFIX_TYPES.has(dataType) ? `${quoted}(191)` : quoted;
+      };
+
       // Build column list
       const columnsStr = columns
         .map(col => {
           // Handle DESC/ASC modifiers
           if (col.includes(' DESC') || col.includes(' ASC')) {
             const [colName, ...modifiers] = col.split(' ');
-            return `${quoteIdentifier(colName!, 'column name')} ${modifiers.join(' ')}`;
+            return `${indexColumn(colName!)} ${modifiers.join(' ')}`;
           }
-          return quoteIdentifier(col, 'column name');
+          return indexColumn(col);
         })
         .join(', ');
 
