@@ -5023,7 +5023,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       await resultObject.consumeStream();
     });
 
-    it('should include errored tool-result chunks when a tool throws', async () => {
+    it('should include tool-error chunks when a tool throws', async () => {
       const messageList2 = createMessageListWithUserMessage();
       const errorChunks: Array<ChunkType> = [];
 
@@ -5094,16 +5094,15 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       await resultObject.consumeStream();
 
-      const toolErrorChunks = errorChunks.filter(c => c.type === 'tool-result' && c.payload?.isError);
+      const toolErrorChunks = errorChunks.filter(c => c.type === 'tool-error');
       expect(toolErrorChunks).toHaveLength(1);
       expect(toolErrorChunks[0]).toMatchObject({
-        type: 'tool-result',
+        type: 'tool-error',
         from: 'AGENT',
         payload: expect.objectContaining({
           toolCallId: 'call-1',
           toolName: 'failingTool',
-          result: expect.any(Error),
-          isError: true,
+          error: expect.any(Error),
         }),
       });
     });

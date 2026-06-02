@@ -298,4 +298,47 @@ describe('updateWorkingMemoryTool schema validation (issue #17301)', () => {
     expect('issues' in resolved && resolved.issues).toBeFalsy();
     expect(resolved.value).toEqual({ memory: { name: 'Grace', age: 42 } });
   });
+
+  it('strips nullable optional fields from wrapped nested schema updates', async () => {
+    const tool = updateWorkingMemoryTool({
+      workingMemory: {
+        enabled: true,
+        schema: z.object({
+          people: z
+            .array(
+              z.object({
+                contactId: z.string().optional(),
+                name: z.string(),
+                tags: z.array(z.string()).optional(),
+                notes: z.string().optional(),
+              }),
+            )
+            .optional(),
+          extra: z.object({}).optional(),
+        }),
+      },
+    } as any);
+    const inputSchema = tool.inputSchema as any;
+
+    const resolved = await inputSchema['~standard'].validate({
+      memory: {
+        people: [
+          { contactId: null, name: 'Sarah Kim', tags: null, notes: null },
+          { contactId: null, name: 'Dave Martinez', tags: null, notes: null },
+        ],
+        extra: null,
+      },
+    });
+
+    expect('issues' in resolved && resolved.issues).toBeFalsy();
+    expect(resolved.value).toEqual({
+      memory: {
+        people: [
+          { contactId: null, name: 'Sarah Kim', tags: null, notes: null },
+          { contactId: null, name: 'Dave Martinez', tags: null, notes: null },
+        ],
+        extra: null,
+      },
+    });
+  });
 });

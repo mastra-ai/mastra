@@ -247,6 +247,7 @@ async function addToolPayloadTransformToChunk<OUTPUT>(
       logger,
     );
   } else if (chunk.type === 'tool-result') {
+    const isErrorResult = (payload as { isError?: boolean }).isError === true;
     chunk = withToolPayloadTransformMetadata(
       chunk,
       await transformToolPayloadForTargets(
@@ -262,14 +263,23 @@ async function addToolPayloadTransformToChunk<OUTPUT>(
       ),
     );
     transform = await transformToolPayloadForTargets(
-      {
-        phase: 'output-available',
-        toolName,
-        toolCallId,
-        input: (payload as { args?: unknown }).args,
-        output: (payload as { result?: unknown }).result,
-        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
-      },
+      isErrorResult
+        ? {
+            phase: 'error',
+            toolName,
+            toolCallId,
+            input: (payload as { args?: unknown }).args,
+            error: (payload as { result?: unknown }).result,
+            providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+          }
+        : {
+            phase: 'output-available',
+            toolName,
+            toolCallId,
+            input: (payload as { args?: unknown }).args,
+            output: (payload as { result?: unknown }).result,
+            providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+          },
       source,
       logger,
     );

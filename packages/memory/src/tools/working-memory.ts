@@ -70,10 +70,12 @@ function stripNullsFromOptional(value: unknown, schema: Record<string, unknown>)
   if (typeof value === 'object' && value !== null) {
     const properties = (schema.properties as Record<string, Record<string, unknown>>) ?? {};
     const required = (schema.required as string[]) ?? [];
+    const optional = (schema['x-optional'] as string[]) ?? [];
     const result: Record<string, unknown> = {};
 
     for (const [key, propertyValue] of Object.entries(value as Record<string, unknown>)) {
-      if (propertyValue === null && !required.includes(key)) {
+      const isOptional = optional.includes(key) || !required.includes(key);
+      if (propertyValue === null && isOptional) {
         continue;
       }
 
@@ -129,8 +131,8 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
     // map a successful result back into the `{ memory }` shape the tool expects.
     const validateMemory = (memoryValue: unknown) => standardSchema['~standard'].validate(memoryValue);
     type ValidateResult = Awaited<ReturnType<typeof validateMemory>>;
-    const toWrappedResult = (result: ValidateResult) =>
-      'issues' in result && result.issues ? result : { value: { memory: result.value } };
+    const toWrappedResult = (result: ValidateResult, memoryValue: unknown) =>
+      'issues' in result && result.issues ? result : { value: { memory: memoryValue } };
 
     inputSchema = {
       '~standard': {
@@ -141,12 +143,13 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
           // stripping nulls from the raw value and validating it as the memory payload.
           const hasWrapper =
             !!value && typeof value === 'object' && !Array.isArray(value) && 'memory' in (value as object);
-          const memoryValue = hasWrapper
-            ? (value as { memory: unknown }).memory
-            : stripNullsFromOptional(value, jsonSchema as Record<string, unknown>);
+          const rawMemoryValue = hasWrapper ? (value as { memory: unknown }).memory : value;
+          const memoryValue = stripNullsFromOptional(rawMemoryValue, jsonSchema as Record<string, unknown>);
 
           const result = validateMemory(memoryValue);
-          return result instanceof Promise ? result.then(toWrappedResult) : toWrappedResult(result);
+          return result instanceof Promise
+            ? result.then(result => toWrappedResult(result, rawMemoryValue))
+            : toWrappedResult(result, rawMemoryValue);
         },
         jsonSchema: {
           input: () => wrappedJsonSchema,

@@ -251,6 +251,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
   });
 
   it('should persist streamed provider tool errors without output', async () => {
+    const transformToolPayload = vi.fn(({ phase }) => phase);
     const tools = {
       perplexitySearch: {
         type: 'provider' as const,
@@ -310,6 +311,9 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       },
       _internal: {
         generateId: () => 'generated-id',
+        toolPayloadTransform: {
+          transformToolPayload,
+        },
       },
       logger: {
         error: vi.fn(),
@@ -332,6 +336,15 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         },
       }),
     );
+    const outputErrorUpdate = updateToolInvocation.mock.calls.find(
+      ([update]) => (update as any).toolInvocation?.state === 'output-error',
+    )?.[0] as any;
+    expect(outputErrorUpdate.providerMetadata?.mastra?.toolPayloadTransform?.display?.error).toEqual({
+      transformed: 'error',
+    });
+    expect(
+      outputErrorUpdate.providerMetadata?.mastra?.toolPayloadTransform?.display?.['output-available'],
+    ).toBeUndefined();
   });
 
   it('does not continue when finishReason is length with pending tool calls', async () => {

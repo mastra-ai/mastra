@@ -14,7 +14,7 @@ function normalizeNetworkFinalResultMessages(value: unknown): unknown {
     try {
       const parsed = JSON.parse(value);
       const normalized = normalizeNetworkFinalResultMessages(parsed);
-      return normalized === parsed ? value : JSON.stringify(normalized);
+      return JSON.stringify(normalized);
     } catch {
       return value;
     }
@@ -29,12 +29,9 @@ function normalizeNetworkFinalResultMessages(value: unknown): unknown {
   }
 
   const object = value as Record<string, unknown>;
-  let changed = false;
-  const normalizedEntries = Object.entries(object).map(([key, entry]) => {
-    const normalized = normalizeNetworkFinalResultMessages(entry);
-    if (normalized !== entry) changed = true;
-    return [key, normalized] as const;
-  });
+  const normalizedEntries = Object.entries(object)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => [key, normalizeNetworkFinalResultMessages(entry)] as const);
 
   const normalizedObject = Object.fromEntries(normalizedEntries) as Record<string, unknown>;
   const finalResult = normalizedObject.finalResult;
@@ -49,10 +46,9 @@ function normalizeNetworkFinalResultMessages(value: unknown): unknown {
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return aTime - bTime;
     });
-    changed = true;
   }
 
-  return changed ? normalizedObject : value;
+  return normalizedObject;
 }
 
 export function transformRequest({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {

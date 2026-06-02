@@ -313,21 +313,36 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         if (errorResults?.length) {
           for (const toolCall of errorResults) {
             const toolError = getToolError(toolCall);
+            const hasExecutionError = toolCall.error != null;
             const chunk = await transformToolChunk(
-              {
-                type: 'tool-result',
-                runId: rest.runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  result: toolError,
-                  isError: true,
-                  args: toolCall.args,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
-                  providerExecuted: toolCall.providerExecuted,
-                },
-              },
+              hasExecutionError
+                ? {
+                    type: 'tool-error',
+                    runId: rest.runId,
+                    from: ChunkFrom.AGENT,
+                    payload: {
+                      error: toolError,
+                      args: toolCall.args as Record<string, unknown> | undefined,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+                      providerExecuted: toolCall.providerExecuted,
+                    },
+                  }
+                : {
+                    type: 'tool-result',
+                    runId: rest.runId,
+                    from: ChunkFrom.AGENT,
+                    payload: {
+                      result: toolError,
+                      isError: true,
+                      args: toolCall.args,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+                      providerExecuted: toolCall.providerExecuted,
+                    },
+                  },
               { ...toolCall, error: toolError },
               'error',
             );
