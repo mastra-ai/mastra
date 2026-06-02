@@ -1511,7 +1511,12 @@ export const GET_PROVIDERS_ROUTE = createRoute({
                 // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
                 // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
                 const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
-                allProviders[prefixedId] = config;
+                // Only add if not already present from PROVIDER_REGISTRY to prevent
+                // duplicates when PROVIDER_REGISTRY already has the prefixed key
+                // (e.g. dev mode where GatewayRegistry includes custom gateways).
+                if (!(prefixedId in allProviders)) {
+                  allProviders[prefixedId] = config;
+                }
               }
             } catch (error) {
               console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
