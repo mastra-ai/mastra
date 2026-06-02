@@ -185,7 +185,8 @@ export class MessageHistory implements Processor {
         // Strip working memory tags from string content
         if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
           const cleanedContent = removeWorkingMemoryTags(newMessage.content.content);
-          newMessage.content.content = cleanedContent !== newMessage.content.content ? cleanedContent.trim() : newMessage.content.content;
+          newMessage.content.content =
+            cleanedContent !== newMessage.content.content ? cleanedContent.trim() : newMessage.content.content;
         }
 
         if (Array.isArray(newMessage.content?.parts)) {
