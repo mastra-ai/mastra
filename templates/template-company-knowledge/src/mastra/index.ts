@@ -13,11 +13,15 @@ if (!connectionString) {
 export const storage = new PostgresStore({ connectionString });
 export const vector = new PgVector({ id: 'company-knowledge-vector', connectionString });
 
+type CodeModeEditorConfig = NonNullable<ConstructorParameters<typeof MastraEditor>[0]> & { source: 'code' };
+
+const editorConfig: CodeModeEditorConfig = { source: 'code' };
+
 export const mastra = new Mastra({
   agents: { knowledgeAgent },
   workflows: { indexKnowledgeWorkflow },
   storage,
   vectors: { pgVector: vector },
-  editor: new MastraEditor(),
+  editor: new MastraEditor(editorConfig),
   logger: new PinoLogger({ name: 'company-knowledge', level: 'info' }),
 });
