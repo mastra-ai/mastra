@@ -71,8 +71,14 @@ const planMode = { id: 'plan', agentId: 'agent', defaultModelId: 'plan-model' };
 function createSession() {
   let modelId = 'session-model';
   let mode = buildMode;
+  let state: Record<string, unknown> = { projectPath: '/session-repo' };
 
   return {
+    getState: vi.fn(() => state),
+    setState: vi.fn((updates: Record<string, unknown>) => {
+      state = { ...state, ...updates };
+      return Promise.resolve();
+    }),
     getModelId: vi.fn(() => modelId),
     setModelId: vi.fn((next: string) => {
       modelId = next;
@@ -106,7 +112,7 @@ describe('HarnessCompat session-derived state', () => {
     await harness.switchThread({ threadId: 'thread-id' });
 
     expect(harness.getState()).toMatchObject({
-      projectPath: '/repo',
+      projectPath: '/session-repo',
       currentModelId: 'session-model',
       modeId: 'build',
     });
@@ -133,6 +139,7 @@ describe('HarnessCompat session-derived state', () => {
     expect(session.setModelId).toHaveBeenCalledWith('new-session-model');
     expect(session.setMode).toHaveBeenCalledWith(planMode);
     expect(legacySwitchMode).toHaveBeenCalledWith({ modeId: 'plan' });
+    expect(session.setState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
     expect(legacySetState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
     expect(harness.getState()).toMatchObject({
       projectPath: '/new-repo',

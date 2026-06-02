@@ -1,8 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { MastraMemory } from '../../memory';
-import { toStandardSchema } from '../../schema';
-import type { StandardSchemaWithJSON } from '../../schema';
 import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
@@ -37,9 +35,8 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #compositeStorage?: MastraCompositeStore;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
-  #state: TState;
-  readonly #stateSchema?: StandardSchemaWithJSON<TState>;
-  #stateUpdateQueue: Promise<void> = Promise.resolve();
+  readonly #stateSchema?: HarnessConfig<MODES, TState>['stateSchema'];
+  readonly #initialState?: Partial<TState>;
   #workspace?: Workspace;
   readonly #workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
 
@@ -54,11 +51,8 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     this.#compositeStorage = config.mastra?.getStorage();
     this.#memory = config.memory;
     this.#events = new EventEmitter();
-    this.#stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
-    this.#state = {
-      ...this.#getSchemaDefaults(),
-      ...config.initialState,
-    } as TState;
+    this.#stateSchema = config.stateSchema;
+    this.#initialState = config.initialState;
 
     if (config.workspace instanceof Workspace) {
       this.#workspace = config.workspace;
@@ -91,44 +85,6 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
 
   emit(event: Parameters<EventEmitter['emit']>[0]): ReturnType<EventEmitter['emit']> {
     return this.#events.emit(event);
-  }
-
-  getState(): Readonly<TState> {
-    return Object.freeze({ ...(this.#state as Record<string, unknown>) }) as Readonly<TState>;
-  }
-
-  async setState(updates: Partial<TState>): Promise<void> {
-    const run = this.#stateUpdateQueue.then(() => this.#applyStateUpdates(updates));
-    this.#stateUpdateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
-  }
-
-  async updateState<TResult>(
-    updater: (
-      state: Readonly<TState>,
-    ) =>
-      | { updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }
-      | Promise<{ updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }>,
-  ): Promise<TResult> {
-    const run = this.#stateUpdateQueue.then(async () => {
-      const update = await updater(this.getState());
-      if (update.updates && Object.keys(update.updates).length > 0) {
-        await this.#applyStateUpdates(update.updates);
-      }
-      for (const event of update.events ?? []) {
-        this.#events.emit(event);
-      }
-      return update.result;
-    });
-
-    this.#stateUpdateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
   }
 
   getWorkspace(): Workspace | undefined {
@@ -226,49 +182,6 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     return this.#sessionFromRecord(record);
   }
 
-  async #applyStateUpdates(updates: Partial<TState>): Promise<void> {
-    const changedKeys = Object.keys(updates);
-    const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
-
-    if (this.#stateSchema) {
-      const result = await this.#stateSchema['~standard'].validate(newState);
-      if (result.issues) {
-        const messages = result.issues.map((issue: { message?: string }) => issue.message).join('; ');
-        throw new Error(`Invalid state update: ${messages}`);
-      }
-      this.#state = result.value as TState;
-    } else {
-      this.#state = newState as TState;
-    }
-
-    this.#events.emit({
-      type: 'state_changed',
-      state: this.#state as Record<string, unknown>,
-      changedKeys,
-    });
-  }
-
-  #getSchemaDefaults(): Partial<TState> {
-    if (!this.#stateSchema) return {};
-
-    const defaults: Record<string, unknown> = {};
-
-    try {
-      const jsonSchema = this.#stateSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
-        properties?: Record<string, { default?: unknown }>;
-      };
-      for (const [key, prop] of Object.entries(jsonSchema.properties ?? {})) {
-        if (prop.default !== undefined) {
-          defaults[key] = prop.default;
-        }
-      }
-    } catch {
-      // Schema doesn't support JSON Schema extraction.
-    }
-
-    return defaults as Partial<TState>;
-  }
-
   async #loadSessionRecord(storage: HarnessStorage, sessionId: string, resourceId?: string): Promise<SessionRecord> {
     const record = await storage.loadSession(sessionId);
     if (!record) {
@@ -309,9 +222,8 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       lastActivityAt: record.lastActivityAt,
       memory: this.#memory,
       events: this.#events.scoped({ sessionId: record.id }),
-      getState: () => this.getState(),
-      setState: updates => this.setState(updates),
-      updateState: updater => this.updateState(updater),
+      stateSchema: this.#stateSchema,
+      initialState: this.#initialState,
       workspace: this.#workspace,
       workspaceFn: this.#workspaceFn,
       setWorkspace: workspace => {

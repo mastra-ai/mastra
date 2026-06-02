@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { RequestContext } from '@internal/core/request-context';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory, StorageThreadType } from '../../memory';
+import { toStandardSchema } from '../../schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../../schema';
 import type { DynamicArgument } from '../../types';
 import type { Workspace } from '../../workspace';
 import type { EventEmitter } from './events';
@@ -19,9 +21,10 @@ export class Session<TState = {}> {
   readonly #lastActivityAt: Date;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
-  readonly #getState?: () => Readonly<TState>;
-  readonly #setState?: (updates: Partial<TState>) => Promise<void>;
-  readonly #updateState?: SessionConfig<TState>['updateState'];
+  readonly #stateSchemaInput?: PublicSchema<TState>;
+  readonly #stateSchema?: StandardSchemaWithJSON<TState>;
+  #state: TState;
+  #stateUpdateQueue: Promise<void> = Promise.resolve();
   #workspace?: Workspace;
   readonly #workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
   readonly #setWorkspace?: (workspace: Workspace | undefined) => void;
@@ -42,9 +45,12 @@ export class Session<TState = {}> {
     this.#lastActivityAt = config.lastActivityAt;
     this.#memory = config.memory;
     this.#events = config.events;
-    this.#getState = config.getState;
-    this.#setState = config.setState;
-    this.#updateState = config.updateState;
+    this.#stateSchemaInput = config.stateSchema;
+    this.#stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
+    this.#state = {
+      ...this.#getSchemaDefaults(),
+      ...config.initialState,
+    } as TState;
     this.#workspace = config.workspace;
     this.#workspaceFn = config.workspaceFn;
     this.#setWorkspace = config.setWorkspace;
@@ -94,9 +100,8 @@ export class Session<TState = {}> {
       lastActivityAt: result.thread.updatedAt,
       memory: this.#memory,
       events: this.#events.scoped({ sessionId: cloneId }),
-      getState: this.#getState,
-      setState: this.#setState,
-      updateState: this.#updateState,
+      stateSchema: this.#stateSchemaInput,
+      initialState: this.getState() as Partial<TState>,
       workspace: this.#workspace,
       workspaceFn: this.#workspaceFn,
       setWorkspace: this.#setWorkspace,
@@ -130,6 +135,44 @@ export class Session<TState = {}> {
     return (await this.#resolveMemory()).saveMessages({ messages });
   }
 
+  getState(): Readonly<TState> {
+    return Object.freeze({ ...(this.#state as Record<string, unknown>) }) as Readonly<TState>;
+  }
+
+  async setState(updates: Partial<TState>): Promise<void> {
+    const run = this.#stateUpdateQueue.then(() => this.#applyStateUpdates(updates));
+    this.#stateUpdateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  async updateState<TResult>(
+    updater: (
+      state: Readonly<TState>,
+    ) =>
+      | { updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }
+      | Promise<{ updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }>,
+  ): Promise<TResult> {
+    const run = this.#stateUpdateQueue.then(async () => {
+      const update = await updater(this.getState());
+      if (update.updates && Object.keys(update.updates).length > 0) {
+        await this.#applyStateUpdates(update.updates);
+      }
+      for (const event of update.events ?? []) {
+        this.#events.emit(event);
+      }
+      return update.result;
+    });
+
+    this.#stateUpdateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   getModelId(): string {
     return this.#modelId;
   }
@@ -154,13 +197,62 @@ export class Session<TState = {}> {
     }
   }
 
+  async #applyStateUpdates(updates: Partial<TState>): Promise<void> {
+    const changedKeys = Object.keys(updates);
+    const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
+
+    if (this.#stateSchema) {
+      const result = await this.#stateSchema['~standard'].validate(newState);
+      if (result.issues) {
+        const messages = result.issues.map((issue: { message?: string }) => issue.message).join('; ');
+        throw new Error(`Invalid state update: ${messages}`);
+      }
+      this.#state = result.value as TState;
+    } else {
+      this.#state = newState as TState;
+    }
+
+    this.#events.emit({
+      type: 'state_changed',
+      state: this.#state as Record<string, unknown>,
+      changedKeys,
+    });
+  }
+
+  #getSchemaDefaults(): Partial<TState> {
+    if (!this.#stateSchema) return {};
+
+    const defaults: Record<string, unknown> = {};
+
+    try {
+      const jsonSchema = this.#stateSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
+        properties?: Record<string, { default?: unknown }>;
+      };
+      for (const [key, prop] of Object.entries(jsonSchema.properties ?? {})) {
+        if (prop.default !== undefined) {
+          defaults[key] = prop.default;
+        }
+      }
+    } catch {
+      // Schema doesn't support JSON Schema extraction.
+    }
+
+    return defaults as Partial<TState>;
+  }
+
   async #buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
     requestContext ??= new RequestContext();
     const harnessContext = {
-      state: this.#getState?.(),
-      getState: this.#getState,
-      setState: this.#setState,
-      updateState: this.#updateState,
+      state: this.getState(),
+      getState: () => this.getState(),
+      setState: (updates: Partial<TState>) => this.setState(updates),
+      updateState: <TResult>(
+        updater: (
+          state: Readonly<TState>,
+        ) =>
+          | { updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }
+          | Promise<{ updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }>,
+      ) => this.updateState(updater),
       threadId: this.#threadId,
       resourceId: this.#resourceId,
       modeId: this.#mode.id,

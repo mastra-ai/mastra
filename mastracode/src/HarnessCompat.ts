@@ -56,6 +56,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
 
     return {
       ...state,
+      ...session.getState(),
       currentModelId: session.getModelId(),
       modeId: session.getMode().id,
     } as Readonly<TState>;
@@ -80,6 +81,9 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     }
 
     if (Object.keys(harnessUpdates).length > 0) {
+      if (session) {
+        await session.setState(harnessUpdates as Partial<TState>);
+      }
       await super.setState(harnessUpdates as Partial<TState>);
     }
   }
