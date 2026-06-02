@@ -31,7 +31,6 @@ export const claw = new Agent({
 
 **Code intelligence:**
 - mastra_workspace_lsp_inspect — get type info, hover docs, go-to-definition for a symbol.
-- mastra_workspace_search — semantic or keyword search over indexed workspace content.
 
 **Browser** (for live web interaction):
 - browser_goto, browser_snapshot, browser_click, browser_type, browser_press, browser_select, browser_scroll, browser_hover, browser_back, browser_close, browser_tabs, browser_screenshot, browser_wait, browser_dialog, browser_drag, browser_evaluate.

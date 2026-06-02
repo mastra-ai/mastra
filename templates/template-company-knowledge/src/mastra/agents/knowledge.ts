@@ -27,17 +27,11 @@ export const knowledgeAgent = new Agent({
 - search-knowledge — semantic vector search over the pre-indexed Linear + Notion corpus. Returns scored snippets with source, title, URL. Use this for any factual question about the company.
 
 **Live Linear lookups (via MCP — tools prefixed with \`linear_\`):**
-Linear tools are loaded from the official Linear MCP server. Key tools include:
-- linear_search_issues — search issues by query.
-- linear_get_issue — fetch full details for one issue.
-- linear_list_projects — list all projects with status.
+Linear tools are loaded dynamically from the official Linear MCP server. The exact tool names are discovered at runtime. Look for tools prefixed with \`linear_\` — they cover searching issues, fetching issue details, listing projects, and more.
 Use these when indexed results are stale or missing, or the user references a specific Linear issue/project.
 
 **Live Notion lookups (via MCP — tools prefixed with \`notion_\`):**
-Notion tools are loaded from the official Notion MCP server. Key tools include:
-- notion_search — search across all pages/databases.
-- notion_retrieve-a-page — fetch a page's content.
-- notion_create-a-page — create a new page.
+Notion tools are loaded dynamically from the official Notion MCP server. The exact tool names are discovered at runtime. Look for tools prefixed with \`notion_\` — they cover searching pages/databases, reading page content, creating pages, and more.
 Use these when indexed results are stale or the user asks about a specific Notion doc.
 
 **Public fallback:**

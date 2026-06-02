@@ -6,8 +6,7 @@ import { mcpClient } from '../mcp';
 
 /**
  * Linear and Notion tools are loaded dynamically from MCP servers (when configured).
- * Linear: create issues from action items (linear_create_issue, etc.)
- * Notion: push meeting notes to pages (notion_create-a-page, etc.)
+ * Tool names are discovered at runtime, prefixed with `linear_` and `notion_`.
  */
 const mcpTools = await mcpClient.listTools();
 
@@ -44,10 +43,10 @@ export const meetingNotesAgent = new Agent({
 - fetchZoomTranscript — download the Zoom-generated VTT transcript as plain text. This is the primary way to get meeting content.
 
 **Export (via MCP — side effects, only call when explicitly asked):**
-Linear and Notion tools are loaded via MCP when the corresponding API keys are configured.
-- Linear tools (prefixed \`linear_\`): use \`linear_create_issue\` (or similar) to create an issue from an action item.
-- Notion tools (prefixed \`notion_\`): use \`notion_create-a-page\` (or similar) to push meeting notes as a Notion page.
-If a user asks to export but the tools aren't available, tell them to configure the API key.
+Linear and Notion tools are loaded dynamically via MCP when the corresponding API keys are configured. The exact tool names are discovered at runtime.
+- Linear tools are prefixed with \`linear_\` — look for tools that create issues or comments.
+- Notion tools are prefixed with \`notion_\` — look for tools that create pages.
+If a user asks to export but no matching tools are available, tell them to configure the API key.
 
 ## Workflow
 
@@ -67,10 +66,10 @@ If a user asks to export but the tools aren't available, tell them to configure 
 
 ### When asked to export:
 1. Confirm which export target (Linear, Notion, or both).
-2. For Linear: use the linear_ MCP tools to create one issue per action item. Set the title to the task, description includes owner and due date if known.
-3. For Notion: use the notion_ MCP tools to create one page with the full structured notes.
+2. For Linear: look for available \`linear_\`-prefixed tools and create one issue per action item. Set the title to the task, description includes owner and due date if known.
+3. For Notion: look for available \`notion_\`-prefixed tools and create one page with the full structured notes.
 4. Report what was created, including any IDs or URLs returned.
-5. If the requested export tools aren't available (API key not configured), tell the user.
+5. If no \`linear_\` or \`notion_\` tools are available (API key not configured), tell the user.
 
 ## Summarization rules
 
