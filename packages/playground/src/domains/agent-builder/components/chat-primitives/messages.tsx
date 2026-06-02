@@ -46,6 +46,8 @@ import {
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
 import { ProviderLogo } from '@/domains/llm';
+import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
+import { isSignalData } from '@/lib/ai-ui/messages/signal-data';
 
 interface MessageRowProps {
   message: MastraUIMessage;
@@ -265,6 +267,11 @@ export const MessageRow = ({ message }: MessageRowProps) => {
             if (part.type === 'tool-skill' && part.state === 'output-available') {
               const input = (part.input as { name?: string } | undefined) ?? {};
               return <SkillTool name={input.name ?? 'unknown'} />;
+            }
+
+            if (part.type === 'data-signal') {
+              const data = (part as { data?: unknown }).data;
+              return isSignalData(data) ? <SignalBadge key={key} signal={data} /> : null;
             }
 
             if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
