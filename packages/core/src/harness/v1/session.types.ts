@@ -1,4 +1,5 @@
 import type { MastraMemory } from '../../memory';
+import type { PublicSchema } from '../../schema';
 import type { DynamicArgument } from '../../types';
 import type { Workspace } from '../../workspace';
 import type { EventEmitter } from './events';
@@ -21,15 +22,8 @@ export type CloneSessionOptions = {
 export interface SessionConfig<TState = {}> {
   memory: MastraMemory | DynamicArgument<MastraMemory>;
   events: EventEmitter;
-  getState?: () => Readonly<TState>;
-  setState?: (updates: Partial<TState>) => Promise<void>;
-  updateState?: <TResult>(
-    updater: (
-      state: Readonly<TState>,
-    ) =>
-      | { updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }
-      | Promise<{ updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }>,
-  ) => Promise<TResult>;
+  stateSchema?: PublicSchema<TState>;
+  initialState?: Partial<TState>;
   workspace?: Workspace;
   workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
   setWorkspace?: (workspace: Workspace | undefined) => void;
