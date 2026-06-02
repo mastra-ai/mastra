@@ -310,27 +310,7 @@ const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessa
     },
   });
 
-  if (typeof contents === 'string') {
-    return [makeUserMessage([{ type: 'text', text: contents }])];
-  }
-
-  if (Array.isArray(contents)) {
-    return contents.flatMap(content => signalContentsToUserMessages(content, metadata));
-  }
-
-  if (!contents || typeof contents !== 'object') return [];
-
-  const message = contents as { role?: unknown; content?: unknown };
-  if (message.role && message.role !== 'user') return [];
-
-  const content = message.content;
-  if (typeof content === 'string') {
-    return [makeUserMessage([{ type: 'text', text: content }])];
-  }
-
-  if (!Array.isArray(content)) return [];
-
-  const parts = content.flatMap((part): MastraMessagePart[] => {
+  const toMessagePart = (part: unknown): MastraMessagePart[] => {
     if (!part || typeof part !== 'object') return [];
     const typedPart = part as Record<string, unknown>;
 
@@ -372,8 +352,32 @@ const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessa
     }
 
     return [];
-  });
+  };
 
+  if (typeof contents === 'string') {
+    return [makeUserMessage([{ type: 'text', text: contents }])];
+  }
+
+  if (Array.isArray(contents)) {
+    const parts = contents.flatMap(toMessagePart);
+    return parts.length
+      ? [makeUserMessage(parts)]
+      : contents.flatMap(content => signalContentsToUserMessages(content, metadata));
+  }
+
+  if (!contents || typeof contents !== 'object') return [];
+
+  const message = contents as { role?: unknown; content?: unknown };
+  if (message.role && message.role !== 'user') return [];
+
+  const content = message.content;
+  if (typeof content === 'string') {
+    return [makeUserMessage([{ type: 'text', text: content }])];
+  }
+
+  if (!Array.isArray(content)) return [];
+
+  const parts = content.flatMap(toMessagePart);
   return parts.length ? [makeUserMessage(parts)] : [];
 };
 

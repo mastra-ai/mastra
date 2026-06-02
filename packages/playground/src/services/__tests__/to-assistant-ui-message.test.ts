@@ -263,14 +263,36 @@ describe('toAssistantUIMessage file and image parts', () => {
    * receives exactly this at render time, so we build it with a single narrow
    * boundary cast (mirroring the accumulator) to reflect the real runtime input.
    */
-  const streamedFilePart = (part: { mediaType: string; url: string; filename?: string }): MastraMessagePart =>
-    ({ type: 'file', ...part }) as unknown as MastraMessagePart;
+  const streamedFilePart = (part: {
+    mediaType: string;
+    url?: string;
+    data?: string;
+    filename?: string;
+  }): MastraMessagePart => ({
+    type: 'file',
+    mimeType: part.mediaType,
+    data: part.data ?? part.url ?? '',
+    ...part,
+  });
 
   it('renders a streamed image file part (mediaType/url) as an image content part', () => {
     const dataUrl =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
     const { content } = toAssistantUIMessage(
       assistantMessage([streamedFilePart({ mediaType: 'image/png', url: dataUrl })]),
+    );
+    if (typeof content === 'string') throw new Error('expected structured content parts');
+
+    const part = content[0];
+    expect(part.type).toBe('image');
+    if (part.type !== 'image') throw new Error('expected image');
+    expect(part.image).toBe(dataUrl);
+  });
+
+  it('renders a live signal image file part (mediaType/data) as an image content part', () => {
+    const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD';
+    const { content } = toAssistantUIMessage(
+      assistantMessage([streamedFilePart({ mediaType: 'image/jpeg', data: dataUrl })]),
     );
     if (typeof content === 'string') throw new Error('expected structured content parts');
 

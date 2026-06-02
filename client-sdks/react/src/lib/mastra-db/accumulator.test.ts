@@ -944,6 +944,23 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
       expect(user?.content.parts[0]).toEqual({ type: 'text', text: 'hello back' });
     },
   );
+
+  it('preserves live signal content part arrays with images', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      dataUserMessageChunk('sig-1', [
+        { type: 'text', text: 'see this' },
+        { type: 'file', data: 'data:image/png;base64,abc123', mediaType: 'image/png', filename: 'image.png' },
+      ]),
+    ]);
+
+    const user = out.find(m => m.role === 'user');
+    expect(user?.id).toBe('sig-1');
+    expect(user?.content.parts).toEqual([
+      { type: 'text', text: 'see this' },
+      { type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,abc123', filename: 'image.png' },
+    ]);
+  });
 });
 
 // =============================================================================
