@@ -91,7 +91,15 @@ const ViewTopBarSlot = () => {
       onModeToggle={onModeToggle}
       modeToggleDisabled={isRunning}
       mobileMenu={
-        isOwner && <AgentBuilderMobileMenu agentId={agentId} showDelete agentName={agent.name} disabled={isRunning} />
+        isOwner && (
+          <AgentBuilderMobileMenu
+            agentId={agentId}
+            showEditAgent
+            showDelete
+            agentName={agent.name}
+            disabled={isRunning}
+          />
+        )
       }
     />
   );

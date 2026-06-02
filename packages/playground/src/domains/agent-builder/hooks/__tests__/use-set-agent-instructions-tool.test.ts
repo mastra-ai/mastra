@@ -5,6 +5,7 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
 
 import type { AgentBuilderEditFormValues } from '../../schemas';
+import { MAX_GENERATED_INSTRUCTIONS_CHARS } from '../../services/build-form-snapshot';
 import { SET_AGENT_INSTRUCTIONS_TOOL_NAME, useSetAgentInstructionsTool } from '../use-set-agent-instructions-tool';
 
 const renderTool = () => {
@@ -46,5 +47,35 @@ describe('useSetAgentInstructionsTool', () => {
     const { tool, form } = renderTool();
     await tool.execute!({} as any);
     expect(form().getValues('instructions')).toBe('');
+  });
+
+  it('passes through instructions at or below the hard cap unchanged', async () => {
+    const { tool, form } = renderTool();
+    const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS);
+    const result: any = await tool.execute!({ instructions: body } as any);
+    expect(form().getValues('instructions')).toBe(body);
+    expect(result.success).toBe(true);
+    expect(result.rejected).toBe(false);
+    expect(result.finalLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS);
+  });
+
+  it('rejects instructions past the hard cap without persisting (and leaves existing value intact)', async () => {
+    const { tool, form } = renderTool();
+    // Seed an already-valid instructions value so we can prove rejection does
+    // not clobber existing content (the "nothing is persisted" contract).
+    const seeded = 'Existing valid instructions.';
+    form().setValue('instructions', seeded);
+
+    const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
+    const result: any = await tool.execute!({ instructions: body } as any);
+    // The seeded value survives — over-limit calls write nothing.
+    expect(form().getValues('instructions')).toBe(seeded);
+    expect(result.success).toBe(false);
+    expect(result.rejected).toBe(true);
+    expect(result.currentLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
+    expect(result.limit).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS);
+    // Tool result message tells the LLM exactly what to do.
+    expect(result.message).toMatch(/REJECTED/);
+    expect(result.message).toMatch(/whole section/i);
   });
 });

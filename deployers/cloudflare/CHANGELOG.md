@@ -1,5 +1,31 @@
 # @mastra/deployer-cloudflare
 
+## 1.1.39-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#17146](https://github.com/mastra-ai/mastra/pull/17146))
+  - Updated dependency [`@babel/core@^7.29.7` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.29.7) (from `^7.29.0`, in `dependencies`)
+- Updated dependencies [[`c0ecd20`](https://github.com/mastra-ai/mastra/commit/c0ecd202fc14f2c86fd5f08c091754ba8f3dd088), [`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3), [`05d61e1`](https://github.com/mastra-ai/mastra/commit/05d61e18aa014a012a32ee9cb79cdcf3210dbe9d)]:
+  - @mastra/deployer@1.38.0-alpha.6
+  - @mastra/core@1.38.0-alpha.6
+
+## 1.1.39-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d779de3`](https://github.com/mastra-ai/mastra/commit/d779de3cd9d2e7ed8110547190e2f15e786a0e41), [`1750c97`](https://github.com/mastra-ai/mastra/commit/1750c975d6179fbf6db2813b15229d4f8f23fc55), [`0e32507`](https://github.com/mastra-ai/mastra/commit/0e32507962cdfa5569b7bda5bc6fb3dd34e40b03), [`3a081c1`](https://github.com/mastra-ai/mastra/commit/3a081c1255c5ae8c99f6dad91cc612934ef6f2bd), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194), [`fe9eacd`](https://github.com/mastra-ai/mastra/commit/fe9eacd9545a0a9d64aad31c9fa90294a425289e), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194)]:
+  - @mastra/core@1.38.0-alpha.2
+  - @mastra/deployer@1.38.0-alpha.2
+
+## 1.1.39-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`07c3de7`](https://github.com/mastra-ai/mastra/commit/07c3de7f7bc418beccaea3b5e6b7f7cdda79d492)]:
+  - @mastra/core@1.37.2-alpha.0
+  - @mastra/deployer@1.37.2-alpha.0
+
 ## 1.1.38
 
 ### Patch Changes

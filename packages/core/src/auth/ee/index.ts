@@ -27,7 +27,18 @@ export {
 } from './license';
 
 // FGA check utility
-export { checkFGA, requireFGA, FGADeniedError, type CheckFGAOptions, type RequireFGAOptions } from './fga-check';
+export {
+  checkFGA,
+  requireFGA,
+  FGADeniedError,
+  getAgentFGAResourceId,
+  getWorkflowFGAResourceId,
+  getStandaloneToolFGAResourceId,
+  getAgentToolFGAResourceId,
+  getMCPToolFGAResourceId,
+  type CheckFGAOptions,
+  type RequireFGAOptions,
+} from './fga-check';
 
 // Default implementations
 export * from './defaults';

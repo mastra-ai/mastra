@@ -3,6 +3,7 @@ import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
+import { z as zv3 } from 'zod/v3';
 import { MastraServer } from '../index';
 
 describe('Validation Error Hook', () => {
@@ -225,6 +226,118 @@ describe('Validation Error Hook', () => {
       expect(data.error).toBe('Invalid request body');
       expect(data.issues).toBeInstanceOf(Array);
       expect(data.issues.length).toBeGreaterThan(0);
+    });
+  });
+
+  /**
+   * Regression coverage for https://github.com/mastra-ai/mastra/issues/17167.
+   *
+   * When a consumer pins `zod@^3`, route schemas are constructed with v3 `z`
+   * and `parseAsync` throws a v3 `ZodError`. The Hono adapter imports `ZodError`
+   * from the top-level `zod` (v4 in this repo's graph), so an `instanceof`
+   * check across realms returns `false` and the response falls back to:
+   *
+   *   { error, issues: [{ field: "unknown", message: <stringified zod issues> }] }
+   *
+   * These tests construct schemas with `zod/v3` while the adapter uses the
+   * bundled top-level `zod`, reproducing the dual-instance hazard
+   * deterministically and proving the structural ZodError check is in effect.
+   */
+  describe('dual zod-instance (zod v3 consumer, issue #17167)', () => {
+    async function registerV3Route(app: Hono, route: any) {
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        tools: context.tools,
+        taskStore: context.taskStore,
+      });
+      await adapter.registerRoute(app, route, { prefix: '' });
+      return adapter;
+    }
+
+    it('body schema built with zod v3 produces field-specific issues (not "unknown")', async () => {
+      // Mirrors packages/server/src/server/schemas/conversations.ts createConversationBodySchema.
+      const bodySchemaV3 = zv3.object({
+        agent_id: zv3.string(),
+        conversation_id: zv3.string().optional(),
+      });
+
+      const app = new Hono();
+      await registerV3Route(app, {
+        method: 'POST' as const,
+        path: '/v1/conversations',
+        responseType: 'json' as const,
+        bodySchema: bodySchemaV3,
+        handler: async () => ({ ok: true }),
+      });
+
+      const response = await app.request(
+        new Request('http://localhost/v1/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      const data = await response.json();
+
+      expect(data.error).toBe('Invalid request body');
+      expect(Array.isArray(data.issues)).toBe(true);
+      expect(data.issues.length).toBeGreaterThan(0);
+      expect(data.issues[0].field).toBe('agent_id');
+      // Must not be a JSON-stringified issues array.
+      expect(data.issues[0].message).not.toMatch(/^\[\s*\{/);
+    });
+
+    it('query schema built with zod v3 produces field-specific issues', async () => {
+      const queryParamSchemaV3 = zv3.object({ page: zv3.coerce.number() });
+
+      const app = new Hono();
+      await registerV3Route(app, {
+        method: 'POST' as const,
+        path: '/v1/query-test',
+        responseType: 'json' as const,
+        queryParamSchema: queryParamSchemaV3,
+        handler: async () => ({ ok: true }),
+      });
+
+      const response = await app.request(
+        new Request('http://localhost/v1/query-test?page=not-a-number', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      const data = await response.json();
+      expect(data.error).toBe('Invalid query parameters');
+      expect(data.issues[0].field).toBe('page');
+    });
+
+    it('path schema built with zod v3 produces field-specific issues', async () => {
+      const pathParamSchemaV3 = zv3.object({ id: zv3.coerce.number() });
+
+      const app = new Hono();
+      await registerV3Route(app, {
+        method: 'POST' as const,
+        path: '/v1/path-test/:id',
+        responseType: 'json' as const,
+        pathParamSchema: pathParamSchemaV3,
+        handler: async () => ({ ok: true }),
+      });
+
+      const response = await app.request(
+        new Request('http://localhost/v1/path-test/not-a-number', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      const data = await response.json();
+      expect(data.error).toBe('Invalid path parameters');
+      expect(data.issues[0].field).toBe('id');
     });
   });
 });

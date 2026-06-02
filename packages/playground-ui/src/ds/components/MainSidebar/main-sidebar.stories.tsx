@@ -384,7 +384,7 @@ export const AsChild: Story = {
     docs: {
       description: {
         story:
-          '`MainSidebar.NavLink` accepts `asChild` (Radix `Slot`). The slotted child receives the full row styling, so a `<button>`, a custom `<Link>`, or any element behaves identically to the default anchor — without needing to wrap or override styles. Active state, indicator bar, hover, focus ring, and collapsed icon-only mode all apply automatically.',
+          '`MainSidebar.NavLink` accepts `asChild`. The slotted child receives the full row styling, so a `<button>`, a custom `<Link>`, or any element behaves identically to the default anchor — without needing to wrap or override styles. Active state, indicator bar, hover, focus ring, and collapsed icon-only mode all apply automatically.',
       },
     },
   },
@@ -466,7 +466,7 @@ export const Mobile: Story = {
     docs: {
       description: {
         story:
-          'Below `mobileBreakpoint` (default `1024px`), `MainSidebar` renders as an off-canvas drawer (Radix Dialog). Use the viewport toolbar to switch between mobile/tablet/desktop — the sidebar reacts via `matchMedia`, no story-level overrides required. Place `MainSidebar.MobileTrigger` in your top bar; it only renders on mobile.',
+          'Below `mobileBreakpoint` (default `1024px`), `MainSidebar` renders as an off-canvas drawer. Use the viewport toolbar to switch between mobile/tablet/desktop — the sidebar reacts via `matchMedia`, no story-level overrides required. Place `MainSidebar.MobileTrigger` in your top bar; it only renders on mobile.',
       },
     },
   },
