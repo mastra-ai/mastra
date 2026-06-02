@@ -7,7 +7,6 @@ import type { AgentSignalContents } from '../agent/signals';
 import type { AgentThreadSubscription } from '../agent/types';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
-import type { StorageThreadType } from '../memory/types';
 import type { InputProcessor, InputProcessorOrWorkflow } from '../processors';
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
@@ -130,6 +129,14 @@ export class AgentChannels {
    * platform per AgentChannels instance.
    */
   private warnedToolDisplayFallback = new Set<string>();
+
+  /**
+   * External thread id → Mastra thread id/resourceId. The mapping is created
+   * once in `getOrCreateThread` and never changes for the lifetime of a thread,
+   * so caching it in-process is always safe (no invalidation needed). Lets us
+   * skip the `listThreads({ filter })` metadata scan on warm requests.
+   */
+  private threadIdCache = new Map<string, { id: string; resourceId: string }>();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -1336,7 +1343,11 @@ export class AgentChannels {
     platform: string;
     resourceId: string;
     mastra: Mastra;
-  }): Promise<StorageThreadType> {
+  }): Promise<{ id: string; resourceId: string }> {
+    const cacheKey = `${platform}:${externalThreadId}`;
+    const cached = this.threadIdCache.get(cacheKey);
+    if (cached) return cached;
+
     const storage = mastra.getStorage();
     if (!storage) {
       throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
@@ -1361,10 +1372,13 @@ export class AgentChannels {
     });
 
     if (threads.length > 0) {
-      return threads[0]!;
+      const found = threads[0]!;
+      const entry = { id: found.id, resourceId: found.resourceId };
+      this.threadIdCache.set(cacheKey, entry);
+      return entry;
     }
 
-    return memoryStore.saveThread({
+    const created = await memoryStore.saveThread({
       thread: {
         id: crypto.randomUUID(),
         title: `${platform} conversation`,
@@ -1374,6 +1388,9 @@ export class AgentChannels {
         metadata,
       },
     });
+    const entry = { id: created.id, resourceId: created.resourceId };
+    this.threadIdCache.set(cacheKey, entry);
+    return entry;
   }
 
   /**
