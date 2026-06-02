@@ -426,7 +426,11 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
   // ----- Custom `data-*` chunks (including signal-echo) -----
   if (isDataChunk(chunk)) {
-    if (chunk.type === 'data-user-message' && 'data' in chunk && (chunk as any).data?.type === 'user-message') {
+    if (
+      chunk.type === 'data-user-message' &&
+      'data' in chunk &&
+      ((chunk as any).data?.type === 'user-message' || (chunk as any).data?.type === 'user')
+    ) {
       const signalId = (chunk as any).data.id;
       if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
         return result;

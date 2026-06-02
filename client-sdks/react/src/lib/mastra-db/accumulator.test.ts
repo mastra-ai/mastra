@@ -345,12 +345,14 @@ const dataPartChunk = (suffix: string, data: unknown): ChunkType =>
     data,
   }) as unknown as ChunkType;
 
-const dataUserMessageChunk = (id: string, contents: unknown): ChunkType =>
+// The live server emits the signal echo with `data.type: 'user'`; default to
+// that real wire value so the fixture cannot drift back to masking the guard.
+const dataUserMessageChunk = (id: string, contents: unknown, dataType: 'user' | 'user-message' = 'user'): ChunkType =>
   ({
     type: 'data-user-message',
     runId: RUN_ID,
     from: 'AGENT',
-    data: { type: 'user-message', id, contents },
+    data: { type: dataType, id, contents },
   }) as unknown as ChunkType;
 
 const passthroughChunk = (type: string): ChunkType =>
@@ -928,6 +930,20 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0].id).toBe('sig-1');
   });
+
+  // The server emits the echo with `data.type: 'user'` while the signal input
+  // uses `data.type: 'user-message'`. Both must produce a user message; only
+  // accepting one of them silently drops the live echo (regression guard).
+  it.each(['user', 'user-message'] as const)(
+    'converts a data-user-message echo with data.type=%s into a user message',
+    dataType => {
+      const out = reduce([startChunk('asst-1'), dataUserMessageChunk('sig-1', 'hello back', dataType)]);
+      const user = out.find(m => m.role === 'user');
+      expect(user).toBeDefined();
+      expect(user?.id).toBe('sig-1');
+      expect(user?.content.parts[0]).toEqual({ type: 'text', text: 'hello back' });
+    },
+  );
 });
 
 // =============================================================================
