@@ -7,3 +7,4 @@ export type { DataPanelNextPrevNavProps } from './data-panel-next-prev-nav';
 export type { DataPanelLoadingDataProps } from './data-panel-loading-data';
 export type { DataPanelNoDataProps } from './data-panel-no-data';
 export type { DataPanelContentProps } from './data-panel-content';
+export type { DataPanelSectionHeadingProps } from './data-panel-section-heading';

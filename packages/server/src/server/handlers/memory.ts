@@ -269,6 +269,13 @@ function getStorageFromContext({ mastra }: Pick<MemoryContext, 'mastra'>): Mastr
   return mastra.getStorage();
 }
 
+function agentSupportsMemory(agent: Agent | null): boolean {
+  if (!agent) return true;
+
+  const candidate = agent as Agent & { supportsMemory?: () => boolean };
+  return typeof candidate.supportsMemory === 'function' ? candidate.supportsMemory() : true;
+}
+
 /**
  * Gets the agent from context for OM processor detection.
  */
@@ -538,6 +545,10 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
         }
 
         return { result: true, memoryType: 'local' as const, observationalMemory: omStatus };
+      }
+
+      if (!agentSupportsMemory(agent)) {
+        return { result: false };
       }
 
       // Fallback to storage (covers stored agents whose memory can't be resolved)

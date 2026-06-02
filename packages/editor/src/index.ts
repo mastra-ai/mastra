@@ -11,7 +11,9 @@ import type {
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
+import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
 import type { BlobStore } from '@mastra/core/storage';
+import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import {
@@ -56,6 +58,8 @@ export class MastraEditor implements IMastraEditor {
 
   private __toolProviders: Record<string, ToolProvider>;
   private __processorProviders: Record<string, ProcessorProvider>;
+  private __source?: 'code' | 'db';
+  private __codePath: string;
   private readonly __builderConfig?: AgentBuilderOptions;
   private __builderInstance?: IAgentBuilder;
   private __builderResolved = false;
@@ -102,6 +106,8 @@ export class MastraEditor implements IMastraEditor {
     this.__logger = config?.logger;
     this.__toolProviders = config?.toolProviders ?? {};
     this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
+    this.__source = config?.source;
+    this.__codePath = config?.codePath ?? './mastra/editor';
 
     // Built-in providers are always registered first, then merged with user-provided ones
     this.__filesystems = new Map<string, FilesystemProvider>();
@@ -150,6 +156,26 @@ export class MastraEditor implements IMastraEditor {
     this.__mastra = mastra;
     if (!this.__logger) {
       this.__logger = mastra.getLogger();
+    }
+
+    // Code mode routes editor-owned domains to a FilesystemStore at `codePath`.
+    // If app storage already exists, keep it as the default for non-editor domains
+    // and overlay filesystem storage for editor saves.
+    if (this.__source === 'code') {
+      const filesystemStore = new FilesystemStore({ dir: this.__codePath });
+      const existingStorage = mastra.getStorage();
+
+      if (existingStorage) {
+        mastra.setStorage(
+          new MastraCompositeStore({
+            id: `${existingStorage.id}-with-editor-filesystem`,
+            default: existingStorage,
+            editor: filesystemStore,
+          }),
+        );
+      } else {
+        mastra.setStorage(filesystemStore);
+      }
     }
 
     // Fire-and-forget: persist builder default workspace to DB if configured,
@@ -350,6 +376,11 @@ export class MastraEditor implements IMastraEditor {
     }
   }
 
+  /** Returns the editor's configured source, or undefined if unset. */
+  getSource(): 'code' | 'db' | undefined {
+    return this.__source;
+  }
+
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined {
     return this.__toolProviders[id];
@@ -362,9 +393,7 @@ export class MastraEditor implements IMastraEditor {
   getToolProviderOrThrow(id: string): ToolProvider {
     const provider = this.__toolProviders[id];
     if (!provider) {
-      throw new Error(
-        `Unknown tool provider "${id}". Available: ${Object.keys(this.__toolProviders).join(', ') || '(none)'}`,
-      );
+      throw new UnknownToolProviderError(id, Object.keys(this.__toolProviders));
     }
     return provider;
   }

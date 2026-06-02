@@ -54,18 +54,10 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     retryCount: Number(row.retry_count),
     maxRetries: Number(row.max_retries),
     timeoutMs: Number(row.timeout_ms),
-    createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
-    startedAt: row.startedAt ? (row.startedAt instanceof Date ? row.startedAt : new Date(row.startedAt)) : undefined,
-    suspendedAt: row.suspendedAt
-      ? row.suspendedAt instanceof Date
-        ? row.suspendedAt
-        : new Date(row.suspendedAt)
-      : undefined,
-    completedAt: row.completedAt
-      ? row.completedAt instanceof Date
-        ? row.completedAt
-        : new Date(row.completedAt)
-      : undefined,
+    createdAt: new Date(row.createdAtZ || row.createdAt),
+    startedAt: row.startedAtZ || row.startedAt ? new Date(row.startedAtZ || row.startedAt) : undefined,
+    suspendedAt: row.suspendedAtZ || row.suspendedAt ? new Date(row.suspendedAtZ || row.suspendedAt) : undefined,
+    completedAt: row.completedAtZ || row.completedAt ? new Date(row.completedAtZ || row.completedAt) : undefined,
   };
 }
 
@@ -232,15 +224,21 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     }
     if ('startedAt' in update) {
       setClauses.push(`"startedAt" = $${paramIdx++}`);
-      params.push(update.startedAt?.toISOString() ?? null);
+      setClauses.push(`"startedAtZ" = $${paramIdx++}`);
+      const val = update.startedAt?.toISOString() ?? null;
+      params.push(val, val);
     }
     if ('suspendedAt' in update) {
       setClauses.push(`"suspendedAt" = $${paramIdx++}`);
-      params.push(update.suspendedAt?.toISOString() ?? null);
+      setClauses.push(`"suspendedAtZ" = $${paramIdx++}`);
+      const val = update.suspendedAt?.toISOString() ?? null;
+      params.push(val, val);
     }
     if ('completedAt' in update) {
       setClauses.push(`"completedAt" = $${paramIdx++}`);
-      params.push(update.completedAt?.toISOString() ?? null);
+      setClauses.push(`"completedAtZ" = $${paramIdx++}`);
+      const val = update.completedAt?.toISOString() ?? null;
+      params.push(val, val);
     }
 
     if (setClauses.length === 0) return;

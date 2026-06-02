@@ -284,7 +284,7 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Install integration test dependencies
-        run: pnpm install --ignore-workspace
+        run: pnpm install
         working-directory: packages/memory/integration-tests
 
       - name: Run Memory tests

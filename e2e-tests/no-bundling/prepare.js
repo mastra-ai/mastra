@@ -17,12 +17,22 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
   await mkdir(newPath, { recursive: true });
   await cp(templatePath, newPath, { recursive: true });
   await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\n');
-  await writeFile(join(newPath, 'pnpm-workspace.yaml'), 'minimumReleaseAge: 0\n');
+  await writeFile(
+    join(newPath, 'pnpm-workspace.yaml'),
+    `packages:
+  - '.'
+allowBuilds:
+  esbuild: true
+  sharp: true
+  protobufjs: true
+minimumReleaseAge: 0
+`,
+  );
 
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
   const env = {
     ...process.env,
-    npm_config_minimum_release_age: '0',
+    pnpm_config_minimum_release_age: '0',
   };
 
   console.log('Directory:', newPath);

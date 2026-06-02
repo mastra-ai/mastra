@@ -1,3 +1,4 @@
+import type { StorageMastraRef } from '../../base';
 import type { FilesystemDB } from '../../filesystem-db';
 import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
@@ -21,9 +22,53 @@ const PERSISTED_SNAPSHOT_FIELDS = new Set([
   'model',
   'tools',
   'integrationTools',
+  'toolProviders',
   'mcpClients',
   'requestContextSchema',
 ]);
+
+/**
+ * Fields always excluded from per-entity (code-mode) JSON files regardless
+ * of editor config. `model`/`name` are not editable from Studio for
+ * code-defined agents, so they should not appear in the committed override
+ * JSON — they would otherwise look like settable fields in code review and
+ * could drift from the source-of-truth declaration in code.
+ */
+const CODE_MODE_EXCLUDED_FIELDS = new Set(['model', 'name']);
+
+/**
+ * Fields that depend on per-agent editor ownership.
+ * When the agent's editor config does not own a given field (e.g.
+ * descriptions-only mode does not own raw instructions), it should be
+ * omitted from the on-disk per-entity JSON entirely.
+ */
+const OWNED_FIELDS_BY_GROUP = {
+  instructions: ['instructions'],
+  tools: ['tools', 'integrationTools', 'mcpClients'],
+} as const;
+
+function ownershipFromEditorConfig(editorConfig: unknown): {
+  ownsInstructions: boolean;
+  ownsTools: boolean;
+} {
+  if (editorConfig === false) {
+    return { ownsInstructions: false, ownsTools: false };
+  }
+  if (editorConfig === undefined || editorConfig === null) {
+    // Code agents without explicit editor config behave as fully editable.
+    return { ownsInstructions: true, ownsTools: true };
+  }
+  if (typeof editorConfig !== 'object') {
+    return { ownsInstructions: false, ownsTools: false };
+  }
+  const cfg = editorConfig as { instructions?: unknown; tools?: unknown };
+  const ownsInstructions = cfg.instructions === true;
+  const toolsCfg = cfg.tools;
+  const ownsTools =
+    toolsCfg === true ||
+    (typeof toolsCfg === 'object' && toolsCfg !== null && (toolsCfg as { description?: unknown }).description === true);
+  return { ownsInstructions, ownsTools };
+}
 
 function stripUnusedFields<T extends Record<string, unknown>>(obj: T): T {
   const result = {} as Record<string, unknown>;
@@ -37,16 +82,51 @@ function stripUnusedFields<T extends Record<string, unknown>>(obj: T): T {
 
 export class FilesystemAgentsStorage extends AgentsStorage {
   private helpers: FilesystemVersionedHelpers<StorageAgentType, AgentVersion>;
+  private storageMastra?: StorageMastraRef;
 
   constructor({ db }: { db: FilesystemDB }) {
     super();
+    const isCodeAgent = (entityId: string): boolean => {
+      const agent = this.storageMastra?.getAgentById?.(entityId);
+      return agent?.source === 'code';
+    };
+    const editorConfigFor = (entityId: string): unknown => {
+      const agent = this.storageMastra?.getAgentById?.(entityId);
+      return agent?.__getEditorConfig?.();
+    };
     this.helpers = new FilesystemVersionedHelpers({
       db,
       entitiesFile: 'agents.json',
       parentIdField: 'agentId',
       name: 'FilesystemAgentsStorage',
       versionMetadataFields: ['id', 'agentId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt'],
+      perEntityFilesDir: 'agents',
+      // Per-entity layout is used only for code-mode agents — i.e. agents
+      // that are declared in code (`source === 'code'`). For db-mode and
+      // user-created stored agents we keep the shared `agents.json` layout.
+      shouldPersistToPerEntityFile: entity => isCodeAgent(entity.id),
+      perEntitySnapshotFilter: (snapshot, entity) => {
+        const { ownsInstructions, ownsTools } = ownershipFromEditorConfig(editorConfigFor(entity.id));
+        const excludedByOwnership = new Set<string>();
+        if (!ownsInstructions) {
+          for (const field of OWNED_FIELDS_BY_GROUP.instructions) excludedByOwnership.add(field);
+        }
+        if (!ownsTools) {
+          for (const field of OWNED_FIELDS_BY_GROUP.tools) excludedByOwnership.add(field);
+        }
+        const result: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(snapshot)) {
+          if (CODE_MODE_EXCLUDED_FIELDS.has(key)) continue;
+          if (excludedByOwnership.has(key)) continue;
+          result[key] = value;
+        }
+        return result;
+      },
     });
+  }
+
+  __registerMastra(mastra: StorageMastraRef): void {
+    this.storageMastra = mastra;
   }
 
   override async init(): Promise<void> {
