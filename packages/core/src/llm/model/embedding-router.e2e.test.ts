@@ -129,6 +129,35 @@ describe('ModelRouterEmbeddingModel Integration', () => {
       });
     });
 
+    it('falls back to the default Mastra Gateway URL for empty configured URLs', () => {
+      process.env.MASTRA_GATEWAY_URL = '   ';
+      new ModelRouterEmbeddingModel(GATEWAY_OPENAI_EMBEDDING_MODEL);
+
+      expect(createOpenAICompatible).toHaveBeenLastCalledWith({
+        name: 'mastra',
+        apiKey: 'test-gateway-key',
+        baseURL: 'https://gateway-api.mastra.ai/v1',
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+        },
+      });
+
+      new ModelRouterEmbeddingModel({
+        id: GATEWAY_OPENAI_EMBEDDING_MODEL,
+        apiKey: 'explicit-gateway-key',
+        url: '',
+      });
+
+      expect(createOpenAICompatible).toHaveBeenLastCalledWith({
+        name: 'mastra',
+        apiKey: 'explicit-gateway-key',
+        baseURL: 'https://gateway-api.mastra.ai/v1',
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+        },
+      });
+    });
+
     it('requires MASTRA_GATEWAY_API_KEY for mastra-prefixed embedding models', () => {
       delete process.env.MASTRA_GATEWAY_API_KEY;
 

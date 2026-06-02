@@ -19,8 +19,9 @@ function trimTrailingSlashes(value: string): string {
   return value.slice(0, end);
 }
 
-function getMastraGatewayBaseUrl(raw = process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai'): string {
-  const withoutTrailingSlashes = trimTrailingSlashes(raw);
+function getMastraGatewayBaseUrl(raw = process.env['MASTRA_GATEWAY_URL']): string {
+  const baseUrl = raw?.trim() || 'https://gateway-api.mastra.ai';
+  const withoutTrailingSlashes = trimTrailingSlashes(baseUrl);
   const withoutVersion = withoutTrailingSlashes.endsWith('/v1')
     ? withoutTrailingSlashes.slice(0, -'/v1'.length)
     : withoutTrailingSlashes;
