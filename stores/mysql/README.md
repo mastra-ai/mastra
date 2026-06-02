@@ -1,6 +1,6 @@
 # @mastra/mysql
 
-MySQL provider for Mastra - includes both vector and db storage capabilities.
+MySQL storage provider for Mastra.
 
 ## Stable v1.5 Compatibility
 
@@ -14,7 +14,7 @@ This version has been adapted to meet the stable v1.5 contract for Mastra storag
 To verify compatibility:
 
 ```bash
-pnpm typecheck
+pnpm exec tsc --noEmit
 pnpm test src/storage/index.unit.test.ts
 ```
 
@@ -67,7 +67,7 @@ If issues arise with this version, follow these steps to rollback:
    ```
 3. Verify the previous state:
    ```bash
-   pnpm typecheck
+   pnpm exec tsc --noEmit
    pnpm test src/storage/index.unit.test.ts
    ```
 
