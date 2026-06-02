@@ -38,6 +38,24 @@ const Providers = ({ children }: { children: ReactNode }) => {
   );
 };
 
+// The agent builder opts into the agent-signals transport
+// (`enableThreadSignals: true` + a `threadId`), so a send first subscribes to
+// the thread (`POST /threads/subscribe`) and then dispatches a signal
+// (`POST /signals`). The user turn + per-call instructions ride on the signal's
+// `ifIdle.streamOptions`, NOT on a legacy `stream-until-idle` request body.
+const stubThreadSubscription = () =>
+  http.post(`${BASE_URL}/api/agents/builder-agent/threads/subscribe`, () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.close();
+      },
+    });
+    return new HttpResponse(stream, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+  });
+
 describe('StreamChatProvider — modelSettings.instructions on the wire', () => {
   beforeEach(() => {
     server.resetHandlers();
@@ -47,23 +65,15 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     cleanup();
   });
 
-  it('flattens modelSettings.instructions into the request body and excludes it from the visible message list', async () => {
+  it('flattens modelSettings.instructions onto the signal and excludes it from the signal contents', async () => {
     const captured: CapturedRequest = { body: null };
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-      http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
+      stubThreadSubscription(),
+      http.post(`${BASE_URL}/api/agents/builder-agent/signals`, async ({ request }) => {
         captured.body = await request.json();
-        // Minimal "no events" response body — useChat closes out cleanly.
-        const stream = new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.close();
-          },
-        });
-        return new HttpResponse(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
+        return HttpResponse.json({ accepted: true, runId: 'run-1' });
       }),
     );
 
@@ -85,49 +95,45 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
       );
     });
 
-    // Allow the streamed request to be issued + intercepted.
+    // Allow the subscription + signal requests to be issued + intercepted.
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
     expect(captured.body).toBeTruthy();
 
+    const streamOptions = captured.body.ifIdle?.streamOptions;
+    expect(streamOptions).toBeTruthy();
+
     // The React layer flattens `modelSettings.instructions` to a top-level
-    // `instructions` field on the wire (see client-sdks/react/src/agent/hooks.ts:266).
-    expect(captured.body.instructions).toBe(snapshot);
+    // `instructions` field on the signal's stream options
+    // (see client-sdks/react/src/agent/hooks.ts).
+    expect(streamOptions.instructions).toBe(snapshot);
 
     // Supplying extraInstructions must NOT drop the rest of modelSettings.
-    // maxSteps is sent top-level; the remaining settings live under
-    // modelSettings (maxTokens is serialized as maxOutputTokens on the wire).
-    expect(captured.body.maxSteps).toBe(100);
-    expect(captured.body.modelSettings.maxRetries).toBe(3);
-    expect(captured.body.modelSettings.maxOutputTokens).toBe(5000);
-    expect(captured.body.modelSettings.temperature).toBe(1);
+    // maxSteps is sent top-level on the stream options; the remaining settings
+    // live under modelSettings (maxTokens is serialized as maxOutputTokens).
+    expect(streamOptions.maxSteps).toBe(100);
+    expect(streamOptions.modelSettings.maxRetries).toBe(3);
+    expect(streamOptions.modelSettings.maxOutputTokens).toBe(5000);
+    expect(streamOptions.modelSettings.temperature).toBe(1);
 
-    // Confirm the snapshot is NOT smuggled into the user-facing messages array.
-    const messages = captured.body.messages ?? [];
-    const serializedMessages = JSON.stringify(messages);
-    expect(serializedMessages).not.toContain('Current agent configuration');
-    expect(serializedMessages).not.toContain('Customer Support Bot');
-    expect(serializedMessages).toContain('Hello agent');
+    // Confirm the snapshot is NOT smuggled into the user-facing signal contents.
+    const serializedContents = JSON.stringify(captured.body.signal?.contents ?? []);
+    expect(serializedContents).not.toContain('Current agent configuration');
+    expect(serializedContents).not.toContain('Customer Support Bot');
+    expect(serializedContents).toContain('Hello agent');
   });
 
-  it('does not include `instructions` on the wire when extraInstructions is omitted', async () => {
+  it('does not include `instructions` on the signal when extraInstructions is omitted', async () => {
     const captured: CapturedRequest = { body: null };
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-      http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
+      stubThreadSubscription(),
+      http.post(`${BASE_URL}/api/agents/builder-agent/signals`, async ({ request }) => {
         captured.body = await request.json();
-        const stream = new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.close();
-          },
-        });
-        return new HttpResponse(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
+        return HttpResponse.json({ accepted: true, runId: 'run-1' });
       }),
     );
 
@@ -146,6 +152,6 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     });
 
     expect(captured.body).toBeTruthy();
-    expect(captured.body.instructions).toBeUndefined();
+    expect(captured.body.ifIdle?.streamOptions?.instructions).toBeUndefined();
   });
 });
