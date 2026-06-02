@@ -128,6 +128,13 @@ describe('Working memory via state signals (opt-in)', () => {
         resourceId: 'resource-round-trip',
       });
 
+      // Seed working memory so the processor has something to broadcast.
+      await memory.updateWorkingMemory({
+        threadId: thread.id,
+        resourceId: 'resource-round-trip',
+        workingMemory: '# User Profile\n- Name: Caleb',
+      });
+
       const processors = await memory.getInputProcessors();
       const wm = processors.find(p => p.id === WORKING_MEMORY_STATE_PROCESSOR_ID) as {
         computeStateSignal: (args: any) => Promise<any>;
@@ -208,6 +215,13 @@ describe('Working memory via state signals (opt-in)', () => {
       const thread = await memory.createThread({
         threadId: 'thread-reinject',
         resourceId: 'resource-reinject',
+      });
+
+      // Seed working memory so the processor has something to broadcast.
+      await memory.updateWorkingMemory({
+        threadId: thread.id,
+        resourceId: 'resource-reinject',
+        workingMemory: '# User Profile\n- Name: Caleb',
       });
 
       const processors = await memory.getInputProcessors();
@@ -343,6 +357,21 @@ describe('Working memory via state signals (opt-in)', () => {
       );
 
       expect(wmCallParts.length).toBeGreaterThanOrEqual(1);
+
+      // Thread metadata should track the working-memory state signal lifecycle.
+      const refreshedThread = await memory.getThreadById({ threadId });
+      const tracking = (refreshedThread?.metadata as any)?.mastra?.stateSignals?.['working-memory'];
+      expect(tracking).toBeDefined();
+      expect(tracking?.currentMode).toBe('snapshot');
+
+      // The WorkingMemoryStateProcessor should have emitted a snapshot signal during
+      // the agent run, and it should be persisted as a state signal row.
+      const wmStateSignals = persisted.filter((m: any) => {
+        if (m.role !== 'signal') return false;
+        const signal = m.content?.metadata?.signal;
+        return signal?.type === 'state' && signal?.metadata?.state?.id === 'working-memory';
+      });
+      expect(wmStateSignals.length).toBeGreaterThanOrEqual(1);
     });
 
     it('strips updateWorkingMemory tool-invocation parts on agent.stream with useStateSignals: false (default behavior preserved)', async () => {

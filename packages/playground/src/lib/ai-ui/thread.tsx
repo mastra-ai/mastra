@@ -9,6 +9,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import './composer-sending.css';
 import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
+import { SystemMessage } from './messages/system-message';
 import { UserMessage } from './messages/user-messages';
 import { useThreadRuntimeState } from './thread-runtime-state';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
@@ -65,6 +66,7 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
               UserMessage: UserMessage,
               EditComposer: EditComposer,
               AssistantMessage: WrappedAssistantMessage,
+              SystemMessage: SystemMessage,
             }}
           />
         </div>

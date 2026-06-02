@@ -3,7 +3,6 @@ import type { ComputeStateSignalArgs, ProcessorStateSignalTracking } from '@mast
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  renderWorkingMemoryAsSignalContents,
   stableWorkingMemoryCacheKey,
   WORKING_MEMORY_STATE_ID,
   WORKING_MEMORY_STATE_PROCESSOR_ID,
@@ -75,9 +74,10 @@ describe('WorkingMemoryStateProcessor', () => {
       tagName: 'working-memory',
     });
     expect(result?.cacheKey).toBe(stableWorkingMemoryCacheKey({ format: 'markdown', data: '# Title\n- ready' }));
-    expect(result?.contents).toContain('<working_memory_template>');
-    expect(result?.contents).toContain('<working_memory_data>');
-    expect(result?.contents).toContain('# Title\n- ready');
+    // Plain text contents — runtime wraps in <working-memory ...>…</working-memory> via tagName.
+    expect(result?.contents).toBe('# Title\n- ready');
+    expect(result?.contents).not.toContain('<working_memory_');
+    expect(result?.value).toEqual({ data: '# Title\n- ready' });
     expect(result?.attributes).toMatchObject({ format: 'markdown', scope: 'resource' });
   });
 
@@ -169,18 +169,37 @@ describe('WorkingMemoryStateProcessor', () => {
     expect(result?.contents).toContain('# new');
   });
 
-  it('renders a placeholder when no working memory data is stored yet', () => {
-    const template: WorkingMemoryTemplate = { format: 'markdown', content: 'tpl' };
-    const contents = renderWorkingMemoryAsSignalContents({ template, data: null });
-    expect(contents).toContain('No working memory data stored yet.');
+  it('emits no signal when no working memory data is stored yet', async () => {
+    const template: WorkingMemoryTemplate = { format: 'markdown', content: '# tpl' };
+    const memory = buildMemoryMock({ template, data: null });
+    const processor = new WorkingMemoryStateProcessor(memory);
+    const result = await processor.computeStateSignal(buildArgs());
+    expect(result).toBeUndefined();
   });
 
-  it('produces deterministic cacheKeys regardless of object key order in data', () => {
-    const a = stableWorkingMemoryCacheKey({ format: 'json', data: JSON.stringify({ a: 1, b: 2 }) });
-    const b = stableWorkingMemoryCacheKey({ format: 'json', data: JSON.stringify({ b: 2, a: 1 }) });
-    // raw string differs because JSON.stringify preserves key order in the input,
-    // but stableWorkingMemoryCacheKey wraps the outer object deterministically.
-    expect(a).toContain('"format":"json"');
-    expect(b).toContain('"format":"json"');
+  it('emits no signal when working memory data is whitespace-only', async () => {
+    const template: WorkingMemoryTemplate = { format: 'markdown', content: '# tpl' };
+    const memory = buildMemoryMock({ template, data: '   \n  ' });
+    const processor = new WorkingMemoryStateProcessor(memory);
+    const result = await processor.computeStateSignal(buildArgs());
+    expect(result).toBeUndefined();
+  });
+
+  it('produces compact, stable, content-addressed cacheKeys', () => {
+    const longBlob = '# User Profile\n' + '- Name: Caleb\n'.repeat(1000);
+    const a = stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob });
+    const b = stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob });
+    const c = stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob + 'change' });
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+    // sha256 hex digest + prefix is always 71 chars, regardless of payload size.
+    expect(a).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(a.length).toBe(71);
+  });
+
+  it('treats format as part of the cache key', () => {
+    const md = stableWorkingMemoryCacheKey({ format: 'markdown', data: '{}' });
+    const json = stableWorkingMemoryCacheKey({ format: 'json', data: '{}' });
+    expect(md).not.toBe(json);
   });
 });

@@ -77,15 +77,7 @@ const storage = new LibSQLStore({
   url: 'file:./wm-test.db',
 });
 
-const sharedInstructions = `You are a profile-tracking assistant. You MUST keep the user's profile up to date in working memory.
-
-RULES:
-- On the FIRST user message of every thread, call \`update-working-memory\` to initialize the profile (even if mostly empty).
-- Whenever the user tells you ANYTHING about themselves (name, preferences, allergies, anything that fills a profile field), you MUST call \`update-working-memory\` BEFORE replying to them.
-- When asked "what do you remember" or "what's my name", answer using the working memory profile data.
-- If the user asks about weather, call the \`get-weather\` tool.
-- Never invent values. Only write what the user actually told you.
-- Keep replies short.`;
+const sharedInstructions = `You are a helpful assistant.`;
 
 export const workingMemoryClassicAgent = new Agent({
   id: 'working-memory-classic',
