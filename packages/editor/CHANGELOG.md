@@ -1,5 +1,14 @@
 # @mastra/editor
 
+## 0.11.0-alpha.4
+
+### Patch Changes
+
+- Improved the Agent Builder system prompt so it produces more reliable agents from starter cards and freeform prompts. ([#17424](https://github.com/mastra-ai/mastra/pull/17424))
+
+- Updated dependencies [[`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3)]:
+  - @mastra/core@1.38.0-alpha.6
+
 ## 0.11.0-alpha.3
 
 ### Minor Changes
