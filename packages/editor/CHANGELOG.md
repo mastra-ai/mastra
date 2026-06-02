@@ -1,5 +1,49 @@
 # @mastra/editor
 
+## 0.11.0-alpha.4
+
+### Patch Changes
+
+- Improved the Agent Builder system prompt so it produces more reliable agents from starter cards and freeform prompts. ([#17424](https://github.com/mastra-ai/mastra/pull/17424))
+
+- Updated dependencies [[`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3)]:
+  - @mastra/core@1.38.0-alpha.6
+
+## 0.11.0-alpha.3
+
+### Minor Changes
+
+- Added agent override support to the agent and editor APIs. ([#17227](https://github.com/mastra-ai/mastra/pull/17227))
+
+  Code-defined agents can now declare which fields Studio may edit with the `editor` option:
+
+  ```ts
+  new Agent({
+    name: 'Weather Agent',
+    model,
+    editor: {
+      instructions: true,
+      tools: { description: true },
+    },
+  });
+  ```
+
+  The editor applies stored overrides only for fields the `editor` config owns, so locked fields keep their code-defined values. Per-agent `editor: false` locks an agent entirely.
+
+  `MastraEditor` accepts a `source` setting that picks the editing experience:
+
+  ```ts
+  new MastraEditor({ source: 'code' });
+  ```
+
+  - `source: 'code'` — the editor auto-wires a `FilesystemStore` (defaulting to `./mastra/editor/`, overridable with `codePath`) when no editor storage is supplied, and persists overrides as deterministic per-agent JSON files.
+  - `source: 'db'` (default) — keeps the existing storage-backed flow against whatever storage the project has configured.
+
+### Patch Changes
+
+- Updated dependencies [[`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15)]:
+  - @mastra/core@1.38.0-alpha.5
+
 ## 0.11.0-alpha.2
 
 ### Minor Changes

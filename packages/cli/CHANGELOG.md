@@ -1,5 +1,52 @@
 # mastra
 
+## 1.11.0-alpha.6
+
+### Patch Changes
+
+- Fixed project creation failing with pnpm v11 due to invalid packageManager range in package.json. pnpm v11 writes a semver range (e.g. pnpm@^11.3.0) into the packageManager field, but the spec requires an exact version. The range prefix is now stripped automatically. ([#17419](https://github.com/mastra-ai/mastra/pull/17419))
+
+- Separated thread subscription cleanup from active-run aborts so closing or switching a listener only unsubscribes that listener, while explicit cancel still aborts the active run. ([#17310](https://github.com/mastra-ai/mastra/pull/17310))
+
+- Added subscription-native tool approval APIs so approving or declining a tool call resumes through the active thread subscription instead of requiring a separate continuation stream. New messages are queued while a tool approval is waiting, preventing overlapping runs from duplicating approval requests. ([#17311](https://github.com/mastra-ai/mastra/pull/17311))
+
+  ```ts
+  await agent.sendToolApproval({
+    resourceId: 'user-123',
+    threadId: 'thread-123',
+    toolCallId: 'tool-call-123',
+    approved: true,
+  });
+  ```
+
+- dependencies updates: ([#17146](https://github.com/mastra-ai/mastra/pull/17146))
+  - Updated dependency [`@babel/parser@^7.29.7` ↗︎](https://www.npmjs.com/package/@babel/parser/v/7.29.7) (from `^7.29.3`, in `dependencies`)
+  - Updated dependency [`@babel/types@^7.29.7` ↗︎](https://www.npmjs.com/package/@babel/types/v/7.29.7) (from `^7.29.0`, in `dependencies`)
+
+- Fixed the Agent Builder so newly created agents reliably get a real name, description, and instructions back-filled. Previously the builder could leave the truncated starter prompt as the agent's name, stall before writing instructions, or repeatedly call `set-agent-model` with empty payloads. ([#17424](https://github.com/mastra-ai/mastra/pull/17424))
+
+- Enabled Studio via the CLI and deployers to use agent signal subscriptions by default while preserving `MASTRA_AGENT_SIGNALS=false`, `enableThreadSignals: false`, and explicit legacy Stream as opt-outs. The React `useChat()` hook remains opt-in for SDK consumers via `enableThreadSignals: true`. ([#17313](https://github.com/mastra-ai/mastra/pull/17313))
+
+- Updated dependencies [[`c0ecd20`](https://github.com/mastra-ai/mastra/commit/c0ecd202fc14f2c86fd5f08c091754ba8f3dd088), [`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3), [`05d61e1`](https://github.com/mastra-ai/mastra/commit/05d61e18aa014a012a32ee9cb79cdcf3210dbe9d)]:
+  - @mastra/deployer@1.38.0-alpha.6
+  - @mastra/core@1.38.0-alpha.6
+
+## 1.11.0-alpha.5
+
+### Minor Changes
+
+- Added the agent override editing experience to Studio for the `code` editor source. ([#17229](https://github.com/mastra-ai/mastra/pull/17229))
+
+  When the project uses `MastraEditor({ source: 'code' })`, the agent Editor tab swaps Save/Publish for Download JSON and Save to filesystem (and Open PR when platform wiring is available), and surfaces git commits of per-agent JSON files as read-only version history. Fields locked by an agent's `editor` config render read-only with an "owned by code" notice, and the unsaved-changes prompt matches the active source.
+
+  The default `source: 'db'` flow is unchanged. Also fixed the Editor test chat so saved draft changes are reflected without a page refresh.
+
+### Patch Changes
+
+- Updated dependencies [[`8260167`](https://github.com/mastra-ai/mastra/commit/8260167431f98400f3acef4bbb7bd6027efd7a4b), [`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15)]:
+  - @mastra/deployer@1.38.0-alpha.5
+  - @mastra/core@1.38.0-alpha.5
+
 ## 1.10.3-alpha.4
 
 ### Patch Changes

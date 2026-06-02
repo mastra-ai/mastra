@@ -1,5 +1,60 @@
 # @mastra/client-js
 
+## 1.22.0-alpha.6
+
+### Patch Changes
+
+- Separated thread subscription cleanup from active-run aborts so closing or switching a listener only unsubscribes that listener, while explicit cancel still aborts the active run. ([#17310](https://github.com/mastra-ai/mastra/pull/17310))
+
+- Added subscription-native tool approval APIs so approving or declining a tool call resumes through the active thread subscription instead of requiring a separate continuation stream. New messages are queued while a tool approval is waiting, preventing overlapping runs from duplicating approval requests. ([#17311](https://github.com/mastra-ai/mastra/pull/17311))
+
+  ```ts
+  await agent.sendToolApproval({
+    resourceId: 'user-123',
+    threadId: 'thread-123',
+    toolCallId: 'tool-call-123',
+    approved: true,
+  });
+  ```
+
+- Updated dependencies [[`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3)]:
+  - @mastra/core@1.38.0-alpha.6
+
+## 1.22.0-alpha.5
+
+### Minor Changes
+
+- Added an agent override export API and server-side ownership enforcement. ([#17228](https://github.com/mastra-ai/mastra/pull/17228))
+
+  The server and client now expose an agent override export endpoint so Studio can download an agent's overrides as JSON for review or commit workflows. Saves are enforced server-side against each agent's `editor` config, so only owned fields (instructions, tools, or tool descriptions) are persisted and fields locked by the `editor` config are stripped.
+
+  The system packages response also reports the active editor `source` so clients can render the correct editing experience.
+
+- Added a `PATCH /tool-providers/:providerId/connections/:connectionId` endpoint and matching client SDK method so authors can rename a connection's display label after creation. ([#17249](https://github.com/mastra-ai/mastra/pull/17249))
+
+  **Rename a connection from the client SDK**
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: '…' });
+
+  await client.getToolProvider('composio').updateConnection('auth_abc', {
+    label: 'Work inbox',
+  });
+  ```
+
+  Pass `label: null` (or an empty string) to clear the existing label. Labels are 1–32 characters and accept letters, digits, spaces, underscores, and hyphens (`[A-Za-z0-9 _-]+`).
+
+  **Ownership enforced server-side**
+
+  Non-owners get a 403 unless they hold `tool-providers:admin`. Shared connections are reachable by every author. The label is stored on the connection row itself, so the rename flows to every agent that pins the connection — no per-agent edit needed.
+
+### Patch Changes
+
+- Updated dependencies [[`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15)]:
+  - @mastra/core@1.38.0-alpha.5
+
 ## 1.22.0-alpha.4
 
 ### Minor Changes

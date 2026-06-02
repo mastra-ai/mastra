@@ -80,7 +80,12 @@ export const StreamChatProvider = ({
         modelSettings: {
           maxRetries: 3,
           maxSteps: 100,
-          maxTokens: 1000,
+          // Sized to fit one `set-agent-instructions` tool call carrying up to
+          // ~3,000 chars of generated instructions plus the JSON envelope and
+          // any hidden reasoning tokens emitted by the builder model. Below
+          // ~2,000 we see mid-stream JSON truncation surface as an OpenAI
+          // server_error on the next request.
+          maxTokens: 5000,
           temperature: 1,
         },
         requestContext,

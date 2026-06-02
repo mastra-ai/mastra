@@ -20,6 +20,35 @@ import { convertSignalDataToBase64String } from './signal-data';
 import type { ModelSettings } from './types';
 
 type ToolsInput = any;
+
+const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) => {
+  const pendingToolApprovalIds = new Set<string>();
+
+  for (const message of messages) {
+    const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
+    if (!metadata) continue;
+
+    const metadataSources = [
+      metadata.pendingToolApprovals,
+      metadata.requireApprovalMetadata,
+      metadata.suspendedTools,
+    ] as Array<Record<string, { toolCallId?: unknown }> | undefined>;
+
+    for (const source of metadataSources) {
+      if (!source || typeof source !== 'object') continue;
+
+      for (const suspensionData of Object.values(source)) {
+        const toolCallId = suspensionData?.toolCallId;
+        if (typeof toolCallId === 'string' && toolCallId.length > 0) {
+          pendingToolApprovalIds.add(toolCallId);
+        }
+      }
+    }
+  }
+
+  return pendingToolApprovalIds;
+};
+
 type SignalContinuationOptions = {
   maxSteps?: number;
   modelSettings?: {
@@ -54,9 +83,8 @@ export interface MastraChatProps {
   onSignalEcho?: (signalId: string) => void;
   onThreadSignalsUnsupported?: () => void;
   /**
-   * Opt into the agent-signals streaming path (sendSignal + subscribeToThread).
-   * Defaults to `false` so consumers stay on the legacy `streamUntilIdle` route
-   * unless they explicitly enable the signals path.
+   * Use the agent-signals streaming path (sendSignal + subscribeToThread).
+   * Defaults to `false`; set to `true` to opt into thread signals.
    */
   enableThreadSignals?: boolean;
 }
@@ -156,6 +184,9 @@ export const useChat = ({
   // continuation turns on the server.
   const _streamAbortRef = useRef<AbortController | null>(null);
   const _threadSubscriptionAbortRef = useRef<AbortController | null>(null);
+  const _threadSubscriptionRef = useRef<{ abort?: () => Promise<boolean> | boolean; unsubscribe?: () => void } | null>(
+    null,
+  );
   const _threadSubscriptionKeyRef = useRef<string | undefined>(undefined);
   const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
   const _threadSignalsUnsupportedRef = useRef(false);
@@ -166,6 +197,8 @@ export const useChat = ({
   const [networkToolCallApprovals, setNetworkToolCallApprovals] = useState<{
     [toolName: string]: { status: 'approved' | 'declined' };
   }>({});
+  const pendingToolApprovalIdsRef = useRef(new Set<string>());
+  const [isAwaitingToolApproval, setIsAwaitingToolApproval] = useState(false);
 
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
@@ -173,6 +206,8 @@ export const useChat = ({
   useEffect(() => {
     const formattedMessages = initialMessages ?? [];
     setMessages(formattedMessages);
+    pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
+    setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
   }, [initialMessages]);
 
@@ -248,7 +283,13 @@ export const useChat = ({
   };
 
   const closeThreadSubscription = useCallback(() => {
-    _threadSubscriptionAbortRef.current?.abort();
+    const subscription = _threadSubscriptionRef.current;
+    if (subscription?.unsubscribe) {
+      subscription.unsubscribe();
+    } else {
+      _threadSubscriptionAbortRef.current?.abort();
+    }
+    _threadSubscriptionRef.current = null;
     _threadSubscriptionAbortRef.current = null;
     _threadSubscriptionKeyRef.current = undefined;
     _threadSubscriptionPromiseRef.current = null;
@@ -269,7 +310,18 @@ export const useChat = ({
         }
       }
 
+      if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+        const toolCallId = chunk.payload?.toolCallId;
+        if (typeof toolCallId === 'string') {
+          pendingToolApprovalIdsRef.current.add(toolCallId);
+          setIsAwaitingToolApproval(true);
+        }
+        setIsRunning(false);
+      }
+
       if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
+        pendingToolApprovalIdsRef.current.clear();
+        setIsAwaitingToolApproval(false);
         setIsRunning(false);
       }
 
@@ -286,7 +338,7 @@ export const useChat = ({
         return;
       }
 
-      _threadSubscriptionAbortRef.current?.abort();
+      closeThreadSubscription();
       const subscriptionAbort = new AbortController();
       _threadSubscriptionAbortRef.current = subscriptionAbort;
       _threadSubscriptionKeyRef.current = subscriptionKey;
@@ -300,7 +352,18 @@ export const useChat = ({
       _threadSubscriptionPromiseRef.current = subscriptionAgent
         .subscribeToThread({ resourceId, threadId })
         .then(response => {
-          void response
+          const subscription = response as typeof response & { unsubscribe?: () => void };
+          if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
+            if (subscription.unsubscribe) {
+              subscription.unsubscribe();
+            } else {
+              subscriptionAbort.abort();
+            }
+            return;
+          }
+
+          _threadSubscriptionRef.current = subscription;
+          void subscription
             .processDataStream({
               onChunk: chunk => processStreamChunk(chunk),
             })
@@ -311,6 +374,9 @@ export const useChat = ({
               }
             })
             .finally(() => {
+              if (_threadSubscriptionRef.current === subscription) {
+                _threadSubscriptionRef.current = null;
+              }
               if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
                 _threadSubscriptionAbortRef.current = null;
                 _threadSubscriptionKeyRef.current = undefined;
@@ -322,6 +388,7 @@ export const useChat = ({
           if (isThreadSignalUnsupportedError(error)) {
             markThreadSignalsUnsupported();
             if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+              _threadSubscriptionRef.current = null;
               _threadSubscriptionAbortRef.current = null;
               _threadSubscriptionKeyRef.current = undefined;
               _threadSubscriptionPromiseRef.current = null;
@@ -338,7 +405,7 @@ export const useChat = ({
 
       await _threadSubscriptionPromiseRef.current;
     },
-    [agentId, baseClient, markThreadSignalsUnsupported, processStreamChunk],
+    [agentId, baseClient, closeThreadSubscription, markThreadSignalsUnsupported, processStreamChunk],
   );
 
   useEffect(() => {
@@ -581,6 +648,9 @@ export const useChat = ({
           },
         },
       });
+      if (pendingToolApprovalIdsRef.current.size > 0) {
+        setIsRunning(false);
+      }
     } catch (error) {
       onSignalEcho?.(resolvedSignalId);
       if (isThreadSignalUnsupportedError(error)) {
@@ -659,8 +729,14 @@ export const useChat = ({
   const handleCancelRun = () => {
     _streamAbortRef.current?.abort();
     _streamAbortRef.current = null;
+    const threadSubscription = _threadSubscriptionRef.current;
+    void Promise.resolve(threadSubscription?.abort?.()).catch(error => {
+      console.error('[useChat] Failed to abort thread subscription', error);
+    });
     closeThreadSubscription();
     setMessages(prev => finishStreamingAssistantMessage(prev));
+    pendingToolApprovalIdsRef.current.clear();
+    setIsAwaitingToolApproval(false);
     setIsRunning(false);
     _currentRunId.current = undefined;
     _onChunk.current = undefined;
@@ -680,20 +756,39 @@ export const useChat = ({
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
+    if (_threadSubscriptionKeyRef.current && threadId) {
+      try {
+        await agent.sendToolApproval({
+          resourceId: resourceId || agentId,
+          threadId,
+          toolCallId,
+          approved: true,
+          requestContext: _requestContext.current,
+        });
+        pendingToolApprovalIdsRef.current.delete(toolCallId);
+        setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+        setIsRunning(false);
+      } catch (error) {
+        setToolCallApprovals(prev => {
+          const next = { ...prev };
+          delete next[toolCallId];
+          return next;
+        });
+        setIsRunning(false);
+        throw error;
+      }
+      return;
+    }
+
     const response = await agent.approveToolCall({
       runId: currentRunId,
       toolCallId,
       requestContext: _requestContext.current,
     });
 
-    if (_threadSubscriptionKeyRef.current) {
-      return;
-    }
-
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-        void (onChunk ?? _onChunk.current)?.(chunk);
+        await processStreamChunk(chunk, onChunk);
       },
     });
     setIsRunning(false);
@@ -709,20 +804,39 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
     const agent = baseClient.getAgent(agentId);
+    if (_threadSubscriptionKeyRef.current && threadId) {
+      try {
+        await agent.sendToolApproval({
+          resourceId: resourceId || agentId,
+          threadId,
+          toolCallId,
+          approved: false,
+          requestContext: _requestContext.current,
+        });
+        pendingToolApprovalIdsRef.current.delete(toolCallId);
+        setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+        setIsRunning(false);
+      } catch (error) {
+        setToolCallApprovals(prev => {
+          const next = { ...prev };
+          delete next[toolCallId];
+          return next;
+        });
+        setIsRunning(false);
+        throw error;
+      }
+      return;
+    }
+
     const response = await agent.declineToolCall({
       runId: currentRunId,
       toolCallId,
       requestContext: _requestContext.current,
     });
 
-    if (_threadSubscriptionKeyRef.current) {
-      return;
-    }
-
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-        void (onChunk ?? _onChunk.current)?.(chunk);
+        await processStreamChunk(chunk, onChunk);
       },
     });
     setIsRunning(false);
@@ -874,6 +988,7 @@ export const useChat = ({
     setMessages,
     sendMessage,
     isRunning,
+    isAwaitingToolApproval,
     messages,
     approveToolCall,
     declineToolCall,
