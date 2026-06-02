@@ -4,6 +4,7 @@ import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
 import { matchesDomain, extractUrls } from '../inline-media';
+import type { ChannelHandler } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -427,6 +428,161 @@ describe('AgentChannels', () => {
       expect(failing).toHaveBeenCalledTimes(1);
       expect(succeeding).toHaveBeenCalledTimes(1);
       expect((agentChannels as any).threadSubscriptions.size).toBe(0);
+    });
+  });
+
+  describe('handler ctx', () => {
+    // Drives `resolveHandlerContext` directly so we can assert ctx shape and
+    // abort fan-out without spinning up the full Chat SDK + agent runtime.
+    //
+    // We stub the private deps the resolver hits: `getOrCreateThread` returns a
+    // canned StorageThreadType; `ensureThreadSubscription` is replaced with a
+    // bare object so we can assert what `ctx.abort()` / `ctx.activeRunId` are
+    // wired to.
+    function stubResolverDeps(channels: AgentChannels, opts?: { threadId?: string; resourceId?: string }) {
+      const threadId = opts?.threadId ?? 'mastra-thread-1';
+      const resourceId = opts?.resourceId ?? 'slack:U1';
+      const subscriptionAbort = vi.fn(() => true);
+      const subscriptionActiveRunId = vi.fn(() => 'run-1');
+      const subscription = {
+        abort: subscriptionAbort,
+        activeRunId: subscriptionActiveRunId,
+        unsubscribe: vi.fn(),
+        stream: (async function* () {})(),
+      };
+      (channels as any).getOrCreateThread = vi.fn(async () => ({
+        id: threadId,
+        resourceId,
+        title: 'test thread',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      }));
+      (channels as any).ensureThreadSubscription = vi.fn(() => subscription);
+      return { threadId, resourceId, subscription, subscriptionAbort, subscriptionActiveRunId };
+    }
+
+    function fakeChatThread(adapter = 'slack') {
+      return {
+        id: `${adapter}:C1:T1`,
+        channelId: `${adapter}:C1`,
+        adapter: { name: adapter },
+      } as any;
+    }
+
+    function fakeMessage(userId = 'U1', text = 'hi') {
+      return {
+        id: 'm-1',
+        text,
+        author: { userId, userName: 'alice' },
+        attachments: [],
+      } as any;
+    }
+
+    it('exposes threadId, resourceId, abortSignal, abort, activeRunId on ctx', async () => {
+      const { threadId, resourceId } = stubResolverDeps(agentChannels);
+
+      const { ctx } = await (agentChannels as any).resolveHandlerContext(fakeChatThread(), fakeMessage(), {} as any);
+
+      expect(ctx.threadId).toBe(threadId);
+      expect(ctx.resourceId).toBe(resourceId);
+      expect(ctx.abortSignal).toBeInstanceOf(AbortSignal);
+      expect(ctx.abortSignal.aborted).toBe(false);
+      expect(typeof ctx.abort).toBe('function');
+      expect(typeof ctx.activeRunId).toBe('function');
+      expect(ctx.activeRunId()).toBe('run-1');
+    });
+
+    it('ctx.abort() forwards to the underlying subscription and returns its result', async () => {
+      const { subscriptionAbort } = stubResolverDeps(agentChannels);
+
+      const { ctx } = await (agentChannels as any).resolveHandlerContext(fakeChatThread(), fakeMessage(), {} as any);
+
+      expect(ctx.abort()).toBe(true);
+      expect(subscriptionAbort).toHaveBeenCalledTimes(1);
+
+      subscriptionAbort.mockReturnValueOnce(false);
+      expect(ctx.abort('user-stop')).toBe(false);
+    });
+
+    it('aborting via the agent stream fires ctx.abortSignal on every in-flight handler for that thread', async () => {
+      const { threadId } = stubResolverDeps(agentChannels);
+
+      const a = await (agentChannels as any).resolveHandlerContext(fakeChatThread(), fakeMessage(), {} as any);
+      const b = await (agentChannels as any).resolveHandlerContext(fakeChatThread(), fakeMessage(), {} as any);
+
+      const aFired = vi.fn();
+      const bFired = vi.fn();
+      a.ctx.abortSignal.addEventListener('abort', aFired);
+      b.ctx.abortSignal.addEventListener('abort', bFired);
+
+      // Simulate the consume-stream tap firing on an `abort` chunk.
+      (agentChannels as any).abortHandlerControllers(threadId, 'agent-run-aborted');
+
+      expect(a.ctx.abortSignal.aborted).toBe(true);
+      expect(b.ctx.abortSignal.aborted).toBe(true);
+      expect(aFired).toHaveBeenCalledTimes(1);
+      expect(bFired).toHaveBeenCalledTimes(1);
+      // Set is cleared after fan-out.
+      expect((agentChannels as any).handlerAbortControllers.has(threadId)).toBe(false);
+    });
+
+    it('abort fan-out is scoped per thread', async () => {
+      stubResolverDeps(agentChannels, { threadId: 'thread-a' });
+      const a = await (agentChannels as any).resolveHandlerContext(fakeChatThread(), fakeMessage(), {} as any);
+      expect(a.ctx.threadId).toBe('thread-a');
+
+      stubResolverDeps(agentChannels, { threadId: 'thread-b' });
+      const b = await (agentChannels as any).resolveHandlerContext(fakeChatThread(), fakeMessage(), {} as any);
+      expect(b.ctx.threadId).toBe('thread-b');
+
+      (agentChannels as any).abortHandlerControllers('thread-a', 'agent-run-aborted');
+
+      expect(a.ctx.abortSignal.aborted).toBe(true);
+      expect(b.ctx.abortSignal.aborted).toBe(false);
+    });
+
+    it('releasing a handler removes its controller from the per-thread set', async () => {
+      const { threadId } = stubResolverDeps(agentChannels);
+
+      const { ctx, release } = await (agentChannels as any).resolveHandlerContext(
+        fakeChatThread(),
+        fakeMessage(),
+        {} as any,
+      );
+
+      expect((agentChannels as any).handlerAbortControllers.get(threadId)?.size).toBe(1);
+      release();
+      expect((agentChannels as any).handlerAbortControllers.has(threadId)).toBe(false);
+
+      // After release, aborting the thread does not touch the released signal.
+      (agentChannels as any).abortHandlerControllers(threadId, 'agent-run-aborted');
+      expect(ctx.abortSignal.aborted).toBe(false);
+    });
+
+    it('close() aborts any in-flight handler controllers', async () => {
+      stubResolverDeps(agentChannels);
+
+      const { ctx } = await (agentChannels as any).resolveHandlerContext(fakeChatThread(), fakeMessage(), {} as any);
+
+      agentChannels.close();
+
+      expect(ctx.abortSignal.aborted).toBe(true);
+      expect((agentChannels as any).handlerAbortControllers.size).toBe(0);
+    });
+
+    it('ChannelHandler signature is backward compatible with 3-arg form', () => {
+      // Compile-time guarantee: a 3-arg handler still matches `ChannelHandler`.
+      // (TS will fail at build time if the new ctx arg becomes required.)
+      const threeArg: ChannelHandler = async (_thread, _message, defaultHandler) => {
+        await defaultHandler(_thread, _message);
+      };
+      const fourArg: ChannelHandler = async (_thread, _message, defaultHandler, ctx) => {
+        if (ctx.abort()) return;
+        await defaultHandler(_thread, _message);
+      };
+      expect(typeof threeArg).toBe('function');
+      expect(typeof fourArg).toBe('function');
     });
   });
 });

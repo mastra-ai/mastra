@@ -295,7 +295,7 @@ Override built-in event handlers. Each handler can be:
 
 - **Omitted**: uses the default Mastra handler (routes the message through the agent and posts the response)
 - **`false`**: disables the handler entirely
-- **A function** `(thread, message, defaultHandler) => Promise<void>`: wraps or replaces the default
+- **A function** `(thread, message, defaultHandler, ctx) => Promise<void>`: wraps or replaces the default
 
 ```typescript title="src/mastra/agents/custom-handlers.ts"
 import { Agent } from '@mastra/core/agent'
@@ -319,6 +319,32 @@ const agent = new Agent({
   },
 })
 ```
+
+### Stopping the active run
+
+Handlers receive a 4th `ctx` argument that exposes the Mastra thread ids and lets you abort the currently active run on this thread. This is useful for "stop" / "cancel" commands:
+
+```typescript
+const agent = new Agent({
+  name: 'Stoppable Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: { slack: createSlackAdapter() },
+    handlers: {
+      onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+        if (message.text.trim().toLowerCase() === 'stop') {
+          if (ctx.abort()) await thread.post('⏹️ stopped')
+          return
+        }
+        await defaultHandler(thread, message)
+      },
+    },
+  },
+})
+```
+
+`ctx.abortSignal` fires whenever the active run on this thread is aborted — from this handler, another handler on the same thread, `agent.abortRunStream()`, or `channels.close()` — so you can pass it to any async work the handler kicks off.
 
 <PropertiesTable
   content={[
@@ -350,7 +376,21 @@ type ChannelHandler = (
   thread: Thread,
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+  ctx: ChannelHandlerContext,
 ) => Promise<void>
+
+interface ChannelHandlerContext {
+  /** The Mastra thread id resolved for this chat thread. */
+  threadId: string
+  /** The resource id used for this thread (typically `${platform}:${userId}`). */
+  resourceId: string
+  /** Fires when the active run on this thread is aborted, from anywhere. */
+  abortSignal: AbortSignal
+  /** Abort the currently active run on this thread. Returns true if a run was aborted. */
+  abort: (reason?: string) => boolean
+  /** The active runId on this thread, or `undefined` if idle. */
+  activeRunId: () => string | undefined
+}
 ```
 
 ## Inline media

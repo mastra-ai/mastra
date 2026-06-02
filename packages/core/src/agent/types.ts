@@ -485,8 +485,16 @@ interface AgentConfigBase<
    *   },
    *   handlers: {
    *     // Wrap default DM handler with logging
-   *     onDirectMessage: async (thread, msg, defaultHandler) => {
+   *     onDirectMessage: async (thread, msg, defaultHandler, ctx) => {
    *       console.log('Received DM:', msg.text);
+   *       await defaultHandler(thread, msg);
+   *     },
+   *     // Stop the active run when the user says "stop"
+   *     onSubscribedMessage: async (thread, msg, defaultHandler, ctx) => {
+   *       if (msg.text.trim().toLowerCase() === 'stop') {
+   *         if (ctx.abort()) await thread.post('⏹️ stopped');
+   *         return;
+   *       }
    *       await defaultHandler(thread, msg);
    *     },
    *     // Disable mention handling
