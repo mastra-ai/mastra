@@ -326,7 +326,7 @@ export class AIV4Adapter {
 
     const uiMessage: UIMessageWithMetadata = {
       id: m.id,
-      role: m.role === 'signal' ? 'user' : m.role,
+      role: m.role === 'signal' ? (isUserMessageSignal ? 'user' : 'system') : m.role,
       content: m.role === 'signal' && !isUserMessageSignal ? '' : m.content.content || contentString,
       createdAt: m.createdAt,
       parts: v4Parts,
