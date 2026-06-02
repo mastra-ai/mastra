@@ -1,6 +1,7 @@
 import type * as http from 'node:http';
 import type { Context } from 'hono';
 import type { ToolsInput, Agent } from '../agent';
+import type { RequestContext } from '../request-context';
 import type { Workflow } from '../workflows';
 
 interface MCPServerSSEOptionsBase {
@@ -189,6 +190,22 @@ export interface RemoteInfo {
   url: string;
 }
 
+export type MCPAuthInfoToUserMapper<TUser = unknown> = (args: {
+  /**
+   * Authentication data provided by the MCP SDK request handler `extra.authInfo`.
+   */
+  authInfo: unknown;
+  /**
+   * Full MCP SDK request handler extra object when available.
+   */
+  extra: Record<string, unknown>;
+  /**
+   * RequestContext that will be used for the MCP tool list or execution.
+   * The mapper may read or set additional request-scoped values on it.
+   */
+  requestContext: RequestContext;
+}) => TUser | null | undefined | Promise<TUser | null | undefined>;
+
 // +++ Authoritative MCPServerConfig +++
 /** Configuration options for creating an MCPServer instance. */
 export interface MCPServerConfig<TId extends string = string> {
@@ -218,6 +235,16 @@ export interface MCPServerConfig<TId extends string = string> {
   description?: string;
   /** Optional instructions describing how to use the server and its features. */
   instructions?: string;
+  /**
+   * Maps MCP transport auth information into the user object used by Mastra FGA.
+   *
+   * Self-hosted OAuth MCP transports pass authenticated identity to request
+   * handlers as `extra.authInfo`; Mastra FGA checks read the authenticated user
+   * from `requestContext.get('user')`. Provide this hook when the MCP server is
+   * registered on an FGA-enabled Mastra instance and the transport does not
+   * already put a `user` value in the request context.
+   */
+  mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
   /** Optional repository information for the server's source code. */
   repository?: Repository;
   /**
