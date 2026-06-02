@@ -753,7 +753,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                   <>
                     {/* Input preview */}
                     <DataList.Cell height="compact" className="min-w-0 text-neutral4">
-                      <span className="block truncate">{truncateInput(item.input, 80)}</span>
+                      <span className="block truncate">{truncateInput(item.input, 200)}</span>
                     </DataList.Cell>
 
                     {/* Comment preview */}
