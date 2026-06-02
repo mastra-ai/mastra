@@ -30,6 +30,8 @@ export interface BuildFormSnapshotOptions {
 }
 
 const INSTRUCTIONS_MAX_CHARS = 1500;
+const EMPTY_TEXT = '(empty)';
+const NOT_SET_TEXT = '(not set)';
 
 const truncate = (value: string, max: number): string => {
   if (value.length <= max) return value;
@@ -50,17 +52,18 @@ const collectSelectedIds = (record: Record<string, boolean | undefined> | undefi
 const renderToolEntry = (tool: AgentTool): string => `"${tool.name}" (${tool.id})`;
 const renderSkillEntry = (skill: StoredSkillResponse): string => `"${skill.name}" (${skill.id})`;
 
-// Field values can contain raw user input (agent name, description, custom
-// workspace/skill names). Since the snapshot is treated as authoritative, we
-// must prevent embedded newlines or directive-like glyphs from spoofing a fake
-// "→ already set" line and tricking the LLM into skipping a legitimate setter.
-// Collapse any newlines to a single space and replace the directive arrow with
-// an ASCII fallback before interpolation.
-const sanitizeSnapshotValue = (value: string): string =>
-  value.replaceAll('\r\n', ' ').replaceAll('\r', ' ').replaceAll('\n', ' ').replaceAll('→', '->');
+const renderQuoted = (value: string | undefined): string => {
+  if (!isFilled(value)) return EMPTY_TEXT;
+  return `"${value}"`;
+};
 
-const renderField = (label: string, value: string, directive: string): string =>
-  `- ${label}: ${sanitizeSnapshotValue(value)}\n  → ${directive}`;
+const renderInstructions = (value: string | undefined): string => {
+  if (!isFilled(value)) return EMPTY_TEXT;
+  const truncated = truncate(value, INSTRUCTIONS_MAX_CHARS);
+  return `"""\n${truncated}\n"""`;
+};
+
+const renderField = (label: string, value: string, directive: string): string => `- ${label}: ${value}\n  ${directive}`;
 
 /**
  * Renders the form's current state plus a per-field directive telling the
@@ -93,7 +96,7 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Name',
-        `"${values.name}"`,
+        renderQuoted(values.name),
         'Already set. Do not call set-agent-name unless the user explicitly asks to rename the agent.',
       ),
     );
@@ -101,13 +104,13 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Name',
-        `"${values.name}" (auto-generated placeholder from the starter prompt)`,
+        `${renderQuoted(values.name)} (auto-generated placeholder from the starter prompt)`,
         'Call set-agent-name once with a short, memorable name anchored to the outcome. The current value is a placeholder, not a real name.',
       ),
     );
   } else {
     lines.push(
-      renderField('Name', '(empty)', 'Call set-agent-name once with a short, memorable name anchored to the outcome.'),
+      renderField('Name', EMPTY_TEXT, 'Call set-agent-name once with a short, memorable name anchored to the outcome.'),
     );
   }
 
@@ -116,7 +119,7 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Description',
-        `"${values.description}"`,
+        renderQuoted(values.description),
         'Already set. Do not call set-agent-description unless the user explicitly asks to change it.',
       ),
     );
@@ -124,26 +127,26 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Description',
-        '(empty)',
+        EMPTY_TEXT,
         'Call set-agent-description once with a single plain-language sentence explaining what the agent helps with.',
       ),
     );
   }
 
-  // Instructions are the only field that legitimately renders as multi-line in
-  // the snapshot, so we bypass renderField (which collapses newlines) and
-  // sanitize the user-supplied text in place — stripping the directive arrow
-  // glyph so user instructions can't spoof a "→ already set" line.
+  // Instructions
   if (isFilled(values.instructions)) {
-    const truncated = truncate(values.instructions, INSTRUCTIONS_MAX_CHARS).replaceAll('→', '->');
     lines.push(
-      `- Instructions: """\n${truncated}\n"""\n  → Already set. Do not call set-agent-instructions unless the user explicitly asks to rewrite or amend the prompt.`,
+      renderField(
+        'Instructions',
+        renderInstructions(values.instructions),
+        'Already set. Do not call set-agent-instructions unless the user explicitly asks to rewrite or amend the prompt.',
+      ),
     );
   } else {
     lines.push(
       renderField(
         'Instructions',
-        '(empty)',
+        EMPTY_TEXT,
         'Call set-agent-instructions once with the full system prompt for the produced agent. Follow the quality bar in the main instructions.',
       ),
     );
@@ -166,7 +169,7 @@ export function buildFormSnapshotInstructions(
       lines.push(
         renderField(
           'Model',
-          '(not set)',
+          NOT_SET_TEXT,
           'Call set-agent-model once with a provider/name pair from the available models list (see the set-agent-model tool description). Prefer the strongest model for coding/reasoning work, or a cheaper/faster model for simple high-volume tasks.',
         ),
       );
@@ -180,7 +183,7 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Workspace',
-        `"${name}" (id: ${values.workspaceId})`,
+        `${renderQuoted(name)} (id: ${values.workspaceId})`,
         'Already set. Do not call set-agent-workspace-id unless the user explicitly asks to change the workspace.',
       ),
     );
@@ -188,7 +191,7 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Workspace',
-        '(not set)',
+        NOT_SET_TEXT,
         'Call set-agent-workspace-id only if the requested outcome needs CLI or local-machine actions and an applicable workspace exists. Otherwise skip it.',
       ),
     );
@@ -196,7 +199,7 @@ export function buildFormSnapshotInstructions(
 
   // Visibility (no setter — just informational; included so the LLM doesn't try to change it via tools).
   lines.push(
-    `- Visibility: ${values.visibility ?? 'private'}\n  → No setter; managed outside the builder. Do not attempt to change it.`,
+    `- Visibility: ${values.visibility ?? 'private'}\n  No setter; managed outside the builder. Do not attempt to change it.`,
   );
 
   // Browser
