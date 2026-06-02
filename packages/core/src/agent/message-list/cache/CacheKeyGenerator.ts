@@ -1,10 +1,10 @@
 import type { UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
-import { stableStringify } from './stable-stringify';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { getImageCacheKey } from '../prompt/image-utils';
 import type { AIV5Type, CoreMessageV4 } from '../types';
 import { getResponseProviderItemKeys } from '../utils/response-item-metadata';
+import { stableStringify } from './stable-stringify';
 import type { MastraMessagePart, UIMessageV4Part } from './types';
 
 function appendResponseProviderItemKeys(cacheKey: string, ...providerSources: unknown[]): string {

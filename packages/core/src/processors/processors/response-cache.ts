@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import { stableStringify } from '../../agent/message-list/cache/stable-stringify';
 import type { MastraServerCache } from '../../cache';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
-import { stableStringify } from '../../agent/message-list/cache/stable-stringify';
 import type {
   CachedLLMStepResponse,
   ProcessLLMRequestArgs,
@@ -497,8 +497,6 @@ function normalizeForHash(value: unknown): unknown {
   }
   return String(value);
 }
-
-
 
 /**
  * Re-export the cached payload shape so consumers can type their own custom
