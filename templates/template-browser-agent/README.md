@@ -12,17 +12,15 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 - A [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
 - A [Turso](https://turso.tech) database URL + auth token (or swap to `:memory:` for ephemeral local runs).
-- Playwright browsers installed locally. Run `npx playwright install chromium` once after `npm install`.
+- Playwright's Chromium browser. The template installs it automatically during `npm install`/`pnpm install`.
 
 ## Quickstart 🚀
 
 1. **Clone the template**
    - Run `npx create-mastra@latest --template browser-agent`.
-2. **Install Playwright's browser**
-   - Run `npx playwright install chromium`.
-3. **Add your API keys**
+2. **Add your API keys**
    - Copy `.env.example` to `.env` and fill it in. Set `BROWSER_HEADLESS=false` if you want to watch the agent click around.
-4. **Start the dev server**
+3. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111).
 
 Ask things like:

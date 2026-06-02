@@ -6,12 +6,14 @@
   "scripts": {
     "dev": "mastra dev",
     "build": "mastra build",
-    "start": "mastra start"
+    "start": "mastra start",
+    "postinstall": "playwright install chromium"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "type": "module",
+  "packageManager": "npm@11.12.1",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -23,6 +25,7 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
+    "playwright": "^1.60.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
