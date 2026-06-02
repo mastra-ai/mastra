@@ -8,12 +8,16 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal, resolveDeliveryAttributes } from './signals';
-import type { CreatedAgentSignal } from './signals';
+import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
+import type { AgentMessageInput, CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
+  QueueAgentMessageOptions,
+  QueueAgentMessageResult,
+  SendAgentMessageOptions,
+  SendAgentMessageResult,
   SendAgentSignalOptions,
   SendAgentSignalResult,
 } from './types';
@@ -59,6 +63,7 @@ type AgentThreadRuntimeState = {
   threadRunsById: Map<string, AgentThreadRunRecord<any>>;
   threadKeysByRunId: Map<string, string>;
   activeThreadRunIds: Map<string, string>;
+  approvalSuspendedRunIds: Set<string>;
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
   watchedThreadRunIds: Set<string>;
@@ -72,6 +77,7 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'run-registered'; runId: string }
   | { type: 'stream-part'; runId: string; part: unknown; sourceId: string }
   | { type: 'run-completed'; runId: string }
+  | { type: 'run-suspended'; runId: string }
   | { type: 'run-aborted'; runId: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string };
 
@@ -80,6 +86,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     threadRunsById: new Map(),
     threadKeysByRunId: new Map(),
     activeThreadRunIds: new Map(),
+    approvalSuspendedRunIds: new Set(),
     pendingSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     watchedThreadRunIds: new Set(),
@@ -119,6 +126,14 @@ export class AgentThreadStreamRuntime {
     return `${AGENT_THREAD_STREAM_TOPIC_PREFIX}.${encodeURIComponent(key)}`;
   }
 
+  #isApprovalSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
+    return state.approvalSuspendedRunIds.has(runId);
+  }
+
+  #isThreadBlockingRun(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
+    return record.output.status === 'running' || this.#isApprovalSuspendedRun(state, record.runId);
+  }
+
   #serializeSignal(signal: CreatedAgentSignal): SerializableAgentSignal {
     return signal;
   }
@@ -151,6 +166,9 @@ export class AgentThreadStreamRuntime {
     };
 
     const emitPart = async (part: unknown) => {
+      if (part && typeof part === 'object' && 'type' in part && part.type === 'tool-call-approval') {
+        runtime.#getState(pubsub).approvalSuspendedRunIds.add(output.runId);
+      }
       parts.push(part);
       await runtime.#publishAndWait(pubsub, key, {
         type: 'stream-part',
@@ -297,10 +315,20 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
-  abortThread(options: AgentSubscribeToThreadOptions, pubsub?: PubSub): boolean {
+  getActiveThreadRunId(options: AgentSubscribeToThreadOptions, pubsub?: PubSub): string | undefined {
     const state = this.#getState(pubsub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const activeRunId = state.activeThreadRunIds.get(key);
+    if (!activeRunId) return undefined;
+
+    const record = state.threadRunsById.get(activeRunId);
+    if (record && !this.#isThreadBlockingRun(state, record)) return undefined;
+
+    return activeRunId;
+  }
+
+  abortThread(options: AgentSubscribeToThreadOptions, pubsub?: PubSub): boolean {
+    const activeRunId = this.getActiveThreadRunId(options, pubsub);
     if (!activeRunId) return false;
     return this.abortRun(activeRunId, pubsub);
   }
@@ -325,6 +353,7 @@ export class AgentThreadStreamRuntime {
     state.threadRunsById.clear();
     state.threadKeysByRunId.clear();
     state.activeThreadRunIds.clear();
+    state.approvalSuspendedRunIds.clear();
     state.pendingSignalsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.watchedThreadRunIds.clear();
@@ -397,9 +426,16 @@ export class AgentThreadStreamRuntime {
 
     void record.output._waitUntilFinished().finally(() => {
       state.watchedThreadRunIds.delete(record.runId);
+      this.#cleanupPreparedRun(state, record.runId);
+
+      if (record.output.status === 'suspended' && this.#isApprovalSuspendedRun(state, record.runId)) {
+        this.#publish(pubsub, key, { type: 'run-suspended', runId: record.runId });
+        return;
+      }
+
+      state.approvalSuspendedRunIds.delete(record.runId);
       state.threadRunsById.delete(record.runId);
       state.threadKeysByRunId.delete(record.runId);
-      this.#cleanupPreparedRun(state, record.runId);
       if (state.activeThreadRunIds.get(key) === record.runId) {
         state.activeThreadRunIds.delete(key);
       }
@@ -516,7 +552,9 @@ export class AgentThreadStreamRuntime {
 
       const activeRecord = state.threadRunsById.get(activeRunId);
       if (activeRecord) {
-        if (activeRecord.agent.id === agent.id || activeRecord.output.status !== 'running') return;
+        if (activeRecord.agent.id === agent.id || !this.#isThreadBlockingRun(state, activeRecord)) {
+          return;
+        }
         await activeRecord.output._waitUntilFinished().catch(() => {});
         continue;
       }
@@ -579,7 +617,7 @@ export class AgentThreadStreamRuntime {
       // that sendSignal has reserved but has not yet registered via registerRun. Both are
       // in flight from the subscriber's perspective; treat them as active.
       if (!record) return runId;
-      return record.output.status === 'running' ? runId : null;
+      return this.#isThreadBlockingRun(state, record) ? runId : null;
     };
 
     const enqueueRun = (record: AgentThreadRunRecord<any>) => {
@@ -666,9 +704,15 @@ export class AgentThreadStreamRuntime {
         state.pendingSignalsByThread.set(key, queue);
         return;
       }
-      if (data.type === 'run-completed' || data.type === 'run-aborted') {
-        if (state.activeThreadRunIds.get(key) === data.runId) {
+      if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
+        if (
+          (data.type !== 'run-suspended' || !state.approvalSuspendedRunIds.has(data.runId)) &&
+          state.activeThreadRunIds.get(key) === data.runId
+        ) {
           state.activeThreadRunIds.delete(key);
+        }
+        if (data.type !== 'run-suspended') {
+          state.approvalSuspendedRunIds.delete(data.runId);
         }
         const remoteRun = remoteRuns.get(data.runId);
         if (remoteRun) {
@@ -679,7 +723,9 @@ export class AgentThreadStreamRuntime {
         }
         // Allow the same runId to be re-enqueued when it resumes (e.g. after tool approval).
         seenRunIds.delete(data.runId);
-        void this.#drainPendingIdleSignals(state, resolvedPubSub, key);
+        if (data.type !== 'run-suspended') {
+          void this.#drainPendingIdleSignals(state, resolvedPubSub, key);
+        }
         wake();
       }
     };
@@ -760,6 +806,71 @@ export class AgentThreadStreamRuntime {
     };
   }
 
+  sendMessage<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    message: AgentMessageInput,
+    target: SendAgentMessageOptions<OUTPUT>,
+    pubsub?: PubSub,
+  ): SendAgentMessageResult {
+    return this.sendSignal(agent, createMessageSignal(message, { acceptedAt: new Date() }), target, pubsub);
+  }
+
+  queueMessage<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    message: AgentMessageInput,
+    target: QueueAgentMessageOptions<OUTPUT>,
+    pubsub?: PubSub,
+  ): QueueAgentMessageResult {
+    const state = this.#getState(pubsub);
+    const signal = createMessageSignal(message, { acceptedAt: new Date() });
+    let key: string | undefined;
+    let runId = target.runId;
+    let activeRecord: AgentThreadRunRecord<any> | undefined;
+
+    if (target.resourceId && target.threadId) {
+      key = this.#threadKey(target.resourceId, target.threadId);
+      const activeRunId = state.activeThreadRunIds.get(key);
+      activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
+      if (activeRecord && !this.#isThreadBlockingRun(state, activeRecord)) {
+        state.activeThreadRunIds.delete(key);
+        activeRecord = undefined;
+      }
+      runId ??= activeRunId;
+    }
+
+    if (runId) {
+      activeRecord ??= state.threadRunsById.get(runId);
+      if (activeRecord) {
+        key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
+      }
+    }
+
+    const resourceId = target.resourceId ?? activeRecord?.resourceId;
+    const threadId = target.threadId ?? activeRecord?.threadId;
+    if (!resourceId || !threadId) {
+      throw new Error('resourceId and threadId are required to queue a message');
+    }
+
+    key ??= this.#threadKey(resourceId, threadId);
+    const queuedRunId = randomUUID();
+    const queuedStreamOptions = target.ifIdle?.streamOptions ?? activeRecord?.streamOptions;
+
+    if (activeRecord) {
+      const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
+      idleQueue.push({ agent, signal, runId: queuedRunId, resourceId, threadId, streamOptions: queuedStreamOptions });
+      state.pendingIdleSignalsByThread.set(key, idleQueue);
+      this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      return { accepted: true, runId: queuedRunId, signal };
+    }
+
+    return this.sendSignal(
+      agent,
+      signal,
+      { ...target, runId, resourceId, threadId, ifIdle: { ...target.ifIdle, behavior: 'wake' } },
+      pubsub,
+    );
+  }
+
   /**
    * Routes a signal to an agent thread.
    *
@@ -790,7 +901,7 @@ export class AgentThreadStreamRuntime {
       key = this.#threadKey(target.resourceId, target.threadId);
       const activeRunId = state.activeThreadRunIds.get(key);
       activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
-      if (activeRecord && activeRecord.output.status !== 'running') {
+      if (activeRecord && !this.#isThreadBlockingRun(state, activeRecord)) {
         state.activeThreadRunIds.delete(key);
         activeRecord = undefined;
       }

@@ -1,11 +1,22 @@
 import crypto from 'node:crypto';
 
 import { MastraBase } from '@mastra/core/base';
-import { TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { StorageThreadType } from '@mastra/core/memory';
+import {
+  TABLE_RESOURCES,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
+import type { StorageColumn, StorageResourceType, TABLE_NAMES, UpdateWorkflowStateOptions } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import { ConvexAdminClient } from '../client';
 import type { EqualityFilter, IndexHint } from '../types';
+
+// Must not exceed the server-side loadMany id cap in server/storage.ts.
+const LOAD_MANY_REQUEST_BATCH_SIZE = 10;
 
 /**
  * Configuration for standalone domain usage.
@@ -139,6 +150,51 @@ export class ConvexDB extends MastraBase {
     });
   }
 
+  async updateThread({
+    id,
+    title,
+    metadata,
+    updatedAt,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, any>;
+    updatedAt: Date;
+  }): Promise<(Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null> {
+    return this.client.callStorage({
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id,
+      title,
+      metadata,
+      updatedAt: updatedAt.toISOString(),
+    });
+  }
+
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata,
+    createdAt,
+    updatedAt,
+  }: {
+    resourceId: string;
+    workingMemory?: string;
+    metadata?: Record<string, any>;
+    createdAt: Date;
+    updatedAt: Date;
+  }): Promise<Omit<StorageResourceType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }> {
+    return this.client.callStorage({
+      op: 'updateResource',
+      tableName: TABLE_RESOURCES,
+      resourceId,
+      ...(workingMemory !== undefined ? { workingMemory } : {}),
+      ...(metadata !== undefined ? { metadata } : {}),
+      createdAt: createdAt.toISOString(),
+      updatedAt: updatedAt.toISOString(),
+    });
+  }
+
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null> {
     const result = await this.client.callStorage<R | null>({
       op: 'load',
@@ -147,6 +203,23 @@ export class ConvexDB extends MastraBase {
     });
 
     return result;
+  }
+
+  async loadMany<R>(tableName: TABLE_NAMES, ids: string[]): Promise<R[]> {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return [];
+
+    const rows: R[] = [];
+    for (let index = 0; index < uniqueIds.length; index += LOAD_MANY_REQUEST_BATCH_SIZE) {
+      rows.push(
+        ...(await this.client.callStorage<R[]>({
+          op: 'loadMany',
+          tableName,
+          ids: uniqueIds.slice(index, index + LOAD_MANY_REQUEST_BATCH_SIZE),
+        })),
+      );
+    }
+    return rows;
   }
 
   public async queryTable<R>(
@@ -171,6 +244,56 @@ export class ConvexDB extends MastraBase {
       tableName,
       ids,
     });
+  }
+
+  public async mergeWorkflowStepResult({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const context = await this.client.callStorage<string>({
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName,
+      runId,
+      stepId,
+      result: JSON.stringify(result),
+      requestContext: JSON.stringify(requestContext),
+    });
+    if (!context) {
+      throw new Error(`Convex workflow step merge returned no context for runId ${runId}`);
+    }
+    return JSON.parse(context);
+  }
+
+  public async mergeWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState> {
+    const snapshot = await this.client.callStorage<string>({
+      op: 'mergeWorkflowState',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName,
+      runId,
+      opts: JSON.stringify(opts),
+    });
+    if (!snapshot) {
+      throw new Error(`Convex workflow state merge returned no snapshot for runId ${runId}`);
+    }
+    return JSON.parse(snapshot);
   }
 
   public async createSchedule(record: Record<string, any>): Promise<void> {

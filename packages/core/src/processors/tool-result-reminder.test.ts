@@ -230,7 +230,8 @@ describe('AgentsMDInjector', () => {
     expect(injectedReminder?.content.metadata).toEqual(
       expect.objectContaining({
         signal: expect.objectContaining({
-          type: 'system-reminder',
+          type: 'reactive',
+          tagName: 'system-reminder',
           attributes: expect.objectContaining({ type: 'dynamic-agents-md' }),
           metadata: expect.objectContaining({ path: '/repo/src/agents/nested/AGENTS.md' }),
         }),
@@ -274,7 +275,8 @@ describe('AgentsMDInjector', () => {
       expect.objectContaining({
         type: 'data-system-reminder',
         data: expect.objectContaining({
-          type: 'system-reminder',
+          type: 'reactive',
+          tagName: 'system-reminder',
           contents: 'Project guidance from CLAUDE',
           metadata: {
             path: '/repo/CLAUDE.md',

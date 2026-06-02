@@ -123,6 +123,16 @@ export interface ObservationConfig {
   bufferTokens?: number | false;
 
   /**
+   * Whether to run background observation buffering when a turn ends and the agent becomes idle.
+   *
+   * This is separate from `bufferTokens`: `bufferTokens` controls step-time async buffering,
+   * while `bufferOnIdle` controls end-of-turn buffering for short idle turns.
+   *
+   * @default false
+   */
+  bufferOnIdle?: boolean;
+
+  /**
    * Controls how many raw message tokens to retain after activation.
    *
    * - **Ratio (0 < value <= 1):** fraction of `messageTokens` to activate.
@@ -955,6 +965,8 @@ export interface ResolvedObservationConfig {
   maxTokensPerBatch: number;
   /** Token interval for async background observation buffering (resolved from config) */
   bufferTokens?: number;
+  /** Whether to buffer unobserved messages at the end of an idle turn */
+  bufferOnIdle: boolean;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */

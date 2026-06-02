@@ -595,7 +595,7 @@ describe('injectStudioHtmlConfig', () => {
       telemetryDisabled: "''",
       requestContextPresets: "''",
       experimentalUI: "'true'",
-      agentSignals: "'false'",
+      agentSignals: "'true'",
       autoDetectUrl: "'false'",
     });
 

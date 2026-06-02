@@ -43,6 +43,20 @@ describe('extractLines', () => {
     const result = extractLines(content, -5, 100);
     expect(result.lines).toEqual({ start: 1, end: 5 });
   });
+
+  it('should preserve an empty line within a valid range', () => {
+    const result = extractLines('Line 1\n\nLine 3', 2, 2);
+    expect(result.content).toBe('');
+    expect(result.lines).toEqual({ start: 2, end: 2 });
+    expect(result.totalLines).toBe(3);
+  });
+
+  it('should return an empty range when startLine is past the end', () => {
+    const result = extractLines(content, 10, 12);
+    expect(result.content).toBe('');
+    expect(result.lines).toEqual({ start: 0, end: 0 });
+    expect(result.totalLines).toBe(5);
+  });
 });
 
 describe('extractLinesWithLimit', () => {
@@ -66,6 +80,20 @@ describe('extractLinesWithLimit', () => {
     expect(result.content).toBe('Line 1\nLine 2');
     expect(result.lines).toEqual({ start: 1, end: 2 });
   });
+
+  it('should return an empty range when offset is past the end', () => {
+    const result = extractLinesWithLimit('a\nb\nc', 10, 5);
+    expect(result.content).toBe('');
+    expect(result.lines).toEqual({ start: 0, end: 0 });
+    expect(result.totalLines).toBe(3);
+  });
+
+  it('should return an empty range when offset without limit is past the end', () => {
+    const result = extractLinesWithLimit('a\nb\nc', 10);
+    expect(result.content).toBe('');
+    expect(result.lines).toEqual({ start: 0, end: 0 });
+    expect(result.totalLines).toBe(3);
+  });
 });
 
 describe('formatWithLineNumbers', () => {
@@ -87,6 +115,11 @@ describe('formatWithLineNumbers', () => {
   it('should adjust padding for large line numbers', () => {
     const result = formatWithLineNumbers('Line', 999);
     expect(result).toBe('   999→Line');
+  });
+
+  it('should format an empty line', () => {
+    const result = formatWithLineNumbers('', 10);
+    expect(result).toBe('    10→');
   });
 });
 

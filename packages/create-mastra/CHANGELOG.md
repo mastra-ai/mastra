@@ -1,5 +1,21 @@
 # create-mastra
 
+## 1.11.0-alpha.5
+
+## 1.10.3-alpha.4
+
+## 1.10.3-alpha.3
+
+### Patch Changes
+
+- Fixed observability setup so multi-organization users can choose the target organization without reopening an extra prompt during project provisioning. ([#17214](https://github.com/mastra-ai/mastra/pull/17214))
+
+## 1.10.3-alpha.2
+
+## 1.10.3-alpha.1
+
+## 1.10.3-alpha.0
+
 ## 1.10.2
 
 ## 1.10.2-alpha.0

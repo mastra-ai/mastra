@@ -1,12 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('@brightdata/sdk', () => ({
-  bdclient: vi.fn(function () {
-    return {
-      search: { google: vi.fn(), bing: vi.fn(), yandex: vi.fn() },
-      scrapeUrl: vi.fn(),
-    };
-  }),
+vi.mock('@mastra/core/tools', () => ({
+  createTool: vi.fn(config => config),
 }));
 
 import { createBrightDataTools } from '../tools.js';

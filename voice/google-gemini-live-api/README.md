@@ -99,8 +99,19 @@ voice.on('speaker', audioStream => {
 });
 
 voice.on('writing', ({ text, role }) => {
-  // Handle transcribed text
+  // role: 'user'      → speech-to-text of the caller
+  // role: 'assistant' → speech-to-text of the model's spoken reply
   console.log(`${role}: ${text}`);
+});
+
+// Native-audio models only: model's internal reasoning
+voice.on('thinking', ({ text }) => {
+  console.log(`thinking: ${text}`);
+});
+
+// Drop queued playback when the user barges in over the model
+voice.on('interrupt', ({ type, timestamp }) => {
+  console.log(`interrupt by ${type} at ${timestamp}`);
 });
 
 // Send text to speech
@@ -313,15 +324,25 @@ Registers an event listener.
 
 - `'speaking'` - Audio response from model
 - `'speaker'` - Readable stream of concatenated audio for the active response
-- `'writing'` - Text response or transcription
+- `'writing'` - Transcribed text. Callback receives `{ text, role: 'user' | 'assistant' }`. On native-audio models the assistant transcript is driven by the server's `output_audio_transcription` channel
+- `'thinking'` - Model chain-of-thought / reasoning text on native-audio models. Callback receives `{ text }`. Does not fire on non-native-audio models, where reasoning is not surfaced separately
 - `'error'` - Error events
 - `'session'` - Session state changes
 - `'toolCall'` - Tool calls from model
 - `'vad'` - Voice activity detection events
-- `'interrupt'` - Interrupt events
+- `'interrupt'` - Emitted on barge-in when the user starts speaking over an in-flight model response. Callback receives `{ type: 'user', timestamp }`
 - `'usage'` - Token usage information
 - `'sessionHandle'` - Session resumption handle
 - `'turnComplete'` - Turn completion for the current model response
+
+#### Native-audio models
+
+Native-audio models (any model whose ID contains `native-audio`, e.g. `gemini-2.5-flash-native-audio-preview-12-2025`) split text output across two channels:
+
+- The model's spoken reply is delivered as audio plus an `output_audio_transcription` transcript — surfaced as `writing` with `role: 'assistant'`.
+- The model's internal reasoning is delivered as `modelTurn.parts.text` — surfaced as `thinking`.
+
+On non-native-audio models there is no `output_audio_transcription` channel; `modelTurn.parts.text` is the spoken response itself and is emitted as `writing` (so `thinking` will not fire). Transcription and barge-in detection are enabled automatically in the setup payload — no extra configuration is required.
 
 ### Tools
 

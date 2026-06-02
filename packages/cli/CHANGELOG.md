@@ -1,5 +1,88 @@
 # mastra
 
+## 1.11.0-alpha.5
+
+### Minor Changes
+
+- Added the agent override editing experience to Studio for the `code` editor source. ([#17229](https://github.com/mastra-ai/mastra/pull/17229))
+
+  When the project uses `MastraEditor({ source: 'code' })`, the agent Editor tab swaps Save/Publish for Download JSON and Save to filesystem (and Open PR when platform wiring is available), and surfaces git commits of per-agent JSON files as read-only version history. Fields locked by an agent's `editor` config render read-only with an "owned by code" notice, and the unsaved-changes prompt matches the active source.
+
+  The default `source: 'db'` flow is unchanged. Also fixed the Editor test chat so saved draft changes are reflected without a page refresh.
+
+### Patch Changes
+
+- Updated dependencies [[`8260167`](https://github.com/mastra-ai/mastra/commit/8260167431f98400f3acef4bbb7bd6027efd7a4b), [`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15)]:
+  - @mastra/deployer@1.38.0-alpha.5
+  - @mastra/core@1.38.0-alpha.5
+
+## 1.10.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`50ed00c`](https://github.com/mastra-ai/mastra/commit/50ed00caa914a85969b33de83f26b48e328ef641), [`9283971`](https://github.com/mastra-ai/mastra/commit/928397157009b4aef4d5fdf3a0a273cb371beb55), [`0bf2d93`](https://github.com/mastra-ai/mastra/commit/0bf2d932d20e2936f2d9abb8c0a86e24fbc97ec6), [`94dfef6`](https://github.com/mastra-ai/mastra/commit/94dfef6e2bf19a88467ea3940afcbce88a433f0f), [`a122f79`](https://github.com/mastra-ai/mastra/commit/a122f79427ae225ec79c7b2ed46278da48d04b17), [`4c02027`](https://github.com/mastra-ai/mastra/commit/4c020277235eaa6b1dc957c90ad0639eef213992), [`6855012`](https://github.com/mastra-ai/mastra/commit/685501247cc4717506f3e89beed03509d63a5370), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23)]:
+  - @mastra/core@1.38.0-alpha.4
+  - @mastra/deployer@1.38.0-alpha.4
+
+## 1.10.3-alpha.3
+
+### Patch Changes
+
+- Consolidated the CLI's env-file handling into a single module. `FileEnvService` now lives alongside its `EnvService` base class (the standalone `service.fileEnv.ts` and its stale "copied from admin" TODO are removed), and the env-writing path was hardened: keys are validated against a safe identifier pattern, values containing newlines are rejected, regex metacharacters in keys are escaped, replacement no longer interprets `$` sequences in values, and the success log no longer prints env values. `getEnvValue` now returns an empty string for an empty entry instead of `null`. ([#17050](https://github.com/mastra-ai/mastra/pull/17050))
+
+- Trimmed generated AGENTS.md to remove content redundant with the mastra skill (project structure tables, personality preamble, universal practices). Reduced token count by ~75%. ([#17173](https://github.com/mastra-ai/mastra/pull/17173))
+
+- Changed project initialization to write GOOGLE_API_KEY for Google providers. ([#17343](https://github.com/mastra-ai/mastra/pull/17343))
+
+- Fixed false-positive LOCAL_STORAGE_PATH preflight errors caused by library code (e.g. Agent Builder prompt templates). Added a Rollup plugin (`mastra-local-storage-detector`) to the deployer that detects host-local storage URLs during bundling — only user modules are inspected (node_modules excluded), and tree-shaken code is ignored. The CLI preflight check now reads this bundler-generated metadata instead of scanning raw bundle source. ([#17286](https://github.com/mastra-ai/mastra/pull/17286))
+
+- Fixed observability setup so multi-organization users can choose the target organization without reopening an extra prompt during project provisioning. ([#17214](https://github.com/mastra-ai/mastra/pull/17214))
+
+- Updated dependencies [[`8ace89d`](https://github.com/mastra-ai/mastra/commit/8ace89df77f762e622d3b9f7f65ad7524350d050), [`fa63872`](https://github.com/mastra-ai/mastra/commit/fa6387280954e6b667bec5714b55ba082bc627ff), [`f07b646`](https://github.com/mastra-ai/mastra/commit/f07b64604ab7d25391179790b7fd4823df9e2dff), [`d8838ae`](https://github.com/mastra-ai/mastra/commit/d8838ae80b69780361693d27098f7f6684af12fe), [`40f9297`](https://github.com/mastra-ai/mastra/commit/40f9297003b921c62373d3e8d3a4bda76c9f6de3), [`0f0d1ba`](https://github.com/mastra-ai/mastra/commit/0f0d1ba67bfcb2204e571401662f1eceefc03357), [`8c31bcd`](https://github.com/mastra-ai/mastra/commit/8c31bcdb00e597880d5939b1b7d7566fbe5dacae), [`95b14cd`](https://github.com/mastra-ai/mastra/commit/95b14cdd820e86d97ac05fe568424c513a252e31), [`aa36be2`](https://github.com/mastra-ai/mastra/commit/aa36be23aa513b7dc53cb8ca16b7fab8f20e43ad), [`212c635`](https://github.com/mastra-ai/mastra/commit/212c635203e61d036ab41db8ff86c3893dc795b3), [`d8838ae`](https://github.com/mastra-ai/mastra/commit/d8838ae80b69780361693d27098f7f6684af12fe), [`9aa5a73`](https://github.com/mastra-ai/mastra/commit/9aa5a73e7e110f6e9365eec69364a33d5f03bb56), [`f73c789`](https://github.com/mastra-ai/mastra/commit/f73c789e8ef21561580395d2c410119cab5848c8), [`8bd16da`](https://github.com/mastra-ai/mastra/commit/8bd16da73a4cb874d739373643dbd6a6e7f88684), [`c8630f8`](https://github.com/mastra-ai/mastra/commit/c8630f80d4f40cb5d22e60ab162b618b1907167a), [`47f71dc`](https://github.com/mastra-ai/mastra/commit/47f71dc6fbcbd12d71e21a979e676e20a02bd77d), [`50ceae2`](https://github.com/mastra-ai/mastra/commit/50ceae270878e2f8fb2b2c6c2faab09df0007c8a), [`8cdde58`](https://github.com/mastra-ai/mastra/commit/8cdde5875bbba6702d9df226f2b20232b8d75d6c), [`847ff1e`](https://github.com/mastra-ai/mastra/commit/847ff1e0d94368d94b2e173e4e0908e115568ef3), [`259d409`](https://github.com/mastra-ai/mastra/commit/259d409a514174299dbde1ff5e1121209b3ba850), [`9e16c68`](https://github.com/mastra-ai/mastra/commit/9e16c6818b6485ccb43df28aba6f3a2219d28662), [`cefca33`](https://github.com/mastra-ai/mastra/commit/cefca33ae666e69810c935fedf95a929c173d1d7), [`d00e8c5`](https://github.com/mastra-ai/mastra/commit/d00e8c50daebe5bce5bf2f48bde39c86fc3d2fe4), [`36fa7e2`](https://github.com/mastra-ai/mastra/commit/36fa7e24d14e58a1eb46147097b32f583e5b8775), [`87e9774`](https://github.com/mastra-ai/mastra/commit/87e97741c1e493cd6d62f478eb810b49bda4d57c), [`65a72e7`](https://github.com/mastra-ai/mastra/commit/65a72e70c25eedea8ff985a6624b96be2850236b), [`0f77241`](https://github.com/mastra-ai/mastra/commit/0f7724108806703799a8ba80ad0f09414afd5066), [`cd160ab`](https://github.com/mastra-ai/mastra/commit/cd160abcb994ffdeda7a5bee9ee513ab4ff5f449), [`92ff509`](https://github.com/mastra-ai/mastra/commit/92ff5098ef8a990438ca038077021a5f7541ec1d), [`3fce5e7`](https://github.com/mastra-ai/mastra/commit/3fce5e70d011d289043e75003ef3336ed4aa43c3), [`a763592`](https://github.com/mastra-ai/mastra/commit/a763592c3db46963ef1011cfe16fe372816e775e), [`80c7737`](https://github.com/mastra-ai/mastra/commit/80c7737e32d7917b5f356957d67c169d01744fd3), [`3f1cf47`](https://github.com/mastra-ai/mastra/commit/3f1cf476f74c1e4cc2df908837e05853a5347e31)]:
+  - @mastra/core@1.38.0-alpha.3
+  - @mastra/deployer@1.38.0-alpha.3
+
+## 1.10.3-alpha.2
+
+### Patch Changes
+
+- Fixed `MASTRA_TELEMETRY_DISABLED` opt-out detection. The values `1`, `true`, and `yes` (case-insensitive, trimmed) now reliably disable telemetry in both `@mastra/core` enterprise events and the `mastra` CLI's PostHog analytics. ([#16990](https://github.com/mastra-ai/mastra/pull/16990))
+
+  Previously, `@mastra/core` only treated the literal string `'1'` as disabled, so common opt-out values like `MASTRA_TELEMETRY_DISABLED=true` silently kept telemetry on.
+
+  The `mastra` CLI's `PosthogAnalytics` constructor now also short-circuits when telemetry is disabled — no disk I/O, no tracking ID generation, no PostHog client. Previously the config file (`mastra-cli.json`) was written even when telemetry was disabled.
+
+  **Example:**
+
+  ```bash
+  # .env — any of these now reliably disable telemetry
+  MASTRA_TELEMETRY_DISABLED=true
+  MASTRA_TELEMETRY_DISABLED=1
+  MASTRA_TELEMETRY_DISABLED=yes
+  ```
+
+- Updated dependencies [[`d779de3`](https://github.com/mastra-ai/mastra/commit/d779de3cd9d2e7ed8110547190e2f15e786a0e41), [`1750c97`](https://github.com/mastra-ai/mastra/commit/1750c975d6179fbf6db2813b15229d4f8f23fc55), [`0e32507`](https://github.com/mastra-ai/mastra/commit/0e32507962cdfa5569b7bda5bc6fb3dd34e40b03), [`3a081c1`](https://github.com/mastra-ai/mastra/commit/3a081c1255c5ae8c99f6dad91cc612934ef6f2bd), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194), [`fe9eacd`](https://github.com/mastra-ai/mastra/commit/fe9eacd9545a0a9d64aad31c9fa90294a425289e), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194)]:
+  - @mastra/core@1.38.0-alpha.2
+  - @mastra/deployer@1.38.0-alpha.2
+
+## 1.10.3-alpha.1
+
+### Patch Changes
+
+- Improved generated AGENTS.md guidance to prefer package scripts over global Mastra commands. ([#17095](https://github.com/mastra-ai/mastra/pull/17095))
+
+- Updated dependencies [[`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c)]:
+  - @mastra/core@1.37.2-alpha.1
+  - @mastra/deployer@1.37.2-alpha.1
+
+## 1.10.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`07c3de7`](https://github.com/mastra-ai/mastra/commit/07c3de7f7bc418beccaea3b5e6b7f7cdda79d492)]:
+  - @mastra/core@1.37.2-alpha.0
+  - @mastra/deployer@1.37.2-alpha.0
+
 ## 1.10.2
 
 ### Patch Changes

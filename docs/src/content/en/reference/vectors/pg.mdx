@@ -84,6 +84,14 @@ It provides robust vector similarity search capabilities within your existing Po
     description: 'Additional pg pool configuration options',
     isOptional: true,
   },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description:
+      'When true, automatic DDL (schema, extension, table, and index creation) inside `createIndex` is skipped. Useful for CI/CD pipelines where schema and indexes are managed separately and the runtime database role lacks DDL privileges. Can also be enabled with the `MASTRA_DISABLE_STORAGE_INIT` environment variable.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
 ]}
 />
 

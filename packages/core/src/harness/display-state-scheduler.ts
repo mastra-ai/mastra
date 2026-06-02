@@ -8,6 +8,7 @@ export const DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS = {
 export const CRITICAL_DISPLAY_STATE_EVENT_TYPES: ReadonlySet<HarnessEvent['type']> = new Set([
   'agent_start',
   'agent_end',
+  'follow_up_queued',
   'error',
   'tool_approval_required',
   'tool_suspended',

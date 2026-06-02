@@ -31,6 +31,18 @@ jobs:
 
             const author = comment.user;
 
+            // Skip known bots
+            const allowedBots = [
+              'dane[bot]',
+              'vercel[bot]',
+              'changeset-bot[bot]',
+              'socket-security[bot]',
+            ];
+            if (author.type === 'Bot' || allowedBots.includes(author.login)) {
+              console.log(`Skipping bot comment by ${author.login}`);
+              return;
+            }
+
             // Skip comments from trusted repo associations
             const trustedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'];
             if (trustedAssociations.includes(comment.author_association)) {

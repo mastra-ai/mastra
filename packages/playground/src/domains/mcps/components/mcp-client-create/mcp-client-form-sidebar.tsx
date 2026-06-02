@@ -33,6 +33,11 @@ interface MCPClientFormSidebarProps {
   isTryingConnect?: boolean;
 }
 
+// Pin these fields to a solid surface. The filled Input/Textarea default otherwise swaps the
+// background to a translucent overlay on hover/focus, which leaks through the forced solid bg —
+// re-stating it for hover/focus-visible keeps the whole form a uniform surface3 (incl. the Select).
+const SOLID_FIELD = 'bg-surface3 hover:bg-surface3 focus-visible:bg-surface3';
+
 export function MCPClientFormSidebar({
   form,
   onPublish,
@@ -83,7 +88,7 @@ export function MCPClientFormSidebar({
             <Input
               id="mcp-client-name"
               placeholder="My MCP Client"
-              className="bg-surface3"
+              className={SOLID_FIELD}
               disabled={readOnly}
               {...register('name')}
               error={!!errors.name}
@@ -98,7 +103,7 @@ export function MCPClientFormSidebar({
             <Textarea
               id="mcp-client-description"
               placeholder="Describe what this MCP client connects to"
-              className="bg-surface3"
+              className={SOLID_FIELD}
               disabled={readOnly}
               {...register('description')}
             />
@@ -132,7 +137,7 @@ export function MCPClientFormSidebar({
             <Input
               id="mcp-server-name"
               placeholder="default"
-              className="bg-surface3"
+              className={SOLID_FIELD}
               disabled={readOnly}
               {...register('serverName')}
               error={!!errors.serverName}
@@ -168,7 +173,7 @@ export function MCPClientFormSidebar({
                 <Input
                   id="mcp-url"
                   placeholder="http://localhost:4111/api/mcp/server/mcp"
-                  className="bg-surface3"
+                  className={SOLID_FIELD}
                   disabled={readOnly}
                   {...register('url')}
                   error={!!errors.url}
@@ -184,7 +189,7 @@ export function MCPClientFormSidebar({
                   id="mcp-timeout"
                   type="number"
                   placeholder="30000"
-                  className="bg-surface3"
+                  className={SOLID_FIELD}
                   disabled={readOnly}
                   {...register('timeout', { valueAsNumber: true })}
                 />
@@ -201,7 +206,7 @@ export function MCPClientFormSidebar({
                 <Input
                   id="mcp-command"
                   placeholder="npx"
-                  className="bg-surface3"
+                  className={SOLID_FIELD}
                   disabled={readOnly}
                   {...register('command')}
                   error={!!errors.command}
@@ -216,7 +221,7 @@ export function MCPClientFormSidebar({
                 <Textarea
                   id="mcp-args"
                   placeholder={'-y\n@modelcontextprotocol/server'}
-                  className="bg-surface3"
+                  className={SOLID_FIELD}
                   disabled={readOnly}
                   {...register('args')}
                 />
@@ -229,13 +234,13 @@ export function MCPClientFormSidebar({
                     <div key={index} className="flex gap-2 items-center">
                       <Input
                         placeholder="KEY"
-                        className="bg-surface3 flex-1"
+                        className={`${SOLID_FIELD} flex-1`}
                         disabled={readOnly}
                         {...register(`env.${index}.key`)}
                       />
                       <Input
                         placeholder="VALUE"
-                        className="bg-surface3 flex-1"
+                        className={`${SOLID_FIELD} flex-1`}
                         disabled={readOnly}
                         {...register(`env.${index}.value`)}
                       />

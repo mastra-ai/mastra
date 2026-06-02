@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { ToolsInput } from '@mastra/core/agent';
-import { MastraVoice } from '@mastra/core/voice';
-import type { VoiceEventType, VoiceConfig } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
+import type { ToolsInput, VoiceEventType, VoiceConfig } from '@internal/voice';
+import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import type { WebSocket as WSType } from 'ws';
 import { WebSocket } from 'ws';
 import { AudioStreamManager, ConnectionManager, ContextManager, AuthManager, EventManager } from './managers';
@@ -26,8 +26,17 @@ type GeminiEventName = Extract<keyof GeminiLiveEventMap, string>;
 /**
  * Default configuration values
  */
-const DEFAULT_MODEL: GeminiVoiceModel = 'gemini-2.0-flash-exp';
+const DEFAULT_MODEL: GeminiVoiceModel = 'gemini-3.1-flash-live-preview';
 const DEFAULT_VOICE: GeminiVoiceName = 'Puck';
+
+// Treats only plain objects (own prototype chain ends at `Object.prototype` or `null`) as
+// proto-struct compatible — `Date`, `Map`, `Set`, `Error`, `RegExp`, and class instances all
+// JSON-serialize to `{}` if forwarded bare and need wrapping for Gemini Live's `response` field.
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
 
 /**
  * Helper class for consistent error handling
@@ -122,6 +131,11 @@ export class GeminiLiveVoice extends MastraVoice<
   // Store the configuration options
   private options: GeminiLiveVoiceConfig;
 
+  // Accumulates assistant text across `serverContent` frames for the current
+  // turn. Live API streams responses over many frames; we aggregate here and
+  // flush to context history once on `turnComplete`.
+  private pendingAssistantResponse = '';
+
   /**
    * Normalize configuration to ensure proper VoiceConfig format
    * Handles backward compatibility with direct GeminiLiveVoiceConfig
@@ -162,8 +176,25 @@ export class GeminiLiveVoice extends MastraVoice<
     const normalizedConfig = GeminiLiveVoice.normalizeConfig(config);
     super(normalizedConfig);
 
-    // Extract options from realtimeConfig
-    this.options = normalizedConfig.realtimeConfig?.options || {};
+    // Seed `this.options` from `realtimeConfig`. Fields on the `realtimeConfig` root
+    // (`model`, `apiKey`, `vertexAI`, `project`, etc.) and on the inner `options` object both
+    // belong in the flat `GeminiLiveVoiceConfig` shape this class reads from; merge with the
+    // explicit inner `options` last so caller intent on the inner object wins on collisions.
+    const realtimeConfig = normalizedConfig.realtimeConfig;
+    if (realtimeConfig) {
+      const { options: innerOptions, ...realtimeConfigRoot } = realtimeConfig;
+      this.options = { ...(realtimeConfigRoot as Partial<GeminiLiveVoiceConfig>), ...(innerOptions || {}) };
+    } else {
+      this.options = {};
+    }
+
+    // `speaker` lives at the `VoiceConfig` root, sibling to `realtimeConfig` — not inside it.
+    // Propagate explicitly so `new GeminiLiveVoice({ speaker: 'Puck', realtimeConfig: { ... } })`
+    // honors the caller's voice. Reading from `normalizedConfig.speaker` would pin `DEFAULT_VOICE`
+    // whenever the flat-config branch normalized without an explicit speaker, so use the raw `config`.
+    if ('realtimeConfig' in config && config.speaker && !this.options.speaker) {
+      this.options.speaker = config.speaker as GeminiVoiceName;
+    }
 
     // Validate API key
     const apiKey = this.options.apiKey;
@@ -866,76 +897,23 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Updating instructions');
       }
 
-      // Update tools if provided
-      if (config.tools !== undefined) {
+      // Mirror `sendInitialConfig`: flatten both tool sources — the explicit `config.tools` arg
+      // and the `addTools()` registry — into a single `function_declarations` container so the
+      // model receives every available tool. The multi-container shape previously emitted here
+      // was accepted by Gemini at setup but suppressed tool_call frames mid-session, reintroducing #17018.
+      const hasRegisteredTools = !!this.tools && Object.keys(this.tools).length > 0;
+      // `config.tools: []` is the explicit-clear signal; honor it even when the `addTools()`
+      // registry is non-empty, otherwise the caller has no way to remove all tools mid-session.
+      const isExplicitClear = Array.isArray(config.tools) && config.tools.length === 0;
+      if (config.tools !== undefined || hasRegisteredTools) {
         hasUpdates = true;
-        if (config.tools.length > 0) {
-          updateMessage.session.tools = config.tools.map((tool: GeminiToolConfig) => ({
-            function_declarations: [
-              {
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
-              },
-            ],
-          }));
+        const declarations = isExplicitClear ? [] : this.buildToolDeclarations(config.tools, this.tools);
+        if (declarations.length > 0) {
+          updateMessage.session.tools = [{ function_declarations: declarations }];
         } else {
-          // Clear tools if empty array provided
           updateMessage.session.tools = [];
         }
-
-        this.log('Updating tools:', config.tools.length, 'tools');
-      }
-
-      // Also check for tools from addTools method
-      if (this.tools && Object.keys(this.tools).length > 0) {
-        hasUpdates = true;
-        const allTools: Array<{
-          function_declarations: Array<{
-            name: string;
-            description?: string;
-            parameters?: unknown;
-          }>;
-        }> = [];
-
-        for (const [toolName, tool] of Object.entries(this.tools)) {
-          try {
-            let parameters: unknown;
-
-            // Handle different tool formats
-            if ('inputSchema' in tool && tool.inputSchema) {
-              // Convert Zod schema to JSON schema if needed
-              if (typeof tool.inputSchema === 'object' && 'safeParse' in tool.inputSchema) {
-                // This is a Zod schema - we need to convert it
-                parameters = this.convertZodSchemaToJsonSchema(tool.inputSchema);
-              } else {
-                parameters = tool.inputSchema;
-              }
-            } else if ('parameters' in tool && tool.parameters) {
-              parameters = tool.parameters;
-            } else {
-              // Default empty object if no schema found
-              parameters = { type: 'object', properties: {} };
-            }
-
-            allTools.push({
-              function_declarations: [
-                {
-                  name: toolName,
-                  description: tool.description || `Tool: ${toolName}`,
-                  parameters,
-                },
-              ],
-            });
-          } catch (error) {
-            this.log('Failed to process tool for session update', { toolName, error });
-          }
-        }
-
-        if (allTools.length > 0) {
-          updateMessage.session.tools = allTools;
-          this.log('Updating tools from addTools method:', allTools.length, 'tools');
-        }
+        this.log('Updating tools:', declarations.length, 'tools');
       }
 
       // Update session configuration if provided
@@ -1392,17 +1370,65 @@ export class GeminiLiveVoice extends MastraVoice<
       return;
     }
 
-    let assistantResponse = '';
+    // Barge-in: the server cancelled the in-flight model response because the
+    // user started speaking. Surface this as the `interrupt` event so consumers
+    // can drop queued TTS audio. Matches the `interrupt` shape emitted by
+    // `@mastra/voice-aws-nova-sonic`.
+    //
+    // The cancelled turn will not necessarily be followed by `turnComplete`, so
+    // end any in-flight speaker streams here. Otherwise stream counters never
+    // decrement and downstream playback hangs on the cancelled audio. Discard
+    // the partial assistant text — it does not represent a completed turn.
+    if (data.interrupted) {
+      this.log('Model response interrupted by user activity');
+      this.audioStreamManager.cleanupSpeakerStreams();
+      this.pendingAssistantResponse = '';
+      this.emit('interrupt', { type: 'user', timestamp: Date.now() });
+    }
+
+    // User-side transcription. Emitted as `writing` with `role: 'user'`,
+    // matching the OpenAI / xAI / Inworld realtime pattern of using a single
+    // `writing` channel with role disambiguation.
+    if (data.inputTranscription?.text) {
+      this.emit('writing', {
+        text: data.inputTranscription.text,
+        role: 'user',
+      });
+    }
+
+    // Model-side transcription. On native-audio models this is the
+    // authoritative source for the spoken response — emit it as `writing` with
+    // `role: 'assistant'`. On non-native-audio models this field is not sent
+    // (the spoken response comes from `modelTurn.parts.text` below).
+    if (data.outputTranscription?.text) {
+      this.pendingAssistantResponse += data.outputTranscription.text;
+      this.emit('writing', {
+        text: data.outputTranscription.text,
+        role: 'assistant',
+      });
+    }
+
+    const nativeAudio = this.isNativeAudioModel();
 
     if (data.modelTurn?.parts) {
       for (const part of data.modelTurn.parts) {
-        // Handle text content
+        // Handle text content. Native-audio models put their internal reasoning
+        // here while the spoken response goes through `outputTranscription`
+        // above — route reasoning to the Gemini-specific `thinking` event so
+        // consumers can render it separately without conflating it with the
+        // assistant's actual reply. Non-native-audio models do not send
+        // `outputTranscription`, so `part.text` IS the spoken response and
+        // continues to flow through `writing`.
         if (part.text) {
-          assistantResponse += part.text;
-          this.emit('writing', {
-            text: part.text,
-            role: 'assistant',
-          });
+          if (nativeAudio) {
+            this.emit('thinking', { text: part.text });
+          } else {
+            this.pendingAssistantResponse += part.text;
+            this.emit('writing', {
+              text: part.text,
+              role: 'assistant',
+            });
+          }
         }
 
         // Handle function calls (tool calls) embedded in parts
@@ -1502,14 +1528,18 @@ export class GeminiLiveVoice extends MastraVoice<
       }
     }
 
-    // Add assistant response to context if there was text content
-    if (assistantResponse.trim()) {
-      this.addToContext('assistant', assistantResponse);
-    }
-
     // Check for turn completion
     if (data.turnComplete) {
       this.log('Turn completed');
+
+      // Flush the assistant text accumulated across this turn's `serverContent`
+      // frames as a single context entry. Doing this once per turn (rather than
+      // once per frame) keeps the conversation history coherent even when the
+      // Live API streams a response over many incremental frames.
+      if (this.pendingAssistantResponse.trim()) {
+        this.addToContext('assistant', this.pendingAssistantResponse);
+      }
+      this.pendingAssistantResponse = '';
 
       // End all active speaker streams for this turn
       this.audioStreamManager.cleanupSpeakerStreams();
@@ -1594,13 +1624,21 @@ export class GeminiLiveVoice extends MastraVoice<
         result = { error: 'Tool has no execute function' };
       }
 
+      // Gemini Live's `response` proto field is a struct, not repeating. Tools returning arrays
+      // or primitives close the session with `1007 Unknown name "response": Proto field is not
+      // repeating`. Wrap everything except plain objects in `{ result }` so the field is always a
+      // struct — `Date`, `Map`, `Set`, `Error`, and class instances all serialize as `{}` if sent
+      // bare (their own enumerable properties are empty), losing the tool's data silently.
+      const responsePayload = isPlainObject(result) ? result : { result };
+
       // Send tool result back to Gemini Live API
       const toolResultMessage = {
         toolResponse: {
           functionResponses: [
             {
               id: toolId,
-              response: result,
+              name: toolName,
+              response: responsePayload,
             },
           ],
         },
@@ -1618,6 +1656,7 @@ export class GeminiLiveVoice extends MastraVoice<
           functionResponses: [
             {
               id: toolId,
+              name: toolName,
               response: { error: errorMessage },
             },
           ],
@@ -1703,6 +1742,28 @@ export class GeminiLiveVoice extends MastraVoice<
   }
 
   /**
+   * Whether the active model is a Gemini Live "native-audio" variant.
+   *
+   * Native-audio models emit a different `serverContent.modelTurn.parts.text`
+   * stream than their half-cascade siblings: on native-audio, that text is the
+   * model's internal reasoning (chain-of-thought), and the *spoken* response
+   * arrives separately via `serverContent.outputTranscription.text`. On
+   * non-native-audio models there is no `outputTranscription` channel, and
+   * `modelTurn.parts.text` is the spoken response.
+   *
+   * Used to decide whether `modelTurn.parts.text` should be emitted as
+   * `thinking` (native-audio) or `writing` (non-native-audio). All native-audio
+   * model IDs in `GeminiVoiceModel` contain the literal substring
+   * `native-audio`, so a substring check is sufficient and forward-compatible
+   * with new variants that follow the same naming convention.
+   * @private
+   */
+  private isNativeAudioModel(): boolean {
+    const model = this.options.model ?? DEFAULT_MODEL;
+    return model.includes('native-audio');
+  }
+
+  /**
    * Resolve the correct model identifier for Gemini API or Vertex AI
    * @private
    */
@@ -1733,118 +1794,123 @@ export class GeminiLiveVoice extends MastraVoice<
       throw new Error('WebSocket not connected');
     }
 
-    // Live API format - based on the official documentation
+    // Live API setup message. Keys must be snake_case to match Gemini Live's wire format —
+    // camelCase keys cause native-audio models to reject the setup with
+    // `1007 Cannot extract voices from a non-audio request`. Matches the `UpdateMessage` shape
+    // already used by this package's `session.update` path.
     interface LiveGenerateContentSetup {
       model?: string;
-      generationConfig?: {
+      generation_config?: {
         temperature?: number;
-        topK?: number;
-        topP?: number;
-        maxOutputTokens?: number;
-        stopSequences?: string[];
-        candidateCount?: number;
-        responseModalities?: string[];
-        speechConfig?: {
-          voiceConfig?: {
-            prebuiltVoiceConfig?: {
-              voiceName?: string;
+        top_k?: number;
+        top_p?: number;
+        max_output_tokens?: number;
+        stop_sequences?: string[];
+        candidate_count?: number;
+        response_modalities?: ('AUDIO' | 'TEXT')[];
+        speech_config?: {
+          voice_config?: {
+            prebuilt_voice_config?: {
+              voice_name?: string;
             };
           };
         };
       };
-      systemInstruction?: {
+      system_instruction?: {
         parts: Array<{
           text: string;
         }>;
       };
       tools?: Array<{
-        functionDeclarations: Array<{
+        function_declarations: Array<{
           name: string;
           description?: string;
           parameters?: unknown;
         }>;
       }>;
+      /**
+       * Empty-object flag that enables server-side ASR for the user's spoken
+       * input. When set, the server emits `serverContent.inputTranscription.text`
+       * frames alongside audio. Required to surface what the user said.
+       */
+      input_audio_transcription?: Record<string, never>;
+      /**
+       * Empty-object flag that enables server-side transcription of the model's
+       * spoken output. When set, the server emits
+       * `serverContent.outputTranscription.text` frames. Required on
+       * native-audio models — without this, the spoken response text is never
+       * delivered to the client (`modelTurn.parts.text` on native-audio is
+       * reasoning, not spoken content).
+       */
+      output_audio_transcription?: Record<string, never>;
+      /**
+       * Activity handling tells the server how to react to new user activity
+       * while the model is still responding. `START_OF_ACTIVITY_INTERRUPTS`
+       * cancels the in-flight model response on barge-in and sets
+       * `serverContent.interrupted = true`, which is the signal consumers need
+       * to drop queued TTS audio.
+       */
+      realtime_input_config?: {
+        activity_handling?: 'START_OF_ACTIVITY_INTERRUPTS' | 'NO_INTERRUPTION';
+      };
+    }
+
+    // Native-audio models require `response_modalities: ["AUDIO"]` at setup time. This is a voice
+    // library, so AUDIO is the only sensible session-level default; callers needing a TEXT-only
+    // turn can override per-turn via `GeminiLiveVoiceOptions.responseModalities` on `speak()`.
+    const generationConfig: NonNullable<LiveGenerateContentSetup['generation_config']> = {
+      response_modalities: ['AUDIO'],
+    };
+
+    // Only attach `voice_config` when the caller supplied a `speaker`. Omitting the field lets
+    // Gemini Live pick its server-side default and avoids pinning a Mastra-side preference.
+    if (this.options.speaker) {
+      generationConfig.speech_config = {
+        voice_config: {
+          prebuilt_voice_config: {
+            voice_name: this.options.speaker,
+          },
+        },
+      };
     }
 
     // Build the Live API setup message
     const setupMessage: { setup: LiveGenerateContentSetup } = {
       setup: {
         model: this.resolveModelIdentifier(),
+        generation_config: generationConfig,
+        // Transcription is on by default — matches the pattern in @mastra/voice-openai-realtime,
+        // @mastra/voice-xai-realtime, and @mastra/voice-inworld where realtime sessions
+        // unconditionally enable STT in `connect()`. On native-audio models this is the ONLY way
+        // to receive the spoken response as text (`modelTurn.parts.text` carries reasoning, not
+        // speech), so without these flags the assistant's words are silently dropped client-side.
+        input_audio_transcription: {},
+        output_audio_transcription: {},
+        // Activity-based interrupts surface barge-in as `serverContent.interrupted = true` and
+        // cancel the in-flight model response. This is the only way to wire up the `interrupt`
+        // event declared in `GeminiLiveEventMap`.
+        realtime_input_config: {
+          activity_handling: 'START_OF_ACTIVITY_INTERRUPTS',
+        },
       },
     };
 
     // Add system instructions if provided
     if (this.options.instructions) {
-      setupMessage.setup.systemInstruction = {
+      setupMessage.setup.system_instruction = {
         parts: [{ text: this.options.instructions }],
       };
     }
 
-    // Collect tools from both options and addTools method
-    const allTools: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }> = [];
+    // Gemini Live expects a single `tools` entry whose `function_declarations` array holds every
+    // tool. The previous shape (one entry per tool, camelCase `functionDeclarations`) was accepted
+    // at setup but the model never emitted tool_call frames back to the client.
+    const functionDeclarations = this.buildToolDeclarations(this.options.tools, this.tools);
 
-    // Add tools from options (GeminiToolConfig[])
-    if (this.options.tools && this.options.tools.length > 0) {
-      for (const tool of this.options.tools) {
-        allTools.push({
-          functionDeclarations: [
-            {
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.parameters,
-            },
-          ],
-        });
-      }
-    }
-
-    // Add tools from addTools method (ToolsInput)
-    if (this.tools && Object.keys(this.tools).length > 0) {
-      for (const [toolName, tool] of Object.entries(this.tools)) {
-        try {
-          let parameters: unknown;
-
-          // Handle different tool formats
-          if ('inputSchema' in tool && tool.inputSchema) {
-            // Convert Zod schema to JSON schema if needed
-            if (typeof tool.inputSchema === 'object' && 'safeParse' in tool.inputSchema) {
-              // This is a Zod schema - we need to convert it
-              parameters = this.convertZodSchemaToJsonSchema(tool.inputSchema);
-            } else {
-              parameters = tool.inputSchema;
-            }
-          } else if ('parameters' in tool && tool.parameters) {
-            parameters = tool.parameters;
-          } else {
-            // Default empty object if no schema found
-            parameters = { type: 'object', properties: {} };
-          }
-
-          allTools.push({
-            functionDeclarations: [
-              {
-                name: toolName,
-                description: tool.description || `Tool: ${toolName}`,
-                parameters,
-              },
-            ],
-          });
-        } catch (error) {
-          this.log('Failed to process tool', { toolName, error });
-        }
-      }
-    }
-
-    // Add tools to setup message if any exist
-    if (allTools.length > 0) {
-      setupMessage.setup.tools = allTools;
-      this.log('Including tools in setup message', { toolCount: allTools.length });
+    // Emit tools as a single container with all declarations
+    if (functionDeclarations.length > 0) {
+      setupMessage.setup.tools = [{ function_declarations: functionDeclarations }];
+      this.log('Including tools in setup message', { toolCount: functionDeclarations.length });
     }
 
     this.log('Sending Live API setup message:', setupMessage);
@@ -2033,32 +2099,72 @@ export class GeminiLiveVoice extends MastraVoice<
   }
 
   /**
-   * Convert Zod schema to JSON Schema for tool parameters
+   * Flatten both tool sources (constructor `tools` option and runtime `addTools()` registry) into
+   * the single declaration array Gemini Live expects inside `tools[0].function_declarations`.
+   * Used by both `sendInitialConfig()` and `updateSessionConfig()` so mid-session tool updates
+   * stay on the same shape as setup-time tools.
    * @private
    */
-  private convertZodSchemaToJsonSchema(schema: any): unknown {
+  private buildToolDeclarations(
+    configTools: GeminiToolConfig[] | undefined,
+    registeredTools: ToolsInput | undefined,
+  ): Array<{ name: string; description?: string; parameters?: unknown }> {
+    const declarations: Array<{ name: string; description?: string; parameters?: unknown }> = [];
+
+    if (configTools && configTools.length > 0) {
+      for (const tool of configTools) {
+        declarations.push({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        });
+      }
+    }
+
+    if (registeredTools && Object.keys(registeredTools).length > 0) {
+      for (const [toolName, tool] of Object.entries(registeredTools)) {
+        try {
+          let parameters: unknown;
+          if ('inputSchema' in tool && tool.inputSchema) {
+            if (typeof tool.inputSchema === 'object' && 'safeParse' in tool.inputSchema) {
+              parameters = this.convertZodSchemaToJsonSchema(tool.inputSchema);
+            } else {
+              parameters = tool.inputSchema;
+            }
+          } else if ('parameters' in tool && tool.parameters) {
+            parameters = tool.parameters;
+          } else {
+            parameters = { type: 'object', properties: {} };
+          }
+
+          declarations.push({
+            name: toolName,
+            description: tool.description || `Tool: ${toolName}`,
+            parameters,
+          });
+        } catch (error) {
+          this.log('Failed to process tool', { toolName, error });
+        }
+      }
+    }
+
+    return declarations;
+  }
+
+  /**
+   * Convert a schema to Gemini-compatible JSON Schema using GoogleSchemaCompatLayer.
+   * This ensures the output conforms to the OpenAPI 3.0 Schema Object subset
+   * that Gemini's wire validator expects.
+   * @private
+   */
+  private convertZodSchemaToJsonSchema(schema: unknown): unknown {
     try {
-      // Try to use the schema's toJSON method if available
-      if (typeof schema.toJSON === 'function') {
-        return schema.toJSON();
-      }
-
-      // Try to use the schema's _def property if available (Zod internal)
-      if (schema._def) {
-        return this.convertZodDefToJsonSchema(schema._def);
-      }
-
-      // If it's already a plain object, return as is
-      if (typeof schema === 'object' && !schema.safeParse) {
-        return schema;
-      }
-
-      // Default fallback
-      return {
-        type: 'object',
-        properties: {},
-        description: schema.description || '',
-      };
+      const compat = new GoogleSchemaCompatLayer({
+        provider: 'google',
+        modelId: 'gemini-live',
+        supportsStructuredOutputs: false,
+      });
+      return compat.processToJSONSchema(schema as any);
     } catch (error) {
       this.log('Failed to convert Zod schema to JSON schema', { error, schema });
       return {
@@ -2066,69 +2172,6 @@ export class GeminiLiveVoice extends MastraVoice<
         properties: {},
         description: 'Schema conversion failed',
       };
-    }
-  }
-
-  /**
-   * Convert Zod definition to JSON Schema
-   * @private
-   */
-  private convertZodDefToJsonSchema(def: any): unknown {
-    switch (def.typeName) {
-      case 'ZodString':
-        return {
-          type: 'string',
-          description: def.description || '',
-        };
-      case 'ZodNumber':
-        return {
-          type: 'number',
-          description: def.description || '',
-        };
-      case 'ZodBoolean':
-        return {
-          type: 'boolean',
-          description: def.description || '',
-        };
-      case 'ZodArray':
-        return {
-          type: 'array',
-          items: this.convertZodDefToJsonSchema(def.type._def),
-          description: def.description || '',
-        };
-      case 'ZodObject':
-        const properties: Record<string, unknown> = {};
-        const required: string[] = [];
-
-        for (const [key, value] of Object.entries(def.shape())) {
-          properties[key] = this.convertZodDefToJsonSchema((value as any)._def);
-          if ((value as any)._def.typeName === 'ZodOptional') {
-            // Optional field, don't add to required
-          } else {
-            required.push(key);
-          }
-        }
-
-        return {
-          type: 'object',
-          properties,
-          required: required.length > 0 ? required : undefined,
-          description: def.description || '',
-        };
-      case 'ZodOptional':
-        return this.convertZodDefToJsonSchema(def.innerType._def);
-      case 'ZodEnum':
-        return {
-          type: 'string',
-          enum: def.values,
-          description: def.description || '',
-        };
-      default:
-        return {
-          type: 'object',
-          properties: {},
-          description: def.description || '',
-        };
     }
   }
 
