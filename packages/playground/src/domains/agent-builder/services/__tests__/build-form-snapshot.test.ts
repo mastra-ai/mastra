@@ -137,8 +137,11 @@ describe('buildFormSnapshotInstructions', () => {
     expect(result).not.toContain('missing');
   });
 
-  it('truncates long instructions and appends [truncated]', () => {
-    const longInstructions = 'a'.repeat(2000);
+  it('truncates instructions beyond the hard cap and appends [truncated]', () => {
+    // Use a length above MAX_GENERATED_INSTRUCTIONS_CHARS (3000) to trip the
+    // snapshot's truncate helper. Below the cap, the full block is echoed so
+    // the LLM sees the same "persisted, final text" the directive points to.
+    const longInstructions = 'a'.repeat(4000);
     const values: AgentBuilderEditFormValues = {
       ...baseValues,
       instructions: longInstructions,
@@ -147,8 +150,25 @@ describe('buildFormSnapshotInstructions', () => {
     const result = buildFormSnapshotInstructions(values, buildOptions());
 
     expect(result).toContain('[truncated]');
-    expect(result).not.toContain('a'.repeat(2000));
-    expect(result).toContain('a'.repeat(1500));
+    expect(result).not.toContain('a'.repeat(4000));
+    expect(result).toContain('a'.repeat(3000));
+  });
+
+  it('echoes instructions verbatim when under the hard cap', () => {
+    // Anything <= MAX_GENERATED_INSTRUCTIONS_CHARS must be displayed in full
+    // so the already-set directive ("the persisted, final text") matches what
+    // the LLM sees — otherwise the model might re-call set-agent-instructions
+    // to "restore" the missing tail.
+    const instructions = 'b'.repeat(2500);
+    const values: AgentBuilderEditFormValues = {
+      ...baseValues,
+      instructions,
+    };
+
+    const result = buildFormSnapshotInstructions(values, buildOptions());
+
+    expect(result).not.toContain('[truncated]');
+    expect(result).toContain('b'.repeat(2500));
   });
 
   it('renders model as provider/name when set and feature is enabled', () => {

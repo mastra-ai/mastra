@@ -29,7 +29,6 @@ export interface BuildFormSnapshotOptions {
   starterUserMessage?: string;
 }
 
-const INSTRUCTIONS_MAX_CHARS = 1500;
 /**
  * Hard cap on the generated `instructions` field. Surfaced to the builder LLM
  * via the empty-instructions directive AND enforced server-side by
@@ -37,6 +36,11 @@ const INSTRUCTIONS_MAX_CHARS = 1500;
  * always stays under the stream output cap (`maxTokens` in
  * `stream-chat-provider.tsx`). Anything past the cap is truncated before it
  * lands in the form — the LLM is told this is a strict, not aspirational, limit.
+ *
+ * The same cap is used when echoing the already-set instructions block back
+ * to the LLM in the snapshot. Using a smaller display cap would clip the
+ * "persisted, final text" the directive points to and could trick the model
+ * into re-calling set-agent-instructions to "restore" the missing tail.
  */
 export const MAX_GENERATED_INSTRUCTIONS_CHARS = 3000;
 const EMPTY_TEXT = '(empty)';
@@ -68,7 +72,7 @@ const renderQuoted = (value: string | undefined): string => {
 
 const renderInstructions = (value: string | undefined): string => {
   if (!isFilled(value)) return EMPTY_TEXT;
-  const truncated = truncate(value, INSTRUCTIONS_MAX_CHARS);
+  const truncated = truncate(value, MAX_GENERATED_INSTRUCTIONS_CHARS);
   return `"""\n${truncated}\n"""`;
 };
 

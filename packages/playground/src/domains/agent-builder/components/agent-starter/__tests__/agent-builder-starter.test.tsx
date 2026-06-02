@@ -110,7 +110,10 @@ describe('AgentBuilderStarter', () => {
       fireEvent.click(submit);
     });
 
-    expect(capturedBody).toBeTruthy();
+    // The MSW handler populates `capturedBody` asynchronously, so wait for the
+    // POST to land before reading its fields. Avoids a race that previously
+    // made this assertion flaky on slow runners.
+    await waitFor(() => expect(capturedBody).not.toBeNull());
     expect(capturedBody.name).toBe('build a tutor agent');
     expect(capturedBody.instructions).toBe('');
     expect(capturedBody.model).toEqual({ provider: 'google', name: 'gemini-2.5-flash' });
