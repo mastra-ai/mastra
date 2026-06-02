@@ -37,8 +37,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #events: EventEmitter;
   readonly #stateSchema?: HarnessConfig<MODES, TState>['stateSchema'];
   readonly #initialState?: Partial<TState>;
-  #workspace?: Workspace;
-  readonly #workspaceFn?: Extract<DynamicArgument<Workspace | undefined>, (...args: any[]) => any>;
+  readonly #workspace?: DynamicArgument<Workspace | undefined>;
 
   constructor(config: HarnessConfig<MODES, TState>) {
     if (!config.modes.length) {
@@ -54,10 +53,8 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     this.#stateSchema = config.stateSchema;
     this.#initialState = config.initialState;
 
-    if (config.workspace instanceof Workspace) {
+    if (config.workspace instanceof Workspace || typeof config.workspace === 'function') {
       this.#workspace = config.workspace;
-    } else if (typeof config.workspace === 'function') {
-      this.#workspaceFn = config.workspace;
     } else if (config.workspace) {
       this.#workspace = new Workspace(config.workspace);
     }
@@ -88,7 +85,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   }
 
   getWorkspace(): Workspace | undefined {
-    return this.#workspace;
+    return typeof this.#workspace === 'function' ? undefined : this.#workspace;
   }
 
   listModes(): HarnessMode[] {
@@ -225,10 +222,6 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       stateSchema: this.#stateSchema,
       initialState: this.#initialState,
       workspace: this.#workspace,
-      workspaceFn: this.#workspaceFn,
-      setWorkspace: workspace => {
-        this.#workspace = workspace;
-      },
     });
   }
 

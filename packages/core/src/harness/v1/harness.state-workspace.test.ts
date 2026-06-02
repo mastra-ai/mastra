@@ -130,22 +130,25 @@ describe('Harness v1 workspace', () => {
     );
   });
 
-  it('resolves dynamic workspaces into request context and caches them on the harness', async () => {
+  it('resolves dynamic workspaces into request context and caches them on the session', async () => {
     const workspace = new Workspace({ name: 'dynamic-workspace', skills: ['.'] });
     let harnessContext: { workspace?: Workspace } | undefined;
     const memory = vi.fn(({ requestContext }) => {
       harnessContext = requestContext.get('harness');
       return createMemory();
     });
+    const workspaceFactory = vi.fn(() => workspace);
     const { harness } = createHarness({
       memory,
-      workspace: vi.fn(() => workspace),
+      workspace: workspaceFactory,
     });
 
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
     await session.getThread();
+    await session.getThread();
 
     expect(harnessContext?.workspace).toBe(workspace);
-    expect(harness.getWorkspace()).toBe(workspace);
+    expect(workspaceFactory).toHaveBeenCalledTimes(1);
+    expect(harness.getWorkspace()).toBeUndefined();
   });
 });
