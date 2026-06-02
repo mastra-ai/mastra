@@ -182,6 +182,16 @@ type BaseWorkingMemory = {
    * @default 'resource'
    */
   scope?: 'thread' | 'resource';
+  /**
+   * Experimental: deliver working memory to the model as a state signal instead of folding
+   * it into the system message. Storage and the `update-working-memory` tool are unchanged;
+   * only the delivery path differs. When `true`, `Memory` auto-attaches a state-signal
+   * processor that emits a snapshot signal on each run with dedup via `cacheKey`.
+   *
+   * @default false
+   * @see docs/src/content/en/docs/agents/signals.mdx
+   */
+  useStateSignals?: boolean;
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };

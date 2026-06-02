@@ -13,6 +13,11 @@ import type { MemoryStorage } from '../../storage';
 export interface MessageHistoryOptions {
   storage: MemoryStorage;
   lastMessages?: number;
+  /**
+   * When true, preserve `updateWorkingMemory` tool-call parts during persistence.
+   * Set by `Memory` when working memory is configured with `useStateSignals: true`.
+   */
+  keepWorkingMemoryToolCalls?: boolean;
 }
 
 /**
@@ -28,10 +33,12 @@ export class MessageHistory implements Processor {
   readonly name = 'MessageHistory';
   private storage: MemoryStorage;
   private lastMessages?: number;
+  private keepWorkingMemoryToolCalls: boolean;
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
+    this.keepWorkingMemoryToolCalls = options.keepWorkingMemoryToolCalls === true;
   }
 
   /**
@@ -166,13 +173,18 @@ export class MessageHistory implements Processor {
    * 1. Removes system messages - these are runtime instructions and should never be stored
    * 2. Removes streaming tool calls (state === 'partial-call') - these are intermediate states
    * 3. Removes updateWorkingMemory tool invocations (hide args from message history)
+   *    unless `keepWorkingMemoryToolCalls` is true (state-signals path keeps them as audit trail).
    * 4. Strips <working_memory> tags from text content
    *
    * Note: We preserve 'call' state tool invocations because:
    * - For server-side tools, 'call' should have been converted to 'result' by the time OUTPUT is processed
    * - For client-side tools (no execute function), 'call' is the final state from the server's perspective
    */
-  private filterMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
+  private filterMessagesForPersistence(
+    messages: MastraDBMessage[],
+    options?: { keepWorkingMemoryToolCalls?: boolean },
+  ): MastraDBMessage[] {
+    const keepWorkingMemoryToolCalls = options?.keepWorkingMemoryToolCalls === true;
     return messages
       .filter(m => m.role !== 'system')
       .map(m => {
@@ -197,7 +209,14 @@ export class MessageHistory implements Processor {
                 return null;
               }
               // Filter out updateWorkingMemory tool invocations (hide args from message history)
-              if (p.type === `tool-invocation` && p.toolInvocation.toolName === `updateWorkingMemory`) {
+              // When state signals are opted in, keep the tool calls so they form an audit trail
+              // (working memory is delivered via state signals, not folded into the system prompt,
+              // so the duplication concern that originally motivated this strip no longer applies).
+              if (
+                !keepWorkingMemoryToolCalls &&
+                p.type === `tool-invocation` &&
+                p.toolInvocation.toolName === `updateWorkingMemory`
+              ) {
                 return null;
               }
               // Strip working memory tags from text parts
@@ -240,6 +259,7 @@ export class MessageHistory implements Processor {
     // Check if readOnly from memoryConfig
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
+    const keepWorkingMemoryToolCalls = this.keepWorkingMemoryToolCalls;
 
     if (!context || readOnly) {
       return messageList;
@@ -260,7 +280,7 @@ export class MessageHistory implements Processor {
     });
 
     try {
-      await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
+      await this.persistMessages({ messages: messagesToSave, threadId, resourceId, keepWorkingMemoryToolCalls });
       // add extra 1ms latency to make sure the next generate has not the same input
       await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -282,14 +302,19 @@ export class MessageHistory implements Processor {
    * This method can be called externally by other processors (e.g., ObservationalMemory)
    * that need to save messages incrementally.
    */
-  async persistMessages(args: { messages: MastraDBMessage[]; threadId: string; resourceId?: string }): Promise<void> {
-    const { messages, threadId, resourceId } = args;
+  async persistMessages(args: {
+    messages: MastraDBMessage[];
+    threadId: string;
+    resourceId?: string;
+    keepWorkingMemoryToolCalls?: boolean;
+  }): Promise<void> {
+    const { messages, threadId, resourceId, keepWorkingMemoryToolCalls } = args;
 
     if (messages.length === 0) {
       return;
     }
 
-    const filtered = this.filterMessagesForPersistence(messages);
+    const filtered = this.filterMessagesForPersistence(messages, { keepWorkingMemoryToolCalls });
 
     if (filtered.length === 0) {
       return;
