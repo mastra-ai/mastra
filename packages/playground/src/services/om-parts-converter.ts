@@ -1,5 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 
+import type { OmCycleParts, OmIndexablePart } from './om-types';
+
 /**
  * Converts a data-om-* part to dynamic-tool format so toAssistantUIMessage can transform it.
  * The ToolFallback component will detect the om-observation-* prefix and render ObservationMarkerBadge.
@@ -9,41 +11,33 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
  */
 const OM_TOOL_NAME = 'mastra-memory-om-observation';
 
-type OmCycleParts = {
-  start?: any;
-  end?: any;
-  failed?: any;
-  bufferingStart?: any;
-  bufferingEnd?: any;
-  bufferingFailed?: any;
-  activation?: any;
-};
+const OM_TYPE_TO_KEY = {
+  'data-om-observation-start': 'start',
+  'data-om-observation-end': 'end',
+  'data-om-observation-failed': 'failed',
+  'data-om-buffering-start': 'bufferingStart',
+  'data-om-buffering-end': 'bufferingEnd',
+  'data-om-buffering-failed': 'bufferingFailed',
+  'data-om-activation': 'activation',
+} as const satisfies Record<string, keyof OmCycleParts>;
 
 /**
  * Index data-om-* parts by cycleId from an array of parts.
  * Merges into an existing map so it can be called across multiple messages.
  */
-const indexOmPartsByCycleId = (parts: any[], target: Map<string, OmCycleParts>) => {
+const indexOmPartsByCycleId = (parts: MastraDBMessage['content']['parts'], target: Map<string, OmCycleParts>) => {
   for (const part of parts) {
-    const cycleId = (part as any).data?.cycleId;
+    if (!(part.type in OM_TYPE_TO_KEY)) continue;
+    const omPart = part as NonNullable<OmIndexablePart>;
+    const cycleId = omPart.data?.cycleId;
     if (!cycleId) continue;
 
-    const typeToKey: Record<string, keyof OmCycleParts> = {
-      'data-om-observation-start': 'start',
-      'data-om-observation-end': 'end',
-      'data-om-observation-failed': 'failed',
-      'data-om-buffering-start': 'bufferingStart',
-      'data-om-buffering-end': 'bufferingEnd',
-      'data-om-buffering-failed': 'bufferingFailed',
-      'data-om-activation': 'activation',
-    };
-
-    const key = typeToKey[part.type];
-    if (key) {
-      const existing = target.get(cycleId) || {};
-      existing[key] = part;
-      target.set(cycleId, existing);
-    }
+    const key = OM_TYPE_TO_KEY[omPart.type];
+    const existing = target.get(cycleId) || {};
+    // The discriminant `omPart.type` and `key` are paired in OM_TYPE_TO_KEY, so
+    // the assignment is sound; TS cannot correlate the two unions on its own.
+    (existing[key] as OmIndexablePart) = omPart;
+    target.set(cycleId, existing);
   }
   return target;
 };
@@ -101,13 +95,13 @@ export const convertOmPartsInMastraMessage = (
       const cycle = globalOmParts.get(cycleId);
       if (!cycle) continue;
 
-      const startData = cycle.start?.data || {};
-      const endData = cycle.end?.data || {};
-      const failedData = cycle.failed?.data || {};
+      const startData = cycle.start?.data;
+      const endData = cycle.end?.data;
+      const failedData = cycle.failed?.data;
 
       const isFailed = !!cycle.failed;
       const isComplete = !!cycle.end;
-      const isDisconnected = !!startData.disconnectedAt || (isComplete && !!endData.disconnectedAt);
+      const isDisconnected = !!startData?.disconnectedAt || (isComplete && !!endData?.disconnectedAt);
       const isLoading = !isFailed && !isComplete && !isDisconnected;
 
       const mergedData = {
@@ -134,15 +128,15 @@ export const convertOmPartsInMastraMessage = (
       const cycle = globalOmParts.get(cycleId);
       if (!cycle) continue;
 
-      const startData = cycle.bufferingStart?.data || {};
-      const endData = cycle.bufferingEnd?.data || {};
-      const failedData = cycle.bufferingFailed?.data || {};
-      const activationData = cycle.activation?.data || {};
+      const startData = cycle.bufferingStart?.data;
+      const endData = cycle.bufferingEnd?.data;
+      const failedData = cycle.bufferingFailed?.data;
+      const activationData = cycle.activation?.data;
 
       const isFailed = !!cycle.bufferingFailed;
       const isActivated = !!cycle.activation;
       const isComplete = !!cycle.bufferingEnd;
-      const isDisconnected = !!startData.disconnectedAt;
+      const isDisconnected = !!startData?.disconnectedAt;
       const isLoading = !isFailed && !isActivated && !isComplete && !isDisconnected;
 
       const mergedData: Record<string, unknown> = {
