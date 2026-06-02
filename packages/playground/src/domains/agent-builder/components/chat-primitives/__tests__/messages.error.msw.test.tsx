@@ -110,8 +110,11 @@ describe('MessageRow error rendering', () => {
     const errorCard = screen.getByTestId('agent-builder-chat-error');
     expect(errorCard).not.toBeNull();
     expect(errorCard.textContent).toContain('Something went wrong while building the agent.');
-    // The raw envelope is hidden in collapsible details, not in the visible summary.
+    // The visible summary echoes the parsed, sanitized provider message — not the
+    // raw JSON envelope (which is hidden behind the Details toggle).
     const summary = screen.getByTestId('agent-builder-chat-error-summary');
+    const expected = parseStreamErrorText(openAIServerErrorPayload).summary;
+    expect(summary.textContent).toContain(expected);
     expect(summary.textContent).not.toContain('AI_APICallError');
     expect(summary.textContent).not.toContain('req_abc123');
   });

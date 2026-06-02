@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
-import { buildFormSnapshotInstructions } from '../build-form-snapshot';
+import { MAX_GENERATED_INSTRUCTIONS_CHARS, buildFormSnapshotInstructions } from '../build-form-snapshot';
 import type { AvailableWorkspaceLike, BuildFormSnapshotOptions } from '../build-form-snapshot';
 import type { ModelInfo } from '@/domains/llm';
 
@@ -138,10 +138,10 @@ describe('buildFormSnapshotInstructions', () => {
   });
 
   it('truncates instructions beyond the hard cap and appends [truncated]', () => {
-    // Use a length above MAX_GENERATED_INSTRUCTIONS_CHARS (4000) to trip the
-    // snapshot's truncate helper. Below the cap, the full block is echoed so
-    // the LLM sees the same "persisted, final text" the directive points to.
-    const longInstructions = 'a'.repeat(5000);
+    // Use a length above MAX_GENERATED_INSTRUCTIONS_CHARS to trip the snapshot's
+    // truncate helper. Below the cap, the full block is echoed so the LLM sees
+    // the same "persisted, final text" the directive points to.
+    const longInstructions = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 1000);
     const values: AgentBuilderEditFormValues = {
       ...baseValues,
       instructions: longInstructions,
@@ -150,8 +150,8 @@ describe('buildFormSnapshotInstructions', () => {
     const result = buildFormSnapshotInstructions(values, buildOptions());
 
     expect(result).toContain('[truncated]');
-    expect(result).not.toContain('a'.repeat(5000));
-    expect(result).toContain('a'.repeat(4000));
+    expect(result).not.toContain('a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 1));
+    expect(result).toContain('a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS));
   });
 
   it('echoes instructions verbatim when under the hard cap', () => {
@@ -342,7 +342,7 @@ describe('buildFormSnapshotInstructions', () => {
       // Hard cap surfaced to the LLM AND enforced server-side in
       // useSetAgentInstructionsTool, so set-agent-instructions args stay
       // under the stream output token cap.
-      expect(result).toMatch(/HARD limit: [\d,]+ characters/);
+      expect(result).toContain(`HARD limit: ${MAX_GENERATED_INSTRUCTIONS_CHARS.toLocaleString()} characters`);
       expect(result).toMatch(/Over-limit calls are REJECTED/);
     });
 

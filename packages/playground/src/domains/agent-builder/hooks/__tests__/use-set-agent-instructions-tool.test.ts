@@ -59,12 +59,17 @@ describe('useSetAgentInstructionsTool', () => {
     expect(result.finalLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS);
   });
 
-  it('rejects instructions past the hard cap without persisting', async () => {
+  it('rejects instructions past the hard cap without persisting (and leaves existing value intact)', async () => {
     const { tool, form } = renderTool();
+    // Seed an already-valid instructions value so we can prove rejection does
+    // not clobber existing content (the "nothing is persisted" contract).
+    const seeded = 'Existing valid instructions.';
+    form().setValue('instructions', seeded);
+
     const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
     const result: any = await tool.execute!({ instructions: body } as any);
-    // Nothing was written to the form.
-    expect(form().getValues('instructions')).toBe('');
+    // The seeded value survives — over-limit calls write nothing.
+    expect(form().getValues('instructions')).toBe(seeded);
     expect(result.success).toBe(false);
     expect(result.rejected).toBe(true);
     expect(result.currentLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);

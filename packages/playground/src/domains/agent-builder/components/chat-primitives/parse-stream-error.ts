@@ -36,10 +36,13 @@ export const parseStreamErrorText = (raw: string): ParsedStreamError => {
   }
 
   const oneLine = trimmed.split('\n')[0];
-  return {
-    summary: oneLine.length > 200 ? `${oneLine.slice(0, 200)}…` : oneLine,
-    details: trimmed.length > oneLine.length ? trimmed : undefined,
-  };
+  const truncated = oneLine.length > 200;
+  const summary = truncated ? `${oneLine.slice(0, 200)}…` : oneLine;
+  // Keep the full text recoverable whenever the summary doesn't already contain it:
+  // either because we truncated a long single line, or because there are extra
+  // lines below the first one.
+  const details = truncated || trimmed.length > oneLine.length ? trimmed : undefined;
+  return { summary, details };
 };
 
 const extractFriendlyMessage = (payload: Record<string, unknown>): string | undefined => {
@@ -78,5 +81,13 @@ const tryParseNestedProviderError = (value: string): string | undefined => {
   return undefined;
 };
 
-const stripRequestIdSuffix = (message: string): string =>
-  message.replace(/\s*Please include the request ID[^.]*\./i, '').trim();
+const stripRequestIdSuffix = (message: string): string => {
+  const marker = 'please include the request id';
+  const idx = message.toLowerCase().indexOf(marker);
+  if (idx === -1) return message.trim();
+  // Drop from the marker through the next period (if any) to end of string.
+  const tail = message.slice(idx);
+  const periodIdx = tail.indexOf('.');
+  const cutEnd = periodIdx === -1 ? message.length : idx + periodIdx + 1;
+  return (message.slice(0, idx) + message.slice(cutEnd)).trim();
+};

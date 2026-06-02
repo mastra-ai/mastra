@@ -315,6 +315,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
   return (
     <Card
       className="border-accent6/40 bg-accent6/5 max-w-[80%] p-4 flex flex-col gap-3"
+      role="alert"
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">

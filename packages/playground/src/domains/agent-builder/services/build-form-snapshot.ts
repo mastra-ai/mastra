@@ -31,14 +31,14 @@ export interface BuildFormSnapshotOptions {
 
 /**
  * Hard cap on the generated `instructions` field. Surfaced to the builder LLM
- * via the empty-instructions directive AND enforced server-side by
- * `useSetAgentInstructionsTool`, so a single `set-agent-instructions` tool call
- * always stays under the stream output cap (`maxTokens` in
- * `stream-chat-provider.tsx`). Anything past the cap is truncated before it
- * lands in the form — the LLM is told this is a strict, not aspirational, limit.
+ * via the empty-instructions directive AND enforced by `useSetAgentInstructionsTool`,
+ * which **rejects** over-limit `set-agent-instructions` calls without persisting
+ * anything — so a single tool call always stays under the stream output cap
+ * (`maxTokens` in `stream-chat-provider.tsx`).
  *
- * The same cap is used when echoing the already-set instructions block back
- * to the LLM in the snapshot. Using a smaller display cap would clip the
+ * The same cap is reused when echoing already-persisted instructions back in
+ * the snapshot via the `truncate` helper below: this only trims the display
+ * copy, never the stored value. Using a smaller display cap would clip the
  * "persisted, final text" the directive points to and could trick the model
  * into re-calling set-agent-instructions to "restore" the missing tail.
  */
