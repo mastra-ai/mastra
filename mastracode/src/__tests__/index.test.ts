@@ -521,4 +521,16 @@ describe('createMastraCode', () => {
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
+
+  it('configures GitHubSignals as an input processor for local PR subscriptions', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { inputProcessors?: Array<{ id?: string }> }
+      | undefined;
+    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('github-signals');
+  });
 });

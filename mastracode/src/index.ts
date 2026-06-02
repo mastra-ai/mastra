@@ -49,6 +49,7 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
+import { GithubSignals } from './github-signals/index.js';
 import { HarnessCompat, v1ModeToLegacy } from './HarnessCompat';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
@@ -435,6 +436,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           return getStaticallyLoadedInstructionPaths(projectPath);
         },
       }),
+      new GithubSignals({ cwd: project.rootPath }),
       new ProviderHistoryCompat(),
     ],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
