@@ -385,7 +385,7 @@ response.processDataStream({
 
 ### `approveToolCall()`
 
-Approve a pending tool call that requires human confirmation:
+Approve a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the approval response.
 
 ```typescript
 const response = await agent.approveToolCall({
@@ -400,9 +400,26 @@ response.processDataStream({
 })
 ```
 
+### `sendToolApproval()`
+
+Approve or decline a pending tool call for a subscribed thread. Use this with `subscribeToThread()` when the resumed chunks should arrive through the existing thread subscription instead of a separate continuation stream.
+
+```typescript
+const result = await agent.sendToolApproval({
+  resourceId: 'user-123',
+  threadId: 'thread-456',
+  toolCallId: 'tool-call-456',
+  approved: true,
+})
+
+console.log(result.accepted)
+```
+
+Returns `{ accepted: true, runId: string, toolCallId?: string }`.
+
 ### `declineToolCall()`
 
-Decline a pending tool call that requires human confirmation:
+Decline a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the decline response.
 
 ```typescript
 const response = await agent.declineToolCall({

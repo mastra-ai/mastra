@@ -8,7 +8,8 @@ import { BROWSER_TOOLS } from './constants';
 export function createSelectTool(browser: AgentBrowser) {
   return createTool({
     id: BROWSER_TOOLS.SELECT,
-    description: 'Select an option from a dropdown by value, label, or index.',
+    description:
+      'Select an option from a dropdown by value, label, or index. Pass waitUntil when the selection triggers navigation so the page settles before the next snapshot.',
     inputSchema: selectInputSchema,
     execute: async (input, { agent }) => {
       const threadId = agent?.threadId;

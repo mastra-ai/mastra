@@ -4,6 +4,7 @@ packages:
   - packages/_vendored/*
   - packages/_internals/*
   - packages/*
+  - agent-sdks/*
   - deployers/*
   - stores/*
   - browser/*
@@ -40,7 +41,6 @@ catalog:
   zod: ^4.4.3
 
 patchedDependencies:
-  '@changesets/get-dependents-graph@2.1.3': patches/@changesets__get-dependents-graph.patch
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   tsup@8.5.1: patches/tsup@8.5.1.patch
 
@@ -133,6 +133,7 @@ allowBuilds:
   onnxruntime-node: false
   protobufjs: false
   sharp: false
+  sqlite3: false
   ssh2: false
   unrs-resolver: false
   workerd: false
