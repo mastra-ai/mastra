@@ -1,6 +1,6 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
-import type { AIV5Type, MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { AIV5Type, MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
 import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
@@ -48,6 +48,69 @@ const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) 
 
   return pendingToolApprovalIds;
 };
+
+const toolCallHasOutput = (parts: MastraDBMessage['content']['parts'], toolCallId: string): boolean =>
+  parts.some(part => {
+    if (part.type !== 'tool-invocation') return false;
+    const invocation = (part as MastraToolInvocationPart).toolInvocation;
+    if (invocation.toolCallId !== toolCallId) return false;
+    return invocation.state === 'result' || (invocation as { result?: unknown }).result != null;
+  });
+
+/**
+ * Normalize persisted initial messages back into the stream-friendly shape the
+ * UI renders from. Mirrors `main`'s `resolveInitialMessages`:
+ *
+ * - Converts persisted `pendingToolApprovals` (DB shape) into
+ *   `requireApprovalMetadata` (stream shape) so reloaded threads still render
+ *   approve/decline buttons, filtering out approvals whose tool already
+ *   produced output, and marks the message `mode: 'stream'`.
+ * - Drops assistant completion messages flagged `suppressFeedback`, which are
+ *   persisted by the supervisor agent but must stay hidden on reload.
+ */
+const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] =>
+  messages
+    .filter(message => {
+      const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
+      const completion = metadata?.completionResult as { suppressFeedback?: boolean } | undefined;
+      const isTaskComplete = metadata?.isTaskCompleteResult as { suppressFeedback?: boolean } | undefined;
+      if (completion?.suppressFeedback || isTaskComplete?.suppressFeedback) {
+        return false;
+      }
+      return true;
+    })
+    .map(message => {
+      const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
+      const pendingToolApprovals = metadata?.pendingToolApprovals;
+      if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+        return message;
+      }
+
+      const stillPending = Object.fromEntries(
+        Object.entries(pendingToolApprovals).filter(
+          ([, approval]) =>
+            approval &&
+            typeof approval === 'object' &&
+            typeof approval.toolCallId === 'string' &&
+            !toolCallHasOutput(message.content.parts, approval.toolCallId),
+        ),
+      );
+
+      const { pendingToolApprovals: _omit, ...restMetadata } = metadata;
+      const hasStillPending = Object.keys(stillPending).length > 0;
+
+      return {
+        ...message,
+        content: {
+          ...message.content,
+          metadata: {
+            ...restMetadata,
+            mode: 'stream' as const,
+            ...(hasStillPending ? { pendingToolApprovals: stillPending, requireApprovalMetadata: stillPending } : {}),
+          },
+        },
+      };
+    });
 
 type SignalContinuationOptions = {
   maxSteps?: number;
@@ -204,7 +267,7 @@ export const useChat = ({
   const [isRunning, setIsRunning] = useState(false);
 
   useEffect(() => {
-    const formattedMessages = initialMessages ?? [];
+    const formattedMessages = resolveInitialMessages(initialMessages ?? []);
     setMessages(formattedMessages);
     pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
     setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);

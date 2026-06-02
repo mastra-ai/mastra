@@ -511,6 +511,151 @@ describe('useChat forwards clientTools', () => {
     unmount();
   });
 
+  it('converts persisted pendingToolApprovals into requireApprovalMetadata on initial load', async () => {
+    const initialMessages = [
+      {
+        id: 'msg-reload-approval',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [],
+          metadata: {
+            pendingToolApprovals: {
+              'tool-call-reload-1': {
+                runId: 'run-reload',
+                toolCallId: 'tool-call-reload-1',
+                toolName: 'weatherTool',
+                args: { city: 'London' },
+              },
+            },
+          },
+        },
+      },
+    ] as any;
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.mode).toBe('stream');
+      expect(metadata?.requireApprovalMetadata?.['tool-call-reload-1']).toEqual({
+        runId: 'run-reload',
+        toolCallId: 'tool-call-reload-1',
+        toolName: 'weatherTool',
+        args: { city: 'London' },
+      });
+    });
+    expect(result.current.isAwaitingToolApproval).toBe(true);
+  });
+
+  it('drops already-completed pendingToolApprovals from requireApprovalMetadata on initial load', async () => {
+    const initialMessages = [
+      {
+        id: 'msg-reload-completed',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-call-done',
+                toolName: 'weatherTool',
+                args: { city: 'London' },
+                result: { temperature: 20 },
+              },
+            },
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              'tool-call-done': {
+                runId: 'run-reload',
+                toolCallId: 'tool-call-done',
+                toolName: 'weatherTool',
+                args: { city: 'London' },
+              },
+            },
+          },
+        },
+      },
+    ] as any;
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.mode).toBe('stream');
+      expect(metadata?.requireApprovalMetadata).toBeUndefined();
+    });
+    expect(result.current.isAwaitingToolApproval).toBe(false);
+  });
+
+  it('filters suppressed completion messages out of initial load', async () => {
+    const initialMessages = [
+      {
+        id: 'msg-visible',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'hello' }],
+          metadata: { mode: 'stream' },
+        },
+      },
+      {
+        id: 'msg-suppressed',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'suppressed feedback' }],
+          metadata: {
+            mode: 'stream',
+            completionResult: { suppressFeedback: true },
+          },
+        },
+      },
+    ] as any;
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.messages.map(message => message.id)).toEqual(['msg-visible']);
+    });
+  });
+
   it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
     keepSubscriptionOpen = true;
     const { rerender } = renderHook(
