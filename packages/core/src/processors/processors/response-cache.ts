@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { MastraServerCache } from '../../cache';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
+import { stableStringify } from '../../agent/message-list/cache/stable-stringify';
 import type {
   CachedLLMStepResponse,
   ProcessLLMRequestArgs,
@@ -497,25 +498,7 @@ function normalizeForHash(value: unknown): unknown {
   return String(value);
 }
 
-/**
- * `JSON.stringify` with deterministic key ordering at every level. Required
- * because object key order is preserved by `JSON.stringify`, and we don't
- * want `{ a: 1, b: 2 }` and `{ b: 2, a: 1 }` to hash to different keys.
- *
- * @internal
- */
-function stableStringify(value: unknown): string {
-  return JSON.stringify(value, (_key, val) => {
-    if (val && typeof val === 'object' && !Array.isArray(val)) {
-      const sorted: Record<string, unknown> = {};
-      for (const k of Object.keys(val as Record<string, unknown>).sort()) {
-        sorted[k] = (val as Record<string, unknown>)[k];
-      }
-      return sorted;
-    }
-    return val;
-  });
-}
+
 
 /**
  * Re-export the cached payload shape so consumers can type their own custom
