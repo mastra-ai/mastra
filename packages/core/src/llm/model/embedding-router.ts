@@ -5,15 +5,28 @@ import type { EmbeddingModel } from '@internal/ai-sdk-v5';
 
 type EmbeddingModelV2<VALUE> = Exclude<EmbeddingModel<VALUE>, string>;
 
-const MASTRA_GATEWAY_ID = 'mastra';
-
-function getMastraGatewayBaseUrl(raw = process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai'): string {
-  return `${raw.replace(/\/+$/, '').replace(/\/v1$/, '')}/v1`;
-}
-
 import { MASTRA_USER_AGENT } from './gateways/constants.js';
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';
+
+const MASTRA_GATEWAY_ID = 'mastra';
+
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
+function getMastraGatewayBaseUrl(raw = process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai'): string {
+  const withoutTrailingSlashes = trimTrailingSlashes(raw);
+  const withoutVersion = withoutTrailingSlashes.endsWith('/v1')
+    ? withoutTrailingSlashes.slice(0, -'/v1'.length)
+    : withoutTrailingSlashes;
+
+  return `${withoutVersion}/v1`;
+}
 
 /**
  * Information about a known embedding model
