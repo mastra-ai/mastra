@@ -150,6 +150,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/sdk-agents',
+          label: 'SDK Agents',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/adding-voice',
           label: 'Voice',
         },
