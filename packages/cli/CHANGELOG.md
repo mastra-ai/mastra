@@ -1,5 +1,30 @@
 # mastra
 
+## 1.11.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`0c1ed1d`](https://github.com/mastra-ai/mastra/commit/0c1ed1d00c7d87b5ac99ca95896211a2fa9189fa), [`849efb9`](https://github.com/mastra-ai/mastra/commit/849efb9fca6dc976589c1f90a303fea618769109)]:
+  - @mastra/core@1.38.0-alpha.8
+  - @mastra/deployer@1.38.0-alpha.8
+
+## 1.11.0-alpha.7
+
+### Patch Changes
+
+- Make the agent builder reliably back-fill new agents: ([#17428](https://github.com/mastra-ai/mastra/pull/17428))
+  - Raise the builder stream output token cap so `set-agent-instructions` JSON args no longer get truncated mid-stream.
+  - Tell the builder to call `set-agent-instructions` exactly once with a final version under 3,000 characters.
+  - Clamp oversized instructions server-side and surface the clip back to the model.
+  - Restore form snapshot helpers and drop the `→` glyph from per-field directives.
+  - Treat whitespace-only field values as empty and sanitize interpolated snapshot values.
+  - Guard the starter submit until builder settings load so the configured default model is always applied.
+
+- Updated dependencies [[`d2b728c`](https://github.com/mastra-ai/mastra/commit/d2b728c0e6da55901c8dd191692fa4adb668bbd8)]:
+  - @mastra/loggers@1.1.2-alpha.0
+  - @mastra/deployer@1.38.0-alpha.7
+  - @mastra/core@1.38.0-alpha.7
+
 ## 1.11.0-alpha.6
 
 ### Patch Changes

@@ -1,5 +1,22 @@
 # @mastra/deployer-cloud
 
+## 1.38.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`0c1ed1d`](https://github.com/mastra-ai/mastra/commit/0c1ed1d00c7d87b5ac99ca95896211a2fa9189fa), [`849efb9`](https://github.com/mastra-ai/mastra/commit/849efb9fca6dc976589c1f90a303fea618769109)]:
+  - @mastra/core@1.38.0-alpha.8
+  - @mastra/deployer@1.38.0-alpha.8
+
+## 1.38.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`d2b728c`](https://github.com/mastra-ai/mastra/commit/d2b728c0e6da55901c8dd191692fa4adb668bbd8)]:
+  - @mastra/loggers@1.1.2-alpha.0
+  - @mastra/deployer@1.38.0-alpha.7
+  - @mastra/core@1.38.0-alpha.7
+
 ## 1.38.0-alpha.6
 
 ### Patch Changes

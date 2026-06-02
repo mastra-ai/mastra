@@ -114,6 +114,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     description: 'Optional instructions describing how to use the server and its features.',
   },
   {
+    name: 'mapAuthInfoToUser',
+    type: '({ authInfo, extra, requestContext }) => unknown | null | undefined | Promise<unknown | null | undefined>',
+    isOptional: true,
+    description:
+      'Maps MCP transport auth data from `extra.authInfo` into the `user` value used by Mastra FGA checks. Use this when an OAuth-protected MCP server is registered on a Mastra instance with an FGA provider.',
+  },
+  {
     name: 'repository',
     type: 'Repository', // { url: string; source: string; id: string; }
     isOptional: true,
@@ -1323,6 +1330,36 @@ Whatever you set on `req.auth` in your HTTP middleware becomes available as `con
 
 ```
 req.auth = { ... }  →  context?.mcp?.extra?.authInfo.extra = { ... }
+```
+
+### Map auth data for FGA
+
+When an `MCPServer` is registered on a Mastra instance with a fine-grained authorization (FGA) provider, Mastra checks `requestContext.get('user')` before listing or calling tools. HTTP MCP transports pass authenticated data as `extra.authInfo`, so use `mapAuthInfoToUser` to set the user shape expected by your FGA provider.
+
+```typescript
+const server = new MCPServer({
+  id: 'my-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { getUserData },
+  mapAuthInfoToUser: ({ authInfo }) => {
+    const user = authInfo as {
+      extra?: {
+        userId?: string
+        organizationMembershipId?: string
+      }
+    }
+
+    if (!user.extra?.userId) {
+      return null
+    }
+
+    return {
+      id: user.extra.userId,
+      organizationMembershipId: user.extra.organizationMembershipId,
+    }
+  },
+})
 ```
 
 ### Setting Up Authentication Middleware
