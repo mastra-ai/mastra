@@ -1,6 +1,8 @@
+import { SET_WORKING_MEMORY_TOOL_NAME, UPDATE_WORKING_MEMORY_TOOL_NAME } from '@mastra/core/memory';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
+import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
@@ -405,3 +407,28 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
     },
   });
 };
+
+/**
+ * Returns the working-memory tool plus the wire name it should be registered under.
+ *
+ * - Default delivery (`useStateSignals: false`): wire name `updateWorkingMemory`,
+ *   identical shape to today.
+ * - State-signals delivery (`useStateSignals: true`): wire name `setWorkingMemory`.
+ *   The rename keeps legacy strip filters (which match the literal `updateWorkingMemory`)
+ *   from removing tool-call parts so they persist as a normal audit trail. Any
+ *   future state-signal-specific tweaks to the tool (e.g. delta-aware results,
+ *   scoped descriptions) belong here.
+ *
+ * The VNext vs default tool body decision is left to the caller because Memory
+ * owns the `isVNextWorkingMemoryConfig` check; pass `vNext: true` to use the
+ * search-and-replace shape.
+ */
+export function createWorkingMemoryTool(
+  config: MemoryConfigInternal,
+  options: { vNext?: boolean } = {},
+): { name: string; tool: ToolAction<any, any, any> } {
+  const useStateSignals = config.workingMemory?.useStateSignals === true;
+  const tool = options.vNext ? __experimental_updateWorkingMemoryToolVNext(config) : updateWorkingMemoryTool(config);
+  const name = useStateSignals ? SET_WORKING_MEMORY_TOOL_NAME : UPDATE_WORKING_MEMORY_TOOL_NAME;
+  return { name, tool };
+}

@@ -21,6 +21,7 @@ import type { MastraModelConfig, TripwireProperties } from '../llm/model/shared.
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
+import { isWorkingMemoryToolName } from '../memory/working-memory-utils';
 import type { Span, TracingOptions, TracingProperties, ObservabilityContext } from '../observability';
 import {
   EntityType,
@@ -547,7 +548,7 @@ export class AgentLegacyHandler {
           .get.all.core();
 
         const usedWorkingMemory = messageListResponses?.some(
-          m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
+          m => m.role === 'tool' && m?.content?.some(c => isWorkingMemoryToolName(c?.toolName)),
         );
         // working memory updates the thread, so we need to get the latest thread if we used it
         const memory = await this.capabilities.getMemory({ requestContext });
