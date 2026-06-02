@@ -467,7 +467,7 @@ const sidebars = {
       label: 'PubSub',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'pubsub/pubsub', label: 'PubSub' },
+        { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
         { type: 'doc', id: 'pubsub/event-emitter', label: 'EventEmitterPubSub' },
         { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
         { type: 'doc', id: 'pubsub/caching-pubsub', label: 'CachingPubSub' },

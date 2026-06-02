@@ -9,9 +9,9 @@ packages:
 
 `PubSub` is the abstract base class for Mastra's event system. It defines the contract that every pub/sub backend implements, so the rest of Mastra can publish and subscribe to events without knowing which transport is in use.
 
-Mastra uses pub/sub internally for workflow event processing, streaming, and cross-component communication. Most applications use the default [`EventEmitterPubSub`](./event-emitter) and never construct a `PubSub` directly. Implement this class only when you need a custom transport.
+Mastra uses pub/sub internally for workflow event processing, streaming, and cross-component communication. Most applications use the default [`EventEmitterPubSub`](/reference/pubsub/event-emitter) and never construct a `PubSub` directly. Implement this class only when you need a custom transport.
 
-For built-in implementations, see [`EventEmitterPubSub`](./event-emitter), [`UnixSocketPubSub`](./unix-socket-pubsub), [`CachingPubSub`](./caching-pubsub), [`RedisStreamsPubSub`](./redis-streams), and [`GoogleCloudPubSub`](./google-cloud-pubsub).
+For built-in implementations, see [`EventEmitterPubSub`](/reference/pubsub/event-emitter), [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub), [`CachingPubSub`](/reference/pubsub/caching-pubsub), [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), and [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
 ## Usage example
 
@@ -40,7 +40,7 @@ export class CustomPubSub extends PubSub {
 }
 ```
 
-Pass the instance to the [Mastra](../core/mastra-class) constructor:
+Pass the instance to the [Mastra](/reference/core/mastra-class) constructor:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -106,7 +106,7 @@ await pubsub.flush()
 
 ### Replay methods
 
-These methods support resuming a stream after a disconnect. The default implementations fall back to a regular `subscribe`, so backends without history support behave as live-only. [`CachingPubSub`](./caching-pubsub) overrides them to replay cached events.
+These methods support resuming a stream after a disconnect. The default implementations fall back to a regular `subscribe`, so backends without history support behave as live-only. [`CachingPubSub`](/reference/pubsub/caching-pubsub) overrides them to replay cached events.
 
 #### `getHistory(topic, offset?)`
 

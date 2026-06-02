@@ -7,11 +7,11 @@ packages:
 
 # EventEmitterPubSub
 
-`EventEmitterPubSub` is the default [`PubSub`](./pubsub) implementation. It delivers events in-process using a Node.js [`EventEmitter`](https://nodejs.org/api/events.html#class-eventemitter), so it works without any external service.
+`EventEmitterPubSub` is the default [`PubSub`](/reference/pubsub/base) implementation. It delivers events in-process using a Node.js [`EventEmitter`](https://nodejs.org/api/events.html#class-eventemitter), so it works without any external service.
 
-Use it for single-process applications. For delivery across processes on one host, see [`UnixSocketPubSub`](./unix-socket-pubsub). For distributed delivery, see [`RedisStreamsPubSub`](./redis-streams) or [`GoogleCloudPubSub`](./google-cloud-pubsub).
+Use it for single-process applications. For delivery across processes on one host, see [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub). For distributed delivery, see [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
-Because it is in-process, events are not persisted and are not shared with other processes. Wrap it in [`CachingPubSub`](./caching-pubsub) when you need replay for resumable streams.
+Because it is in-process, events are not persisted and are not shared with other processes. Wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub) when you need replay for resumable streams.
 
 ## Usage example
 
@@ -64,9 +64,9 @@ const pubsub = new EventEmitterPubSub(emitter)
 
 ## Methods
 
-`EventEmitterPubSub` implements the [`PubSub`](./pubsub) contract. The methods below have behavior specific to this implementation.
+`EventEmitterPubSub` implements the [`PubSub`](/reference/pubsub/base) contract. The methods below have behavior specific to this implementation.
 
-#### `subscribe(topic, cb, options?)`
+### `subscribe(topic, cb, options?)`
 
 Registers a callback for a topic. Without `options.group`, every subscriber receives every event. With a group, events are distributed round-robin across members of that group.
 
@@ -76,7 +76,7 @@ await pubsub.subscribe('workflow.events', (event, ack, nack) => {
 })
 ```
 
-#### `flush()`
+### `flush()`
 
 Waits for any pending redeliveries from `nack` to fire before resolving.
 
@@ -84,7 +84,7 @@ Waits for any pending redeliveries from `nack` to fire before resolving.
 await pubsub.flush()
 ```
 
-#### `close()`
+### `close()`
 
 Removes all listeners and cancels pending redeliveries. Call this during graceful shutdown.
 

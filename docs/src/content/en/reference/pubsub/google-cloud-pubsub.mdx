@@ -8,9 +8,9 @@ packages:
 
 # GoogleCloudPubSub
 
-`GoogleCloudPubSub` is a [`PubSub`](./pubsub) implementation backed by [Google Cloud Pub/Sub](https://cloud.google.com/pubsub/docs). It delivers events across processes and hosts using Google Cloud topics and subscriptions, with ordered delivery and message acknowledgment.
+`GoogleCloudPubSub` is a [`PubSub`](/reference/pubsub/base) implementation backed by [Google Cloud Pub/Sub](https://cloud.google.com/pubsub/docs). It delivers events across processes and hosts using Google Cloud topics and subscriptions, with ordered delivery and message acknowledgment.
 
-Use it for distributed deployments on Google Cloud. For single-process delivery, use [`EventEmitterPubSub`](./event-emitter). For Redis, use [`RedisStreamsPubSub`](./redis-streams).
+Use it for distributed deployments on Google Cloud. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For Redis, use [`RedisStreamsPubSub`](/reference/pubsub/redis-streams).
 
 Each topic maps to a Google Cloud topic. Subscriptions with a group share a named subscription, so members compete for events. Subscriptions without a group create a per-instance subscription, so every instance receives every event.
 
@@ -51,9 +51,9 @@ export const mastra = new Mastra({
 
 ## Methods
 
-`GoogleCloudPubSub` implements the [`PubSub`](./pubsub) contract. The methods below are specific to this implementation.
+`GoogleCloudPubSub` implements the [`PubSub`](/reference/pubsub/base) contract. The methods below are specific to this implementation.
 
-#### `init(topicName, group?)`
+### `init(topicName, group?)`
 
 Creates the topic and a subscription if they do not already exist, and returns the subscription. `subscribe` calls this internally, so you rarely call it directly.
 
@@ -61,7 +61,7 @@ Creates the topic and a subscription if they do not already exist, and returns t
 await pubsub.init('workflow.events')
 ```
 
-#### `subscribe(topic, cb, options?)`
+### `subscribe(topic, cb, options?)`
 
 Subscribes to a topic. With `options.group`, members of the group share a subscription and compete for events. Without a group, the instance receives every event through its own subscription.
 
@@ -71,7 +71,7 @@ await pubsub.subscribe('workflow.events', (event, ack, nack) => {
 })
 ```
 
-#### `flush()`
+### `flush()`
 
 Waits for pending acknowledgments to complete.
 
@@ -79,7 +79,7 @@ Waits for pending acknowledgments to complete.
 await pubsub.flush()
 ```
 
-#### `destroy(topicName)`
+### `destroy(topicName)`
 
 Removes the subscription and topic for a given topic name. Use this to clean up Google Cloud resources.
 

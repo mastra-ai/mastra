@@ -8,9 +8,9 @@ packages:
 
 # RedisStreamsPubSub
 
-`RedisStreamsPubSub` is a [`PubSub`](./pubsub) implementation backed by [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure.
+`RedisStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) implementation backed by [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure.
 
-Use it for distributed deployments where several services share an event stream. For single-process delivery, use [`EventEmitterPubSub`](./event-emitter). For Google Cloud, use [`GoogleCloudPubSub`](./google-cloud-pubsub).
+Use it for distributed deployments where several services share an event stream. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For Google Cloud, use [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
 Each topic maps to a Redis stream key. Subscriptions with a group use a Redis consumer group, so members share work round-robin. Subscriptions without a group create a private consumer group, so every subscriber receives every event.
 
@@ -122,9 +122,9 @@ export const mastra = new Mastra({
 
 ## Methods
 
-`RedisStreamsPubSub` implements the [`PubSub`](./pubsub) contract. The methods below have behavior specific to this implementation.
+`RedisStreamsPubSub` implements the [`PubSub`](/reference/pubsub/base) contract. The methods below have behavior specific to this implementation.
 
-#### `subscribe(topic, cb, options?)`
+### `subscribe(topic, cb, options?)`
 
 Subscribes to a topic. With `options.group`, members of the group share events through a Redis consumer group. Without a group, the subscriber receives every event through a private consumer group.
 
@@ -134,7 +134,7 @@ await pubsub.subscribe('workflow.events', (event, ack, nack) => {
 })
 ```
 
-#### `flush()`
+### `flush()`
 
 Waits for in-flight publishes to complete.
 
@@ -142,7 +142,7 @@ Waits for in-flight publishes to complete.
 await pubsub.flush()
 ```
 
-#### `close()`
+### `close()`
 
 Closes the Redis connections and stops all subscriptions. Call this during graceful shutdown.
 

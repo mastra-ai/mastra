@@ -7,9 +7,9 @@ packages:
 
 # CachingPubSub
 
-`CachingPubSub` wraps any [`PubSub`](./pubsub) implementation and adds event caching and replay. It records every published event per topic in a cache, so a subscriber that connects late or reconnects after a disconnect can replay the events it missed before continuing with live events.
+`CachingPubSub` wraps any [`PubSub`](/reference/pubsub/base) implementation and adds event caching and replay. It records every published event per topic in a cache, so a subscriber that connects late or reconnects after a disconnect can replay the events it missed before continuing with live events.
 
-Use it to build resumable streams on top of a transport that does not keep history, such as [`EventEmitterPubSub`](./event-emitter). Transports that already persist events, such as [`RedisStreamsPubSub`](./redis-streams), do not need this wrapper.
+Use it to build resumable streams on top of a transport that does not keep history, such as [`EventEmitterPubSub`](/reference/pubsub/event-emitter). Transports that already persist events, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), do not need this wrapper.
 
 ## Usage example
 
@@ -80,9 +80,9 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
 
 ## Methods
 
-`CachingPubSub` implements the [`PubSub`](./pubsub) contract. It overrides the replay methods to read cached events. The methods below describe the caching behavior.
+`CachingPubSub` implements the [`PubSub`](/reference/pubsub/base) contract. It overrides the replay methods to read cached events. The methods below describe the caching behavior.
 
-#### `publish(topic, event)`
+### `publish(topic, event)`
 
 Caches the event with a sequential index, then publishes it to the inner pub/sub.
 
@@ -94,7 +94,7 @@ await pubsub.publish('my-topic', {
 })
 ```
 
-#### `subscribeWithReplay(topic, cb)`
+### `subscribeWithReplay(topic, cb)`
 
 Replays all cached events for the topic, then subscribes to live events.
 
@@ -104,7 +104,7 @@ await pubsub.subscribeWithReplay('my-topic', event => {
 })
 ```
 
-#### `subscribeFromOffset(topic, offset, cb)`
+### `subscribeFromOffset(topic, offset, cb)`
 
 Replays cached events starting at `offset`, then subscribes to live events. Use this when the client knows its last position, to avoid replaying the whole history.
 
@@ -114,7 +114,7 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
 })
 ```
 
-#### `getHistory(topic, offset?)`
+### `getHistory(topic, offset?)`
 
 Returns cached events for the topic, starting at `offset`.
 
@@ -126,7 +126,7 @@ Returns: `Promise<Event[]>`
 
 ## Functions
 
-#### `withCaching(pubsub, cache, options?)`
+### `withCaching(pubsub, cache, options?)`
 
 Convenience wrapper that constructs a `CachingPubSub`. Accepts the same arguments as the constructor and returns the new instance.
 

@@ -7,9 +7,9 @@ packages:
 
 # UnixSocketPubSub
 
-`UnixSocketPubSub` is a [`PubSub`](./pubsub) implementation that delivers events across processes on a single host using a Unix domain socket. It elects one process as a broker, and other processes connect to it as clients. If the broker exits, the remaining clients elect a new broker automatically.
+`UnixSocketPubSub` is a [`PubSub`](/reference/pubsub/base) implementation that delivers events across processes on a single host using a Unix domain socket. It elects one process as a broker, and other processes connect to it as clients. If the broker exits, the remaining clients elect a new broker automatically.
 
-Use it when several local processes need to share a stream, such as coordinating thread streams across the Mastra Code terminal interface. For single-process delivery, use [`EventEmitterPubSub`](./event-emitter). For distributed delivery across hosts, use [`RedisStreamsPubSub`](./redis-streams) or [`GoogleCloudPubSub`](./google-cloud-pubsub).
+Use it when several local processes need to share a stream, such as coordinating thread streams across the Mastra Code terminal interface. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For distributed delivery across hosts, use [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
 `UnixSocketPubSub` is a push transport: events arrive without a read loop, so Mastra does not run a pull worker for it.
 
@@ -84,9 +84,9 @@ export const mastra = new Mastra({
 
 ## Methods
 
-`UnixSocketPubSub` implements the [`PubSub`](./pubsub) contract. The method below is specific to this implementation.
+`UnixSocketPubSub` implements the [`PubSub`](/reference/pubsub/base) contract. The method below is specific to this implementation.
 
-#### `close()`
+### `close()`
 
 Closes the socket connection and, when this instance is the broker, releases the broker role. Call this during graceful shutdown.
 
