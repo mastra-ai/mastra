@@ -176,7 +176,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
           </Tab>
         </TabList>
 
-        <TabContent value="items" className="grid overflow-auto mt-5">
+        <TabContent value="items" className="grid overflow-auto mt-5 pb-0">
           <DatasetItems
             datasetId={datasetId}
             items={items}
@@ -204,7 +204,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
           />
         </TabContent>
 
-        <TabContent value="experiments" className="grid overflow-auto mt-5">
+        <TabContent value="experiments" className="grid overflow-auto mt-5 pb-0">
           <DatasetExperiments
             experiments={experiments}
             allExperiments={allExperiments}
@@ -215,7 +215,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
           />
         </TabContent>
 
-        <TabContent value="review" className="overflow-auto mt-0">
+        <TabContent value="review" className="overflow-auto mt-2 pb-0">
           <DatasetReview datasetId={datasetId} />
         </TabContent>
       </Tabs>
