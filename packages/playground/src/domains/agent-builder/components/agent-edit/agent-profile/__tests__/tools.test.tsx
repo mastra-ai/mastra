@@ -11,6 +11,7 @@ import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import type { AgentTool } from '../../../../types/agent-tool';
 import { Tools } from '../tools';
+import { composioProvider, composioToolkits } from './fixtures/toolkits';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -255,57 +256,100 @@ describe('Tools — toolkit filter pane', () => {
     },
   ];
 
-  it('lists one entry per integration toolkit plus a Built-in entry, all checked by default', () => {
-    const { getByTestId } = render(
+  // Providers are fetched first, then each provider's toolkits. The default
+  // handlers return no providers, so this block stamps a `composio` provider
+  // whose toolkits include `gmail` and `slack`.
+  beforeEach(() => {
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json(composioProvider)),
+      http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () => HttpResponse.json(composioToolkits)),
+    );
+  });
+
+  it('groups toolkits under their provider plus a Built-in group, all checked by default', async () => {
+    const { findByTestId, getByTestId } = render(
       <FormHarness>
         <Tools availableAgentTools={mixedTools} />
       </FormHarness>,
     );
 
-    expect(getByTestId('tools-toolkit-filter-item-gmail')).toBeTruthy();
-    expect(getByTestId('tools-toolkit-filter-item-slack')).toBeTruthy();
+    // Built-in renders immediately; provider toolkits render after the
+    // providers + toolkits queries resolve.
     expect(getByTestId('tools-toolkit-filter-item-__built-in__')).toBeTruthy();
+    await findByTestId('tools-toolkit-filter-item-gmail');
+    expect(getByTestId('tools-toolkit-filter-item-slack')).toBeTruthy();
+
+    // The provider section header groups its toolkits.
+    expect(getByTestId('tools-provider-section-composio').textContent).toBe('Composio');
 
     expect(getByTestId('tools-toolkit-filter-checkbox-gmail').getAttribute('aria-checked')).toBe('true');
     expect(getByTestId('tools-toolkit-filter-checkbox-slack').getAttribute('aria-checked')).toBe('true');
     expect(getByTestId('tools-toolkit-filter-checkbox-__built-in__').getAttribute('aria-checked')).toBe('true');
   });
 
-  it("unchecking an integration toolkit hides only that toolkit's cards", () => {
-    const { getByTestId, queryByTestId } = render(
+  it('shows a skeleton while providers load, then reveals the provider toolkits', async () => {
+    let resolveProviders: () => void = () => {};
+    const providersGate = new Promise<void>(resolve => {
+      resolveProviders = resolve;
+    });
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers`, async () => {
+        await providersGate;
+        return HttpResponse.json(composioProvider);
+      }),
+    );
+
+    const { findByTestId, queryByTestId } = render(
       <FormHarness>
         <Tools availableAgentTools={mixedTools} />
       </FormHarness>,
     );
 
-    fireEvent.click(getByTestId('tools-toolkit-filter-checkbox-slack'));
+    // While providers are pending the provider toolkits are not yet rendered.
+    expect(queryByTestId('tools-toolkit-filter-item-gmail')).toBeNull();
 
-    expect(queryByTestId('tool-card-integration-composio:SLACK_POST')).toBeNull();
-    expect(queryByTestId('tool-card-integration-composio:GMAIL_FETCH')).toBeTruthy();
-    expect(queryByTestId('tool-card-tool-native-tool')).toBeTruthy();
+    resolveProviders();
+    await findByTestId('tools-toolkit-filter-item-gmail');
   });
 
-  it('unchecking Built-in hides native tools but keeps integration cards', () => {
-    const { getByTestId, queryByTestId } = render(
+  it("unchecking an integration toolkit hides only that toolkit's cards", async () => {
+    const { findByTestId, getByTestId, queryByTestId } = render(
       <FormHarness>
         <Tools availableAgentTools={mixedTools} />
       </FormHarness>,
     );
 
+    fireEvent.click(await findByTestId('tools-toolkit-filter-checkbox-slack'));
+
+    expect(queryByTestId('tool-card-integration-composio:SLACK_POST')).toBeNull();
+    expect(getByTestId('tool-card-integration-composio:GMAIL_FETCH')).toBeTruthy();
+    expect(getByTestId('tool-card-tool-native-tool')).toBeTruthy();
+  });
+
+  it('unchecking Built-in hides native tools but keeps integration cards', async () => {
+    const { findByTestId, getByTestId, queryByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={mixedTools} />
+      </FormHarness>,
+    );
+
+    // Wait for provider toolkits so the integration cards are mounted.
+    await findByTestId('tools-toolkit-filter-item-gmail');
     fireEvent.click(getByTestId('tools-toolkit-filter-checkbox-__built-in__'));
 
     expect(queryByTestId('tool-card-tool-native-tool')).toBeNull();
-    expect(queryByTestId('tool-card-integration-composio:GMAIL_FETCH')).toBeTruthy();
-    expect(queryByTestId('tool-card-integration-composio:SLACK_POST')).toBeTruthy();
+    expect(getByTestId('tool-card-integration-composio:GMAIL_FETCH')).toBeTruthy();
+    expect(getByTestId('tool-card-integration-composio:SLACK_POST')).toBeTruthy();
   });
 
-  it('Clear all hides every tool and shows the toolkit empty-state copy', () => {
-    const { getByTestId, getByText, queryByTestId } = render(
+  it('Clear all hides every tool and shows the toolkit empty-state copy', async () => {
+    const { findByTestId, getByTestId, getByText, queryByTestId } = render(
       <FormHarness>
         <Tools availableAgentTools={mixedTools} />
       </FormHarness>,
     );
 
+    await findByTestId('tools-toolkit-filter-item-gmail');
     fireEvent.click(getByTestId('tools-toolkit-filter-clear-all'));
 
     expect(queryByTestId('tool-card-tool-native-tool')).toBeNull();
@@ -313,39 +357,41 @@ describe('Tools — toolkit filter pane', () => {
     expect(getByText('Select at least one toolkit to see tools')).toBeTruthy();
   });
 
-  it('Select all restores every tool after clearing', () => {
-    const { getByTestId, queryByTestId } = render(
+  it('Select all restores every tool after clearing', async () => {
+    const { findByTestId, getByTestId, queryByTestId } = render(
       <FormHarness>
         <Tools availableAgentTools={mixedTools} />
       </FormHarness>,
     );
 
+    await findByTestId('tools-toolkit-filter-item-gmail');
     fireEvent.click(getByTestId('tools-toolkit-filter-clear-all'));
     expect(queryByTestId('tool-card-tool-native-tool')).toBeNull();
 
     fireEvent.click(getByTestId('tools-toolkit-filter-select-all'));
-    expect(queryByTestId('tool-card-tool-native-tool')).toBeTruthy();
-    expect(queryByTestId('tool-card-integration-composio:GMAIL_FETCH')).toBeTruthy();
-    expect(queryByTestId('tool-card-integration-composio:SLACK_POST')).toBeTruthy();
+    expect(getByTestId('tool-card-tool-native-tool')).toBeTruthy();
+    expect(getByTestId('tool-card-integration-composio:GMAIL_FETCH')).toBeTruthy();
+    expect(getByTestId('tool-card-integration-composio:SLACK_POST')).toBeTruthy();
   });
 
   it('left-pane search filters the toolkit checklist without affecting the tool grid', async () => {
-    const { getByTestId, queryByTestId } = render(
+    const { findByTestId, getByTestId, queryByTestId } = render(
       <FormHarness>
         <Tools availableAgentTools={mixedTools} />
       </FormHarness>,
     );
 
+    await findByTestId('tools-toolkit-filter-item-gmail');
     const filterSearch = getByTestId('tools-toolkit-filter-search').querySelector('input');
     expect(filterSearch).toBeTruthy();
     fireEvent.change(filterSearch!, { target: { value: 'slack' } });
 
     await waitFor(() => expect(queryByTestId('tools-toolkit-filter-item-gmail')).toBeNull());
-    expect(queryByTestId('tools-toolkit-filter-item-slack')).toBeTruthy();
+    expect(getByTestId('tools-toolkit-filter-item-slack')).toBeTruthy();
 
     // Tool grid is unaffected by the left-pane search.
-    expect(queryByTestId('tool-card-integration-composio:GMAIL_FETCH')).toBeTruthy();
-    expect(queryByTestId('tool-card-tool-native-tool')).toBeTruthy();
+    expect(getByTestId('tool-card-integration-composio:GMAIL_FETCH')).toBeTruthy();
+    expect(getByTestId('tool-card-tool-native-tool')).toBeTruthy();
   });
 });
 
