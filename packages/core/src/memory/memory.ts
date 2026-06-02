@@ -771,6 +771,9 @@ https://mastra.ai/en/docs/memory/overview`,
           new MessageHistory({
             storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+            keepWorkingMemoryToolCalls:
+              effectiveConfig.workingMemory?.enabled === true &&
+              effectiveConfig.workingMemory?.useStateSignals === true,
           }),
         );
       }
@@ -930,6 +933,9 @@ https://mastra.ai/en/docs/memory/overview`,
           new MessageHistory({
             storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+            keepWorkingMemoryToolCalls:
+              effectiveConfig.workingMemory?.enabled === true &&
+              effectiveConfig.workingMemory?.useStateSignals === true,
           }),
         );
       }
