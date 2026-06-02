@@ -1,6 +1,6 @@
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { ChatMessage, ChatMessagePart } from './messages';
 import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
 import { useAutoScroll } from '@/domains/agent-builder/hooks/use-auto-scroll';
 
@@ -25,24 +25,37 @@ const useDelayedFlag = (flag: boolean, delayMs: number) => {
 const SKELETON_DELAY_MS = 300;
 
 interface MessageListProps {
-  messages: MastraDBMessage[];
+  messages: ChatMessage[];
   isLoading?: boolean;
   isRunning?: boolean;
   emptyState?: ReactNode;
   skeletonTestId?: string;
 }
 
-const hasStreamingPart = (message: MastraDBMessage | undefined) => {
+/**
+ * Detects whether the last assistant message has a part that is *actively*
+ * streaming output. Completed tool calls (`output-available` / `output-error`)
+ * are excluded so the pending indicator stays visible during quiet moments —
+ * e.g. while the server is internally retrying via
+ * `StreamErrorRetryProcessor` after the previous step finished cleanly.
+ */
+const getMessageParts = (message: ChatMessage): ChatMessagePart[] => {
+  if ('content' in message) return message.content.parts;
+  return message.parts;
+};
+
+const hasStreamingPart = (message: ChatMessage | undefined) => {
   if (!message) return false;
-  const parts = message.content?.parts;
-  if (!Array.isArray(parts)) return false;
-  return parts.some(part => {
+  return getMessageParts(message).some(part => {
     if (part.type === 'reasoning' || part.type === 'text') {
-      return (part as { state?: string }).state === 'streaming';
+      return 'state' in part && part.state === 'streaming';
     }
     if (part.type === 'tool-invocation') {
-      const state = part.toolInvocation.state;
-      return state !== 'result' && state !== 'output-error' && state !== 'output-denied';
+      return 'toolInvocation' in part && part.toolInvocation.state !== 'result';
+    }
+    if (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) {
+      const state = 'state' in part ? part.state : undefined;
+      return state !== 'output-available' && state !== 'output-error';
     }
     return false;
   });

@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 31.0.0-alpha.9
+
+### Patch Changes
+
+- Fixed dropdowns, menus, comboboxes, and popovers being unclickable when opened inside a SideDialog (for example the dataset selector in the "Save as Dataset Item" panel on the Traces tab). These popups now render inside the dialog so they stay interactive within the modal drawer. ([#17479](https://github.com/mastra-ai/mastra/pull/17479))
+
+- Updated dependencies [[`850af77`](https://github.com/mastra-ai/mastra/commit/850af7779cb87c350804488734544a5b1843de25), [`7b0d34c`](https://github.com/mastra-ai/mastra/commit/7b0d34cfe4a2fce22ac86ae17404685ff67a2ddb)]:
+  - @mastra/core@1.38.0-alpha.9
+  - @mastra/client-js@1.22.0-alpha.9
+  - @mastra/react@0.4.3-alpha.9
+
 ## 31.0.0-alpha.8
 
 ### Patch Changes

@@ -11,14 +11,16 @@ import {
   Skeleton,
   Txt,
 } from '@mastra/playground-ui';
-import type { RequireApprovalEntry } from '@mastra/react';
+import type { MastraDBMessageMetadata } from '@mastra/react';
 import {
+  AlertTriangle,
   AlignLeft,
   Check,
   ChevronRight,
   FileText,
   Globe,
   Loader2,
+  RefreshCw,
   Wrench,
   Zap,
   GlobeLockIcon,
@@ -28,8 +30,10 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useAgentPrimitives } from '../../contexts/agent-primitives-context';
-import { useStreamApproval } from '../../contexts/stream-chat-context';
+import { useStreamApproval, useStreamRetry } from '../../contexts/stream-chat-context';
 import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
+import { parseStreamErrorText } from './parse-stream-error';
+import type { ParsedStreamError } from './parse-stream-error';
 import { Shimmer } from './shimmer';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
@@ -44,26 +48,37 @@ import {
 } from '@/domains/agent-builder/services/tool-constants';
 import { ProviderLogo } from '@/domains/llm';
 
+export type UIMessagePart =
+  | { type: 'text'; text: string; state?: string }
+  | { type: 'reasoning'; state?: string }
+  | {
+      type: 'dynamic-tool' | `tool-${string}`;
+      state?: string;
+      toolName?: string;
+      toolCallId?: string;
+      input?: unknown;
+      output?: unknown;
+    };
+
+export type ChatMessagePart = MastraDBMessage['content']['parts'][number] | UIMessagePart;
+
+export type ChatMessage =
+  | MastraDBMessage
+  | {
+      id: string;
+      role: MastraDBMessage['role'];
+      type?: string;
+      parts: ChatMessagePart[];
+      metadata?: MastraDBMessageMetadata;
+    };
+
 interface MessageRowProps {
-  message: MastraDBMessage;
+  message: ChatMessage;
 }
 
-type RequireApprovalMetadata = Record<string, RequireApprovalEntry>;
+type RequireApprovalMetadata = NonNullable<MastraDBMessageMetadata['requireApprovalMetadata']>;
 
-type ApprovalEntry = RequireApprovalEntry;
-type MessageDisplayRole = 'user' | 'assistant' | 'system' | null;
-
-const getMessageDisplayRole = (message: MastraDBMessage): MessageDisplayRole => {
-  if (message.role === 'user' || message.role === 'assistant' || message.role === 'system') {
-    return message.role;
-  }
-
-  if (message.role === 'signal' && message.type === 'user') {
-    return 'user';
-  }
-
-  return null;
-};
+type ApprovalEntry = RequireApprovalMetadata[string];
 
 const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; toolName: string }) => {
   const { approveToolCall, declineToolCall } = useStreamApproval();
@@ -115,12 +130,46 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   );
 };
 
-const getRequireApprovalMetadata = (message: MastraDBMessage): RequireApprovalMetadata | undefined => {
-  const metadata = message.content?.metadata;
+const getMessageParts = (message: ChatMessage): ChatMessagePart[] => {
+  if ('content' in message) return message.content.parts;
+  return message.parts;
+};
+
+const getMessageMetadata = (message: ChatMessage): MastraDBMessageMetadata | undefined => {
+  if ('content' in message) return message.content.metadata;
+  return message.metadata;
+};
+
+const getMessageDisplayRole = (message: ChatMessage): MastraDBMessage['role'] | null => {
+  if (message.role === 'assistant' || message.role === 'user' || message.role === 'system') return message.role;
+  if (message.role === 'signal' && message.type === 'user') return 'user';
+  return null;
+};
+
+const getRequireApprovalMetadata = (message: ChatMessage): RequireApprovalMetadata | undefined => {
+  const metadata = getMessageMetadata(message);
   if (!metadata || typeof metadata !== 'object') return undefined;
-  const mode = (metadata as { mode?: unknown }).mode;
+  const { mode } = metadata;
   if (mode !== 'stream' && mode !== 'network' && mode !== 'generate') return undefined;
-  return (metadata as { requireApprovalMetadata?: RequireApprovalMetadata }).requireApprovalMetadata;
+  return metadata.requireApprovalMetadata;
+};
+
+const isLegacyToolInvocationPart = (
+  part: ChatMessagePart,
+): part is Extract<MastraDBMessage['content']['parts'][number], { type: 'tool-invocation' }> =>
+  part.type === 'tool-invocation' && 'toolInvocation' in part;
+
+const isStreamingReasoningPart = (part: ChatMessagePart): part is Extract<UIMessagePart, { type: 'reasoning' }> =>
+  part.type === 'reasoning' && 'state' in part;
+
+const isOutputToolPart = (
+  part: ChatMessagePart,
+): part is Extract<UIMessagePart, { type: 'dynamic-tool' | `tool-${string}` }> =>
+  (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) && 'state' in part;
+
+const getNameFromInput = (input: unknown): string => {
+  if (!input || typeof input !== 'object' || !('name' in input)) return 'unknown';
+  return typeof input.name === 'string' ? input.name : 'unknown';
 };
 
 const findApprovalEntry = (
@@ -132,18 +181,33 @@ const findApprovalEntry = (
   return (toolName ? approvals[toolName] : undefined) ?? (toolCallId ? approvals[toolCallId] : undefined);
 };
 
+const getMessageStatus = (message: ChatMessage): string | undefined => {
+  const metadata = getMessageMetadata(message);
+  return typeof metadata?.status === 'string' ? metadata.status : undefined;
+};
+
+const getMessageErrorText = (message: ChatMessage): string => {
+  return getMessageParts(message).find(part => part.type === 'text')?.text ?? '';
+};
+
 export const MessageRow = ({ message }: MessageRowProps) => {
-  const parts = message.content?.parts ?? [];
+  const parts = getMessageParts(message);
   const approvals = getRequireApprovalMetadata(message);
+  const retry = useStreamRetry();
   const displayRole = getMessageDisplayRole(message);
+
+  if (getMessageStatus(message) === 'error') {
+    const parsed = parseStreamErrorText(getMessageErrorText(message));
+    return <ErrorMessage error={parsed} onRetry={retry} />;
+  }
 
   return (
     <>
       {parts.map((part, index) => {
         const key = `${message.id}-${index}`;
 
-        if (approvals && part.type === 'tool-invocation') {
-          const inv = part.toolInvocation;
+        if (approvals && isLegacyToolInvocationPart(part)) {
+          const { toolInvocation: inv } = part;
           const entry = findApprovalEntry(approvals, inv.toolName, inv.toolCallId);
           if (entry && inv.state !== 'result') {
             return <ToolApprovalPrompt key={key} toolCallId={entry.toolCallId} toolName={entry.toolName} />;
@@ -151,20 +215,20 @@ export const MessageRow = ({ message }: MessageRowProps) => {
         }
 
         if (part.type === 'text') {
-          return <Txtmessage key={key} txt={part.text} role={displayRole} />;
+          return <Txtmessage key={key} txt={part.text ?? ''} role={displayRole} />;
         }
 
         if (part.type === 'reasoning') {
-          if ((part as { state?: string }).state !== 'streaming') return null;
+          if (!isStreamingReasoningPart(part) || part.state !== 'streaming') return null;
           return <ReasoningMessage key={key} text="Reasoning..." streaming />;
         }
 
-        if (part.type === 'tool-invocation') {
-          const inv = part.toolInvocation;
+        if (isLegacyToolInvocationPart(part)) {
+          const { toolInvocation: inv } = part;
           if (inv.state !== 'result') return null;
           const toolName = inv.toolName;
-          const input = (inv as { args?: unknown }).args;
-          const output = (inv as { result?: unknown }).result;
+          const input = 'args' in inv ? inv.args : undefined;
+          const output = 'result' in inv ? inv.result : undefined;
 
           switch (toolName) {
             case SET_AGENT_NAME_TOOL_NAME:
@@ -184,9 +248,36 @@ export const MessageRow = ({ message }: MessageRowProps) => {
             case SET_AGENT_WORKSPACE_ID_TOOL_NAME:
               return <MessageSetAgentWorkspaceId key={key} />;
             case 'skill':
-              return <SkillTool key={key} name={(input as { name?: string } | undefined)?.name ?? 'unknown'} />;
+              return <SkillTool key={key} name={getNameFromInput(input)} />;
             default:
               return <GenericTool key={key} toolName={toolName} input={input} output={output} />;
+          }
+        }
+
+        if (isOutputToolPart(part)) {
+          if (part.state !== 'output-available') return null;
+          const toolName = part.toolName ?? part.type.replace(/^tool-/, '');
+          switch (toolName) {
+            case SET_AGENT_NAME_TOOL_NAME:
+              return <MessageSetAgentName key={key} />;
+            case SET_AGENT_DESCRIPTION_TOOL_NAME:
+              return <MessageSetAgentDescription key={key} />;
+            case SET_AGENT_INSTRUCTIONS_TOOL_NAME:
+              return <MessageSetAgentInstructions key={key} />;
+            case SET_AGENT_TOOLS_TOOL_NAME:
+              return <MessageSetAgentTools key={key} />;
+            case SET_AGENT_SKILLS_TOOL_NAME:
+              return <MessageSetAgentSkills key={key} />;
+            case SET_AGENT_MODEL_TOOL_NAME:
+              return <MessageSetAgentModel key={key} />;
+            case SET_AGENT_BROWSER_ENABLED_TOOL_NAME:
+              return <MessageSetAgentBrowserEnabled key={key} />;
+            case SET_AGENT_WORKSPACE_ID_TOOL_NAME:
+              return <MessageSetAgentWorkspaceId key={key} />;
+            case 'skill':
+              return <SkillTool key={key} name={getNameFromInput(part.input)} />;
+            default:
+              return <GenericTool key={key} toolName={toolName} input={part.input} output={part.output} />;
           }
         }
 
@@ -196,7 +287,7 @@ export const MessageRow = ({ message }: MessageRowProps) => {
   );
 };
 
-export const Txtmessage = ({ txt, role }: { txt: string; role: MessageDisplayRole }) => {
+export const Txtmessage = ({ txt, role }: { txt: string; role: MastraDBMessage['role'] | null }) => {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
@@ -224,6 +315,79 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MessageDisplayRol
   }
 
   return null;
+};
+
+export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onRetry: (() => void) | null }) => {
+  return (
+    <Card
+      className="border-accent6/40 bg-accent6/5 max-w-[80%] p-4 flex flex-col gap-3"
+      role="alert"
+      data-testid="agent-builder-chat-error"
+    >
+      <div className="flex items-start gap-2.5">
+        <AlertTriangle className="size-4 mt-0.5 shrink-0 text-accent6" aria-hidden />
+        <div className="flex flex-col gap-1 min-w-0">
+          <Txt variant="ui-md" className="text-icon6 font-medium" as="div">
+            Something went wrong while building the agent.
+          </Txt>
+          <Txt
+            variant="ui-sm"
+            className="text-neutral4 break-words"
+            as="div"
+            data-testid="agent-builder-chat-error-summary"
+          >
+            {error.summary}
+          </Txt>
+        </div>
+      </div>
+
+      {error.details && error.details !== error.summary ? (
+        <Collapsible className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            {onRetry !== null && (
+              <Button
+                variant="default"
+                onClick={onRetry}
+                className="gap-1.5"
+                data-testid="agent-builder-chat-error-retry"
+              >
+                <RefreshCw className="size-3.5" aria-hidden />
+                Try again
+              </Button>
+            )}
+            <CollapsibleTrigger
+              className="text-neutral4 hover:text-neutral6 text-sm underline-offset-2 hover:underline"
+              data-testid="agent-builder-chat-error-details-trigger"
+            >
+              Details
+            </CollapsibleTrigger>
+          </div>
+          <CollapsibleContent>
+            <pre
+              className="text-xs text-neutral4 whitespace-pre-wrap break-all bg-surface1 rounded-md p-2 max-h-48 overflow-auto"
+              data-testid="agent-builder-chat-error-details"
+            >
+              {error.details}
+            </pre>
+          </CollapsibleContent>
+        </Collapsible>
+      ) : (
+        onRetry !== null && (
+          <div className="flex items-center gap-3">
+            <Button
+              variant="default"
+              onClick={onRetry}
+              className="gap-1.5"
+              data-testid="agent-builder-chat-error-retry"
+            >
+              <RefreshCw className="size-3.5" aria-hidden />
+              Try again
+            </Button>
+          </div>
+        )
+      )}
+    </Card>
+  );
 };
 
 export const PendingIndicator = () => {
@@ -427,7 +591,7 @@ const MessageSetAgentTools = () => {
 const MessageSetAgentSkills = () => {
   const { availableSkills } = useAgentPrimitives();
   const { watch } = useFormContext<AgentBuilderEditFormValues>();
-  const skillsField = watch('skills') as Record<string, boolean> | undefined;
+  const skillsField = watch('skills');
   const enabled = skillsField ? availableSkills.filter(s => skillsField[s.id] === true) : [];
   const value = enabled.length === 0 ? 'none' : enabled.map(s => s.name).join(', ');
 

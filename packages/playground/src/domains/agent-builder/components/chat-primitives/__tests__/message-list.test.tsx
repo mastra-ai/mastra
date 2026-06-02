@@ -66,6 +66,62 @@ describe('MessageList pending indicator', () => {
     const { queryByTestId } = render(<MessageList messages={[]} isRunning={true} isLoading={true} />);
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
+
+  it('shows the pending indicator after a tool call has completed but no new part is streaming', () => {
+    // Regression: once any tool call lands in `output-available`, the previous
+    // implementation of `hasStreamingPart` returned true unconditionally for
+    // tool parts, hiding the indicator during server-side retry pauses.
+    const messages: MastraUIMessage[] = [
+      buildAssistantMessage([
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call-skill-1',
+          toolName: 'skill',
+          state: 'output-available',
+          input: { name: 'generic-assistant' },
+          output: { success: true },
+        } as MastraUIMessage['parts'][number],
+      ]),
+    ];
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
+  });
+
+  it('shows the pending indicator after a legacy tool-* part terminates in output-error', () => {
+    // Regression: `hasStreamingPart` must treat both `dynamic-tool` and legacy
+    // `tool-*` parts as terminated when they land in `output-available` or
+    // `output-error`, so the indicator stays visible during retry pauses.
+    const messages: MastraUIMessage[] = [
+      buildAssistantMessage([
+        {
+          type: 'tool-skill',
+          toolCallId: 'call-skill-err',
+          toolName: 'skill',
+          state: 'output-error',
+          input: { name: 'generic-assistant' },
+          errorText: 'boom',
+        } as unknown as MastraUIMessage['parts'][number],
+      ]),
+    ];
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
+  });
+
+  it('hides the pending indicator while a tool call is still streaming its input', () => {
+    const messages: MastraUIMessage[] = [
+      buildAssistantMessage([
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call-in-flight',
+          toolName: 'skill',
+          state: 'input-available',
+          input: { name: 'generic-assistant' },
+        } as MastraUIMessage['parts'][number],
+      ]),
+    ];
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
+  });
 });
 
 describe('MessageList deferred skeleton', () => {
