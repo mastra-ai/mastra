@@ -1,5 +1,51 @@
 # @mastra/playground-ui
 
+## 31.0.0-alpha.7
+
+### Patch Changes
+
+- Added a `DataPanel.SectionHeading` component for small-caps section labels (with an optional leading icon) inside a `DataPanel.Content`. `DataCodeSection` now renders through it, and `DataPanel.Header` hides its bottom border when the panel is collapsed (header-only) so an empty panel no longer shows a stray divider. ([#17464](https://github.com/mastra-ai/mastra/pull/17464))
+
+  ```tsx
+  <DataPanel.SectionHeading icon={<FileInputIcon />}>Input</DataPanel.SectionHeading>
+  ```
+
+- Changed `Spinner` to render the new compact loader by default and added `variant="pulse"` for longer data-loading states. Removed the `color` prop so the loader defaults to the neutral text token and color overrides go through `className`. ([#17455](https://github.com/mastra-ai/mastra/pull/17455))
+
+  **Migration note**
+
+  Before:
+
+  ```tsx
+  <Spinner color={Colors.neutral3} />
+  ```
+
+  After:
+
+  ```tsx
+  <Spinner className="text-neutral3" />
+  <Spinner variant="pulse" className="text-neutral1" />
+  ```
+
+- Added an `is404NotFoundError` helper to detect 404 Not Found responses from the Mastra client, alongside the existing `is401UnauthorizedError` and `is403ForbiddenError` helpers. Use it to show a clear not-found state when a resource no longer exists. ([#17460](https://github.com/mastra-ai/mastra/pull/17460))
+
+  ```ts
+  import { is404NotFoundError } from '@mastra/playground-ui';
+
+  try {
+    await client.getDataset(id);
+  } catch (error) {
+    if (is404NotFoundError(error)) {
+      // show a not-found state instead of a generic error
+    }
+  }
+  ```
+
+- Updated dependencies:
+  - @mastra/core@1.38.0-alpha.7
+  - @mastra/client-js@1.22.0-alpha.7
+  - @mastra/react@0.4.3-alpha.7
+
 ## 31.0.0-alpha.6
 
 ### Patch Changes

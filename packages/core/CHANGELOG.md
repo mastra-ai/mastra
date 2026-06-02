@@ -1,5 +1,7 @@
 # @mastra/core
 
+## 1.38.0-alpha.7
+
 ## 1.38.0-alpha.6
 
 ### Patch Changes
