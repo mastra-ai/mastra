@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { NotificationSummaryComponent } from '../components/notification-summary.js';
+import { NotificationComponent } from '../components/notification.js';
 import { ReactiveSignalComponent } from '../components/reactive-signal.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { StateSignalComponent } from '../components/state-signal.js';
@@ -122,6 +123,29 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children.some(child => child instanceof NotificationSummaryComponent)).toBe(true);
     expect(state.messageComponentsById.get('notification-summary-1')).toBeInstanceOf(NotificationSummaryComponent);
+  });
+
+  it('renders full notifications as inline notification components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'notification-1',
+      role: 'user',
+      content: [
+        {
+          type: 'notification',
+          message: 'CI failed on main',
+          source: 'github',
+          kind: 'ci-status',
+          priority: 'high',
+          status: 'delivered',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(true);
+    expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
   });
 
   it('dedupes echoed slash command messages against the optimistic slash component', () => {

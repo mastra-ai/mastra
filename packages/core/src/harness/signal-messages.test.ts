@@ -247,6 +247,78 @@ describe('Harness signal messages', () => {
     ]);
   });
 
+  it('renders persisted full notification signals', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const thread = await harness.createThread();
+
+    await storage.stores.memory!.saveMessages({
+      messages: [
+        createSignal({
+          id: 'notification-signal-1',
+          type: 'notification',
+          tagName: 'notification',
+          contents: 'CI failed on main',
+          attributes: {
+            id: 'notification-1',
+            source: 'github',
+            kind: 'ci-status',
+            priority: 'high',
+            status: 'delivered',
+          },
+          metadata: {
+            notification: {
+              signal: 'notification',
+              recordId: 'notification-1',
+              source: 'github',
+              kind: 'ci-status',
+              priority: 'high',
+              status: 'delivered',
+            },
+          },
+          createdAt: new Date('2026-05-04T00:00:00.000Z'),
+        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      ],
+    });
+
+    await expect(harness.listMessages()).resolves.toEqual([
+      {
+        id: 'notification-signal-1',
+        role: 'user',
+        content: [
+          {
+            type: 'notification',
+            id: 'notification-signal-1',
+            notificationId: 'notification-1',
+            message: 'CI failed on main',
+            source: 'github',
+            kind: 'ci-status',
+            priority: 'high',
+            status: 'delivered',
+            attributes: {
+              id: 'notification-1',
+              source: 'github',
+              kind: 'ci-status',
+              priority: 'high',
+              status: 'delivered',
+            },
+            metadata: {
+              notification: {
+                signal: 'notification',
+                recordId: 'notification-1',
+                source: 'github',
+                kind: 'ci-status',
+                priority: 'high',
+                status: 'delivered',
+              },
+            },
+          },
+        ],
+        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      },
+    ]);
+  });
+
   it('processes sendMessage streams once through the active thread subscription', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
@@ -947,6 +1019,84 @@ describe('Harness signal messages', () => {
             bySource: { mastracode: 1 },
             byPriority: { low: 1 },
             notificationIds: ['notification-1'],
+          },
+        ],
+      }),
+    });
+  });
+
+  it('emits full notification data parts as renderable message updates', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const state = (harness as any).createStreamState();
+
+    await (harness as any).processStreamChunk(
+      state,
+      {
+        type: 'data-signal',
+        data: {
+          id: 'notification-signal-1',
+          type: 'notification',
+          tagName: 'notification',
+          contents: 'CI failed on main',
+          createdAt: '2026-05-04T00:00:00.000Z',
+          attributes: {
+            id: 'notification-1',
+            source: 'github',
+            kind: 'ci-status',
+            priority: 'high',
+            status: 'delivered',
+          },
+          metadata: {
+            notification: {
+              signal: 'notification',
+              recordId: 'notification-1',
+              source: 'github',
+              kind: 'ci-status',
+              priority: 'high',
+              status: 'delivered',
+            },
+          },
+        },
+      },
+      new RequestContext(),
+    );
+
+    expect(events).toContainEqual({
+      type: 'message_update',
+      message: expect.objectContaining({
+        role: 'assistant',
+        content: [
+          {
+            type: 'notification',
+            id: 'notification-signal-1',
+            notificationId: 'notification-1',
+            message: 'CI failed on main',
+            source: 'github',
+            kind: 'ci-status',
+            priority: 'high',
+            status: 'delivered',
+            attributes: {
+              id: 'notification-1',
+              source: 'github',
+              kind: 'ci-status',
+              priority: 'high',
+              status: 'delivered',
+            },
+            metadata: {
+              notification: {
+                signal: 'notification',
+                recordId: 'notification-1',
+                source: 'github',
+                kind: 'ci-status',
+                priority: 'high',
+                status: 'delivered',
+              },
+            },
           },
         ],
       }),

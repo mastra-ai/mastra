@@ -16,6 +16,7 @@ import { AskQuestionInlineComponent } from './components/ask-question-inline.js'
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
 import { NotificationSummaryComponent } from './components/notification-summary.js';
+import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
@@ -375,6 +376,31 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     const component = new ReactiveSignalComponent({
       tagName: reactiveSignalPart.tagName,
       message: reactiveSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationPart = message.content.find(content => (content as { type?: string }).type === 'notification') as
+    | {
+        type: 'notification';
+        message: string;
+        source?: string;
+        kind?: string;
+        priority?: string;
+        status?: string;
+      }
+    | undefined;
+
+  if (notificationPart) {
+    const component = new NotificationComponent({
+      message: notificationPart.message,
+      source: notificationPart.source,
+      kind: notificationPart.kind,
+      priority: notificationPart.priority,
+      status: notificationPart.status,
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
