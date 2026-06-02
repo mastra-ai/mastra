@@ -295,7 +295,7 @@ describe('createStep with Processor', () => {
       expect(processInputStepMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
       expect(messageList.add).toHaveBeenCalledWith(expect.objectContaining({ role: 'signal' }), 'input');
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
-      expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-system-reminder', transient: true }));
+      expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-signal', transient: true }));
     });
 
     it('should provide sendSignal when phase is inputStep and messageList is synthesized', async () => {
