@@ -25,6 +25,8 @@
  * ```
  */
 
+import { createHash } from 'node:crypto';
+
 import type { MastraMemory, MemoryConfigInternal, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from '@mastra/core/processors';
 
@@ -50,7 +52,12 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
       memoryConfig: this.memoryConfig,
     });
 
-    const cacheKey = stableWorkingMemoryCacheKey({ format: template.format, data });
+    // Nothing stored yet — no state to broadcast. The setWorkingMemory tool
+    // description tells the model the expected shape; the signal carries state.
+    const contents = data?.trim();
+    if (!contents) return;
+
+    const cacheKey = stableWorkingMemoryCacheKey({ format: template.format, data: contents });
     const shouldRefreshSnapshot = Boolean(args.lastSnapshot && !args.contextWindow.hasSnapshot);
     if (args.tracking?.currentCacheKey === cacheKey && !shouldRefreshSnapshot) return;
 
@@ -62,12 +69,8 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
       mode: 'snapshot',
       cacheKey,
       tagName: 'working-memory',
-      contents: renderWorkingMemoryAsSignalContents({ template, data }),
-      value: {
-        template: template.content,
-        format: template.format,
-        data,
-      },
+      contents,
+      value: { data: contents },
       attributes: {
         format: template.format,
         scope,
@@ -77,53 +80,17 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
 }
 
 /**
- * Build the model-facing payload for the working-memory state signal.
- *
- * The shape mirrors the system-message rendering used by
- * `getWorkingMemoryToolInstruction` (template wrapped in `<working_memory_template>`,
- * data wrapped in `<working_memory_data>`) so the model sees the same content,
- * just delivered as an in-line signal instead of a system message. Tool
- * invocation guidance is dropped here — the `update-working-memory` tool is
- * still bound and its schema description is the authoritative source.
- */
-export function renderWorkingMemoryAsSignalContents({
-  template,
-  data,
-}: {
-  template: WorkingMemoryTemplate;
-  data: string | null;
-}): string {
-  const body = data ?? 'No working memory data stored yet.';
-  return [
-    'Current working memory for this conversation. Update it via the setWorkingMemory tool when relevant information changes.',
-    '',
-    `<working_memory_template>`,
-    template.content,
-    `</working_memory_template>`,
-    '',
-    `<working_memory_data>`,
-    body,
-    `</working_memory_data>`,
-  ].join('\n');
-}
-
-/**
- * Stable cache key for the rendered working memory payload. Matches the
- * deterministic-JSON pattern used by `stableBrowserStateCacheKey` so dedup is
- * insensitive to incidental key ordering in the template/data inputs.
+ * Stable cache key for the rendered working memory payload. Returns a SHA-256
+ * digest so dedup metadata stays compact regardless of payload size (working
+ * memory blobs can grow arbitrarily long).
  */
 export function stableWorkingMemoryCacheKey(input: {
   format: WorkingMemoryTemplate['format'];
   data: string | null;
 }): string {
-  return JSON.stringify({ format: input.format, data: input.data ?? '' }, (_key, value) => {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const sorted: Record<string, unknown> = {};
-      for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-        sorted[key] = (value as Record<string, unknown>)[key];
-      }
-      return sorted;
-    }
-    return value;
-  });
+  const hash = createHash('sha256');
+  hash.update(input.format);
+  hash.update('\0');
+  hash.update(input.data ?? '');
+  return `sha256:${hash.digest('hex')}`;
 }

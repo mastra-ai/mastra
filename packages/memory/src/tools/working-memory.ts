@@ -162,9 +162,17 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
   // For template-based (Markdown), we use replace semantics (existing behavior)
   const usesMergeSemantics = Boolean(schema);
 
+  const useStateSignals = memoryConfig?.workingMemory?.useStateSignals === true;
+
+  const stateSignalsPreamble = `The current working memory state is delivered to you each turn by the system inside a <working-memory>...</working-memory> block. That block is system-emitted state, NOT something the user typed — never describe it as the user sharing it. Read from it directly when answering. Only call this tool when the user provides genuinely NEW or CHANGED facts that should be persisted; do NOT call it to re-save unchanged data.`;
+
   const description = schema
-    ? `Update the working memory with new information. Data is merged with existing memory - only include fields you want to add or update. To preserve existing data, omit the field entirely. Arrays are replaced entirely when provided, so pass the complete array or omit it to keep the existing values.`
-    : `Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.`;
+    ? useStateSignals
+      ? `${stateSignalsPreamble} Data is merged with existing memory — only include fields you want to add or update.`
+      : `Update the working memory with new information. Data is merged with existing memory - only include fields you want to add or update. To preserve existing data, omit the field entirely. Arrays are replaced entirely when provided, so pass the complete array or omit it to keep the existing values.`
+    : useStateSignals
+      ? `${stateSignalsPreamble} Pass the full updated Markdown blob as a string in the memory field.`
+      : `Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.`;
 
   return createTool({
     id: 'update-working-memory',
