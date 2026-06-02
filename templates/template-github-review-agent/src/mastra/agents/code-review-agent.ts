@@ -102,7 +102,4 @@ Good patterns, clean abstractions, thoughtful decisions, or well-written tests w
       },
     },
   }),
-  defaultOptions: {
-    maxSteps: 50,
-  },
 });
