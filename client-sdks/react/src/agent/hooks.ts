@@ -79,7 +79,7 @@ export interface MastraChatProps {
   onThreadSignalsUnsupported?: () => void;
   /**
    * Use the agent-signals streaming path (sendSignal + subscribeToThread).
-   * Defaults to `true`; set to `false` to force the legacy `streamUntilIdle` route.
+   * Defaults to `false`; set to `true` to opt into thread signals.
    */
   enableThreadSignals?: boolean;
 }
@@ -135,7 +135,7 @@ export const useChat = ({
   onSignalSent,
   onSignalEcho,
   onThreadSignalsUnsupported,
-  enableThreadSignals = true,
+  enableThreadSignals = false,
 }: MastraChatProps) => {
   const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
