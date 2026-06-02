@@ -203,15 +203,11 @@ export function ReviewItemPanel({
           </div>
 
           <div className="grid gap-3">
-            <DataPanel.CodeSection
-              title="Input"
-              icon={<FileInputIcon />}
-              codeStr={JSON.stringify(item.input ?? null, null, 2)}
-            />
+            <DataPanel.CodeSection title="Input" icon={<FileInputIcon />} codeStr={formatUnknown(item.input ?? null)} />
             <DataPanel.CodeSection
               title="Output"
               icon={<FileOutputIcon />}
-              codeStr={JSON.stringify(item.output ?? null, null, 2)}
+              codeStr={formatUnknown(item.output ?? null)}
             />
           </div>
 
