@@ -287,13 +287,13 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                 <DataKeysAndValues.Value>v{item.datasetVersion}</DataKeysAndValues.Value>
                 <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>
-                  {format(new Date(item.createdAt), 'MMM dd, HH:mm:ss.SSS')}
+                  {format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa')}
                 </DataKeysAndValues.Value>
                 {item.updatedAt && new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime() && (
                   <>
                     <DataKeysAndValues.Key>Updated</DataKeysAndValues.Key>
                     <DataKeysAndValues.Value>
-                      {format(new Date(item.updatedAt), 'MMM dd, HH:mm:ss.SSS')}
+                      {format(new Date(item.updatedAt), 'MMM d, yyyy h:mm aaa')}
                     </DataKeysAndValues.Value>
                   </>
                 )}

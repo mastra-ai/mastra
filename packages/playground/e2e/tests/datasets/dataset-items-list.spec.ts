@@ -23,7 +23,11 @@ test.describe('Dataset Items List - Behavior Tests', () => {
 
     await page.getByRole('button', { name: /Test input 1/ }).click();
 
-    await expect(page.getByText(/Created [A-Z][a-z]{2} \d{1,2}, \d{4}/).first()).toBeVisible({ timeout: 5000 });
+    // The detail panel surfaces the item's metadata as labelled fields. "Dataset Id"
+    // only appears in this panel (not in the list rows), confirming it opened.
+    await expect(page.getByText('Dataset Id')).toBeVisible({ timeout: 5000 });
+    // The "Created" timestamp renders as "MMM d, yyyy h:mm aaa", e.g. "May 29, 2026 1:08 pm".
+    await expect(page.getByText(/[A-Z][a-z]{2} \d{1,2}, \d{4} \d{1,2}:\d{2} (am|pm)/).first()).toBeVisible();
   });
 
   test('selecting Delete Items from menu enables selection mode with checkboxes', async ({ page }) => {
