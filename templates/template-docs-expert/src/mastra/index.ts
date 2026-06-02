@@ -10,10 +10,6 @@ import {
 } from '@mastra/observability';
 import { docsExpert } from './agents/docs-expert';
 
-type CodeModeEditorConfig = NonNullable<ConstructorParameters<typeof MastraEditor>[0]> & { source: 'code' };
-
-const editorConfig: CodeModeEditorConfig = { source: 'code' };
-
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
@@ -21,7 +17,7 @@ export const mastra = new Mastra({
     authToken: process.env.TURSO_AUTH_TOKEN,
   }),
   agents: { docsExpert },
-  editor: new MastraEditor(editorConfig),
+  editor: new MastraEditor({ source: 'code' } as any),
   logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
   observability: new Observability({
     configs: {

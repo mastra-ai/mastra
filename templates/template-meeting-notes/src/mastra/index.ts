@@ -12,10 +12,6 @@ import { meetingNotesAgent } from './agents/meeting-notes';
 import { ingestMeetingWorkflow } from './workflows/ingest-meeting';
 import { meetingsUploadRoute } from './server/routes';
 
-type CodeModeEditorConfig = NonNullable<ConstructorParameters<typeof MastraEditor>[0]> & { source: 'code' };
-
-const editorConfig: CodeModeEditorConfig = { source: 'code' };
-
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
@@ -24,7 +20,7 @@ export const mastra = new Mastra({
   }),
   agents: { meetingNotesAgent },
   workflows: { ingestMeetingWorkflow },
-  editor: new MastraEditor(editorConfig),
+  editor: new MastraEditor({ source: 'code' } as any),
   logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
   server: {
     apiRoutes: [meetingsUploadRoute],

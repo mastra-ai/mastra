@@ -21,10 +21,6 @@ if (!tursoUrl) {
   throw new Error('TURSO_DATABASE_URL is not set. Use `file:./mastra.db` for local dev or a Turso libSQL URL.');
 }
 
-type CodeModeEditorConfig = NonNullable<ConstructorParameters<typeof MastraEditor>[0]> & { source: 'code' };
-
-const editorConfig: CodeModeEditorConfig = { source: 'code' };
-
 export const mastra = new Mastra({
   workspace,
   agents: { claw },
@@ -33,6 +29,6 @@ export const mastra = new Mastra({
     url: tursoUrl,
     authToken: process.env.TURSO_AUTH_TOKEN,
   }),
-  editor: new MastraEditor(editorConfig),
+  editor: new MastraEditor({ source: 'code' } as any),
   logger: new PinoLogger({ name: 'claw', level: 'info' }),
 });
