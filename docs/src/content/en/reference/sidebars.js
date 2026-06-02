@@ -286,6 +286,19 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Events & PubSub',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'events/pubsub', label: 'PubSub' },
+        { type: 'doc', id: 'events/event-emitter', label: 'EventEmitterPubSub' },
+        { type: 'doc', id: 'events/unix-socket-pubsub', label: 'UnixSocketPubSub' },
+        { type: 'doc', id: 'events/caching-pubsub', label: 'CachingPubSub' },
+        { type: 'doc', id: 'events/redis-streams', label: 'RedisStreamsPubSub' },
+        { type: 'doc', id: 'events/google-cloud-pubsub', label: 'GoogleCloudPubSub' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Harness',
       collapsed: true,
       items: [
