@@ -32,7 +32,7 @@ import {
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
 import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors';
-import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
+import type { OutputResult, Processor, ProcessorAgent, ProcessorStreamWriter } from '../processors';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -731,6 +731,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
       const input = inputData as ProcessorStepOutput & {
+        agent?: ProcessorAgent;
         processorStates?: Map<string, ProcessorState>;
         abortSignal?: AbortSignal;
       };
@@ -764,6 +765,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
+        agent,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -1006,6 +1008,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       const baseContext = {
         abort,
+        agent,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
@@ -1029,6 +1032,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
         phase,
+        agent,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
         messageList: processorMessageList,

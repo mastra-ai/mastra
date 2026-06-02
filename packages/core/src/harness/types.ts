@@ -821,6 +821,18 @@ export type HarnessEvent =
       observations?: string;
     }
   | { type: 'om_reflection_failed'; cycleId: string; error: string; durationMs: number }
+  | {
+      type: 'om_extraction_end';
+      cycleId: string;
+      operationType: 'observation' | 'reflection';
+      extractedValues: Record<string, unknown>;
+    }
+  | {
+      type: 'om_extraction_failed';
+      cycleId: string;
+      operationType: 'observation' | 'reflection';
+      error: string;
+    }
   | { type: 'om_model_changed'; role: 'observer' | 'reflector'; modelId: string }
   | {
       type: 'om_buffering_start';
@@ -996,6 +1008,16 @@ export type HarnessMessageContent =
       error: string;
       tokensAttempted?: number;
       operationType?: 'observation' | 'reflection';
+    }
+  | {
+      type: 'om_extraction_end';
+      operationType?: 'observation' | 'reflection';
+      extractedValues: Record<string, unknown>;
+    }
+  | {
+      type: 'om_extraction_failed';
+      operationType?: 'observation' | 'reflection';
+      error: string;
     }
   | { type: 'om_thread_title_updated'; threadId: string; oldTitle?: string; newTitle: string };
 

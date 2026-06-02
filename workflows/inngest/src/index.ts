@@ -663,10 +663,21 @@ function createStepFromProcessor<TProcessorId extends string>(
         ? { currentSpan: processorSpan }
         : tracingContext;
 
+      const agent = (input as ProcessorStepOutput & { agent?: Agent }).agent;
+      if (!agent) {
+        throw new MastraError({
+          category: ErrorCategory.USER,
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          id: 'PROCESSOR_MISSING_AGENT',
+          text: `Processor ${processor.id} requires an agent for ${phase} phase`,
+        });
+      }
+
       // Base context for all processor methods - includes requestContext for memory processors
       // and tracingContext for proper span nesting when processors call internal agents
       const baseContext = {
         abort,
+        agent,
         retryCount: retryCount ?? 0,
         requestContext,
         tracingContext: processorTracingContext,

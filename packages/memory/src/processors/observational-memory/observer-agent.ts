@@ -292,18 +292,7 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
 
-export function buildObserverOutputFormat(includeThreadTitle: boolean = false): string {
-  const threadTitleSection = includeThreadTitle
-    ? `
-<thread-title>
-A short, noun-phrase title for this conversation (2-5 words). Examples:
-- "Auth bug fix" — not "Fixing the auth bug"
-- "Dark mode toggle" — not "User wants dark mode toggle added"
-- "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
-Only update when the topic meaningfully changes.
-</thread-title>`
-    : '';
-
+export function buildObserverOutputFormat(): string {
   return `Use priority levels:
 - 🔴 High: explicit user facts, preferences, unresolved goals, critical context
 - 🟡 Medium: project details, learned information, tool results
@@ -327,22 +316,7 @@ Date: Dec 4, 2025
 
 Date: Dec 5, 2025
 * 🔴 (09:15) Continued work on feature X
-</observations>
-
-<current-task>
-State the current task(s) explicitly. Can be single or multiple:
-- Primary: What the agent is currently working on
-- Secondary: Other pending tasks (mark as "waiting for user" if appropriate)
-
-If the agent started doing something without user approval, note that it's off-task.
-</current-task>
-
-<suggested-response>
-Hint for the agent's immediate next message. Examples:
-- "I've updated the navigation model. Let me walk you through the changes..."
-- "The assistant should wait for the user to respond before continuing."
-- Call the view tool on src/example.ts to continue debugging.
-</suggested-response>${threadTitleSection}`;
+</observations>`;
 }
 
 /**
@@ -371,24 +345,16 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
+ * @param includeThreadTitle - Whether to include the <thread-title> section
  */
 export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
 ): string {
-  const outputFormat = buildObserverOutputFormat(includeThreadTitle);
-  const multiThreadTitleInstruction = includeThreadTitle
-    ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
-    : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
-  const multiThreadTitleExample = includeThreadTitle
-    ? `
-<thread-title>Feature X implementation</thread-title>`
-    : '';
-  const multiThreadSecondTitleExample = includeThreadTitle
-    ? `
-<thread-title>Deployment setup</thread-title>`
-    : '';
+  void includeThreadTitle;
+  const outputFormat = buildObserverOutputFormat();
+  const multiThreadInstruction = ` Each thread's observations should be nested inside a <thread id="..."> block within <observations>.`;
 
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -404,7 +370,7 @@ Process each thread separately and output observations for each thread.
 
 === OUTPUT FORMAT ===
 
-Your output MUST use XML tags to structure the response.${multiThreadTitleInstruction}
+Your output MUST use XML tags to structure the response.${multiThreadInstruction}
 
 Use this observation format inside each thread block:
 
@@ -417,27 +383,11 @@ For multi-thread output, wrap each thread's observations like this:
 Date: Dec 4, 2025
 * 🔴 (14:30) User prefers direct answers
 * 🔴 (14:31) Working on feature X
-
-<current-task>
-What the agent is currently working on in this thread
-</current-task>
-
-<suggested-response>
-Hint for the agent's next message in this thread
-</suggested-response>${multiThreadTitleExample}
 </thread>
 
 <thread id="thread_id_2">
 Date: Dec 5, 2025
 * 🔴 (09:15) User asked about deployment
-
-<current-task>
-Current task for this thread
-</current-task>
-
-<suggested-response>
-Suggested response for this thread
-</suggested-response>${multiThreadSecondTitleExample}
 </thread>
 </observations>
 
@@ -447,7 +397,7 @@ ${OBSERVER_GUIDELINES}
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+User messages are extremely important. If the user asks a question or gives a new task, capture that priority directly in the observations.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
   }
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -474,7 +424,7 @@ Simply output your observations without any thread-related markup.
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+User messages are extremely important. If the user asks a question or gives a new task, capture that priority directly in the observations. If the assistant needs to pause for the user, record that in the observations.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
 }
 
 /**
@@ -501,6 +451,15 @@ export interface ObserverResult {
 
   /** The suggested thread title (short/concise, for thread metadata) */
   threadTitle?: string;
+
+  /**
+   * User-defined extracted values keyed by extractor slug. Built-in extractors
+   * (current-task, suggested-response, thread-title) continue to use their
+   * dedicated fields above.
+   *
+   * @experimental
+   */
+  extractedValues?: Record<string, unknown>;
 
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
@@ -1155,7 +1114,15 @@ export function buildMultiThreadObserverHistoryMessage(
 export function buildMultiThreadObserverTaskPrompt(
   existingObservations: string | undefined,
   threadOrder?: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  priorMetadataByThread?: Map<
+    string,
+    {
+      currentTask?: string;
+      suggestedResponse?: string;
+      threadTitle?: string;
+      extractedValues?: Readonly<Record<string, unknown>>;
+    }
+  >,
   wasTruncated?: boolean,
   includeThreadTitle?: boolean,
 ): string {
@@ -1178,13 +1145,13 @@ export function buildMultiThreadObserverTaskPrompt(
       }
 
       const lines = [`- thread ${threadId}`];
-      if (metadata.currentTask) {
+      if (metadata?.currentTask) {
         lines.push(`  - prior current-task: ${metadata.currentTask}`);
       }
-      if (metadata.suggestedResponse) {
+      if (metadata?.suggestedResponse) {
         lines.push(`  - prior suggested-response: ${metadata.suggestedResponse}`);
       }
-      if (includeThreadTitle && metadata.threadTitle) {
+      if (includeThreadTitle && metadata?.threadTitle) {
         lines.push(`  - prior thread-title: ${metadata.threadTitle}`);
       }
       return lines.join('\n');
@@ -1198,28 +1165,21 @@ export function buildMultiThreadObserverTaskPrompt(
       prompt += `Previous observations were truncated for context budget reasons.\n`;
       prompt += `The main agent still has full memory context outside this observer window.\n`;
     }
-    const titleHint = includeThreadTitle ? ', and thread-title' : '';
-    prompt += `Use each thread's prior current-task, suggested-response${titleHint} as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
+    prompt += `Use each thread's prior metadata as continuity hints for understanding the new observations.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;
-  const titleInstruction = includeThreadTitle ? ', and thread-title' : '';
-  prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, suggested-response${titleInstruction}.\n\n`;
+  void includeThreadTitle;
+  prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain only that thread's observations.\n\n`;
   prompt += `Example output format:\n`;
   prompt += `<observations>\n`;
   prompt += `<thread id="thread1">\n`;
   prompt += `Date: Dec 4, 2025\n`;
   prompt += `* 🔴 (14:30) User prefers direct answers\n`;
-  prompt += `<current-task>Working on feature X</current-task>\n`;
-  prompt += `<suggested-response>Continue with the implementation</suggested-response>\n`;
-  if (includeThreadTitle) prompt += `<thread-title>Feature X implementation</thread-title>\n`;
   prompt += `</thread>\n`;
   prompt += `<thread id="thread2">\n`;
   prompt += `Date: Dec 5, 2025\n`;
   prompt += `* 🔴 (09:15) User asked about deployment\n`;
-  prompt += `<current-task>Discussing deployment options</current-task>\n`;
-  prompt += `<suggested-response>Explain the deployment process</suggested-response>\n`;
-  if (includeThreadTitle) prompt += `<thread-title>Deployment setup</thread-title>\n`;
   prompt += `</thread>\n`;
   prompt += `</observations>`;
 
@@ -1233,13 +1193,27 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  priorMetadataByThread?: Map<
+    string,
+    {
+      currentTask?: string;
+      suggestedResponse?: string;
+      threadTitle?: string;
+      extractedValues?: Readonly<Record<string, unknown>>;
+    }
+  >,
   wasTruncated?: boolean,
   options?: ObserverFormatOptions,
   includeThreadTitle?: boolean,
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
-  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle)}`;
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(
+    existingObservations,
+    threadOrder,
+    priorMetadataByThread,
+    wasTruncated,
+    includeThreadTitle,
+  )}`;
 }
 
 /**
@@ -1256,6 +1230,8 @@ export interface MultiThreadObserverResult {
 
 /**
  * Parse multi-thread Observer output to extract per-thread results.
+ *
+ * @param output - Raw text output from the observer model
  */
 export function parseMultiThreadObserverOutput(output: string): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
@@ -1371,13 +1347,8 @@ export function buildObserverTaskPrompt(
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
 
-  // Add thread title guidance (independent of continuation hints)
-  if (options?.includeThreadTitle) {
-    prompt += `\n\nAlso output a <thread-title> — a short noun-phrase label for this conversation (2-5 words). Write it like a file name or PR title: "Auth bug fix", "Memory config refactor", "RAG pipeline setup". Avoid verbs/sentences ("Fixing the auth bug"), filler ("Working on stuff"), and generic labels ("Code review"). Only change it from the prior title if the topic meaningfully shifted.`;
-  }
-
   if (options?.skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${options?.includeThreadTitle ? ' and <thread-title>' : ''}.`;
+    prompt += `\n\nIMPORTANT: Only output <observations>. Do not output current-task, suggested-response, thread-title, or custom extractor sections.`;
   }
 
   return prompt;
@@ -1406,6 +1377,8 @@ export function buildObserverPrompt(
 /**
  * Parse the Observer's output to extract observations, current task, and suggested response.
  * Uses XML tag parsing for structured extraction.
+ *
+ * @param output - Raw text output from the observer model
  */
 export function parseObserverOutput(output: string): ObserverResult {
   // Check for degenerate repetition before parsing (operates on raw output)
@@ -1419,8 +1392,6 @@ export function parseObserverOutput(output: string): ObserverResult {
 
   const parsed = parseMemorySectionXml(output);
 
-  // Return observations WITHOUT current-task/suggested-response tags
-  // Those are stored separately in thread metadata and injected dynamically
   const observations = sanitizeObservationLines(parsed.observations || '');
 
   return {

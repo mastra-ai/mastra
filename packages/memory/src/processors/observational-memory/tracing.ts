@@ -10,7 +10,7 @@ type OmTracingModel = Exclude<
   ModelByInputTokens
 >;
 
-type OmTracingPhase = 'observer' | 'observer-multi-thread' | 'reflector';
+type OmTracingPhase = 'observer' | 'observer-multi-thread' | 'extractor' | 'reflector';
 
 const PHASE_CONFIG: Record<
   OmTracingPhase,
@@ -26,6 +26,10 @@ const PHASE_CONFIG: Record<
   'observer-multi-thread': {
     name: 'om.observer.multi-thread',
     entityName: 'MultiThreadObserver',
+  },
+  extractor: {
+    name: 'om.extractor',
+    entityName: 'Extractor',
   },
   reflector: {
     name: 'om.reflector',

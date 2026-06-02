@@ -3,6 +3,8 @@ import type {
   DataOmBufferingEndPart,
   DataOmBufferingFailedPart,
   DataOmBufferingStartPart,
+  DataOmExtractedPart,
+  DataOmExtractionFailedPart,
   DataOmObservationEndPart,
   DataOmObservationFailedPart,
   DataOmObservationStartPart,
@@ -41,6 +43,52 @@ export function createObservationStartMarker(params: {
 /**
  * Create an end marker for when observation completes successfully.
  */
+export function createExtractedMarker(params: {
+  cycleId: string;
+  operationType: 'observation' | 'reflection';
+  threadId: string;
+  resourceId?: string;
+  recordId?: string;
+  completedAt?: string;
+  extractedValues: Record<string, unknown>;
+}): DataOmExtractedPart {
+  return {
+    type: 'data-om-extracted',
+    data: {
+      cycleId: params.cycleId,
+      operationType: params.operationType,
+      completedAt: params.completedAt ?? new Date().toISOString(),
+      recordId: params.recordId,
+      threadId: params.threadId,
+      resourceId: params.resourceId,
+      extractedValues: params.extractedValues,
+    },
+  };
+}
+
+export function createExtractionFailedMarker(params: {
+  cycleId: string;
+  operationType: 'observation' | 'reflection';
+  threadId: string;
+  resourceId?: string;
+  recordId?: string;
+  error: string;
+  failedAt?: string;
+}): DataOmExtractionFailedPart {
+  return {
+    type: 'data-om-extraction-failed',
+    data: {
+      cycleId: params.cycleId,
+      operationType: params.operationType,
+      failedAt: params.failedAt ?? new Date().toISOString(),
+      recordId: params.recordId,
+      threadId: params.threadId,
+      resourceId: params.resourceId,
+      error: params.error,
+    },
+  };
+}
+
 export function createObservationEndMarker(params: {
   cycleId: string;
   operationType: 'observation' | 'reflection';

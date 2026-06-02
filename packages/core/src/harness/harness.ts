@@ -2181,6 +2181,24 @@ export class Harness<TState = {}> {
           });
           break;
         }
+        case 'data-om-extracted': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push({
+            type: 'om_extraction_end',
+            extractedValues: (data.extractedValues as Record<string, unknown>) ?? {},
+            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+          });
+          break;
+        }
+        case 'data-om-extraction-failed': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push({
+            type: 'om_extraction_failed',
+            error: (data.error as string) ?? 'Unknown error',
+            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+          });
+          break;
+        }
         case 'data-user-message': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
           const message = toUserSignalMessage(data);
@@ -2690,6 +2708,30 @@ export class Harness<TState = {}> {
 
           this.abortForOmFailure({ operationType, stage: 'run', error });
           return { message: state.currentMessage };
+        }
+        break;
+      }
+      case 'data-om-extracted': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload) {
+          this.emit({
+            type: 'om_extraction_end',
+            cycleId: payload.cycleId ?? 'unknown',
+            operationType: payload.operationType === 'reflection' ? 'reflection' : 'observation',
+            extractedValues: payload.extractedValues ?? {},
+          });
+        }
+        break;
+      }
+      case 'data-om-extraction-failed': {
+        const payload = (chunk as any).data as Record<string, any> | undefined;
+        if (payload) {
+          this.emit({
+            type: 'om_extraction_failed',
+            cycleId: payload.cycleId ?? 'unknown',
+            operationType: payload.operationType === 'reflection' ? 'reflection' : 'observation',
+            error: payload.error ?? 'Unknown error',
+          });
         }
         break;
       }

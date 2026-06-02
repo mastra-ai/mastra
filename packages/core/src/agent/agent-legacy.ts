@@ -30,6 +30,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
+import type { ProcessorState } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
@@ -114,6 +115,7 @@ export interface AgentLegacyCapabilities {
       requestContext: RequestContext;
       messageList: MessageList;
       inputProcessorOverrides?: InputProcessorOrWorkflow[];
+      processorStates?: Map<string, ProcessorState>;
     } & ObservabilityContext,
   ): Promise<{
     messageList: MessageList;
@@ -139,6 +141,7 @@ export interface AgentLegacyCapabilities {
       autoResumeSuspendedTools?: boolean;
       backgroundTaskEnabled?: boolean;
       providerOptions?: ProviderOptions;
+      processorStates?: Map<string, ProcessorState>;
     },
   ): Promise<{
     messageList: MessageList;
@@ -194,6 +197,7 @@ export interface AgentLegacyCapabilities {
       requestContext: RequestContext;
       messageList: MessageList;
       outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+      processorStates?: Map<string, ProcessorState>;
     } & ObservabilityContext,
   ): Promise<{
     messageList: MessageList;
@@ -265,6 +269,7 @@ export class AgentLegacyHandler {
     providerOptions?: ProviderOptions;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
+    const processorStates = new Map<string, ProcessorState>();
     return {
       before: async () => {
         const agentSpan = getOrCreateSpan({
@@ -333,6 +338,7 @@ export class AgentLegacyHandler {
             ...innerObservabilityContext,
             messageList,
             inputProcessorOverrides: inputProcessors,
+            processorStates,
           });
           // Run processInputStep for step 0 (legacy path compatibility)
           if (!tripwire) {
@@ -342,6 +348,7 @@ export class AgentLegacyHandler {
               messageList,
               stepNumber: 0,
               inputProcessorOverrides: inputProcessors,
+              processorStates,
               tools: convertedTools,
               providerOptions,
               runId,
@@ -359,6 +366,7 @@ export class AgentLegacyHandler {
                 thread: undefined,
                 messageList,
                 agentSpan,
+                processorStates,
                 tripwire: inputStepResult.tripwire,
               };
             }
@@ -370,6 +378,7 @@ export class AgentLegacyHandler {
             thread: undefined,
             messageList,
             agentSpan,
+            processorStates,
             tripwire,
           };
         }
@@ -435,6 +444,7 @@ export class AgentLegacyHandler {
           ...innerObservabilityContext,
           messageList,
           inputProcessorOverrides: inputProcessors,
+          processorStates,
         });
         messageList = processedMessageList;
 
@@ -449,6 +459,7 @@ export class AgentLegacyHandler {
             messageList,
             stepNumber: 0,
             inputProcessorOverrides: inputProcessors,
+            processorStates,
             tools: convertedTools,
             providerOptions,
             runId,
@@ -465,6 +476,7 @@ export class AgentLegacyHandler {
               messageList,
               messageObjects: [],
               agentSpan,
+              processorStates,
               tripwire: inputStepResult.tripwire,
               threadExists: !!existingThread,
             };
@@ -482,6 +494,7 @@ export class AgentLegacyHandler {
           // add old processed messages + new input messages
           messageObjects: processedList,
           agentSpan,
+          processorStates,
           tripwire,
           threadExists: !!existingThread,
         };
@@ -842,7 +855,7 @@ export class AgentLegacyHandler {
       llm: llm as MastraLLMV1,
       before: async () => {
         const beforeResult = await before();
-        const { messageObjects, convertedTools, agentSpan } = beforeResult;
+        const { messageObjects, convertedTools, agentSpan, processorStates } = beforeResult;
         threadExists = beforeResult.threadExists || false;
         threadCreatedByStep = false;
         messageList = beforeResult.messageList;
@@ -880,6 +893,7 @@ export class AgentLegacyHandler {
           tripwire: beforeResult.tripwire,
           ...args,
           agentSpan,
+          processorStates,
         } as any;
 
         return { ...result, messageList, requestContext };
@@ -976,6 +990,7 @@ export class AgentLegacyHandler {
     const llmToUse = llm as MastraLLMV1;
     const beforeResult = await before();
     const { messageList, requestContext: contextWithMemory } = beforeResult;
+    const processorStates = (beforeResult as any).processorStates as Map<string, ProcessorState> | undefined;
     const traceId = beforeResult.agentSpan?.externalTraceId;
     const spanId = beforeResult.agentSpan?.id;
 
@@ -1052,6 +1067,7 @@ export class AgentLegacyHandler {
         ...observabilityContext,
         outputProcessorOverrides: finalOutputProcessors,
         messageList, // Use the full message list with complete conversation history
+        processorStates,
       });
 
       // Handle tripwire for output processors
@@ -1182,6 +1198,7 @@ export class AgentLegacyHandler {
       requestContext: contextWithMemory || new RequestContext(),
       ...observabilityContext,
       messageList, // Use the full message list with complete conversation history
+      processorStates,
     });
 
     // Handle tripwire for output processors
@@ -1392,8 +1409,17 @@ export class AgentLegacyHandler {
         | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
-    const { onFinish, runId, output, experimental_output, agentSpan, messageList, requestContext, ...llmOptions } =
-      beforeResult;
+    const {
+      onFinish,
+      runId,
+      output,
+      experimental_output,
+      agentSpan,
+      messageList,
+      processorStates,
+      requestContext,
+      ...llmOptions
+    } = beforeResult as typeof beforeResult & { processorStates?: Map<string, ProcessorState> };
     const overrideScorers = mergedStreamOptions.scorers;
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -1413,6 +1439,7 @@ export class AgentLegacyHandler {
               requestContext,
               ...observabilityContext,
               messageList,
+              processorStates,
             });
 
             // End agent span with tripwire details if output processor aborted
@@ -1491,6 +1518,7 @@ export class AgentLegacyHandler {
             requestContext,
             ...observabilityContext,
             messageList,
+            processorStates,
           });
 
           // End agent span with tripwire details if output processor aborted

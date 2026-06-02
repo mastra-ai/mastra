@@ -1630,6 +1630,7 @@ ${workingMemory}`;
             previousObserverTokens: omConfig.observation.previousObserverTokens,
             instruction: omConfig.observation.instruction,
             threadTitle: omConfig.observation.threadTitle,
+            extract: omConfig.observation.extract,
             observeAttachments: omConfig.observation.observeAttachments,
           }
         : undefined,
@@ -1642,6 +1643,7 @@ ${workingMemory}`;
             bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
             instruction: omConfig.reflection.instruction,
+            extract: omConfig.reflection.extract,
           }
         : undefined,
     });

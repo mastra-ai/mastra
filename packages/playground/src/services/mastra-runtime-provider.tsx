@@ -101,6 +101,8 @@ type OmCycleParts = {
   bufferingEnd?: any;
   bufferingFailed?: any;
   activation?: any;
+  extracted?: any;
+  extractionFailed?: any;
 };
 
 /**
@@ -120,6 +122,8 @@ const indexOmPartsByCycleId = (parts: any[], target: Map<string, OmCycleParts>) 
       'data-om-buffering-end': 'bufferingEnd',
       'data-om-buffering-failed': 'bufferingFailed',
       'data-om-activation': 'activation',
+      'data-om-extracted': 'extracted',
+      'data-om-extraction-failed': 'extractionFailed',
     };
 
     const key = typeToKey[part.type];
@@ -179,7 +183,6 @@ const convertOmPartsInMastraMessage = (
     const cycleId = (part as any).data?.cycleId;
     const partType = part.type as string;
 
-    // Only render badges at start marker positions
     if (partType === 'data-om-observation-start' && cycleId) {
       const cycle = globalOmParts.get(cycleId);
       if (!cycle) continue;
@@ -187,6 +190,7 @@ const convertOmPartsInMastraMessage = (
       const startData = cycle.start?.data || {};
       const endData = cycle.end?.data || {};
       const failedData = cycle.failed?.data || {};
+      const extractedData = cycle.extracted?.data || {};
 
       const isFailed = !!cycle.failed;
       const isComplete = !!cycle.end;
@@ -197,6 +201,7 @@ const convertOmPartsInMastraMessage = (
         ...startData,
         ...(isComplete ? endData : {}),
         ...(isFailed ? failedData : {}),
+        ...extractedData,
         _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'complete' : 'loading',
       };
 
@@ -221,6 +226,7 @@ const convertOmPartsInMastraMessage = (
       const endData = cycle.bufferingEnd?.data || {};
       const failedData = cycle.bufferingFailed?.data || {};
       const activationData = cycle.activation?.data || {};
+      const extractedData = cycle.extracted?.data || {};
 
       const isFailed = !!cycle.bufferingFailed;
       const isActivated = !!cycle.activation;
@@ -233,6 +239,7 @@ const convertOmPartsInMastraMessage = (
         ...(isComplete ? endData : {}),
         ...(isFailed ? failedData : {}),
         ...(isActivated ? activationData : {}),
+        ...extractedData,
         _state: isFailed
           ? 'buffering-failed'
           : isActivated
@@ -270,6 +277,28 @@ const convertOmPartsInMastraMessage = (
             },
         state: isLoading ? 'input-available' : 'output-available',
       });
+    } else if ((partType === 'data-om-extracted' || partType === 'data-om-extraction-failed') && cycleId) {
+      const cycle = globalOmParts.get(cycleId);
+      if (!cycle?.start && !cycle?.bufferingStart) {
+        const markerData = (part as any).data || {};
+        const isFailed = partType === 'data-om-extraction-failed';
+        const mergedData = {
+          ...markerData,
+          _state: isFailed ? 'extraction-failed' : 'extracted',
+        };
+
+        convertedParts.push({
+          type: 'dynamic-tool',
+          toolCallId: `om-extraction-${cycleId}`,
+          toolName: OM_TOOL_NAME,
+          input: mergedData,
+          output: {
+            status: isFailed ? 'extraction-failed' : 'extracted',
+            omData: mergedData,
+          },
+          state: 'output-available',
+        });
+      }
     } else if (partType?.startsWith('data-om-')) {
       // Silently skip all other OM parts (end, failed, activation, status).
       // Their data is already in globalOmParts and merged into the start-position badge.

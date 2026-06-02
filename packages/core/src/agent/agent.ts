@@ -993,6 +993,7 @@ export class Agent<
       outputProcessors,
       errorProcessors,
       logger: this.logger,
+      agent: this,
       agentName: this.name,
       processorStates,
     });
@@ -2746,6 +2747,7 @@ export class Agent<
         requestContext,
         ...observabilityContext,
         messageList,
+        agent: this,
         agentId: this.id,
         agentName: this.name,
       });
@@ -3540,11 +3542,13 @@ export class Agent<
     requestContext,
     messageList,
     outputProcessorOverrides,
+    processorStates,
     ...observabilityContext
   }: {
     requestContext: RequestContext;
     messageList: MessageList;
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
     tripwire?: {
@@ -3560,6 +3564,7 @@ export class Agent<
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,
+        processorStates,
       });
 
       try {

@@ -1,9 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorAgent, ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import type { ObservationExtractionSession } from '../extraction-runner';
 import type { ObservationModelContext, ObserveHooks } from '../types';
 
 /** Parameters for running an observation via a strategy. */
@@ -21,6 +22,7 @@ export interface ObservationRunOpts {
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;
   reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  agent?: ProcessorAgent;
   sendSignal?: ProcessorContext['sendSignal'];
   requestContext?: RequestContext;
   currentModel?: ObservationModelContext;
@@ -33,6 +35,10 @@ export interface ObserverOutput {
   currentTask?: string;
   suggestedContinuation?: string;
   threadTitle?: string;
+  /** User-defined extracted values, keyed by extractor slug. */
+  extractedValues?: Record<string, unknown>;
+  /** Ephemeral observer conversation used for structured extraction follow-up. */
+  extractionSession?: ObservationExtractionSession;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
 }
 
@@ -56,8 +62,20 @@ export interface ProcessedObservation {
     currentTask?: string;
     threadTitle?: string;
     lastObservedMessageCursor?: { createdAt: string; id: string };
+    extractedValues?: Record<string, unknown>;
+    observedMessages?: MastraDBMessage[];
+    activeObservations?: string;
+    newObservations?: string;
+    extractionSession?: ObservationExtractionSession;
   }>;
+  observedMessages?: MastraDBMessage[];
+  activeObservations?: string;
+  newObservations?: string;
   suggestedContinuation?: string;
   currentTask?: string;
   threadTitle?: string;
+  /** User-defined extracted values (non-built-in slugs), keyed by slug. */
+  extractedValues?: Record<string, unknown>;
+  /** Ephemeral observer conversation used for structured extraction follow-up. */
+  extractionSession?: ObservationExtractionSession;
 }

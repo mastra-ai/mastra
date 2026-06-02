@@ -1,4 +1,5 @@
 import { stripEphemeralAnchorIds } from './anchor-ids';
+import type { Extractor } from './extractor';
 import { reconcileObservationGroupsFromReflection, stripObservationGroups } from './observation-groups';
 import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
@@ -16,6 +17,8 @@ import type { ReflectorResult as BaseReflectorResult } from './types';
 export interface ReflectorResult extends BaseReflectorResult {
   /** Token count of output (for compression validation) */
   tokenCount?: number;
+  /** User-defined extracted values keyed by extractor slug. */
+  extractedValues?: Record<string, unknown>;
 }
 
 /**
@@ -30,7 +33,11 @@ export interface ReflectorResult extends BaseReflectorResult {
  *
  * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildReflectorSystemPrompt(instruction?: string): string {
+export function buildReflectorSystemPrompt(
+  instruction?: string,
+  extractors: ReadonlyArray<Extractor<any>> = [],
+): string {
+  void extractors;
   return `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
 
 The following instructions were given to another part of your psyche (the observer) to create memories.
@@ -238,6 +245,7 @@ export function buildReflectorPrompt(
   manualPrompt?: string,
   compressionLevel?: boolean | CompressionLevel,
   skipContinuationHints?: boolean,
+  extractors: ReadonlyArray<Extractor<any>> = [],
 ): string {
   // Normalize: boolean `true` maps to level 1 for backwards compat
   const level: CompressionLevel = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
@@ -266,8 +274,9 @@ ${manualPrompt}`;
 ${guidance}`;
   }
 
+  void extractors;
   if (skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>.`;
+    prompt += `\n\nIMPORTANT: Only output <observations>. Do not output current-task, suggested-response, or custom extractor sections.`;
   }
 
   return prompt;
@@ -277,7 +286,12 @@ ${guidance}`;
  * Parse the Reflector's output to extract observations, current task, and suggested response.
  * Uses XML tag parsing for structured extraction.
  */
-export function parseReflectorOutput(output: string, sourceObservations?: string): ReflectorResult {
+export function parseReflectorOutput(
+  output: string,
+  sourceObservations?: string,
+  extractors: ReadonlyArray<Extractor<any>> = [],
+  onParseError?: (extractor: Extractor<any>, error: unknown, rawValue: string) => void,
+): ReflectorResult {
   // Check for degenerate repetition before parsing
   if (detectDegenerateRepetition(output)) {
     return {
@@ -286,6 +300,8 @@ export function parseReflectorOutput(output: string, sourceObservations?: string
     };
   }
 
+  void extractors;
+  void onParseError;
   const parsed = parseReflectorSectionXml(output);
   const sanitizedObservations = sanitizeObservationLines(stripEphemeralAnchorIds(parsed.observations || ''));
   const reconciledObservations = sourceObservations

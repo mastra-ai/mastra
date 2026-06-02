@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { setThreadOMMetadata } from '@mastra/core/memory';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { createBufferingEndMarker, createBufferingFailedMarker, createThreadUpdateMarker } from '../markers';
@@ -9,6 +9,7 @@ import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { filterExtractedValuesForStorage } from './extracted-values';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class AsyncBufferObservationStrategy extends ObservationStrategy {
@@ -52,6 +53,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
+      resourceId: this.opts.resourceId,
     });
   }
 
@@ -91,9 +93,14 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       cycleObservationTokens: observationTokens,
       observedMessageIds: messageIds,
       lastObservedAt,
+      observedMessages: messages,
+      activeObservations: this.opts.record.activeObservations ?? '',
+      newObservations: output.observations,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
+      extractedValues: filterExtractedValuesForStorage(output.extractedValues, this.deps.additionalExtractors),
+      extractionSession: output.extractionSession,
     };
   }
 
@@ -120,27 +127,38 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
 
-    // Update thread title immediately — don't wait for activation.
+    // Update thread title immediately — don't wait for activation. Custom
+    // extractor values are already normalized by onExtracted hooks and are
+    // written through so the next observation cycle can carry them forward.
     const newTitle = processed.threadTitle?.trim();
-    if (newTitle && newTitle.length >= 3) {
+    const shouldWriteTitle = !!newTitle && newTitle.length >= 3;
+    const extractedValues = processed.extractedValues;
+    if (shouldWriteTitle || extractedValues) {
       const thread = await this.storage.getThreadById({ threadId });
       if (thread) {
         const oldTitle = thread.title?.trim();
-        if (newTitle !== oldTitle) {
-          const newMetadata = setThreadOMMetadata(thread.metadata, {
-            threadTitle: processed.threadTitle,
-          });
-          await this.storage.updateThread({
-            id: threadId,
-            title: newTitle,
-            metadata: newMetadata,
-          });
+        const titleChanged = shouldWriteTitle && newTitle !== oldTitle;
+        const priorMeta = getThreadOMMetadata(thread.metadata);
+        const mergedExtractedValues =
+          priorMeta?.extracted || extractedValues
+            ? { ...(priorMeta?.extracted ?? {}), ...(extractedValues ?? {}) }
+            : undefined;
+        const newMetadata = setThreadOMMetadata(thread.metadata, {
+          ...(shouldWriteTitle ? { threadTitle: processed.threadTitle } : {}),
+          ...(mergedExtractedValues ? { extracted: mergedExtractedValues } : {}),
+        });
+        await this.storage.updateThread({
+          id: threadId,
+          title: titleChanged ? newTitle! : (thread.title ?? ''),
+          metadata: newMetadata,
+        });
 
+        if (titleChanged) {
           const marker = createThreadUpdateMarker({
             cycleId: this.cycleId,
             threadId,
             oldTitle,
-            newTitle,
+            newTitle: newTitle!,
           });
           await this.streamMarker(marker);
         }

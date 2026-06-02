@@ -1,11 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { modelSupportsAttachments } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
+import { MockMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
+import type { ObservationExtractionSession } from './extraction-runner';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import type { ObserverAttachmentFilter } from './observer-agent';
 import {
@@ -44,6 +47,7 @@ export interface ObserverExchange {
     currentTask?: string;
     suggestedContinuation?: string;
     threadTitle?: string;
+    extractedValues?: Record<string, unknown>;
     degenerate?: boolean;
   };
   model: string;
@@ -90,11 +94,20 @@ export class ObserverRunner {
         this.observationConfig.threadTitle,
       ),
       model,
+      memory: new MockMemory({ options: { lastMessages: 20 } }),
     });
     if (this.mastra) {
       agent.__registerMastra(this.mastra);
     }
     return agent;
+  }
+
+  private createExtractionSession(agent: Agent, resourceId?: string): ObservationExtractionSession {
+    return {
+      agent,
+      threadId: `om-observer-${randomUUID()}`,
+      resourceId: resourceId ?? 'observational-memory',
+    };
   }
 
   /**
@@ -166,6 +179,7 @@ export class ObserverRunner {
       skipContinuationHints?: boolean;
       requestContext?: RequestContext;
       observabilityContext?: ObservabilityContext;
+      resourceId?: string;
       priorCurrentTask?: string;
       priorSuggestedResponse?: string;
       priorThreadTitle?: string;
@@ -177,11 +191,14 @@ export class ObserverRunner {
     currentTask?: string;
     suggestedContinuation?: string;
     threadTitle?: string;
+    extractedValues?: Record<string, unknown>;
+    extractionSession?: ObservationExtractionSession;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model);
+    const extractionSession = this.createExtractionSession(agent, options?.resourceId);
 
     const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 
@@ -221,6 +238,7 @@ export class ObserverRunner {
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
                 const streamResult = await agent.stream(observerMessages, {
+                  memory: { thread: extractionSession.threadId, resource: extractionSession.resourceId },
                   modelSettings: { ...this.observationConfig.modelSettings },
                   providerOptions: this.observationConfig.providerOptions as any,
                   ...(abortSignal ? { abortSignal } : {}),
@@ -263,6 +281,7 @@ export class ObserverRunner {
         currentTask: parsed.currentTask,
         suggestedContinuation: parsed.suggestedContinuation,
         threadTitle: parsed.threadTitle,
+        extractedValues: parsed.extractedValues,
         degenerate: parsed.degenerate,
       },
       model: String(resolvedModel.model),
@@ -278,6 +297,8 @@ export class ObserverRunner {
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
       threadTitle: parsed.threadTitle,
+      extractedValues: parsed.extractedValues,
+      extractionSession,
       usage: usage
         ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
         : undefined,
@@ -293,13 +314,29 @@ export class ObserverRunner {
     threadOrder: string[],
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
-    priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+    priorMetadataByThread?: Map<
+      string,
+      {
+        currentTask?: string;
+        suggestedResponse?: string;
+        threadTitle?: string;
+        extractedValues?: Readonly<Record<string, unknown>>;
+      }
+    >,
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
+    resourceId?: string,
   ): Promise<{
     results: Map<
       string,
-      { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string }
+      {
+        observations: string;
+        currentTask?: string;
+        suggestedContinuation?: string;
+        threadTitle?: string;
+        extractedValues?: Record<string, unknown>;
+        extractionSession?: ObservationExtractionSession;
+      }
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
@@ -309,6 +346,7 @@ export class ObserverRunner {
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model, true);
+    const extractionSession = this.createExtractionSession(agent, resourceId);
 
     const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
 
@@ -357,6 +395,7 @@ export class ObserverRunner {
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
                 const streamResult = await agent.stream(observerMessages, {
+                  memory: { thread: extractionSession.threadId, resource: extractionSession.resourceId },
                   modelSettings: { ...this.observationConfig.modelSettings },
                   providerOptions: this.observationConfig.providerOptions as any,
                   ...(abortSignal ? { abortSignal } : {}),
@@ -412,7 +451,14 @@ export class ObserverRunner {
 
     const results = new Map<
       string,
-      { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string }
+      {
+        observations: string;
+        currentTask?: string;
+        suggestedContinuation?: string;
+        threadTitle?: string;
+        extractedValues?: Record<string, unknown>;
+        extractionSession?: ObservationExtractionSession;
+      }
     >();
     for (const [threadId, threadResult] of parsed.threads) {
       results.set(threadId, {
@@ -420,6 +466,8 @@ export class ObserverRunner {
         currentTask: threadResult.currentTask,
         suggestedContinuation: threadResult.suggestedContinuation,
         threadTitle: threadResult.threadTitle,
+        extractedValues: threadResult.extractedValues,
+        extractionSession,
       });
     }
 

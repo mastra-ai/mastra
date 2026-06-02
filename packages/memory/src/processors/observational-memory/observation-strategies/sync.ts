@@ -13,6 +13,7 @@ import { getLastObservedMessageCursor } from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { filterExtractedValuesForStorage } from './extracted-values';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class SyncObservationStrategy extends ObservationStrategy {
@@ -102,6 +103,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const result = await this.deps.observer.call(existingObservations, messages, this.opts.abortSignal, {
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
+      resourceId: this.opts.resourceId,
       priorCurrentTask: omMeta?.currentTask,
       priorSuggestedResponse: omMeta?.suggestedResponse,
       priorThreadTitle: omMeta?.threadTitle,
@@ -150,9 +152,14 @@ export class SyncObservationStrategy extends ObservationStrategy {
       cycleObservationTokens,
       observedMessageIds,
       lastObservedAt,
+      observedMessages: messages,
+      activeObservations: existingObservations,
+      newObservations: output.observations,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
+      extractedValues: filterExtractedValuesForStorage(output.extractedValues, this.deps.additionalExtractors),
+      extractionSession: output.extractionSession,
     };
   }
 
@@ -166,11 +173,20 @@ export class SyncObservationStrategy extends ObservationStrategy {
       const oldTitle = thread.title?.trim();
       const newTitle = processed.threadTitle?.trim();
       const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+      // Merge new custom-extractor values on top of any prior persisted values
+      // so an empty cycle (e.g. observer didn't emit a value for one extractor)
+      // doesn't wipe out the previous extracted state.
+      const priorMeta = getThreadOMMetadata(thread.metadata);
+      const mergedExtractedValues =
+        priorMeta?.extracted || processed.extractedValues
+          ? { ...(priorMeta?.extracted ?? {}), ...(processed.extractedValues ?? {}) }
+          : undefined;
       const newMetadata = setThreadOMMetadata(thread.metadata, {
         suggestedResponse: processed.suggestedContinuation,
         currentTask: processed.currentTask,
         threadTitle: processed.threadTitle,
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
+        extracted: mergedExtractedValues,
       });
       await this.storage.updateThread({
         id: threadId,

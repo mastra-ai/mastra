@@ -17,7 +17,7 @@ import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
-import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
+import type { OutputResult, Processor, ProcessorAgent, ProcessorStreamWriter } from '../../processors';
 import {
   ProcessorRunner,
   ProcessorState,
@@ -760,6 +760,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
       const input = inputData as ProcessorStepOutput & {
+        agent?: ProcessorAgent;
         processorStates?: Map<string, ProcessorState>;
         abortSignal?: AbortSignal;
       };
@@ -793,6 +794,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
+        agent,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -1030,6 +1032,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       const baseContext = {
         abort,
+        agent: agent!,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
