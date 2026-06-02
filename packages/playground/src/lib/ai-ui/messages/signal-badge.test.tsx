@@ -11,7 +11,8 @@ describe('SignalBadge', () => {
           type: 'notification',
           tagName: 'notification-summary',
           contents: 'github: 2',
-          attributes: { pending: 2, priority: 'high' },
+          attributes: { pending: 99, priority: 'low' },
+          metadata: { notification: { signal: 'summary', pending: 2, priority: 'high' } },
         }}
       />,
     );
@@ -29,7 +30,16 @@ describe('SignalBadge', () => {
           type: 'notification',
           tagName: 'notification',
           contents: 'CI failed on main',
-          attributes: { source: 'github', kind: 'ci-status', priority: 'medium', status: 'delivered' },
+          attributes: { source: 'legacy-source', kind: 'legacy-kind', priority: 'low', status: 'pending' },
+          metadata: {
+            notification: {
+              signal: 'notification',
+              source: 'github',
+              kind: 'ci-status',
+              priority: 'medium',
+              status: 'delivered',
+            },
+          },
         }}
       />,
     );

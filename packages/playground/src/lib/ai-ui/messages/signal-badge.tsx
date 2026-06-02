@@ -1,7 +1,7 @@
 import type { DataMessagePartProps } from '@assistant-ui/react';
 import { Bell, Database, Radio } from 'lucide-react';
 
-import { isRecord, isSignalData } from './signal-data';
+import { getNotificationMetadata, isRecord, isSignalData } from './signal-data';
 import type { SignalData } from './signal-data';
 
 export type SignalBadgeProps = {
@@ -36,9 +36,10 @@ const getStateLabel = (signal: SignalData) => {
 };
 
 const getNotificationTitle = (signal: SignalData) => {
-  if (signal.tagName === 'notification-summary') return 'Notification summary';
-  const source = formatValue(signal.attributes?.source);
-  const kind = formatValue(signal.attributes?.kind);
+  const notification = getNotificationMetadata(signal);
+  if (notification?.signal === 'summary' || signal.tagName === 'notification-summary') return 'Notification summary';
+  const source = notification?.source ?? formatValue(signal.attributes?.source);
+  const kind = notification?.kind ?? formatValue(signal.attributes?.kind);
   if (source && kind) return `${source} / ${kind}`;
   return source ?? kind ?? 'Notification';
 };
@@ -86,9 +87,10 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
   }
 
   if (value.type === 'notification') {
-    const priority = formatValue(value.attributes?.priority);
-    const pending = formatValue(value.attributes?.pending);
-    const status = formatValue(value.attributes?.status);
+    const notification = getNotificationMetadata(value);
+    const priority = notification?.priority ?? formatValue(value.attributes?.priority);
+    const pending = formatValue(notification?.pending) ?? formatValue(value.attributes?.pending);
+    const status = notification?.status ?? formatValue(value.attributes?.status);
     const toneClass = getToneClass(priority);
 
     return (
