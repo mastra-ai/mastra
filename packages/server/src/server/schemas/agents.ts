@@ -463,6 +463,12 @@ export const toolCallResponseSchema = z.object({
   fullStream: z.any(), // ReadableStream
 });
 
+export const sendToolApprovalResponseSchema = z.object({
+  accepted: z.literal(true),
+  runId: z.string(),
+  toolCallId: z.string().optional(),
+});
+
 // ============================================================================
 // Resume Stream Schema
 // ============================================================================
@@ -609,6 +615,15 @@ export const subscribeAgentThreadBodySchema = z.object({
 });
 
 export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
+
+export const sendToolApprovalBodySchema = z.object({
+  resourceId: z.string(),
+  threadId: z.string(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  toolCallId: z.string(),
+  approved: z.boolean(),
+  format: z.string().optional(),
+});
 
 export const abortAgentThreadResponseSchema = z.object({
   aborted: z.boolean(),

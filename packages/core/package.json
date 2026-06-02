@@ -793,6 +793,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
+    "@ai-sdk/alibaba-v6": "npm:@ai-sdk/alibaba@1.0.25",
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.79",
     "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@3.0.76",
     "@ai-sdk/azure": "^2.0.108",
@@ -816,7 +817,7 @@
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.72",
     "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.89",
     "@ast-grep/napi": "^0.40.5",
-    "@babel/core": "^7.29.0",
+    "@babel/core": "^7.29.7",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
