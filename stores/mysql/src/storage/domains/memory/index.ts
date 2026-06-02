@@ -15,11 +15,15 @@ import {
 } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
+  CreateIndexOptions,
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
+  ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
   PaginationArgs,
   PaginationInfo,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
   StorageListMessagesByResourceIdInput,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -29,6 +33,7 @@ import type {
   SwapBufferedReflectionToActiveInput,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
+  ThreadCloneMetadata,
   ThreadSortOptions,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
@@ -36,6 +41,7 @@ import type {
 } from '@mastra/core/storage';
 import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL, generateIndexSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
 
 const OM_TABLE = 'mastra_observational_memory' as const;
@@ -143,11 +149,27 @@ export class MemoryMySQL extends MemoryStorage {
 
   private pool: Pool;
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
+  static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
+
+  constructor({
+    pool,
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    pool: Pool;
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.pool = pool;
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (MemoryMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
@@ -210,6 +232,61 @@ export class MemoryMySQL extends MemoryStorage {
           throw err;
         }
       }
+    }
+
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  static getDefaultIndexDefs(prefix: string = ''): CreateIndexOptions[] {
+    return [
+      {
+        name: `${prefix}mastra_threads_resourceid_createdat_idx`,
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'createdAt DESC'],
+      },
+      {
+        name: `${prefix}mastra_messages_thread_id_createdat_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['thread_id', 'createdAt DESC'],
+      },
+    ];
+  }
+
+  static getExportDDL(): string[] {
+    const statements: string[] = [];
+
+    for (const tableName of [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+        }),
+      );
+    }
+
+    for (const idx of MemoryMySQL.getDefaultIndexDefs()) {
+      statements.push(generateIndexSQL(idx));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return MemoryMySQL.getDefaultIndexDefs('');
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      await this.operations.createIndex(indexDef);
+    }
+  }
+
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
     }
   }
 
@@ -279,6 +356,81 @@ export class MemoryMySQL extends MemoryStorage {
       params.push(limit);
     }
     const [rows] = await this.pool.execute<RowDataPacket[]>(sql, params);
+    return rows as unknown as MessageRow[];
+  }
+
+  /**
+   * Fetches included messages by ID, discovering their thread automatically.
+   * This handles cross-thread includes where the include item doesn't specify a threadId.
+   */
+  private async _getIncludedMessages({
+    include,
+  }: {
+    include: StorageListMessagesInput['include'];
+  }): Promise<MessageRow[] | null> {
+    if (!include || include.length === 0) return null;
+
+    const tableName = formatTableName(TABLE_MESSAGES);
+    const selectColumns = `id, thread_id, content, role, type, createdAt, resourceId`;
+
+    // Phase 1: Batch-fetch metadata for all target messages
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return null;
+
+    const idPlaceholders = targetIds.map(() => '?').join(', ');
+    const [targetRows] = await this.pool.execute<RowDataPacket[]>(
+      `SELECT id, thread_id, createdAt FROM ${tableName} WHERE id IN (${idPlaceholders})`,
+      targetIds,
+    );
+
+    if (!targetRows || targetRows.length === 0) return null;
+
+    const targetMap = new Map(targetRows.map(r => [r.id, { threadId: r.thread_id, createdAt: r.createdAt }]));
+
+    // Phase 2: Build UNION queries for each include item
+    const unionQueries: string[] = [];
+    const params: any[] = [];
+
+    for (const inc of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const target = targetMap.get(id);
+      if (!target) continue;
+
+      // Validate LIMIT values are safe integers
+      const prevLimit = Math.max(0, Math.floor(withPreviousMessages + 1));
+      const nextLimit = Math.max(0, Math.floor(withNextMessages));
+
+      // Fetch the target message plus previous messages
+      unionQueries.push(`(
+        SELECT ${selectColumns}
+        FROM ${tableName} m
+        WHERE m.thread_id = ?
+          AND m.createdAt <= ?
+        ORDER BY m.createdAt DESC, m.id DESC
+        LIMIT ${prevLimit}
+      )`);
+      params.push(target.threadId, target.createdAt);
+
+      // Fetch messages after the target (only if requested)
+      if (nextLimit > 0) {
+        unionQueries.push(`(
+          SELECT ${selectColumns}
+          FROM ${tableName} m
+          WHERE m.thread_id = ?
+            AND m.createdAt > ?
+          ORDER BY m.createdAt ASC, m.id ASC
+          LIMIT ${nextLimit}
+        )`);
+        params.push(target.threadId, target.createdAt);
+      }
+    }
+
+    if (unionQueries.length === 0) return null;
+
+    // Combine queries with UNION ALL and sort
+    const finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY createdAt ASC, id ASC`;
+    const [rows] = await this.pool.execute<RowDataPacket[]>(finalQuery, params);
+
     return rows as unknown as MessageRow[];
   }
 
@@ -368,20 +520,32 @@ export class MemoryMySQL extends MemoryStorage {
     });
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
-      const row = await this.operations.load<ThreadRow>({
-        tableName: TABLE_THREADS,
-        keys: { id: threadId },
-      });
-      return row ? this.mapThread(row) : null;
+      let sql = `SELECT * FROM ${formatTableName(TABLE_THREADS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`;
+      const params: any[] = [threadId];
+
+      if (resourceId !== undefined) {
+        sql += ` AND ${quoteIdentifier('resourceId', 'column name')} = ?`;
+        params.push(resourceId);
+      }
+
+      const [rows] = await this.pool.execute<RowDataPacket[]>(sql, params);
+      const row = rows[0];
+      return row ? this.mapThread(row as ThreadRow) : null;
     } catch (error) {
       throw new MastraError(
         {
           id: 'MYSQL_MEMORY_GET_THREAD_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId, ...(resourceId !== undefined && { resourceId }) },
         },
         error,
       );
@@ -853,6 +1017,183 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
+
+    // Get the source thread
+    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    if (!sourceThread) {
+      throw new MastraError({
+        id: createStorageErrorId('MYSQL', 'CLONE_THREAD', 'SOURCE_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Source thread with id ${sourceThreadId} not found`,
+        details: { sourceThreadId },
+      });
+    }
+
+    // Use provided ID or generate a new one
+    const newThreadId = providedThreadId || randomUUID();
+
+    // Check if the new thread ID already exists
+    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    if (existingThread) {
+      throw new MastraError({
+        id: createStorageErrorId('MYSQL', 'CLONE_THREAD', 'THREAD_EXISTS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread with id ${newThreadId} already exists`,
+        details: { newThreadId },
+      });
+    }
+
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Build message query with filters
+      let messageQuery = `SELECT id, thread_id, content, role, type, createdAt, resourceId
+                          FROM ${formatTableName(TABLE_MESSAGES)} WHERE thread_id = ?`;
+      const messageParams: any[] = [sourceThreadId];
+
+      // Apply date filters
+      if (options?.messageFilter?.startDate) {
+        messageQuery += ` AND createdAt >= ?`;
+        messageParams.push(transformToSqlValue(options.messageFilter.startDate));
+      }
+      if (options?.messageFilter?.endDate) {
+        messageQuery += ` AND createdAt <= ?`;
+        messageParams.push(transformToSqlValue(options.messageFilter.endDate));
+      }
+
+      // Apply message ID filter
+      if (options?.messageFilter?.messageIds && options.messageFilter.messageIds.length > 0) {
+        const placeholders = options.messageFilter.messageIds.map(() => '?').join(', ');
+        messageQuery += ` AND id IN (${placeholders})`;
+        messageParams.push(...options.messageFilter.messageIds);
+      }
+
+      messageQuery += ` ORDER BY createdAt ASC`;
+
+      // Apply message limit (from most recent, so we need to reverse order for limit then sort back)
+      if (options?.messageLimit && options.messageLimit > 0) {
+        const limitQuery = `SELECT * FROM (${messageQuery.replace('ORDER BY createdAt ASC', 'ORDER BY createdAt DESC')} LIMIT ?) AS limited ORDER BY createdAt ASC`;
+        messageParams.push(options.messageLimit);
+        messageQuery = limitQuery;
+      }
+
+      const [sourceMessageRows] = await connection.execute<RowDataPacket[]>(messageQuery, messageParams);
+
+      const now = new Date();
+
+      // Determine the last message ID for clone metadata
+      const lastMessageId =
+        sourceMessageRows.length > 0 ? (sourceMessageRows[sourceMessageRows.length - 1] as any).id : undefined;
+
+      // Create clone metadata
+      const cloneMetadata: ThreadCloneMetadata = {
+        sourceThreadId,
+        clonedAt: now,
+        ...(lastMessageId && { lastMessageId }),
+      };
+
+      // Create the new thread
+      const newThread: StorageThreadType = {
+        id: newThreadId,
+        resourceId: resourceId || sourceThread.resourceId,
+        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
+        metadata: {
+          ...metadata,
+          clone: cloneMetadata,
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Insert the new thread
+      await connection.execute(
+        `INSERT INTO ${formatTableName(TABLE_THREADS)} (id, resourceId, title, metadata, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          newThread.id,
+          newThread.resourceId,
+          newThread.title,
+          newThread.metadata ? JSON.stringify(newThread.metadata) : null,
+          transformToSqlValue(now),
+          transformToSqlValue(now),
+        ],
+      );
+
+      // Clone messages with new IDs
+      const clonedMessages: MastraDBMessage[] = [];
+      const messageIdMap: Record<string, string> = {};
+      const targetResourceId = resourceId || sourceThread.resourceId;
+
+      for (const sourceRow of sourceMessageRows) {
+        const row = sourceRow as MessageRow;
+        const newMessageId = randomUUID();
+        messageIdMap[row.id] = newMessageId;
+
+        let content = row.content;
+        try {
+          content = typeof content === 'string' ? JSON.parse(content) : content;
+        } catch {
+          // use content as-is
+        }
+
+        const msgCreatedAt = parseDateTime(row.createdAt) ?? now;
+
+        await connection.execute(
+          `INSERT INTO ${formatTableName(TABLE_MESSAGES)} (id, thread_id, content, createdAt, role, type, resourceId)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            newMessageId,
+            newThreadId,
+            typeof row.content === 'string' ? row.content : JSON.stringify(row.content),
+            transformToSqlValue(msgCreatedAt),
+            row.role,
+            row.type || 'v2',
+            targetResourceId,
+          ],
+        );
+
+        clonedMessages.push({
+          id: newMessageId,
+          threadId: newThreadId,
+          content: content as MastraMessageContentV2,
+          role: row.role as MastraDBMessage['role'],
+          type: row.type ?? undefined,
+          createdAt: msgCreatedAt,
+          resourceId: targetResourceId,
+        });
+      }
+
+      await connection.commit();
+
+      return {
+        thread: newThread,
+        clonedMessages,
+        messageIdMap,
+      };
+    } catch (error) {
+      await connection.rollback();
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'CLONE_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { sourceThreadId, newThreadId },
+        },
+        error,
+      );
+    } finally {
+      connection.release();
+    }
+  }
+
   async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, filter, orderBy, page = 0, perPage: perPageInput } = args;
     const selectBy = (
@@ -929,6 +1270,44 @@ export class MemoryMySQL extends MemoryStorage {
 
       const whereSql = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
       const tableName = formatTableName(TABLE_MESSAGES);
+
+      // Fast path: perPage=0 with no includes returns empty immediately
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      // Fast path: perPage=0 with includes skips COUNT and main query
+      if (perPage === 0 && include && include.length > 0) {
+        const includeRows = await this._getIncludedMessages({ include });
+        if (!includeRows || includeRows.length === 0) {
+          return {
+            messages: [],
+            total: 0,
+            page,
+            perPage,
+            hasMore: false,
+          };
+        }
+
+        const includeMessages = includeRows.map(row => this.mapMessage(row));
+        const list = new MessageList();
+        list.add(includeMessages, 'memory');
+        const messages = list.get.all.db().sort(comparator);
+
+        return {
+          messages,
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
 
       const [countRows] = await this.pool.execute<RowDataPacket[]>(
         `SELECT COUNT(*) as count FROM ${tableName}${whereSql}`,
@@ -1327,14 +1706,32 @@ export class MemoryMySQL extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const safeLimit = Math.max(1, Math.floor(Number(limit)) || 10);
-      const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ? ORDER BY ${omCol('generationCount')} DESC LIMIT ?`,
-        [lookupKey, String(safeLimit)],
-      );
+
+      const conditions: string[] = [`${omCol('lookupKey')} = ?`];
+      const params: any[] = [lookupKey];
+
+      if (options?.from) {
+        conditions.push(`${omCol('createdAt')} >= ?`);
+        params.push(transformToSqlValue(options.from));
+      }
+      if (options?.to) {
+        conditions.push(`${omCol('createdAt')} <= ?`);
+        params.push(transformToSqlValue(options.to));
+      }
+
+      const whereClause = conditions.join(' AND ');
+      let sql = `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${whereClause} ORDER BY ${omCol('generationCount')} DESC LIMIT ${safeLimit}`;
+
+      if (options?.offset != null && options.offset > 0) {
+        sql += ` OFFSET ${options.offset}`;
+      }
+
+      const [rows] = await this.pool.execute<RowDataPacket[]>(sql, params);
       if (!rows) return [];
       return rows.map(row => this.parseOMRow(row));
     } catch (error) {

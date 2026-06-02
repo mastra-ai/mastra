@@ -6,10 +6,12 @@ import {
   calculatePagination,
   TABLE_WORKSPACES,
   TABLE_WORKSPACE_VERSIONS,
+  TABLE_SCHEMAS,
   WORKSPACES_SCHEMA,
   WORKSPACE_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
 import type {
+  CreateIndexOptions,
   StorageWorkspaceType,
   StorageCreateWorkspaceInput,
   StorageUpdateWorkspaceInput,
@@ -25,6 +27,7 @@ import type {
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -43,16 +46,79 @@ const SNAPSHOT_FIELDS = [
 export class WorkspacesMySQL extends WorkspacesStorage {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_WORKSPACES, TABLE_WORKSPACE_VERSIONS] as const;
+
+  /**
+   * Returns default index definitions for the workspaces domain tables.
+   * Currently no default indexes are defined for workspaces.
+   */
+  static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Exports DDL statements for all managed tables.
+   */
+  static getExportDDL(): string[] {
+    return [
+      generateTableSQL({ tableName: TABLE_WORKSPACES, schema: TABLE_SCHEMAS[TABLE_WORKSPACES] }),
+      generateTableSQL({ tableName: TABLE_WORKSPACE_VERSIONS, schema: TABLE_SCHEMAS[TABLE_WORKSPACE_VERSIONS] }),
+    ];
+  }
+
+  constructor({
+    pool,
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    pool: Pool;
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.pool = pool;
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (WorkspacesMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns default index definitions for the workspaces domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return WorkspacesMySQL.getDefaultIndexDefs('');
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for workspaces.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    // No default indexes for workspaces domain
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_WORKSPACES, schema: WORKSPACES_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_WORKSPACE_VERSIONS, schema: WORKSPACE_VERSIONS_SCHEMA });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {

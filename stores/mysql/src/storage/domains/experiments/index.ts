@@ -3,6 +3,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
+  TABLE_SCHEMAS,
   EXPERIMENTS_SCHEMA,
   EXPERIMENT_RESULTS_SCHEMA,
   ExperimentsStorage,
@@ -10,6 +11,7 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  CreateIndexOptions,
   Experiment,
   ExperimentResult,
   ExperimentReviewCounts,
@@ -25,6 +27,7 @@ import type {
 } from '@mastra/core/storage';
 import type { Pool } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier } from '../utils';
 
 function parseJSON<T>(value: unknown): T | undefined {
@@ -82,16 +85,79 @@ interface ExperimentResultRow {
 export class ExperimentsMySQL extends ExperimentsStorage {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS] as const;
+
+  /**
+   * Returns default index definitions for the experiments domain tables.
+   * Currently no default indexes are defined for experiments.
+   */
+  static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Exports DDL statements for all managed tables.
+   */
+  static getExportDDL(): string[] {
+    return [
+      generateTableSQL({ tableName: TABLE_EXPERIMENTS, schema: TABLE_SCHEMAS[TABLE_EXPERIMENTS] }),
+      generateTableSQL({ tableName: TABLE_EXPERIMENT_RESULTS, schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS] }),
+    ];
+  }
+
+  constructor({
+    pool,
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    pool: Pool;
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.pool = pool;
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (ExperimentsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns default index definitions for the experiments domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return ExperimentsMySQL.getDefaultIndexDefs('');
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for experiments.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    // No default indexes for experiments domain
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_EXPERIMENTS, schema: EXPERIMENTS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: EXPERIMENT_RESULTS_SCHEMA });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -218,6 +284,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       if (input.succeededCount !== undefined) data.succeededCount = input.succeededCount;
       if (input.failedCount !== undefined) data.failedCount = input.failedCount;
       if (input.skippedCount !== undefined) data.skippedCount = input.skippedCount;
+      if (input.totalItems !== undefined) data.totalItems = input.totalItems;
       if (input.startedAt !== undefined) data.startedAt = input.startedAt ?? null;
       if (input.completedAt !== undefined) data.completedAt = input.completedAt ?? null;
       if (input.name !== undefined) data.name = input.name;

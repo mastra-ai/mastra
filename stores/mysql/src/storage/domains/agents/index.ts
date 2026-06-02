@@ -6,6 +6,8 @@ import {
   calculatePagination,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_FAVORITES,
+  TABLE_SCHEMAS,
   AGENTS_SCHEMA,
   AGENT_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
@@ -15,6 +17,7 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
+  CreateIndexOptions,
   AgentVersion,
   CreateVersionInput,
   ListVersionsInput,
@@ -24,16 +27,78 @@ import type {
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
 
 export class AgentsMySQL extends AgentsStorage {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_AGENTS, TABLE_AGENT_VERSIONS] as const;
+
+  /**
+   * Returns default index definitions for the agents domain tables.
+   * Currently no default indexes are defined for agents.
+   */
+  static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Exports DDL statements for all managed tables.
+   */
+  static getExportDDL(): string[] {
+    return [
+      generateTableSQL({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] }),
+      generateTableSQL({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] }),
+    ];
+  }
+
+  constructor({
+    pool,
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    pool: Pool;
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.pool = pool;
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (AgentsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns default index definitions for the agents domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return AgentsMySQL.getDefaultIndexDefs('');
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for agents.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    // No default indexes for agents domain
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async init(): Promise<void> {
@@ -42,13 +107,15 @@ export class AgentsMySQL extends AgentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_AGENTS,
       schema: AGENTS_SCHEMA,
-      ifNotExists: ['status', 'authorId'],
+      ifNotExists: ['status', 'authorId', 'visibility', 'favoriteCount'],
     });
     await this.operations.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
       schema: AGENT_VERSIONS_SCHEMA,
       ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
     });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -74,7 +141,9 @@ export class AgentsMySQL extends AgentsStorage {
       status: (row.status as 'draft' | 'published' | 'archived') ?? 'draft',
       activeVersionId: (row.activeVersionId as string) ?? undefined,
       authorId: (row.authorId as string) ?? undefined,
+      visibility: (row.visibility as 'private' | 'public') ?? undefined,
       metadata: this.safeParseJSON(row.metadata),
+      favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt as string),
       updatedAt: row.updatedAt instanceof Date ? row.updatedAt : new Date(row.updatedAt as string),
     };
@@ -113,7 +182,9 @@ export class AgentsMySQL extends AgentsStorage {
           status: 'draft',
           activeVersionId: null,
           authorId: agent.authorId ?? null,
+          visibility: agent.visibility ?? null,
           metadata: agent.metadata ?? null,
+          favoriteCount: 0,
           createdAt: now,
           updatedAt: now,
         },
@@ -240,7 +311,18 @@ export class AgentsMySQL extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      metadata,
+      status,
+      visibility,
+      entityIds,
+      pinFavoritedFor,
+      favoritedOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -259,17 +341,41 @@ export class AgentsMySQL extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
+      // Empty entityIds is short-circuit: no rows possible
+      if (entityIds && entityIds.length === 0) {
+        return { agents: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      const agentsTable = formatTableName(TABLE_AGENTS);
+      const favoritesTable = formatTableName(TABLE_FAVORITES);
+
+      // Build WHERE conditions
       const conditions: string[] = [];
       const queryParams: any[] = [];
 
+      // Determine if we need a JOIN
+      const joinUserId = pinFavoritedFor;
+      const useJoin = Boolean(joinUserId);
+
       if (status) {
-        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        conditions.push(`a.${quoteIdentifier('status', 'column name')} = ?`);
         queryParams.push(status);
       }
 
       if (authorId !== undefined) {
-        conditions.push(`${quoteIdentifier('authorId', 'column name')} = ?`);
+        conditions.push(`a.${quoteIdentifier('authorId', 'column name')} = ?`);
         queryParams.push(authorId);
+      }
+
+      if (visibility !== undefined) {
+        conditions.push(`a.${quoteIdentifier('visibility', 'column name')} = ?`);
+        queryParams.push(visibility);
+      }
+
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map(() => '?').join(', ');
+        conditions.push(`a.${quoteIdentifier('id', 'column name')} IN (${placeholders})`);
+        queryParams.push(...entityIds);
       }
 
       if (metadata && Object.keys(metadata).length > 0) {
@@ -285,22 +391,39 @@ export class AgentsMySQL extends AgentsStorage {
           }
           if (typeof value === 'string') {
             conditions.push(
-              `JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,
+              `JSON_UNQUOTE(JSON_EXTRACT(a.${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,
             );
             queryParams.push(value);
           } else {
             conditions.push(
-              `JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`,
+              `JSON_EXTRACT(a.${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`,
             );
             queryParams.push(JSON.stringify(value));
           }
         }
       }
 
-      const whereClause =
-        conditions.length > 0 ? { sql: ` WHERE ${conditions.join(' AND ')}`, args: queryParams } : undefined;
+      // Handle favoritedOnly
+      if (useJoin && favoritedOnly) {
+        conditions.push(`sr.${quoteIdentifier('userId', 'column name')} IS NOT NULL`);
+      } else if (favoritedOnly) {
+        // Defensive: favoritedOnly with no userId can never match a real row
+        conditions.push('1=0');
+      }
 
-      const total = await this.operations.loadTotalCount({ tableName: TABLE_AGENTS, whereClause });
+      const joinClause = useJoin
+        ? `LEFT JOIN ${favoritesTable} sr ON sr.${quoteIdentifier('entityType', 'column name')} = 'agent' AND sr.${quoteIdentifier('entityId', 'column name')} = a.${quoteIdentifier('id', 'column name')} AND sr.${quoteIdentifier('userId', 'column name')} = ?`
+        : '';
+
+      const joinParams: any[] = useJoin && joinUserId ? [joinUserId] : [];
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Get total count
+      const [countRows] = await this.pool.query<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM ${agentsTable} a ${joinClause} ${whereClause}`,
+        [...joinParams, ...queryParams],
+      );
+      const total = parseInt(countRows[0]?.count ?? '0', 10);
 
       if (total === 0) {
         return {
@@ -313,13 +436,21 @@ export class AgentsMySQL extends AgentsStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const rows = await this.operations.loadMany<Record<string, unknown>>({
-        tableName: TABLE_AGENTS,
-        whereClause,
-        orderBy: `${quoteIdentifier(field, 'column name')} ${direction}`,
-        offset,
-        limit: limitValue,
-      });
+      const hasMore = perPageInput === false ? false : offset + perPage < total;
+
+      // Build ORDER BY
+      let orderByClause: string;
+      if (useJoin) {
+        // Pin favorited agents first
+        orderByClause = `CASE WHEN sr.${quoteIdentifier('userId', 'column name')} IS NOT NULL THEN 0 ELSE 1 END ASC, a.${quoteIdentifier(field, 'column name')} ${direction}`;
+      } else {
+        orderByClause = `a.${quoteIdentifier(field, 'column name')} ${direction}`;
+      }
+
+      const [rows] = await this.pool.query<RowDataPacket[]>(
+        `SELECT a.* FROM ${agentsTable} a ${joinClause} ${whereClause} ORDER BY ${orderByClause} LIMIT ? OFFSET ?`,
+        [...joinParams, ...queryParams, limitValue, offset],
+      );
 
       const agents = rows.map(row => this.parseRow(row));
 
@@ -328,7 +459,7 @@ export class AgentsMySQL extends AgentsStorage {
         total,
         page,
         perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
+        hasMore,
       };
     } catch (error) {
       if (error instanceof MastraError) throw error;

@@ -1,45 +1,55 @@
 import { MastraError, ErrorCategory, ErrorDomain } from '@mastra/core/error';
 import { MastraCompositeStore } from '@mastra/core/storage';
-import type { StorageDomains } from '@mastra/core/storage';
+import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
 import { createPool } from 'mysql2/promise';
 import type { Pool, PoolOptions } from 'mysql2/promise';
 
 import { AgentsMySQL } from './domains/agents';
+import { BackgroundTasksMySQL } from './domains/background-tasks';
 import { BlobsMySQL } from './domains/blobs';
+import { ChannelsMySQL } from './domains/channels';
 import { DatasetsMySQL } from './domains/datasets';
 import { ExperimentsMySQL } from './domains/experiments';
+import { FavoritesMySQL } from './domains/favorites';
 import { MCPClientsMySQL } from './domains/mcp-clients';
 import { MCPServersMySQL } from './domains/mcp-servers';
 import { MemoryMySQL } from './domains/memory';
 import { ObservabilityMySQL } from './domains/observability';
 import { StoreOperationsMySQL } from './domains/operations';
 import { PromptBlocksMySQL } from './domains/prompt-blocks';
+import { SchedulesMySQL } from './domains/schedules';
 import { ScorerDefinitionsMySQL } from './domains/scorer-definitions';
 import { ScoresMySQL } from './domains/scores';
 import { SkillsMySQL } from './domains/skills';
+import { ToolProviderConnectionsMySQL } from './domains/tool-provider-connections';
 import { WorkflowsMySQL } from './domains/workflows';
 import { WorkspacesMySQL } from './domains/workspaces';
 
 // Export domain classes for direct use with MastraStorage composition
 export {
   AgentsMySQL,
+  BackgroundTasksMySQL,
   BlobsMySQL,
+  ChannelsMySQL,
   DatasetsMySQL,
   ExperimentsMySQL,
+  FavoritesMySQL,
   MCPClientsMySQL,
   MCPServersMySQL,
   MemoryMySQL,
   ObservabilityMySQL,
   StoreOperationsMySQL,
   PromptBlocksMySQL,
+  SchedulesMySQL,
   ScorerDefinitionsMySQL,
   ScoresMySQL,
   SkillsMySQL,
+  ToolProviderConnectionsMySQL,
   WorkflowsMySQL,
   WorkspacesMySQL,
 };
 
-export type MySQLStoreConfig =
+export type MySQLStoreConfig = (
   | {
       connectionString: string;
       database?: string;
@@ -56,7 +66,11 @@ export type MySQLStoreConfig =
       max?: number;
       waitForConnections?: boolean;
       queueLimit?: number;
-    };
+    }
+) & {
+  skipDefaultIndexes?: boolean;
+  indexes?: CreateIndexOptions[];
+};
 
 function validateConfig(config: MySQLStoreConfig): void {
   if ('connectionString' in config) {
@@ -156,7 +170,10 @@ function parseConnectionString(
       sslParam = undefined;
     } else if (['true', '1', 'on'].includes(lowered)) {
       sslParam = {};
-    } else if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    } else if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
       try {
         sslParam = JSON.parse(trimmed);
       } catch {
@@ -184,20 +201,114 @@ export class MySQLStore extends MastraCompositeStore {
 
     const operations = new StoreOperationsMySQL({ pool: this.pool, database });
 
-    const memory = new MemoryMySQL({ pool: this.pool, operations });
-    const workflows = new WorkflowsMySQL({ operations, pool: this.pool });
-    const scores = new ScoresMySQL({ pool: this.pool, operations });
-    const observability = new ObservabilityMySQL({ operations });
-    const agents = new AgentsMySQL({ pool: this.pool, operations });
-    const datasets = new DatasetsMySQL({ pool: this.pool, operations });
-    const experiments = new ExperimentsMySQL({ pool: this.pool, operations });
-    const promptBlocks = new PromptBlocksMySQL({ pool: this.pool, operations });
-    const scorerDefinitions = new ScorerDefinitionsMySQL({ pool: this.pool, operations });
-    const mcpClients = new MCPClientsMySQL({ pool: this.pool, operations });
-    const mcpServers = new MCPServersMySQL({ pool: this.pool, operations });
-    const workspaces = new WorkspacesMySQL({ pool: this.pool, operations });
-    const skills = new SkillsMySQL({ pool: this.pool, operations });
+    const memory = new MemoryMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const workflows = new WorkflowsMySQL({
+      operations,
+      pool: this.pool,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const scores = new ScoresMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const observability = new ObservabilityMySQL({
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const agents = new AgentsMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const datasets = new DatasetsMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const experiments = new ExperimentsMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const promptBlocks = new PromptBlocksMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const scorerDefinitions = new ScorerDefinitionsMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const mcpClients = new MCPClientsMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const mcpServers = new MCPServersMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const workspaces = new WorkspacesMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const skills = new SkillsMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
     const blobs = new BlobsMySQL({ pool: this.pool, operations });
+    const backgroundTasks = new BackgroundTasksMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const channels = new ChannelsMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const favorites = new FavoritesMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const schedules = new SchedulesMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
+    const toolProviderConnections = new ToolProviderConnectionsMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
 
     this.stores = {
       memory,
@@ -214,6 +325,11 @@ export class MySQLStore extends MastraCompositeStore {
       workspaces,
       skills,
       blobs,
+      backgroundTasks,
+      channels,
+      favorites,
+      schedules,
+      toolProviderConnections,
     };
   }
 
@@ -237,4 +353,37 @@ export class MySQLStore extends MastraCompositeStore {
   async close(): Promise<void> {
     await this.pool.end();
   }
+}
+
+/**
+ * All storage domain classes that provide static getExportDDL methods.
+ */
+const ALL_DOMAINS = [
+  MemoryMySQL,
+  ObservabilityMySQL,
+  ScoresMySQL,
+  ScorerDefinitionsMySQL,
+  PromptBlocksMySQL,
+  AgentsMySQL,
+  WorkflowsMySQL,
+  DatasetsMySQL,
+  ExperimentsMySQL,
+  BackgroundTasksMySQL,
+  FavoritesMySQL,
+  ChannelsMySQL,
+  SchedulesMySQL,
+] as const;
+
+/**
+ * Exports the Mastra database schema as MySQL DDL statements.
+ * Does not require a database connection.
+ */
+export function exportSchemas(): string {
+  const statements: string[] = [];
+
+  for (const Domain of ALL_DOMAINS) {
+    statements.push(...Domain.getExportDDL());
+  }
+
+  return statements.join('\n');
 }

@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { StoreOperations, TABLE_SPANS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import { StoreOperations, TABLE_CONFIGS, TABLE_SPANS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES, CreateIndexOptions } from '@mastra/core/storage';
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import {
   formatTableName,
@@ -145,14 +145,13 @@ export class StoreOperationsMySQL extends StoreOperations {
     const tableIdent = formatTableName(tableName, this.database);
 
     const extraConstraints: string[] = [];
-    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-      extraConstraints.push('PRIMARY KEY (workflow_name, run_id)');
-    } else if (tableName === TABLE_SPANS) {
-      extraConstraints.push('PRIMARY KEY (traceId, spanId)');
-    } else if (tableName === ('mastra_dataset_items' as TABLE_NAMES)) {
-      extraConstraints.push(
-        `PRIMARY KEY (${quoteIdentifier('id', 'primary key column')}, ${quoteIdentifier('datasetVersion', 'primary key column')})`,
-      );
+    // Check if this table has a composite primary key defined in TABLE_CONFIGS
+    const tableConfig = TABLE_CONFIGS[tableName];
+    if (tableConfig?.compositePrimaryKey) {
+      const pkColumns = tableConfig.compositePrimaryKey
+        .map(col => quoteIdentifier(col, 'primary key column'))
+        .join(', ');
+      extraConstraints.push(`PRIMARY KEY (${pkColumns})`);
     }
 
     return `CREATE TABLE IF NOT EXISTS ${tableIdent} (${[...columns, ...extraConstraints].filter(Boolean).join(', ')}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
@@ -163,18 +162,17 @@ export class StoreOperationsMySQL extends StoreOperations {
       return true;
     }
 
+    // Check if this column is part of a composite primary key
+    const tableConfig = TABLE_CONFIGS[tableName];
+    if (tableConfig?.compositePrimaryKey?.includes(columnName)) {
+      return true;
+    }
+
     if (tableName === TABLE_WORKFLOW_SNAPSHOT && (columnName === 'workflow_name' || columnName === 'run_id')) {
       return true;
     }
 
     if (tableName === TABLE_SPANS && (columnName === 'traceId' || columnName === 'spanId')) {
-      return true;
-    }
-
-    if (
-      tableName === ('mastra_dataset_items' as TABLE_NAMES) &&
-      (columnName === 'id' || columnName === 'datasetVersion')
-    ) {
       return true;
     }
 
@@ -264,6 +262,47 @@ export class StoreOperationsMySQL extends StoreOperations {
       throw error;
     } finally {
       connection.release();
+    }
+  }
+
+  async createIndex(options: CreateIndexOptions): Promise<void> {
+    const { name, table, columns, unique = false } = options;
+    const tableName = formatTableName(table as TABLE_NAMES, this.database);
+    const indexName = quoteIdentifier(name, 'index name');
+
+    try {
+      // Check if index already exists
+      const db = (await this.getDatabase()) ?? '';
+      const [existing] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT 1 FROM information_schema.STATISTICS 
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?
+         LIMIT 1`,
+        [db, table, name],
+      );
+
+      if (existing.length > 0) {
+        return; // Index already exists
+      }
+
+      // Build column list
+      const columnsStr = columns
+        .map(col => {
+          // Handle DESC/ASC modifiers
+          if (col.includes(' DESC') || col.includes(' ASC')) {
+            const [colName, ...modifiers] = col.split(' ');
+            return `${quoteIdentifier(colName!, 'column name')} ${modifiers.join(' ')}`;
+          }
+          return quoteIdentifier(col, 'column name');
+        })
+        .join(', ');
+
+      const uniqueStr = unique ? 'UNIQUE ' : '';
+      const sql = `CREATE ${uniqueStr}INDEX ${indexName} ON ${tableName} (${columnsStr})`;
+
+      await this.pool.execute(sql);
+    } catch (error) {
+      // Log but don't throw - indexes are performance optimizations
+      console.warn(`Failed to create index ${name}:`, error);
     }
   }
 
@@ -609,4 +648,83 @@ function sanitizeOrderBy(orderBy: string): string {
   });
 
   return clauses.join(', ');
+}
+
+/**
+ * Generates MySQL CREATE TABLE SQL for export.
+ * @param tableName - Table name
+ * @param schema - Column definitions
+ * @param compositePrimaryKey - Optional composite primary key columns
+ */
+export function generateTableSQL({
+  tableName,
+  schema,
+  compositePrimaryKey,
+}: {
+  tableName: TABLE_NAMES;
+  schema: Record<string, StorageColumn>;
+  compositePrimaryKey?: string[];
+}): string {
+  const tableIdent = formatTableName(tableName);
+  const columns = Object.entries(schema).map(([name, def]) => {
+    const colName = quoteIdentifier(name, 'column name');
+    const constraints: string[] = [];
+    if (def.primaryKey && !compositePrimaryKey?.includes(name)) constraints.push('PRIMARY KEY');
+    if (!def.nullable) constraints.push('NOT NULL');
+    const sqlType = mapToMySqlType(def.type);
+    return `${colName} ${sqlType} ${constraints.join(' ')}`;
+  });
+
+  const tableConstraints: string[] = [];
+  if (compositePrimaryKey) {
+    const pkCols = compositePrimaryKey.map(c => quoteIdentifier(c, 'primary key column')).join(', ');
+    tableConstraints.push(`PRIMARY KEY (${pkCols})`);
+  }
+
+  return `CREATE TABLE IF NOT EXISTS ${tableIdent} (\n${[...columns, ...tableConstraints].join(',\n')}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`;
+}
+
+/**
+ * Generates MySQL CREATE INDEX SQL for export.
+ */
+export function generateIndexSQL(options: CreateIndexOptions): string {
+  const { name, table, columns, unique = false } = options;
+  const tableName = formatTableName(table as TABLE_NAMES);
+  const indexName = quoteIdentifier(name, 'index name');
+  const uniqueStr = unique ? 'UNIQUE ' : '';
+
+  const columnsStr = columns
+    .map(col => {
+      if (col.includes(' DESC') || col.includes(' ASC')) {
+        const [colName, ...modifiers] = col.split(' ');
+        return `${quoteIdentifier(colName!, 'column name')} ${modifiers.join(' ')}`;
+      }
+      return quoteIdentifier(col, 'column name');
+    })
+    .join(', ');
+
+  return `CREATE ${uniqueStr}INDEX ${indexName} ON ${tableName} (${columnsStr});`;
+}
+
+function mapToMySqlType(type: StorageColumn['type']): string {
+  switch (type) {
+    case 'text':
+      return 'TEXT';
+    case 'timestamp':
+      return 'DATETIME(3)';
+    case 'bigint':
+      return 'BIGINT';
+    case 'integer':
+      return 'INT';
+    case 'float':
+      return 'FLOAT';
+    case 'boolean':
+      return 'BOOLEAN';
+    case 'uuid':
+      return 'VARCHAR(36)';
+    case 'jsonb':
+      return 'JSON';
+    default:
+      return 'TEXT';
+  }
 }

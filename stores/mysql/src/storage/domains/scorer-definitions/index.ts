@@ -8,6 +8,7 @@ import {
   TABLE_SCORER_DEFINITION_VERSIONS,
   SCORER_DEFINITIONS_SCHEMA,
   SCORER_DEFINITION_VERSIONS_SCHEMA,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageScorerDefinitionType,
@@ -15,6 +16,7 @@ import type {
   StorageUpdateScorerDefinitionInput,
   StorageListScorerDefinitionsInput,
   StorageListScorerDefinitionsOutput,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type {
   ScorerDefinitionVersion,
@@ -25,16 +27,35 @@ import type {
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL, generateIndexSQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
 
 export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
+  static readonly MANAGED_TABLES = [TABLE_SCORER_DEFINITIONS, TABLE_SCORER_DEFINITION_VERSIONS] as const;
+
+  constructor({
+    pool,
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    pool: Pool;
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.pool = pool;
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx =>
+      (ScorerDefinitionsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table),
+    );
   }
 
   async init(): Promise<void> {
@@ -43,6 +64,56 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
       tableName: TABLE_SCORER_DEFINITION_VERSIONS,
       schema: SCORER_DEFINITION_VERSIONS_SCHEMA,
     });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  static getDefaultIndexDefs(prefix: string = ''): CreateIndexOptions[] {
+    return [
+      {
+        name: `${prefix}idx_scorer_definition_versions_def_version`,
+        table: TABLE_SCORER_DEFINITION_VERSIONS,
+        columns: ['scorerDefinitionId', 'versionNumber'],
+        unique: true,
+      },
+    ];
+  }
+
+  static getExportDDL(): string[] {
+    const statements: string[] = [];
+
+    for (const tableName of ScorerDefinitionsMySQL.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+        }),
+      );
+    }
+
+    for (const idx of ScorerDefinitionsMySQL.getDefaultIndexDefs()) {
+      statements.push(generateIndexSQL(idx));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return ScorerDefinitionsMySQL.getDefaultIndexDefs('');
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      await this.operations.createIndex(indexDef);
+    }
+  }
+
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {

@@ -6,10 +6,12 @@ import {
   calculatePagination,
   TABLE_MCP_CLIENTS,
   TABLE_MCP_CLIENT_VERSIONS,
+  TABLE_SCHEMAS,
   MCP_CLIENTS_SCHEMA,
   MCP_CLIENT_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
 import type {
+  CreateIndexOptions,
   StorageMCPClientType,
   StorageCreateMCPClientInput,
   StorageUpdateMCPClientInput,
@@ -25,21 +27,85 @@ import type {
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
 
 export class MCPClientsMySQL extends MCPClientsStorage {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_MCP_CLIENTS, TABLE_MCP_CLIENT_VERSIONS] as const;
+
+  /**
+   * Returns default index definitions for the mcp-clients domain tables.
+   * Currently no default indexes are defined for mcp-clients.
+   */
+  static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Exports DDL statements for all managed tables.
+   */
+  static getExportDDL(): string[] {
+    return [
+      generateTableSQL({ tableName: TABLE_MCP_CLIENTS, schema: TABLE_SCHEMAS[TABLE_MCP_CLIENTS] }),
+      generateTableSQL({ tableName: TABLE_MCP_CLIENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_MCP_CLIENT_VERSIONS] }),
+    ];
+  }
+
+  constructor({
+    pool,
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    pool: Pool;
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.pool = pool;
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (MCPClientsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns default index definitions for the mcp-clients domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return MCPClientsMySQL.getDefaultIndexDefs('');
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for mcp-clients.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    // No default indexes for mcp-clients domain
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_MCP_CLIENTS, schema: MCP_CLIENTS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_MCP_CLIENT_VERSIONS, schema: MCP_CLIENT_VERSIONS_SCHEMA });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {

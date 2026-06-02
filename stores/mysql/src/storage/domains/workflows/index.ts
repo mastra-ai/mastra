@@ -1,9 +1,16 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, WorkflowsStorage, normalizePerPage } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput, UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  CreateIndexOptions,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
 
 interface WorkflowRow {
@@ -40,15 +47,73 @@ function mapWorkflowRow(row: WorkflowRow): WorkflowRun {
 export class WorkflowsMySQL extends WorkflowsStorage {
   private operations: StoreOperationsMySQL;
   private pool: Pool;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ operations, pool }: { operations: StoreOperationsMySQL; pool: Pool }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
+
+  /**
+   * Returns default index definitions for the workflows domain tables.
+   * Currently no default indexes are defined for workflows.
+   */
+  static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Exports DDL statements for all managed tables.
+   */
+  static getExportDDL(): string[] {
+    return [generateTableSQL({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] })];
+  }
+
+  constructor({
+    operations,
+    pool,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    operations: StoreOperationsMySQL;
+    pool: Pool;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.operations = operations;
     this.pool = pool;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (WorkflowsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   supportsConcurrentUpdates(): boolean {
     return true;
+  }
+
+  /**
+   * Returns default index definitions for the workflows domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return WorkflowsMySQL.getDefaultIndexDefs('');
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for workflows.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    // No default indexes for workflows domain
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async init(): Promise<void> {
@@ -59,6 +124,8 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       schema,
       ifNotExists: ['resourceId'],
     });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -288,8 +355,8 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       params.push(resourceId);
     }
     if (status) {
-      conditions.push(`${quoteIdentifier('snapshot', 'column name')} LIKE ?`);
-      params.push(`%"status":"${status}"%`);
+      conditions.push(`JSON_EXTRACT(${quoteIdentifier('snapshot', 'column name')}, '$.status') = ?`);
+      params.push(status);
     }
     if (fromDate) {
       conditions.push(`${quoteIdentifier('createdAt', 'column name')} >= ?`);
@@ -365,9 +432,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       const runs = await this.operations.loadMany<WorkflowRow>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         whereClause: {
-          sql: workflowName
-            ? ' WHERE workflow_name = ? AND run_id = ?'
-            : ' WHERE run_id = ?',
+          sql: workflowName ? ' WHERE workflow_name = ? AND run_id = ?' : ' WHERE run_id = ?',
           args: workflowName ? [workflowName, runId] : [runId],
         },
         orderBy: '`createdAt` DESC',

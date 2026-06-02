@@ -1,15 +1,17 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import {
   ScoresStorage,
   SCORERS_SCHEMA,
+  TABLE_SCHEMAS,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type { PaginationInfo, StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
 import type { Pool } from 'mysql2/promise';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL, generateIndexSQL } from '../operations';
 import { parseDateTime, quoteIdentifier } from '../utils';
 
 type SaveScoreInput = Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
@@ -67,11 +69,27 @@ function parseJSON<T>(value: unknown): T | undefined {
 export class ScoresMySQL extends ScoresStorage {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
+  static readonly MANAGED_TABLES = [TABLE_SCORERS] as const;
+
+  constructor({
+    pool,
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    pool: Pool;
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.pool = pool;
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (ScoresMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
@@ -81,6 +99,53 @@ export class ScoresMySQL extends ScoresStorage {
       schema: SCORERS_SCHEMA,
       ifNotExists: ['spanId', 'requestContext'],
     });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  static getDefaultIndexDefs(prefix: string = ''): CreateIndexOptions[] {
+    return [
+      {
+        name: `${prefix}mastra_scores_trace_id_span_id_created_at_idx`,
+        table: TABLE_SCORERS,
+        columns: ['traceId', 'spanId', 'createdAt DESC'],
+      },
+    ];
+  }
+
+  static getExportDDL(): string[] {
+    const statements: string[] = [];
+
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_SCORERS,
+        schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      }),
+    );
+
+    for (const idx of ScoresMySQL.getDefaultIndexDefs()) {
+      statements.push(generateIndexSQL(idx));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return ScoresMySQL.getDefaultIndexDefs('');
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      await this.operations.createIndex(indexDef);
+    }
+  }
+
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -215,9 +280,9 @@ export class ScoresMySQL extends ScoresStorage {
         pagination: { total: 0, page, perPage, hasMore: false },
       };
     }
-    
+
     const limitValue = perPageInput === false ? total : perPageNormalized;
-    
+
     const rows = await this.operations.loadMany<ScoreRow>({
       tableName: TABLE_SCORERS,
       whereClause,
@@ -225,9 +290,9 @@ export class ScoresMySQL extends ScoresStorage {
       offset,
       limit: limitValue,
     });
-    
+
     const scores = rows.map(row => this.mapScore(row));
-    
+
     return {
       scores,
       pagination: {
@@ -239,9 +304,7 @@ export class ScoresMySQL extends ScoresStorage {
     };
   }
 
-  private buildWhereClause(
-    filters: Record<string, string | undefined>,
-  ): { sql: string; args: any[] } {
+  private buildWhereClause(filters: Record<string, string | undefined>): { sql: string; args: any[] } {
     const conditions: string[] = [];
     const args: any[] = [];
     for (const [column, value] of Object.entries(filters)) {
@@ -266,10 +329,7 @@ export class ScoresMySQL extends ScoresStorage {
     return this.listScoresByScorerId(args);
   }
 
-  async getScoresByRunId(args: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<ListScoresResult> {
+  async getScoresByRunId(args: { runId: string; pagination: StoragePagination }): Promise<ListScoresResult> {
     return this.listScoresByRunId(args);
   }
 
@@ -302,10 +362,7 @@ export class ScoresMySQL extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(
-      this.buildWhereClause({ scorerId, entityId, entityType, source }),
-      pagination,
-    );
+    return this.fetchScores(this.buildWhereClause({ scorerId, entityId, entityType, source }), pagination);
   }
 
   async listScoresByRunId({
@@ -321,10 +378,7 @@ export class ScoresMySQL extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(
-      this.buildWhereClause({ runId, entityId, entityType, source }),
-      pagination,
-    );
+    return this.fetchScores(this.buildWhereClause({ runId, entityId, entityType, source }), pagination);
   }
 
   async listScoresBySpan({
@@ -336,10 +390,7 @@ export class ScoresMySQL extends ScoresStorage {
     spanId: string;
     pagination: StoragePagination;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(
-      this.buildWhereClause({ traceId, spanId }),
-      pagination,
-    );
+    return this.fetchScores(this.buildWhereClause({ traceId, spanId }), pagination);
   }
 
   async listScoresByEntityId({
@@ -353,9 +404,6 @@ export class ScoresMySQL extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(
-      this.buildWhereClause({ entityId, entityType, source }),
-      pagination,
-    );
+    return this.fetchScores(this.buildWhereClause({ entityId, entityType, source }), pagination);
   }
 }

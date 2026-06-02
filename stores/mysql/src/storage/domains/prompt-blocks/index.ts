@@ -8,6 +8,7 @@ import {
   TABLE_PROMPT_BLOCK_VERSIONS,
   PROMPT_BLOCKS_SCHEMA,
   PROMPT_BLOCK_VERSIONS_SCHEMA,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StoragePromptBlockType,
@@ -19,20 +20,38 @@ import type {
   CreatePromptBlockVersionInput,
   ListPromptBlockVersionsInput,
   ListPromptBlockVersionsOutput,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL, generateIndexSQL } from '../operations';
 import { formatTableName, quoteIdentifier } from '../utils';
 
 export class PromptBlocksMySQL extends PromptBlocksStorage {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
+  static readonly MANAGED_TABLES = [TABLE_PROMPT_BLOCKS, TABLE_PROMPT_BLOCK_VERSIONS] as const;
+
+  constructor({
+    pool,
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    pool: Pool;
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.pool = pool;
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (PromptBlocksMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
@@ -43,6 +62,56 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
       schema: PROMPT_BLOCK_VERSIONS_SCHEMA,
       ifNotExists: ['requestContextSchema'],
     });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  static getDefaultIndexDefs(prefix: string = ''): CreateIndexOptions[] {
+    return [
+      {
+        name: `${prefix}idx_prompt_block_versions_block_version`,
+        table: TABLE_PROMPT_BLOCK_VERSIONS,
+        columns: ['blockId', 'versionNumber'],
+        unique: true,
+      },
+    ];
+  }
+
+  static getExportDDL(): string[] {
+    const statements: string[] = [];
+
+    for (const tableName of PromptBlocksMySQL.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+        }),
+      );
+    }
+
+    for (const idx of PromptBlocksMySQL.getDefaultIndexDefs()) {
+      statements.push(generateIndexSQL(idx));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return PromptBlocksMySQL.getDefaultIndexDefs('');
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      await this.operations.createIndex(indexDef);
+    }
+  }
+
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {

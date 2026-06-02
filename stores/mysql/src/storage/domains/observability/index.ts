@@ -4,6 +4,7 @@ import {
   listTracesArgsSchema,
   ObservabilityStorage,
   SPAN_SCHEMA,
+  TABLE_SCHEMAS,
   TABLE_SPANS,
   toTraceSpans,
   TraceStatus,
@@ -18,14 +19,18 @@ import type {
   BatchUpdateSpansArgs,
   BatchCreateSpansArgs,
   CreateSpanArgs,
+  CreateIndexOptions,
   GetSpanArgs,
   GetSpanResponse,
   GetRootSpanArgs,
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
 } from '@mastra/core/storage';
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL, generateIndexSQL } from '../operations';
 import { formatTableName, quoteIdentifier, transformFromSqlRow } from '../utils';
 
 const JSON_SPAN_FIELDS = ['input', 'output', 'attributes', 'metadata', 'error', 'links', 'scope', 'tags'] as const;
@@ -42,10 +47,26 @@ function serializeJsonFields(source: Record<string, any>): Record<string, any> {
 
 export class ObservabilityMySQL extends ObservabilityStorage {
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ operations }: { operations: StoreOperationsMySQL }) {
+  static readonly MANAGED_TABLES = [TABLE_SPANS] as const;
+
+  constructor({
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx =>
+      (ObservabilityMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table),
+    );
   }
 
   async init(): Promise<void> {
@@ -55,6 +76,73 @@ export class ObservabilityMySQL extends ObservabilityStorage {
       schema: SPAN_SCHEMA,
       ifNotExists: Object.keys(SPAN_SCHEMA),
     });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  static getDefaultIndexDefs(prefix: string = ''): CreateIndexOptions[] {
+    return [
+      {
+        name: `${prefix}mastra_ai_spans_traceid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['traceId', 'startedAt DESC'],
+      },
+      {
+        name: `${prefix}mastra_ai_spans_parentspanid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['parentSpanId', 'startedAt DESC'],
+      },
+      {
+        name: `${prefix}mastra_ai_spans_name_idx`,
+        table: TABLE_SPANS,
+        columns: ['name'],
+      },
+      {
+        name: `${prefix}mastra_ai_spans_spantype_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['spanType', 'startedAt DESC'],
+      },
+      {
+        name: `${prefix}mastra_ai_spans_root_spans_idx`,
+        table: TABLE_SPANS,
+        columns: ['startedAt DESC'],
+      },
+    ];
+  }
+
+  static getExportDDL(): string[] {
+    const statements: string[] = [];
+
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_SPANS,
+        schema: TABLE_SCHEMAS[TABLE_SPANS],
+      }),
+    );
+
+    for (const idx of ObservabilityMySQL.getDefaultIndexDefs()) {
+      statements.push(generateIndexSQL(idx));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return ObservabilityMySQL.getDefaultIndexDefs('');
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      await this.operations.createIndex(indexDef);
+    }
+  }
+
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -184,6 +272,57 @@ export class ObservabilityMySQL extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('MYSQL', 'GET_TRACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { traceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getStructure(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const spans = await this.operations.loadMany<LightSpanRecord>({
+        tableName: TABLE_SPANS,
+        whereClause: {
+          sql: ` WHERE ${quoteIdentifier('traceId', 'column name')} = ?`,
+          args: [traceId],
+        },
+        orderBy: `${quoteIdentifier('startedAt', 'column name')} ASC`,
+      });
+
+      if (!spans || spans.length === 0) {
+        return null;
+      }
+
+      // Strip heavy fields (input, output, attributes, metadata, tags, links) for lightweight response
+      const lightSpans: LightSpanRecord[] = spans.map(span => ({
+        traceId: span.traceId,
+        spanId: span.spanId,
+        parentSpanId: span.parentSpanId,
+        name: span.name,
+        entityType: span.entityType,
+        entityId: span.entityId,
+        entityName: span.entityName,
+        spanType: span.spanType,
+        error: span.error,
+        isEvent: span.isEvent,
+        startedAt: span.startedAt,
+        endedAt: span.endedAt,
+        createdAt: span.createdAt,
+        updatedAt: span.updatedAt,
+      }));
+
+      return {
+        traceId,
+        spans: lightSpans,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_STRUCTURE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { traceId },
@@ -343,10 +482,14 @@ export class ObservabilityMySQL extends ObservabilityStorage {
               });
             }
             if (typeof value === 'string') {
-              conditions.push(`JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`);
+              conditions.push(
+                `JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,
+              );
               queryArgs.push(value);
             } else {
-              conditions.push(`JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`);
+              conditions.push(
+                `JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}') = CAST(? AS JSON)`,
+              );
               queryArgs.push(JSON.stringify(value));
             }
           }

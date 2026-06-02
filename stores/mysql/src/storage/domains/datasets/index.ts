@@ -6,6 +6,7 @@ import {
   TABLE_DATASET_VERSIONS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
+  TABLE_SCHEMAS,
   DATASETS_SCHEMA,
   DATASET_ITEMS_SCHEMA,
   DATASET_VERSIONS_SCHEMA,
@@ -14,6 +15,7 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  CreateIndexOptions,
   DatasetRecord,
   DatasetItem,
   DatasetItemRow,
@@ -33,6 +35,7 @@ import type {
 } from '@mastra/core/storage';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
+import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
 
 function parseJSON<T>(value: unknown): T | undefined {
@@ -56,17 +59,85 @@ function jsonArg(value: unknown): string | null {
 export class DatasetsMySQL extends DatasetsStorage {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
+
+  /**
+   * Returns default index definitions for the datasets domain tables.
+   * Currently no default indexes are defined for datasets.
+   */
+  static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Exports DDL statements for all managed tables.
+   */
+  static getExportDDL(): string[] {
+    return [
+      generateTableSQL({ tableName: TABLE_DATASETS, schema: TABLE_SCHEMAS[TABLE_DATASETS] }),
+      generateTableSQL({
+        tableName: TABLE_DATASET_ITEMS,
+        schema: TABLE_SCHEMAS[TABLE_DATASET_ITEMS],
+        compositePrimaryKey: ['id', 'datasetVersion'],
+      }),
+      generateTableSQL({ tableName: TABLE_DATASET_VERSIONS, schema: TABLE_SCHEMAS[TABLE_DATASET_VERSIONS] }),
+    ];
+  }
+
+  constructor({
+    pool,
+    operations,
+    skipDefaultIndexes,
+    indexes,
+  }: {
+    pool: Pool;
+    operations: StoreOperationsMySQL;
+    skipDefaultIndexes?: boolean;
+    indexes?: CreateIndexOptions[];
+  }) {
     super();
     this.pool = pool;
     this.operations = operations;
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    this.#indexes = indexes?.filter(idx => (DatasetsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns default index definitions for the datasets domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return DatasetsMySQL.getDefaultIndexDefs('');
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for datasets.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+    // No default indexes for datasets domain
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) return;
+    for (const indexDef of this.#indexes) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_DATASETS, schema: DATASETS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_DATASET_ITEMS as any, schema: DATASET_ITEMS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: DATASET_VERSIONS_SCHEMA });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -209,8 +280,10 @@ export class DatasetsMySQL extends DatasetsStorage {
       if (args.name !== undefined) data.name = args.name;
       if (args.description !== undefined) data.description = args.description;
       if (args.metadata !== undefined) data.metadata = JSON.stringify(args.metadata);
-      if (args.inputSchema !== undefined) data.inputSchema = args.inputSchema === null ? null : JSON.stringify(args.inputSchema);
-      if (args.groundTruthSchema !== undefined) data.groundTruthSchema = args.groundTruthSchema === null ? null : JSON.stringify(args.groundTruthSchema);
+      if (args.inputSchema !== undefined)
+        data.inputSchema = args.inputSchema === null ? null : JSON.stringify(args.inputSchema);
+      if (args.groundTruthSchema !== undefined)
+        data.groundTruthSchema = args.groundTruthSchema === null ? null : JSON.stringify(args.groundTruthSchema);
 
       await this.operations.update({
         tableName: TABLE_DATASETS,
@@ -224,7 +297,8 @@ export class DatasetsMySQL extends DatasetsStorage {
         description: args.description ?? existing.description,
         metadata: args.metadata ?? existing.metadata,
         inputSchema: (args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema) ?? undefined,
-        groundTruthSchema: (args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema) ?? undefined,
+        groundTruthSchema:
+          (args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema) ?? undefined,
         updatedAt: data.updatedAt,
       };
     } catch (error) {
@@ -262,8 +336,14 @@ export class DatasetsMySQL extends DatasetsStorage {
         // experiments table may not exist
       }
 
-      await connection.execute(`DELETE FROM ${formatTableName(TABLE_DATASET_VERSIONS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`, [id]);
-      await connection.execute(`DELETE FROM ${formatTableName(TABLE_DATASET_ITEMS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`, [id]);
+      await connection.execute(
+        `DELETE FROM ${formatTableName(TABLE_DATASET_VERSIONS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`,
+        [id],
+      );
+      await connection.execute(
+        `DELETE FROM ${formatTableName(TABLE_DATASET_ITEMS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`,
+        [id],
+      );
       await connection.execute(`DELETE FROM ${formatTableName(TABLE_DATASETS)} WHERE id = ?`, [id]);
 
       await connection.commit();
@@ -344,10 +424,9 @@ export class DatasetsMySQL extends DatasetsStorage {
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
 
       // Bump version
-      await connection.execute(
-        `UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`,
-        [args.datasetId],
-      );
+      await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
+        args.datasetId,
+      ]);
 
       // Get new version
       const [versionRows] = await connection.execute<RowDataPacket[]>(
@@ -359,7 +438,16 @@ export class DatasetsMySQL extends DatasetsStorage {
       // Insert item
       await connection.execute(
         `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
-        [id, args.datasetId, newVersion, jsonArg(args.input), jsonArg(args.groundTruth), jsonArg(args.metadata), transformToSqlValue(now), transformToSqlValue(now)],
+        [
+          id,
+          args.datasetId,
+          newVersion,
+          jsonArg(args.input),
+          jsonArg(args.groundTruth),
+          jsonArg(args.metadata),
+          transformToSqlValue(now),
+          transformToSqlValue(now),
+        ],
       );
 
       // Insert dataset version record
@@ -430,10 +518,9 @@ export class DatasetsMySQL extends DatasetsStorage {
       const mergedMetadata = args.metadata ?? existing.metadata;
 
       // Bump version
-      await connection.execute(
-        `UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`,
-        [args.datasetId],
-      );
+      await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
+        args.datasetId,
+      ]);
 
       const [versionRows] = await connection.execute<RowDataPacket[]>(
         `SELECT \`version\` FROM ${tableDatasetsName} WHERE id = ?`,
@@ -450,7 +537,16 @@ export class DatasetsMySQL extends DatasetsStorage {
       // Insert new row
       await connection.execute(
         `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
-        [args.id, args.datasetId, newVersion, jsonArg(mergedInput), jsonArg(mergedGroundTruth), jsonArg(mergedMetadata), transformToSqlValue(existing.createdAt), transformToSqlValue(now)],
+        [
+          args.id,
+          args.datasetId,
+          newVersion,
+          jsonArg(mergedInput),
+          jsonArg(mergedGroundTruth),
+          jsonArg(mergedMetadata),
+          transformToSqlValue(existing.createdAt),
+          transformToSqlValue(now),
+        ],
       );
 
       // Insert dataset version record
@@ -508,10 +604,9 @@ export class DatasetsMySQL extends DatasetsStorage {
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
 
       // Bump version
-      await connection.execute(
-        `UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`,
-        [datasetId],
-      );
+      await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
+        datasetId,
+      ]);
 
       const [versionRows] = await connection.execute<RowDataPacket[]>(
         `SELECT \`version\` FROM ${tableDatasetsName} WHERE id = ?`,
@@ -528,7 +623,16 @@ export class DatasetsMySQL extends DatasetsStorage {
       // Insert tombstone
       await connection.execute(
         `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)`,
-        [id, datasetId, newVersion, jsonArg(existing.input), jsonArg(existing.groundTruth), jsonArg(existing.metadata), transformToSqlValue(existing.createdAt), transformToSqlValue(now)],
+        [
+          id,
+          datasetId,
+          newVersion,
+          jsonArg(existing.input),
+          jsonArg(existing.groundTruth),
+          jsonArg(existing.metadata),
+          transformToSqlValue(existing.createdAt),
+          transformToSqlValue(now),
+        ],
       );
 
       // Insert dataset version record
@@ -803,10 +907,9 @@ export class DatasetsMySQL extends DatasetsStorage {
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
 
       // Single version increment
-      await connection.execute(
-        `UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`,
-        [input.datasetId],
-      );
+      await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
+        input.datasetId,
+      ]);
 
       const [versionRows] = await connection.execute<RowDataPacket[]>(
         `SELECT \`version\` FROM ${tableDatasetsName} WHERE id = ?`,
@@ -821,7 +924,16 @@ export class DatasetsMySQL extends DatasetsStorage {
 
         await connection.execute(
           `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
-          [id, input.datasetId, newVersion, jsonArg(itemInput.input), jsonArg(itemInput.groundTruth), jsonArg(itemInput.metadata), transformToSqlValue(now), transformToSqlValue(now)],
+          [
+            id,
+            input.datasetId,
+            newVersion,
+            jsonArg(itemInput.input),
+            jsonArg(itemInput.groundTruth),
+            jsonArg(itemInput.metadata),
+            transformToSqlValue(now),
+            transformToSqlValue(now),
+          ],
         );
       }
 
@@ -892,10 +1004,9 @@ export class DatasetsMySQL extends DatasetsStorage {
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
 
       // Single version increment
-      await connection.execute(
-        `UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`,
-        [input.datasetId],
-      );
+      await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
+        input.datasetId,
+      ]);
 
       const [versionRows] = await connection.execute<RowDataPacket[]>(
         `SELECT \`version\` FROM ${tableDatasetsName} WHERE id = ?`,
@@ -913,7 +1024,16 @@ export class DatasetsMySQL extends DatasetsStorage {
         // Insert tombstone
         await connection.execute(
           `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)`,
-          [item.id, input.datasetId, newVersion, jsonArg(item.input), jsonArg(item.groundTruth), jsonArg(item.metadata), transformToSqlValue(item.createdAt), transformToSqlValue(now)],
+          [
+            item.id,
+            input.datasetId,
+            newVersion,
+            jsonArg(item.input),
+            jsonArg(item.groundTruth),
+            jsonArg(item.metadata),
+            transformToSqlValue(item.createdAt),
+            transformToSqlValue(now),
+          ],
         );
       }
 
