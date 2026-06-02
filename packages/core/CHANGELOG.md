@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.38.0-alpha.9
+
+### Patch Changes
+
+- Fixed `filterMessagesForPersistence` unconditionally trimming whitespace from text parts, which caused spaces between words to be lost when text parts were split by token boundaries in the streaming span-based persistence. The trim now only applies when working memory tags are actually stripped. ([#17404](https://github.com/mastra-ai/mastra/pull/17404))
+
+- Fixes a crash where OpenAI rejects resumed tool-approval requests with `AI_APICallError: Duplicate item found with id rs_*`. ([#17439](https://github.com/mastra-ai/mastra/pull/17439))
+
+  The same message stored in PostgreSQL's `jsonb` column (workflow snapshot) and `text` column (messages) could have different JSON key orders, causing the deduplication check to treat them as different messages and send the same reasoning item twice. Both representations now compare equal regardless of key order.
+
 ## 1.38.0-alpha.8
 
 ### Minor Changes

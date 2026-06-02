@@ -1,5 +1,17 @@
 # mastra
 
+## 1.11.0-alpha.9
+
+### Patch Changes
+
+- Agent Builder errors are friendlier and easier to recover from. On a stream error, the chat shows a readable error banner instead of raw JSON, with the full payload behind a Details toggle. The "Reasoning…" indicator stays visible during retry pauses, and a new Try again button resubmits your last prompt in the same conversation. ([#17481](https://github.com/mastra-ai/mastra/pull/17481))
+
+  Agent Builder also writes complete, in-budget system prompts more reliably. Builder-generated instructions have a hard 4,000-character limit; over-limit drafts are rejected instead of silently clipped, so the agent never ships a half-truncated prompt.
+
+- Updated dependencies [[`850af77`](https://github.com/mastra-ai/mastra/commit/850af7779cb87c350804488734544a5b1843de25), [`7b0d34c`](https://github.com/mastra-ai/mastra/commit/7b0d34cfe4a2fce22ac86ae17404685ff67a2ddb)]:
+  - @mastra/core@1.38.0-alpha.9
+  - @mastra/deployer@1.38.0-alpha.9
+
 ## 1.11.0-alpha.8
 
 ### Patch Changes
