@@ -8,7 +8,7 @@ import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
 import { ensureAnthropicCompatibleMessages, sanitizeOrphanedToolPairs } from '../utils/provider-compat';
-import { getResponseProviderItemKey } from '../utils/response-item-metadata';
+import { getResponseProviderItemKey, getResponseProviderItemKeys } from '../utils/response-item-metadata';
 
 /**
  * Merges text parts that share the same OpenAI-compatible itemId.
@@ -79,6 +79,40 @@ function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T
   }
 
   return result;
+}
+
+function dedupeAssistantResponseItemIds(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+  const seenPreviousMessages = new Set<string>();
+
+  return messages
+    .map(message => {
+      if (message.role !== 'assistant') return message;
+
+      const messageItemKeys = new Set<string>();
+      const parts = message.parts.filter(part => {
+        const itemKeys = getResponseProviderItemKeys(
+          (part as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+        ).concat(
+          getResponseProviderItemKeys(
+            (part as { callProviderMetadata?: Record<string, unknown> }).callProviderMetadata,
+          ),
+        );
+        if (itemKeys.length === 0) return true;
+
+        for (const itemKey of itemKeys) {
+          messageItemKeys.add(itemKey);
+        }
+
+        return !itemKeys.some(itemKey => seenPreviousMessages.has(itemKey));
+      });
+
+      for (const itemKey of messageItemKeys) {
+        seenPreviousMessages.add(itemKey);
+      }
+
+      return parts.length > 0 ? { ...message, parts } : false;
+    })
+    .filter((message): message is AIV5Type.UIMessage => Boolean(message));
 }
 
 /**
@@ -237,7 +271,7 @@ export function sanitizeV5UIMessages(
       return sanitized;
     })
     .filter((m): m is AIV5Type.UIMessage => Boolean(m));
-  return msgs;
+  return dedupeAssistantResponseItemIds(msgs);
 }
 
 /**

@@ -124,4 +124,214 @@ describe('OpenAI reasoning — memory-loaded multi-step conversations', () => {
     expect(reasoningParts.length).toBeGreaterThan(0);
     expect(reasoningParts[0].providerOptions?.openai?.itemId).toBe('rs_001ba7b2523b3aed0069de7872a800');
   });
+
+  it('should not duplicate OpenAI provider tool-call response item ids when persisted history is replayed on the next turn', () => {
+    const duplicateToolCallItemId = 'fc_0bdc537ceaa1bb34006a1ea21248108197b5db6c60dd4f4d77';
+    const list = new MessageList();
+
+    list.add(
+      {
+        id: 'mem-user-tool-search',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Search the web for Mastra updates.' }] },
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        threadId: 'thread-duplicate-fc',
+      },
+      'memory',
+    );
+
+    list.add(
+      {
+        id: 'mem-assistant-tool-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_search_1',
+                toolName: 'web_search_preview',
+                args: { query: 'Mastra updates' },
+                result: { results: [{ title: 'Mastra updates' }] },
+              },
+              providerExecuted: true,
+              providerMetadata: {
+                openai: {
+                  itemId: duplicateToolCallItemId,
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'I searched for Mastra updates.',
+              providerMetadata: {
+                openai: {
+                  itemId: 'msg_after_first_tool_call',
+                },
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        threadId: 'thread-duplicate-fc',
+      },
+      'memory',
+    );
+
+    list.add(
+      {
+        id: 'mem-assistant-tool-2',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_search_1',
+                toolName: 'web_search_preview',
+                args: { query: 'Mastra updates' },
+                result: { results: [{ title: 'Mastra updates' }] },
+              },
+              providerExecuted: true,
+              providerMetadata: {
+                openai: {
+                  itemId: duplicateToolCallItemId,
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'The search found recent Responses API notes.',
+              providerMetadata: {
+                openai: {
+                  itemId: 'msg_after_duplicate_tool_call',
+                },
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:02Z'),
+        threadId: 'thread-duplicate-fc',
+      },
+      'memory',
+    );
+
+    list.add({ role: 'user', content: 'Can you continue from that?' }, 'input');
+
+    const prompt = list.get.all.aiV5.prompt();
+    const assistantParts = prompt.flatMap(message =>
+      message.role === 'assistant' && Array.isArray(message.content) ? message.content : [],
+    );
+    const toolCallItemIds = assistantParts
+      .filter((part: any) => part.type === 'tool-call')
+      .map((part: any) => part.providerOptions?.openai?.itemId)
+      .filter(Boolean);
+
+    expect(toolCallItemIds).toContain(duplicateToolCallItemId);
+    expect(toolCallItemIds.filter(itemId => itemId === duplicateToolCallItemId)).toHaveLength(1);
+  });
+
+  it('should not duplicate OpenAI reasoning response item ids when persisted history is replayed on the next turn', () => {
+    const duplicateReasoningItemId = 'rs_024f66eee433e506006a1e8beb18308190a6d6e394596f7bed';
+    const list = new MessageList();
+
+    list.add(
+      {
+        id: 'mem-user-search',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Search for the latest Mastra release notes.' }] },
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        threadId: 'thread-duplicate-rs',
+      },
+      'memory',
+    );
+
+    list.add(
+      {
+        id: 'mem-assistant-reasoning-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+              providerMetadata: {
+                openai: {
+                  itemId: duplicateReasoningItemId,
+                  reasoningEncryptedContent: null,
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'I found the release notes.',
+              providerMetadata: {
+                openai: {
+                  itemId: 'msg_024f66eee433e506006a1e8beb18308190a6d6e394596f7bed',
+                },
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        threadId: 'thread-duplicate-rs',
+      },
+      'memory',
+    );
+
+    list.add(
+      {
+        id: 'mem-assistant-reasoning-2',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+              providerMetadata: {
+                openai: {
+                  itemId: duplicateReasoningItemId,
+                  reasoningEncryptedContent: null,
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'The release notes mention the Responses API changes.',
+              providerMetadata: {
+                openai: {
+                  itemId: 'msg_after_duplicate_reasoning',
+                },
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:02Z'),
+        threadId: 'thread-duplicate-rs',
+      },
+      'memory',
+    );
+
+    list.add({ role: 'user', content: 'Can you continue from that?' }, 'input');
+
+    const prompt = list.get.all.aiV5.prompt();
+    const assistantParts = prompt.flatMap(message =>
+      message.role === 'assistant' && Array.isArray(message.content) ? message.content : [],
+    );
+    const reasoningItemIds = assistantParts
+      .filter((part: any) => part.type === 'reasoning')
+      .map((part: any) => part.providerOptions?.openai?.itemId)
+      .filter(Boolean);
+
+    expect(reasoningItemIds).toContain(duplicateReasoningItemId);
+    expect(reasoningItemIds.filter(itemId => itemId === duplicateReasoningItemId)).toHaveLength(1);
+  });
 });

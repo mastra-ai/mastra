@@ -874,4 +874,34 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
       'According to recent sources, the answer is 42. This was confirmed by multiple studies.',
     );
   });
+
+  it('should preserve same-message tool parts with matching provider response item ids', () => {
+    const msg = makeMessage([
+      {
+        type: 'tool-web_search_preview',
+        toolCallId: 'call-1',
+        state: 'output-available',
+        input: { query: 'first' },
+        output: { results: [] },
+        providerExecuted: true,
+        callProviderMetadata: { openai: { itemId: 'fc_same_message' } },
+      } as any,
+      {
+        type: 'tool-web_search_preview',
+        toolCallId: 'call-2',
+        state: 'output-available',
+        input: { query: 'second' },
+        output: { results: [] },
+        providerExecuted: true,
+        callProviderMetadata: { openai: { itemId: 'fc_same_message' } },
+      } as any,
+    ]);
+
+    const result = sanitizeV5UIMessages([msg], false);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(2);
+    expect((result[0]!.parts[0] as any).toolCallId).toBe('call-1');
+    expect((result[0]!.parts[1] as any).toolCallId).toBe('call-2');
+  });
 });
