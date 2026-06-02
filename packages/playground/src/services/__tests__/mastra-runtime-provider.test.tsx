@@ -138,7 +138,7 @@ describe('MastraRuntimeProvider', () => {
     delete (window as any).MASTRA_AGENT_SIGNALS;
   });
 
-  it('enables thread signals by default', () => {
+  it('opts Playground into thread signals by default', () => {
     render(
       <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
         <div />
