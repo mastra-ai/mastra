@@ -974,7 +974,11 @@ export class AgentThreadStreamRuntime {
 
     if (runId) {
       activeRecord ??= state.threadRunsById.get(runId);
-      if (activeRecord?.output.status === 'running') {
+      // A run is "blocking" while it is running or suspended awaiting tool approval. Both
+      // states mean the run has already made model requests, so a follow-up signal must be
+      // queued as a pending (next-turn) signal rather than folded into a not-yet-started
+      // first request via the pre-run path below.
+      if (activeRecord && this.#isThreadBlockingRun(state, activeRecord)) {
         key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
         if (activeRecord.agent.id === agent.id) {
           // Same-agent active run: queue the signal for in-loop draining so it becomes
