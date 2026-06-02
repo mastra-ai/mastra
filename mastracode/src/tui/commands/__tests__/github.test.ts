@@ -22,7 +22,11 @@ vi.mock('../../modal-question.js', () => ({
 function createContext() {
   const sendSignal = vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
   const ctx = {
-    state: { ui: { requestRender: vi.fn() }, projectInfo: { rootPath: '/repo' } },
+    state: {
+      ui: { requestRender: vi.fn() },
+      projectInfo: { rootPath: '/repo' },
+      options: { githubSignals: { isPollingThread: vi.fn(() => false), getPollIntervalMs: vi.fn(() => 60_000) } },
+    },
     harness: {
       sendSignal,
       getCurrentThreadId: vi.fn(() => 'thread-1'),
@@ -150,9 +154,11 @@ describe('handleGithubCommand', () => {
 
   it('shows GitHub subscription debug information for the current thread', async () => {
     const { ctx, sendSignal } = createContext();
+    vi.mocked((ctx.state as any).options.githubSignals.isPollingThread).mockReturnValue(true);
     vi.mocked((ctx.harness as any).listThreads).mockResolvedValue([
       {
         id: 'thread-1',
+        resourceId: 'resource-1',
         metadata: {
           mastra: {
             githubSignals: {
@@ -188,7 +194,7 @@ describe('handleGithubCommand', () => {
         hour12: true,
       }).format(new Date(value));
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      `GitHub Signals debug for thread-1:\n- mastra-ai/mastra#17447 sync=success lastPoll=${formatLocal('2026-06-02T18:03:12Z')} (githubUpdated=${formatLocal('2026-06-02T18:01:58Z')}, ci=failure, merge=dirty)\n  lastNotification=pull-request-ci-failure/high at ${formatLocal('2026-06-02T18:03:13Z')}: mastra-ai/mastra#17447 has failing CI: Quality assurance`,
+      `GitHub Signals debug for thread-1: 1 subscription, polling=active, interval=60s\n- mastra-ai/mastra#17447 sync=success lastPoll=${formatLocal('2026-06-02T18:03:12Z')} (githubUpdated=${formatLocal('2026-06-02T18:01:58Z')}, ci=failure, merge=dirty)\n  lastNotification=pull-request-ci-failure/high at ${formatLocal('2026-06-02T18:03:13Z')}: mastra-ai/mastra#17447 has failing CI: Quality assurance`,
     );
   });
 

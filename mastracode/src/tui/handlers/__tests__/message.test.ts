@@ -189,8 +189,11 @@ describe('handleMessageUpdate system reminders', () => {
     expect(state.chatContainer.children).toHaveLength(1);
     const component = state.chatContainer.children[0];
     expect(component).toBeInstanceOf(NotificationComponent);
-    const rendered = stripAnsi((component as NotificationComponent).render(80).join('\n'));
-    expect(rendered).toContain('Notification: github: ci-status');
+    const rendered = stripAnsi((component as NotificationComponent).render(100).join('\n'));
+    expect(rendered).toContain('notification from github');
+    expect(rendered).toContain('╭');
+    expect(rendered).toContain('╰');
+    expect(rendered).toContain('high · ci-status · delivered');
     expect(rendered).toContain('CI failed on main');
   });
 

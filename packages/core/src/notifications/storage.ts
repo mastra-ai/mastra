@@ -132,7 +132,10 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
       .filter(record => !input.agentId || record.agentId === input.agentId)
       .filter(
         record =>
-          !search || record.summary.toLowerCase().includes(search) || record.kind.toLowerCase().includes(search),
+          !search ||
+          record.summary.toLowerCase().includes(search) ||
+          record.kind.toLowerCase().includes(search) ||
+          record.source.toLowerCase().includes(search),
       )
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     return results.slice(0, input.limit ?? results.length).map(cloneRecord);

@@ -75,6 +75,8 @@ type HarnessStreamState = {
 };
 
 type HarnessSendNotificationSignalOptions = {
+  resourceId?: string;
+  threadId?: string;
   ifActive?: SendAgentNotificationSignalOptions['ifActive'];
   ifIdle?: SendAgentNotificationSignalOptions['ifIdle'];
   tracingContext?: TracingContext;
@@ -1697,16 +1699,20 @@ export class Harness<TState = {}> {
     this.abortRequested = false;
   }
 
-  private getAgentThreadSubscriptionKey(agent: Agent, threadId: string): string {
-    return `${agent.id}:${this.resourceId}:${threadId}`;
+  private getAgentThreadSubscriptionKey(agent: Agent, threadId: string, resourceId = this.resourceId): string {
+    return `${agent.id}:${resourceId}:${threadId}`;
   }
 
-  private async ensureAgentThreadSubscription(agent: Agent, threadId: string): Promise<void> {
-    const key = this.getAgentThreadSubscriptionKey(agent, threadId);
+  private async ensureAgentThreadSubscription(
+    agent: Agent,
+    threadId: string,
+    resourceId = this.resourceId,
+  ): Promise<void> {
+    const key = this.getAgentThreadSubscriptionKey(agent, threadId, resourceId);
     if (this.agentThreadSubscriptionKey === key && this.agentThreadSubscription) return;
 
     this.cleanupAgentThreadSubscription();
-    const subscription = await agent.subscribeToThread({ resourceId: this.resourceId, threadId });
+    const subscription = await agent.subscribeToThread({ resourceId, threadId });
     this.agentThreadSubscription = subscription;
     this.agentThreadSubscriptionKey = key;
     void this.processSubscribedThreadStream(subscription);
@@ -1756,14 +1762,20 @@ export class Harness<TState = {}> {
 
   private async buildAgentMessageStreamOptions({
     requestContext: requestContextInput,
+    resourceId,
+    threadId,
     tracingContext,
     tracingOptions,
   }: {
     requestContext?: RequestContext;
+    resourceId?: string;
+    threadId?: string;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<Record<string, unknown>> {
-    if (!this.currentThreadId) {
+    const memoryThreadId = threadId ?? this.currentThreadId;
+    const memoryResourceId = resourceId ?? this.resourceId;
+    if (!memoryThreadId) {
       throw new Error('Cannot build stream options without a current thread');
     }
 
@@ -1772,7 +1784,7 @@ export class Harness<TState = {}> {
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const streamOptions: Record<string, unknown> = {
-      memory: { thread: this.currentThreadId, resource: this.resourceId },
+      memory: { thread: memoryThreadId, resource: memoryResourceId },
       abortSignal: this.abortController.signal,
       requestContext,
       maxSteps: 1000,
@@ -1992,18 +2004,23 @@ export class Harness<TState = {}> {
     options: HarnessSendNotificationSignalOptions = {},
   ): Promise<SendAgentNotificationSignalResult> {
     const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
-    if (!this.currentThreadId) {
+    if (!this.currentThreadId && !options.threadId) {
       const thread = await this.createThread();
       this.currentThreadId = thread.id;
     }
 
     const agent = this.getCurrentAgent();
-    await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
+    const targetThreadId = options.threadId ?? this.currentThreadId;
+    const targetResourceId = options.resourceId ?? this.resourceId;
+    if (!targetThreadId) {
+      throw new Error('Cannot send notification signal without a thread');
+    }
+    await this.ensureAgentThreadSubscription(agent, targetThreadId, targetResourceId);
 
-    if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
+    if (this.currentRunId && this.agentThreadSubscription?.activeRunId() && targetThreadId === this.currentThreadId) {
       return agent.sendNotificationSignal(input, {
-        resourceId: this.resourceId,
-        threadId: this.currentThreadId,
+        resourceId: targetResourceId,
+        threadId: targetThreadId,
         ifActive,
         ifIdle,
       });
@@ -2011,13 +2028,15 @@ export class Harness<TState = {}> {
 
     const streamOptions = await this.buildAgentMessageStreamOptions({
       requestContext: requestContextInput,
+      resourceId: targetResourceId,
+      threadId: targetThreadId,
       tracingContext,
       tracingOptions,
     });
 
     return agent.sendNotificationSignal(input, {
-      resourceId: this.resourceId,
-      threadId: this.currentThreadId,
+      resourceId: targetResourceId,
+      threadId: targetThreadId,
       ifActive,
       ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
     });

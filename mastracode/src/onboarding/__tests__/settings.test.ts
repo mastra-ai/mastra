@@ -66,6 +66,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       stagehand: { env: 'LOCAL' },
     },
     shellPassthrough: { mode: 'default' },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };
@@ -203,6 +204,24 @@ describe('customProviders parsing/persistence', () => {
       });
       expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
       vi.mocked(JSON.parse).mockRestore();
+    });
+  });
+
+  it('persists experimental GitHub signals enable and disable across reloads', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.signals.experimentalGithubSignals = true;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+
+      const reloaded = loadSettings(filePath);
+      reloaded.signals.experimentalGithubSignals = false;
+      saveSettings(reloaded, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(false);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(false);
     });
   });
 

@@ -799,7 +799,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
 
   if (githubSignalsProcessor) {
-    githubSignalsProcessor.addNotificationSender(notification => harness.sendNotificationSignal(notification as any));
+    githubSignalsProcessor.addNotificationSender((notification, target) =>
+      harness.sendNotificationSignal(notification as any, target),
+    );
 
     const startGithubPollingForCurrentThread = async (threadId?: string | null) => {
       if (!threadId) return;
@@ -846,5 +848,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,
+    githubSignals: githubSignalsProcessor,
   };
 }

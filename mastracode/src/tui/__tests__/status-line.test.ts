@@ -51,6 +51,9 @@ vi.mock('../theme.js', () => ({
     blue: '#3b82f6',
     specialGray: '#6b7280',
   },
+  extendedColors: {
+    skyBlue: '#0ea5e9',
+  },
   tintHex: (_color: string, _amount: number) => '#111111',
   getThemeMode: () => 'dark',
   ensureContrast: (_color: string) => _color,
@@ -65,6 +68,7 @@ function createState() {
   const memorySetText = vi.fn();
 
   return {
+    options: {},
     harness: {
       getDisplayState: vi.fn(() => ({
         omProgress: { status: 'idle' },
@@ -74,6 +78,8 @@ function createState() {
       listModes: vi.fn(() => [{ id: 'build', name: 'build', color: '#00ff00' }]),
       getCurrentMode: vi.fn(() => ({ id: 'build', name: 'build', color: '#00ff00' })),
       getCurrentModeId: vi.fn(() => 'build'),
+      getCurrentThreadId: vi.fn(() => 'thread-1'),
+      getResourceId: vi.fn(() => 'resource-1'),
       getState: vi.fn(() => ({ yolo: false })),
       getObserverModelId: vi.fn(() => 'openai/gpt-4o'),
       getReflectorModelId: vi.fn(() => 'openai/gpt-4o-mini'),
@@ -90,6 +96,7 @@ function createState() {
       gitBranch: 'feat/mc-queueing-ux',
     },
     pendingQueuedActions: [],
+    activeGithubPrSubscriptions: [],
     goalManager: { getGoal: vi.fn(() => null) },
     ui: { requestRender: vi.fn() },
   } as any;
@@ -128,6 +135,27 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).not.toContain('queued');
+  });
+
+  it('shows the active GitHub PR subscription beside the thread path', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [{ owner: 'mastra-ai', repo: 'mastra', prNumber: 17439 }];
+    state.options = { githubSignals: { isPollingThread: vi.fn(() => true) } };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('PR#17439');
+    expect(rendered).not.toContain('polling');
+  });
+
+  it('does not show GitHub PR status for unsubscribed threads', () => {
+    const state = createState();
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).not.toContain('PR#');
   });
 
   it('preserves the gateway prefix when compacting gateway-backed model ids', () => {

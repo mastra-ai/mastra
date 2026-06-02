@@ -41,7 +41,7 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
     getCurrentThreadId?: () => string | undefined;
     listThreads?: (input?: {
       allResources?: boolean;
-    }) => Promise<Array<{ id: string; metadata?: Record<string, unknown> }>>;
+    }) => Promise<Array<{ id: string; resourceId?: string; metadata?: Record<string, unknown> }>>;
   };
   const threadId = harness.getCurrentThreadId?.();
   if (!threadId) return 'GitHub Signals debug: no current thread.';
@@ -51,6 +51,13 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
   const githubSignals = isPlainObject(mastra[GITHUB_SIGNALS_METADATA_KEY]) ? mastra[GITHUB_SIGNALS_METADATA_KEY] : {};
   const subscriptions = Array.isArray(githubSignals.subscriptions) ? githubSignals.subscriptions : [];
   if (subscriptions.length === 0) return `GitHub Signals debug for ${threadId}: no subscribed PRs.`;
+
+  const githubSignalsProcessor = ctx.state.options?.githubSignals;
+  const pollingActive = thread?.resourceId
+    ? (githubSignalsProcessor?.isPollingThread({ threadId, resourceId: thread.resourceId }) ?? false)
+    : false;
+  const pollIntervalMs = githubSignalsProcessor?.getPollIntervalMs?.();
+  const header = `GitHub Signals debug for ${threadId}: ${subscriptions.length} subscription${subscriptions.length === 1 ? '' : 's'}, polling=${pollingActive ? 'active' : 'inactive'}${pollIntervalMs ? `, interval=${Math.round(pollIntervalMs / 1000)}s` : ''}`;
 
   const lines = subscriptions.map(subscription => {
     if (!isPlainObject(subscription)) return '- invalid subscription metadata';
@@ -74,7 +81,7 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
       : 'lastNotification=none';
     return `- ${pr} ${sync} ${poll}${subscription.lastSyncError ? ` error=${subscription.lastSyncError}` : ''}${observed.length ? ` (${observed.join(', ')})` : ''}\n  ${notification}`;
   });
-  return [`GitHub Signals debug for ${threadId}:`, ...lines].join('\n');
+  return [header, ...lines].join('\n');
 }
 
 async function detectCurrentPullRequest(ctx: SlashCommandContext): Promise<string> {
