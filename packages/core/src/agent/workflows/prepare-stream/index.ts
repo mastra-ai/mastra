@@ -8,10 +8,12 @@ import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import { createWorkflow } from '../../../workflows';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
+import { createWorkflow } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
+import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
@@ -29,11 +31,13 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
+  /** MCP server guidance to include as a separate system message. */
+  mcpServerGuidance?: string;
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
@@ -45,12 +49,14 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   workspace?: Workspace;
   backgroundTaskManager?: BackgroundTaskManager;
   agentBackgroundConfig?: AgentBackgroundConfig;
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
   /**
    * When true, the in-loop `backgroundTaskCheckStep` skips its wait for
    * running tasks. Used when an outer caller (e.g. `agent.streamUntilIdle`)
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -63,6 +69,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentSpan,
   methodType,
   instructions,
+  mcpServerGuidance,
   memoryConfig,
   memory,
   returnScorerData,
@@ -76,7 +83,9 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   workspace,
   backgroundTaskManager,
   agentBackgroundConfig,
+  toolPayloadTransform,
   skipBgTaskWait,
+  drainPendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -100,6 +109,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     requestContext,
     methodType,
     instructions,
+    mcpServerGuidance,
     memoryConfig,
     memory,
     isResume: !!resumeContext,
@@ -124,7 +134,9 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     workspace,
     backgroundTaskManager,
     agentBackgroundConfig,
+    toolPayloadTransform,
     skipBgTaskWait,
+    drainPendingSignals,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -151,6 +163,10 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,
       },
+      // This is an internal, non-resumable workflow created per agent generate/stream call.
+      // It must never write snapshot rows to the user's storage. Registering Mastra (done by
+      // the agent) lets it read storage to suppress noise, while this keeps writes off.
+      shouldPersistSnapshot: () => false,
       validateInputs: false,
     },
   })

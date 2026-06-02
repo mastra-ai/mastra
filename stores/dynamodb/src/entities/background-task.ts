@@ -84,6 +84,11 @@ export const backgroundTaskEntity = new Entity({
       required: false,
       ...jsonSetGet,
     },
+    suspendPayload: {
+      type: 'string',
+      required: false,
+      ...jsonSetGet,
+    },
     retryCount: {
       type: 'number',
       required: true,
@@ -98,6 +103,10 @@ export const backgroundTaskEntity = new Entity({
     },
     // Separate ISO strings for date columns — use these for GSI sort keys
     startedAtIso: {
+      type: 'string',
+      required: false,
+    },
+    suspendedAtIso: {
       type: 'string',
       required: false,
     },

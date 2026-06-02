@@ -12,7 +12,6 @@ const meta: Meta<typeof MainHeader> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

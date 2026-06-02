@@ -50,16 +50,14 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     runId: row.run_id,
     result: parseJson(row.result),
     error: parseJson(row.error),
+    suspendPayload: parseJson(row.suspend_payload),
     retryCount: Number(row.retry_count),
     maxRetries: Number(row.max_retries),
     timeoutMs: Number(row.timeout_ms),
-    createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
-    startedAt: row.startedAt ? (row.startedAt instanceof Date ? row.startedAt : new Date(row.startedAt)) : undefined,
-    completedAt: row.completedAt
-      ? row.completedAt instanceof Date
-        ? row.completedAt
-        : new Date(row.completedAt)
-      : undefined,
+    createdAt: new Date(row.createdAtZ || row.createdAt),
+    startedAt: row.startedAtZ || row.startedAt ? new Date(row.startedAtZ || row.startedAt) : undefined,
+    suspendedAt: row.suspendedAtZ || row.suspendedAt ? new Date(row.suspendedAtZ || row.suspendedAt) : undefined,
+    completedAt: row.completedAtZ || row.completedAt ? new Date(row.completedAtZ || row.completedAt) : undefined,
   };
 }
 
@@ -84,6 +82,12 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     await this.#db.createTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+    });
+    // Backfill columns added after the initial schema shipped.
+    await this.#db.alterTable({
+      tableName: TABLE_BACKGROUND_TASKS,
+      schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+      ifNotExists: ['suspend_payload', 'suspendedAt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -181,11 +185,13 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
         args: serializeJson(task.args),
         result: serializeJson(task.result),
         error: serializeJson(task.error),
+        suspend_payload: serializeJson(task.suspendPayload),
         retry_count: task.retryCount,
         max_retries: task.maxRetries,
         timeout_ms: task.timeoutMs,
         createdAt: task.createdAt.toISOString(),
         startedAt: task.startedAt?.toISOString() ?? null,
+        suspendedAt: task.suspendedAt?.toISOString() ?? null,
         completedAt: task.completedAt?.toISOString() ?? null,
       },
     });
@@ -208,17 +214,31 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
       setClauses.push(`"error" = $${paramIdx++}`);
       params.push(serializeJson(update.error));
     }
+    if ('suspendPayload' in update) {
+      setClauses.push(`"suspend_payload" = $${paramIdx++}`);
+      params.push(serializeJson(update.suspendPayload));
+    }
     if ('retryCount' in update) {
       setClauses.push(`"retry_count" = $${paramIdx++}`);
       params.push(update.retryCount);
     }
     if ('startedAt' in update) {
       setClauses.push(`"startedAt" = $${paramIdx++}`);
-      params.push(update.startedAt?.toISOString() ?? null);
+      setClauses.push(`"startedAtZ" = $${paramIdx++}`);
+      const val = update.startedAt?.toISOString() ?? null;
+      params.push(val, val);
+    }
+    if ('suspendedAt' in update) {
+      setClauses.push(`"suspendedAt" = $${paramIdx++}`);
+      setClauses.push(`"suspendedAtZ" = $${paramIdx++}`);
+      const val = update.suspendedAt?.toISOString() ?? null;
+      params.push(val, val);
     }
     if ('completedAt' in update) {
       setClauses.push(`"completedAt" = $${paramIdx++}`);
-      params.push(update.completedAt?.toISOString() ?? null);
+      setClauses.push(`"completedAtZ" = $${paramIdx++}`);
+      const val = update.completedAt?.toISOString() ?? null;
+      params.push(val, val);
     }
 
     if (setClauses.length === 0) return;
@@ -266,13 +286,19 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
       conditions.push(`"tool_name" = $${paramIdx++}`);
       params.push(filter.toolName);
     }
+    if (filter.toolCallId) {
+      conditions.push(`"tool_call_id" = $${paramIdx++}`);
+      params.push(filter.toolCallId);
+    }
     // Date range filtering
     const dateCol =
       filter.dateFilterBy === 'startedAt'
         ? '"startedAt"'
-        : filter.dateFilterBy === 'completedAt'
-          ? '"completedAt"'
-          : '"createdAt"';
+        : filter.dateFilterBy === 'suspendedAt'
+          ? '"suspendedAt"'
+          : filter.dateFilterBy === 'completedAt'
+            ? '"completedAt"'
+            : '"createdAt"';
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= $${paramIdx++}`);
       params.push(filter.fromDate.toISOString());
@@ -294,9 +320,11 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     const orderCol =
       filter.orderBy === 'startedAt'
         ? '"startedAt"'
-        : filter.orderBy === 'completedAt'
-          ? '"completedAt"'
-          : '"createdAt"';
+        : filter.orderBy === 'suspendedAt'
+          ? '"suspendedAt"'
+          : filter.orderBy === 'completedAt'
+            ? '"completedAt"'
+            : '"createdAt"';
     const direction = filter.orderDirection === 'desc' ? 'DESC' : 'ASC';
 
     let sql = `SELECT * FROM ${table} ${where} ORDER BY ${orderCol} ${direction}`;
@@ -335,9 +363,11 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     const dateCol =
       filter.dateFilterBy === 'startedAt'
         ? '"startedAt"'
-        : filter.dateFilterBy === 'completedAt'
-          ? '"completedAt"'
-          : '"createdAt"';
+        : filter.dateFilterBy === 'suspendedAt'
+          ? '"suspendedAt"'
+          : filter.dateFilterBy === 'completedAt'
+            ? '"completedAt"'
+            : '"createdAt"';
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= $${paramIdx++}`);
       params.push(filter.fromDate.toISOString());

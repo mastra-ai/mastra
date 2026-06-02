@@ -23,6 +23,9 @@ const providerOptionsSchema = z
     openai: providerOptionValuesSchema
       .optional()
       .describe('OpenAI provider options such as previousResponseId, conversation, or responseId'),
+    azure: providerOptionValuesSchema
+      .optional()
+      .describe('Azure OpenAI provider options such as previousResponseId, store, or itemId'),
   })
   .passthrough();
 
@@ -59,7 +62,11 @@ export const createResponseBodySchema = z
       .describe(
         'Optional model identifier override, such as openai/gpt-5. When omitted, the agent default model is used.',
       ),
-    agent_id: z.string().describe('Mastra agent ID for the request'),
+    agent_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Mastra agent ID for the request. Required unless previous_response_id is provided.'),
     input: z.union([z.string(), z.array(responseInputMessageSchema)]),
     instructions: z.string().optional(),
     text: responseTextSchema
@@ -73,9 +80,13 @@ export const createResponseBodySchema = z
       .describe('Optional provider-specific options passed through to the underlying model call'),
     stream: z.boolean().optional().default(false),
     store: z.boolean().optional().default(false),
-    previous_response_id: z.string().optional(),
+    previous_response_id: z.string().min(1).optional(),
   })
-  .passthrough();
+  .passthrough()
+  .refine(data => data.agent_id || data.previous_response_id, {
+    message: 'agent_id is required unless previous_response_id is provided',
+    path: [],
+  });
 
 export type CreateResponseBody = z.infer<typeof createResponseBodySchema>;
 

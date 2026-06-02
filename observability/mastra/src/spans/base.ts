@@ -59,6 +59,7 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
     // Model-related spans
     case SpanType.MODEL_GENERATION:
     case SpanType.MODEL_STEP:
+    case SpanType.MODEL_INFERENCE:
     case SpanType.MODEL_CHUNK:
       return (flags & InternalSpans.MODEL) !== 0;
 
@@ -414,7 +415,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContext) {
-      return bridge.executeInContext(this.id, fn);
+      const bridgeContextSpan = this.isInternal ? this.getParentSpan(false) : this;
+      return bridge.executeInContext(bridgeContextSpan?.id ?? this.id, fn);
     }
 
     return fn();
@@ -428,7 +430,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContextSync) {
-      return bridge.executeInContextSync(this.id, fn);
+      const bridgeContextSpan = this.isInternal ? this.getParentSpan(false) : this;
+      return bridge.executeInContextSync(bridgeContextSpan?.id ?? this.id, fn);
     }
 
     return fn();

@@ -5,15 +5,15 @@ import { useMetricsFilters } from './use-metrics-filters';
 /** Total Model Cost — sum of estimatedCost across input and output token metrics */
 export function useModelCostKpiMetrics() {
   const client = useMastraClient();
-  const { datePreset, customRange, timestamp } = useMetricsFilters();
+  const { filters, filterKey } = useMetricsFilters();
 
   return useQuery({
-    queryKey: ['metrics', 'model-cost-kpi', datePreset, customRange],
+    queryKey: ['metrics', 'model-cost-kpi', filterKey],
     queryFn: async () => {
       const res = await client.getMetricAggregate({
         name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
         aggregation: 'sum',
-        filters: { timestamp },
+        filters,
         comparePeriod: 'previous_period',
       });
 

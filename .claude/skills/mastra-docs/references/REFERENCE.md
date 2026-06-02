@@ -23,7 +23,7 @@ packages:
 
 # $NAME
 
-Added in: `@mastra/$PACKAGE@$VERSION`
+**Added in:** `@mastra/$PACKAGE@$VERSION`
 
 One or two sentences on what the class or function does and when to use it.
 
@@ -95,9 +95,9 @@ Rules:
 - frontmatter title must be `Reference: $NAME | $CATEGORY`
 - for functions, include parentheses in `$NAME` in frontmatter and H1
 - for classes, use the class name in frontmatter and H1
-- include `Added in:` only when the API was introduced in a specific release and the minimum version matters
-- place `Added in:` immediately after the H1
-- omit `Added in:` for long-standing APIs
+- include `**Added in:**` only when the API was introduced in a specific release and the minimum version matters. Do not add it if the package is a net-new package
+- place `**Added in:**` immediately after the H1
+- omit `**Added in:**` for long-standing APIs
 - link to alternative APIs right after the description when they exist
 - put a minimal working usage example immediately after the description
 - if the API has multiple calling patterns, show them in the Usage example section

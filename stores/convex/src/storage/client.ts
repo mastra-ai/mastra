@@ -10,9 +10,31 @@ export type ConvexAdminClientConfig = {
 export type RawStorageResult<T = any> = {
   result: T;
   hasMore?: boolean;
+  continuationCursor?: string | null;
 };
 
 const DEFAULT_STORAGE_FUNCTION = 'mastra/storage:handle';
+
+type ConvexFunctionKind = 'action' | 'mutation' | 'query';
+
+type ConvexHttpSuccess<T> = {
+  status: 'success';
+  value: T;
+  logLines?: string[];
+};
+
+type ConvexHttpResponse<T> =
+  | {
+      status: 'success';
+      value: T;
+      logLines?: string[];
+    }
+  | {
+      status: 'error';
+      errorMessage: string;
+      errorData?: unknown;
+      logLines?: string[];
+    };
 
 export class ConvexAdminClient {
   private readonly deploymentUrl: string;
@@ -38,42 +60,9 @@ export class ConvexAdminClient {
    * Use this for operations that may need multiple calls (e.g., clearTable).
    */
   async callStorageRaw<T = any>(request: StorageRequest): Promise<RawStorageResult<T>> {
-    // Use Convex HTTP API directly with admin auth
-    const url = `${this.deploymentUrl}/api/mutation`;
+    const result = await this.callConvexFunction<StorageResponse>('mutation', this.storageFunction, request);
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Convex ${this.adminAuthToken}`,
-      },
-      body: JSON.stringify({
-        path: this.storageFunction,
-        args: request,
-        format: 'json',
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Convex API error: ${response.status} ${text}`);
-    }
-
-    const result = (await response.json()) as {
-      status?: string;
-      errorMessage?: string;
-      errorCode?: string;
-      value?: StorageResponse;
-    };
-
-    // Handle Convex response format
-    if (result.status === 'error') {
-      const error = new Error(result.errorMessage || 'Unknown Convex error');
-      (error as any).code = result.errorCode;
-      throw error;
-    }
-
-    const storageResponse = result.value as StorageResponse;
+    const storageResponse = result.value;
     if (!storageResponse?.ok) {
       const errResponse = storageResponse as { ok: false; error: string; code?: string; details?: Record<string, any> };
       const error = new Error(errResponse?.error || 'Unknown Convex storage error');
@@ -85,11 +74,73 @@ export class ConvexAdminClient {
     return {
       result: storageResponse.result as T,
       hasMore: storageResponse.hasMore,
+      continuationCursor: storageResponse.continuationCursor,
     };
   }
 
   async callStorage<T = any>(request: StorageRequest): Promise<T> {
     const { result } = await this.callStorageRaw<T>(request);
+    return result;
+  }
+
+  async callAction<T = any>(path: string, args: Record<string, any>): Promise<T> {
+    return this.callFunction<T>('action', path, args);
+  }
+
+  async callMutation<T = any>(path: string, args: Record<string, any>): Promise<T> {
+    return this.callFunction<T>('mutation', path, args);
+  }
+
+  async callQuery<T = any>(path: string, args: Record<string, any>): Promise<T> {
+    return this.callFunction<T>('query', path, args);
+  }
+
+  private async callFunction<T>(kind: ConvexFunctionKind, path: string, args: Record<string, any>): Promise<T> {
+    const result = await this.callConvexFunction<T>(kind, path, args);
+    return result.value;
+  }
+
+  private async callConvexFunction<T>(
+    kind: ConvexFunctionKind,
+    path: string,
+    args: Record<string, any>,
+  ): Promise<ConvexHttpSuccess<T>> {
+    const url = `${this.deploymentUrl}/api/${kind}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Convex ${this.adminAuthToken}`,
+      },
+      body: JSON.stringify({
+        path,
+        args,
+        format: 'json',
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Convex API error: ${response.status} ${text}`);
+    }
+
+    const result = (await response.json()) as ConvexHttpResponse<T>;
+
+    if (result.status === 'error') {
+      const error = new Error(result.errorMessage || 'Unknown Convex error');
+      (error as any).details = result.errorData;
+      throw error;
+    }
+
+    if (result.status !== 'success') {
+      throw new Error(`Convex ${kind} ${path} returned an invalid response`);
+    }
+
+    if (result.value === undefined) {
+      throw new Error(`Convex ${kind} ${path} returned no value`);
+    }
+
     return result;
   }
 }

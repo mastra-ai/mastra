@@ -11,11 +11,9 @@
  * import { Agent } from '@mastra/core/agent';
  * import { createInngestAgent } from '@mastra/inngest';
  * import { Inngest } from 'inngest';
- * import { realtimeMiddleware } from '@inngest/realtime/middleware';
  *
  * const inngest = new Inngest({
  *   id: 'my-app',
- *   middleware: [realtimeMiddleware()],
  * });
  *
  * const agent = new Agent({
@@ -713,8 +711,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       mastra = mastraInstance;
 
       // NOTE: Unlike core DurableAgent, we do NOT replace innerPubsub with mastra.pubsub.
-      // InngestAgent uses InngestPubSub which handles both publishing (inside Inngest
-      // functions via the realtime publishFn) and subscribing (via @inngest/realtime).
+      // InngestAgent uses InngestPubSub which handles both publishing (via
+      // `inngest.realtime.publish()` in SDK v4) and subscribing (via @inngest/realtime).
       // Replacing it with mastra's EventEmitterPubSub would break streaming because
       // the subscriber would be on a different transport than the publisher.
     },

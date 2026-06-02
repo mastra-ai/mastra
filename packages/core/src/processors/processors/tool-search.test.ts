@@ -474,6 +474,45 @@ describe('ToolSearchProcessor', () => {
       expect(loadResult.message).toContain('Did you mean');
     });
 
+    it('should preserve key-only suggestions when filter is omitted', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather_tool_id', 'Get weather'),
+        },
+      });
+
+      const args = createMockArgs('thread-suggestion-key');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      const loadResult = await loadTool!.execute?.({ toolName: 'weath' }, undefined);
+
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.message).toContain('Did you mean: weather');
+      expect(loadResult.message).not.toContain('weather_tool_id');
+    });
+
+    it('should preserve key-first load resolution when filter is omitted', async () => {
+      const keyedTool = createMockTool('public_weather', 'Public weather');
+      const idCollisionTool = createMockTool('weather', 'Private weather');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: keyedTool,
+          private_weather: idCollisionTool,
+        },
+      });
+
+      const args1 = createMockArgs('thread-no-filter-key-id-collision');
+      const result1 = await processor.processInputStep(args1);
+      const loadResult = await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      expect(loadResult.success).toBe(true);
+
+      const args2 = createMockArgs('thread-no-filter-key-id-collision');
+      const result2 = await processor.processInputStep(args2);
+      expect(result2.tools?.weather).toBe(keyedTool);
+    });
+
     it('should indicate when tool is already loaded', async () => {
       const processor = new ToolSearchProcessor({
         tools: {
@@ -534,6 +573,429 @@ describe('ToolSearchProcessor', () => {
       const result2 = await processor.processInputStep(args2);
       const toolKeys = Object.keys(result2.tools || {}).filter(k => k === 'weather');
       expect(toolKeys.length).toBe(1);
+    });
+
+    it('should load multiple tools at once via toolNames array', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+          email: createMockTool('email', 'Send email'),
+        },
+      });
+
+      const args = createMockArgs('thread-multi');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      const loadResult = await loadTool!.execute?.({ toolNames: ['weather', 'calendar'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.loaded).toEqual(expect.arrayContaining(['weather', 'calendar']));
+      expect(loadResult.loadedCount).toBe(2);
+      expect(loadResult.notFound).toBeUndefined();
+      expect(loadResult.alreadyLoaded).toBeUndefined();
+
+      // Verify both are actually loaded
+      const args2 = createMockArgs('thread-multi');
+      const result2 = await processor.processInputStep(args2);
+      expect(result2.tools?.weather).toBeDefined();
+      expect(result2.tools?.calendar).toBeDefined();
+      expect(result2.tools?.email).toBeUndefined();
+    });
+
+    it('should return clear error for empty toolNames array', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      const args = createMockArgs('thread-empty');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      const loadResult = await loadTool!.execute?.({ toolNames: [] }, undefined);
+
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.message).toBe('toolNames array must not be empty.');
+    });
+
+    it('should report not-found tools in multi-load response', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      const args = createMockArgs('thread-multi');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      const loadResult = await loadTool!.execute?.({ toolNames: ['weather', 'nonexistent', 'calendar'] }, undefined);
+
+      // Partial load (some found, some not): success=false since not all requested tools are available
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.loaded).toEqual(['weather']);
+      expect(loadResult.notFound).toEqual(['nonexistent', 'calendar']);
+      expect(loadResult.loadedCount).toBe(1);
+    });
+
+    it('should report already-loaded tools in multi-load response', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+      });
+
+      const args1 = createMockArgs('thread-multi');
+      const result1 = await processor.processInputStep(args1);
+      const loadTool1 = result1.tools?.load_tool;
+      await loadTool1!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Try loading weather again alongside calendar
+      const args2 = createMockArgs('thread-multi');
+      const result2 = await processor.processInputStep(args2);
+      const loadTool2 = result2.tools?.load_tool;
+
+      const loadResult = await loadTool2!.execute?.({ toolNames: ['weather', 'calendar'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.loaded).toEqual(['calendar']);
+      expect(loadResult.alreadyLoaded).toEqual(['weather']);
+      expect(loadResult.loadedCount).toBe(1);
+    });
+
+    it('should return success=true when all requested tools are already loaded', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+      });
+
+      const args1 = createMockArgs('thread-multi');
+      const result1 = await processor.processInputStep(args1);
+      const loadTool1 = result1.tools?.load_tool;
+      await loadTool1!.execute?.({ toolNames: ['weather', 'calendar'] }, undefined);
+
+      // All already loaded — should be success even though nothing new was loaded
+      const args2 = createMockArgs('thread-multi');
+      const result2 = await processor.processInputStep(args2);
+      const loadTool2 = result2.tools?.load_tool;
+
+      const loadResult = await loadTool2!.execute?.({ toolNames: ['weather', 'calendar'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.loaded).toBeUndefined();
+      expect(loadResult.alreadyLoaded).toEqual(['weather', 'calendar']);
+      expect(loadResult.notFound).toBeUndefined();
+    });
+
+    it('should merge and deduplicate when both toolName and toolNames are provided', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+      });
+
+      const args = createMockArgs('thread-merge');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      // toolName 'weather' should be merged with toolNames ['calendar']
+      const loadResult = await loadTool!.execute?.({ toolName: 'weather', toolNames: ['calendar'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      // weather from toolName, calendar from toolNames — both deduplicated
+      expect(loadResult.loaded).toEqual(expect.arrayContaining(['weather', 'calendar']));
+      expect(loadResult.loadedCount).toBe(2);
+    });
+
+    it('should deduplicate duplicate names within toolNames array', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      const args = createMockArgs('thread-dedup');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      // Duplicate 'weather' entries should only load once
+      const loadResult = await loadTool!.execute?.({ toolNames: ['weather', 'weather'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.loaded).toEqual(['weather']);
+      expect(loadResult.loadedCount).toBe(1);
+    });
+  });
+
+  describe('request-aware filtering', () => {
+    it('should filter search results with filter', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather forecast'),
+          weather_alerts: createMockTool('weather_alerts', 'Get weather alerts'),
+        },
+        filter: ({ toolName, phase }) => phase !== 'search' || toolName !== 'weather_alerts',
+      });
+
+      const args = createMockArgs('thread-filter-search');
+      const result = await processor.processInputStep(args);
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+
+      expect(searchResult.results.map((tool: any) => tool.name)).toEqual(['weather']);
+    });
+
+    it('should filter search results against the indexed tool id when keys collide with tool ids', async () => {
+      const privateTool = createMockTool('weather', 'Private weather forecast');
+      const publicTool = createMockTool('public_weather', 'Public weather forecast');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          private_weather: privateTool,
+          weather: publicTool,
+        },
+        filter: ({ toolName }) => toolName !== 'weather',
+      });
+
+      const args = createMockArgs('thread-filter-key-id-collision');
+      const result = await processor.processInputStep(args);
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+
+      expect(searchResult.results.map((tool: any) => tool.name)).toEqual(['public_weather']);
+    });
+
+    it('should support async filter hooks', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather forecast'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+        filter: async ({ toolName, phase }) => {
+          await Promise.resolve();
+          return phase !== 'search' || toolName !== 'calendar';
+        },
+      });
+
+      const args = createMockArgs('thread-async-filter');
+      const result = await processor.processInputStep(args);
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'calendar' }, undefined);
+
+      expect(searchResult.results).toEqual([]);
+    });
+
+    it('should block loading disallowed tools', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        filter: ({ phase }) => phase !== 'load',
+      });
+
+      const args1 = createMockArgs('thread-load-filter');
+      const result1 = await processor.processInputStep(args1);
+      const loadResult = await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.toolName).toBe('weather');
+
+      const args2 = createMockArgs('thread-load-filter');
+      const result2 = await processor.processInputStep(args2);
+      expect(result2.tools?.weather).toBeUndefined();
+    });
+
+    it('should filter load requests against the resolved tool id when keys collide with tool ids', async () => {
+      const privateTool = createMockTool('weather', 'Private weather forecast');
+      const publicTool = createMockTool('public_weather', 'Public weather forecast');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          private_weather: privateTool,
+          weather: publicTool,
+        },
+        filter: ({ toolName }) => toolName !== 'weather',
+      });
+
+      const args1 = createMockArgs('thread-load-key-id-collision');
+      const result1 = await processor.processInputStep(args1);
+      const loadResult = await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      expect(loadResult.success).toBe(false);
+
+      const args2 = createMockArgs('thread-load-key-id-collision');
+      const result2 = await processor.processInputStep(args2);
+      expect(result2.tools?.weather).toBeUndefined();
+    });
+
+    it('should not leak disallowed tools in load suggestions', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          premium_weather: createMockTool('premium_weather', 'Premium weather'),
+          public_weather: createMockTool('public_weather', 'Public weather'),
+        },
+        filter: ({ toolName }) => toolName !== 'premium_weather',
+      });
+
+      const args = createMockArgs('thread-filter-suggestions');
+      const result = await processor.processInputStep(args);
+      const loadResult = await result.tools?.load_tool!.execute?.({ toolName: 'premium' }, undefined);
+
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.message).not.toContain('premium_weather');
+    });
+
+    it('should not suggest filtered key aliases that resolve to disallowed tool ids', async () => {
+      const privateTool = createMockTool('weather', 'Private weather forecast');
+      const publicTool = createMockTool('public_weather', 'Public weather forecast');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          private_weather: privateTool,
+          weather: publicTool,
+        },
+        filter: ({ toolName }) => toolName !== 'weather',
+      });
+
+      const args = createMockArgs('thread-filter-suggestions-key-id-collision');
+      const result = await processor.processInputStep(args);
+      const loadResult = await result.tools?.load_tool!.execute?.({ toolName: 'weath' }, undefined);
+
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.message).not.toContain('Did you mean: weather');
+    });
+
+    it('should fill search results from lower-ranked allowed matches', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          premium_a: createMockTool('premium_a', 'Shared capability'),
+          premium_b: createMockTool('premium_b', 'Shared capability'),
+          premium_c: createMockTool('premium_c', 'Shared capability'),
+          premium_d: createMockTool('premium_d', 'Shared capability'),
+          public_a: createMockTool('public_a', 'Shared capability'),
+          public_b: createMockTool('public_b', 'Shared capability'),
+        },
+        search: { topK: 2 },
+        filter: ({ toolName, phase }) => phase !== 'search' || toolName.startsWith('public_'),
+      });
+
+      const args = createMockArgs('thread-filter-fill');
+      const result = await processor.processInputStep(args);
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'shared' }, undefined);
+
+      expect(searchResult.results.map((tool: any) => tool.name)).toEqual(['public_a', 'public_b']);
+    });
+
+    it('should pass resolved tool id, tool, request context, and phase to filter', async () => {
+      const calls: Array<{ toolName: string; tool: Tool<any, any>; requestContext?: RequestContext; phase: string }> =
+        [];
+      const weatherTool = createMockTool('weather_tool_id', 'Get weather');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: weatherTool,
+        },
+        filter: args => {
+          calls.push(args);
+          return true;
+        },
+      });
+
+      const args1 = createMockArgs('thread-filter-args');
+      args1.requestContext?.set('plan', 'pro');
+      const result1 = await processor.processInputStep(args1);
+      await result1.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+      await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      const args2 = createMockArgs('thread-filter-args');
+      args2.requestContext?.set('plan', 'pro');
+      await processor.processInputStep(args2);
+
+      expect(calls.map(call => call.phase)).toEqual(['search', 'load', 'active']);
+      expect(calls.every(call => call.toolName === 'weather_tool_id')).toBe(true);
+      expect(calls.every(call => call.tool === weatherTool)).toBe(true);
+      expect(calls.every(call => call.requestContext?.get('plan') === 'pro')).toBe(true);
+    });
+
+    it('should fail closed when filter throws', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        filter: () => {
+          throw new Error('policy unavailable');
+        },
+      });
+
+      const args = createMockArgs('thread-filter-throws');
+      const result = await processor.processInputStep(args);
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+      const loadResult = await result.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      expect(searchResult.results).toEqual([]);
+      expect(loadResult.success).toBe(false);
+    });
+
+    it('should filter active loaded tools per request without clearing thread state', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        filter: ({ phase, requestContext }) => {
+          if (phase !== 'active') return true;
+          return requestContext?.get('allowWeather') === true;
+        },
+      });
+
+      const args1 = createMockArgs('thread-active-filter');
+      args1.requestContext?.set('allowWeather', true);
+      const result1 = await processor.processInputStep(args1);
+      await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      const disallowedArgs = createMockArgs('thread-active-filter');
+      disallowedArgs.requestContext?.set('allowWeather', false);
+      const disallowedResult = await processor.processInputStep(disallowedArgs);
+      expect(disallowedResult.tools?.weather).toBeUndefined();
+
+      const allowedArgs = createMockArgs('thread-active-filter');
+      allowedArgs.requestContext?.set('allowWeather', true);
+      const allowedResult = await processor.processInputStep(allowedArgs);
+      expect(allowedResult.tools?.weather).toBeDefined();
+    });
+
+    it('should preserve existing tools passed to processInputStep when filter is provided', async () => {
+      const existingTool = createMockTool('weather', 'Existing weather tool');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Dynamic weather tool'),
+        },
+        filter: () => false,
+      });
+
+      const args = createMockArgs('thread-existing-filter', { weather: existingTool });
+      const result = await processor.processInputStep(args);
+
+      expect(result.tools?.weather).toBe(existingTool);
+    });
+
+    it('should keep existing behavior when filter is omitted', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      const args1 = createMockArgs('thread-no-filter');
+      const result1 = await processor.processInputStep(args1);
+      const searchResult = await result1.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+      const loadResult = await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      expect(searchResult.results[0].name).toBe('weather');
+      expect(loadResult.success).toBe(true);
+
+      const args2 = createMockArgs('thread-no-filter');
+      const result2 = await processor.processInputStep(args2);
+      expect(result2.tools?.weather).toBeDefined();
     });
   });
 

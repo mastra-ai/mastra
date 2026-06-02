@@ -1,6 +1,8 @@
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { CircleAlertIcon } from 'lucide-react';
+import React from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
+import { useMaybeSidebar } from './main-sidebar-context';
+import { MainSidebarNavLabel } from './main-sidebar-nav-label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -12,105 +14,120 @@ export type NavLink = {
   isActive?: boolean;
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
-  isOnMastraPlatform: boolean;
-  isExperimental?: boolean;
+  /** @deprecated Sidebar nav items now render flush; this option is accepted but ignored. */
   indent?: boolean;
 };
 
-export type MainSidebarNavLinkProps = {
+type ItemStyleOptions = {
+  isActive?: boolean;
+  isCollapsed?: boolean;
+  isFeatured?: boolean;
+};
+
+/**
+ * Shared classes for any sidebar nav row element (anchor, button, custom).
+ * Apply directly to the interactive element so `asChild` and custom slotted
+ * elements (e.g. router Links) all receive the same styling without relying
+ * on `[&>a]:` child selectors.
+ */
+export const navItemClasses = ({ isActive, isCollapsed, isFeatured }: ItemStyleOptions = {}) =>
+  cn(
+    'flex items-center text-ui-md text-neutral3 rounded-lg h-9 min-w-0 whitespace-nowrap',
+    'transition-all duration-normal ease-out-custom motion-reduce:transition-none',
+    '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0 [&_svg]:text-neutral3/70 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
+    'hover:bg-sidebar-nav-hover hover:text-neutral6 [&:hover_svg]:text-neutral5',
+    'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
+    !isCollapsed && 'w-full gap-2.5 py-1 px-3 justify-start',
+    isCollapsed && 'w-full p-0 justify-center',
+    isActive &&
+      'text-neutral6 bg-sidebar-nav-active hover:bg-sidebar-nav-active hover:text-neutral6 [&_svg]:text-neutral6 [&:hover_svg]:text-neutral6',
+    isCollapsed && !isActive && '[&_svg]:text-neutral3',
+    isFeatured && 'my-2 bg-accent1Dark hover:bg-accent1Darker text-accent1 hover:text-accent1 border border-accent1/30',
+    isFeatured &&
+      'dark:bg-accent1 dark:hover:bg-accent1/90 dark:text-black dark:hover:text-black dark:border-transparent',
+    isFeatured &&
+      '[&_svg]:text-accent1 [&:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&:hover_svg]:text-black',
+  );
+
+export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'children'> & {
   link?: NavLink;
   isActive?: boolean;
   state?: SidebarState;
   children?: React.ReactNode;
-  className?: string;
-  LinkComponent: LinkComponent;
+  /** Override the Provider-level LinkComponent for this row. Defaults to `<a>` when neither is set. */
+  LinkComponent?: LinkComponent;
+  /**
+   * When true, render `children` as the interactive element.
+   * Use for `<button>` items or custom router Links. Item classes are forwarded
+   * to the slotted element. `link.url` and `LinkComponent` are ignored; other
+   * `link` presentation fields still apply when supplied.
+   */
+  asChild?: boolean;
 };
+
+type SlottedNavChildProps = {
+  className?: string;
+};
+
 export function MainSidebarNavLink({
   link,
-  state = 'default',
+  state: stateProp,
   children,
   isActive,
   className,
-  LinkComponent: Link,
+  LinkComponent: LinkProp,
+  asChild = false,
+  ...props
 }: MainSidebarNavLinkProps) {
+  // Auto-inherit state + LinkComponent from context; explicit props still win.
+  const ctx = useMaybeSidebar();
+  const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
+  const Link: LinkComponent | 'a' = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
-  const isExternal = link?.url?.startsWith('http');
+  const isExternal = Boolean(link?.url && /^(https?:)?\/\//.test(link.url));
   const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
+  const needsTooltip = link ? isCollapsed || Boolean(link.tooltipMsg) : false;
+
+  const itemClassName = navItemClasses({
+    isActive,
+    isCollapsed,
+    isFeatured,
+  });
+
+  let interactiveEl: React.ReactNode = null;
+
+  if (asChild) {
+    if (!React.isValidElement<SlottedNavChildProps>(children)) {
+      throw new Error(
+        'MainSidebarNavLink requires a valid React element child when `asChild` is true so it can apply `SlottedNavChildProps` and merge `itemClassName`.',
+      );
+    }
+
+    interactiveEl = React.cloneElement(children, {
+      className: cn(itemClassName, children.props.className),
+    });
+  } else if (link) {
+    interactiveEl = (
+      <Link href={link.url} {...linkParams} className={itemClassName}>
+        {link.icon}
+        <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
+        {children}
+      </Link>
+    );
+  }
 
   return (
-    <li
-      className={cn(
-        'flex relative',
-        // Base link styles with smooth transitions
-        '[&>a]:flex [&>a]:items-center [&>a]:min-h-8 [&>a]:gap-2.5 [&>a]:text-ui-md [&>a]:text-neutral3 [&>a]:py-1.5 [&>a]:px-3 [&>a]:w-full [&>a]:rounded-lg [&>a]:justify-center',
-        '[&>a]:transition-all [&>a]:duration-normal [&>a]:ease-out-custom',
-        // Icon styles with transitions
-        '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:text-neutral3/60 [&_svg]:transition-colors [&_svg]:duration-normal',
-        // Hover states
-        '[&>a:hover]:bg-surface4 [&>a:hover]:text-neutral5 [&>a:hover_svg]:text-neutral3',
-        {
-          // Active state with left indicator bar
-          '[&>a]:text-neutral5 [&>a]:bg-surface3': isActive,
-          '[&_svg]:text-neutral5': isActive,
-          // Active indicator bar
-          'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-5 before:bg-black dark:before:bg-white before:rounded-r-full before:transition-all before:duration-normal':
-            isActive && !isCollapsed,
-          '[&>a]:justify-start': !isCollapsed,
-          '[&_svg]:text-neutral3': isCollapsed,
-          // Featured variant
-          '[&>a]:rounded-md [&>a]:my-2 [&>a]:bg-accent1Dark [&>a:hover]:bg-accent1Darker [&>a]:text-accent1 [&>a:hover]:text-accent1 [&>a]:border [&>a]:border-accent1/30':
-            isFeatured,
-          // Keep strong green CTA in dark mode
-          'dark:[&>a]:bg-accent1 dark:[&>a:hover]:bg-accent1/90 dark:[&>a]:text-black dark:[&>a:hover]:text-black dark:[&>a]:border-transparent':
-            isFeatured,
-          '[&_svg]:text-accent1 [&>a:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&>a:hover_svg]:text-black':
-            isFeatured,
-          // Indented sub-link
-          '[&>a]:pl-7 [&>a]:text-ui-sm': link?.indent && !isCollapsed,
-        },
-        className,
-      )}
-    >
-      {link ? (
-        <>
-          {isCollapsed || link.tooltipMsg ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link href={link.url} {...linkParams}>
-                  {link.icon && link.icon}
-                  {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right" align="center" className="ml-4">
-                {link.tooltipMsg ? (
-                  <>
-                    {isCollapsed && `${link.name} | `} {link.tooltipMsg}
-                  </>
-                ) : (
-                  link.name
-                )}
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <Link href={link.url} {...linkParams}>
-              {link.icon && link.icon}
-              {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
-              {link.isExperimental && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <CircleAlertIcon className="ml-auto stroke-accent5" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" align="center" className="ml-4">
-                    Experimental Feature
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </Link>
-          )}
-        </>
+    <li {...props} className={cn('flex relative min-w-0', className)}>
+      {link && needsTooltip && React.isValidElement(interactiveEl) ? (
+        <Tooltip>
+          <TooltipTrigger render={interactiveEl} />
+          <TooltipContent side="right" align="center" sideOffset={16}>
+            {link.tooltipMsg ? (isCollapsed ? `${link.name} | ${link.tooltipMsg}` : link.tooltipMsg) : link.name}
+          </TooltipContent>
+        </Tooltip>
       ) : (
-        children
+        (interactiveEl ?? children)
       )}
     </li>
   );

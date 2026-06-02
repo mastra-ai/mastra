@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import type { PubSub } from '../events/pubsub';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
@@ -9,6 +10,7 @@ import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
+import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
 // Heartbeat Handlers
@@ -144,7 +146,14 @@ export type HarnessStateSchema<T> = T;
 /**
  * Identifiers for the built-in harness tools that can be selectively disabled.
  */
-export type BuiltinToolId = 'ask_user' | 'submit_plan' | 'task_write' | 'task_check' | 'subagent';
+export type BuiltinToolId =
+  | 'ask_user'
+  | 'submit_plan'
+  | 'task_write'
+  | 'task_update'
+  | 'task_complete'
+  | 'task_check'
+  | 'subagent';
 
 export interface HarnessConfig<TState = {}> {
   /** Unique identifier for this harness instance */
@@ -253,7 +262,8 @@ export interface HarnessConfig<TState = {}> {
   /**
    * Built-in tool IDs to disable.
    * Any tool listed here will be excluded from the `harnessBuiltIn` toolset.
-   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_check', 'subagent'.
+   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_update',
+   * 'task_complete', 'task_check', 'subagent'.
    */
   disableBuiltinTools?: BuiltinToolId[];
 
@@ -263,6 +273,11 @@ export interface HarnessConfig<TState = {}> {
    * If not provided, all tools default to the "other" category.
    */
   toolCategoryResolver?: (toolName: string) => ToolCategory | null;
+
+  /**
+   * PubSub instance used by the internal Mastra instance and mode agents.
+   */
+  pubsub?: PubSub;
 
   /**
    * Optional thread locking callbacks.
@@ -423,6 +438,21 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  raw?: unknown;
+}
+
+/** Creates a zero-initialized TokenUsage object. */
+export function createEmptyTokenUsage(): TokenUsage {
+  return {
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+  };
 }
 
 // =============================================================================
@@ -497,6 +527,7 @@ export interface ActiveToolState {
  */
 export interface ActiveSubagentState {
   agentType: string;
+  displayName?: string;
   task: string;
   modelId?: string;
   forked?: boolean;
@@ -506,6 +537,8 @@ export interface ActiveSubagentState {
   durationMs?: number;
   result?: string;
 }
+
+export type HarnessSubagentHistoryEntry = Omit<ActiveSubagentState, 'status'>;
 
 /**
  * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
@@ -553,6 +586,10 @@ export interface HarnessDisplayState {
   // ── Current streaming message ────────────────────────────────────────
   /** The message currently being streamed (null when idle) */
   currentMessage: HarnessMessage | null;
+
+  // ── Follow-up queue ──────────────────────────────────────────────────
+  /** Number of follow-up messages queued locally by the Harness */
+  queuedFollowUps: number;
 
   // ── Token usage ──────────────────────────────────────────────────────
   /** Cumulative token usage for the current thread */
@@ -619,19 +656,11 @@ export interface HarnessDisplayState {
   modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
 
   // ── Tasks ────────────────────────────────────────────────────────────
-  /** Current task list (from task_write tool) */
-  tasks: Array<{
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    activeForm: string;
-  }>;
+  /** Current task list (from task tools) */
+  tasks: TaskItemSnapshot[];
 
   /** Previous task list snapshot (for diff detection) */
-  previousTasks: Array<{
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    activeForm: string;
-  }>;
+  previousTasks: TaskItemSnapshot[];
 }
 
 /**
@@ -641,7 +670,8 @@ export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
-    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    queuedFollowUps: 0,
+    tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
@@ -720,7 +750,13 @@ export type HarnessEvent =
       resumeSchema?: string;
     }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean }
+  | {
+      type: 'tool_end';
+      toolCallId: string;
+      result: unknown;
+      isError: boolean;
+      providerMetadata?: Record<string, unknown>;
+    }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
@@ -728,7 +764,7 @@ export type HarnessEvent =
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
   | { type: 'error'; error: Error; errorType?: string; retryable?: boolean; retryDelay?: number }
-  | { type: 'follow_up_queued'; count: number }
+  | { type: 'follow_up_queued'; count: number; runId?: string }
   | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error }
   | { type: 'workspace_ready'; workspaceId: string; workspaceName: string }
   | { type: 'workspace_error'; error: Error }
@@ -866,11 +902,7 @@ export type HarnessEvent =
   | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string }
   | {
       type: 'task_updated';
-      tasks: Array<{
-        content: string;
-        status: 'pending' | 'in_progress' | 'completed';
-        activeForm: string;
-      }>;
+      tasks: TaskItemSnapshot[];
     }
   | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 
@@ -913,6 +945,7 @@ export interface HarnessMessage {
   role: 'user' | 'assistant' | 'system';
   content: HarnessMessageContent[];
   createdAt: Date;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
   stopReason?: 'complete' | 'tool_use' | 'aborted' | 'error';
   errorMessage?: string;
 }
@@ -921,7 +954,14 @@ export type HarnessMessageContent =
   | { type: 'text'; text: string }
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
-  | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
+  | {
+      type: 'tool_result';
+      id: string;
+      name: string;
+      result: unknown;
+      isError: boolean;
+      providerMetadata?: Record<string, unknown>;
+    }
   | {
       type: 'system_reminder';
       message: string;
@@ -931,6 +971,8 @@ export type HarnessMessageContent =
       gapText?: string;
       gapMs?: number;
       timestamp?: string;
+      goalMaxTurns?: number;
+      judgeModelId?: string;
     }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
@@ -977,6 +1019,21 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Update harness state */
   setState: (updates: Partial<TState>) => Promise<void>;
+
+  /** Update harness state from the latest state snapshot in a serialized transaction */
+  updateState?: <TResult>(
+    updater: (state: Readonly<TState>) =>
+      | {
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }
+      | Promise<{
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }>,
+  ) => Promise<TResult>;
 
   /** Current thread ID */
   threadId: string | null;

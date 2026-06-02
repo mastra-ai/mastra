@@ -7,7 +7,6 @@ const meta: Meta<typeof Kbd> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     theme: {
       control: { type: 'select' },

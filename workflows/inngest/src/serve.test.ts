@@ -4,7 +4,7 @@ import { Inngest } from 'inngest';
 import { describe, expect, it, vi, beforeEach, afterAll } from 'vitest';
 import { z } from 'zod';
 
-import { init, serve, createServe } from './index';
+import { init, serve, createServe, connect } from './index';
 
 // Mock the inngest framework-specific serve functions using vi.hoisted to ensure
 // mocks are created before module imports capture the real functions
@@ -13,14 +13,28 @@ const mocks = vi.hoisted(() => {
     honoServe: vi.fn(() => () => Promise.resolve(new Response())),
     expressServe: vi.fn(() => () => {}),
     fastifyServe: vi.fn(() => () => Promise.resolve()),
+    inngestConnect: vi.fn(async () => ({
+      connectionId: 'conn-test',
+      close: vi.fn(async () => {}),
+      closed: Promise.resolve(),
+      state: 'ACTIVE',
+      getDebugState: vi.fn(),
+    })),
   };
 });
 
 vi.mock('inngest/hono', () => ({ serve: mocks.honoServe }));
 vi.mock('inngest/express', () => ({ serve: mocks.expressServe }));
 vi.mock('inngest/fastify', () => ({ serve: mocks.fastifyServe }));
+vi.mock('inngest/connect', () => ({ connect: mocks.inngestConnect }));
 
-const { honoServe, expressServe: _expressServe, fastifyServe: _fastifyServe } = mocks;
+const { honoServe, expressServe: _expressServe, fastifyServe: _fastifyServe, inngestConnect } = mocks;
+
+const getFunctionIds = (functions: Array<{ id?: (prefix?: string) => string }>) =>
+  functions.map(fn => {
+    if (typeof fn.id === 'function') return fn.id();
+    throw new Error('Expected an Inngest function with an id() method');
+  });
 
 describe('Multi-framework serve', () => {
   afterAll(() => {
@@ -87,7 +101,10 @@ describe('Multi-framework serve', () => {
     });
 
     it('should pass additional user functions', async () => {
-      const userFunction = inngest.createFunction({ id: 'user-function' }, { event: 'test/event' }, async () => 'done');
+      const userFunction = inngest.createFunction(
+        { id: 'user-function', triggers: { event: 'test/event' } },
+        async () => 'done',
+      );
 
       serve({ mastra, inngest, functions: [userFunction] });
 
@@ -102,6 +119,68 @@ describe('Multi-framework serve', () => {
 
       const callArgs = honoServe.mock.calls[0][0];
       expect(callArgs.servePath).toBe('/custom/inngest');
+    });
+
+    it('should collect the same functions for serve and connect', async () => {
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step = createStep({
+        id: 'nested-step',
+        execute: async () => ({ result: 'done' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step],
+      });
+      nestedWorkflow.then(step).commit();
+
+      const parentWorkflow = createWorkflow({
+        id: 'parent-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [nestedWorkflow],
+      });
+      parentWorkflow.then(nestedWorkflow).commit();
+
+      const cronWorkflow = createWorkflow({
+        id: 'cron-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step],
+        cron: '*/5 * * * *',
+      });
+      cronWorkflow.then(step).commit();
+
+      const userFunction = inngest.createFunction(
+        { id: 'user-function', triggers: { event: 'test/event' } },
+        async () => 'done',
+      );
+      const equivalentMastra = new Mastra({
+        storage: new MockStore(),
+        workflows: {
+          'parent-workflow': parentWorkflow,
+          'cron-workflow': cronWorkflow,
+        },
+      });
+      const adapter = vi.fn(options => options);
+
+      const serveOptions = createServe(adapter)({ mastra: equivalentMastra, inngest, functions: [userFunction] });
+      await connect({ mastra: equivalentMastra, inngest, functions: [userFunction] });
+
+      const connectOptions = inngestConnect.mock.calls[0][0];
+      expect(getFunctionIds(connectOptions.apps[0].functions)).toEqual(getFunctionIds(serveOptions.functions));
+      expect(getFunctionIds(connectOptions.apps[0].functions)).toEqual([
+        'workflow.parent-workflow',
+        'workflow.nested-workflow',
+        'workflow.cron-workflow',
+        'workflow.cron-workflow.cron',
+        'user-function',
+      ]);
     });
   });
 
@@ -159,7 +238,10 @@ describe('Multi-framework serve', () => {
 
     it('should pass user functions to custom adapter', async () => {
       const customServe = vi.fn(() => () => 'custom-handler');
-      const userFunction = inngest.createFunction({ id: 'user-function' }, { event: 'test/event' }, async () => 'done');
+      const userFunction = inngest.createFunction(
+        { id: 'user-function', triggers: { event: 'test/event' } },
+        async () => 'done',
+      );
 
       const serveWithCustom = createServe(customServe);
       serveWithCustom({ mastra, inngest, functions: [userFunction] });

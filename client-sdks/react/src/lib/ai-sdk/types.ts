@@ -39,6 +39,7 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
       /**
@@ -50,8 +51,9 @@ export type MastraUIMessageMetadata = {
       backgroundTasks?: Record<
         string,
         {
-          startedAt?: Date;
+          startedAt: Date;
           completedAt?: Date;
+          suspendedAt?: Date;
           taskId: string;
         }
       >;
@@ -77,6 +79,7 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
       /**
@@ -88,8 +91,9 @@ export type MastraUIMessageMetadata = {
       backgroundTasks?: Record<
         string,
         {
-          startedAt?: Date;
+          startedAt: Date;
           completedAt?: Date;
+          suspendedAt?: Date;
           taskId: string;
         }
       >;
@@ -118,6 +122,7 @@ export type MastraUIMessageMetadata = {
           toolName: string;
           args: Record<string, any>;
           suspendPayload: any;
+          runId?: string;
         };
       };
     }

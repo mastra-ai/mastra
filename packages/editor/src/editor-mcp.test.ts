@@ -39,6 +39,12 @@ class TestMCPServer extends MCPServerBase {
   async executeTool() {
     return {};
   }
+  async readResource() {
+    return { contents: [] };
+  }
+  async listResources() {
+    return { resources: [] };
+  }
 }
 
 const createTestStorage = () => {

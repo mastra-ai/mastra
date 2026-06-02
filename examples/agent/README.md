@@ -111,8 +111,8 @@ The `requestContextDemoAgent` demonstrates how agents can dynamically adapt thei
   - Log level affects response detail
 
 - **Model Selection**: Automatically chooses appropriate model
-  - Production: `gpt-4o` (higher quality)
-  - Development/Staging: `gpt-4o-mini` (faster iteration)
+  - Production: `gpt-5` (higher quality)
+  - Development/Staging: `gpt-5-mini` (faster iteration)
 
 - **Tool Availability**: Conditionally provides tools based on permissions
   - `apiRequestTool`: Available to all users, uses environment-specific endpoints

@@ -15,7 +15,7 @@ export type MemoryInfo = { threadId: string; resourceId?: string };
 
 type MastraMessageShared = {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;
@@ -73,13 +73,15 @@ export type MastraSourceUrlPart = Omit<LegacySourcePart, 'providerMetadata'> & {
   createdAt?: number;
 };
 
+// Named alias so TypeScript caches the Exclude expansion and avoids TS2589 when
+// MastraMessagePart is used alongside deeply-generic libraries like @hono/zod-openapi.
+type UIV4NonMastraPart = Exclude<UIMessageV4['parts'][number], { type: 'tool-invocation' | 'source' | 'step-start' }>;
+
 // Canonical stored part type. It starts from the v4 UI part model and extends
 // it with provider metadata, AI SDK v5 data parts, and v6-only persisted parts
 // such as approval-aware tool invocations and source documents.
 export type MastraMessagePart =
-  | PartWithProviderMetadata<
-      Exclude<UIMessageV4['parts'][number], { type: 'tool-invocation' | 'source' | 'step-start' }>
-    >
+  | PartWithProviderMetadata<UIV4NonMastraPart>
   | MastraStepStartPart
   | MastraToolInvocationPart
   | MastraSourceUrlPart
@@ -110,7 +112,7 @@ export type MastraDBMessage = MastraMessageShared & {
 export type MastraMessageV1 = {
   id: string;
   content: string | CoreMessageV4['content'];
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: 'system' | 'user' | 'assistant' | 'tool' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;

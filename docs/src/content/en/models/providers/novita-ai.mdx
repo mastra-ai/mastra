@@ -207,7 +207,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 16384,
     "inputCost": 0.15,
@@ -219,7 +219,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 64000,
     "maxOutput": 32000,
     "inputCost": 0.3,
@@ -330,8 +330,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 393216,
-    "inputCost": 1.74,
-    "outputCost": 3.48
+    "inputCost": 1.69,
+    "outputCost": 3.38
   },
   {
     "model": "novita-ai/google/gemma-3-12b-it",
@@ -404,6 +404,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "novita-ai/inclusionai/ling-2.6-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.1,
+    "outputCost": 0.3
   },
   {
     "model": "novita-ai/kwaipilot/kat-coder-pro",
@@ -1042,19 +1054,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.6
   },
   {
-    "model": "novita-ai/qwen/qwen3.6-27b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.6,
-    "outputCost": 3.6
-  },
-  {
-    "model": "novita-ai/sao10k/l3-70b-euryale-v2.1",
+    "model": "novita-ai/sao10K/l3-70b-euryale-v2.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -1066,7 +1066,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.48
   },
   {
-    "model": "novita-ai/sao10k/l3-8b-lunaris",
+    "model": "novita-ai/sao10K/l3-8b-lunaris",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -1078,7 +1078,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "novita-ai/sao10k/L3-8B-Stheno-v3.2",
+    "model": "novita-ai/sao10K/L3-8B-stheno-v3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -1090,7 +1090,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "novita-ai/sao10k/l31-70b-euryale-v2.2",
+    "model": "novita-ai/sao10K/l31-70b-euryale-v2.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,

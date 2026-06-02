@@ -16,7 +16,6 @@ export type UISpanStyle = {
   icon?: ReactNode;
   color?: string;
   label?: string;
-  bgColor?: string;
   typePrefix: string;
 };
 

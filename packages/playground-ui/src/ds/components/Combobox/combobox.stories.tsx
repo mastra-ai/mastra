@@ -8,7 +8,6 @@ const meta: Meta<typeof Combobox> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     disabled: {
       control: { type: 'boolean' },
@@ -116,6 +115,20 @@ export const Variants: Story = {
       ))}
     </div>
   ),
+};
+
+export const WithDescriptions: Story = {
+  args: {
+    options: [
+      { label: 'GPT-4', value: 'gpt-4', description: 'Most capable model' },
+      { label: 'GPT-4 Turbo', value: 'gpt-4-turbo', description: 'Faster, cheaper GPT-4' },
+      { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo', description: 'Fast and economical' },
+      { label: 'Claude 3 Opus', value: 'claude-3-opus', description: "Anthropic's most powerful" },
+    ],
+    value: 'gpt-4-turbo',
+    placeholder: 'Select a model...',
+    className: 'w-[280px]',
+  },
 };
 
 export const Sizes: Story = {

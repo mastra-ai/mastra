@@ -7,6 +7,7 @@ import {
   DELETE_AGENT_VERSION_ROUTE,
   COMPARE_AGENT_VERSIONS_ROUTE,
 } from '../../handlers/agent-versions';
+import { FAVORITE_STORED_AGENT_ROUTE, UNFAVORITE_STORED_AGENT_ROUTE } from '../../handlers/stored-agent-favorites';
 import {
   LIST_STORED_AGENTS_ROUTE,
   GET_STORED_AGENT_ROUTE,
@@ -14,6 +15,7 @@ import {
   UPDATE_STORED_AGENT_ROUTE,
   DELETE_STORED_AGENT_ROUTE,
   PREVIEW_INSTRUCTIONS_ROUTE,
+  EXPORT_STORED_AGENT_ROUTE,
 } from '../../handlers/stored-agents';
 import type { ServerRoute } from '.';
 
@@ -30,6 +32,7 @@ export const STORED_AGENTS_ROUTES: readonly ServerRoute[] = [
   // ============================================================================
   LIST_STORED_AGENTS_ROUTE,
   PREVIEW_INSTRUCTIONS_ROUTE, // Must be before GET_STORED_AGENT_ROUTE
+  EXPORT_STORED_AGENT_ROUTE, // Must be before GET_STORED_AGENT_ROUTE
   GET_STORED_AGENT_ROUTE,
   CREATE_STORED_AGENT_ROUTE,
   UPDATE_STORED_AGENT_ROUTE,
@@ -47,6 +50,12 @@ export const STORED_AGENTS_ROUTES: readonly ServerRoute[] = [
   ACTIVATE_AGENT_VERSION_ROUTE,
   RESTORE_AGENT_VERSION_ROUTE,
   DELETE_AGENT_VERSION_ROUTE,
+
+  // ============================================================================
+  // Favorites (EE)
+  // ============================================================================
+  FAVORITE_STORED_AGENT_ROUTE,
+  UNFAVORITE_STORED_AGENT_ROUTE,
 ];
 
 /**
@@ -56,6 +65,7 @@ export const STORED_AGENTS_ROUTES: readonly ServerRoute[] = [
 export type StoredAgentRoutes = readonly [
   typeof LIST_STORED_AGENTS_ROUTE,
   typeof PREVIEW_INSTRUCTIONS_ROUTE,
+  typeof EXPORT_STORED_AGENT_ROUTE,
   typeof GET_STORED_AGENT_ROUTE,
   typeof CREATE_STORED_AGENT_ROUTE,
   typeof UPDATE_STORED_AGENT_ROUTE,
@@ -67,4 +77,6 @@ export type StoredAgentRoutes = readonly [
   typeof ACTIVATE_AGENT_VERSION_ROUTE,
   typeof RESTORE_AGENT_VERSION_ROUTE,
   typeof DELETE_AGENT_VERSION_ROUTE,
+  typeof FAVORITE_STORED_AGENT_ROUTE,
+  typeof UNFAVORITE_STORED_AGENT_ROUTE,
 ];

@@ -23,6 +23,7 @@ A sandbox provider executes commands in a controlled environment:
 ## Supported providers
 
 - [`LocalSandbox`](/reference/workspace/local-sandbox): Executes commands on the local machine
+- [`AgentCoreRuntimeSandbox`](/reference/workspace/agentcore-runtime-sandbox): Executes commands in AWS Bedrock AgentCore Runtime sessions
 - [`BlaxelSandbox`](/reference/workspace/blaxel-sandbox): Executes commands in isolated Blaxel cloud sandboxes
 - [`DaytonaSandbox`](/reference/workspace/daytona-sandbox): Executes commands in isolated Daytona cloud sandboxes
 - [`E2BSandbox`](/reference/workspace/e2b-sandbox): Executes commands in isolated E2B cloud sandboxes
@@ -47,7 +48,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   id: 'dev-agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   instructions: 'You are a helpful development assistant.',
   workspace,
 })
@@ -127,9 +128,10 @@ For the full `SandboxProcessManager` API (spawning processes programmatically, r
 ## Related
 
 - [`SandboxProcessManager` reference](/reference/workspace/process-manager)
-- [`LocalSandbox` reference](/reference/workspace/local-sandbox)
-- [`ModalSandbox` reference](/reference/workspace/modal-sandbox)
+- [`AgentCoreRuntimeSandbox` reference](/reference/workspace/agentcore-runtime-sandbox)
 - [`DaytonaSandbox` reference](/reference/workspace/daytona-sandbox)
 - [`E2BSandbox` reference](/reference/workspace/e2b-sandbox)
+- [`LocalSandbox` reference](/reference/workspace/local-sandbox)
+- [`ModalSandbox` reference](/reference/workspace/modal-sandbox)
 - [Workspace overview](/docs/workspace/overview)
 - [Filesystem](/docs/workspace/filesystem)

@@ -15,10 +15,12 @@ import type {
   ICredentialsProvider,
   SSOCallbackResult,
 } from '@mastra/core/auth';
-import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
+import type { IRBACProvider, IFGAProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
+import { z } from 'zod/v4';
 import { supportsSessionRefresh } from '../auth/helpers';
+import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -29,10 +31,14 @@ import {
   credentialsSignUpBodySchema,
   refreshResponseSchema,
 } from '../schemas/auth';
-import { createPublicRoute } from '../server-adapter/routes/route-builder';
+import { createPublicRoute, createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
-type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any; apiPrefix?: string }) => Promise<any>;
+type BuildCapabilitiesFn = (
+  auth: any,
+  request: Request,
+  options?: { rbac?: any; fga?: any; apiPrefix?: string },
+) => Promise<any>;
 let _buildCapabilitiesPromise: Promise<BuildCapabilitiesFn | undefined> | undefined;
 function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
   if (!_buildCapabilitiesPromise) {
@@ -107,10 +113,18 @@ function getRBACProvider(mastra: any): IRBACProvider<EEUser> | undefined {
 }
 
 /**
+ * Helper to get FGA provider from Mastra server config.
+ */
+function getFGAProvider(mastra: any): IFGAProvider<EEUser> | undefined {
+  const serverConfig = mastra.getServer?.();
+  return serverConfig?.fga as IFGAProvider<EEUser> | undefined;
+}
+
+/**
  * Type guard to check if auth provider implements an interface.
  */
 function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
-  return auth !== null && typeof auth === 'object' && method in auth;
+  return auth !== null && typeof auth === 'object' && typeof (auth as any)[method] === 'function';
 }
 
 // ============================================================================
@@ -137,12 +151,13 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
       }
 
       const rbac = getRBACProvider(mastra);
+      const fga = getFGAProvider(mastra);
 
       const buildCapabilities = await loadBuildCapabilities();
       if (!buildCapabilities) {
         return { enabled: false, login: null };
       }
-      const capabilities = await buildCapabilities(auth, request, { rbac, apiPrefix: routePrefix });
+      const capabilities = await buildCapabilities(auth, request, { rbac, fga, apiPrefix: routePrefix });
 
       // If capabilities came back without a user, the session may have expired.
       // Attempt a transparent refresh (same logic as coreAuthMiddleware) and retry.
@@ -670,6 +685,49 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
 });
 
 // ============================================================================
+// GET /auth/roles/:roleId/permissions
+// ============================================================================
+
+const rolePermissionsPathSchema = z.object({ roleId: z.string() });
+const rolePermissionsResponseSchema = z.object({ roleId: z.string(), permissions: z.array(z.string()) });
+
+export const GET_ROLE_PERMISSIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/roles/:roleId/permissions',
+  requiresAuth: true,
+  responseType: 'json',
+  pathParamSchema: rolePermissionsPathSchema,
+  responseSchema: rolePermissionsResponseSchema,
+  summary: 'Get permissions for a role',
+  description:
+    'Returns the resolved permissions for a specific role. Only accessible by admin users. Used by the "View as role" feature.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    try {
+      const { mastra, requestContext, roleId } = ctx as any;
+
+      // Check that the caller is an admin
+      const callerPermissions: string[] = requestContext?.get(MASTRA_USER_PERMISSIONS_KEY) ?? [];
+      const isAdmin = callerPermissions.some((p: string) => p === '*' || p === '*:*');
+      if (!isAdmin) {
+        throw new HTTPException(403, { message: 'Admin access required' });
+      }
+
+      const rbac = getRBACProvider(mastra);
+      if (!rbac?.getPermissionsForRole) {
+        throw new HTTPException(404, { message: 'RBAC provider does not support role permission resolution' });
+      }
+
+      const permissions = await rbac.getPermissionsForRole(roleId);
+      return { roleId, permissions };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error getting role permissions');
+    }
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -682,4 +740,5 @@ export const AUTH_ROUTES = [
   POST_REFRESH_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
+  GET_ROLE_PERMISSIONS_ROUTE,
 ] as const;

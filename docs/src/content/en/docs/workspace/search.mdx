@@ -91,6 +91,45 @@ const workspace = new Workspace({
 })
 ```
 
+### Batch embedding
+
+The embedder above takes one text at a time. Indexing a workspace with hundreds of files calls the provider hundreds of times, which is slow and expensive.
+
+When the provider supports batching (for example, OpenAI's `embedMany`), pass an embedder that takes an array of texts and accepts many embeddings back in one call. To opt in, set a `batch: true` property on the function. Mastra checks for that property at runtime and switches to the batched path.
+
+The following example replaces the single-text embedder with a batched one. The embedder function takes an array, returns an array of embeddings in the same order, and carries two extra properties:
+
+- `batch: true`: marks the function as batch-capable. Without this property, Mastra calls it one text at a time.
+- `maxBatchSize`: the largest array the provider accepts in one call. Mastra splits larger requests into chunks of this size and sends them in parallel. Set this to your provider's documented limit (for example, 2048 for OpenAI, 96 for Cohere, 128 for Voyage). Omit it to send every pending text in one request.
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+import { PineconeVector } from '@mastra/pinecone'
+import { embedMany } from 'ai'
+import { openai } from '@ai-sdk/openai'
+
+const model = openai.embedding('text-embedding-3-small')
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  vectorStore: new PineconeVector({
+    apiKey: process.env.PINECONE_API_KEY,
+    index: 'workspace-index',
+  }),
+  embedder: Object.assign(
+    async (texts: string[]) => {
+      const { embeddings } = await embedMany({ model, values: texts })
+      return embeddings
+    },
+    { batch: true as const, maxBatchSize: 2048 },
+  ),
+})
+```
+
+`Object.assign` adds the `batch` and `maxBatchSize` properties to the embedder function. Mastra reads them as metadata and never passes them to the provider.
+
+Single-text embedders still work. The function signature `(text: string) => Promise<number[]>` is unchanged, so existing code keeps running without modification.
+
 ## Hybrid search
 
 Configure both BM25 and vector search to enable hybrid mode, which combines keyword matching with semantic understanding.
