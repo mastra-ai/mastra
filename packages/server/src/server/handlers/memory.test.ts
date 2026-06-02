@@ -121,6 +121,53 @@ describe('Memory Handlers', () => {
       expect(result).toMatchObject({ result: true });
     });
 
+    it('should use storage fallback when a registered agent has no local memory', async () => {
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+      });
+
+      expect(result).toEqual({ result: true });
+    });
+
+    it('should return false when an agent explicitly does not support Mastra memory', async () => {
+      const agentWithoutMemorySupport = Object.assign(
+        new Agent({
+          id: 'unsupported-memory-agent',
+          name: 'Agent Without Memory Support',
+          instructions: 'test-instructions',
+          model: {} as any,
+        }),
+        {
+          supportsMemory: () => false,
+        },
+      );
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: { 'unsupported-memory-agent': agentWithoutMemorySupport },
+      });
+
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'unsupported-memory-agent',
+      });
+
+      expect(result).toEqual({ result: false });
+    });
+
     it('should use agent memory when agentId is provided', async () => {
       const mastra = new Mastra({
         logger: false,
