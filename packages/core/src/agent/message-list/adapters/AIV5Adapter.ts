@@ -7,6 +7,7 @@ import type {
   MastraDBMessage,
   MastraMessageContentV2,
   MastraMessagePart,
+  MastraToolInvocation,
   MastraToolInvocationPart,
   MessageSource,
 } from '../state/types';
@@ -243,20 +244,29 @@ export class AIV5Adapter {
     const hasToolInvocationParts = dbMsg.content.parts?.some(p => p.type === 'tool-invocation');
     if (dbMsg.content.toolInvocations && !hasToolInvocationParts) {
       for (const invocation of dbMsg.content.toolInvocations) {
-        if (invocation.state === 'result') {
+        const legacyInvocation = invocation as MastraToolInvocation;
+        if (legacyInvocation.state === 'result') {
           parts.push({
-            type: `tool-${invocation.toolName}`,
-            toolCallId: invocation.toolCallId,
+            type: `tool-${legacyInvocation.toolName}`,
+            toolCallId: legacyInvocation.toolCallId,
             state: 'output-available',
-            input: invocation.args,
-            output: invocation.result,
+            input: legacyInvocation.args,
+            output: legacyInvocation.result,
+          });
+        } else if (legacyInvocation.state === 'output-error') {
+          parts.push({
+            type: `tool-${legacyInvocation.toolName}`,
+            toolCallId: legacyInvocation.toolCallId,
+            state: 'output-error',
+            input: legacyInvocation.args,
+            errorText: legacyInvocation.errorText || '',
           });
         } else {
           parts.push({
-            type: `tool-${invocation.toolName}`,
-            toolCallId: invocation.toolCallId,
-            state: invocation.state === 'call' ? 'input-available' : 'input-streaming',
-            input: invocation.args,
+            type: `tool-${legacyInvocation.toolName}`,
+            toolCallId: legacyInvocation.toolCallId,
+            state: legacyInvocation.state === 'call' ? 'input-available' : 'input-streaming',
+            input: legacyInvocation.args,
           });
         }
       }

@@ -964,6 +964,27 @@ describe('TokenCounter', () => {
       expect(withToolResultAgain).toBe(withToolResult);
     });
 
+    it('counts output-error tool invocations for observation context', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolCallId: 'tool-1',
+              toolName: 'find_files',
+              args: { path: '/Users/test' },
+              errorText: 'Permission denied: path is outside the workspace',
+            },
+          },
+        ],
+      });
+
+      expect(counter.countMessage(message)).toBeGreaterThan(0);
+    });
+
     it('prefers stored mastra.modelOutput over raw tool results for token counting', async () => {
       const counter = new TokenCounter();
       const args = { q: 'weather in sf' };

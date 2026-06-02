@@ -312,6 +312,46 @@ describe('consumeAgentStream', () => {
       expect(text).toContain('done');
     });
 
+    it("'timeline': marks structured error tool results as error task updates", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'timeline' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'find_files', args: { path: '/outside-workspace' } },
+          },
+          {
+            type: 'tool-result',
+            payload: {
+              toolCallId: 't1',
+              toolName: 'find_files',
+              args: { path: '/outside-workspace' },
+              result: 'Permission denied: path is outside the workspace',
+              isError: true,
+            },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const post = calls.find(c => c.kind === 'post') as Extract<Call, { kind: 'post' }>;
+      const drained = await drainStreamingPlan(post.arg);
+      const taskUpdates = drained.filter(
+        (p): p is { type: 'task_update'; status: string; id: string; output?: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+
+      expect(taskUpdates).toHaveLength(2);
+      expect(taskUpdates[0]).toMatchObject({ id: 't1', status: 'in_progress' });
+      expect(taskUpdates[1]).toMatchObject({
+        id: 't1',
+        status: 'error',
+        output: 'Error: Permission denied: path is outside the workspace',
+      });
+    });
+
     it("'grouped': renders task_updates inside a single plan block (groupTasks: 'plan')", async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
       await drive(

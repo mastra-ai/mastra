@@ -5023,7 +5023,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       await resultObject.consumeStream();
     });
 
-    it('should include tool-error chunks when a tool throws', async () => {
+    it('should include errored tool-result chunks when a tool throws', async () => {
       const messageList2 = createMessageListWithUserMessage();
       const errorChunks: Array<ChunkType> = [];
 
@@ -5094,15 +5094,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       await resultObject.consumeStream();
 
-      const toolErrorChunks = errorChunks.filter(c => c.type === 'tool-error');
+      const toolErrorChunks = errorChunks.filter(c => c.type === 'tool-result' && c.payload?.isError);
       expect(toolErrorChunks).toHaveLength(1);
       expect(toolErrorChunks[0]).toMatchObject({
-        type: 'tool-error',
+        type: 'tool-result',
         from: 'AGENT',
         payload: expect.objectContaining({
           toolCallId: 'call-1',
           toolName: 'failingTool',
-          error: expect.any(Error),
+          result: expect.any(Error),
+          isError: true,
         }),
       });
     });
@@ -9036,6 +9037,89 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(errorResult.output).toBeDefined();
       expect(errorResult.output.type).toBe('error-text');
       expect(errorResult.output.value).toContain('connection refused');
+    });
+
+    it('should continue when a tool returns a structured isError result', async () => {
+      const messageList = createMessageListWithUserMessage();
+
+      const stepInputs: Array<any> = [];
+      let responseCount = 0;
+      const resultObject = await loopFn({
+        methodType: 'stream',
+        runId,
+        agentId: 'agent-id',
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt }) => {
+                stepInputs.push(prompt);
+                switch (responseCount++) {
+                  case 0:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-structured-error',
+                          toolName: 'structuredErrorTool',
+                          input: `{ "path": "/Users/test" }`,
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: 'text-1',
+                          delta: 'The tool failed because the path is outside the workspace.',
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage2,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected LLM call #${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
+        tools: {
+          structuredErrorTool: {
+            inputSchema: z.object({ path: z.string() }),
+            execute: async () => ({
+              message: 'Permission denied: path is outside the workspace',
+              isError: true,
+            }),
+          },
+        },
+        messageList,
+        stopWhen: stepCountIs(5),
+        options: {},
+      });
+
+      await resultObject.consumeStream();
+
+      expect(stepInputs).toHaveLength(2);
+      expect((await resultObject.steps)[1]!.text).toBe('The tool failed because the path is outside the workspace.');
+
+      const secondPrompt = stepInputs[1]!;
+      const toolResultParts = secondPrompt.filter((m: any) => m.role === 'tool').flatMap((m: any) => m.content);
+      const errorResult = toolResultParts.find((p: any) => p.toolCallId === 'call-structured-error');
+      expect(errorResult.output.type).toBe('error-text');
+      expect(errorResult.output.value).toContain('Permission denied');
     });
 
     it('should persist output-error state in the message list', async () => {

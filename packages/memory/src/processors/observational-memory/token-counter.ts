@@ -1730,12 +1730,12 @@ export class TokenCounter {
         return { tokens, overheadDelta, toolResultDelta };
       }
 
-      if (invocation.state === 'result') {
+      if (invocation.state === 'result' || invocation.state === 'output-error') {
         toolResultDelta++;
-        const { value: resultForCounting, usingStoredModelOutput } = this.resolveToolResultForTokenCounting(
-          part,
-          invocation.result,
-        );
+        const { value: resultForCounting, usingStoredModelOutput } =
+          invocation.state === 'output-error'
+            ? { value: invocation.errorText ?? 'Tool execution failed', usingStoredModelOutput: false }
+            : this.resolveToolResultForTokenCounting(part, invocation.result);
 
         if (resultForCounting !== undefined) {
           const contentTokens = this.countMultimodalToolResultContent(part, resultForCounting);

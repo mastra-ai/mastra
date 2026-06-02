@@ -1,5 +1,6 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
 import { RequestContext } from '../request-context';
@@ -143,6 +144,136 @@ describe('Harness signal messages', () => {
     expect(assistantEnds).toHaveLength(1);
     expect(assistantEnds[0]?.message.content).toEqual([{ type: 'text', text: 'Hello' }]);
     expect(harness.getCurrentRunId()).toBeNull();
+  });
+
+  it('continues consuming harness streams after non-terminal finish chunks', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    await harness.createThread();
+
+    const chunks = [
+      {
+        type: 'finish',
+        runId: 'run-1',
+        payload: {
+          stepResult: {
+            reason: 'tool-calls',
+            isContinued: true,
+          },
+        },
+      },
+      {
+        type: 'text-start',
+        runId: 'run-1',
+        payload: { id: 'text-1' },
+      },
+      {
+        type: 'text-delta',
+        runId: 'run-1',
+        payload: { id: 'text-1', text: 'The tool failed because the path is outside the workspace.' },
+      },
+      {
+        type: 'finish',
+        runId: 'run-1',
+        payload: {
+          stepResult: {
+            reason: 'stop',
+            isContinued: false,
+          },
+        },
+      },
+    ];
+
+    const result = await (harness as any).processStream({
+      fullStream: (async function* () {
+        for (const chunk of chunks) {
+          yield chunk;
+        }
+      })(),
+    });
+
+    expect(result.message.content).toEqual([
+      {
+        type: 'text',
+        text: 'The tool failed because the path is outside the workspace.',
+      },
+    ]);
+    expect(events.filter(event => event.type === 'message_end')).toHaveLength(1);
+  });
+
+  it('continues the subscribed thread stream after a structured tool error result', async () => {
+    const storage = new InMemoryStore();
+    const events: HarnessEvent[] = [];
+    let calls = 0;
+    const agent = new Agent({
+      id: 'tool-error-agent',
+      name: 'tool-error-agent',
+      instructions: 'Use tools when asked.',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream:
+            calls++ === 0
+              ? convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'tool-call', toolCallId: 'call-1', toolName: 'failingTool', input: '{ "path": "/home" }' },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  },
+                ])
+              : convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'text-start', id: 'text-1' },
+                  {
+                    type: 'text-delta',
+                    id: 'text-1',
+                    delta: 'The tool failed because the path is outside the workspace.',
+                  },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  },
+                ]),
+        }),
+      }),
+      tools: {
+        failingTool: {
+          inputSchema: z.object({ path: z.string() }),
+          execute: async () => ({ message: 'path is outside the workspace', isError: true }),
+        },
+      },
+    });
+    const harness = createHarness(storage, agent);
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    await harness.createThread();
+    await harness.setState({ yolo: true } as any);
+    await harness.sendMessage({ content: 'call the failing tool' });
+    await waitFor(() => events.some(event => event.type === 'agent_end'));
+
+    expect(calls).toBe(2);
+    expect(
+      events.some(
+        event =>
+          event.type === 'message_end' &&
+          event.message.role === 'assistant' &&
+          event.message.content.some(
+            part => part.type === 'text' && part.text === 'The tool failed because the path is outside the workspace.',
+          ),
+      ),
+    ).toBe(true);
   });
 
   it('sends active text signals without building idle stream options', async () => {

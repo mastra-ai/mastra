@@ -14,6 +14,7 @@ type ToolCallOutput = {
   toolName: string;
   args: Record<string, any>;
   result?: any;
+  isError?: boolean;
   error?: Error;
   providerMetadata?: Record<string, any>;
   providerExecuted?: boolean;
@@ -216,7 +217,7 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-result' }));
   });
 
-  it('should emit tool-error for tools with errors and continue the loop for self-recovery', async () => {
+  it('should emit errored tool-result chunks for tools with errors and continue the loop for self-recovery', async () => {
     // Arrange: Tools without results but with errors
     const inputData: ToolCallOutput[] = [
       {
@@ -231,13 +232,14 @@ describe('createLLMMappingStep HITL behavior', () => {
     // Act
     const result = await llmMappingStep.execute(createExecuteParams(inputData));
 
-    // Assert: Should emit tool-error chunk
+    // Assert: Should emit errored tool-result chunk
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'tool-error',
+        type: 'tool-result',
         payload: expect.objectContaining({
           toolCallId: 'call-1',
-          error: expect.any(Error),
+          result: expect.any(Error),
+          isError: true,
         }),
       }),
     );
@@ -266,13 +268,14 @@ describe('createLLMMappingStep HITL behavior', () => {
 
     // Assert: Should NOT bail — the agentic loop should continue so the model can self-correct
     expect(bail).not.toHaveBeenCalled();
-    // Should still emit tool-error chunk so the error is visible in the stream
+    // Should still emit an errored tool-result chunk so the error is visible in the stream
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'tool-error',
+        type: 'tool-result',
         payload: expect.objectContaining({
           toolCallId: 'call-1',
-          error: expect.any(Error),
+          result: expect.any(Error),
+          isError: true,
         }),
       }),
     );
@@ -335,13 +338,14 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(bail).not.toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(true);
 
-    // Should emit tool-error for the hallucinated tool
+    // Should emit an errored tool-result for the hallucinated tool
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'tool-error',
+        type: 'tool-result',
         payload: expect.objectContaining({
           toolCallId: 'call-2',
           toolName: 'creating:view',
+          isError: true,
         }),
       }),
     );
@@ -583,14 +587,15 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
 
     const result = await llmMappingStep.execute(createExecuteParams(inputData));
 
-    // The error should be emitted as a tool-error chunk
+    // The error should be emitted as an errored tool-result chunk
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'tool-error',
+        type: 'tool-result',
         payload: expect.objectContaining({
           toolCallId: 'call-1',
           toolName: 'myTool',
-          error: expect.any(Error),
+          result: expect.any(Error),
+          isError: true,
         }),
       }),
     );
@@ -630,6 +635,48 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
     );
   });
 
+  it('should treat isError tool results as output-error and continue the loop', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'find_files',
+        args: { path: '/outside-workspace', maxDepth: 1 },
+        result: {
+          content: 'path is outside the workspace; use a path relative to the workspace root',
+          isError: true,
+        },
+      },
+    ];
+
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          toolName: 'find_files',
+          result: 'path is outside the workspace; use a path relative to the workspace root',
+          isError: true,
+        }),
+      }),
+    );
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'output-error',
+          toolCallId: 'call-1',
+          toolName: 'find_files',
+          args: { path: '/outside-workspace', maxDepth: 1 },
+          errorText: 'path is outside the workspace; use a path relative to the workspace root',
+        },
+      }),
+    );
+    expect(bail).not.toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(true);
+  });
+
   it('should continue the loop when a tool execution error occurs alongside successful tool results', async () => {
     // Mixed scenario: one tool succeeds, one throws at runtime.
     // The model should see both the success and the error, and be allowed to retry.
@@ -651,13 +698,14 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
 
     const result = await llmMappingStep.execute(createExecuteParams(inputData));
 
-    // Should emit tool-error for the failed tool
+    // Should emit an errored tool-result for the failed tool
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'tool-error',
+        type: 'tool-result',
         payload: expect.objectContaining({
           toolCallId: 'call-2',
           toolName: 'processData',
+          isError: true,
         }),
       }),
     );
@@ -703,7 +751,7 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
 
     const result = await llmMappingStep.execute(createExecuteParams(inputData));
 
-    // Both errors should be emitted as tool-error chunks
+    // Both errors should be emitted as errored tool-result chunks
     expect(controller.enqueue).toHaveBeenCalledTimes(2);
 
     // Errors should be updated in messageList for the model to see

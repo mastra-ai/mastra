@@ -1,5 +1,6 @@
 ---
 '@mastra/core': patch
+'@mastra/memory': patch
 ---
 
-Fixed failed tool calls showing up as successful when a conversation is reloaded from history. Previously a tool that threw an error displayed correctly while the agent was running, but reappeared as a successful result once the conversation was loaded from memory. The error is now preserved and displayed on reload, matching what you see during the live run. Fixes #15569.
+Fixed failed tool calls being treated as successful results in agent history, live harness streams, and observational memory token counting. Tool errors are now preserved as error outputs when reloading memory, and continued finish chunks no longer stop the harness before the agent can respond to a failed tool call. Fixes #15569.

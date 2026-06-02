@@ -127,6 +127,14 @@ export class AgentThreadStreamRuntime {
     return signal;
   }
 
+  #isTerminalStreamPart(part: unknown): boolean {
+    const typedPart = part as { type?: string; payload?: { stepResult?: { isContinued?: boolean } } };
+    if (typedPart.type === 'finish') {
+      return typedPart.payload?.stepResult?.isContinued !== true;
+    }
+    return typedPart.type === 'error' || typedPart.type === 'abort' || typedPart.type === 'tool-call-suspended';
+  }
+
   #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     void this.#publishAndWait(pubsub, key, event).catch(() => {});
   }
@@ -703,6 +711,8 @@ export class AgentThreadStreamRuntime {
       wake();
     };
 
+    const runtime = this;
+
     return {
       activeRunId,
       abort: () => this.abortThread(options, resolvedPubSub),
@@ -728,12 +738,7 @@ export class AgentThreadStreamRuntime {
                 const typedPart = part as any;
                 yield typedPart;
                 if (done) break;
-                if (
-                  typedPart.type === 'finish' ||
-                  typedPart.type === 'error' ||
-                  typedPart.type === 'abort' ||
-                  typedPart.type === 'tool-call-suspended'
-                ) {
+                if (runtime.#isTerminalStreamPart(typedPart)) {
                   // After a terminal chunk, drain remaining stream data in the
                   // background to prevent backpressure from blocking upstream
                   // processing (e.g. OM), while allowing the generator to

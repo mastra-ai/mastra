@@ -602,7 +602,7 @@ export async function runStreamingDriver({
         type: 'task_update',
         id: enr.toolCallId,
         title: taskTitle,
-        status: 'complete',
+        status: chunk.payload.isError ? 'error' : 'complete',
         // Grouped is at-a-glance: suppress the full result body to keep
         // tasks single-line. Timeline shows the full result.
         output: toolDisplay === 'timeline' ? enr.resultText || undefined : undefined,

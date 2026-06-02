@@ -216,6 +216,38 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         return hasMetadata ? providerMetadata : undefined;
       }
 
+      function isErrorToolResult(toolCall: { isError?: boolean; result?: unknown }): boolean {
+        if (toolCall.isError) return true;
+        return (
+          toolCall.result != null &&
+          typeof toolCall.result === 'object' &&
+          (toolCall.result as Record<string, unknown>).isError === true
+        );
+      }
+
+      function getToolError(toolCall: { error?: unknown; result?: unknown }): unknown {
+        if (toolCall.error) return toolCall.error;
+        const result = toolCall.result;
+        if (result != null && typeof result === 'object') {
+          const content = (result as Record<string, unknown>).content;
+          if (typeof content === 'string') return content;
+          if (Array.isArray(content)) {
+            const text = content
+              .filter(
+                part =>
+                  part != null &&
+                  typeof part === 'object' &&
+                  (part as Record<string, unknown>).type === 'text' &&
+                  typeof (part as Record<string, unknown>).text === 'string',
+              )
+              .map(part => (part as Record<string, string>).text)
+              .join('\n');
+            if (text) return text;
+          }
+        }
+        return result ?? 'Tool execution failed';
+      }
+
       async function transformToolChunk(
         chunk: ChunkType<OUTPUT>,
         toolCall: {
@@ -223,6 +255,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           toolCallId: string;
           args?: unknown;
           result?: unknown;
+          isError?: boolean;
           error?: unknown;
           providerMetadata?: Record<string, unknown>;
         },
@@ -268,25 +301,34 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         return withToolPayloadTransformMetadata(withToolPayloadTransformMetadata(chunk, inputTransform), transform);
       }
 
-      if (inputData?.some(toolCall => toolCall?.result === undefined && !toolCall.providerExecuted)) {
-        const errorResults = inputData.filter(toolCall => toolCall?.error && !toolCall.providerExecuted);
+      if (
+        inputData?.some(
+          toolCall => (toolCall?.result === undefined || isErrorToolResult(toolCall)) && !toolCall.providerExecuted,
+        )
+      ) {
+        const errorResults = inputData.filter(
+          toolCall => (toolCall?.error || isErrorToolResult(toolCall)) && !toolCall.providerExecuted,
+        );
 
         if (errorResults?.length) {
           for (const toolCall of errorResults) {
+            const toolError = getToolError(toolCall);
             const chunk = await transformToolChunk(
               {
-                type: 'tool-error',
+                type: 'tool-result',
                 runId: rest.runId,
                 from: ChunkFrom.AGENT,
                 payload: {
-                  error: toolCall.error,
+                  result: toolError,
+                  isError: true,
                   args: toolCall.args,
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+                  providerExecuted: toolCall.providerExecuted,
                 },
               },
-              toolCall,
+              { ...toolCall, error: toolError },
               'error',
             );
             const processed = await processAndEnqueueChunk(chunk);
@@ -300,11 +342,13 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
                 errorText:
-                  toolCall.error instanceof Error
-                    ? toolCall.error.message
-                    : toolCall.error == null
+                  toolError instanceof Error
+                    ? toolError.message
+                    : toolError == null
                       ? 'Tool execution failed'
-                      : safeStringify(toolCall.error),
+                      : typeof toolError === 'string'
+                        ? toolError
+                        : safeStringify(toolError),
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
@@ -330,13 +374,15 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // Check for pending HITL tool calls (tools with no result and no error).
         // In mixed turns with errors and pending HITL tools,
         // the HITL suspension path should take priority over continuing the loop.
-        const hasPendingHITL = inputData.some(tc => tc.result === undefined && !tc.error && !tc.providerExecuted);
+        const hasPendingHITL = inputData.some(
+          tc => tc.result === undefined && !tc.error && !isErrorToolResult(tc) && !tc.providerExecuted,
+        );
 
         if (errorResults?.length > 0 && !hasPendingHITL) {
           // Process any successful tool results from this turn before continuing.
           // In a mixed turn (e.g., one valid tool + one hallucinated), the successful
           // results need their chunks emitted and messages added to the messageList.
-          const successfulResults = inputData.filter(tc => tc.result !== undefined);
+          const successfulResults = inputData.filter(tc => tc.result !== undefined && !isErrorToolResult(tc));
           if (successfulResults.length) {
             for (const toolCall of successfulResults) {
               // Compute modelOutput before emitting the chunk so consumers (e.g. harness)

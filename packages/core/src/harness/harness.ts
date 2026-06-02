@@ -1786,7 +1786,7 @@ export class Harness<TState = {}> {
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
           if (
             streamResult ||
-            chunk.type === 'finish' ||
+            this.isTerminalFinishChunk(chunk) ||
             chunk.type === 'error' ||
             chunk.type === 'abort' ||
             chunk.type === 'tool-call-suspended'
@@ -2294,7 +2294,7 @@ export class Harness<TState = {}> {
       }
       if (
         result ||
-        chunk.type === 'finish' ||
+        this.isTerminalFinishChunk(chunk) ||
         chunk.type === 'error' ||
         chunk.type === 'abort' ||
         chunk.type === 'tool-call-suspended' ||
@@ -2324,6 +2324,10 @@ export class Harness<TState = {}> {
     await this.drainFollowUpQueue();
 
     return result;
+  }
+
+  private isTerminalFinishChunk(chunk: any): boolean {
+    return chunk?.type === 'finish' && chunk.payload?.stepResult?.isContinued !== true;
   }
 
   private async processStreamChunk(
@@ -2448,12 +2452,23 @@ export class Harness<TState = {}> {
 
       case 'tool-error': {
         const toolError = chunk.payload;
+        const result = getDisplayTransform(chunk.metadata, 'error', toolError.error);
+        state.currentMessage.content.push({
+          type: 'tool_result',
+          id: toolError.toolCallId,
+          name: toolError.toolName,
+          result,
+          isError: true,
+          ...(toolError.providerMetadata ? { providerMetadata: toolError.providerMetadata } : {}),
+        });
         this.emit({
           type: 'tool_end',
           toolCallId: toolError.toolCallId,
-          result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
+          result,
           isError: true,
+          ...(toolError.providerMetadata ? { providerMetadata: toolError.providerMetadata } : {}),
         });
+        this.emit({ type: 'message_update', message: { ...state.currentMessage } });
         break;
       }
 

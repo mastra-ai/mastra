@@ -2203,6 +2203,57 @@ describe('MessageList V5 Support', () => {
       expect(drainedApprovalPart.data.args).toBeNull();
     });
 
+    it('should preserve legacy toolInvocations output-error state in the model prompt', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('List the inaccessible directory', 'input');
+      list.add(
+        {
+          id: 'msg-legacy-output-error',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+          content: {
+            format: 2,
+            toolInvocations: [
+              {
+                toolCallId: 'call-list-error',
+                toolName: 'find_files',
+                state: 'output-error',
+                args: { path: '/restricted' },
+                errorText: 'EACCES: permission denied',
+              },
+            ],
+          },
+        },
+        'response',
+      );
+
+      const uiToolPart = list.get.all.aiV5.ui()[1]!.parts.find((part: any) => part.toolCallId === 'call-list-error');
+      expect(uiToolPart).toEqual(
+        expect.objectContaining({
+          state: 'output-error',
+          errorText: 'EACCES: permission denied',
+        }),
+      );
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolMessage = prompt.find(message => message.role === 'tool');
+      const toolResult = (toolMessage as any).content.find((part: any) => part.toolCallId === 'call-list-error');
+
+      expect(toolResult).toEqual(
+        expect.objectContaining({
+          type: 'tool-result',
+          toolName: 'find_files',
+          output: {
+            type: 'error-text',
+            value: 'EACCES: permission denied',
+          },
+        }),
+      );
+    });
+
     it('should preserve modelOutput metadata across db to model to db conversion', () => {
       const list = new MessageList({ threadId, resourceId });
       const toolResultMessage: MastraDBMessage = {
