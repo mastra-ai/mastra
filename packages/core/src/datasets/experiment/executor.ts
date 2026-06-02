@@ -97,6 +97,9 @@ async function executeScorer(
   }
 }
 
+/** Maximum number of suspend/resume cycles to prevent infinite loops */
+const MAX_RESUME_CYCLES = 10;
+
 /**
  * Execute a dataset item against a target (agent, workflow, scorer, processor).
  * Phase 2: agent/workflow. Phase 4: scorer. Processor deferred.
@@ -104,7 +107,13 @@ async function executeScorer(
 export async function executeTarget(
   target: Target,
   targetType: TargetType,
-  item: { input: unknown; groundTruth?: unknown },
+  item: {
+    input: unknown;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
+    resumeSteps?: Record<string, unknown>;
+    resumeData?: unknown;
+  },
   options?: {
     signal?: AbortSignal;
     requestContext?: Record<string, unknown>;
@@ -263,15 +272,57 @@ async function executeAgent(
 }
 
 /**
+ * Extract resume data from item fields and metadata.
+ *
+ * Checks top-level `resumeSteps`/`resumeData` first (inline data path),
+ * then falls back to `metadata.resumeSteps`/`metadata.resumeData` (storage-backed path).
+ *
+ * Supports two shapes:
+ * 1. Keyed by step ID: `resumeSteps: { "step-id": <payload> }`
+ *    Used when the workflow may suspend on multiple steps and each needs distinct data.
+ * 2. Flat payload: `resumeData: <payload>`
+ *    Used when the workflow has a single suspended step (auto-detected).
+ */
+function extractResumeData(item: {
+  metadata?: Record<string, unknown>;
+  resumeSteps?: Record<string, unknown>;
+  resumeData?: unknown;
+}): {
+  perStep?: Record<string, unknown>;
+  flat?: unknown;
+} {
+  // Top-level fields (from inline DataItem) take precedence.
+  // Use explicit `undefined` checks rather than `??` so that falsy values
+  // like `null`, `false`, `0`, `""` are treated as valid resume payloads.
+  const perStep =
+    item.resumeSteps !== undefined
+      ? item.resumeSteps
+      : (item.metadata?.resumeSteps as Record<string, unknown> | undefined);
+  const flat = item.resumeData !== undefined ? item.resumeData : item.metadata?.resumeData;
+  return { perStep, flat };
+}
+
+/**
  * Execute a dataset item against a workflow.
  * Creates a run with scorers disabled to avoid double-scoring.
+ *
+ * When the workflow suspends, checks for resume data in `item.metadata`
+ * (via `resumeSteps` keyed by step ID or `resumeData` for single-step workflows)
+ * and automatically resumes. Loops through multiple suspend/resume cycles up to
+ * MAX_RESUME_CYCLES to support multi-step suspend workflows.
  *
  * Mirrors `executeWorkflow` in evals/run so dataset experiments and runEvals
  * produce the same observability spans and scoring data for workflow targets.
  */
 async function executeWorkflow(
   workflow: Workflow,
-  item: { input: unknown; groundTruth?: unknown },
+  item: {
+    input: unknown;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
+    resumeSteps?: Record<string, unknown>;
+    resumeData?: unknown;
+  },
   requestContext?: Record<string, unknown>,
 ): Promise<ExecutionResult> {
   const reqCtx: RequestContext | undefined = requestContext
@@ -280,12 +331,55 @@ async function executeWorkflow(
   const observabilityContext = resolveObservabilityContext({});
 
   const run = await workflow.createRun({ disableScorers: true });
-  const result = await run.start({
+  let result = await run.start({
     inputData: item.input,
     ...(reqCtx ? { requestContext: reqCtx } : {}),
     ...observabilityContext,
   });
 
+  // Auto-resume loop: if the workflow suspends and resume data is provided,
+  // resume the workflow automatically. Cap iterations to prevent infinite loops.
+  const { perStep, flat } = extractResumeData(item);
+  const hasResumeData = perStep !== undefined || flat !== undefined;
+
+  if (hasResumeData) {
+    let cycle = 0;
+    while (result.status === 'suspended' && cycle < MAX_RESUME_CYCLES) {
+      cycle++;
+
+      // Determine which steps are suspended
+      const suspendedPaths: string[][] = result.suspended ?? [];
+      if (suspendedPaths.length === 0) break;
+
+      // For each suspended step, look up resume data
+      const firstSuspendedStep = suspendedPaths[0]?.[0];
+      if (!firstSuspendedStep) break;
+
+      // Resolve resume data: per-step map takes precedence, then flat fallback.
+      // Use explicit undefined check so falsy values (null, false, 0) are forwarded.
+      const perStepValue = perStep?.[firstSuspendedStep];
+      const stepResumeData = perStepValue !== undefined ? perStepValue : flat;
+      if (stepResumeData === undefined) break; // No data for this step, stop resuming
+
+      result = await run.resume({
+        resumeData: stepResumeData,
+        step: firstSuspendedStep,
+        ...(reqCtx ? { requestContext: reqCtx } : {}),
+        ...observabilityContext,
+      });
+    }
+  }
+
+  return handleWorkflowResult(result);
+}
+
+/**
+ * Map a terminal WorkflowResult to an ExecutionResult.
+ * Uses a loose `result: any` parameter because WorkflowResult is heavily generic;
+ * status-narrowing guards below keep accesses safe.
+ */
+
+function handleWorkflowResult(result: any): ExecutionResult {
   // TracingProperties is intersected on every WorkflowResult variant
   const traceId = result.traceId ?? null;
   const spanId = result.spanId ?? null;
@@ -301,7 +395,6 @@ async function executeWorkflow(
     };
   }
 
-  // Handle all non-success statuses (still include traceId for debugging)
   if (result.status === 'failed') {
     return {
       output: null,
@@ -325,9 +418,14 @@ async function executeWorkflow(
   }
 
   if (result.status === 'suspended') {
+    // Workflow suspended but no resume data was provided (or exhausted).
+    // Return partial results with suspend payload for debugging.
     return {
-      output: null,
-      error: { message: 'Workflow suspended - not yet supported in dataset experiments' },
+      output: result.suspendPayload ?? null,
+      error: {
+        message:
+          'Workflow suspended — provide resume data via item.resumeSteps/item.resumeData (or metadata.resumeSteps/metadata.resumeData) to auto-resume',
+      },
       traceId,
       spanId,
       stepResults: result.steps as Record<string, StepResult<any, any, any, any>>,
@@ -346,11 +444,10 @@ async function executeWorkflow(
     };
   }
 
-  // Exhaustive check - should never reach here
-  const _exhaustiveCheck: never = result;
+  // Catch-all for any other status
   return {
     output: null,
-    error: { message: `Workflow ended with unexpected status: ${(_exhaustiveCheck as any).status}` },
+    error: { message: `Workflow ended with unexpected status: ${result.status}` },
     traceId,
     spanId,
   };

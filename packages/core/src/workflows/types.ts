@@ -486,6 +486,7 @@ export type WorkflowInfo = {
   allSteps: Record<string, SerializedStep>;
   name: string | undefined;
   description: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   stepGraph: SerializedStepFlowEntry[];
   inputSchema: string | undefined;
   outputSchema: string | undefined;
@@ -820,6 +821,7 @@ export type WorkflowConfig<
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   inputSchema: PublicSchema<TInput>;
   outputSchema: PublicSchema<TOutput>;
   stateSchema?: PublicSchema<TState>;

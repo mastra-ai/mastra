@@ -15,6 +15,7 @@ import {
   UPDATE_STORED_AGENT_ROUTE,
   DELETE_STORED_AGENT_ROUTE,
   PREVIEW_INSTRUCTIONS_ROUTE,
+  EXPORT_STORED_AGENT_ROUTE,
 } from '../../handlers/stored-agents';
 import type { ServerRoute } from '.';
 
@@ -31,6 +32,7 @@ export const STORED_AGENTS_ROUTES: readonly ServerRoute[] = [
   // ============================================================================
   LIST_STORED_AGENTS_ROUTE,
   PREVIEW_INSTRUCTIONS_ROUTE, // Must be before GET_STORED_AGENT_ROUTE
+  EXPORT_STORED_AGENT_ROUTE, // Must be before GET_STORED_AGENT_ROUTE
   GET_STORED_AGENT_ROUTE,
   CREATE_STORED_AGENT_ROUTE,
   UPDATE_STORED_AGENT_ROUTE,
@@ -63,6 +65,7 @@ export const STORED_AGENTS_ROUTES: readonly ServerRoute[] = [
 export type StoredAgentRoutes = readonly [
   typeof LIST_STORED_AGENTS_ROUTE,
   typeof PREVIEW_INSTRUCTIONS_ROUTE,
+  typeof EXPORT_STORED_AGENT_ROUTE,
   typeof GET_STORED_AGENT_ROUTE,
   typeof CREATE_STORED_AGENT_ROUTE,
   typeof UPDATE_STORED_AGENT_ROUTE,

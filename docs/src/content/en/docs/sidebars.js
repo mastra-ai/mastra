@@ -145,8 +145,24 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/sdk-agents',
+          label: 'SDK Agents',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/adding-voice',
           label: 'Voice',
+        },
+        {
+          type: 'doc',
+          id: 'agents/code-mode',
+          label: 'Code Mode',
+          customProps: {
+            tags: ['alpha'],
+          },
         },
         {
           type: 'doc',
@@ -712,6 +728,11 @@ const sidebars = {
               type: 'doc',
               id: 'observability/metrics/overview',
               label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/metrics/querying',
+              label: 'Querying metrics',
             },
           ],
         },

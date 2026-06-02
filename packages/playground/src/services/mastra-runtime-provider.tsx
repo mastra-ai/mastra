@@ -8,6 +8,7 @@ import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
+import { getCanSendWhileStreaming } from './mastra-runtime-state';
 import {
   buildMaxStepsStreamErrorMessage,
   buildStreamErrorMessage,
@@ -309,7 +310,8 @@ export function MastraRuntimeProvider({
   const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
-  const threadSignalsEnabled = window.MASTRA_AGENT_SIGNALS === 'true';
+  const threadSignalsEnabled =
+    window.MASTRA_AGENT_SIGNALS !== 'false' && !settings?.modelSettings?.chatWithLegacyStream;
 
   const addPendingSignal = useCallback((signalId: string, preview: string) => {
     setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
@@ -345,6 +347,7 @@ export function MastraRuntimeProvider({
     sendMessage,
     cancelRun,
     isRunning: isRunningStream,
+    isAwaitingToolApproval,
     setMessages,
     approveToolCall,
     declineToolCall,
@@ -867,7 +870,7 @@ export function MastraRuntimeProvider({
   });
 
   const runtime = useExternalStoreRuntime({
-    isRunning: isRunningStream,
+    isRunning: isRunningStream || isAwaitingToolApproval,
     messages: vnextmessages,
     convertMessage: x => x,
     onNew,
@@ -884,9 +887,13 @@ export function MastraRuntimeProvider({
   return (
     <ThreadRuntimeStateProvider
       value={{
-        isStreaming: isRunningStream,
-        canSendWhileStreaming:
-          isSupportedModel && threadSignalsEnabled && Boolean(threadId) && !threadSignalsUnsupported,
+        isStreaming: isRunningStream || isAwaitingToolApproval,
+        canSendWhileStreaming: getCanSendWhileStreaming({
+          isSupportedModel,
+          threadSignalsEnabled,
+          threadId,
+          threadSignalsUnsupported,
+        }),
         cancelStream: onCancel,
         pendingSignals,
         hasPendingMessages: pendingSignals.length > 0,

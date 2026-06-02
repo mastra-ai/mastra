@@ -261,7 +261,14 @@ export type ModelWithRetries = {
   headers?: DynamicArgument<Record<string, string>>;
 };
 
-export interface AgentConfig<
+export type AgentEditorConfig =
+  | false
+  | {
+      instructions?: boolean;
+      tools?: boolean | { description?: boolean };
+    };
+
+interface AgentConfigBase<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
@@ -456,9 +463,16 @@ export interface AgentConfig<
    */
   browser?: MastraBrowser;
   /**
-   * Voice settings for speech input and output.
+   * Voice settings for speech input and output. Can be provided statically or resolved dynamically per request.
+   *
+   * Provide a resolver (`({ requestContext }) => new SomeVoice(...)`) to give each request/session its own
+   * voice instance. This is required for realtime / speech-to-speech providers, where concurrent live sessions
+   * must not share a single mutable instance (ws, tools, instructions, request context). The caller owns the
+   * lifecycle (e.g. `disconnect()`) of a resolver-produced instance.
+   *
+   * A static `MastraVoice` remains shared across requests, which is appropriate for one-shot TTS.
    */
-  voice?: MastraVoice;
+  voice?: DynamicArgument<MastraVoice, TRequestContext>;
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *
@@ -540,6 +554,47 @@ export interface AgentConfig<
    */
   transform?: ToolPayloadTransformPolicy;
 }
+
+/**
+ * Whether a given `editor` config hands a field to Studio (`true`) so that
+ * field becomes owned by Studio and must NOT be provided in code.
+ *
+ * To add a new editable field, add an `Owns*` helper here and a corresponding
+ * clause to {@link AgentEditableFieldConfig} — no combinatorial union needed.
+ */
+type EditorOwnsInstructions<TEditor> = TEditor extends { instructions: true } ? true : false;
+type EditorOwnsToolMembership<TEditor> = TEditor extends { tools: true } ? true : false;
+
+/**
+ * Resolves the `instructions`/`tools` portion of an agent config from the
+ * `editor` config inferred at `new Agent({...})`.
+ *
+ * `instructions` and `tools` are owned by *either* code or Studio, never both.
+ * When `editor` hands a field to Studio (`instructions: true` / `tools: true`),
+ * that field is forbidden in code (`?: never`); otherwise it keeps its normal
+ * code-owned shape. Tool *descriptions* (`tools: { description: true }`) keep
+ * tool membership in code, so they fall under the code-owned case.
+ */
+type AgentEditableFieldConfig<
+  TTools extends ToolsInput,
+  TRequestContext extends Record<string, any> | unknown,
+  TEditor extends AgentEditorConfig | undefined,
+> = (EditorOwnsInstructions<TEditor> extends true
+  ? { instructions?: never }
+  : { instructions: DynamicArgument<AgentInstructions, TRequestContext> }) &
+  (EditorOwnsToolMembership<TEditor> extends true
+    ? { tools?: never }
+    : { tools?: DynamicArgument<TTools, TRequestContext> });
+
+export type AgentConfig<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TOutput = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TEditor extends AgentEditorConfig | undefined = AgentEditorConfig | undefined,
+> = Omit<AgentConfigBase<TAgentId, TTools, TOutput, TRequestContext>, 'instructions' | 'tools' | 'editor'> & {
+  editor?: TEditor;
+} & AgentEditableFieldConfig<TTools, TRequestContext, TEditor>;
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });

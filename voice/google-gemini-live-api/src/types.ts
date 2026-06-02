@@ -129,6 +129,21 @@ export interface GeminiLiveEventMap {
   speaking: { audio?: string; audioData?: Int16Array; sampleRate?: number };
   /** Text response or transcription - compatible with base VoiceEventMap */
   writing: { text: string; role: 'assistant' | 'user' };
+  /**
+   * Model chain-of-thought / reasoning text.
+   *
+   * Gemini-specific. On native-audio models, `serverContent.modelTurn.parts.text`
+   * is the model's internal reasoning, not the spoken response — the spoken
+   * response arrives via `serverContent.outputTranscription.text` and is emitted
+   * as `writing` with `role: 'assistant'`. This event surfaces the reasoning
+   * stream separately so consumers can render it as a "thinking" UI affordance
+   * without conflating it with the assistant's spoken reply.
+   *
+   * On non-native-audio models there is no `outputTranscription` channel, so
+   * `modelTurn.parts.text` IS the spoken response and continues to be emitted
+   * as `writing` (this event will not fire).
+   */
+  thinking: { text: string };
   /** Error events - compatible with base VoiceEventMap */
   error: { message: string; code?: string; details?: unknown };
   /** Session state changes */
@@ -245,6 +260,28 @@ export interface GeminiLiveServerMessage {
         };
       }>;
     };
+    /**
+     * Transcript of the user's spoken input. Only present when
+     * `input_audio_transcription` is enabled in the setup payload.
+     */
+    inputTranscription?: {
+      text?: string;
+    };
+    /**
+     * Transcript of the model's spoken output. Only present when
+     * `output_audio_transcription` is enabled in the setup payload. On
+     * native-audio models this is the authoritative source for the spoken
+     * response (NOT `modelTurn.parts.text`, which is reasoning).
+     */
+    outputTranscription?: {
+      text?: string;
+    };
+    /**
+     * `true` when the model's in-flight response was interrupted by a new user
+     * activity (barge-in). The server stops sending further audio for the
+     * current turn after this signal.
+     */
+    interrupted?: boolean;
     turnComplete?: boolean;
   };
 

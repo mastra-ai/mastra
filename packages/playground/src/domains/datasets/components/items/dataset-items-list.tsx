@@ -64,6 +64,7 @@ export function DatasetItemsList({
   onImportJsonClick,
 }: DatasetItemsListProps) {
   // Only show empty state if there are no items AND no search is active AND not loading
+
   if (items.length === 0 && !searchQuery && !isLoading) {
     return (
       <EmptyDatasetItemList
@@ -134,8 +135,8 @@ export function DatasetItemsList({
             const rowCells = (
               <>
                 <DataList.IdCell id={item.id} />
-                <DataList.MonoCell>{truncateValue(item.input, 60)}</DataList.MonoCell>
-                <DataList.MonoCell>{item.groundTruth ? truncateValue(item.groundTruth, 40) : '-'}</DataList.MonoCell>
+                <DataList.MonoCell>{truncateValue(item.input, 150)}</DataList.MonoCell>
+                <DataList.MonoCell>{item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}</DataList.MonoCell>
                 <DataList.Cell height="compact" className="min-w-0">
                   {item.expectedTrajectory ? (
                     <span className="text-ui-smd text-neutral3">

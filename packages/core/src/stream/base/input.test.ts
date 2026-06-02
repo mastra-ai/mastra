@@ -210,6 +210,59 @@ describe('MastraModelInput', () => {
       });
     });
 
+    it('should enqueue chunks returned by onResult before transformed stream chunks', async () => {
+      const initialChunk: ChunkType = {
+        type: 'custom-message',
+        runId: 'test-run-id',
+        from: 'on-result',
+        payload: {
+          content: 'initial lifecycle chunk',
+        },
+      };
+
+      mockCreateStream.mockResolvedValue({
+        stream: createMockStream([{ id: 'msg1', content: 'transformed chunk' }]),
+        warnings: {},
+        request: {},
+        rawResponse: {},
+      });
+      mockOnResult.mockReturnValue(initialChunk);
+
+      const runId = 'test-run-id';
+      const resultStream = testInput.initialize({
+        runId,
+        createStream: mockCreateStream,
+        onResult: mockOnResult,
+      });
+
+      const reader = resultStream.getReader();
+      const chunks: ChunkType[] = [];
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      expect(chunks).toHaveLength(2);
+      expect(chunks[0]).toBe(initialChunk);
+      expect(chunks[1]).toEqual({
+        type: 'custom-message',
+        runId,
+        from: 'test-converter',
+        payload: {
+          originalId: 'msg1',
+          content: 'transformed chunk',
+          metadata: {},
+          rawValue: { id: 'msg1', content: 'transformed chunk' },
+        },
+      });
+    });
+
     it('should handle errors from createStream', async () => {
       const error = new Error('Stream creation failed');
       mockCreateStream.mockRejectedValue(error);

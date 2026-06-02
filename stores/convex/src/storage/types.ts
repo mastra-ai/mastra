@@ -27,9 +27,31 @@ export type StorageRequest =
       record: Record<string, any>;
     }
   | {
+      op: 'updateThread';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      title: string;
+      metadata: Record<string, any>;
+      updatedAt: string;
+    }
+  | {
+      op: 'updateResource';
+      tableName: TABLE_NAMES | string;
+      resourceId: string;
+      workingMemory?: string;
+      metadata?: Record<string, any>;
+      createdAt: string;
+      updatedAt: string;
+    }
+  | {
       op: 'load';
       tableName: TABLE_NAMES | string;
       keys: Record<string, any>;
+    }
+  | {
+      op: 'loadMany';
+      tableName: TABLE_NAMES | string;
+      ids: string[];
     }
   | {
       op: 'clearTable' | 'dropTable';

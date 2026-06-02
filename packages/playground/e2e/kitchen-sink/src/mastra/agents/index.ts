@@ -178,6 +178,29 @@ export const subAgent = new Agent({
   model: 'google/gemini-2.5-pro',
 });
 
+/**
+ * Code-defined agent that allows Studio to override every editable field.
+ * Used by cms/agents/code-agent-override E2E tests.
+ */
+export const codeOverrideEditableAgent = new Agent({
+  id: 'code-override-editable',
+  name: 'Code Override Editable',
+  instructions: 'Original code instructions for editable override agent.',
+  model: 'openai/gpt-4o-mini',
+});
+
+/**
+ * Code-defined agent that opts out of all editing via `editor: false`.
+ * Studio should refuse to surface override actions for this one.
+ */
+export const codeOverrideLockedAgent = new Agent({
+  id: 'code-override-locked',
+  name: 'Code Override Locked',
+  instructions: 'Locked code instructions that Studio cannot override.',
+  model: 'openai/gpt-4o-mini',
+  editor: false,
+});
+
 export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
