@@ -213,7 +213,11 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
           changeMessage: 'Initial version',
         });
       } catch (versionError) {
-        await this.operations.delete({ tableName: TABLE_SCORER_DEFINITIONS, keys: { id: scorerDefinition.id } });
+        try {
+          await this.operations.delete({ tableName: TABLE_SCORER_DEFINITIONS, keys: { id: scorerDefinition.id } });
+        } catch (rollbackError) {
+          console.error('Failed to rollback scorer definition creation:', rollbackError);
+        }
         throw versionError;
       }
 

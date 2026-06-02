@@ -1,8 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-
-import { MySQLStore  } from './index';
-import type {MySQLStoreConfig} from './index';
 import { createTestSuite } from '@internal/storage-test-utils';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+
+import { MySQLStore } from './index';
+import type { MySQLStoreConfig } from './index';
 
 const TEST_CONFIG: MySQLStoreConfig = {
   host: process.env.MYSQL_HOST || 'localhost',

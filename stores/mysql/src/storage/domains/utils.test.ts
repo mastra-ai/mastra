@@ -1,3 +1,4 @@
+import { TABLE_MESSAGES } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -8,7 +9,6 @@ import {
   quoteIdentifier,
   transformToSqlValue,
 } from './utils';
-import { TABLE_MESSAGES } from '@mastra/core/storage';
 
 describe('MySQL utils', () => {
   it('quotes identifiers with backticks', () => {

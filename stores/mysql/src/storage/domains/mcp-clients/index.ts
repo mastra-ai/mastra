@@ -200,7 +200,11 @@ export class MCPClientsMySQL extends MCPClientsStorage {
           changeMessage: 'Initial version',
         });
       } catch (versionError) {
-        await this.operations.delete({ tableName: TABLE_MCP_CLIENTS, keys: { id: mcpClient.id } });
+        try {
+          await this.operations.delete({ tableName: TABLE_MCP_CLIENTS, keys: { id: mcpClient.id } });
+        } catch (rollbackError) {
+          console.error('Failed to rollback MCP client creation:', rollbackError);
+        }
         throw versionError;
       }
 
@@ -230,7 +234,15 @@ export class MCPClientsMySQL extends MCPClientsStorage {
     const { id, ...updates } = input;
     try {
       const existing = await this.getById(id);
-      if (!existing) throw new Error(`MCP client with id ${id} not found`);
+      if (!existing) {
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_MCP_CLIENT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `MCP client with id ${id} not found`,
+          details: { id },
+        });
+      }
 
       const { authorId, activeVersionId, metadata, status } = updates;
       const updateData: Record<string, unknown> = { updatedAt: new Date() };

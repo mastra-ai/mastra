@@ -2031,46 +2031,58 @@ export class MemoryMySQL extends MemoryStorage {
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
     try {
-      const nowSql = transformToSqlValue(new Date());
+      const connection = await this.pool.getConnection();
+      try {
+        await connection.beginTransaction();
 
-      const [currentRows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT ${omCol('bufferedObservationChunks')} FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ?`,
-        [input.id],
-      );
+        const nowSql = transformToSqlValue(new Date());
 
-      if (!currentRows || currentRows.length === 0) {
-        throwOMNotFound(input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
-      }
+        const [currentRows] = await connection.execute<RowDataPacket[]>(
+          `SELECT ${omCol('bufferedObservationChunks')} FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? FOR UPDATE`,
+          [input.id],
+        );
 
-      const existingChunks = parseBufferedChunks(currentRows[0]!.bufferedObservationChunks);
+        if (!currentRows || currentRows.length === 0) {
+          throwOMNotFound(input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
+        }
 
-      const newChunk: BufferedObservationChunk = {
-        id: `ombuf-${randomUUID()}`,
-        cycleId: input.chunk.cycleId,
-        observations: input.chunk.observations,
-        tokenCount: input.chunk.tokenCount,
-        messageIds: input.chunk.messageIds,
-        messageTokens: input.chunk.messageTokens,
-        lastObservedAt: input.chunk.lastObservedAt,
-        createdAt: new Date(),
-        suggestedContinuation: input.chunk.suggestedContinuation,
-        currentTask: input.chunk.currentTask,
-      };
+        const existingChunks = parseBufferedChunks(currentRows[0]!.bufferedObservationChunks);
 
-      const newChunks = [...existingChunks, newChunk];
-      const lastBufferedAtTime = input.lastBufferedAtTime ? transformToSqlValue(input.lastBufferedAtTime) : null;
+        const newChunk: BufferedObservationChunk = {
+          id: `ombuf-${randomUUID()}`,
+          cycleId: input.chunk.cycleId,
+          observations: input.chunk.observations,
+          tokenCount: input.chunk.tokenCount,
+          messageIds: input.chunk.messageIds,
+          messageTokens: input.chunk.messageTokens,
+          lastObservedAt: input.chunk.lastObservedAt,
+          createdAt: new Date(),
+          suggestedContinuation: input.chunk.suggestedContinuation,
+          currentTask: input.chunk.currentTask,
+        };
 
-      const [result] = await this.pool.execute(
-        `UPDATE ${OM_TABLE_QUOTED} SET
-          ${omCol('bufferedObservationChunks')} = ?,
-          ${omCol('lastBufferedAtTime')} = COALESCE(?, ${omCol('lastBufferedAtTime')}),
-          ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
-        [JSON.stringify(newChunks), lastBufferedAtTime, nowSql, input.id],
-      );
+        const newChunks = [...existingChunks, newChunk];
+        const lastBufferedAtTime = input.lastBufferedAtTime ? transformToSqlValue(input.lastBufferedAtTime) : null;
 
-      if ((result as ResultSetHeader).affectedRows === 0) {
-        throwOMNotFound(input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
+        const [result] = await connection.execute(
+          `UPDATE ${OM_TABLE_QUOTED} SET
+            ${omCol('bufferedObservationChunks')} = ?,
+            ${omCol('lastBufferedAtTime')} = COALESCE(?, ${omCol('lastBufferedAtTime')}),
+            ${omCol('updatedAt')} = ?
+          WHERE ${omCol('id')} = ?`,
+          [JSON.stringify(newChunks), lastBufferedAtTime, nowSql, input.id],
+        );
+
+        if ((result as ResultSetHeader).affectedRows === 0) {
+          throwOMNotFound(input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
+        }
+
+        await connection.commit();
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
       }
     } catch (error) {
       rethrowOrWrapOM(error, input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
@@ -2078,11 +2090,14 @@ export class MemoryMySQL extends MemoryStorage {
   }
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+    const connection = await this.pool.getConnection();
     try {
+      await connection.beginTransaction();
+
       const nowSql = transformToSqlValue(new Date());
 
-      const [currentRows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ?`,
+      const [currentRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? FOR UPDATE`,
         [input.id],
       );
 
@@ -2094,6 +2109,7 @@ export class MemoryMySQL extends MemoryStorage {
       const chunks = parseBufferedChunks(row.bufferedObservationChunks);
 
       if (chunks.length === 0) {
+        await connection.commit();
         return {
           chunksActivated: 0,
           messageTokensActivated: 0,
@@ -2181,7 +2197,7 @@ export class MemoryMySQL extends MemoryStorage {
       const existingPending = Number(row.pendingMessageTokens || 0);
       const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
-      await this.pool.execute(
+      await connection.execute(
         `UPDATE ${OM_TABLE_QUOTED} SET
           ${omCol('activeObservations')} = ?,
           ${omCol('observationTokenCount')} = ?,
@@ -2200,6 +2216,8 @@ export class MemoryMySQL extends MemoryStorage {
           input.id,
         ],
       );
+
+      await connection.commit();
 
       const latestChunkHints = activatedChunks[activatedChunks.length - 1];
 
@@ -2222,7 +2240,10 @@ export class MemoryMySQL extends MemoryStorage {
         currentTask: latestChunkHints?.currentTask ?? undefined,
       };
     } catch (error) {
+      await connection.rollback();
       rethrowOrWrapOM(error, input.id, 'SWAP_BUFFERED_TO_ACTIVE');
+    } finally {
+      connection.release();
     }
   }
 

@@ -209,7 +209,11 @@ export class PromptBlocksMySQL extends PromptBlocksStorage {
           changeMessage: 'Initial version',
         });
       } catch (versionError) {
-        await this.operations.delete({ tableName: TABLE_PROMPT_BLOCKS, keys: { id: promptBlock.id } });
+        try {
+          await this.operations.delete({ tableName: TABLE_PROMPT_BLOCKS, keys: { id: promptBlock.id } });
+        } catch (rollbackError) {
+          console.error('Failed to rollback prompt block creation:', rollbackError);
+        }
         throw versionError;
       }
 

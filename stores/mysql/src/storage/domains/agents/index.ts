@@ -203,7 +203,12 @@ export class AgentsMySQL extends AgentsStorage {
           changeMessage: 'Initial version',
         });
       } catch (versionError) {
-        await this.operations.delete({ tableName: TABLE_AGENTS, keys: { id: agent.id } });
+        try {
+          await this.operations.delete({ tableName: TABLE_AGENTS, keys: { id: agent.id } });
+        } catch (rollbackError) {
+          // Log rollback failure but preserve original error
+          console.error('Failed to rollback agent creation:', rollbackError);
+        }
         throw versionError;
       }
 

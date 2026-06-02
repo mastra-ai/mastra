@@ -527,12 +527,16 @@ export class ObservabilityMySQL extends ObservabilityStorage {
           if (filters.hasChildError) {
             conditions.push(`EXISTS (
               SELECT 1 FROM ${tbl} c
-              WHERE c.${quoteIdentifier('traceId', 'column name')} = ${tbl}.${quoteIdentifier('traceId', 'column name')} AND c.${quoteIdentifier('error', 'column name')} IS NOT NULL
+              WHERE c.${quoteIdentifier('traceId', 'column name')} = ${tbl}.${quoteIdentifier('traceId', 'column name')}
+                AND c.${quoteIdentifier('parentSpanId', 'column name')} IS NOT NULL
+                AND c.${quoteIdentifier('error', 'column name')} IS NOT NULL
             )`);
           } else {
             conditions.push(`NOT EXISTS (
               SELECT 1 FROM ${tbl} c
-              WHERE c.${quoteIdentifier('traceId', 'column name')} = ${tbl}.${quoteIdentifier('traceId', 'column name')} AND c.${quoteIdentifier('error', 'column name')} IS NOT NULL
+              WHERE c.${quoteIdentifier('traceId', 'column name')} = ${tbl}.${quoteIdentifier('traceId', 'column name')}
+                AND c.${quoteIdentifier('parentSpanId', 'column name')} IS NOT NULL
+                AND c.${quoteIdentifier('error', 'column name')} IS NOT NULL
             )`);
           }
         }

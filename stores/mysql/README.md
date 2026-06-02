@@ -5,12 +5,14 @@ MySQL provider for Mastra - includes both vector and db storage capabilities.
 ## Stable v1.5 Compatibility
 
 This version has been adapted to meet the stable v1.5 contract for Mastra storage adapters. It supports:
+
 - Full observability/tracing (spans, traces)
 - Workflow run management
 - Thread and message persistence
 - Scoring and evaluation storage
 
 To verify compatibility:
+
 ```bash
 pnpm typecheck
 pnpm test src/storage/index.unit.test.ts
@@ -39,7 +41,7 @@ The integration test suite uses Docker to run a MySQL instance:
 pnpm test
 ```
 
-This will automatically start a MySQL container, run the tests, and clean up afterwards.
+This will automatically start a MySQL container, run the tests, and clean up afterward.
 
 ## Environment Variables
 

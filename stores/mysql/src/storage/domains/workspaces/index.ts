@@ -269,7 +269,14 @@ export class WorkspacesMySQL extends WorkspacesStorage {
       if (status !== undefined) updateData.status = status;
       if (metadata !== undefined) updateData.metadata = { ...(existing.metadata || {}), ...metadata };
 
-      await this.operations.withTransaction(async () => {
+      await this.operations.withTransaction(async connection => {
+        // Lock the workspace row so concurrent updates serialize and cannot
+        // race on the version number increment below.
+        await connection.execute(
+          `SELECT ${quoteIdentifier('id', 'column name')} FROM ${formatTableName(TABLE_WORKSPACES)} WHERE ${quoteIdentifier('id', 'column name')} = ? FOR UPDATE`,
+          [id],
+        );
+
         await this.operations.update({ tableName: TABLE_WORKSPACES, keys: { id }, data: updateData });
 
         if (hasConfigUpdate) {

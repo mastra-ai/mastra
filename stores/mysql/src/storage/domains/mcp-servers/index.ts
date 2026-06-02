@@ -211,7 +211,11 @@ export class MCPServersMySQL extends MCPServersStorage {
           changeMessage: 'Initial version',
         });
       } catch (versionError) {
-        await this.operations.delete({ tableName: TABLE_MCP_SERVERS, keys: { id: mcpServer.id } });
+        try {
+          await this.operations.delete({ tableName: TABLE_MCP_SERVERS, keys: { id: mcpServer.id } });
+        } catch (rollbackError) {
+          console.error('Failed to rollback MCP server creation:', rollbackError);
+        }
         throw versionError;
       }
 

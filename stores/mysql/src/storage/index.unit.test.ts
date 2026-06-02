@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import type * as Mysql2Promise from 'mysql2/promise';
+import { createPool } from 'mysql2/promise';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
+
+import { MySQLStore } from './index';
 
 const poolInstances: Array<{
   connection: {
@@ -16,7 +21,7 @@ const poolInstances: Array<{
 }> = [];
 
 vi.mock('mysql2/promise', async () => {
-  const actual = await vi.importActual<typeof import('mysql2/promise')>('mysql2/promise');
+  const actual = await vi.importActual<typeof Mysql2Promise>('mysql2/promise');
   return {
     ...actual,
     createPool: vi.fn(() => {
@@ -38,9 +43,6 @@ vi.mock('mysql2/promise', async () => {
   };
 });
 
-import { createPool } from 'mysql2/promise';
-import { MySQLStore } from './index';
-
 describe('MySQLStore configuration', () => {
   beforeEach(() => {
     poolInstances.length = 0;
@@ -49,7 +51,11 @@ describe('MySQLStore configuration', () => {
   });
 
   it('initializes a pool from a connection string', async () => {
-    const store = new MySQLStore({ connectionString: 'mysql://user:pass@localhost:3306/mastra?queueLimit=2', database: 'mastra', max: 5 });
+    const store = new MySQLStore({
+      connectionString: 'mysql://user:pass@localhost:3306/mastra?queueLimit=2',
+      database: 'mastra',
+      max: 5,
+    });
 
     expect(createPool).toHaveBeenCalledWith({
       host: 'localhost',
@@ -149,9 +155,7 @@ describe('MySQLStore configuration', () => {
       ssl: false,
     });
 
-    expect(createPool).toHaveBeenLastCalledWith(
-      expect.not.objectContaining({ ssl: expect.anything() }),
-    );
+    expect(createPool).toHaveBeenLastCalledWith(expect.not.objectContaining({ ssl: expect.anything() }));
 
     await store.close();
   });

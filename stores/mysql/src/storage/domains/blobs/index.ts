@@ -1,6 +1,6 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { BlobStore, TABLE_SKILL_BLOBS, SKILL_BLOBS_SCHEMA } from '@mastra/core/storage';
 import type { StorageBlobEntry } from '@mastra/core/storage';
+import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { formatTableName, quoteIdentifier, transformToSqlValue } from '../utils';
