@@ -483,6 +483,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'server/pubsub',
+          label: 'PubSub',
+        },
+        {
+          type: 'doc',
           id: 'server/custom-api-routes',
           label: 'Custom API Routes',
         },

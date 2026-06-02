@@ -1,0 +1,119 @@
+---
+title: "PubSub | Server"
+description: Learn how Mastra uses pub/sub for event delivery and when to configure a distributed backend for multi-process or multi-instance deployments.
+packages:
+  - "@mastra/core"
+  - "@mastra/redis-streams"
+  - "@mastra/google-cloud-pubsub"
+---
+
+# PubSub
+
+Mastra uses a publish/subscribe (pub/sub) system to deliver events between components, such as workflow execution events, background task updates, and resumable stream chunks. The pub/sub backend determines how those events travel: in memory, across processes on one host, or across separate instances.
+
+## When to configure PubSub
+
+By default, Mastra uses an in-process backend that requires no setup. You only need to configure pub/sub when events must reach code running outside the current process.
+
+- **Single process**: Use the default. No configuration is needed.
+- **Multiple processes on one host**: Use a backend that delivers across local processes.
+- **Multiple instances or hosts**: Use a distributed backend so every instance receives the same events.
+
+If you run a single Mastra server instance, the default backend covers most applications. Configure a distributed backend when you scale horizontally, because each instance otherwise only sees its own in-process events.
+
+## Default backend
+
+When you do not set the `pubsub` option, Mastra uses [`EventEmitterPubSub`](/reference/pubsub/event-emitter). It delivers events in process using a Node.js [`EventEmitter`](https://nodejs.org/api/events.html#class-eventemitter), so it works without any external service.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+// No pubsub option: Mastra uses EventEmitterPubSub
+export const mastra = new Mastra({})
+```
+
+Because it runs in process, events are not persisted and are not shared with other processes.
+
+## Choosing a backend
+
+Set the `pubsub` option on the `Mastra` instance to choose a backend. Each backend implements the same [`PubSub`](/reference/pubsub/base) contract, so the rest of your application does not change.
+
+| Backend | Scope | Package |
+| - | - | - |
+| [`EventEmitterPubSub`](/reference/pubsub/event-emitter) | Single process | `@mastra/core` |
+| [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) | Multiple processes, one host | `@mastra/core` |
+| [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) | Distributed, multiple hosts | `@mastra/redis-streams` |
+| [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) | Distributed, multiple hosts | `@mastra/google-cloud-pubsub` |
+
+### Multiple processes on one host
+
+Use [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) when several processes on the same machine need to share a stream. It delivers events over a Unix domain socket and elects one process as a broker. If the broker exits, the remaining processes elect a new one.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { UnixSocketPubSub } from '@mastra/core/events'
+
+export const mastra = new Mastra({
+  pubsub: new UnixSocketPubSub('/tmp/mastra/events.sock'),
+})
+```
+
+### Distributed deployments
+
+Use a distributed backend when you run more than one instance or host, so every instance receives the same events. Both backends below deliver across processes and hosts and persist events for redelivery.
+
+The following example uses [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+  pubsub: new RedisStreamsPubSub({
+    url: 'redis://localhost:6379',
+  }),
+})
+```
+
+The following example uses [Google Cloud Pub/Sub](https://cloud.google.com/pubsub/docs):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
+
+export const mastra = new Mastra({
+  pubsub: new GoogleCloudPubSub({
+    projectId: 'my-project',
+  }),
+})
+```
+
+## Resumable streams
+
+Resumable streams let a client reconnect and replay events it missed, which requires the backend to keep recent history. Distributed backends such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) already persist events, so they support replay on their own.
+
+In-process delivery does not keep history. To add replay on top of [`EventEmitterPubSub`](/reference/pubsub/event-emitter), wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub), which records published events per topic so a late or reconnecting subscriber can catch up before continuing with live events.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events'
+import { InMemoryServerCache } from '@mastra/core/cache'
+
+const cache = new InMemoryServerCache()
+
+export const mastra = new Mastra({
+  pubsub: new CachingPubSub(new EventEmitterPubSub(), cache),
+})
+```
+
+:::note
+
+Visit the [PubSub reference](/reference/pubsub/base) for the full delivery contract and the configuration options for each backend.
+
+:::
+
+## Related
+
+- [PubSub reference](/reference/pubsub/base)
+- [Mastra class](/reference/core/mastra-class)
+- [Background task streaming](/docs/streaming/background-task-streaming)
