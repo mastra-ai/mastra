@@ -270,6 +270,30 @@ function toReactiveSignalContent(
   };
 }
 
+function toNotificationContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'notification' }> | undefined {
+  const attributes = getRecordValue(payload.attributes) ?? {};
+  const metadata = getRecordValue(payload.metadata) ?? {};
+  const notificationMetadata = getRecordValue(metadata.notification);
+  const message = signalContentsToText(payload.contents);
+  if (!message) return undefined;
+
+  return {
+    type: 'notification',
+    id: getStringValue(payload.id),
+    notificationId: getStringValue(attributes.id) ?? getStringValue(notificationMetadata?.recordId),
+    message,
+    source: getStringValue(attributes.source) ?? getStringValue(notificationMetadata?.source),
+    kind:
+      getStringValue(attributes.kind) ?? getStringValue(attributes.type) ?? getStringValue(notificationMetadata?.kind),
+    priority: getStringValue(attributes.priority) ?? getStringValue(notificationMetadata?.priority),
+    status: getStringValue(attributes.status) ?? getStringValue(notificationMetadata?.status),
+    attributes,
+    metadata,
+  };
+}
+
 /**
  * The Harness orchestrates multiple agent modes, shared state, memory, and storage.
  * It's the core abstraction that a TUI (or other UI) controls.
@@ -2278,6 +2302,25 @@ export class Harness<TState = {}> {
         };
       }
 
+      if (signal.type === 'notification' && signal.tagName === 'notification') {
+        const notification = toNotificationContent({
+          id: signal.id,
+          contents: signal.contents,
+          attributes: signal.attributes,
+          metadata: signal.metadata,
+        });
+        if (notification) {
+          content.push(notification);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
       if (signal.type === 'reactive') {
         const reactiveSignal = toReactiveSignalContent({
           id: signal.id,
@@ -2393,6 +2436,9 @@ export class Harness<TState = {}> {
           } else if (data.type === 'notification' && data.tagName === 'notification-summary') {
             const notificationSummary = toNotificationSummaryContent(data);
             if (notificationSummary) content.push(notificationSummary);
+          } else if (data.type === 'notification' && data.tagName === 'notification') {
+            const notification = toNotificationContent(data);
+            if (notification) content.push(notification);
           } else if (data.type === 'reactive') {
             const reactiveSignal = toReactiveSignalContent(data);
             if (reactiveSignal) content.push(reactiveSignal);
@@ -2975,6 +3021,12 @@ export class Harness<TState = {}> {
           const notificationSummary = toNotificationSummaryContent(payload);
           if (notificationSummary) {
             state.currentMessage.content.push(notificationSummary);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'notification' && payload.tagName === 'notification') {
+          const notification = toNotificationContent(payload);
+          if (notification) {
+            state.currentMessage.content.push(notification);
             this.emit({ type: 'message_update', message: state.currentMessage });
           }
         } else if (payload?.type === 'reactive') {
