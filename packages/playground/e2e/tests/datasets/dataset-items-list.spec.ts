@@ -23,11 +23,13 @@ test.describe('Dataset Items List - Behavior Tests', () => {
 
     await page.getByRole('button', { name: /Test input 1/ }).click();
 
-    // The detail panel surfaces the item's metadata as labelled fields. "Dataset Id"
-    // only appears in this panel (not in the list rows), confirming it opened.
-    await expect(page.getByText('Dataset Id')).toBeVisible({ timeout: 5000 });
+    // Scope to the detail panel's metadata list (a <dl> uniquely identified by its
+    // "Dataset Id" field, which the list rows don't render), so the timestamp regex
+    // can't accidentally match a datetime elsewhere on the page.
+    const itemMetadata = page.locator('dl').filter({ hasText: 'Dataset Id' });
+    await expect(itemMetadata).toBeVisible({ timeout: 5000 });
     // The "Created" timestamp renders as "MMM d, yyyy h:mm aaa", e.g. "May 29, 2026 1:08 pm".
-    await expect(page.getByText(/[A-Z][a-z]{2} \d{1,2}, \d{4} \d{1,2}:\d{2} (am|pm)/).first()).toBeVisible();
+    await expect(itemMetadata.getByText(/[A-Z][a-z]{2} \d{1,2}, \d{4} \d{1,2}:\d{2} (am|pm)/).first()).toBeVisible();
   });
 
   test('selecting Delete Items from menu enables selection mode with checkboxes', async ({ page }) => {
