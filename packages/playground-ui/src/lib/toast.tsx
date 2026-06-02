@@ -63,7 +63,7 @@ toast.promise = <T,>({
 }) =>
   sonnerToast.promise(myPromise, {
     loading: loadingMessage ?? 'Loading...',
-    success: data => {
+    success: (data: T) => {
       onSuccess?.(data);
       return successMessage;
     },

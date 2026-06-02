@@ -127,7 +127,8 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     // The signal should have proper metadata
     const signalMeta = signalMessages[0]!.content.metadata?.signal as Record<string, unknown> | undefined;
     expect(signalMeta).toBeDefined();
-    expect(signalMeta!.type).toBe('system-reminder');
+    expect(signalMeta!.type).toBe('reactive');
+    expect(signalMeta!.tagName).toBe('system-reminder');
     expect(signalMeta!.attributes).toEqual(
       expect.objectContaining({ type: 'dynamic-agents-md', path: '/repo/src/components/AGENTS.md' }),
     );
@@ -231,7 +232,8 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       expect.objectContaining({
         type: 'data-system-reminder',
         data: expect.objectContaining({
-          type: 'system-reminder',
+          type: 'reactive',
+          tagName: 'system-reminder',
           contents: AGENTS_MD_CONTENT,
           metadata: expect.objectContaining({
             path: '/repo/AGENTS.md',

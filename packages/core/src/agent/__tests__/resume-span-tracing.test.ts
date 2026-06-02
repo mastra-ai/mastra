@@ -1,13 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
 describe('resumed AGENT_RUN span input and trace continuity', () => {
   let spanIdCounter = 0;
+
+  beforeEach(() => {
+    agentThreadStreamRuntime.resetForTests();
+  });
 
   function createFindUserTool() {
     return createTool({
@@ -136,6 +141,40 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     }
   }
 
+  async function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 500): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
+  async function readRunText(iterator: AsyncIterator<any>) {
+    let text = '';
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) return text;
+      const part = next.value;
+      if (part.type === 'text-delta') text += part.payload.text;
+      if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') return text;
+    }
+  }
+
+  async function readApprovalToolCallId(iterator: AsyncIterator<any>) {
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) return undefined;
+      const part = next.value;
+      if (part.type === 'tool-call-approval') return part.payload.toolCallId as string;
+    }
+  }
+
   function createMockSpan(type: string, parentSpan?: any) {
     spanIdCounter += 1;
     const span: Record<string, any> = {
@@ -228,6 +267,48 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
       expect(resumedCall.tracingOptions?.parentSpanId).toBeTruthy();
     } finally {
       spy.mockRestore();
+    }
+  }, 30000);
+
+  it('publishes subscription-native approval chunks using memory from the suspended snapshot', async () => {
+    const agent = createRegisteredAgent();
+    const threadId = 'approval-thread';
+    const resourceId = 'approval-resource';
+    const subscription = await agent.subscribeToThread({ threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const approvalToolCallId = withTimeout(
+        readApprovalToolCallId(iterator),
+        'Timed out waiting for subscribed approval chunk',
+      );
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'Find Dero Israel' },
+        {
+          resourceId,
+          threadId,
+          ifIdle: {
+            streamOptions: {
+              requireToolApproval: true,
+              memory: { thread: threadId, resource: resourceId },
+            },
+          },
+        },
+      );
+
+      const toolCallId = await approvalToolCallId;
+      expect(toolCallId).toBeTruthy();
+
+      const resumedSubscriptionRun = withTimeout(
+        readRunText(iterator),
+        'Timed out waiting for subscribed approval continuation',
+      );
+      expect(result.runId).toBeTruthy();
+      await agent.sendToolApproval({ resourceId, threadId, toolCallId: toolCallId!, approved: true });
+
+      await expect(resumedSubscriptionRun).resolves.toBe('User found');
+    } finally {
+      subscription.unsubscribe();
     }
   }, 30000);
 

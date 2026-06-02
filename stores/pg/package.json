@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "1.11.1",
+  "version": "1.12.0-alpha.0",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -37,6 +37,7 @@
   "dependencies": {
     "async-mutex": "^0.5.0",
     "pg": "^8.20.0",
+    "pg-connection-string": "^2.12.0",
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {

@@ -397,6 +397,62 @@ describe('MCP Tool Tracing', () => {
       expect(builtTool.requireApproval).toBe(true);
       expect((builtTool as any).needsApprovalFn).toBeUndefined();
     });
+
+    it('should preserve a needsApprovalFn attached directly to the tool instance (MCP shape)', () => {
+      // MCP tools wrap a server-level requireToolApproval function and attach it as
+      // `needsApprovalFn` on the tool while keeping `requireApproval` as a boolean.
+      const needsApprovalFn = (args: any) => args.value === 'secret';
+      const testTool = {
+        id: 'mcp-test-tool',
+        description: 'An MCP-style test tool',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async (input: any) => input,
+        requireApproval: true,
+        needsApprovalFn,
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: testTool as any,
+        options: {
+          name: 'mcp-test-tool',
+          // Mirrors the agent passing the tool's boolean requireApproval into options.
+          requireApproval: true,
+        },
+      });
+
+      const builtTool = builder.build();
+
+      // requireApproval stays true so tool-call-step evaluates the function.
+      expect(builtTool.requireApproval).toBe(true);
+      // The directly-attached function must survive conversion.
+      expect((builtTool as any).needsApprovalFn).toBe(needsApprovalFn);
+    });
+
+    it('should not override an options-derived needsApprovalFn with the instance one', () => {
+      const optionsFn = (input: any) => input.value === 'fromOptions';
+      const instanceFn = (input: any) => input.value === 'fromInstance';
+      const testTool = {
+        id: 'precedence-tool',
+        description: 'A tool with both function sources',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async (input: any) => input,
+        needsApprovalFn: instanceFn,
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: testTool as any,
+        options: {
+          name: 'precedence-tool',
+          requireApproval: optionsFn,
+        },
+      });
+
+      const builtTool = builder.build();
+
+      expect(builtTool.requireApproval).toBe(true);
+      // Options-derived function wins; the instance fallback only fills gaps.
+      expect((builtTool as any).needsApprovalFn).toBe(optionsFn);
+    });
   });
 });
 
