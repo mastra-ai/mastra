@@ -41,10 +41,12 @@ Use the same prefix for embedding models that should run through the gateway:
 ```typescript title="src/mastra/rag/embed.ts"
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
-const embedder = new ModelRouterEmbeddingModel("mastra/openai/text-embedding-3-small");
+const embedder = new ModelRouterEmbeddingModel("mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__");
 ```
 
-Pass `memory.thread` and `memory.resource` when you generate/stream responses to enable Observational Memory:
+Gateway-routed models do not forward local thread/resource context as upstream Gateway memory headers. If you want Observational Memory for a Gateway-routed actor model, configure local observer and reflector models in your Mastra memory setup; those models may also use gateway-prefixed IDs.
+
+Pass `memory.thread` and `memory.resource` when you generate/stream responses to provide local memory context:
 
 ```typescript title="src/mastra/run.ts"
 import { weatherAgent } from "./agents/weather-agent";

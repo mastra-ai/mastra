@@ -2,6 +2,7 @@ import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, describe, it, expect, beforeAll, vi, beforeEach, afterEach } from 'vitest';
 import { ModelRouterEmbeddingModel } from './embedding-router.js';
+import { MASTRA_USER_AGENT } from './gateways/constants.js';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai', 'google']);
@@ -20,6 +21,9 @@ const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v5');
 const mock = createGatewayMock();
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
+
+const GATEWAY_OPENAI_EMBEDDING_MODEL = 'mastra/openai/__AI_SDK_OPENAI_EMBEDDING_MODEL__';
+const OPENAI_EMBEDDING_MODEL = 'openai/__AI_SDK_OPENAI_EMBEDDING_MODEL__';
 
 describe('ModelRouterEmbeddingModel Integration', () => {
   beforeAll(() => {
@@ -87,31 +91,48 @@ describe('ModelRouterEmbeddingModel Integration', () => {
     });
 
     it('routes mastra-prefixed embedding models through the Mastra Gateway', async () => {
-      const model = new ModelRouterEmbeddingModel('mastra/openai/text-embedding-3-small');
+      const model = new ModelRouterEmbeddingModel(GATEWAY_OPENAI_EMBEDDING_MODEL);
 
       expect(model.provider).toBe('mastra');
-      expect(model.modelId).toBe('openai/text-embedding-3-small');
+      expect(model.modelId).toBe(OPENAI_EMBEDDING_MODEL);
       expect(createOpenAICompatible).toHaveBeenCalledWith({
         name: 'mastra',
         apiKey: 'test-gateway-key',
         baseURL: 'https://gateway.example.com/v1',
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': MASTRA_USER_AGENT,
         },
       });
 
       const mockInstance = vi.mocked(createOpenAICompatible).mock.results[0].value;
-      expect(mockInstance.textEmbeddingModel).toHaveBeenCalledWith('openai/text-embedding-3-small');
+      expect(mockInstance.textEmbeddingModel).toHaveBeenCalledWith(OPENAI_EMBEDDING_MODEL);
 
       const result = await model.doEmbed({ values: ['hello gateway'] });
       expect(result.embeddings).toHaveLength(1);
       expect(result.embeddings[0]).toHaveLength(1536);
     });
 
+    it('normalizes explicit Mastra Gateway URLs before creating the provider', () => {
+      new ModelRouterEmbeddingModel({
+        id: GATEWAY_OPENAI_EMBEDDING_MODEL,
+        apiKey: 'explicit-gateway-key',
+        url: 'https://gateway.example.com/',
+      });
+
+      expect(createOpenAICompatible).toHaveBeenCalledWith({
+        name: 'mastra',
+        apiKey: 'explicit-gateway-key',
+        baseURL: 'https://gateway.example.com/v1',
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+        },
+      });
+    });
+
     it('requires MASTRA_GATEWAY_API_KEY for mastra-prefixed embedding models', () => {
       delete process.env.MASTRA_GATEWAY_API_KEY;
 
-      expect(() => new ModelRouterEmbeddingModel('mastra/openai/text-embedding-3-small')).toThrow(
+      expect(() => new ModelRouterEmbeddingModel(GATEWAY_OPENAI_EMBEDDING_MODEL)).toThrow(
         'API key not found for provider mastra. Set MASTRA_GATEWAY_API_KEY',
       );
     });

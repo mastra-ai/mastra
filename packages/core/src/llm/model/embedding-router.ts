@@ -7,8 +7,7 @@ type EmbeddingModelV2<VALUE> = Exclude<EmbeddingModel<VALUE>, string>;
 
 const MASTRA_GATEWAY_ID = 'mastra';
 
-function getMastraGatewayBaseUrl(): string {
-  const raw = process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
+function getMastraGatewayBaseUrl(raw = process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai'): string {
   return `${raw.replace(/\/+$/, '').replace(/\/v1$/, '')}/v1`;
 }
 
@@ -180,7 +179,7 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
       this.providerModel = createOpenAICompatible({
         name: MASTRA_GATEWAY_ID,
         apiKey,
-        baseURL: normalizedConfig.url ?? getMastraGatewayBaseUrl(),
+        baseURL: getMastraGatewayBaseUrl(normalizedConfig.url),
         headers: {
           'User-Agent': MASTRA_USER_AGENT,
           ...normalizedConfig.headers,
