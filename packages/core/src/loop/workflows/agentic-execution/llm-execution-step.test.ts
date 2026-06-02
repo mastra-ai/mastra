@@ -653,7 +653,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
-  it('preserves model config headers when modelSettings adds non-conflicting headers', async () => {
+  it('preserves model config headers when modelSettings adds non-conflicting headers without internal memory context', async () => {
     const doStream = vi.fn(async () => ({
       stream: convertArrayToReadableStream([
         {
@@ -732,12 +732,10 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(doStream.mock.calls[0]?.[0]?.headers).toEqual({
       authorization: 'Bearer model-token',
       'x-custom-header': 'settings-value',
-      'x-thread-id': 'thread-123',
-      'x-resource-id': 'resource-456',
     });
   });
 
-  it('should not create headers when neither model nor modelSettings provide them', async () => {
+  it('should not create headers from internal memory context alone', async () => {
     const doStream = vi.fn(async () => ({
       stream: convertArrayToReadableStream([
         {
@@ -805,10 +803,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     await llmExecutionStep.execute(createExecuteParams(input));
 
     expect(doStream).toHaveBeenCalledOnce();
-    expect(doStream.mock.calls[0]?.[0]?.headers).toEqual({
-      'x-thread-id': 'thread-123',
-      'x-resource-id': 'resource-456',
-    });
+    expect(doStream.mock.calls[0]?.[0]?.headers).toBeUndefined();
   });
 
   it('updates model step tracing with final input messages', async () => {
