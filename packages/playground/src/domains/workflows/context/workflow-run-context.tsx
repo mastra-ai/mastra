@@ -2,7 +2,7 @@ import type { TimeTravelParams } from '@mastra/client-js';
 import type { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
 import { toast } from '@mastra/playground-ui';
 import { useCreateWorkflowRun, useCancelWorkflowRun, useStreamWorkflow } from '@mastra/react';
-import { createContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction, ReactNode } from 'react';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 import type { WorkflowTriggerProps } from '../workflow/workflow-trigger';
@@ -69,6 +69,7 @@ export function WorkflowRunProvider({
   const [runId, setRunId] = useState<string>(() => initialRunId ?? '');
   const [isRunning, setIsRunning] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
+  const hasMountedRef = useRef(false);
 
   const refetchExecResultInterval = isRunning
     ? undefined
@@ -127,9 +128,15 @@ export function WorkflowRunProvider({
   // The provider stays mounted across same-pattern route changes (React Router
   // reuses the component when only :workflowId/:runId differ), so without this
   // result/payload from the previous run would leak into the next view and the
-  // graph would show stale state until the new fetch completed.
+  // graph would show stale state until the new fetch completed. Skip the first
+  // render so we don't wipe the snapshot-initialized state on mount.
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
     setIsRunning(false);
+    setRunId(initialRunId ?? '');
     setResult(null);
     setPayload(null);
   }, [initialRunId, workflowId]);
