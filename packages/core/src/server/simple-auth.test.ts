@@ -1,24 +1,13 @@
-import type { HonoRequest } from 'hono';
 import { describe, expect, it } from 'vitest';
 import { SimpleAuth } from './simple-auth';
 
-const mockRequest = (headers: Record<string, string | string[]> = {}) =>
-  ({
-    url: 'http://localhost/test',
+const mockRequest = (headers: Record<string, string> = {}) =>
+  new Request('http://localhost/test', {
     method: 'GET',
-    header: (name: string) => headers[name],
-  }) as HonoRequest;
+    headers,
+  });
 
-/**
- * Mock a standard Web Request (what c.req.raw returns in Hono).
- * This does NOT have a .header() method — only .headers.get().
- */
-const mockRawRequest = (headers: Record<string, string> = {}) =>
-  ({
-    url: 'http://localhost/test',
-    method: 'GET',
-    headers: new Headers(headers),
-  }) as unknown as HonoRequest;
+const mockRawRequest = mockRequest;
 
 describe('SimpleAuth', () => {
   describe('constructor', () => {

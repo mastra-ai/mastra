@@ -27,24 +27,10 @@ describe('MastraAuthBetterAuth', () => {
     },
   };
 
-  const mockRequest = {
-    header: vi.fn(),
-    headers: new Headers(),
-  } as any;
-
-  /**
-   * Mock a standard Web Request (what c.req.raw returns in Hono).
-   * Does NOT have a .header() method — only .headers (Headers object).
-   */
-  const mockRawRequest = (headers: Record<string, string> = {}) =>
-    ({
-      headers: new Headers(headers),
-    }) as unknown as any;
+  const mockRawRequest = (headers: Record<string, string> = {}) => new Request('http://localhost/test', { headers });
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRequest.header.mockReset();
-    mockRequest.headers = new Headers();
   });
 
   describe('initialization', () => {
@@ -271,27 +257,6 @@ describe('MastraAuthBetterAuth', () => {
 
       const call = mockAuth.api.getSession.mock.calls[0][0];
       expect(call.headers.get('Cookie')).toBe('better-auth.session_token=raw123');
-    });
-
-    it('should handle HonoRequest with .raw property', async () => {
-      mockAuth.api.getSession.mockResolvedValue({
-        session: mockSession,
-        user: mockUser,
-      });
-      const honoReq = {
-        raw: new Request('http://localhost/test', {
-          headers: { Cookie: 'better-auth.session_token=hono-token' },
-        }),
-      } as any;
-
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
-      const result = await auth.authenticateToken('hono-token', honoReq);
-
-      expect(result).toEqual({ session: mockSession, user: mockUser });
-      const call = mockAuth.api.getSession.mock.calls[0][0];
-      expect(call.headers.get('Cookie')).toBe('better-auth.session_token=hono-token');
     });
 
     it('should inject session cookie when session name appears only inside a cookie value', async () => {

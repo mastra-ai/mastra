@@ -16,13 +16,12 @@ import type {
   SSOLoginConfig,
 } from '@mastra/core/auth';
 import type { EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
+import type { MastraAuthProviderOptions, MastraAuthRequest } from '@mastra/core/server';
+import { getWebRequest, MastraAuthProvider } from '@mastra/core/server';
 import { AuthService, sessionEncryption } from '@workos/authkit-session';
 import type { AuthKitConfig } from '@workos/authkit-session';
 import { WorkOS } from '@workos-inc/node';
 import type { OrganizationMembership } from '@workos-inc/node';
-import type { HonoRequest } from 'hono';
 import { LRUCache } from 'lru-cache';
 
 import { WebSessionStorage } from './session-storage.js';
@@ -156,13 +155,11 @@ export class MastraAuthWorkos
    * Uses AuthKit's withAuth() for cookie-based sessions, falls back to
    * JWT verification for bearer tokens.
    */
-  async authenticateToken(token: string, request: HonoRequest | Request): Promise<WorkOSUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<WorkOSUser | null> {
     try {
-      // Get the raw Request object - handle both HonoRequest and plain Request
-      const rawRequest = 'raw' in request ? request.raw : request;
-
       // First try session-based auth via AuthKit
-      const { auth } = await this.authService.withAuth(rawRequest);
+      const webRequest = getWebRequest(request);
+      const { auth } = webRequest ? await this.authService.withAuth(webRequest) : { auth: { user: null } };
 
       if (auth.user) {
         // Fetch memberships only when FGA is configured (fetchMemberships: true).

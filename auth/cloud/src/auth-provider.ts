@@ -16,9 +16,8 @@ import type {
   SSOLoginConfig,
 } from '@mastra/core/auth';
 import type { EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
-import type { HonoRequest } from 'hono';
+import type { MastraAuthProviderOptions, MastraAuthRequest } from '@mastra/core/server';
+import { getRequestHeader, MastraAuthProvider } from '@mastra/core/server';
 
 import { MastraCloudAuth } from './client';
 import { parseSessionCookie } from './session/cookie';
@@ -109,14 +108,12 @@ export class MastraCloudAuthProvider
    * Checks session cookie first, falls back to bearer token for API clients.
    *
    * @param token - Bearer token (from Authorization header)
-   * @param request - Hono or raw Request
+   * @param request - Request used for cookie access
    * @returns Authenticated user with role, or null if invalid
    */
-  async authenticateToken(token: string, request: HonoRequest | Request): Promise<CloudUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<CloudUser | null> {
     try {
-      // Get raw Request for cookie access
-      const rawRequest = 'raw' in request ? request.raw : request;
-      const cookieHeader = rawRequest.headers.get('cookie');
+      const cookieHeader = getRequestHeader(request, 'cookie');
 
       // Parse session token from cookie
       const sessionToken = parseSessionCookie(cookieHeader);

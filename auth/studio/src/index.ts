@@ -8,8 +8,8 @@ import type {
 } from '@mastra/core/auth';
 import type { EEUser, IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
 import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
-import { MastraAuthProvider } from '@mastra/core/server';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
+import { getRequestHeader, MastraAuthProvider } from '@mastra/core/server';
+import type { MastraAuthProviderOptions, MastraAuthRequest } from '@mastra/core/server';
 
 export interface StudioUser extends EEUser {
   id: string;
@@ -105,11 +105,11 @@ export class MastraAuthStudio
    * Authenticate an incoming request by forwarding the sealed session cookie
    * to the shared API's /auth/me endpoint, or a Bearer token to /auth/verify.
    */
-  async authenticateToken(token: string, request: any): Promise<StudioUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<StudioUser | null> {
     let user: StudioUser | null = null;
 
     // Try sealed session cookie first (browser flow)
-    const cookieHeader = request?.headers?.get('Cookie');
+    const cookieHeader = getRequestHeader(request, 'Cookie');
     const sessionCookie = parseCookie(cookieHeader, COOKIE_NAME);
 
     if (sessionCookie) {

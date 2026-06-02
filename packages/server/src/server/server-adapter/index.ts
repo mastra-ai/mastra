@@ -504,7 +504,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       authConfig,
       customRouteAuthConfig: this.customRouteAuthConfig,
       requestContext: context.requestContext,
-      rawRequest: context.request,
+      rawRequest: context.request ?? new Request(`http://localhost${context.path}`, { method: context.method }),
       token,
       buildAuthorizeContext: context.buildAuthorizeContext ?? (() => null),
       requiresAuth: route.requiresAuth,
@@ -758,7 +758,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const serverOnError = this.mastra.getServer()?.onError;
     app.onError((err, c) => {
       if (serverOnError) {
-        return serverOnError(err, c);
+        return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
       return c.json({ error: 'Internal Server Error' }, 500);
     });
