@@ -4,7 +4,7 @@ import { cleanup, render, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { isPostHogAllowedHost, PostHogProvider } from './analytics';
+import { PostHogProvider } from './analytics';
 
 const posthogMock = vi.hoisted(() => ({
   init: vi.fn(),
@@ -46,22 +46,9 @@ afterEach(() => {
   setHostname('localhost');
 });
 
-describe('isPostHogAllowedHost', () => {
-  it('allows mastra.cloud subdomains', () => {
-    expect(isPostHogAllowedHost('foo.mastra.cloud')).toBe(true);
-    expect(isPostHogAllowedHost('staging.foo.mastra.cloud')).toBe(true);
-  });
-
-  it('rejects the mastra.cloud apex and unrelated hosts', () => {
-    expect(isPostHogAllowedHost('mastra.cloud')).toBe(false);
-    expect(isPostHogAllowedHost('localhost')).toBe(false);
-    expect(isPostHogAllowedHost('foo.example.com')).toBe(false);
-  });
-});
-
 describe('PostHogProvider', () => {
-  it('initializes PostHog on a mastra.cloud subdomain', async () => {
-    setHostname('foo.mastra.cloud');
+  it('initializes PostHog on the mastra.cloud apex', async () => {
+    setHostname('mastra.cloud');
 
     render(
       <PostHogProvider>
@@ -74,6 +61,19 @@ describe('PostHogProvider', () => {
         api_host: 'https://us.posthog.com',
       });
     });
+    expect(posthogMock.register).toHaveBeenCalledWith({ mastraSource: 'playground' });
+  });
+
+  it('initializes PostHog on a mastra.cloud subdomain', async () => {
+    setHostname('foo.mastra.cloud');
+
+    render(
+      <PostHogProvider>
+        <div>Playground</div>
+      </PostHogProvider>,
+    );
+
+    await waitFor(() => expect(posthogMock.init).toHaveBeenCalledTimes(1));
     expect(posthogMock.register).toHaveBeenCalledWith({ mastraSource: 'playground' });
   });
 
@@ -91,7 +91,7 @@ describe('PostHogProvider', () => {
   });
 
   it('does not initialize PostHog on disallowed hosts', async () => {
-    for (const hostname of ['mastra.cloud', 'localhost', 'foo.example.com']) {
+    for (const hostname of ['localhost', 'foo.example.com', 'evil.notmastra.cloud']) {
       setHostname(hostname);
 
       const { unmount } = render(

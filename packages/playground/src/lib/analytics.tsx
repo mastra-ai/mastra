@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
 const TRUTHY_DISABLED_VALUES = ['1', 'true', 'yes'];
-const POSTHOG_ALLOWED_HOST_SUFFIX = '.mastra.cloud';
+const POSTHOG_ALLOWED_HOSTNAME = /(?:^|\.)mastra\.cloud$/;
 
 function isTelemetryDisabled(): boolean {
   const value = window.MASTRA_TELEMETRY_DISABLED;
@@ -14,8 +14,8 @@ function isTelemetryDisabled(): boolean {
   return TRUTHY_DISABLED_VALUES.includes(value.trim().toLowerCase());
 }
 
-export function isPostHogAllowedHost(hostname: string): boolean {
-  return hostname.toLowerCase().endsWith(POSTHOG_ALLOWED_HOST_SUFFIX);
+function isPostHogAllowedHost(hostname: string): boolean {
+  return POSTHOG_ALLOWED_HOSTNAME.test(hostname.toLowerCase());
 }
 
 export function PostHogProvider({ children }: { children: ReactNode }) {
