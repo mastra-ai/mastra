@@ -4,6 +4,31 @@ export type NotificationStatus = 'pending' | 'delivered' | 'seen' | 'dismissed' 
 
 export type NotificationSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 
+export type NotificationSignalMetadata = {
+  signal: 'notification';
+  recordId: string;
+  source: string;
+  kind: string;
+  priority: NotificationPriority;
+  status: NotificationStatus;
+  coalescedCount?: number;
+  deliveredAt?: string;
+  seenAt?: string;
+};
+
+export type NotificationSummarySignalMetadata = {
+  signal: 'summary';
+  pending: number;
+  groups: Array<{ source: string; count: number }>;
+  byPriority: Partial<Record<NotificationPriority, number>>;
+  notificationIds: string[];
+  priority?: NotificationPriority;
+};
+
+export type NotificationSignalMetadataEnvelope = {
+  notification: NotificationSignalMetadata | NotificationSummarySignalMetadata;
+};
+
 export type NotificationRecord = {
   id: string;
   threadId: string;
