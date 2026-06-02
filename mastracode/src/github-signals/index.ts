@@ -136,9 +136,11 @@ type GithubPRSignal = {
 };
 
 type GithubSignalAgent = {
-  sendSignal(signal: AgentSignalInput, target: unknown): { accepted: Promise<unknown> };
-  sendNotificationSignal?(notification: unknown, target: unknown): { accepted: Promise<unknown> } | Promise<unknown>;
+  sendSignal(signal: AgentSignalInput, target: unknown): { accepted: unknown };
+  sendNotificationSignal?(notification: unknown, target: unknown): { accepted?: unknown } | Promise<unknown>;
 };
+
+type GithubNotificationSender = (notification: unknown) => Promise<unknown>;
 
 type GithubSignalsMastra = {
   getStorage?: () => { getStore?: (name: 'memory') => Promise<unknown> } | undefined;
@@ -355,12 +357,12 @@ function classifyGithubActivityNotification(input: {
 }): { kind: string; priority: 'medium' | 'high'; summary: string } | undefined {
   const pr = `${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`;
   const label = getPrLabel(input.subscription, input.snapshot);
-  if (input.subscription.lastObservedState && input.subscription.lastObservedState !== input.snapshot.state) {
+  if (input.snapshot.state && input.subscription.lastObservedState !== input.snapshot.state) {
     if (input.snapshot.state === 'merged')
       return { kind: 'pull-request-merged', priority: 'high', summary: `${label} was merged` };
     if (input.snapshot.state === 'closed')
       return { kind: 'pull-request-closed', priority: 'high', summary: `${label} was closed` };
-    if (input.snapshot.state === 'open')
+    if (input.subscription.lastObservedState && input.snapshot.state === 'open')
       return { kind: 'pull-request-reopened', priority: 'medium', summary: `${label} was reopened` };
   }
 
@@ -560,13 +562,16 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         head_sha?: string;
         head_ref?: string;
         mergeable_state?: string;
-      }>(`select d.head_sha, d.head_ref, d.mergeable_state
+        merged_at?: string;
+      }>(`select d.head_sha, d.head_ref, d.mergeable_state,
+                 json_extract(d.raw_json, '$.merged_at') as merged_at
           from pull_request_details d
           join threads t on t.id=d.thread_id
           join repositories r on r.id=t.repo_id
          where r.owner=${owner} and r.name=${repo} and t.number=${number}
          limit 1`);
 
+      const headSha = readString(details?.head_sha);
       const checkRows = await queryGitcrawlDb<{
         name?: string;
         status?: string;
@@ -574,12 +579,12 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         workflow_name?: string;
         details_url?: string;
         updated_at?: string;
-      }>(`select name, status, conclusion, workflow_name, details_url,
-                 coalesce(completed_at, started_at, fetched_at) as updated_at
+      }>(`select c.name, c.status, c.conclusion, c.workflow_name, c.details_url,
+                 coalesce(c.completed_at, c.started_at, c.fetched_at) as updated_at
             from pull_request_checks c
             join threads t on t.id=c.thread_id
             join repositories r on r.id=t.repo_id
-           where r.owner=${owner} and r.name=${repo} and t.number=${number}`);
+           where r.owner=${owner} and r.name=${repo} and t.number=${number}${headSha ? ` and json_extract(c.raw_json, '$.head_sha')=${sqlString(headSha)}` : ''}`);
 
       const workflowRows = details?.head_sha
         ? await queryGitcrawlDb<{
@@ -662,13 +667,14 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
       });
       return {
         title: readString(thread.title),
-        state: readString(threadDetails?.merged_at_gh)
-          ? 'merged'
-          : (readString(threadDetails?.state) ?? readString(thread.state)),
+        state:
+          readString(details?.merged_at) || readString(threadDetails?.merged_at_gh)
+            ? 'merged'
+            : (readString(threadDetails?.state) ?? readString(thread.state)),
         htmlUrl: readString(thread.html_url),
         githubUpdatedAt: readString(thread.updated_at_gh),
         closedAt: readString(threadDetails?.closed_at_gh),
-        mergedAt: readString(threadDetails?.merged_at_gh),
+        mergedAt: readString(details?.merged_at) ?? readString(threadDetails?.merged_at_gh),
         threadContentHash,
         contentHash,
         headSha: readString(details?.head_sha),
@@ -739,6 +745,8 @@ export class GithubSignals implements Processor<'github-signals'> {
   readonly #syncClient: GithubSignalsSyncClient;
   readonly #repositoryResolver: GithubRepositoryResolver;
   readonly #polling = new Map<string, GithubPollingState>();
+  #agent?: GithubSignalAgent;
+  #notificationSender?: GithubNotificationSender;
 
   constructor(options: GithubSignalsOptions = {}) {
     this.#options = options;
@@ -746,11 +754,22 @@ export class GithubSignals implements Processor<'github-signals'> {
     this.#repositoryResolver = options.repositoryResolver ?? new GitRemoteRepositoryResolver();
   }
 
+  addAgent(agent: GithubSignalAgent): void {
+    this.#agent = agent;
+  }
+
+  addNotificationSender(sender: GithubNotificationSender): void {
+    this.#notificationSender = sender;
+  }
+
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
     this.mastra = mastra as unknown as GithubSignalsMastra;
   }
 
-  async startPollingForThread(input: GithubPollingThread): Promise<boolean> {
+  async startPollingForThread(
+    input: GithubPollingThread,
+    options: { pollImmediately?: boolean } = {},
+  ): Promise<boolean> {
     const subscriptions = await this.#getThreadSubscriptions(input);
     if (subscriptions.length === 0) {
       this.stopPollingForThread(input);
@@ -758,11 +777,21 @@ export class GithubSignals implements Processor<'github-signals'> {
     }
 
     const key = this.#pollingKey(input);
+    for (const [pollingKey, state] of this.#polling.entries()) {
+      if (pollingKey === key) continue;
+      clearInterval(state.timer);
+      this.#polling.delete(pollingKey);
+    }
+
     if (this.#polling.has(key)) return true;
 
-    const timer = setInterval(() => {
-      void this.#pollThread(input);
-    }, this.#options.pollIntervalMs ?? 60_000);
+    const runPoll = () => {
+      void this.#pollThread(input).catch(error => {
+        console.warn('GitHub PR polling failed:', error);
+      });
+    };
+    const timer = setInterval(runPoll, this.#options.pollIntervalMs ?? 60_000);
+    if (options.pollImmediately) runPoll();
     timer.unref?.();
     this.#polling.set(key, { ...input, timer, running: false });
     return true;
@@ -911,7 +940,7 @@ export class GithubSignals implements Processor<'github-signals'> {
       ifActive: { behavior: 'deliver' },
       ifIdle: { behavior: 'wake' },
     });
-    await result.accepted;
+    if (result.accepted instanceof Promise) await result.accepted;
   }
 
   async #resolveRepository(input: GithubPRSignal & { abortSignal?: AbortSignal }): Promise<GithubRepository> {
@@ -949,8 +978,9 @@ export class GithubSignals implements Processor<'github-signals'> {
     return `${input.resourceId}:${input.threadId}`;
   }
 
-  #getNotificationAgent(input: { agentId?: string }): GithubSignalAgent | undefined {
-    const agentId = input.agentId ?? this.#options.agentId;
+  #getNotificationAgent(_input?: { agentId?: string }): GithubSignalAgent | undefined {
+    if (this.#agent) return this.#agent;
+    const agentId = _input?.agentId ?? this.#options.agentId;
     return agentId ? this.mastra?.getAgentById?.(agentId) : undefined;
   }
 
@@ -962,7 +992,9 @@ export class GithubSignals implements Processor<'github-signals'> {
   async #pollThread(input: GithubPollingThread): Promise<number> {
     const key = this.#pollingKey(input);
     const state = this.#polling.get(key);
-    if (state?.running) return 0;
+    if (state?.running) {
+      return 0;
+    }
     if (state) state.running = true;
 
     try {
@@ -997,23 +1029,28 @@ export class GithubSignals implements Processor<'github-signals'> {
         const previousContentHash = subscription.lastObservedContentHash;
         if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
 
+        // First observation (no previous cursor) always counts as changed so we
+        // emit a baseline notification with the PR's current state.
+        const isFirstObservation = syncResult.ok && snapshot && !previousGithubUpdatedAt && !previousContentHash;
+
         const changed =
-          syncResult.ok &&
-          snapshot &&
-          ((previousGithubUpdatedAt &&
-            snapshot.githubUpdatedAt &&
-            previousGithubUpdatedAt !== snapshot.githubUpdatedAt) ||
-            (previousContentHash && snapshot.contentHash && previousContentHash !== snapshot.contentHash) ||
-            (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
-            (subscription.lastObservedMergeableState &&
-              snapshot.mergeableState &&
-              subscription.lastObservedMergeableState !== snapshot.mergeableState) ||
-            (subscription.lastObservedCiState &&
-              snapshot.ciState &&
-              subscription.lastObservedCiState !== snapshot.ciState) ||
-            (subscription.lastObservedReviewStateHash &&
-              snapshot.reviewStateHash &&
-              subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash));
+          isFirstObservation ||
+          (syncResult.ok &&
+            snapshot &&
+            ((previousGithubUpdatedAt &&
+              snapshot.githubUpdatedAt &&
+              previousGithubUpdatedAt !== snapshot.githubUpdatedAt) ||
+              (previousContentHash && snapshot.contentHash && previousContentHash !== snapshot.contentHash) ||
+              (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
+              (subscription.lastObservedMergeableState &&
+                snapshot.mergeableState &&
+                subscription.lastObservedMergeableState !== snapshot.mergeableState) ||
+              (subscription.lastObservedCiState &&
+                snapshot.ciState &&
+                subscription.lastObservedCiState !== snapshot.ciState) ||
+              (subscription.lastObservedReviewStateHash &&
+                snapshot.reviewStateHash &&
+                subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash)));
         if (changed) {
           const notification = await this.#sendActivityNotification({
             polling: input,
@@ -1044,6 +1081,8 @@ export class GithubSignals implements Processor<'github-signals'> {
         },
       });
       return subscriptions.length;
+    } catch (error) {
+      throw error;
     } finally {
       const latestState = this.#polling.get(key);
       if (latestState) latestState.running = false;
@@ -1051,7 +1090,7 @@ export class GithubSignals implements Processor<'github-signals'> {
   }
 
   async #sendGithubNotification(input: {
-    agent: GithubSignalAgent;
+    agent?: GithubSignalAgent;
     subscription: GithubPRSubscription;
     snapshot: GithubPullRequestSnapshot;
     notification: { kind: string; priority: 'medium' | 'high'; summary: string };
@@ -1062,64 +1101,62 @@ export class GithubSignals implements Processor<'github-signals'> {
   }): Promise<void> {
     const failingChecks = getFailingChecks(input.snapshot);
     const pendingChecks = getPendingChecks(input.snapshot);
-    const result = await input.agent.sendNotificationSignal?.(
-      {
-        source: 'github',
-        kind: input.notification.kind,
-        priority: input.notification.priority,
-        summary: input.notification.summary,
-        dedupeKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}:${input.dedupeSuffix}`,
-        coalesceKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`,
-        attributes: {
+    const notificationInput = {
+      source: 'github',
+      kind: input.notification.kind,
+      priority: input.notification.priority,
+      summary: input.notification.summary,
+      dedupeKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}:${input.dedupeSuffix}`,
+      coalesceKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`,
+      attributes: {
+        owner: input.subscription.owner,
+        repo: input.subscription.repo,
+        number: input.subscription.number,
+        ...(input.snapshot.title ? { title: input.snapshot.title } : {}),
+        ...(input.snapshot.state ? { state: input.snapshot.state } : {}),
+        ...(input.snapshot.htmlUrl ? { url: input.snapshot.htmlUrl } : {}),
+        ...(input.snapshot.githubUpdatedAt ? { githubUpdatedAt: input.snapshot.githubUpdatedAt } : {}),
+        ...(input.previousGithubUpdatedAt ? { previousGithubUpdatedAt: input.previousGithubUpdatedAt } : {}),
+        ...(input.snapshot.mergeableState ? { mergeableState: input.snapshot.mergeableState } : {}),
+        ...(input.snapshot.ciState ? { ciState: input.snapshot.ciState } : {}),
+        ...(input.snapshot.unresolvedReviewThreads !== undefined
+          ? { unresolvedReviewThreads: input.snapshot.unresolvedReviewThreads }
+          : {}),
+        ...(failingChecks.length > 0 ? { failingChecks: failingChecks.map(check => check.name).join(', ') } : {}),
+        ...(pendingChecks.length > 0 ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
+      },
+      metadata: {
+        github: {
           owner: input.subscription.owner,
           repo: input.subscription.repo,
           number: input.subscription.number,
-          ...(input.snapshot.title ? { title: input.snapshot.title } : {}),
-          ...(input.snapshot.state ? { state: input.snapshot.state } : {}),
-          ...(input.snapshot.htmlUrl ? { url: input.snapshot.htmlUrl } : {}),
-          ...(input.snapshot.githubUpdatedAt ? { githubUpdatedAt: input.snapshot.githubUpdatedAt } : {}),
-          ...(input.previousGithubUpdatedAt ? { previousGithubUpdatedAt: input.previousGithubUpdatedAt } : {}),
-          ...(input.snapshot.mergeableState ? { mergeableState: input.snapshot.mergeableState } : {}),
-          ...(input.snapshot.ciState ? { ciState: input.snapshot.ciState } : {}),
-          ...(input.snapshot.unresolvedReviewThreads !== undefined
-            ? { unresolvedReviewThreads: input.snapshot.unresolvedReviewThreads }
-            : {}),
-          ...(failingChecks.length > 0 ? { failingChecks: failingChecks.map(check => check.name).join(', ') } : {}),
-          ...(pendingChecks.length > 0 ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
-        },
-        metadata: {
-          github: {
-            owner: input.subscription.owner,
-            repo: input.subscription.repo,
-            number: input.subscription.number,
-            title: input.snapshot.title,
-            state: input.snapshot.state,
-            htmlUrl: input.snapshot.htmlUrl,
-            githubUpdatedAt: input.snapshot.githubUpdatedAt,
-            previousGithubUpdatedAt: input.previousGithubUpdatedAt,
-            contentHash: input.snapshot.contentHash,
-            previousContentHash: input.previousContentHash,
-            threadContentHash: input.snapshot.threadContentHash,
-            headSha: input.snapshot.headSha,
-            headRef: input.snapshot.headRef,
-            mergeableState: input.snapshot.mergeableState,
-            ciState: input.snapshot.ciState,
-            closedAt: input.snapshot.closedAt,
-            mergedAt: input.snapshot.mergedAt,
-            unresolvedReviewThreads: input.snapshot.unresolvedReviewThreads,
-            reviewStateHash: input.snapshot.reviewStateHash,
-            latestReviewThreadAt: input.snapshot.latestReviewThreadAt,
-            latestCommentAuthor: input.snapshot.latestCommentAuthor,
-            latestCommentAuthorType: input.snapshot.latestCommentAuthorType,
-            latestCommentIsBot: input.snapshot.latestCommentIsBot,
-            failingChecks,
-            pendingChecks,
-          },
+          title: input.snapshot.title,
+          state: input.snapshot.state,
+          htmlUrl: input.snapshot.htmlUrl,
+          githubUpdatedAt: input.snapshot.githubUpdatedAt,
+          previousGithubUpdatedAt: input.previousGithubUpdatedAt,
+          contentHash: input.snapshot.contentHash,
+          previousContentHash: input.previousContentHash,
+          threadContentHash: input.snapshot.threadContentHash,
+          headSha: input.snapshot.headSha,
+          headRef: input.snapshot.headRef,
+          mergeableState: input.snapshot.mergeableState,
+          ciState: input.snapshot.ciState,
+          closedAt: input.snapshot.closedAt,
+          mergedAt: input.snapshot.mergedAt,
+          unresolvedReviewThreads: input.snapshot.unresolvedReviewThreads,
+          reviewStateHash: input.snapshot.reviewStateHash,
+          latestReviewThreadAt: input.snapshot.latestReviewThreadAt,
+          latestCommentAuthor: input.snapshot.latestCommentAuthor,
+          latestCommentAuthorType: input.snapshot.latestCommentAuthorType,
+          latestCommentIsBot: input.snapshot.latestCommentIsBot,
+          failingChecks,
+          pendingChecks,
         },
       },
-      input.target,
-    );
-    if (isPlainObject(result) && result.accepted instanceof Promise) await result.accepted;
+    };
+    if (this.#notificationSender) await this.#notificationSender(notificationInput);
+    else await input.agent?.sendNotificationSignal?.(notificationInput, input.target);
   }
 
   async #sendBaselineNotification(input: {
@@ -1129,7 +1166,7 @@ export class GithubSignals implements Processor<'github-signals'> {
     snapshot: GithubPullRequestSnapshot;
   }): Promise<void> {
     const agent = this.#getNotificationAgent({});
-    if (!agent?.sendNotificationSignal) return;
+    if (!this.#notificationSender && !agent?.sendNotificationSignal) return;
     await this.#sendGithubNotification({
       agent,
       subscription: input.subscription,
@@ -1148,7 +1185,7 @@ export class GithubSignals implements Processor<'github-signals'> {
     previousContentHash?: string;
   }): Promise<{ kind: string; priority: 'medium' | 'high'; summary: string } | undefined> {
     const agent = this.#getNotificationAgent(input.polling);
-    if (!agent?.sendNotificationSignal) return undefined;
+    if (!this.#notificationSender && !agent?.sendNotificationSignal) return undefined;
     const notification = classifyGithubActivityNotification({
       subscription: input.subscription,
       snapshot: input.snapshot,

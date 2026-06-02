@@ -528,6 +528,10 @@ describe('createMastraCode', () => {
       ...createMockSettings(),
       signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
     });
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
+    const { GithubSignals } = await import('../github-signals/index.js');
+    const startPollingForThread = vi.spyOn(GithubSignals.prototype, 'startPollingForThread').mockResolvedValue(true);
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -537,5 +541,9 @@ describe('createMastraCode', () => {
       | { inputProcessors?: Array<{ id?: string }> }
       | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('github-signals');
+    expect(startPollingForThread).toHaveBeenCalledWith(
+      { threadId: 'thread-1', resourceId: 'thread-resource' },
+      { pollImmediately: true },
+    );
   });
 });

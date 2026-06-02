@@ -15,6 +15,7 @@ import {
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { NotificationSignalComponent } from './components/notification-signal.js';
 import { NotificationSummaryComponent } from './components/notification-summary.js';
 import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
@@ -424,6 +425,33 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
       message: notificationSummaryPart.message,
       pending: notificationSummaryPart.pending,
       bySource: notificationSummaryPart.bySource,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationSignalPart = message.content.find(
+    content => (content as { type?: string }).type === 'notification_signal',
+  ) as
+    | {
+        type: 'notification_signal';
+        message: string;
+        source?: string;
+        kind?: string;
+        priority?: string;
+        status?: string;
+      }
+    | undefined;
+
+  if (notificationSignalPart) {
+    const component = new NotificationSignalComponent({
+      message: notificationSignalPart.message,
+      source: notificationSignalPart.source,
+      kind: notificationSignalPart.kind,
+      priority: notificationSignalPart.priority,
+      status: notificationSignalPart.status,
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);

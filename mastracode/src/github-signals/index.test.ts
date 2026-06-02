@@ -483,6 +483,154 @@ describe('GithubSignals', () => {
     processor.stopAllPolling();
   });
 
+  it('only keeps one active polling thread at a time', async () => {
+    vi.useFakeTimers();
+    const firstThread: StorageThreadType = {
+      id: 'thread-one',
+      resourceId: 'resource-1',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 1,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const secondThread: StorageThreadType = {
+      id: 'thread-two',
+      resourceId: 'resource-1',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 2,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-2',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threads = new Map([
+      [firstThread.id, firstThread],
+      [secondThread.id, secondThread],
+    ]);
+    const threadStore: GithubSignalsThreadStore = {
+      getThreadById: vi.fn(async ({ threadId }: { threadId: string }) => threads.get(threadId) ?? null),
+      saveThread: vi.fn(async ({ thread }: { thread: StorageThreadType }) => thread),
+    };
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({ githubUpdatedAt: '2026-01-01T00:00:00.000Z' })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000 });
+
+    await expect(
+      processor.startPollingForThread({ threadId: firstThread.id, resourceId: firstThread.resourceId }),
+    ).resolves.toBe(true);
+    expect(processor.isPollingThread({ threadId: firstThread.id, resourceId: firstThread.resourceId })).toBe(true);
+
+    await expect(
+      processor.startPollingForThread({ threadId: secondThread.id, resourceId: secondThread.resourceId }),
+    ).resolves.toBe(true);
+
+    expect(processor.isPollingThread({ threadId: firstThread.id, resourceId: firstThread.resourceId })).toBe(false);
+    expect(processor.isPollingThread({ threadId: secondThread.id, resourceId: secondThread.resourceId })).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
+    expect(syncClient.syncPullRequest).toHaveBeenCalledWith(expect.objectContaining({ number: 2 }));
+    processor.stopAllPolling();
+  });
+
+  it('emits a high-priority notification when a legacy subscribed PR is first observed as merged', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-merged',
+      resourceId: 'resource-merged',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Fix duplicate reasoning IDs',
+        state: 'merged',
+        mergedAt: '2026-06-02T18:42:32Z',
+        githubUpdatedAt: '2026-06-02T18:43:57Z',
+        contentHash: 'merged-hash',
+        ciState: 'success' as const,
+      })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    processor.__registerMastra({ getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })) } as any);
+
+    await expect(processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(1);
+
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription).toMatchObject({
+      lastObservedState: 'merged',
+      lastObservedCiState: 'success',
+      lastNotificationKind: 'pull-request-merged',
+      lastNotificationPriority: 'high',
+      lastNotificationSummary: 'mastra-ai/mastra#123: Fix duplicate reasoning IDs was merged',
+    });
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'github',
+        kind: 'pull-request-merged',
+        priority: 'high',
+        summary: 'mastra-ai/mastra#123: Fix duplicate reasoning IDs was merged',
+        attributes: expect.objectContaining({
+          state: 'merged',
+        }),
+        metadata: expect.objectContaining({
+          github: expect.objectContaining({ mergedAt: '2026-06-02T18:42:32Z' }),
+        }),
+      }),
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
+    );
+  });
+
   it('emits a high-priority notification when CI fails between polls', async () => {
     const thread: StorageThreadType = {
       id: 'thread-ci',
