@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useChat } from '@mastra/react';
 import { act, render, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -127,13 +128,36 @@ import { MastraRuntimeProvider } from '../mastra-runtime-provider';
 
 describe('MastraRuntimeProvider', () => {
   beforeEach(() => {
+    vi.mocked(useChat).mockClear();
     mocks.cancelRun.mockReset();
     mocks.runtimeProps = undefined;
     mocks.threadRuntimeState = undefined;
     mocks.chatState.isAwaitingToolApproval = false;
     mocks.chatState.isRunning = false;
     mocks.sendMessage.mockReset();
+    delete (window as any).MASTRA_AGENT_SIGNALS;
+  });
+
+  it('enables thread signals by default', () => {
+    render(
+      <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    expect(useChat).toHaveBeenCalledWith(expect.objectContaining({ enableThreadSignals: true }));
+  });
+
+  it('preserves the explicit thread signals opt-out', () => {
     (window as any).MASTRA_AGENT_SIGNALS = 'false';
+
+    render(
+      <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    expect(useChat).toHaveBeenCalledWith(expect.objectContaining({ enableThreadSignals: false }));
   });
 
   it('persists a visible error when a vNext stream finishes with pending tool calls', async () => {
