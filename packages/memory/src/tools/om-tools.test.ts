@@ -97,6 +97,47 @@ describe('om-tools', () => {
       expect(result.messages).not.toContain('Message 5');
     });
 
+    it('should include failed tool (output-error) results in the recalled transcript', async () => {
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-err',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'output-error',
+                    toolCallId: 'call-err',
+                    toolName: 'flakyTool',
+                    args: { path: '/x' },
+                    errorText: 'permission-denied-xyz',
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ] as MastraDBMessage[],
+      });
+
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-4',
+        page: 1,
+        limit: 10,
+      });
+
+      expect(result.messages).toContain('Tool Result: flakyTool');
+      expect(result.messages).toContain('permission-denied-xyz');
+    });
+
     it('should return backward results when page is negative', async () => {
       const result = await recallMessages({
         memory: memory as any,

@@ -231,6 +231,12 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
                   overhead -= 12;
                 }
               }
+            } else if (invocation.state === 'output-error') {
+              // Failed tool result - also becomes a separate CoreMessage
+              toolResultCount++;
+              if (invocation.errorText !== undefined) {
+                tokenString += invocation.errorText;
+              }
             }
           } else {
             tokenString += JSON.stringify(part);
@@ -240,7 +246,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     }
 
     // Add message formatting overhead
-    // Each MastraDBMessage becomes at least 1 CoreMessage, plus 1 additional CoreMessage per tool-invocation (state: 'result')
+    // Each MastraDBMessage becomes at least 1 CoreMessage, plus 1 additional CoreMessage per terminal tool output.
     // Base overhead for the message itself
     overhead += TokenLimiterProcessor.TOKENS_PER_MESSAGE;
     // Additional overhead for each tool result (which adds an extra CoreMessage)

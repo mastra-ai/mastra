@@ -2030,6 +2030,7 @@ export class Harness<TState = {}> {
           args?: unknown;
           result?: unknown;
           isError?: boolean;
+          errorText?: string;
         };
         [key: string]: unknown;
       }>;
@@ -2123,6 +2124,16 @@ export class Harness<TState = {}> {
                 name: inv.toolName,
                 result: inv.result,
                 isError: inv.isError ?? false,
+                ...(partProviderMetadata ? { providerMetadata: partProviderMetadata } : {}),
+              });
+            } else if (inv.state === 'output-error') {
+              const partProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
+              content.push({
+                type: 'tool_result',
+                id: inv.toolCallId,
+                name: inv.toolName,
+                result: inv.errorText ?? 'Tool execution failed',
+                isError: true,
                 ...(partProviderMetadata ? { providerMetadata: partProviderMetadata } : {}),
               });
             }

@@ -983,6 +983,18 @@ function formatObserverMessage(
           return;
         }
 
+        if (inv.state === 'output-error') {
+          pushLine(
+            `Tool Result ${inv.toolName}`,
+            maybeTruncate(
+              formatToolResultForObserver(inv.errorText ?? 'Tool execution failed', { maxTokens: maxToolResultTokens }),
+              maxLen,
+            ),
+            partCreatedAt,
+          );
+          return;
+        }
+
         pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
         return;
       }

@@ -1613,6 +1613,29 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain('x'.repeat(200));
     });
 
+    it('should include failed tool (output-error) results so the observer sees the error', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolCallId: 'tool-1',
+              toolName: 'find_files',
+              args: { path: '/Users/test' },
+              errorText: 'Permission denied: path is outside the workspace',
+            },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('Tool Result find_files');
+      expect(formatted).toContain('Permission denied: path is outside the workspace');
+    });
+
     it('should replace image-data tool-result blocks with attachment placeholders', () => {
       const base64 = 'A'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');

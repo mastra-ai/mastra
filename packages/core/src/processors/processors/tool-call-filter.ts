@@ -339,10 +339,12 @@ export class ToolCallFilter implements Processor {
             return [part];
           }
 
+          const invocationState = invocation.state as string;
+          const hasTerminalOutput = invocationState === 'result' || invocationState === 'output-error';
           const shouldExclude =
-            (invocation.state === 'call' && this.exclude.includes(invocation.toolName)) ||
-            (invocation.state === 'result' && toolCallId !== undefined && excludedToolCallIds.has(toolCallId)) ||
-            (invocation.state === 'result' && this.exclude.includes(invocation.toolName));
+            (invocationState === 'call' && this.exclude.includes(invocation.toolName)) ||
+            (hasTerminalOutput && toolCallId !== undefined && excludedToolCallIds.has(toolCallId)) ||
+            (hasTerminalOutput && this.exclude.includes(invocation.toolName));
 
           if (!shouldExclude) {
             return [part];

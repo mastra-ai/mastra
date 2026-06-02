@@ -246,6 +246,10 @@ function createLegacyToolInvocations(
       continue;
     }
 
+    // Note: failed tools (`output-error`) are intentionally not mirrored into this
+    // synthesized AI SDK v6 back-compat `toolInvocations` array. The error is
+    // preserved on the modern `parts` representation, which downstream consumers read.
+
     if (invocation.state === 'call' || invocation.state === 'partial-call') {
       toolInvocations.push({
         args: invocation.args,

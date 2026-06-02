@@ -624,7 +624,11 @@ export function extractTrajectory(output: ScorerRunOutputForAgent): Trajectory {
     if (!toolInvocations?.length) continue;
 
     for (const invocation of toolInvocations) {
-      if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
+      if (
+        invocation &&
+        invocation.toolName &&
+        (invocation.state === 'result' || invocation.state === 'call' || invocation.state === 'output-error')
+      ) {
         const toolArgs =
           invocation.args != null && typeof invocation.args === 'object' && !Array.isArray(invocation.args)
             ? (invocation.args as Record<string, unknown>)
@@ -632,7 +636,12 @@ export function extractTrajectory(output: ScorerRunOutputForAgent): Trajectory {
               ? { value: invocation.args }
               : undefined;
 
-        const rawResult = invocation.state === 'result' ? invocation.result : undefined;
+        const rawResult =
+          invocation.state === 'result'
+            ? invocation.result
+            : invocation.state === 'output-error'
+              ? (invocation.errorText ?? 'Tool execution failed')
+              : undefined;
         const toolResult =
           rawResult != null && typeof rawResult === 'object' && !Array.isArray(rawResult)
             ? (rawResult as Record<string, unknown>)

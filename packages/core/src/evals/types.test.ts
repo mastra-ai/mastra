@@ -807,6 +807,65 @@ describe('extractTrajectory', () => {
     });
   });
 
+  it('records a failed tool (output-error) as a step with success false', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          toolInvocations: [
+            { state: 'output-error', toolCallId: 'c1', toolName: 'flakyTool', args: { q: 'x' }, errorText: 'boom' },
+          ],
+          parts: [],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({
+      stepType: 'tool_call',
+      name: 'flakyTool',
+      toolArgs: { q: 'x' },
+      toolResult: { value: 'boom' },
+      success: false,
+    });
+  });
+
+  it('records a failed tool (output-error) from V2 content.parts as a step with success false', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'output-error',
+                toolCallId: 'c1',
+                toolName: 'flakyTool',
+                args: { q: 'x' },
+                errorText: 'boom',
+              },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({
+      stepType: 'tool_call',
+      name: 'flakyTool',
+      toolArgs: { q: 'x' },
+      toolResult: { value: 'boom' },
+      success: false,
+    });
+  });
+
   // --- V2 parts fallback path ---
 
   it('extracts tool calls from V2 content.parts when toolInvocations is absent', () => {

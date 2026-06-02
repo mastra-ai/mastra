@@ -709,6 +709,70 @@ describe('TokenLimiterProcessor', () => {
       ).resolves.toBeUndefined();
     });
 
+    it('should count failed tool results (output-error) toward the token limit', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 100 });
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList();
+
+      // Oldest message: a failed tool with a large errorText. If the limiter
+      // ignores output-error (the bug), this message counts as ~0 tokens and
+      // survives; once it's counted, it's large enough to be pruned.
+      messageList.add(
+        {
+          id: 'failed-tool',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'output-error',
+                  toolCallId: 'call_1',
+                  toolName: 'flakyTool',
+                  args: {},
+                  errorText: 'connection timed out while contacting the upstream service '.repeat(30),
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'response',
+      );
+      messageList.add(
+        {
+          id: 'user-latest',
+          role: 'user',
+          content: { format: 2, content: 'Please continue', parts: [{ type: 'text', text: 'Please continue' }] },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        'input',
+      );
+
+      expect(messageList.get.all.db().length).toBe(2);
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 2,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      const messagesAfter = messageList.get.all.db();
+      // The large failed-tool message must have been counted and pruned;
+      // the newest user message is preserved.
+      expect(messagesAfter.some(m => m.id === 'failed-tool')).toBe(false);
+      expect(messagesAfter.some(m => m.id === 'user-latest')).toBe(true);
+    });
+
     it('should prune old messages at each step to stay within token limit', async () => {
       const processor = new TokenLimiterProcessor({ limit: 50 });
 

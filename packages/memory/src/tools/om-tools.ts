@@ -525,6 +525,12 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
             const resultStr = formatToolResultForObserver(resultValue, { maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS });
             const fullText = `[Tool Result: ${inv.toolName}]\n${resultStr}`;
             parts.push(makePart(msg, i, 'tool-result', fullText, detail, inv.toolName));
+          } else if (inv.state === 'output-error') {
+            const resultStr = formatToolResultForObserver(inv.errorText ?? 'Tool execution failed', {
+              maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS,
+            });
+            const fullText = `[Tool Result: ${inv.toolName}]\n${resultStr}`;
+            parts.push(makePart(msg, i, 'tool-result', fullText, detail, inv.toolName));
           }
         }
       } else if (partType === 'tool-call') {

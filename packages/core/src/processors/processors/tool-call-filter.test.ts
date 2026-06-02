@@ -496,6 +496,85 @@ describe('ToolCallFilter', () => {
       }
     });
 
+    it('should exclude a specified tool whose result failed (output-error)', async () => {
+      const filter = new ToolCallFilter({ exclude: ['weather'] });
+
+      const baseTime = Date.now();
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'What is the weather?',
+            parts: [{ type: 'text' as const, text: 'What is the weather?' }],
+          },
+          createdAt: new Date(baseTime),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(baseTime + 1),
+        },
+        {
+          id: 'msg-3',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'output-error' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: {},
+                  errorText: 'weather service unavailable',
+                },
+              },
+            ],
+          },
+          createdAt: new Date(baseTime + 2),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      // The failed weather call and its error result must both be excluded —
+      // a failed excluded tool should not leak its error into the context.
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      for (const msg of resultMessages) {
+        if (typeof msg.content === 'string') continue;
+        const weatherInvocations = (msg.content.parts ?? []).filter(
+          (p: any) => p.type === 'tool-invocation' && p.toolInvocation.toolName === 'weather',
+        );
+        expect(weatherInvocations).toHaveLength(0);
+      }
+    });
+
     it('should exclude multiple specified tools', async () => {
       const filter = new ToolCallFilter({ exclude: ['weather', 'search'] });
 
