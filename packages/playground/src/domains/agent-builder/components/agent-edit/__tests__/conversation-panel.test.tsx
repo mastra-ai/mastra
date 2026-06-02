@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, cleanup } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
@@ -118,6 +119,7 @@ vi.mock('@/domains/agent-builder/hooks/use-agent-builder-allowed-models', () => 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
 
 const FormWrapper = ({ children }: { children: React.ReactNode }) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: 'Initial',
@@ -127,13 +129,15 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
   });
   formMethodsRef = methods;
   return (
-    <TooltipProvider>
-      <MemoryRouter>
-        <FormProvider {...methods}>
-          <AgentColorProvider agentId="agent-test">{children}</AgentColorProvider>
-        </FormProvider>
-      </MemoryRouter>
-    </TooltipProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <MemoryRouter>
+          <FormProvider {...methods}>
+            <AgentColorProvider agentId="agent-test">{children}</AgentColorProvider>
+          </FormProvider>
+        </MemoryRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 };
 
