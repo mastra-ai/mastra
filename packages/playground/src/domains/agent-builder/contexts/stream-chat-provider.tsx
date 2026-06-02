@@ -54,7 +54,12 @@ export const StreamChatProvider = ({
   debounceTime = 0,
   children,
 }: StreamChatProviderProps) => {
-  const { messages, isRunning, sendMessage, approveToolCall, declineToolCall } = useChat({ agentId, initialMessages });
+  const threadSignalsEnabled = window.MASTRA_AGENT_SIGNALS !== 'false';
+  const { messages, isRunning, sendMessage, approveToolCall, declineToolCall } = useChat({
+    agentId,
+    initialMessages,
+    enableThreadSignals: threadSignalsEnabled,
+  });
   const { data: currentUser } = useCurrentUser();
 
   // temping the fact that client tools open and closes multiple streams making the UI flicker with isStreaming: true, then false for a few MS
