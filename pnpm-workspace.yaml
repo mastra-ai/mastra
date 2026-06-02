@@ -132,7 +132,6 @@ allowBuilds:
   onnxruntime-node: false
   protobufjs: false
   sharp: false
-  sqlite3: false
   ssh2: false
   unrs-resolver: false
   workerd: false
