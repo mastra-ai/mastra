@@ -91,6 +91,16 @@
         "default": "./dist/auth/ee/index.cjs"
       }
     },
+    "./auth/ee/permissions": {
+      "import": {
+        "types": "./dist/auth/ee/permissions.d.ts",
+        "default": "./dist/auth/ee/permissions.js"
+      },
+      "require": {
+        "types": "./dist/auth/ee/permissions.d.ts",
+        "default": "./dist/auth/ee/permissions.cjs"
+      }
+    },
     "./agent-builder/ee": {
       "import": {
         "types": "./dist/agent-builder/ee/index.d.ts",

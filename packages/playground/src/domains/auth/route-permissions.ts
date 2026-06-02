@@ -6,15 +6,15 @@
  * - The order of routes for redirect priority (first accessible route wins)
  * - Sidebar link permission gating
  *
- * IMPORTANT: Permission strings are imported from `@mastra/core/auth/ee` (PERMISSION_PATTERNS).
+ * IMPORTANT: Permission strings are imported from `@mastra/core/auth/ee/permissions` (PERMISSION_PATTERNS).
  * This ensures type safety and prevents typos like 'scorers:read' vs 'scores:read'.
  *
  * @see COR-829 Studio View Permissions
- * @see packages/core/src/auth/ee/interfaces/permissions.generated.ts
+ * @see packages/core/src/auth/ee/permissions.ts
  */
 
-import type { PermissionPattern } from '@mastra/core/auth/ee';
-import { PERMISSION_PATTERNS } from '@mastra/core/auth/ee';
+import type { PermissionPattern } from '@mastra/core/auth/ee/permissions';
+import { PERMISSION_PATTERNS } from '@mastra/core/auth/ee/permissions';
 
 // Validated permission helper - ensures we're using valid patterns from the generated file
 const P = <T extends PermissionPattern>(pattern: T): T => {
