@@ -1,6 +1,6 @@
 # Docs Expert
 
-A research assistant that answers questions about libraries, APIs, and documentation by searching the live web and citing its sources. Uses provider-native web search (`openai.tools.webSearch()`) routed through the Mastra Gateway — no extra search API key needed.
+A research assistant that answers questions about libraries, APIs, and documentation by searching the live web and citing its sources. Uses Mastra Gateway online model routing (`mastra/openai/gpt-5-mini:online`) — no extra search API key needed.
 
 The agent has observational memory (powered by a lightweight `gpt-5-nano` observer) so it learns what docs and topics you've asked about, building persistent context over time. All state is persisted to Turso (libSQL).
 
@@ -28,7 +28,7 @@ Ask things like:
 
 ## Making it yours
 
-- **Swap the model.** Any Mastra Gateway model id works — try `mastra/anthropic/claude-sonnet-4-6` or `mastra/google/gemini-2.5-flash`. Web search continues to work because Anthropic and Google ship their own provider-native search tools (`anthropic.tools.webSearch_20250305`, `google.tools.googleSearch`).
+- **Swap the model.** Use a Mastra Gateway model that supports online web search. For OpenRouter-backed search, keep the `:online` suffix (for example, `mastra/openai/gpt-5-mini:online`).
 - **Tighten the system prompt.** Constrain the agent to a single docs domain (e.g. "only answer about Mastra") and require it to refuse unrelated questions.
 - **Add structured output.** Set `structuredOutput` on the agent or call `generate({ output: z.object({ answer: z.string(), sources: z.array(...) }) })` to force JSON with citations.
 - **Persist conversations.** This template already wires Memory + Turso, so threads survive restarts.
