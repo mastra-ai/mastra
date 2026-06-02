@@ -467,12 +467,12 @@ const sidebars = {
       label: 'PubSub',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
-        { type: 'doc', id: 'pubsub/event-emitter', label: 'EventEmitterPubSub' },
-        { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
         { type: 'doc', id: 'pubsub/caching-pubsub', label: 'CachingPubSub' },
-        { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
+        { type: 'doc', id: 'pubsub/event-emitter', label: 'EventEmitterPubSub' },
         { type: 'doc', id: 'pubsub/google-cloud-pubsub', label: 'GoogleCloudPubSub' },
+        { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
+        { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
+        { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
       ],
     },
     {
@@ -692,7 +692,11 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'workspace/agentcore-runtime-sandbox', label: 'AgentCoreRuntimeSandbox' },
+        {
+          type: 'doc',
+          id: 'workspace/agentcore-runtime-sandbox',
+          label: 'AgentCoreRuntimeSandbox',
+        },
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
         { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
