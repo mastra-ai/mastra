@@ -1,8 +1,8 @@
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { openai } from '@ai-sdk/openai';
 import { embedMany } from 'ai';
 import { z } from 'zod';
-import { KNOWLEDGE_INDEX } from '../tools/knowledge-search';
+import { GATEWAY_EMBEDDING_MODEL, KNOWLEDGE_INDEX } from '../tools/knowledge-search';
 
 const EMBEDDING_DIM = 1536;
 
@@ -130,7 +130,7 @@ const fetchStep = createStep({
 
 const embedAndUpsertStep = createStep({
   id: 'embed-and-upsert',
-  description: 'Embed documents with OpenAI text-embedding-3-small and upsert into pgvector.',
+  description: 'Embed documents with text-embedding-3-small through Mastra Gateway and upsert into pgvector.',
   inputSchema: z.object({ docs: z.array(docSchema) }),
   outputSchema: z.object({ indexed: z.number() }),
   execute: async ({ inputData, mastra }) => {
@@ -141,7 +141,7 @@ const embedAndUpsertStep = createStep({
     await vector.createIndex({ indexName: KNOWLEDGE_INDEX, dimension: EMBEDDING_DIM }).catch(() => {});
 
     const { embeddings } = await embedMany({
-      model: openai.embedding('text-embedding-3-small'),
+      model: new ModelRouterEmbeddingModel(GATEWAY_EMBEDDING_MODEL),
       values: docs.map(d => d.text.slice(0, 8000)),
     });
 

@@ -10,14 +10,13 @@ A scheduled workflow (`index-knowledge`) re-indexes every 6 hours automatically.
 - A Neon Postgres database (or any Postgres 11+ with the `vector` extension)
 - A Mastra Gateway API key — get one at [gateway.mastra.ai](https://gateway.mastra.ai)
 - A Linear API key and/or Notion integration token
-- An OpenAI API key for embeddings (the chat model still runs through the Mastra Gateway)
 
 ## Setup
 
 ```bash
 pnpm install
 cp .env.example .env
-# fill in MASTRA_GATEWAY_API_KEY, DATABASE_URL, LINEAR_API_KEY, NOTION_API_KEY, OPENAI_API_KEY
+# fill in MASTRA_GATEWAY_API_KEY, DATABASE_URL, LINEAR_API_KEY, NOTION_API_KEY
 pnpm dev
 ```
 
@@ -29,7 +28,7 @@ Run the `index-knowledge` workflow from Mastra Studio (`pnpm dev` → workflows 
 
 1. Pull up to N recent Linear issues (via the Linear MCP server).
 2. Search Notion pages the integration has access to (via the Notion MCP server).
-3. Embed each document with `text-embedding-3-small`.
+3. Embed each document with `mastra/openai/text-embedding-3-small` through the Mastra Gateway.
 4. Upsert into the `company_knowledge` pgvector index.
 
 The workflow is scheduled to run every 6 hours automatically. You can also trigger it manually from Studio or programmatically.
@@ -46,10 +45,9 @@ Sources (URLs) are always cited in the response.
 
 ## Environment variables
 
-| Variable                 | Purpose                                                              |
-| ------------------------ | -------------------------------------------------------------------- |
-| `MASTRA_GATEWAY_API_KEY` | Routes the chat model and provider tools through the Mastra Gateway. |
-| `DATABASE_URL`           | Neon (or other) Postgres connection string with `?sslmode=require`.  |
-| `LINEAR_API_KEY`         | Linear personal API key (for Linear MCP server).                     |
-| `NOTION_API_KEY`         | Notion internal integration token (for Notion MCP server).           |
-| `OPENAI_API_KEY`         | Used only for embeddings (`text-embedding-3-small`).                 |
+| Variable                 | Purpose                                                                           |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `MASTRA_GATEWAY_API_KEY` | Routes the chat model, embeddings, and provider tools through the Mastra Gateway. |
+| `DATABASE_URL`           | Neon (or other) Postgres connection string with `?sslmode=require`.               |
+| `LINEAR_API_KEY`         | Linear personal API key (for Linear MCP server).                                  |
+| `NOTION_API_KEY`         | Notion internal integration token (for Notion MCP server).                        |
