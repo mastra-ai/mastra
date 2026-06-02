@@ -509,8 +509,9 @@ export const constructNodesAndEdges = ({
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
 
     return { nodes: layoutedNodes, edges: layoutedEdges };
-  } catch {
+  } catch (error) {
     // Return empty graph on malformed step data to prevent crash
+    console.error('[constructNodesAndEdges] Failed to build workflow graph:', error, { stepGraph });
     return { nodes: [], edges: [] };
   }
 };
