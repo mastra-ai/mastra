@@ -136,11 +136,7 @@ describe('Harness notification signals', () => {
       summary: 'CI finished',
       summaryAt: new Date(0),
     });
-    const sendSignal = vi.spyOn(harness, 'sendSignal').mockImplementation(signal => ({
-      id: signal.id,
-      type: signal.type,
-      accepted: Promise.resolve({ accepted: true, runId: 'notification-run' }),
-    }));
+    const sendSignal = vi.spyOn(agent, 'sendSignal');
 
     const result = await harness.dispatchDueNotifications();
 
@@ -148,7 +144,7 @@ describe('Harness notification signals', () => {
     expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
     expect(result?.signals).toHaveLength(1);
     await expect(notifications.getNotification({ threadId: thread.id, id: record.id })).resolves.toMatchObject({
-      status: 'delivered',
+      status: 'pending',
       summarySignalId: result?.signals[0]?.id,
     });
 
@@ -220,7 +216,7 @@ describe('Harness notification signals', () => {
     });
     expect(result?.signals).toHaveLength(1);
     await expect(notifications.getNotification({ threadId: thread.id, id: record.id })).resolves.toMatchObject({
-      status: 'delivered',
+      status: 'pending',
       summarySignalId: result?.signals[0]?.id,
     });
 

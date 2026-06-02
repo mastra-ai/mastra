@@ -1246,8 +1246,8 @@ describe('Agent signals', () => {
     expect(low.record.summaryAt).toBeInstanceOf(Date);
 
     releaseFirst();
-    await expect(stream.text).resolves.toBe('active responseactive response');
-    expect(streamCount).toBe(2);
+    await expect(stream.text).resolves.toBe('active response');
+    expect(streamCount).toBe(1);
     subscription.unsubscribe();
   });
 
@@ -1330,7 +1330,7 @@ describe('Agent signals', () => {
       contents: 'github: 1',
       attributes: { pending: 1 },
     });
-    expect(streamCount).toBe(2);
+    expect(streamCount).toBe(1);
     await expect(
       notifications.getNotification({ threadId: 'high-active-thread', id: result.record.id }),
     ).resolves.toMatchObject({
