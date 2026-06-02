@@ -68,8 +68,8 @@ vi.mock('@mastra/core/harness', () => ({
 const buildMode = { id: 'build', agentId: 'agent', defaultModelId: 'default-model' };
 const planMode = { id: 'plan', agentId: 'agent', defaultModelId: 'plan-model' };
 
-function createSession() {
-  let modelId = 'session-model';
+function createSession(initialModelId = 'session-model') {
+  let modelId = initialModelId;
   let mode = buildMode;
   let state: Record<string, unknown> = { projectPath: '/session-repo' };
 
@@ -117,6 +117,23 @@ describe('HarnessCompat session-derived state', () => {
       modeId: 'build',
     });
     expect(harnessV1.session).toHaveBeenCalledWith({ threadId: 'thread-id', resourceId: 'resource-id' });
+  });
+
+  it('preserves the current model when switching threads', async () => {
+    const { HarnessCompat } = await import('./HarnessCompat.js');
+    const firstSession = createSession('selected-model');
+    const secondSession = createSession('stored-thread-model');
+    const harnessV1 = {
+      session: vi.fn().mockResolvedValueOnce(firstSession).mockResolvedValueOnce(secondSession),
+      getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
+    };
+
+    const harness = new HarnessCompat({} as never, harnessV1 as never);
+    await harness.switchThread({ threadId: 'first-thread' });
+    await harness.switchThread({ threadId: 'second-thread' });
+
+    expect(secondSession.setModelId).toHaveBeenCalledWith('selected-model');
+    expect(harness.getState()).toMatchObject({ currentModelId: 'selected-model' });
   });
 
   it('routes session-derived setState fields to the session and harness fields to legacy state', async () => {
