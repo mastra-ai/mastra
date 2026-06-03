@@ -220,7 +220,7 @@ importers:
   agent-sdks/cursor:
     devDependencies:
       '@cursor/sdk':
-        specifier: ^1.0.13
+        specifier: ^1.0.17
         version: 1.0.17
       '@internal/lint':
         specifier: workspace:*
