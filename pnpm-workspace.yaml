@@ -4,6 +4,7 @@ packages:
   - packages/_vendored/*
   - packages/_internals/*
   - packages/*
+  - agent-sdks/*
   - deployers/*
   - stores/*
   - browser/*
@@ -68,6 +69,7 @@ minimumReleaseAgeExclude:
   - '@internal/*'
   - 'mastra'
   - 'create-mastra'
+  - 'mastracode'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,

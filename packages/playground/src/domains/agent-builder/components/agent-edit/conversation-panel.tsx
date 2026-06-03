@@ -1,6 +1,4 @@
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import type { StoredSkillResponse } from '@mastra/client-js';
-import type { MastraUIMessage } from '@mastra/react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -60,7 +58,6 @@ export const ConversationPanelProvider = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const emptyMessages = useMemo(() => [], [agentId]);
   const storedMessages = data?.messages ?? emptyMessages;
-  const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
   const hasExistingConversation = (data?.messages?.length ?? 0) > 0;
   const { models, isLoading: isLoadingModels } = useAgentBuilderAllowedModels();
 
@@ -113,7 +110,7 @@ export const ConversationPanelProvider = ({
     <StreamChatProvider
       agentId={BUILDER_AGENT_ID}
       threadId={builderThreadId}
-      initialMessages={v5Messages}
+      initialMessages={storedMessages}
       initialUserMessage={starterMessageReady}
       clientTools={clientTools}
       extraInstructions={extraInstructions}
