@@ -12,6 +12,7 @@ import type {
   TracingEvent,
   AnyExportedSpan,
   CreateSpanOptions,
+  ScoreEvent,
   SpanType as SpanTypeGeneric,
 } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
@@ -30,7 +31,9 @@ const {
   mockScopeActivate,
   mockScopeActive,
   mockStartSpan,
+  mockSubmitEvaluation,
   mockTrace,
+  mockExportSpan,
 } = vi.hoisted(() => {
   let currentScopeSpan: any = undefined;
   let apmSpanCounter = 0;
@@ -88,7 +91,12 @@ const {
     mockScopeActivate: activate,
     mockScopeActive: active,
     mockStartSpan: startSpan,
+    mockSubmitEvaluation: vi.fn(),
     mockTrace: vi.fn(),
+    mockExportSpan: vi.fn((span: any) => ({
+      traceId: `exported-${span.context().toTraceId(true)}`,
+      spanId: `exported-${span.context().toSpanId(true)}`,
+    })),
   };
 });
 
@@ -111,6 +119,8 @@ vi.mock('dd-trace', () => {
         annotate: mockAnnotate,
         flush: mockFlush,
         trace: mockTrace,
+        submitEvaluation: mockSubmitEvaluation,
+        exportSpan: mockExportSpan,
       },
       _tracer: {
         started: false,
@@ -145,6 +155,22 @@ function createMockSpan(overrides: Partial<AnyExportedSpan> = {}): AnyExportedSp
 
 function createTracingEvent(type: TracingEventType, span: AnyExportedSpan): TracingEvent {
   return { type, exportedSpan: span } as TracingEvent;
+}
+
+function createScoreEvent(overrides: Partial<ScoreEvent['score']> = {}): ScoreEvent {
+  return {
+    type: 'score',
+    score: {
+      id: 'score-1',
+      traceId: '00000000000000000000000000000001',
+      spanId: '0000000000000001',
+      scorerId: 'scorer-1',
+      scorerName: 'Quality scorer',
+      score: 0.75,
+      timestamp: new Date('2024-01-01T00:00:02Z'),
+      ...overrides,
+    },
+  } as ScoreEvent;
 }
 
 function createMockSpanOptions(
@@ -635,6 +661,78 @@ describe('DatadogBridge', () => {
           metadata: { other: 'value' },
           tags: { tenantId: 'tenant-123' },
         }),
+      );
+    });
+
+    it('forwards score events with exportSpan ids after the span finishes', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const spanResult = bridge.createSpan(createMockSpanOptions())!;
+      const span = createMockSpan({
+        id: spanResult.spanId,
+        traceId: spanResult.traceId,
+      });
+
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+      await bridge.onScoreEvent(
+        createScoreEvent({
+          traceId: spanResult.traceId,
+          spanId: spanResult.spanId,
+          metadata: { source: 'unit-test' },
+          reason: 'looks good',
+        }),
+      );
+
+      expect(mockSubmitEvaluation).toHaveBeenCalledWith(
+        {
+          traceId: `exported-${spanResult.traceId}`,
+          spanId: `exported-${spanResult.spanId}`,
+        },
+        {
+          label: 'Quality scorer',
+          value: 0.75,
+          metricType: 'score',
+          mlApp: 'test',
+          timestampMs: new Date('2024-01-01T00:00:02Z').getTime(),
+          reasoning: 'looks good',
+          metadata: { source: 'unit-test' },
+        },
+      );
+    });
+
+    it('drops score events when the finished span context has been evicted', async () => {
+      const bridge = new DatadogBridge({
+        mlApp: 'test',
+        agentless: false,
+        finishedSpanContextCacheMaxEntries: 1,
+      });
+      const firstSpanResult = bridge.createSpan(createMockSpanOptions({ name: 'first' }))!;
+      const secondSpanResult = bridge.createSpan(createMockSpanOptions({ name: 'second' }))!;
+
+      await bridge.exportTracingEvent(
+        createTracingEvent(
+          TracingEventType.SPAN_ENDED,
+          createMockSpan({ id: firstSpanResult.spanId, traceId: firstSpanResult.traceId }),
+        ),
+      );
+      await bridge.exportTracingEvent(
+        createTracingEvent(
+          TracingEventType.SPAN_ENDED,
+          createMockSpan({ id: secondSpanResult.spanId, traceId: secondSpanResult.traceId }),
+        ),
+      );
+
+      await bridge.onScoreEvent(createScoreEvent({ traceId: firstSpanResult.traceId, spanId: firstSpanResult.spanId }));
+      await bridge.onScoreEvent(
+        createScoreEvent({ traceId: secondSpanResult.traceId, spanId: secondSpanResult.spanId }),
+      );
+
+      expect(mockSubmitEvaluation).toHaveBeenCalledTimes(1);
+      expect(mockSubmitEvaluation).toHaveBeenCalledWith(
+        {
+          traceId: `exported-${secondSpanResult.traceId}`,
+          spanId: `exported-${secondSpanResult.spanId}`,
+        },
+        expect.any(Object),
       );
     });
 
