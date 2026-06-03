@@ -1,21 +1,31 @@
 import { randomUUID } from 'node:crypto';
 
 import { RequestContext } from '@internal/core/request-context';
-import type { ToolsInput } from '../../agent';
+import type { Agent, ToolsInput } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory, StorageThreadType } from '../../memory';
 import { toStandardSchema } from '../../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../../schema';
+import type {
+  HarnessPendingItemRecord,
+  HarnessStorage,
+  SessionRecord,
+  SessionRecordUpdate,
+} from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
 import type { Workspace } from '../../workspace';
-import type { Skill, SkillMetadata } from '../../workspace/skills/types';
+import type { Skill as WorkspaceSkill, SkillMetadata as WorkspaceSkillMetadata } from '../../workspace/skills/types';
+import { sessionCreatedPayload } from './events';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
 import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
-import type { CloneSessionOptions, SessionConfig } from './session.types';
+import { buildHarnessRequestContext } from './request-context';
+import type { HarnessRequestContext, HarnessRequestContextSource } from './request-context';
+import type { CloneSessionOptions, SessionConfig, SessionSignalOptions } from './session.types';
 import { HarnessSkillNotFoundError } from './skills.types';
-import type { SkillSource } from './skills.types';
+import type { HarnessSkill, SkillSource } from './skills.types';
 import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
+import { buildHarnessBuiltInTools, buildSessionToolsets } from './tools';
 
 export class Session<TState = {}> {
   /** Stable identity. Frozen at construction. */
@@ -24,7 +34,16 @@ export class Session<TState = {}> {
   readonly #resourceId: string;
   readonly #threadId: string;
   readonly #createdAt: Date;
-  readonly #lastActivityAt: Date;
+  #lastActivityAt: Date;
+  readonly #storage: HarnessStorage;
+  readonly #runtimeCompatibilityGeneration?: string | null;
+  readonly #parentSessionId?: string;
+  readonly #subagentDepth: number;
+  readonly #source: HarnessRequestContextSource;
+  #pending: HarnessPendingItemRecord[];
+  #runStatus: 'idle' | 'starting' | 'running' | 'waiting' | 'resuming' = 'idle';
+  #currentRunId: string | null = null;
+  #currentTraceId: string | null = null;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
   readonly #stateSchemaInput?: PublicSchema<TState>;
@@ -34,13 +53,14 @@ export class Session<TState = {}> {
   readonly #workspace?: DynamicArgument<Workspace | undefined>;
   #resolvedWorkspace?: Workspace;
   #workspaceResolved = false;
-  readonly #skills: readonly Skill[];
+  readonly #resolveAgent?: (agentId: string) => Agent | Promise<Agent>;
+  readonly #resolveMode?: (modeId: string) => HarnessMode | Promise<HarnessMode>;
   /**
    * Single-flight cache for workspace skill discovery (spec §4.6: concurrent
    * `listSkills`/`useSkill` calls must share the same in-flight promise so we
    * don't re-scan the workspace per call).
    */
-  #workspaceSkillsPromise?: Promise<SkillMetadata[]>;
+  #workspaceSkillsPromise?: Promise<HarnessSkill[]>;
   readonly #subagents?: SubagentRegistryConfig;
   readonly #resolveModel?: ModelResolver;
   readonly #defaultPermissionPolicy: PermissionPolicy;
@@ -60,16 +80,26 @@ export class Session<TState = {}> {
     this.#modelId = config.model;
     this.#createdAt = config.createdAt;
     this.#lastActivityAt = config.lastActivityAt;
+    this.#storage = config.storage;
+    this.#runtimeCompatibilityGeneration = config.runtimeCompatibilityGeneration;
+    this.#parentSessionId = config.record?.parentSessionId;
+    this.#subagentDepth = config.record?.subagentDepth ?? 0;
+    this.#source = config.record?.source
+      ? { type: config.record.source.type, parentSessionId: config.record.source.parentSessionId }
+      : { type: config.record?.origin ?? 'top-level', parentSessionId: config.record?.parentSessionId };
+    this.#pending = (config.pending ?? config.record?.pending ?? []).map(item => ({ ...item }));
     this.#memory = config.memory;
     this.#events = config.events;
     this.#stateSchemaInput = config.stateSchema;
     this.#stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
+    this.#resolveAgent = config.resolveAgent;
+    this.#resolveMode = config.resolveMode;
     this.#state = {
       ...this.#getSchemaDefaults(),
       ...config.initialState,
+      ...(config.record?.state as Partial<TState> | undefined),
     } as TState;
     this.#workspace = config.workspace;
-    this.#skills = config.skills ?? [];
     this.#subagents = config.subagents;
     this.#resolveModel = config.resolveModel;
     this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
@@ -96,6 +126,204 @@ export class Session<TState = {}> {
     return this.#createdAt;
   }
 
+  get lastActivityAt(): Date {
+    return this.#lastActivityAt;
+  }
+
+  get parentSessionId(): string | undefined {
+    return this.#parentSessionId;
+  }
+
+  get subagentDepth(): number {
+    return this.#subagentDepth;
+  }
+
+  isBusy(): boolean {
+    return this.#isBusySnapshot();
+  }
+
+  async waitForIdle(opts: { timeout?: number } = {}): Promise<void> {
+    const timeout = opts.timeout ?? 30_000;
+    const startedAt = Date.now();
+
+    while (this.#isBusySnapshot()) {
+      if (Date.now() - startedAt >= timeout) {
+        throw new Error(`Harness session "${this.#id}" did not become idle within ${timeout}ms`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+
+  getQueueDepth(): number {
+    return this.#pending.filter(item => item.status === 'pending').length;
+  }
+
+  getCurrentRunId(): string | null {
+    return this.#currentRunId;
+  }
+
+  getCurrentTraceId(): string | null {
+    return this.#currentTraceId;
+  }
+
+  listPendingItems(): HarnessPendingItemRecord[] {
+    return this.#pending.map(item => ({ ...item }));
+  }
+
+  async spawnSubagentSession(opts: {
+    agentType: string;
+    prompt: string;
+    modelId?: string;
+    forked?: boolean;
+  }): Promise<
+    | {
+        isError: false;
+        subagentSessionId: string;
+        threadId: string;
+        resourceId: string;
+        agentType: string;
+        depth: number;
+      }
+    | {
+        isError: true;
+        code: 'harness.subagent_depth_exceeded';
+        message: string;
+        details: { maxDepth: number; attemptedDepth: number };
+      }
+  > {
+    const maxDepth = this.#subagents?.maxDepth ?? 1;
+    const attemptedDepth = this.#subagentDepth + 1;
+    if (attemptedDepth > maxDepth) {
+      return {
+        isError: true,
+        code: 'harness.subagent_depth_exceeded',
+        message: `Harness subagent depth ${attemptedDepth} exceeds the configured maximum of ${maxDepth}`,
+        details: { maxDepth, attemptedDepth },
+      };
+    }
+
+    const definition = this.#subagents?.types?.[opts.agentType];
+    if (!definition) {
+      throw new Error(`Harness subagent type "${opts.agentType}" was not found`);
+    }
+
+    if (!this.#resolveAgent) {
+      throw new Error('Harness subagent spawn requires an agent resolver');
+    }
+    await this.#resolveAgent(definition.agentId);
+
+    const modelId = opts.modelId ?? definition.defaultModelId ?? this.#modelId;
+    if (!this.#resolveModel) {
+      throw new Error('Harness subagent spawn requires a resolveModel function');
+    }
+    await this.#resolveModel(modelId);
+
+    const now = new Date();
+    const record: SessionRecord = {
+      id: `sess-${randomUUID()}`,
+      ownerId: this.#ownerId,
+      resourceId: this.#resourceId,
+      threadId: `thread-${randomUUID()}`,
+      parentSessionId: this.#id,
+      origin: 'subagent-tool',
+      source: { type: 'subagent-tool', parentSessionId: this.#id },
+      subagentDepth: attemptedDepth,
+      runtimeCompatibilityGeneration: this.#runtimeCompatibilityGeneration,
+      modeId: this.#mode.id,
+      modelId,
+      metadata: {
+        agentType: opts.agentType,
+        agentId: definition.agentId,
+        prompt: opts.prompt,
+        forked: opts.forked ?? definition.forked ?? false,
+      },
+      state: this.getState() as Record<string, unknown>,
+      pending: [],
+      createdAt: now,
+      lastActivityAt: now,
+    };
+
+    await this.#storage.saveSession(record);
+    this.#events.emit({ type: 'session_created', ...sessionCreatedPayload(record) }, { sessionId: record.id });
+    this.#events.emit({
+      type: 'subagent_start',
+      subagentSessionId: record.id,
+      payload: { agentType: opts.agentType, parentSessionId: this.#id, depth: attemptedDepth },
+    });
+
+    return {
+      isError: false,
+      subagentSessionId: record.id,
+      threadId: record.threadId,
+      resourceId: record.resourceId,
+      agentType: opts.agentType,
+      depth: attemptedDepth,
+    };
+  }
+
+  async registerPendingItem(
+    item: Omit<HarnessPendingItemRecord, 'sessionId' | 'createdAt' | 'updatedAt'> & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    },
+  ): Promise<HarnessPendingItemRecord> {
+    const now = new Date();
+    const record: HarnessPendingItemRecord = {
+      ...item,
+      sessionId: this.#id,
+      runtimeCompatibilityGeneration: item.runtimeCompatibilityGeneration ?? this.#runtimeCompatibilityGeneration,
+      createdAt: item.createdAt ?? now,
+      updatedAt: item.updatedAt ?? now,
+    };
+    this.#pending = [...this.#pending, record];
+    await this.#storage.appendPendingItem(this.#id, record);
+    await this.#reloadRecordProjection();
+    return { ...record };
+  }
+
+  async updatePendingItem(
+    pendingItemId: string,
+    updates: Partial<Omit<HarnessPendingItemRecord, 'id' | 'sessionId' | 'createdAt'>>,
+  ): Promise<HarnessPendingItemRecord> {
+    await this.#storage.updatePendingItem(this.#id, pendingItemId, updates);
+    await this.#reloadRecordProjection();
+    const item = this.#pending.find(item => item.id === pendingItemId);
+    if (!item) {
+      throw new Error(`Harness pending item "${pendingItemId}" was not found on session "${this.#id}"`);
+    }
+    return { ...item };
+  }
+
+  async removePendingItem(pendingItemId: string): Promise<void> {
+    await this.#storage.removePendingItem(this.#id, pendingItemId);
+    await this.#reloadRecordProjection();
+  }
+
+  async respondToToolApproval(
+    pendingItemId: string,
+    response: Record<string, unknown>,
+  ): Promise<HarnessPendingItemRecord> {
+    return this.#respondToPendingItem(pendingItemId, 'tool-approval', response);
+  }
+
+  async respondToToolSuspension(
+    pendingItemId: string,
+    response: Record<string, unknown>,
+  ): Promise<HarnessPendingItemRecord> {
+    return this.#respondToPendingItem(pendingItemId, 'tool-suspension', response);
+  }
+
+  async respondToQuestion(pendingItemId: string, response: Record<string, unknown>): Promise<HarnessPendingItemRecord> {
+    return this.#respondToPendingItem(pendingItemId, 'question', response);
+  }
+
+  async respondToPlanApproval(
+    pendingItemId: string,
+    response: Record<string, unknown>,
+  ): Promise<HarnessPendingItemRecord> {
+    return this.#respondToPendingItem(pendingItemId, 'plan-approval', response);
+  }
+
   async clone(opts: CloneSessionOptions = {}): Promise<Session<TState>> {
     const result = await (
       await this.#resolveMemory()
@@ -119,12 +347,14 @@ export class Session<TState = {}> {
       createdAt: result.thread.createdAt,
       lastActivityAt: result.thread.updatedAt,
       memory: this.#memory,
+      storage: this.#storage,
       events: this.#events.scoped({ sessionId: cloneId }),
       stateSchema: this.#stateSchemaInput,
       initialState: this.getState() as Partial<TState>,
       workspace: this.#workspace,
-      skills: this.#skills,
       subagents: this.#subagents,
+      resolveAgent: this.#resolveAgent,
+      resolveMode: this.#resolveMode,
       resolveModel: this.#resolveModel,
       defaultPermissionPolicy: this.#defaultPermissionPolicy,
       toolCategoryResolver: this.#toolCategoryResolver,
@@ -204,6 +434,7 @@ export class Session<TState = {}> {
     const previousModelId = this.#modelId;
     this.#modelId = modelId;
     if (modelId !== previousModelId) {
+      void this.#persistSession({ modelId });
       this.#events.emit({ type: 'model_changed', modelId, previousModelId });
     }
   }
@@ -212,69 +443,87 @@ export class Session<TState = {}> {
     return this.#mode;
   }
 
-  /**
-   * Returns the current mode's tool overrides. `tools` replaces the backing
-   * agent's tools; `additionalTools` augments them. The two are mutually
-   * exclusive (validated at Harness construction).
-   */
-  getToolOverrides(): { tools?: ToolsInput; additionalTools?: ToolsInput } {
+  #getToolOverrides(): { tools?: ToolsInput; additionalTools?: ToolsInput } {
     return { tools: this.#mode.tools, additionalTools: this.#mode.additionalTools };
+  }
+
+  async signal({ messages, ...options }: SessionSignalOptions): Promise<unknown> {
+    if (!this.#resolveAgent) {
+      throw new Error('Harness session cannot signal because no agent resolver is configured');
+    }
+
+    const agent = await this.#resolveAgent(this.#mode.agentId);
+    const runId = options.runId ?? randomUUID();
+    this.#markRunning(runId);
+
+    try {
+      const requestContext = await this.#buildRequestContext();
+      const agentTools = await agent.listTools({ requestContext });
+      const tools = buildSessionToolsets({
+        agentTools,
+        modeOverrides: this.#getToolOverrides(),
+        builtInTools: buildHarnessBuiltInTools(this),
+      });
+      const model = this.#resolveModel ? await this.#resolveModel(this.#modelId) : undefined;
+      const result = await agent.generate(messages, {
+        ...options,
+        runId,
+        requestContext,
+        ...(model ? { model } : {}),
+        toolsets: { harness: tools },
+        activeTools: options.activeTools
+          ? [...new Set([...options.activeTools, ...Object.keys(tools)])]
+          : Object.keys(tools),
+      });
+      this.#markIdle();
+      return result;
+    } catch (error) {
+      this.#markIdle();
+      throw error;
+    }
   }
 
   setMode(mode: HarnessMode) {
     const previousModeId = this.#mode.id;
     this.#mode = mode;
     if (mode.id !== previousModeId) {
+      void this.#persistSession({ modeId: mode.id });
       this.#events.emit({ type: 'mode_changed', modeId: mode.id, previousModeId });
     }
   }
 
   /**
-   * Returns the merged skill catalog as metadata entries. Explicitly configured
-   * canonical skills take precedence over workspace-discovered skills on name
-   * collision. Workspace discovery is async on first call and cached for the
-   * lifetime of the session (use `refreshSkills` to invalidate).
+   * Returns the workspace skill catalog. Workspace discovery is async on first
+   * call and cached for the lifetime of the session (use `refreshSkills` to
+   * invalidate).
    */
-  async listSkills(): Promise<SkillMetadata[]> {
-    const merged = new Map<string, SkillMetadata>();
-    const workspaceSkills = await this.#loadWorkspaceSkillMetadata();
-    for (const skill of workspaceSkills) {
-      merged.set(skill.name, skill);
-    }
-    for (const skill of this.#skills) {
-      merged.set(skill.name, skill);
-    }
-    return [...merged.values()];
+  async listSkills(): Promise<HarnessSkill[]> {
+    return this.#loadWorkspaceSkillMetadata();
   }
 
   /**
    * Look up a single skill by name. Returns `null` when no skill matches;
    * use `useSkill` when a missing skill should be a hard error.
    */
-  async getSkill(name: string): Promise<Skill | null> {
-    const configuredMatch = this.#skills.find(skill => skill.name === name);
-    if (configuredMatch) return configuredMatch;
-
+  async getSkill(name: string): Promise<HarnessSkill | null> {
     const workspace = await this.#getResolvedWorkspace();
     if (!workspace?.skills) return null;
 
     // Use the cached metadata list before materialising a full skill so
-    // configured skills keep deterministic precedence and concurrent discovery
-    // stays single-flight.
+    // concurrent discovery stays single-flight.
     const workspaceSkills = await this.#loadWorkspaceSkillMetadata();
     if (!workspaceSkills.some(skill => skill.name === name)) return null;
 
-    return workspace.skills.get(name);
+    const skill = await workspace.skills.get(name);
+    return skill ? this.#toHarnessSkill(skill) : null;
   }
 
   /**
-   * Activate a skill by name. Validates `opts.args` against the skill's
-   * `metadata.args` schema if both are present, then returns the canonical
-   * skill instructions string.
+   * Activate a skill by name and return the canonical skill instructions string.
    *
    * Throws `HarnessSkillNotFoundError` when the skill cannot be resolved.
    */
-  async useSkill(name: string, opts: { args?: Record<string, unknown> } = {}): Promise<string> {
+  async useSkill(name: string): Promise<string> {
     const skill = await this.getSkill(name);
     if (!skill) {
       throw new HarnessSkillNotFoundError({
@@ -283,35 +532,67 @@ export class Session<TState = {}> {
       });
     }
 
-    if (skill.metadata?.args && opts.args !== undefined) {
-      const argsSchema = toStandardSchema(skill.metadata.args as PublicSchema);
-      const result = await argsSchema['~standard'].validate(opts.args);
-      if (result.issues) {
-        const messages = result.issues.map((issue: { message?: string }) => issue.message).join('; ');
-        throw new Error(`Invalid skill args for "${name}": ${messages}`);
-      }
-    }
-
     return skill.instructions;
   }
 
   /**
    * Invalidate the workspace skill discovery cache. The next `listSkills` or
-   * `useSkill` call will re-query the workspace. Explicit configured skills
-   * are configuration and are unaffected.
+   * `useSkill` call will re-query the workspace.
    */
   refreshSkills(): void {
     this.#workspaceSkillsPromise = undefined;
   }
 
-  #searchedSources(): SkillSource[] {
-    const sources: SkillSource[] = [];
-    if (this.#skills.length > 0) sources.push('configured');
-    if (this.#workspace !== undefined) sources.push('workspace');
-    return sources;
+  #toHarnessSkill(skill: WorkspaceSkill | WorkspaceSkillMetadata): HarnessSkill {
+    const metadata = this.#plainMetadata(skill.metadata);
+    const category = typeof metadata?.category === 'string' ? metadata.category : undefined;
+    const filePath = skill.path;
+    if (!filePath) {
+      throw new Error(`Workspace skill "${skill.name}" is missing a file path`);
+    }
+    return {
+      name: skill.name,
+      description: skill.description,
+      instructions: 'instructions' in skill ? skill.instructions : '',
+      filePath,
+      ...(category ? { category } : {}),
+      ...(metadata ? { metadata } : {}),
+    };
   }
 
-  async #loadWorkspaceSkillMetadata(): Promise<SkillMetadata[]> {
+  #plainMetadata(metadata: Record<string, unknown> | undefined): HarnessSkill['metadata'] | undefined {
+    if (!metadata) return undefined;
+    const copy: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(metadata)) {
+      if (key === 'args') continue;
+      if (this.#isJsonSerializable(value)) copy[key] = value;
+    }
+    return Object.keys(copy).length > 0 ? (copy as HarnessSkill['metadata']) : undefined;
+  }
+
+  #isPlainObject(value: unknown): value is Record<string, unknown> {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      !Array.isArray(value) &&
+      Object.getPrototypeOf(value) === Object.prototype
+    );
+  }
+
+  #isJsonSerializable(value: unknown): boolean {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (Array.isArray(value)) return value.every(item => this.#isJsonSerializable(item));
+    if (this.#isPlainObject(value))
+      return Object.values(value).every(item => item !== undefined && this.#isJsonSerializable(item));
+    return false;
+  }
+
+  #searchedSources(): SkillSource[] {
+    return this.#workspace !== undefined ? ['workspace'] : [];
+  }
+
+  async #loadWorkspaceSkillMetadata(): Promise<HarnessSkill[]> {
     if (!this.#workspaceSkillsPromise) {
       this.#workspaceSkillsPromise = this.#discoverWorkspaceSkillMetadata().catch(err => {
         // Reset on failure so a later call can retry instead of poisoning the
@@ -323,10 +604,15 @@ export class Session<TState = {}> {
     return this.#workspaceSkillsPromise;
   }
 
-  async #discoverWorkspaceSkillMetadata(): Promise<SkillMetadata[]> {
+  async #discoverWorkspaceSkillMetadata(): Promise<HarnessSkill[]> {
     const workspace = await this.#getResolvedWorkspace();
-    if (!workspace?.skills) return [];
-    return workspace.skills.list();
+    const skillsApi = workspace?.skills;
+    if (!skillsApi) return [];
+    const skillMetadata = await skillsApi.list();
+    const skills = await Promise.all(
+      skillMetadata.map(async metadata => (await skillsApi.get(metadata.name)) ?? metadata),
+    );
+    return skills.map(skill => this.#toHarnessSkill(skill));
   }
 
   async #getResolvedWorkspace(requestContext?: RequestContext): Promise<Workspace | undefined> {
@@ -356,11 +642,115 @@ export class Session<TState = {}> {
       this.#state = newState as TState;
     }
 
+    await this.#persistSession({ state: this.#state as Record<string, unknown> });
+
     this.#events.emit({
       type: 'state_changed',
       state: this.#state as Record<string, unknown>,
       changedKeys,
     });
+  }
+
+  #isBusySnapshot(): boolean {
+    const hasActiveRun =
+      this.#runStatus === 'starting' ||
+      this.#runStatus === 'running' ||
+      this.#runStatus === 'waiting' ||
+      this.#runStatus === 'resuming';
+    return hasActiveRun || this.#pending.some(item => item.status === 'pending');
+  }
+
+  #markRunning(runId: string, traceId: string | null = null): void {
+    this.#runStatus = 'running';
+    this.#currentRunId = runId;
+    this.#currentTraceId = traceId;
+  }
+
+  #markIdle(): void {
+    this.#runStatus = 'idle';
+    this.#currentRunId = null;
+    this.#currentTraceId = null;
+  }
+
+  async #persistSession(updates: SessionRecordUpdate): Promise<void> {
+    this.#lastActivityAt = updates.lastActivityAt ?? new Date();
+    await this.#storage.updateSession(this.#id, {
+      ...updates,
+      lastActivityAt: this.#lastActivityAt,
+    });
+  }
+
+  async #respondToPendingItem(
+    pendingItemId: string,
+    expectedKind: HarnessPendingItemRecord['kind'],
+    response: Record<string, unknown>,
+  ): Promise<HarnessPendingItemRecord> {
+    const item = this.#pending.find(item => item.id === pendingItemId);
+    if (!item) {
+      throw new Error(`Harness pending item "${pendingItemId}" was not found on session "${this.#id}"`);
+    }
+    if (item.kind !== expectedKind) {
+      throw new Error(`Harness pending item "${pendingItemId}" is kind "${item.kind}", not "${expectedKind}"`);
+    }
+    if (item.status !== 'pending') {
+      throw new Error(`Harness pending item "${pendingItemId}" is already ${item.status}`);
+    }
+    if (item.runtimeCompatibilityGeneration !== this.#runtimeCompatibilityGeneration) {
+      throw new Error('harness.runtime_dependency_drifted');
+    }
+
+    const resumeResult = await this.#resumePendingBoundary(item, response);
+    const recordedResponse = resumeResult === undefined ? response : { ...response, resumeResult };
+
+    await this.#storage.updatePendingItem(this.#id, pendingItemId, { status: 'responded', response: recordedResponse });
+    await this.#reloadRecordProjection();
+    const updated = this.#pending.find(item => item.id === pendingItemId);
+    if (!updated) {
+      throw new Error(`Harness pending item "${pendingItemId}" was not found on session "${this.#id}"`);
+    }
+    return { ...updated };
+  }
+
+  async #resumePendingBoundary(
+    item: HarnessPendingItemRecord,
+    response: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | undefined> {
+    const payload = item.payload;
+    if (!this.#isPlainObject(payload)) return undefined;
+
+    if (item.kind === 'tool-approval') {
+      const approved = response.approved;
+      const runId = typeof payload.runId === 'string' ? payload.runId : item.runId;
+      const toolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : undefined;
+      const agentId = typeof payload.agentId === 'string' ? payload.agentId : this.#mode.agentId;
+      if (typeof approved !== 'boolean' || !runId || !this.#resolveAgent) return undefined;
+
+      const agent = await this.#resolveAgent(agentId);
+      const result = approved
+        ? await agent.approveToolCallGenerate({ runId, toolCallId, requestContext: await this.#buildRequestContext() })
+        : await agent.declineToolCallGenerate({ runId, toolCallId, requestContext: await this.#buildRequestContext() });
+      return this.#isJsonSerializable(result) ? (result as Record<string, unknown>) : { resumed: true };
+    }
+
+    if (item.kind === 'plan-approval' && response.approved === true) {
+      const transitionModeId = typeof payload.transitionModeId === 'string' ? payload.transitionModeId : undefined;
+      if (transitionModeId && transitionModeId !== this.#mode.id && this.#resolveMode) {
+        const mode = await this.#resolveMode(transitionModeId);
+        this.setMode(mode);
+        return { transitionModeId, modeChanged: true };
+      }
+    }
+
+    return undefined;
+  }
+
+  async #reloadRecordProjection(): Promise<void> {
+    const record = await this.#storage.loadSession(this.#id);
+    if (!record) {
+      throw new Error(`Harness session "${this.#id}" was not found`);
+    }
+    this.#lastActivityAt = record.lastActivityAt;
+    this.#pending = (record.pending ?? []).map(item => ({ ...item }));
   }
 
   #getSchemaDefaults(): Partial<TState> {
@@ -384,20 +774,27 @@ export class Session<TState = {}> {
     return defaults as Partial<TState>;
   }
 
-  async #buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
-    requestContext ??= new RequestContext();
-    const harnessContext = {
+  async #buildRequestContext(): Promise<RequestContext> {
+    const overlay = buildHarnessRequestContext({ harnessContext: this.#createHarnessContext() });
+    await this.#getResolvedWorkspace(overlay);
+
+    return overlay;
+  }
+
+  #createHarnessContext(): HarnessRequestContext<TState> {
+    return {
+      harnessId: this.#ownerId,
       sessionId: this.#id,
-      getState: () => this.getState(),
-      threadId: this.#threadId,
+      ownerId: this.#ownerId,
       resourceId: this.#resourceId,
+      threadId: this.#threadId,
       modeId: this.#mode.id,
       modelId: this.#modelId,
+      parentSessionId: this.#parentSessionId,
+      subagentDepth: this.#subagentDepth,
+      source: this.#source,
+      getState: () => this.getState(),
     };
-
-    requestContext.set('harness', harnessContext);
-
-    return requestContext;
   }
 
   async #resolveMemory(): Promise<MastraMemory> {
