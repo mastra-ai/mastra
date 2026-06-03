@@ -32,7 +32,10 @@ function getAuthProvider(mastra: Mastra): MastraAuthProvider | null {
 
 function isUserProvider(p: unknown): p is IUserProvider {
   return (
-    p !== null && typeof p === 'object' && typeof (p as { getCurrentUser?: unknown }).getCurrentUser === 'function'
+    p !== null &&
+    typeof p === 'object' &&
+    typeof (p as { getCurrentUser?: unknown }).getCurrentUser === 'function' &&
+    typeof (p as { getUser?: unknown }).getUser === 'function'
   );
 }
 
