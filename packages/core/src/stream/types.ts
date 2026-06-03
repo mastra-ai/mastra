@@ -373,7 +373,7 @@ interface WatchPayload {
   [key: string]: unknown;
 }
 
-interface TripwirePayload<TMetadata = unknown> {
+export interface TripwirePayload<TMetadata = unknown> {
   /** The reason for the tripwire */
   reason: string;
   /** If true, the agent should retry with the tripwire reason as feedback */
@@ -387,7 +387,7 @@ interface TripwirePayload<TMetadata = unknown> {
 /**
  * Payload for is-task-complete events emitted during stream/generate scoring.
  */
-interface IsTaskCompletePayload {
+export interface IsTaskCompletePayload {
   /** Current iteration number */
   iteration: number;
   /** Whether all/any scorers passed based on strategy */

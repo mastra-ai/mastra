@@ -11,7 +11,7 @@ import {
 } from '@mastra/playground-ui';
 import type { Theme } from '@mastra/playground-ui';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
-import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'dark', label: 'Dark' },
