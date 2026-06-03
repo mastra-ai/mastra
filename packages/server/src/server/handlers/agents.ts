@@ -44,6 +44,8 @@ import {
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   toolCallResponseSchema,
+  sendToolApprovalBodySchema,
+  sendToolApprovalResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
   updateAgentModelInModelListBodySchema,
@@ -1509,7 +1511,12 @@ export const GET_PROVIDERS_ROUTE = createRoute({
                 // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
                 // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
                 const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
-                allProviders[prefixedId] = config;
+                // Only add if not already present from PROVIDER_REGISTRY to prevent
+                // duplicates when PROVIDER_REGISTRY already has the prefixed key
+                // (e.g. dev mode where GatewayRegistry includes custom gateways).
+                if (!(prefixedId in allProviders)) {
+                  allProviders[prefixedId] = config;
+                }
               }
             } catch (error) {
               console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
@@ -2295,6 +2302,85 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error approving tool call');
+    }
+  },
+});
+
+async function validateSubscriptionToolCallThreadAccess({
+  agent,
+  requestContext,
+  resourceId,
+  threadId,
+}: {
+  agent: Agent;
+  requestContext: RequestContext;
+  resourceId?: string;
+  threadId?: string;
+}) {
+  const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+  const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+
+  if (!effectiveThreadId) {
+    throw new HTTPException(400, { message: 'threadId is required' });
+  }
+
+  if (effectiveResourceId) {
+    const memory = await agent.getMemory({ requestContext });
+    if (memory) {
+      const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+      await validateThreadOwnership(thread, effectiveResourceId);
+    }
+  }
+
+  return { effectiveResourceId: effectiveResourceId ?? '', effectiveThreadId };
+}
+
+export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/send-tool-approval',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: sendToolApprovalBodySchema,
+  responseSchema: sendToolApprovalResponseSchema,
+  summary: 'Send tool approval',
+  description: 'Approves or declines a pending tool call and publishes resumed chunks to thread subscribers',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
+    try {
+      const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
+      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions,
+        requestContext: serverRequestContext,
+      });
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      sanitizeBody(params, ['tools']);
+      const { effectiveResourceId, effectiveThreadId } = await validateSubscriptionToolCallThreadAccess({
+        agent,
+        requestContext: serverRequestContext,
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+      });
+
+      return await agent.sendToolApproval({
+        ...params,
+        resourceId: effectiveResourceId,
+        threadId: effectiveThreadId,
+        requestContext: serverRequestContext,
+        abortSignal,
+      });
+    } catch (error) {
+      return handleError(error, 'error sending tool approval');
     }
   },
 });

@@ -101,7 +101,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     // modelSettings (maxTokens is serialized as maxOutputTokens on the wire).
     expect(captured.body.maxSteps).toBe(100);
     expect(captured.body.modelSettings.maxRetries).toBe(3);
-    expect(captured.body.modelSettings.maxOutputTokens).toBe(1000);
+    expect(captured.body.modelSettings.maxOutputTokens).toBe(5000);
     expect(captured.body.modelSettings.temperature).toBe(1);
 
     // Confirm the snapshot is NOT smuggled into the user-facing messages array.

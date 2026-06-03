@@ -12,12 +12,14 @@ import {
 } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import {
+  AlertTriangle,
   AlignLeft,
   Check,
   ChevronRight,
   FileText,
   Globe,
   Loader2,
+  RefreshCw,
   Wrench,
   Zap,
   GlobeLockIcon,
@@ -27,8 +29,10 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useAgentPrimitives } from '../../contexts/agent-primitives-context';
-import { useStreamApproval } from '../../contexts/stream-chat-context';
+import { useStreamApproval, useStreamRetry } from '../../contexts/stream-chat-context';
 import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
+import { parseStreamErrorText } from './parse-stream-error';
+import type { ParsedStreamError } from './parse-stream-error';
 import { Shimmer } from './shimmer';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
@@ -42,6 +46,8 @@ import {
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
 import { ProviderLogo } from '@/domains/llm';
+import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
+import { isSignalData } from '@/lib/ai-ui/messages/signal-data';
 
 interface MessageRowProps {
   message: MastraUIMessage;
@@ -120,8 +126,25 @@ const findApprovalEntry = (
   return (toolName ? approvals[toolName] : undefined) ?? (toolCallId ? approvals[toolCallId] : undefined);
 };
 
+const getMessageStatus = (message: MastraUIMessage): string | undefined => {
+  const metadata = message.metadata as { status?: unknown } | undefined;
+  if (!metadata) return undefined;
+  return typeof metadata.status === 'string' ? metadata.status : undefined;
+};
+
+const getMessageErrorText = (message: MastraUIMessage): string => {
+  const textPart = message.parts.find(part => part.type === 'text') as { text?: string } | undefined;
+  return textPart?.text ?? '';
+};
+
 export const MessageRow = ({ message }: MessageRowProps) => {
   const approvals = getRequireApprovalMetadata(message);
+  const retry = useStreamRetry();
+
+  if (getMessageStatus(message) === 'error') {
+    const parsed = parseStreamErrorText(getMessageErrorText(message));
+    return <ErrorMessage error={parsed} onRetry={retry} />;
+  }
 
   return (
     <>
@@ -246,6 +269,11 @@ export const MessageRow = ({ message }: MessageRowProps) => {
               return <SkillTool name={input.name ?? 'unknown'} />;
             }
 
+            if (part.type === 'data-signal') {
+              const data = (part as { data?: unknown }).data;
+              return isSignalData(data) ? <SignalBadge key={key} signal={data} /> : null;
+            }
+
             if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
               const toolName = part.type.slice('tool-'.length);
               const extra = part as { input?: unknown; output?: unknown };
@@ -288,6 +316,79 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
   }
 
   return null;
+};
+
+export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onRetry: (() => void) | null }) => {
+  return (
+    <Card
+      className="border-accent6/40 bg-accent6/5 max-w-[80%] p-4 flex flex-col gap-3"
+      role="alert"
+      data-testid="agent-builder-chat-error"
+    >
+      <div className="flex items-start gap-2.5">
+        <AlertTriangle className="size-4 mt-0.5 shrink-0 text-accent6" aria-hidden />
+        <div className="flex flex-col gap-1 min-w-0">
+          <Txt variant="ui-md" className="text-icon6 font-medium" as="div">
+            Something went wrong while building the agent.
+          </Txt>
+          <Txt
+            variant="ui-sm"
+            className="text-neutral4 break-words"
+            as="div"
+            data-testid="agent-builder-chat-error-summary"
+          >
+            {error.summary}
+          </Txt>
+        </div>
+      </div>
+
+      {error.details && error.details !== error.summary ? (
+        <Collapsible className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            {onRetry !== null && (
+              <Button
+                variant="default"
+                onClick={onRetry}
+                className="gap-1.5"
+                data-testid="agent-builder-chat-error-retry"
+              >
+                <RefreshCw className="size-3.5" aria-hidden />
+                Try again
+              </Button>
+            )}
+            <CollapsibleTrigger
+              className="text-neutral4 hover:text-neutral6 text-sm underline-offset-2 hover:underline"
+              data-testid="agent-builder-chat-error-details-trigger"
+            >
+              Details
+            </CollapsibleTrigger>
+          </div>
+          <CollapsibleContent>
+            <pre
+              className="text-xs text-neutral4 whitespace-pre-wrap break-all bg-surface1 rounded-md p-2 max-h-48 overflow-auto"
+              data-testid="agent-builder-chat-error-details"
+            >
+              {error.details}
+            </pre>
+          </CollapsibleContent>
+        </Collapsible>
+      ) : (
+        onRetry !== null && (
+          <div className="flex items-center gap-3">
+            <Button
+              variant="default"
+              onClick={onRetry}
+              className="gap-1.5"
+              data-testid="agent-builder-chat-error-retry"
+            >
+              <RefreshCw className="size-3.5" aria-hidden />
+              Try again
+            </Button>
+          </div>
+        )
+      )}
+    </Card>
+  );
 };
 
 export const PendingIndicator = () => {

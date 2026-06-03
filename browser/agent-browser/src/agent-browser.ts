@@ -763,12 +763,18 @@ export class AgentBrowser extends MastraBrowser {
         );
       }
 
+      const timeout = input.timeout ?? this.defaultTimeout;
+
+      const navigation = input.waitUntil ? page.waitForNavigation({ waitUntil: input.waitUntil, timeout }) : undefined;
+
       await locator.click({
         button: input.button ?? 'left',
         clickCount: input.clickCount ?? 1,
         modifiers: input.modifiers,
-        timeout: this.defaultTimeout,
+        timeout,
       });
+
+      await navigation;
 
       return {
         success: true,
@@ -863,7 +869,12 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
+      const timeout = input.timeout ?? this.defaultTimeout;
+      const navigation = input.waitUntil ? page.waitForNavigation({ waitUntil: input.waitUntil, timeout }) : undefined;
+
       await page.keyboard.press(input.key);
+
+      await navigation;
 
       return {
         success: true,
@@ -900,9 +911,12 @@ export class AgentBrowser extends MastraBrowser {
       if (input.label) selectValue.label = input.label;
       if (input.index !== undefined) selectValue.index = input.index;
 
-      const selected = await locator.selectOption(selectValue, {
-        timeout: this.defaultTimeout,
-      });
+      const timeout = input.timeout ?? this.defaultTimeout;
+      const navigation = input.waitUntil ? page.waitForNavigation({ waitUntil: input.waitUntil, timeout }) : undefined;
+
+      const selected = await locator.selectOption(selectValue, { timeout });
+
+      await navigation;
 
       return {
         success: true,

@@ -1041,6 +1041,8 @@ export type MastraPartType =
   | 'data-tool-call-approval'
   | 'data-tool-call-suspended'
   | 'data-system-reminder'
+  | 'data-signal'
+  | 'data-user-message'
   | 'data-tripwire'
   | 'data-structured-output'
   // Allow arbitrary strings for custom data-* types

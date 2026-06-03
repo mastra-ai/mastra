@@ -99,11 +99,29 @@ describe('ComposerModelSettings', () => {
     await openPopover();
 
     expect(await screen.findByText('Chat Method')).not.toBeNull();
-    // v2 model defaults to the modern Generate/Stream options (no Legacy variants).
+    // v2 model defaults to the modern Generate/Stream Subscription/Stream options (no Legacy variants).
     expect(document.getElementById('generate')).not.toBeNull();
+    expect(document.getElementById('streamSubscription')).not.toBeNull();
     expect(document.getElementById('stream')).not.toBeNull();
     expect(document.getElementById('generateLegacy')).toBeNull();
     expect(document.getElementById('streamLegacy')).toBeNull();
+  });
+
+  it('persists legacy stream as an explicit no-subscription fallback', async () => {
+    useDefaultHandlers();
+    renderSettings();
+    await openPopover();
+
+    const legacyStream = document.getElementById('stream');
+    expect(legacyStream).not.toBeNull();
+    await act(async () => {
+      fireEvent.click(legacyStream!);
+    });
+
+    const stored = JSON.parse(window.localStorage.getItem(`mastra-agent-store-${AGENT_ID}`) ?? '{}');
+    expect(stored.modelSettings.chatWithLegacyStream).toBe(true);
+    expect(stored.modelSettings.chatWithGenerate).toBe(false);
+    expect(stored.modelSettings.chatWithNetwork).toBe(false);
   });
 
   it('keeps the popover open when the Advanced Settings dialog is dismissed via its built-in close button', async () => {

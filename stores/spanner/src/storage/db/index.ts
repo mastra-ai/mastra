@@ -7,6 +7,7 @@ import {
   TABLE_SPANS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
+  TABLE_CONFIGS,
   getDefaultValue,
 } from '@mastra/core/storage';
 import type {
@@ -414,6 +415,20 @@ export class SpannerDB extends MastraBase {
     }
     if (tableName === TABLE_SPANS) {
       return ['traceId', 'spanId'];
+    }
+    // Tables with composite primary keys (e.g. mastra_favorites,
+    // mastra_dataset_items) declare them in core's TABLE_CONFIGS rather than via
+    // per-column `primaryKey: true` flags. Honor that first so the PRIMARY KEY
+    // clause emitted by createTable matches what the domains expect.
+    const compositePk = TABLE_CONFIGS[tableName]?.compositePrimaryKey;
+    if (compositePk && compositePk.length > 0) {
+      const missing = compositePk.filter(col => !schema[col]);
+      if (missing.length > 0) {
+        throw new Error(
+          `Table ${tableName}: composite primary key references columns not present in schema: ${missing.join(', ')}`,
+        );
+      }
+      return [...compositePk];
     }
     const pk = Object.entries(schema)
       .filter(([, col]) => col.primaryKey)
