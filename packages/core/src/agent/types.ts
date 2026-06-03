@@ -87,6 +87,8 @@ export type {
   AgentSignalInput as AgentSignal,
   AgentSignalType,
   AgentSignalDataPart,
+  AgentStateSignalInput,
+  AgentStateSignalMode,
   CreatedAgentSignal,
 } from './signals';
 
@@ -153,6 +155,18 @@ export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type QueueAgentMessageResult = SendAgentSignalResult;
+
+/**
+ * @experimental Agent state signal APIs are experimental and may change in a future release.
+ */
+export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent state signal APIs are experimental and may change in a future release.
+ */
+export type SendAgentStateSignalResult =
+  | (SendAgentSignalResult & { skipped?: false })
+  | { accepted: true; skipped: true; reason: 'unchanged'; runId?: string; signal?: undefined };
 
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;

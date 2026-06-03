@@ -234,6 +234,84 @@ When the agent is idle:
 
 Top-level `attributes` always apply. The selected branch's `attributes` are merged into them at delivery time. The `delivery` name shown above is not a special Mastra API field. It is a custom attribute name used for this example, you can add any attribute names that suit your use case.
 
+## State signals
+
+State signals expose named, thread-scoped context lanes. Use them for durable context that changes over time, such as browser state, editor state, or a background watcher result.
+
+Each state signal needs:
+
+- `id`: The state lane name, such as `browser`.
+- `cacheKey`: A producer-owned key for deduping the current state.
+- `mode`: `snapshot` for an authoritative state copy, or `delta` for a change event.
+
+Use `sendStateSignal()` when an external producer detects a state change.
+
+```typescript title="src/mastra/browser-watcher.ts"
+await agent.sendStateSignal(
+  {
+    id: 'browser',
+    mode: 'snapshot',
+    cacheKey: 'browser:https://example.com:3-tabs',
+    contents: 'Browser is open on https://example.com with 3 tabs.',
+    value: {
+      activeUrl: 'https://example.com',
+      tabCount: 3,
+      open: true,
+    },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+When Mastra accepts a state signal, it stores compact tracking metadata on the thread. The metadata records the lane's current `cacheKey`, current mode, version, last signal id, and last snapshot signal id. If a producer sends the same `cacheKey` and mode again while that state is still current, Mastra skips the duplicate.
+
+State signal fields have separate roles:
+
+- `contents`: The representation the model reads.
+- `value`: The structured snapshot for `mode: 'snapshot'`.
+- `delta`: The structured change for `mode: 'delta'`.
+- `metadata.state`: The runtime tracking envelope with `id`, `mode`, `cacheKey`, `version`, and `threadId`.
+
+Use `computeStateSignal()` when a processor owns a state lane. Mastra calls it once per model input step after `processInputStep()`. If the processor omits `id`, Mastra uses the processor id as the state lane id. Set `stateId` when the public state lane should differ from the processor id.
+
+```typescript title="src/mastra/processors/browser-state.ts"
+import type { ComputeStateSignalArgs, Processor } from '@mastra/core/processors'
+
+export const browserStateProcessor: Processor = {
+  id: 'browser-state',
+  stateId: 'browser',
+  computeStateSignal(args: ComputeStateSignalArgs) {
+    const browser = readCurrentBrowserState()
+    const previous = readMostRecentBrowserState(args.activeStateSignals)
+    const changed = previous ? diffBrowserState(previous, browser) : browser
+    const shouldRefreshSnapshot = Boolean(args.lastSnapshot && !args.contextWindow.hasSnapshot)
+
+    if (previous && Object.keys(changed).length === 0 && !shouldRefreshSnapshot) {
+      return
+    }
+
+    const isDelta = Boolean(previous && !shouldRefreshSnapshot)
+
+    return {
+      mode: isDelta ? 'delta' : 'snapshot',
+      cacheKey: stableBrowserStateCacheKey(browser),
+      contents: isDelta ? describeBrowserDelta(changed) : describeBrowserSnapshot(browser),
+      value: browser,
+      ...(isDelta ? { delta: changed } : {}),
+    }
+  },
+}
+```
+
+Mastra passes `lastSnapshot` and `deltasSinceSnapshot` into `computeStateSignal()`. It resolves them from message history when the current message list does not contain the latest snapshot. The processor still owns merge and diff logic.
+
+`contextWindow.hasSnapshot` tells the processor whether the active message window already contains a snapshot for this state lane. If it is `false`, return a fresh `snapshot` so the model sees the current state even after older state messages are trimmed from the context window.
+
+The built-in browser context processor emits state under the `browser` id with snapshot and delta modes.
+
 ## Compatibility
 
 Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `type: 'system-reminder'`. It normalizes them internally to the new category and tag shape:

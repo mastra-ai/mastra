@@ -3,13 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
+import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
-import type { AgentMessageInput, CreatedAgentSignal } from './signals';
+import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
+import { applyStateSignal } from './state-signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
@@ -20,6 +22,8 @@ import type {
   SendAgentMessageResult,
   SendAgentSignalOptions,
   SendAgentSignalResult,
+  SendAgentStateSignalOptions,
+  SendAgentStateSignalResult,
 } from './types';
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
@@ -869,6 +873,56 @@ export class AgentThreadStreamRuntime {
       { ...target, runId, resourceId, threadId, ifIdle: { ...target.ifIdle, behavior: 'wake' } },
       pubsub,
     );
+  }
+
+  async sendStateSignal<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    stateInput: AgentStateSignalInput,
+    target: SendAgentStateSignalOptions<OUTPUT>,
+    pubsub?: PubSub,
+  ): Promise<SendAgentStateSignalResult> {
+    if (!target.resourceId || !target.threadId) {
+      throw new Error('resourceId and threadId are required to send a state signal');
+    }
+    const resourceId = target.resourceId;
+    const threadId = target.threadId;
+
+    const requestContext = target.ifIdle?.streamOptions?.requestContext;
+    const memoryContext = parseMemoryRequestContext(requestContext);
+    const memory = await agent.getMemory({ requestContext });
+    if (!memory) {
+      throw new Error('sendStateSignal requires Mastra memory');
+    }
+
+    const loadedThread = (await memory.getThreadById({ threadId })) ?? memoryContext?.thread;
+    if (!loadedThread) {
+      throw new Error(`sendStateSignal could not load thread ${threadId}`);
+    }
+
+    const thread = {
+      ...loadedThread,
+      id: threadId,
+      resourceId: loadedThread.resourceId ?? resourceId,
+      createdAt: loadedThread.createdAt ?? new Date(),
+      updatedAt: loadedThread.updatedAt ?? new Date(),
+      metadata: loadedThread.metadata,
+    };
+
+    const applied = await applyStateSignal({
+      input: stateInput,
+      memory,
+      thread,
+      resourceId,
+      threadId,
+      memoryConfig: memoryContext?.memoryConfig,
+      acceptedAt: new Date(),
+    });
+
+    if (applied.skipped) {
+      return { accepted: true, skipped: true, reason: 'unchanged' };
+    }
+
+    return this.sendSignal(agent, applied.signal, target, pubsub);
   }
 
   /**

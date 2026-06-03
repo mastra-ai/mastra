@@ -11,6 +11,8 @@ import {
   reconcileChatBoundarySpacers,
 } from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { ReactiveSignalComponent } from '../components/reactive-signal.js';
+import { StateSignalComponent } from '../components/state-signal.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
@@ -59,14 +61,41 @@ type StreamedSystemReminderPart = {
   judgeModelId?: string;
 };
 
+type StreamedStateSignalPart = {
+  type: 'state_signal';
+  stateId: string;
+  mode: 'snapshot' | 'delta';
+  cacheKey?: string;
+  version?: number;
+  message?: string;
+};
+
+type StreamedReactiveSignalPart = {
+  type: 'reactive_signal';
+  tagName: string;
+  message?: string;
+};
+
 function isInlineBoundary(part: HarnessMessageContent): boolean {
   return (
-    part.type === 'tool_call' || part.type === 'tool_result' || (part as { type?: string }).type === 'system_reminder'
+    part.type === 'tool_call' ||
+    part.type === 'tool_result' ||
+    (part as { type?: string }).type === 'system_reminder' ||
+    (part as { type?: string }).type === 'state_signal' ||
+    (part as { type?: string }).type === 'reactive_signal'
   );
 }
 
 function isSystemReminderPart(part: HarnessMessageContent): boolean {
   return (part as { type?: string }).type === 'system_reminder';
+}
+
+function isStateSignalPart(part: HarnessMessageContent): boolean {
+  return (part as { type?: string }).type === 'state_signal';
+}
+
+function isReactiveSignalPart(part: HarnessMessageContent): boolean {
+  return (part as { type?: string }).type === 'reactive_signal';
 }
 
 function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSystemReminderPart | undefined {
@@ -85,6 +114,36 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
   };
 }
 
+function toStreamedStateSignalPart(part: HarnessMessageContent): StreamedStateSignalPart | undefined {
+  if (!isStateSignalPart(part)) return undefined;
+  const stateSignal = part as unknown as Partial<StreamedStateSignalPart>;
+  if (typeof stateSignal.stateId !== 'string') return undefined;
+
+  return {
+    type: 'state_signal',
+    stateId: stateSignal.stateId,
+    mode: stateSignal.mode === 'delta' ? 'delta' : 'snapshot',
+    cacheKey:
+      typeof (stateSignal as Record<string, unknown>).cacheKey === 'string'
+        ? ((stateSignal as Record<string, unknown>).cacheKey as string)
+        : undefined,
+    version: typeof stateSignal.version === 'number' ? stateSignal.version : undefined,
+    message: typeof stateSignal.message === 'string' ? stateSignal.message : undefined,
+  };
+}
+
+function toStreamedReactiveSignalPart(part: HarnessMessageContent): StreamedReactiveSignalPart | undefined {
+  if (!isReactiveSignalPart(part)) return undefined;
+  const reactiveSignal = part as unknown as Partial<StreamedReactiveSignalPart>;
+  if (typeof reactiveSignal.tagName !== 'string') return undefined;
+
+  return {
+    type: 'reactive_signal',
+    tagName: reactiveSignal.tagName,
+    message: typeof reactiveSignal.message === 'string' ? reactiveSignal.message : undefined,
+  };
+}
+
 function createReminderComponent(reminder: StreamedSystemReminderPart): SystemReminderComponent | TemporalGapComponent {
   if (reminder.reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
@@ -100,6 +159,24 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
     goalMaxTurns: reminder.goalMaxTurns,
     judgeModelId: reminder.judgeModelId,
   });
+}
+
+function addInlineStateSignal(ctx: EventHandlerContext, stateSignal: StreamedStateSignalPart): void {
+  const component = new StateSignalComponent({
+    stateId: stateSignal.stateId,
+    mode: stateSignal.mode,
+    version: stateSignal.version,
+    message: stateSignal.message,
+  });
+  ctx.addChildBeforeFollowUps(component);
+}
+
+function addInlineReactiveSignal(ctx: EventHandlerContext, reactiveSignal: StreamedReactiveSignalPart): void {
+  const component = new ReactiveSignalComponent({
+    tagName: reactiveSignal.tagName,
+    message: reactiveSignal.message,
+  });
+  ctx.addChildBeforeFollowUps(component);
 }
 
 function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemReminderPart): void {
@@ -186,6 +263,20 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   const systemReminderParts = message.content
     .map(toStreamedSystemReminderPart)
     .filter((part): part is StreamedSystemReminderPart => part !== undefined);
+  const stateSignalParts = message.content
+    .map(toStreamedStateSignalPart)
+    .filter((part): part is StreamedStateSignalPart => part !== undefined);
+  const reactiveSignalParts = message.content
+    .map(toStreamedReactiveSignalPart)
+    .filter((part): part is StreamedReactiveSignalPart => part !== undefined);
+
+  for (const stateSignal of stateSignalParts) {
+    const stateSignalKey = `state:${message.id}:${stateSignal.cacheKey ?? ''}:${stateSignal.stateId}:${stateSignal.mode}:${stateSignal.version ?? ''}:${stateSignal.message ?? ''}`;
+    if (!state.currentRunSystemReminderKeys.has(stateSignalKey)) {
+      state.currentRunSystemReminderKeys.add(stateSignalKey);
+      addInlineStateSignal(ctx, stateSignal);
+    }
+  }
 
   for (const reminder of systemReminderParts) {
     if (reminder.reminderType === 'goal-judge') continue;
@@ -197,11 +288,19 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     }
   }
 
+  for (const reactiveSignal of reactiveSignalParts) {
+    const reactiveSignalKey = `${message.id}:${reactiveSignal.tagName}:${reactiveSignal.message ?? ''}`;
+    if (!state.currentRunSystemReminderKeys.has(reactiveSignalKey)) {
+      state.currentRunSystemReminderKeys.add(reactiveSignalKey);
+      addInlineReactiveSignal(ctx, reactiveSignal);
+    }
+  }
+
   if (!state.streamingComponent) {
     const trailingParts = getTrailingContentParts(message);
     const hasToolCalls = message.content.some(content => content.type === 'tool_call');
     if (trailingParts.length === 0 && !hasToolCalls) {
-      if (systemReminderParts.length > 0) {
+      if (systemReminderParts.length > 0 || stateSignalParts.length > 0 || reactiveSignalParts.length > 0) {
         state.ui.requestRender();
       }
       return;

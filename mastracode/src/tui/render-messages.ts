@@ -18,7 +18,9 @@ import type { ChatSpacingKind } from './components/chat-spacing.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
+import { ReactiveSignalComponent } from './components/reactive-signal.js';
 import { SlashCommandComponent } from './components/slash-command.js';
+import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -343,6 +345,38 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     }
 
     addChildBeforeMessageOrFollowUps(state, reminderComponent, reminderPart.precedesMessageId);
+    state.ui.requestRender();
+    return;
+  }
+
+  const stateSignalPart = message.content.find(content => (content as { type?: string }).type === 'state_signal') as
+    | { type: 'state_signal'; stateId: string; mode: 'snapshot' | 'delta'; version?: number; message?: string }
+    | undefined;
+
+  if (stateSignalPart) {
+    const component = new StateSignalComponent({
+      stateId: stateSignalPart.stateId,
+      mode: stateSignalPart.mode,
+      version: stateSignalPart.version,
+      message: stateSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const reactiveSignalPart = message.content.find(
+    content => (content as { type?: string }).type === 'reactive_signal',
+  ) as { type: 'reactive_signal'; tagName: string; message?: string } | undefined;
+
+  if (reactiveSignalPart) {
+    const component = new ReactiveSignalComponent({
+      tagName: reactiveSignalPart.tagName,
+      message: reactiveSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
     return;
   }
