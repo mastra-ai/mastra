@@ -2,8 +2,11 @@ import type { MastraMemory } from '../../memory';
 import type { PublicSchema } from '../../schema';
 import type { DynamicArgument } from '../../types';
 import type { Workspace } from '../../workspace';
+import type { Skill } from '../../workspace/skills/types';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
+import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
+import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
 export type CloneSessionOptions = {
   sessionId?: string;
@@ -25,6 +28,16 @@ export interface SessionConfig<TState = {}> {
   stateSchema?: PublicSchema<TState>;
   initialState?: Partial<TState>;
   workspace?: DynamicArgument<Workspace | undefined>;
+  /** Explicitly configured canonical skills exposed to this session. */
+  skills?: readonly Skill[];
+  /** Subagent registry the session can spawn through the built-in tool. */
+  subagents?: SubagentRegistryConfig;
+  /** Resolves a model id to a `LanguageModel`. Required for subagent spawn. */
+  resolveModel?: ModelResolver;
+  /** Default permission policy applied when no category rule matches. */
+  defaultPermissionPolicy?: PermissionPolicy;
+  /** Resolves a tool name to its category for permission-gate evaluation. */
+  toolCategoryResolver?: ToolCategoryResolver;
   // storage: HarnessStorage;
   /** Identifier of the Harness instance that owns this session. */
   ownerId: string;

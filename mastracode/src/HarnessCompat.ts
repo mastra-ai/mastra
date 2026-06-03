@@ -238,4 +238,18 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
 
     await super.switchMode({ modeId });
   }
+
+  /**
+   * Activate a skill on the current v1 session.
+   *
+   * Pass-through to `Session.useSkill` — returns the resolved instructions
+   * string, or throws `HarnessSkillNotFoundError` if the skill is missing.
+   * Throws if there is no active session.
+   */
+  async useSkill(name: string, opts?: { args?: Record<string, unknown> }): Promise<string> {
+    if (!this.#session) {
+      throw new Error('No active session to use skill');
+    }
+    return this.#session.useSkill(name, opts);
+  }
 }
