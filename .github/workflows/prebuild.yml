@@ -198,7 +198,7 @@ jobs:
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      changed: ${{ steps.changes.outputs.changed }}
+      changed: ${{ steps.changes.outputs.changed == 'true' || steps.integration-test-manifest.outputs.changed == 'true' }}
     permissions:
       contents: read
     steps:
@@ -218,6 +218,15 @@ jobs:
           packages: '@mastra/memory'
           tasks: 'build,test'
           base-ref: 'origin/main'
+
+      - name: Check for memory integration test manifest changes
+        id: integration-test-manifest
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -qx 'packages/memory/integration-tests/package.json'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
   memory-test:
     name: Memory Tests
@@ -275,7 +284,7 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Install integration test dependencies
-        run: pnpm install --ignore-workspace
+        run: pnpm install
         working-directory: packages/memory/integration-tests
 
       - name: Run Memory tests

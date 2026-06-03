@@ -184,6 +184,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
     return {
       name: workflow.name,
       description: workflow.description,
+      metadata: workflow.metadata,
       stepCount: Object.keys(workflow.steps).length,
       stepGraph: workflow.serializedStepGraph,
       options: workflow.options,
@@ -192,12 +193,14 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
       inputSchema: undefined,
       outputSchema: undefined,
       stateSchema: undefined,
+      requestContextSchema: undefined,
     } as WorkflowInfo;
   }
 
   return {
     name: workflow.name,
     description: workflow.description,
+    metadata: workflow.metadata,
     steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
       acc[key] = {
         id: step.id,

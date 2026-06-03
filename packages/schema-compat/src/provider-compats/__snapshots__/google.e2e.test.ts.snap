@@ -2,8 +2,6 @@
 
 exports[`Google e2e test > should be succesful with structured_output 1`] = `
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
   "properties": {
     "actualData": {
       "description": "a valid sample date
@@ -50,6 +48,47 @@ constraints: a valid date-time",
       "description": "sample text that is the default value",
       "type": "string",
     },
+    "discriminatedUnion": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "circle",
+              ],
+              "type": "string",
+            },
+            "r": {
+              "type": "number",
+            },
+          },
+          "required": [
+            "kind",
+            "r",
+          ],
+          "type": "object",
+        },
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "square",
+              ],
+              "type": "string",
+            },
+            "s": {
+              "type": "number",
+            },
+          },
+          "required": [
+            "kind",
+            "s",
+          ],
+          "type": "object",
+        },
+      ],
+      "description": "a circle with radius r or a square with side s",
+    },
     "enum": {
       "description": "The letter A, B, or C",
       "enum": [
@@ -66,6 +105,13 @@ constraints: a valid date-time",
       },
       "type": "array",
     },
+    "literal": {
+      "description": "exactly the string "the-only-allowed-value"",
+      "enum": [
+        "the-only-allowed-value",
+      ],
+      "type": "string",
+    },
     "nativeEnum": {
       "description": "The letter A, B, or C",
       "enum": [
@@ -76,15 +122,9 @@ constraints: a valid date-time",
       "type": "string",
     },
     "nullable": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
       "description": "leave this field empty as an example of a nullable field",
+      "nullable": true,
+      "type": "string",
     },
     "number": {
       "description": "any valid sample number",
@@ -120,7 +160,6 @@ constraints: multiple of 2",
       "type": "number",
     },
     "object": {
-      "additionalProperties": false,
       "description": "any valid sample object with a string and a number",
       "properties": {
         "bar": {
@@ -137,18 +176,15 @@ constraints: multiple of 2",
       "type": "object",
     },
     "objectLoose": {
-      "additionalProperties": true,
       "description": "any sample object with example keys and data",
       "properties": {},
       "required": [],
       "type": "object",
     },
     "objectNested": {
-      "additionalProperties": false,
       "description": "any valid sample data",
       "properties": {
         "user": {
-          "additionalProperties": false,
           "properties": {
             "age": {
               "description": "constraints: greater than or equal to 18",
@@ -172,7 +208,6 @@ constraints: multiple of 2",
       "type": "object",
     },
     "objectPassthrough": {
-      "additionalProperties": true,
       "description": "any sample object with example keys and data",
       "properties": {},
       "required": [],
@@ -188,7 +223,7 @@ constraints: multiple of 2",
     },
     "stringCuid": {
       "description": "a valid sample cuid
-constraints: input must match this regex ^[cC][^\\s-]{8,}$",
+constraints: input must match this regex ^[cC][0-9a-z]{6,}$",
       "format": "cuid",
       "type": "string",
     },
@@ -227,10 +262,23 @@ constraints: a valid uri",
 constraints: a valid uuid",
       "type": "string",
     },
+    "tuple": {
+      "description": "two-element tuple: a string followed by a number",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+          },
+          {
+            "type": "number",
+          },
+        ],
+      },
+      "type": "array",
+    },
     "unionObjects": {
       "anyOf": [
         {
-          "additionalProperties": false,
           "properties": {
             "amount": {
               "type": "number",
@@ -246,7 +294,6 @@ constraints: a valid uuid",
           "type": "object",
         },
         {
-          "additionalProperties": false,
           "properties": {
             "permissions": {
               "items": {
@@ -312,6 +359,9 @@ constraints: a valid uuid",
     "nativeEnum",
     "unionPrimitives",
     "unionObjects",
+    "discriminatedUnion",
+    "literal",
+    "tuple",
     "default",
   ],
   "type": "object",
@@ -321,7 +371,7 @@ constraints: a valid uuid",
 exports[`Google e2e test > should be succesful with structured_output 2`] = `
 {
   "value": {
-    "actualData": 2023-10-10T00:00:00.000Z,
+    "actualData": 2023-01-01T00:00:00.000Z,
     "arrayMax": [
       "a",
       "b",
@@ -330,21 +380,26 @@ exports[`Google e2e test > should be succesful with structured_output 2`] = `
     "arrayMin": [
       "a",
     ],
-    "date": 2023-10-10T00:00:00.000Z,
-    "dateAfter": 2024-02-01T00:00:00.000Z,
-    "dateBefore": 2023-01-01T00:00:00.000Z,
+    "date": 2023-01-01T00:00:00.000Z,
+    "dateAfter": 2024-05-01T00:00:00.000Z,
+    "dateBefore": 2020-01-01T00:00:00.000Z,
     "default": "default value",
+    "discriminatedUnion": {
+      "kind": "circle",
+      "r": 5,
+    },
     "enum": "A",
     "exampleArray": [
       "a",
       "b",
     ],
+    "literal": "the-only-allowed-value",
     "nativeEnum": "B",
-    "nullable": null,
-    "number": 1.23,
+    "nullable": "",
+    "number": 10,
     "numberGt": 4,
     "numberGte": 1,
-    "numberInt": 42,
+    "numberInt": 7,
     "numberLt": 5,
     "numberLte": 1,
     "numberMultipleOf": 4,
@@ -355,25 +410,30 @@ exports[`Google e2e test > should be succesful with structured_output 2`] = `
     "objectLoose": {},
     "objectNested": {
       "user": {
-        "age": 18,
-        "name": "John",
+        "age": 25,
+        "name": "Alice",
       },
     },
     "objectPassthrough": {},
-    "string": "sample text",
-    "stringCuid": "c123456789",
+    "optional": "",
+    "string": "sample",
+    "stringCuid": "c1234567",
     "stringEmail": "test@example.com",
-    "stringEmoji": "😀",
-    "stringMax": "abcdef",
+    "stringEmoji": "🚀",
+    "stringMax": "abcdefghij",
     "stringMin": "abcde",
-    "stringRegex": "test-123",
+    "stringRegex": "test-foo",
     "stringUrl": "https://example.com",
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+    "tuple": [
+      "string value",
+      123,
+    ],
     "unionObjects": {
-      "amount": 1,
+      "amount": 5,
       "inventoryItemName": "item",
     },
-    "unionPrimitives": 1,
+    "unionPrimitives": "test string",
   },
 }
 `;
@@ -381,96 +441,109 @@ exports[`Google e2e test > should be succesful with structured_output 2`] = `
 exports[`Google e2e test > should handle tool call with manySchemas input 1`] = `
 {
   "value": {
-    "actualData": 2024-05-20T12:00:00.000Z,
+    "actualData": 2023-10-01T12:00:00.000Z,
     "arrayMax": [
-      "a",
-      "b",
-      "c",
+      "one",
+      "two",
     ],
     "arrayMin": [
-      "test",
+      "one",
     ],
-    "date": 2023-10-10T14:48:00.000Z,
-    "dateAfter": 2024-02-01T00:00:00.000Z,
-    "dateBefore": 2023-01-01T00:00:00.000Z,
+    "date": 2023-10-01T12:00:00.000Z,
+    "dateAfter": 2025-01-01T12:00:00.000Z,
+    "dateBefore": 2020-01-01T12:00:00.000Z,
     "default": "default text",
+    "discriminatedUnion": {
+      "kind": "circle",
+      "r": 5,
+    },
     "enum": "A",
     "exampleArray": [
-      "foo",
-      "bar",
+      "example1",
+      "example2",
     ],
+    "literal": "the-only-allowed-value",
     "nativeEnum": "B",
     "nullable": null,
-    "number": 42.5,
-    "numberGt": 4,
-    "numberGte": 1,
+    "number": 42,
+    "numberGt": 5,
+    "numberGte": 2,
     "numberInt": 10,
-    "numberLt": 5,
-    "numberLte": 1,
-    "numberMultipleOf": 4,
+    "numberLt": 4,
+    "numberLte": 0,
+    "numberMultipleOf": 8,
     "object": {
-      "bar": 100,
-      "foo": "value",
+      "bar": 1,
+      "foo": "test",
     },
     "objectLoose": {
-      "any": "data",
+      "sampleKey": "sampleValue",
     },
     "objectNested": {
       "user": {
-        "age": 20,
-        "name": "Bob",
+        "age": 25,
+        "name": "Alice",
       },
     },
     "objectPassthrough": {
-      "custom": "field",
+      "sampleKey": "sampleValue",
     },
-    "string": "Sample text",
-    "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
+    "string": "sample",
+    "stringCuid": "c1234567",
     "stringEmail": "test@example.com",
     "stringEmoji": "🚀",
-    "stringMax": "hello",
-    "stringMin": "hello",
-    "stringRegex": "test-data",
+    "stringMax": "sample",
+    "stringMin": "sample-text",
+    "stringRegex": "test-string",
     "stringUrl": "https://example.com",
-    "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
+    "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+    "tuple": [
+      "test",
+      42,
+    ],
     "unionObjects": {
-      "amount": 5,
+      "amount": 10,
       "inventoryItemName": "apple",
     },
-    "unionPrimitives": 99,
+    "unionPrimitives": "union-test",
   },
 }
 `;
 
 exports[`Google e2e test > should handle tool call with manySchemas input and output 1`] = `
-"The tool call was successfully executed with the following validated sample data:
+"I have successfully called the \`manySchemasTool\` using valid sample data strictly matching all the provided schema constraints. Here is the validated tool output returned by the system:
 
 \`\`\`json
 {
-  "actualData": "2024-05-15T12:00:00.000Z",
-  "arrayMax": ["a", "b", "c"],
-  "arrayMin": ["minimum"],
-  "date": "2023-10-15T10:00:00.000Z",
-  "dateAfter": "2025-01-01T10:00:00.000Z",
-  "dateBefore": "2022-01-01T10:00:00.000Z",
-  "default": "default text",
+  "actualData": "2023-01-01T00:00:00.000Z",
+  "arrayMax": ["one", "two"],
+  "arrayMin": ["one"],
+  "date": "2023-01-01T00:00:00.000Z",
+  "dateAfter": "2024-02-01T00:00:00.000Z",
+  "dateBefore": "2022-01-01T00:00:00.000Z",
+  "default": "default value",
+  "discriminatedUnion": {
+    "kind": "circle",
+    "r": 5
+  },
   "enum": "A",
-  "exampleArray": ["one", "two"],
+  "exampleArray": ["example"],
+  "literal": "the-only-allowed-value",
   "nativeEnum": "B",
   "nullable": null,
   "number": 42,
-  "numberGt": 5,
+  "numberGt": 4,
   "numberGte": 1,
   "numberInt": 10,
-  "numberLt": 2,
-  "numberLte": 0,
-  "numberMultipleOf": 4,
+  "numberLt": 5,
+  "numberLte": 1,
+  "numberMultipleOf": 8,
   "object": {
     "bar": 123,
     "foo": "test"
   },
   "objectLoose": {
-    "key": "value"
+    "exampleKey": "exampleData"
   },
   "objectNested": {
     "user": {
@@ -479,24 +552,26 @@ exports[`Google e2e test > should handle tool call with manySchemas input and ou
     }
   },
   "objectPassthrough": {
-    "key": "value"
+    "exampleKey": "exampleData"
   },
   "string": "Sample text",
-  "stringCuid": "c123456789",
+  "stringCuid": "c1234567",
   "stringEmail": "test@example.com",
-  "stringEmoji": "😀",
-  "stringMax": "Short",
-  "stringMin": "Hello World",
-  "stringRegex": "test-data",
+  "stringEmoji": "🚀",
+  "stringMax": "1234567890",
+  "stringMin": "12345",
+  "stringRegex": "test-string",
   "stringUrl": "https://example.com",
   "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+  "tuple": [
+    "tuple_string",
+    42
+  ],
   "unionObjects": {
     "amount": 10,
     "inventoryItemName": "Widget"
   },
-  "unionPrimitives": "Union string"
+  "unionPrimitives": 100
 }
-\`\`\`
-
-The payload satisfies all explicit constraints including regex lengths, numeric limits, array item requirements, standard dates, and enum options! Optional fields were omitted, and nullable fields correctly reflected \`null\` values as per instructions."
+\`\`\`"
 `;

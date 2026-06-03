@@ -15,7 +15,7 @@ const ComposerTxtAttachment = ({ document }: { document: AttachmentState }) => {
 
   return (
     <div className="flex items-center justify-center h-full w-full">
-      {isLoading ? <Spinner className="animate-spin" /> : <TxtEntry data={text} />}
+      {isLoading ? <Spinner /> : <TxtEntry data={text} />}
     </div>
   );
 };
@@ -45,11 +45,7 @@ const ComposerPdfAttachment = ({ document }: { document: AttachmentState }) => {
 
   return (
     <div className="flex items-center justify-center h-full w-full">
-      {state.isLoading ? (
-        <Spinner className="animate-spin" />
-      ) : (
-        <PdfEntry data={state.text} url={isUrl ? document.file?.name : undefined} />
-      )}
+      {state.isLoading ? <Spinner /> : <PdfEntry data={state.text} url={isUrl ? document.file?.name : undefined} />}
     </div>
   );
 };

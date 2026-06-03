@@ -1,6 +1,6 @@
 {
   "name": "@internal/external-types",
-  "version": "0.0.47",
+  "version": "0.0.51",
   "description": "",
   "type": "module",
   "private": true,
@@ -39,6 +39,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.57.7",
+    "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

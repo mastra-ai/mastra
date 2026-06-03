@@ -1,0 +1,172 @@
+---
+title: "Reference: SerializedMemoryConfig | Memory"
+description: "Reference for SerializedMemoryConfig, the JSON-serializable subset of Memory configuration stored on agent records."
+packages:
+  - "@mastra/core"
+---
+
+# SerializedMemoryConfig
+
+`SerializedMemoryConfig` is the JSON-serializable subset of [`Memory`](/reference/memory/memory-class) configuration that lives on a stored agent record. The runtime hydrates it back into a `Memory` instance by resolving the vector and embedder IDs against the configured `Mastra` instance.
+
+It is the type used by [`BuilderAgentDefaults.memory`](/reference/editor/agent-builder/builder-agent-defaults) and by `EditorAgentNamespace.create({ memory })`.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        memory: {
+          observationalMemory: true,
+          options: { lastMessages: 50 },
+        },
+      },
+    },
+  },
+})
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'vector',
+    type: 'string | false',
+    description:
+      'Vector store identifier. The vector instance must be registered with the Mastra instance to resolve from this ID. Set to `false` to disable vector search.',
+    isOptional: true,
+  },
+  {
+    name: 'embedder',
+    type: 'string',
+    description:
+      'Embedding model ID in the format `"provider/model"` (for example, `"openai/text-embedding-3-small"`).',
+    isOptional: true,
+  },
+  {
+    name: 'embedderOptions',
+    type: "Omit<MastraEmbeddingOptions, 'telemetry'>",
+    description: 'Options passed to the embedder. Telemetry options are stripped.',
+    isOptional: true,
+  },
+  {
+    name: 'options',
+    type: 'SerializedMemoryOptions',
+    description: 'Configuration for memory behaviors. Omits non-serializable fields like working memory and threads.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'SerializedMemoryOptions',
+        parameters: [
+          {
+            name: 'readOnly',
+            type: 'boolean',
+            description: 'Treat memory as read-only — no new messages are stored.',
+            isOptional: true,
+          },
+          {
+            name: 'lastMessages',
+            type: 'number | false',
+            description: 'Number of recent messages to include in context, or `false` to disable.',
+            isOptional: true,
+          },
+          {
+            name: 'semanticRecall',
+            type: 'boolean | SemanticRecall',
+            description: 'Semantic recall configuration. See the Memory class reference for the full shape.',
+            isOptional: true,
+          },
+          {
+            name: 'generateTitle',
+            type: 'boolean | { model: ModelRouterModelId; instructions?: string }',
+            description:
+              'Title generation configuration. Pass an object with `model` (in `"provider/model"` form) and optional `instructions`.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'observationalMemory',
+    type: 'boolean | SerializedObservationalMemoryConfig',
+    description:
+      'Long-lived fact extraction. Pass `true` to enable with defaults, or an object to override observer/reflector models, scope, and activation behavior.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `SerializedObservationalMemoryConfig`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    description: 'Model ID used by both the Observer and Reflector (for example, `"google/gemini-2.5-flash"`).',
+    isOptional: true,
+  },
+  {
+    name: 'scope',
+    type: "'resource' | 'thread'",
+    description: 'Whether observations are scoped to a resource or a single thread.',
+    isOptional: true,
+  },
+  {
+    name: 'activateAfterIdle',
+    type: 'ObservationalMemoryActivationTTL',
+    description: 'Inactivity TTL before forcing buffered observation activation.',
+    isOptional: true,
+  },
+  {
+    name: 'activateOnProviderChange',
+    type: 'boolean',
+    description: 'Force-activate buffered observations when the actor model changes.',
+    isOptional: true,
+  },
+  {
+    name: 'shareTokenBudget',
+    type: 'boolean',
+    description: 'Share the token budget between messages and observations.',
+    isOptional: true,
+  },
+  {
+    name: 'temporalMarkers',
+    type: 'boolean',
+    description: 'Persist inline temporal gap markers for long pauses between messages.',
+    isOptional: true,
+  },
+  {
+    name: 'retrieval',
+    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
+    description: 'Experimental. Enable retrieval-mode observation groups as durable pointers to raw message history.',
+    isOptional: true,
+  },
+  {
+    name: 'observation',
+    type: 'SerializedObservationalMemoryObservationConfig',
+    description: 'Observer-step configuration (model, token thresholds, buffering).',
+    isOptional: true,
+  },
+  {
+    name: 'reflection',
+    type: 'SerializedObservationalMemoryReflectionConfig',
+    description: 'Reflector-step configuration (model, observation token thresholds, buffering).',
+    isOptional: true,
+  },
+]}
+/>
+
+## Related
+
+- [Memory class](/reference/memory/memory-class) — the runtime type this config hydrates into.
+- [Observational memory](/reference/memory/observational-memory) — full observational memory reference.
+- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — where this type is pinned as the Builder default.
+- [Agent Builder: Memory](/docs/agent-builder/memory) — concept and worked examples.

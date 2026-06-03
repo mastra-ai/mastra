@@ -35,16 +35,23 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
       const requestContext = rest.requestContext ?? new RequestContext();
 
-      // Create a ProcessorRunner for data-* chunks so they go through output processors
+      // Create a ProcessorRunner for chunks routed through outputWriter (data-* custom
+      // chunks plus lifecycle chunks like step-finish) so they go through output processors.
+      // Share the loop's processorStates map so these chunks see the same per-processor state
+      // that the main model-output stream path populates; otherwise the runner would build an
+      // isolated empty state map and break state continuity across the step lifecycle.
       const hasOutputProcessors = rest.outputProcessors && rest.outputProcessors.length > 0;
+      const dataChunkProcessorStates = hasOutputProcessors
+        ? (rest.processorStates ?? new Map<string, ProcessorState>())
+        : undefined;
       const dataChunkProcessorRunner = hasOutputProcessors
         ? new ProcessorRunner({
             outputProcessors: rest.outputProcessors,
             logger: rest.logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            processorStates: dataChunkProcessorStates,
           })
         : undefined;
-      const dataChunkProcessorStates = hasOutputProcessors ? new Map<string, ProcessorState>() : undefined;
 
       // Create a ProcessorStreamWriter so output processors can emit custom chunks back to the stream
       const dataChunkStreamWriter = {
@@ -69,7 +76,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               processorId,
             } = await dataChunkProcessorRunner.processPart(
               chunk,
-              (rest.processorStates ?? dataChunkProcessorStates!) as Map<string, ProcessorState<OUTPUT>>,
+              dataChunkProcessorStates! as Map<string, ProcessorState<OUTPUT>>,
               undefined, // observabilityContext
               requestContext,
               messageList,
@@ -143,7 +150,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             processorId,
           } = await dataChunkProcessorRunner.processPart(
             chunk,
-            (rest.processorStates ?? dataChunkProcessorStates!) as Map<string, ProcessorState<OUTPUT>>,
+            dataChunkProcessorStates! as Map<string, ProcessorState<OUTPUT>>,
             undefined,
             requestContext,
             messageList,
@@ -234,8 +241,17 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         resourceId: _internal?.resourceId,
       });
 
-      if (requireToolApproval) {
+      if (typeof requireToolApproval === 'function') {
+        // Store the function so the tool-call-step can evaluate it per call. RequestContext.toJSON()
+        // strips non-serializable values, so this never reaches the persisted suspend snapshot — that
+        // is fine because approval is only decided at call time, before any suspend/resume.
+        requestContext.set('__mastra_requireToolApproval', requireToolApproval);
+      } else if (requireToolApproval) {
         requestContext.set('__mastra_requireToolApproval', true);
+      } else {
+        // Clear any value left over from a prior call so a reused RequestContext can't leak a
+        // stale function/`true` into a call where approval is no longer required.
+        requestContext.delete('__mastra_requireToolApproval');
       }
 
       const executionResult = resumeContext

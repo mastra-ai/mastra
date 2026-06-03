@@ -403,6 +403,34 @@ html.light {
   body {
     background-color: var(--surface1);
     color: var(--neutral6);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Design-system scrollbars — thin, themed thumb on a transparent track.
+     Applies app-wide so native OS scrollbars no longer clash with DS surfaces. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--neutral4) 30%, transparent) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--neutral4) 30%, transparent);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--neutral4) 55%, transparent);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 

@@ -1,6 +1,4 @@
-import { toAISdkV4Messages, toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import type { MastraUIMessage } from '@mastra/react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAgentSettings } from '../context/agent-context';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
@@ -21,7 +19,8 @@ export const AgentChat = ({
   messageId,
   isNewThread,
   hideModelSwitcher,
-}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & {
+}: Omit<ChatProps, 'initialMessages'> & {
+  memory?: boolean;
   messageId?: string;
   isNewThread?: boolean;
   hideModelSwitcher?: boolean;
@@ -55,11 +54,12 @@ export const AgentChat = ({
   // Stable empty array per thread: stays the same reference across re-renders
   // (preventing useChat from wiping streamed messages), but changes when threadId
   // changes (allowing useChat to reset when switching threads).
-  const emptyMessages = useMemo(() => [] as never[], [threadId]);
+  const emptyMessagesRef = useRef<{ threadId: string; messages: never[] }>({ threadId, messages: [] });
+  if (emptyMessagesRef.current.threadId !== threadId) {
+    emptyMessagesRef.current = { threadId, messages: [] };
+  }
 
-  const messages = data?.messages ?? emptyMessages;
-  const v5Messages = useMemo(() => toAISdkV5Messages(messages) as MastraUIMessage[], [messages]);
-  const v4Messages = useMemo(() => toAISdkV4Messages(messages), [messages]);
+  const messages = data?.messages ?? emptyMessagesRef.current.messages;
 
   return (
     <MastraRuntimeProvider
@@ -68,9 +68,7 @@ export const AgentChat = ({
       modelVersion={modelVersion}
       agentVersionId={agentVersionId}
       threadId={threadId}
-      initialMessages={v5Messages}
-      initialLegacyMessages={v4Messages}
-      memory={memory}
+      initialMessages={messages}
       refreshThreadList={refreshThreadList}
       settings={settings}
       requestContext={requestContext}
