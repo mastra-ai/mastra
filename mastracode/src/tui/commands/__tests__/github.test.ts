@@ -25,7 +25,7 @@ function createContext() {
     state: {
       ui: { requestRender: vi.fn() },
       projectInfo: { rootPath: '/repo' },
-      options: { githubSignals: { isPollingThread: vi.fn(() => false), getPollIntervalMs: vi.fn(() => 60_000) } },
+      options: { githubSignals: { isPollingThread: vi.fn(() => false), getPollIntervalMs: vi.fn(() => 300_000) } },
     },
     harness: {
       sendSignal,
@@ -194,7 +194,7 @@ describe('handleGithubCommand', () => {
         hour12: true,
       }).format(new Date(value));
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      `GitHub Signals debug for thread-1: 1 subscription, polling=active, interval=60s\n- mastra-ai/mastra#17447 sync=success lastPoll=${formatLocal('2026-06-02T18:03:12Z')} (githubUpdated=${formatLocal('2026-06-02T18:01:58Z')}, ci=failure, merge=dirty)\n  lastNotification=pull-request-ci-failure/high at ${formatLocal('2026-06-02T18:03:13Z')}: mastra-ai/mastra#17447 has failing CI: Quality assurance`,
+      `GitHub Signals debug for thread-1: 1 subscription, polling=active, interval=5m\n- mastra-ai/mastra#17447 sync=success lastPoll=${formatLocal('2026-06-02T18:03:12Z')} (githubUpdated=${formatLocal('2026-06-02T18:01:58Z')}, ci=failure, merge=dirty)\n  lastNotification=pull-request-ci-failure/high at ${formatLocal('2026-06-02T18:03:13Z')}: mastra-ai/mastra#17447 has failing CI: Quality assurance`,
     );
   });
 

@@ -21,6 +21,11 @@ function formatLocalTimestamp(value: unknown): string | undefined {
   }).format(date);
 }
 
+function formatPollInterval(value: number): string {
+  if (value % 60_000 === 0) return `${value / 60_000}m`;
+  return `${Math.round(value / 1000)}s`;
+}
+
 function parseGithubPRReference(input: string): GithubPRSignalInput | undefined {
   const trimmed = input.trim();
   if (!trimmed) return undefined;
@@ -57,7 +62,7 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
     ? (githubSignalsProcessor?.isPollingThread({ threadId, resourceId: thread.resourceId }) ?? false)
     : false;
   const pollIntervalMs = githubSignalsProcessor?.getPollIntervalMs?.();
-  const header = `GitHub Signals debug for ${threadId}: ${subscriptions.length} subscription${subscriptions.length === 1 ? '' : 's'}, polling=${pollingActive ? 'active' : 'inactive'}${pollIntervalMs ? `, interval=${Math.round(pollIntervalMs / 1000)}s` : ''}`;
+  const header = `GitHub Signals debug for ${threadId}: ${subscriptions.length} subscription${subscriptions.length === 1 ? '' : 's'}, polling=${pollingActive ? 'active' : 'inactive'}${pollIntervalMs ? `, interval=${formatPollInterval(pollIntervalMs)}` : ''}`;
 
   const lines = subscriptions.map(subscription => {
     if (!isPlainObject(subscription)) return '- invalid subscription metadata';

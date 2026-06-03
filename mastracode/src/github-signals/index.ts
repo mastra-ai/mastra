@@ -898,7 +898,7 @@ export class GithubSignals implements Processor<'github-signals'> {
         console.warn('GitHub PR polling failed:', error);
       });
     };
-    const timer = setInterval(runPoll, this.#options.pollIntervalMs ?? 60_000);
+    const timer = setInterval(runPoll, this.#options.pollIntervalMs ?? 300_000);
     if (options.pollImmediately) runPoll();
     timer.unref?.();
     this.#polling.set(key, { ...input, timer, running: false });
@@ -918,7 +918,7 @@ export class GithubSignals implements Processor<'github-signals'> {
   }
 
   getPollIntervalMs(): number {
-    return this.#options.pollIntervalMs ?? 60_000;
+    return this.#options.pollIntervalMs ?? 300_000;
   }
 
   stopAllPolling(): void {
