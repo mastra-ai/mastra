@@ -52,6 +52,22 @@ export interface FGACheckParams {
   context?: FGACheckContext;
 }
 
+export interface FGAResourceMappingEntry {
+  fgaResourceType: string;
+  parentFgaResourceType?: string;
+  parentResourceTypeSlug?: string;
+  deriveId?: (ctx: {
+    user: any;
+    resourceId?: string;
+    requestContext?: RequestContext<any>;
+  }) => string | undefined;
+}
+
+export interface FGAProviderConfigOverrides {
+  resourceMapping?: Record<string, FGAResourceMappingEntry>;
+  permissionMapping?: Record<string, string>;
+}
+
 /**
  * Route-level FGA metadata.
  */
@@ -333,6 +349,8 @@ export interface IFGAProvider<TUser = unknown> {
     resourceType: string,
     permission: MastraFGAPermissionInput,
   ): Promise<T[]>;
+
+  withConfigOverrides?(overrides: FGAProviderConfigOverrides): IFGAProvider<TUser>;
 }
 
 // ──────────────────────────────────────────────────────────────

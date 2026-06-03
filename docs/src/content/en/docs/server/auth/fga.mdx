@@ -219,7 +219,7 @@ When an FGA provider is configured, Mastra automatically checks authorization at
 | Built-in workflow HTTP execution routes and `Workflow.execute()` | `workflows:execute` | `workflow` | `workflowId` |
 | Standalone tool execution | `tools:execute` | `tool` | `toolName` |
 | Agent tool execution | `tools:execute` | `tool` | `${agentId}:${toolName}` |
-| MCP tool execution | `tools:execute` | `tool` | `JSON.stringify([serverName, toolName])` |
+| MCP server tools/list and tools/call | `tools:execute` | `mcpTool` | `JSON.stringify([serverName, toolName])` |
 | Thread and memory access | `memory:read`, `memory:write`, `memory:delete` | `thread` | `threadId` |
 | Stored resource routes | Stored resource permission for the route action | Stored resource type | Route record ID, or the stored-resource scope for collection routes |
 | HTTP resource routes | Configured per route | Configured per route | Configured per route |

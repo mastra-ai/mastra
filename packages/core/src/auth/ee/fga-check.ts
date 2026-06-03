@@ -5,6 +5,7 @@
  */
 
 import { captureEEEvent, getEETelemetryFallbackDistinctId } from '../../telemetry/posthog';
+import type { MCPServerFGAConfig } from '../../mcp/types';
 import type { FGACheckContext, IFGAProvider } from './interfaces/fga';
 import type { MastraFGAPermissionInput } from './interfaces/permissions.generated';
 import { getSafeLicenseSummary } from './license';
@@ -63,6 +64,32 @@ export function getAgentToolFGAResourceId(agentId: string, toolName: string): st
 
 export function getMCPToolFGAResourceId(serverName: string, toolName: string): string {
   return JSON.stringify([serverName, toolName]);
+}
+
+export const MCP_SERVER_TOOL_FGA_RESOURCE_TYPE = 'mcpTool';
+
+export function getMCPServerToolFGAResourceType(serverFga?: MCPServerFGAConfig): string {
+  return serverFga?.resourceType ?? MCP_SERVER_TOOL_FGA_RESOURCE_TYPE;
+}
+
+export function resolveMCPServerFGAProvider(
+  fgaProvider: IFGAProvider | undefined,
+  serverFga?: MCPServerFGAConfig,
+): IFGAProvider | undefined {
+  if (!fgaProvider) {
+    return undefined;
+  }
+
+  if (!serverFga?.resourceMapping && !serverFga?.permissionMapping) {
+    return fgaProvider;
+  }
+
+  return (
+    fgaProvider.withConfigOverrides?.({
+      resourceMapping: serverFga.resourceMapping,
+      permissionMapping: serverFga.permissionMapping,
+    }) ?? fgaProvider
+  );
 }
 
 /**
