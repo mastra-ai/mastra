@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 
-import { GITHUB_SIGNALS_METADATA_KEY, GithubSignals } from '../../github-signals/index.js';
+import { GITHUB_SIGNALS_METADATA_KEY, GITHUB_SYNC_STATUS_TAG, GithubSignals } from '../../github-signals/index.js';
 import type { GithubPRSignalInput } from '../../github-signals/index.js';
 import { loadSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
@@ -102,6 +102,28 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
   return [header, ...lines].join('\n');
 }
 
+function sendGithubSyncStatusSignal(
+  ctx: SlashCommandContext,
+  input: { status: 'synced' | 'not_subscribed' | 'error'; message: string; count?: number },
+): void {
+  ctx.harness.sendSignal({
+    type: 'reactive',
+    tagName: GITHUB_SYNC_STATUS_TAG,
+    contents: input.message,
+    attributes: {
+      status: input.status,
+      ...(input.count !== undefined ? { count: input.count } : {}),
+    },
+    metadata: {
+      github: {
+        action: 'syncThread',
+        status: input.status,
+        ...(input.count !== undefined ? { count: input.count } : {}),
+      },
+    },
+  });
+}
+
 async function syncGithubSubscriptions(ctx: SlashCommandContext): Promise<void> {
   const githubSignalsProcessor = ctx.state.options?.githubSignals;
   if (!githubSignalsProcessor?.syncThreadNow) {
@@ -118,12 +140,18 @@ async function syncGithubSubscriptions(ctx: SlashCommandContext): Promise<void> 
   try {
     const count = await githubSignalsProcessor.syncThreadNow({ threadId, resourceId });
     if (count === 0) {
-      ctx.showInfo('No GitHub PR subscriptions to sync.');
+      sendGithubSyncStatusSignal(ctx, { status: 'not_subscribed', message: 'No GitHub PR subscriptions to sync.' });
       return;
     }
-    ctx.showInfo(`Synced ${count} GitHub PR subscription${count === 1 ? '' : 's'}.`);
+    sendGithubSyncStatusSignal(ctx, {
+      status: 'synced',
+      message: `Synced ${count} GitHub PR subscription${count === 1 ? '' : 's'}.`,
+      count,
+    });
   } catch (error) {
-    ctx.showError(`Failed to sync GitHub PR subscriptions: ${error instanceof Error ? error.message : String(error)}`);
+    const message = `Failed to sync GitHub PR subscriptions: ${error instanceof Error ? error.message : String(error)}`;
+    sendGithubSyncStatusSignal(ctx, { status: 'error', message });
+    ctx.showError(message);
   }
 }
 

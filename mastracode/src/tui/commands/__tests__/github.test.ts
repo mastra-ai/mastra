@@ -168,18 +168,33 @@ describe('handleGithubCommand', () => {
 
     await handleGithubCommand(ctx, ['sync']);
 
-    expect(sendSignal).not.toHaveBeenCalled();
     expect(syncThreadNow).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-from-thread' });
-    expect(ctx.showInfo).toHaveBeenCalledWith('Synced 1 GitHub PR subscription.');
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'reactive',
+        tagName: 'github-sync-status',
+        contents: 'Synced 1 GitHub PR subscription.',
+        attributes: { status: 'synced', count: 1 },
+      }),
+    );
+    expect(ctx.showInfo).not.toHaveBeenCalled();
   });
 
-  it('shows a no-op message when /github sync has no subscriptions', async () => {
-    const { ctx, syncThreadNow } = createContext();
+  it('sends a no-op sync status signal when /github sync has no subscriptions', async () => {
+    const { ctx, sendSignal, syncThreadNow } = createContext();
     syncThreadNow.mockResolvedValue(0);
 
     await handleGithubCommand(ctx, ['sync']);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('No GitHub PR subscriptions to sync.');
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'reactive',
+        tagName: 'github-sync-status',
+        contents: 'No GitHub PR subscriptions to sync.',
+        attributes: { status: 'not_subscribed' },
+      }),
+    );
+    expect(ctx.showInfo).not.toHaveBeenCalled();
   });
 
   it('shows GitHub subscription debug information for the current thread', async () => {
