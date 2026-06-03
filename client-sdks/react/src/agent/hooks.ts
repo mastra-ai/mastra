@@ -70,9 +70,7 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
   messages
     .filter(message => {
       const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
-      const completion = metadata?.completionResult as { suppressFeedback?: boolean } | undefined;
-      const isTaskComplete = metadata?.isTaskCompleteResult as { suppressFeedback?: boolean } | undefined;
-      if (completion?.suppressFeedback || isTaskComplete?.suppressFeedback) {
+      if (metadata?.completionResult?.suppressFeedback || metadata?.isTaskCompleteResult?.suppressFeedback) {
         return false;
       }
       return true;
