@@ -4,8 +4,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { StudioConfigProvider } from './studio-config-context';
-import { useStudioConfig } from './studio-config-state';
+import { StudioConfigProvider } from '../studio-config-context';
+import { useStudioConfig } from '../studio-config-state';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
