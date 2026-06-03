@@ -58,18 +58,23 @@ const getPartKey = (part: RuntimePart, index: number): string => {
   }
   switch (part.type) {
     case 'text':
+      // Intrinsic cast: the `'text'`-narrowed member is `(v4 text part) | MastraTextPart`;
+      // only `MastraTextPart` carries `textId`, so this is an optional structural read.
       return (part as { textId?: string }).textId ?? `text-${index}`;
     case 'reasoning':
+      // Intrinsic cast: same as `textId` — only the Mastra reasoning member has `reasoningId`.
       return (part as { reasoningId?: string }).reasoningId ?? `reasoning-${index}`;
     case 'tool-invocation':
       return part.toolInvocation.toolCallId ?? `tool-invocation-${index}`;
     case 'source-url':
       return part.sourceId || `source-url-${index}`;
     case 'source':
-      return (part as PartByType<'source'>).source.id ?? `source-${index}`;
+      return part.source.id ?? `source-${index}`;
     default:
       break;
   }
+  // Intrinsic cast: fallback key over a heterogeneous union whose members do not
+  // share an `id` field; an optional structural read is the minimal honest form.
   const id = (part as { id?: string }).id;
   return id ?? `${part.type}-${index}`;
 };
@@ -185,7 +190,12 @@ const roleRendererFor = (
 };
 
 const MessageFactoryComponent = ({ message, roles, status, fallback, ...renderers }: MessageFactoryProps) => {
-  const parts = (message.content.parts ?? []) as RuntimePart[];
+  // `MastraMessagePart[]` widens into `RuntimePart[]` (`AccumulatorPart` is a
+  // member of `MessageFactoryPart`), so no cast is needed here.
+  const parts: RuntimePart[] = message.content.parts ?? [];
+  // Intrinsic cast: core types `content.metadata` as `Record<string, unknown>`
+  // (message-list/state/types.ts), so narrowing to the SDK's typed metadata
+  // shape requires a cast. This matches the convention used across the accumulator.
   const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
 
   // Replacement status slots: when the message-level status matches and a slot
