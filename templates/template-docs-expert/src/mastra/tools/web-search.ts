@@ -1,9 +1,13 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-const gatewayUrl = (process.env.MASTRA_GATEWAY_URL ?? 'https://gateway-api.mastra.ai').replace(/\/$/, '');
+const trimTrailingSlash = (value: string) => (value.endsWith('/') ? value.slice(0, -1) : value);
+
+const getGatewayUrl = () => trimTrailingSlash(process.env.MASTRA_GATEWAY_URL ?? 'https://gateway-api.mastra.ai');
 
 const getGatewayChatCompletionsUrl = () => {
+  const gatewayUrl = getGatewayUrl();
+
   if (gatewayUrl.endsWith('/v1')) {
     return `${gatewayUrl}/chat/completions`;
   }
