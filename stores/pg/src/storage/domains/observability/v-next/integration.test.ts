@@ -482,6 +482,29 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
+    it('creates a missing configured schema on init()', async () => {
+      const schema = schemaName('obs_vnext_missing_schema');
+      const pool = new Pool({ connectionString, max: 2 });
+      const client = new PoolAdapter(pool);
+      const domain = new ObservabilityStoragePostgresVNext({ client, schemaName: schema });
+
+      try {
+        await client.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
+        await expect(domain.init()).resolves.toBeUndefined();
+
+        const row = await client.one<{ exists: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+           ) AS "exists"`,
+          [schema],
+        );
+        expect(row.exists).toBe(true);
+      } finally {
+        await client.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
+        await pool.end();
+      }
+    });
+
     it('a second init() after data is written leaves rows intact', async () => {
       const harness = await createHarness({
         schemaPrefix: 'obs_vnext_native_reinit_data',
@@ -535,6 +558,75 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       } finally {
         await client.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
         await pool.end();
+      }
+    });
+  });
+
+  describe('page-mode pagination ordering', () => {
+    it('adds cursorId as a stable tie-breaker for signals, traces, and branches', async () => {
+      const selectQueries: string[] = [];
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_page_order',
+        wrapClient: client =>
+          wrapClient(client, {
+            manyOrNone: async (query: string, values?: QueryValues) => {
+              if (query.includes('ORDER BY') && query.includes('LIMIT') && query.includes('OFFSET')) {
+                selectQueries.push(query.replace(/\s+/g, ' ').trim());
+              }
+              return client.manyOrNone(query, values);
+            },
+          }),
+      });
+
+      try {
+        const timestamp = dayAt(0, 8);
+        await harness.domain.batchCreateLogs({
+          logs: [
+            makeLog({ logId: 'page-order-log-a', timestamp, message: 'a' }),
+            makeLog({ logId: 'page-order-log-b', timestamp, message: 'b' }),
+          ],
+        });
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'page-order-trace-a',
+            spanId: 'page-order-trace-a',
+            spanType: SpanType.AGENT_RUN,
+            startedAt: timestamp,
+            endedAt: new Date(timestamp.getTime() + 1),
+          }),
+        });
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'page-order-trace-b',
+            spanId: 'page-order-trace-b',
+            spanType: SpanType.AGENT_RUN,
+            startedAt: timestamp,
+            endedAt: new Date(timestamp.getTime() + 1),
+          }),
+        });
+
+        await harness.domain.listLogs({
+          mode: 'page',
+          pagination: { page: 0, perPage: 1 },
+          orderBy: { field: 'timestamp', direction: 'ASC' },
+        });
+        await harness.domain.listTraces({
+          mode: 'page',
+          pagination: { page: 0, perPage: 1 },
+          orderBy: { field: 'startedAt', direction: 'ASC' },
+        });
+        await harness.domain.listBranches({
+          mode: 'page',
+          pagination: { page: 0, perPage: 1 },
+          orderBy: { field: 'startedAt', direction: 'ASC' },
+        });
+
+        expect(selectQueries).toHaveLength(3);
+        expect(selectQueries[0]).toContain('ORDER BY "timestamp" ASC, "cursorId" ASC');
+        expect(selectQueries[1]).toContain('ORDER BY r."startedAt" ASC, r."cursorId" ASC');
+        expect(selectQueries[2]).toContain('ORDER BY r."startedAt" ASC, r."cursorId" ASC');
+      } finally {
+        await harness.close();
       }
     });
   });

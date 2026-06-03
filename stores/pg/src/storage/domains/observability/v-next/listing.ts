@@ -88,7 +88,7 @@ export async function listSignalPage<
       `SELECT ${selectColumns}
        FROM ${table}
        ${whereClause}
-       ORDER BY "${safeOrderField}" ${orderDir}
+       ORDER BY "${safeOrderField}" ${orderDir}, "cursorId" ${orderDir}
        LIMIT $${acc.next++} OFFSET $${acc.next++}`,
       [...acc.params, perPage, page * perPage],
     );

@@ -7,8 +7,7 @@
  *     extension is detected)
  *   - retry idempotency via `ON CONFLICT DO NOTHING` on the partition-aware
  *     primary key (the ClickHouse design uses ReplacingMergeTree dedupeKey)
- *   - root-span projection populated by an AFTER INSERT trigger (Postgres
- *     materialized views are not incremental)
+ *   - root-span reads served by partial indexes on the span events table
  *   - discovery values cached in a Postgres table with stale-while-revalidate
  *     semantics, so cache state survives serverless restarts and works
  *     across multiple frontends pointing at the same DB
@@ -103,7 +102,15 @@ import type {
 import type { DbClient } from '../../../client';
 import { resolvePgConfig } from '../../../db';
 import type { PgDomainConfig } from '../../../db';
-import { ALL_SIGNAL_TABLES, allIndexDDL, allTableDDL, qualifiedTable, TABLE_DISCOVERY, TABLE_SPAN_EVENTS } from './ddl';
+import {
+  ALL_SIGNAL_TABLES,
+  allIndexDDL,
+  allTableDDL,
+  qualifiedTable,
+  schemaDDL,
+  TABLE_DISCOVERY,
+  TABLE_SPAN_EVENTS,
+} from './ddl';
 import * as discoveryOps from './discovery';
 import type { DiscoveryConfig } from './discovery';
 import * as feedbackOps from './feedback';
@@ -198,6 +205,8 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       }
 
       const ddlMode = mode === 'timescale' ? 'timescale' : 'partitioned';
+
+      await this.#client.none(schemaDDL(this.#schema));
 
       for (const ddl of allTableDDL(this.#schema, ddlMode)) {
         try {

@@ -226,8 +226,8 @@ async function listTracesPage(
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
   const orderClause =
     orderField === 'endedAt'
-      ? `ORDER BY r."endedAt" ${orderDir} NULLS ${orderDir === 'DESC' ? 'FIRST' : 'LAST'}`
-      : `ORDER BY r."${orderField}" ${orderDir}`;
+      ? `ORDER BY r."endedAt" ${orderDir} NULLS ${orderDir === 'DESC' ? 'FIRST' : 'LAST'}, r."cursorId" ${orderDir}`
+      : `ORDER BY r."${orderField}" ${orderDir}, r."cursorId" ${orderDir}`;
 
   const countRow = await client.oneOrNone<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM ${span} r ${whereClause}`,
@@ -548,8 +548,8 @@ async function listBranchesPage(
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
   const orderClause =
     orderField === 'endedAt'
-      ? `ORDER BY r."endedAt" ${orderDir} NULLS ${orderDir === 'DESC' ? 'FIRST' : 'LAST'}`
-      : `ORDER BY r."${orderField}" ${orderDir}`;
+      ? `ORDER BY r."endedAt" ${orderDir} NULLS ${orderDir === 'DESC' ? 'FIRST' : 'LAST'}, r."cursorId" ${orderDir}`
+      : `ORDER BY r."${orderField}" ${orderDir}, r."cursorId" ${orderDir}`;
 
   const countRow = await client.oneOrNone<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM ${span} r ${whereClause}`,

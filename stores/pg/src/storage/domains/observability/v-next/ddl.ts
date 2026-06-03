@@ -90,6 +90,12 @@ export function qualifiedName(schema: string, name: string): string {
   return `"${s}"."${n}"`;
 }
 
+/** Schema CREATE. Safe to run repeatedly before table DDL. */
+export function schemaDDL(schema: string): string {
+  const s = parseSqlIdentifier(schema, 'schema name');
+  return `CREATE SCHEMA IF NOT EXISTS "${s}"`;
+}
+
 // ---------------------------------------------------------------------------
 // Mode-aware partitioning clause
 // ---------------------------------------------------------------------------
