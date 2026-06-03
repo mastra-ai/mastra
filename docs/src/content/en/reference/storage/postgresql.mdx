@@ -191,6 +191,9 @@ The storage implementation handles schema creation and updates automatically. It
 - `mastra_traces`: Stores telemetry and tracing data
 - `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
+- `mastra_notifications`: Stores notification inbox records and delivery metadata
+
+`PostgresStore` exposes notification storage through `getStore('notifications')`.
 
 ### Observability
 

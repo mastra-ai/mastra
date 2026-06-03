@@ -35,6 +35,7 @@ import type {
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_TOOL_PROVIDER_CONNECTIONS,
+  TABLE_NOTIFICATIONS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -174,6 +175,7 @@ export type RecordTypes = {
   [TABLE_SCHEDULE_TRIGGERS]: Record<string, any>;
   mastra_channel_installations: Record<string, any>;
   mastra_channel_config: Record<string, any>;
+  [TABLE_NOTIFICATIONS]: Record<string, any>;
 };
 
 export type ListOptions = {

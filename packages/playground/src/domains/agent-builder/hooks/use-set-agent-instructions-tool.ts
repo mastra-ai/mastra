@@ -8,24 +8,6 @@ import { MAX_GENERATED_INSTRUCTIONS_CHARS } from '@/domains/agent-builder/servic
 
 export const SET_AGENT_INSTRUCTIONS_TOOL_NAME = 'set-agent-instructions';
 
-const TRUNCATION_NOTICE = '\n\n[…truncated to fit length limit]';
-
-/**
- * Backstop for the snapshot-level soft cap on `instructions`. The builder LLM
- * is told the limit is strict; this enforces it before the value reaches the
- * form so an over-long value (or a partially-streamed one) can never push the
- * agent into an inconsistent state.
- */
-function clampInstructions(value: string): { value: string; truncated: boolean; originalLength: number } {
-  const originalLength = value.length;
-  if (originalLength <= MAX_GENERATED_INSTRUCTIONS_CHARS) {
-    return { value, truncated: false, originalLength };
-  }
-  const room = MAX_GENERATED_INSTRUCTIONS_CHARS - TRUNCATION_NOTICE.length;
-  const clipped = value.slice(0, Math.max(0, room)).trimEnd() + TRUNCATION_NOTICE;
-  return { value: clipped, truncated: true, originalLength };
-}
-
 export function useSetAgentInstructionsTool() {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
 
@@ -33,31 +15,45 @@ export function useSetAgentInstructionsTool() {
     () =>
       createTool({
         id: SET_AGENT_INSTRUCTIONS_TOOL_NAME,
-        description: `Set the agent instructions (its system prompt). Use this when the user provides or revises the body of guidance the agent should follow. Hard limit: ${MAX_GENERATED_INSTRUCTIONS_CHARS} characters — content beyond that is truncated server-side.`,
+        description: `Set the agent instructions (its system prompt). Use this when the user provides or revises the body of guidance the agent should follow. HARD limit: ${MAX_GENERATED_INSTRUCTIONS_CHARS} characters. Over-limit calls are REJECTED (no persistence) — you must re-submit a tighter version. Plan length BEFORE calling and drop whole sections rather than shaving words when over budget.`,
         inputSchema: z.object({
           instructions: z
             .string()
             .describe(
-              `The full instructions / system prompt for the agent. May be multi-paragraph markdown. Replaces the previous instructions. Strict ${MAX_GENERATED_INSTRUCTIONS_CHARS}-character limit; anything past that is truncated.`,
+              `The full instructions / system prompt for the agent. May be multi-paragraph markdown. Replaces the previous instructions. HARD ${MAX_GENERATED_INSTRUCTIONS_CHARS}-character limit; over-limit calls are rejected without persisting. Count characters before calling.`,
             ),
         }),
         outputSchema: z.object({
           success: z.boolean(),
-          truncated: z.boolean().optional(),
-          originalLength: z.number().optional(),
+          rejected: z.boolean().optional(),
+          currentLength: z.number().optional(),
+          limit: z.number().optional(),
           finalLength: z.number().optional(),
+          message: z.string().optional(),
         }),
         execute: async (inputData: any) => {
           if (typeof inputData?.instructions !== 'string') {
             return { success: true };
           }
-          const { value, truncated, originalLength } = clampInstructions(inputData.instructions);
+          const value = inputData.instructions;
+          const currentLength = value.length;
+          if (currentLength > MAX_GENERATED_INSTRUCTIONS_CHARS) {
+            const over = currentLength - MAX_GENERATED_INSTRUCTIONS_CHARS;
+            return {
+              success: false,
+              rejected: true,
+              currentLength,
+              limit: MAX_GENERATED_INSTRUCTIONS_CHARS,
+              message: `REJECTED: ${currentLength} chars exceeds the ${MAX_GENERATED_INSTRUCTIONS_CHARS}-char limit by ${over}. Nothing was persisted. Drop a WHOLE section (worked example, FAQ, edge-case list) — do NOT shave words — and call set-agent-instructions ONCE more with the tighter version.`,
+            };
+          }
           formMethods.setValue('instructions', value, { shouldDirty: true });
           return {
             success: true,
-            truncated,
-            originalLength,
-            finalLength: value.length,
+            rejected: false,
+            currentLength,
+            limit: MAX_GENERATED_INSTRUCTIONS_CHARS,
+            finalLength: currentLength,
           };
         },
       }),

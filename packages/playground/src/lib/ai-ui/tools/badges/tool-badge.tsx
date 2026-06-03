@@ -1,16 +1,16 @@
 import { CodeEditor, ToolsIcon } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
   result: any;
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   toolOutput: Array<{ toolId: string }>;
   suspendPayload?: any;
   toolCalled?: boolean;
@@ -53,8 +53,10 @@ export const ToolBadge = ({
       <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
 
-  const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
-  const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+  const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
+  const selectionReason =
+    metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
+  const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
 

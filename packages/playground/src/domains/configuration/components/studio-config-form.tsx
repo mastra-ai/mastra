@@ -1,7 +1,7 @@
 import { Button, TextFieldBlock, TooltipProvider, toast } from '@mastra/playground-ui';
 import { SaveIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useStudioConfig } from '../context/studio-config-context';
+import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 import type { HeaderListFormItem } from './header-list-form';
 import { HeaderListForm } from './header-list-form';
