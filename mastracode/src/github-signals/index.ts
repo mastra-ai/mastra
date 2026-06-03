@@ -64,6 +64,7 @@ export type GithubSignalsSyncInput = {
   number: number;
   cwd?: string;
   abortSignal?: AbortSignal;
+  includeComments?: boolean;
 };
 
 export type GithubSignalsSyncResult = {
@@ -643,24 +644,21 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
 
   async syncPullRequest(input: GithubSignalsSyncInput): Promise<GithubSignalsSyncResult> {
     try {
-      const { stdout, stderr } = await execFileAsync(
-        this.#command,
-        [
-          'sync',
-          `${input.owner}/${input.repo}`,
-          '--numbers',
-          String(input.number),
-          '--include-comments',
-          '--with',
-          'pr-details',
-          '--json',
-        ],
-        {
-          cwd: input.cwd,
-          signal: input.abortSignal,
-          maxBuffer: 10 * 1024 * 1024,
-        },
-      );
+      const args = [
+        'sync',
+        `${input.owner}/${input.repo}`,
+        '--numbers',
+        String(input.number),
+        ...(input.includeComments === false ? [] : ['--include-comments']),
+        '--with',
+        'pr-details',
+        '--json',
+      ];
+      const { stdout, stderr } = await execFileAsync(this.#command, args, {
+        cwd: input.cwd,
+        signal: input.abortSignal,
+        maxBuffer: 10 * 1024 * 1024,
+      });
       return { ok: true, stdout, stderr };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -907,7 +905,7 @@ export class GithubSignals implements Processor<'github-signals'> {
   }
 
   async syncThreadNow(input: GithubPollingThread): Promise<number> {
-    return this.#pollThread(input);
+    return this.#pollThread(input, { includeComments: true });
   }
 
   async startPollingForThread(
@@ -929,13 +927,17 @@ export class GithubSignals implements Processor<'github-signals'> {
 
     if (this.#polling.has(key)) return true;
 
-    const runPoll = () => {
-      void this.#pollThread(input).catch(error => {
+    let scheduledPollCount = options.pollImmediately ? 1 : 0;
+    const runPoll = (pollOptions: { includeComments?: boolean } = {}) => {
+      void this.#pollThread(input, pollOptions).catch(error => {
         console.warn('GitHub PR polling failed:', error);
       });
     };
-    const timer = setInterval(runPoll, this.#options.pollIntervalMs ?? 300_000);
-    if (options.pollImmediately) runPoll();
+    const timer = setInterval(() => {
+      scheduledPollCount += 1;
+      runPoll({ includeComments: scheduledPollCount % 2 === 1 });
+    }, this.#options.pollIntervalMs ?? 300_000);
+    if (options.pollImmediately) runPoll({ includeComments: true });
     timer.unref?.();
     this.#polling.set(key, { ...input, timer, running: false });
     return true;
@@ -963,7 +965,7 @@ export class GithubSignals implements Processor<'github-signals'> {
   }
 
   async pollThreadNow(input: GithubPollingThread): Promise<number> {
-    return this.#pollThread(input);
+    return this.#pollThread(input, { includeComments: true });
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
@@ -1186,7 +1188,7 @@ export class GithubSignals implements Processor<'github-signals'> {
     this.#subscriptionsChangedHandler?.(input);
   }
 
-  async #pollThread(input: GithubPollingThread): Promise<number> {
+  async #pollThread(input: GithubPollingThread, options: { includeComments?: boolean } = {}): Promise<number> {
     const key = this.#pollingKey(input);
     const state = this.#polling.get(key);
     if (state?.running) {
@@ -1210,6 +1212,7 @@ export class GithubSignals implements Processor<'github-signals'> {
           repo: subscription.repo,
           number: subscription.number,
           cwd: this.#options.cwd,
+          includeComments: options.includeComments,
         };
         const syncResult = await this.#syncClient.syncPullRequest(syncInput);
         const snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;

@@ -1003,6 +1003,17 @@ describe('GithubSignals', () => {
       }),
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
+    expect(syncClient.syncPullRequest).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123, includeComments: true }),
+    );
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(syncClient.syncPullRequest).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123, includeComments: false }),
+    );
     processor.stopAllPolling();
   });
 
