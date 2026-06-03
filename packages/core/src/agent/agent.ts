@@ -7390,10 +7390,10 @@ export class Agent<
           resourceId,
           threadId,
           runId: executionOptions.runId,
-          streamOptions: {
-            ...(streamOptions ?? {}),
-            ...executionOptions,
-          } as unknown as AgentExecutionOptions<OUTPUT>,
+          streamOptions: deepMerge(
+            (streamOptions ?? {}) as Record<string, unknown>,
+            executionOptions as Record<string, unknown>,
+          ) as unknown as AgentExecutionOptions<OUTPUT>,
         },
         this.getPubSub(),
       );

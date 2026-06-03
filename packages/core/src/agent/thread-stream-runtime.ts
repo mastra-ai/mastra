@@ -650,7 +650,11 @@ export class AgentThreadStreamRuntime {
         if (state.activeThreadRunIds.get(key) === pending.runId) {
           state.activeThreadRunIds.delete(key);
         }
-        void this.#drainPendingContinuations(state, pubsub, key);
+        void this.#drainPendingContinuations(state, pubsub, key).then(started => {
+          if (!started) {
+            void this.#drainPendingIdleSignals(state, pubsub, key);
+          }
+        });
       });
   }
 
