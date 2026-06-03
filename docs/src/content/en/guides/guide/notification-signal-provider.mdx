@@ -1,0 +1,380 @@
+---
+title: "Guide: Building a notification signal provider"
+description: Build a custom notification signal provider that pushes external events into a Mastra agent thread.
+---
+
+# Building a notification signal provider
+
+In this guide, you'll build a notification signal provider that pushes external events into a Mastra agent thread. You'll learn how to create a notification record with `sendNotificationSignal()`, customize delivery behavior with a delivery policy, give the agent inbox access with `createNotificationInboxTool()`, and schedule dispatch for deferred notifications.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project. Follow the [installation guide](/guides/getting-started/quickstart) if needed.
+
+## Understand the notification signal flow
+
+Notification signals represent external events such as CI status changes, email, incident alerts, or messages from third-party platforms. Unlike raw `sendSignal()` calls, `sendNotificationSignal()` creates a durable inbox record before delivery.
+
+The flow has two phases:
+
+1. **Ingress**: Your provider calls `agent.sendNotificationSignal()`. Mastra stores a notification record and resolves the agent's delivery policy to decide what happens next.
+1. **Dispatch**: Mastra consumes due records stamped with `deliverAt` or `summaryAt` and emits full notification or summary signals into the agent thread.
+
+The delivery decision is one of:
+
+- `deliver` or `queue`: Emit a full `<notification>` signal immediately and mark the record `delivered`.
+- `defer`: Keep the record `pending` with a future `deliverAt`.
+- `summarize`: Batch the record with `summaryAt` for a later summary rollup.
+- `persist`: Keep the record `pending` in the inbox without scheduled delivery.
+- `discard`: Mark the record `discarded` and emit no signal.
+
+## Set up storage
+
+Notification records require a storage adapter that supports the `notifications` domain. [LibSQL](/reference/storage/libsql), [PostgreSQL](/reference/storage/postgresql), and [MongoDB](/reference/storage/mongodb) support this domain.
+
+Install a storage adapter if you do not have one already:
+
+```bash npm2yarn
+npm install @mastra/libsql@latest
+```
+
+Configure storage in your Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    url: 'file:./mastra.db',
+  }),
+})
+```
+
+## Create the agent
+
+Define an agent that receives notification signals. Add instructions that tell the model how to interpret notifications from your source.
+
+```typescript title="src/mastra/agents/ops-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const opsAgent = new Agent({
+  id: 'ops-agent',
+  name: 'Ops Agent',
+  instructions:
+    'You are an operations assistant. When you receive notifications, summarize them and suggest next steps. Use the notification inbox tool to read full notification details after receiving a summary.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+Register the agent:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+// highlight-next-line
+import { opsAgent } from './agents/ops-agent'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    url: 'file:./mastra.db',
+  }),
+  // highlight-next-line
+  agents: { opsAgent },
+})
+```
+
+## Send a notification signal
+
+Call `agent.sendNotificationSignal()` from the code path that handles your external event. Each call creates a notification record and runs the delivery policy.
+
+The following example sends a CI failure notification:
+
+```typescript title="src/providers/ci-provider.ts"
+import { mastra } from '../mastra'
+
+export async function handleCIFailure(event: {
+  repo: string
+  branch: string
+  failedTests: number
+  runUrl: string
+}) {
+  const agent = await mastra.getAgent('ops-agent')
+
+  await agent.sendNotificationSignal(
+    {
+      source: 'github-ci',
+      kind: 'ci-failure',
+      priority: 'high',
+      summary: `CI failed on ${event.repo}/${event.branch}: ${event.failedTests} tests failed.`,
+      payload: {
+        repository: event.repo,
+        branch: event.branch,
+        failedTests: event.failedTests,
+        runUrl: event.runUrl,
+      },
+      dedupeKey: `ci:${event.repo}:${event.branch}`,
+      attributes: {
+        repo: event.repo,
+        branch: event.branch,
+      },
+    },
+    {
+      resourceId: 'user_123',
+      threadId: 'thread_456',
+    },
+  )
+}
+```
+
+The model receives the notification as an XML signal in the agent thread:
+
+```xml
+<notification source="github-ci" type="ci-failure" priority="high" status="delivered">
+  CI failed on acme/app/main: 3 tests failed.
+</notification>
+```
+
+### Required fields
+
+Every notification needs these fields:
+
+- `source`: The provider name (e.g., `github-ci`, `pagerduty`, `email`).
+- `kind`: The event type within that source (e.g., `ci-failure`, `incident`, `new-message`).
+- `summary`: A human-readable description the model reads as the notification body.
+
+### Optional fields
+
+- `priority`: One of `low`, `medium`, `high`, or `urgent`. Defaults to `medium`. Controls how the delivery policy handles the notification.
+- `payload`: Arbitrary structured data the agent can access through the inbox tool.
+- `sourceId`: An ID from the external system for cross-referencing (e.g., a GitHub run ID).
+- `dedupeKey`: When set, Mastra skips creating a duplicate record if one with the same key already exists in the same thread.
+- `coalesceKey`: When set, Mastra merges repeat events into a single record and increments `coalescedCount` instead of creating a new record.
+- `attributes`: Key-value pairs that appear as XML attributes on the signal tag.
+- `metadata`: Additional data stored on the record but not rendered in the signal XML.
+
+## Customize the delivery policy
+
+The default delivery policy is priority-aware:
+
+| Priority | Active thread | Idle thread |
+| - | - | - |
+| `urgent` | Deliver immediately | Deliver immediately |
+| `high` | Emit a summary now, deliver full notification when idle | Deliver immediately |
+| `medium` | Batch with a summary rollup | Deliver immediately |
+| `low` | Batch with a summary rollup | Batch with a summary rollup (no wake) |
+
+Override the default by adding a `notifications.deliveryPolicy` to your agent. The policy can match by priority, by source, or use a custom `decide` function.
+
+```typescript title="src/mastra/agents/ops-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const opsAgent = new Agent({
+  id: 'ops-agent',
+  name: 'Ops Agent',
+  instructions:
+    'You are an operations assistant. When you receive notifications, summarize them and suggest next steps.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  // highlight-start
+  notifications: {
+    deliveryPolicy: {
+      priorities: {
+        urgent: 'deliver',
+      },
+      sources: {
+        pagerduty: 'deliver',
+      },
+      decide: ({ record, threadState }) => {
+        if (record.source === 'github-ci' && record.priority === 'low') {
+          return {
+            action: 'summarize',
+            summaryAt: new Date(Date.now() + 30 * 60 * 1000),
+          }
+        }
+      },
+    },
+  },
+  // highlight-end
+})
+```
+
+Mastra evaluates the policy in this order:
+
+1. `decide` function (if provided). Return a decision to short-circuit.
+1. `sources` map. Match by `record.source`.
+1. `priorities` map. Match by `record.priority`.
+1. `default` decision (if set).
+1. Built-in priority-aware policy.
+
+## Add the notification inbox tool
+
+Give the agent a tool to query and manage its notification inbox. This is useful when the agent receives a summary signal and needs to read the full records behind it.
+
+```typescript title="src/mastra/agents/ops-agent.ts"
+import { Agent } from '@mastra/core/agent'
+// highlight-next-line
+import { createNotificationInboxTool } from '@mastra/core/notifications'
+// highlight-next-line
+import { mastra } from '../index'
+
+// highlight-start
+const notificationsStorage = await mastra.getStorage()?.getStore('notifications')
+// highlight-end
+
+export const opsAgent = new Agent({
+  id: 'ops-agent',
+  name: 'Ops Agent',
+  instructions:
+    'You are an operations assistant. When you receive notifications, summarize them and suggest next steps. Use the notification inbox tool to read full notification details after receiving a summary.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  notifications: {
+    deliveryPolicy: {
+      priorities: {
+        urgent: 'deliver',
+      },
+    },
+  },
+  // highlight-start
+  tools: {
+    notificationInbox: createNotificationInboxTool({
+      storage: notificationsStorage!,
+    }),
+  },
+  // highlight-end
+})
+```
+
+The tool exposes these actions:
+
+- `list`: List notifications for the current thread.
+- `read`: Deliver full notification signals into the thread and mark records `seen`.
+- `markSeen`: Mark a single record `seen`.
+- `dismiss`: Mark a single record `dismissed`.
+- `archive`: Mark a single record `archived`.
+- `search`: Search notification summaries in the current thread.
+
+## Enable scheduled dispatch
+
+Deferred notifications and summary rollups need a dispatcher that runs on a schedule. Enable it at the Mastra level:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { opsAgent } from './agents/ops-agent'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    url: 'file:./mastra.db',
+  }),
+  agents: { opsAgent },
+  // highlight-start
+  notifications: {
+    dispatch: {
+      enabled: true,
+      cron: '*/1 * * * *',
+      batchSize: 100,
+    },
+  },
+  // highlight-end
+})
+```
+
+The dispatcher runs as an internal workflow on the configured cron schedule. It reads due notification records from storage, groups summaries by agent, resource, and thread, and emits signals through the agent thread runtime.
+
+## Wire up a webhook
+
+A notification signal provider typically receives events through a webhook. The following example demonstrates an Express-style handler that converts incoming webhook payloads into notification signals:
+
+```typescript title="src/providers/webhook-handler.ts"
+import type { Request, Response } from 'express'
+import { mastra } from '../mastra'
+
+export async function webhookHandler(req: Request, res: Response) {
+  const { event, repo, branch, status, url } = req.body
+  const agent = await mastra.getAgent('ops-agent')
+
+  await agent.sendNotificationSignal(
+    {
+      source: 'github-ci',
+      kind: event,
+      priority: status === 'failure' ? 'high' : 'low',
+      summary: `${event} on ${repo}/${branch}: ${status}`,
+      payload: req.body,
+      sourceId: url,
+      dedupeKey: `${repo}:${branch}:${event}`,
+    },
+    {
+      resourceId: req.headers['x-resource-id'] as string,
+      threadId: req.headers['x-thread-id'] as string,
+    },
+  )
+
+  res.json({ ok: true })
+}
+```
+
+For production deployments, verify webhook signatures before processing the payload.
+
+## Test the provider
+
+Start the dev server:
+
+```bash npm2yarn
+npm run dev
+```
+
+Send a test notification signal with a script:
+
+```typescript title="src/test-notification.ts"
+import { mastra } from './mastra'
+
+async function main() {
+  const agent = await mastra.getAgent('ops-agent')
+
+  const result = await agent.sendNotificationSignal(
+    {
+      source: 'test-provider',
+      kind: 'test-event',
+      priority: 'high',
+      summary: 'This is a test notification from the custom provider.',
+      payload: { test: true },
+    },
+    {
+      resourceId: 'user_123',
+      threadId: 'thread_456',
+    },
+  )
+
+  console.log('Notification created:', result.record.id)
+  console.log('Delivery decision:', result.decision.action)
+}
+
+main()
+```
+
+Expected output:
+
+```text
+Notification created: <uuid>
+Delivery decision: deliver
+```
+
+The `decision.action` value depends on the delivery policy and thread state. When the thread is idle and priority is `high`, the default policy delivers immediately.
+
+## Next steps
+
+You can extend this provider to:
+
+- Support multiple external sources by adding a source-specific `kind` taxonomy and matching delivery policy rules
+- Coalesce repeat events with `coalesceKey` to reduce notification noise (e.g., group multiple CI failures on the same branch)
+- Defer low-priority notifications to a digest with a custom `summaryAt` window
+- Add a processor that reads notification metadata and enriches the agent context
+
+Learn more:
+
+- [Signals](/docs/agents/signals)
+- [Processors](/docs/agents/processors)
+- [Storage](/docs/storage/overview)
+- [Agent reference](/reference/agents/agent)
