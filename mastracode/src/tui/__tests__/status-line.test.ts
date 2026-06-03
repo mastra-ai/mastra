@@ -139,7 +139,15 @@ describe('updateStatusLine', () => {
 
   it('shows the active GitHub PR subscription beside the thread path', () => {
     const state = createState();
-    state.activeGithubPrSubscriptions = [{ owner: 'mastra-ai', repo: 'mastra', prNumber: 17439 }];
+    state.activeGithubPrSubscriptions = [
+      {
+        owner: 'mastra-ai',
+        repo: 'mastra',
+        prNumber: 17439,
+        lastNotificationKind: 'pull-request-activity',
+        lastNotificationPriority: 'medium',
+      },
+    ];
     state.options = { githubSignals: { isPollingThread: vi.fn(() => true) } };
 
     updateStatusLine(state);
@@ -147,6 +155,7 @@ describe('updateStatusLine', () => {
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('PR#17439');
     expect(rendered).not.toContain('polling');
+    expect(rendered).not.toContain('updated');
   });
 
   it('does not show GitHub PR status for unsubscribed threads', () => {

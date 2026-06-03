@@ -32,7 +32,7 @@ function formatGithubPrLabel(
   const threadId = state.harness.getCurrentThreadId?.();
   const resourceId = state.harness.getResourceId?.();
   const polling = !!threadId && !!resourceId && state.options.githubSignals?.isPollingThread({ threadId, resourceId });
-  const label = subscription.lastNotificationKind ? `${plain} updated` : plain;
+  const label = plain;
   const color = subscription.lastNotificationPriority === 'high' ? mastra.orange : extendedColors.skyBlue;
   if (polling && state.gradientAnimator?.isRunning()) {
     return {
