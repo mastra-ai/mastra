@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.11.0",
+  "version": "1.12.0-alpha.0",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -98,6 +98,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.2.2",

@@ -1,16 +1,16 @@
 ---
-title: "ACP | Agents"
+title: "Agent Client Protocol (ACP) | Agents"
 description: "Wrap ACP-compatible coding agents as Mastra tools or sub-agents."
 packages:
   - "@mastra/acp"
   - "@mastra/core"
 ---
 
-# ACP (Agent Client Protocol)
+# Agent Client Protocol
 
 Mastra supports the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/overview/introduction) for running ACP-compatible coding agents from a Mastra agent. Use `@mastra/acp` to wrap a coding agent process as a Mastra tool or as a subagent.
 
-ACP is useful for coding agents such as Claude Code, Amp, Codex, or any other executable that implements the Agent Client Protocol over standard input and output.
+ACP is useful for coding agents such as Claude Code, Amp, Codex, or any other executable that implements ACP over standard input and output.
 
 ## When to use ACP
 
@@ -31,14 +31,14 @@ The flow is:
 1. The client sends ACP `initialize` and `session/new` requests.
 1. Mastra sends the user task to the ACP agent with `session/prompt`.
 1. The ACP agent streams session updates and message chunks back to Mastra.
-1. Mastra returns the buffered output, emits streaming chunks, or suspends for permission input.
-1. The ACP process stays alive by default, or stops after the prompt when `persistSession` is `false`.
+1. Mastra returns the buffered output, emits streaming chunks, or handles permission input.
+1. The ACP connection stops the process after the prompt when `persistSession` is `false`; `AcpAgent` can keep a reusable process alive across calls by default.
 
 During execution, the ACP client also handles permission requests and file operations. File reads and writes go through Mastra's `Workspace`, so the ACP agent operates inside the workspace you provide.
 
 ## Getting started
 
-Install `@mastra/acp` in a project that already uses `@mastra/core`:
+Install `@mastra/acp` in a project that already uses `@mastra/core`. The package requires `@mastra/core` version `1.34.0` or later.
 
 ```bash npm2yarn
 npm install @mastra/acp
@@ -46,14 +46,12 @@ npm install @mastra/acp
 
 `@mastra/acp` exports two APIs:
 
-- `createACPTool`: Create a Mastra tool that sends a `task` string to an ACP agent and returns an `output` string.
-- `AcpAgent`: Wrap an ACP agent as a Mastra subagent with `generate()` and `stream()` support.
-
-The package requires `@mastra/core` version `1.34.0` or later.
+- [`createACPTool()`](/reference/acp/create-acp-tool): Create a Mastra tool that sends a `task` string to an ACP agent and returns an `output` string.
+- [`AcpAgent`](/reference/acp/acp-agent): Wrap an ACP agent as a Mastra subagent with `generate()` and `stream()` support.
 
 ## Use ACP as a subagent
 
-Use `AcpAgent` when a parent Mastra agent should delegate directly to an ACP-compatible coding agent as a subagent. Create the ACP agent, then register it in the parent agent's `agents` map.
+Use `AcpAgent` when a parent Mastra agent should delegate directly to an ACP-compatible coding agent as a subagent.
 
 ```typescript title="src/mastra/agents/code-supervisor.ts"
 import { AcpAgent } from '@mastra/acp'
@@ -79,11 +77,11 @@ export const codeSupervisor = new Agent({
 })
 ```
 
-`AcpAgent.generate()` buffers the ACP response and returns it as text. `AcpAgent.stream()` emits Mastra `text-delta` chunks as ACP `agent_message_chunk` updates arrive.
+See the [AcpAgent reference](/reference/acp/acp-agent) for all options, methods, and configuration.
 
 ## Use ACP as a tool
 
-Use `createACPTool` when the parent Mastra agent should decide when to call the ACP agent as a tool. The following example creates a code editing tool and registers it on a parent agent:
+Use `createACPTool()` when the parent Mastra agent should decide when to call the ACP agent as a tool.
 
 ```typescript title="src/mastra/agents/code-supervisor.ts"
 import { createACPTool } from '@mastra/acp'
@@ -108,171 +106,36 @@ export const codeSupervisor = new Agent({
 })
 ```
 
-Use the `command` and `args` required by the ACP-compatible agent you run. The tool input schema has a single `task` string, and the output schema returns the final ACP response as `output`.
-
-If the ACP agent requests permission, the tool can suspend and resume through Mastra's tool suspension flow. Use `onPermissionRequest` when you need custom permission behavior.
-
-## Options reference
-
-`createACPTool` and `AcpAgent` accept the same ACP connection options. `AcpAgent` also accepts `name` to set the display name used during agent delegation.
-
-| Option | Type | Description |
-| - | - | - |
-| `id` | `string` | Unique tool or subagent identifier. |
-| `description` | `string` | Description shown to the model when it can call the tool or delegate to the subagent. |
-| `command` | `string` | ACP agent executable to spawn. |
-| `args` | `string[]` | Arguments passed to the ACP agent executable. |
-| `env` | `Record<string, string>` | Environment variables to merge with the current process environment. |
-| `cwd` | `string` | Working directory for the ACP process, ACP session, and default workspace. |
-| `session` | `Partial<NewSessionRequest>` | ACP session creation options. Defaults to `cwd` or `process.cwd()` and no MCP servers. |
-| `initialize` | `Partial<InitializeRequest>` | ACP initialization options. Defaults to Mastra client information and protocol version. |
-| `authMethodId` | `string` | ACP authentication method ID to invoke after initialization. |
-| `persistSession` | `boolean` | Keep the ACP process alive after execution. Defaults to `true`. |
-| `onPermissionRequest` | `(request) => Promise<Response>` | Callback for ACP permission requests. Defaults to selecting the first option. |
-| `workspace` | `Workspace` | Workspace used for ACP file reads and writes. |
-| `model` | `string` | Model ID to select after session creation via the ACP `session/set_model` method. |
+See the [createACPTool() reference](/reference/acp/create-acp-tool) for all options and configuration.
 
 ## Model selection
 
-ACP agents may expose selectable models. Instead of setting an environment variable like `ANTHROPIC_MODEL`, you can pass a `model` ID directly in the configuration.
+ACP agents may expose selectable models. Pass `model` in the ACP configuration to select a model after session creation, or use `AcpAgent.getAvailableModels()` and `AcpAgent.setModel()` to manage models at runtime.
 
-### Discover available models
-
-Call `getAvailableModels()` to see which models the ACP agent supports. This starts the agent process and returns the model list from the session:
-
-```typescript title="src/mastra/agents/code-agent.ts"
-import { AcpAgent } from '@mastra/acp'
-
-const codeAgent = new AcpAgent({
-  id: 'code-agent',
-  description: 'An ACP-compatible coding agent',
-  command: 'claude',
-  args: ['--acp'],
-})
-
-const models = await codeAgent.getAvailableModels()
-// [{ modelId: 'claude-sonnet-4-20250514', name: 'Claude Sonnet' }, ...]
-```
-
-### Set the model
-
-Pass the `model` option to select a model at connection time:
-
-```typescript title="src/mastra/agents/code-agent.ts"
-import { AcpAgent } from '@mastra/acp'
-
-export const codeAgent = new AcpAgent({
-  id: 'code-agent',
-  description: 'An ACP-compatible coding agent',
-  command: 'claude',
-  args: ['--acp'],
-  model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
-})
-```
-
-You can also change the model at runtime with `setModel()`:
-
-```typescript
-await codeAgent.setModel('__AI_SDK_ANTHROPIC_MODEL_SONNET__')
-```
-
-If the ACP agent advertises available models and your model ID doesn't match any of them, Mastra throws an error listing the valid options:
-
-```text
-Model "bad-model-id" is not available. Available models: claude-sonnet-4-20250514, claude-haiku-4-20250514
-```
-
-If the agent doesn't advertise a model list, the value is passed through without validation.
+See the [AcpAgent model management methods](/reference/acp/acp-agent#model-management) for examples.
 
 ## Session lifecycle
 
-`createACPTool` and `AcpAgent` start the configured command on first use and create an ACP session. By default, `persistSession` is `true`, so the child process stays alive across calls.
+`AcpAgent` starts the configured command on first use and creates an ACP session. By default, `persistSession` is `true`, so the child process stays alive across calls. Set `persistSession: false` when each prompt should run in an isolated process.
 
-Use the default persistent session when:
-
-- The ACP agent benefits from keeping conversation or repository context.
-- Startup is expensive and repeated calls should reuse the same process.
-- A parent agent may delegate several related tasks to the same coding agent.
-
-Set `persistSession: false` when each prompt should run in an isolated process:
-
-```typescript title="src/mastra/agents/code-agent.ts"
-import { AcpAgent } from '@mastra/acp'
-
-export const codeAgent = new AcpAgent({
-  id: 'code-agent',
-  description: 'Run one isolated ACP coding task',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  cwd: process.cwd(),
-  persistSession: false,
-})
-```
-
-With `persistSession: false`, `@mastra/acp` stops the ACP process after each prompt completes.
+See the [AcpAgent session lifecycle](/reference/acp/acp-agent#session-lifecycle) section for details.
 
 ## Permission handling
 
-ACP agents may ask the client to choose a permission option before they continue. By default, `@mastra/acp` selects the first option returned by the ACP agent.
+ACP agents may ask the client to choose a permission option before they continue. By default, `@mastra/acp` selects the first option returned by the ACP agent. Pass `onPermissionRequest` when you need custom permission behavior.
 
-Pass `onPermissionRequest` to inspect the request and return the selected option yourself:
-
-```typescript title="src/mastra/agents/code-agent.ts"
-import { createACPTool } from '@mastra/acp'
-
-export const codeAgentTool = createACPTool({
-  id: 'code-agent',
-  description: 'Use an ACP-compatible coding agent',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  async onPermissionRequest(request) {
-    const allowOption = request.options.find(option => option.name === 'Allow')
-
-    if (!allowOption) {
-      return { outcome: { outcome: 'cancelled' } }
-    }
-
-    return {
-      outcome: {
-        outcome: 'selected',
-        optionId: allowOption.optionId,
-      },
-    }
-  },
-})
-```
-
-Use this callback to enforce local policy, inspect the permission title, or route the decision to your own approval flow.
+See the [createACPTool() permission handling](/reference/acp/create-acp-tool#permission-handling) section for a complete example.
 
 ## Workspace integration
 
-ACP file operations go through Mastra's workspace abstraction. If you don't pass `workspace`, `@mastra/acp` creates a `Workspace` backed by `LocalFilesystem` and uses `cwd` as the filesystem root.
+ACP file operations go through Mastra's workspace abstraction. `AcpAgent` can use a `workspace` option, and `createACPTool()` uses the current Mastra workspace from the tool execution context when one is available. Without a workspace, `@mastra/acp` falls back to a `Workspace` backed by `LocalFilesystem` at `cwd` or `process.cwd()`.
 
-Pass a custom `Workspace` when the ACP agent should read and write through a specific filesystem implementation:
-
-```typescript title="src/mastra/agents/code-agent.ts"
-import { AcpAgent } from '@mastra/acp'
-import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
-
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    root: process.cwd(),
-  }),
-})
-
-export const codeAgent = new AcpAgent({
-  id: 'code-agent',
-  description: 'Run coding tasks in a controlled workspace',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  workspace,
-})
-```
-
-Use `cwd` and `workspace` together when the ACP process should start in one directory but file operations should use an explicitly configured workspace root.
+See the [AcpAgent workspace integration](/reference/acp/acp-agent#workspace-integration) section for custom workspace examples.
 
 ## Related
 
+- [AcpAgent reference](/reference/acp/acp-agent)
+- [createACPTool() reference](/reference/acp/create-acp-tool)
 - [Agent reference](/reference/agents/agent)
 - [Subagents](/docs/agents/supervisor-agents)
 - [Agent Client Protocol introduction](https://agentclientprotocol.com/overview/introduction)
