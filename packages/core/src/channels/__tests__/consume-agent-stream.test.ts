@@ -1498,13 +1498,13 @@ describe('consumeAgentStream', () => {
   });
 
   describe('signal echo', () => {
-    it('drops data-* chunks (echoed user-message / system-reminder signals)', async () => {
+    it('drops data-* chunks (echoed user-message / signal / system-reminder signals)', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
         [
           { type: 'data-user-message', payload: { contents: 'hello' } },
-          { type: 'data-system-reminder', payload: { contents: 'noop' } },
+          { type: 'data-signal', payload: { type: 'reactive', tagName: 'system-reminder', contents: 'noop' } },
           { type: 'text-delta', payload: { text: 'reply' } },
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },

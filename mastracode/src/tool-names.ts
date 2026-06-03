@@ -34,6 +34,9 @@ export const MC_TOOLS = {
 
   // Code intelligence
   LSP_INSPECT: 'lsp_inspect',
+
+  // Notifications
+  NOTIFICATION_INBOX: 'notification_inbox',
 } as const;
 
 /**
