@@ -163,14 +163,13 @@ export async function resolveStateSignalHistory({
 }): Promise<StateSignalHistory> {
   const localStateSignals = getActiveStateSignals(messageList, stateId, threadId);
   const localHistory = deriveStateSignalHistory(localStateSignals);
-  const contextWindow = localHistory.contextWindow;
 
   if (localHistory.contextWindow.hasSnapshot || !tracking?.lastSnapshotSignalId) {
-    return { ...localHistory, contextWindow };
+    return localHistory;
   }
 
   const memoryStore = await memory.storage.getStore('memory');
-  if (!memoryStore) return { ...localHistory, contextWindow };
+  if (!memoryStore) return localHistory;
 
   const storedMessages = await memoryStore.listMessages({
     threadId,
@@ -181,10 +180,7 @@ export async function resolveStateSignalHistory({
   const storedStateSignals = dbMessagesToStateSignals(storedMessages.messages, stateId, threadId);
   const resolvedStateSignals = mergeStateSignals(storedStateSignals, localStateSignals);
 
-  return {
-    ...deriveStateSignalHistory(resolvedStateSignals.length > 0 ? resolvedStateSignals : localStateSignals),
-    contextWindow,
-  };
+  return deriveStateSignalHistory(resolvedStateSignals.length > 0 ? resolvedStateSignals : localStateSignals);
 }
 
 export function createStateSignalInput(
