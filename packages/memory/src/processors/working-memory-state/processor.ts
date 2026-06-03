@@ -170,6 +170,7 @@ function buildMarkdownDelta(args: {
   if (!prior) return;
 
   const patch = renderHunksOnly(prior, nextContents);
+  if (patch.length >= nextContents.length) return;
 
   return { contents: patch };
 }
