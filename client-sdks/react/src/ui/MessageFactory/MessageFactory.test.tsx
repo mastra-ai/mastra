@@ -60,7 +60,11 @@ const makeSpyRenderers = () => {
     },
     SourceUrl: part => {
       calls.SourceUrl(part);
-      return <div data-testid="source">{part.type}</div>;
+      return (
+        <div data-testid="source" data-source-id={part.sourceId} data-url={part.url}>
+          {part.title ?? part.type}
+        </div>
+      );
     },
     SourceDocument: part => {
       calls.SourceDocument(part);
@@ -91,8 +95,12 @@ const toolInvocationPart = (toolCallId: string, toolName: string): AccumulatorPa
     type: 'tool-invocation',
     toolInvocation: { state: 'result', toolCallId, toolName, args: {}, result: {} },
   });
+// Legacy persisted nested `type: 'source'` shape.
 const sourcePart = (): AccumulatorPart =>
-  asPart({ type: 'source', source: { sourceType: 'url', id: 's-1', url: 'https://x' } });
+  asPart({ type: 'source', source: { sourceType: 'url', id: 's-1', url: 'https://x', title: 'Nested' } });
+// Flat runtime `type: 'source-url'` shape pushed by the accumulator.
+const sourceUrlPart = (): AccumulatorPart =>
+  asPart({ type: 'source-url', sourceId: 's-2', url: 'https://flat', title: 'Flat' });
 const sourceDocumentPart = (): AccumulatorPart =>
   asPart({ type: 'source-document', sourceId: 's-1', mediaType: 'text/plain', title: 'Doc' });
 const dataPart = (type: `data-${string}`): AccumulatorPart => asPart({ type, data: { ok: true } });
@@ -147,12 +155,35 @@ describe('MessageFactory', () => {
     expect(calls.DynamicTool).not.toHaveBeenCalled();
   });
 
-  it('renders source only via the SourceUrl renderer', () => {
+  it('normalizes a legacy nested `source` part to the flat SourceUrl shape', () => {
     const { calls, renderers } = makeSpyRenderers();
     render(<MessageFactory message={makeMessage([sourcePart()])} {...renderers} />);
 
-    expect(screen.getByTestId('source')).toBeTruthy();
+    const el = screen.getByTestId('source');
+    expect(el.getAttribute('data-source-id')).toBe('s-1');
+    expect(el.getAttribute('data-url')).toBe('https://x');
+    expect(el.textContent).toBe('Nested');
     expect(calls.SourceUrl).toHaveBeenCalledTimes(1);
+    expect(calls.SourceUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'source-url', sourceId: 's-1', url: 'https://x', title: 'Nested' }),
+    );
+    expect(calls.SourceDocument).not.toHaveBeenCalled();
+  });
+
+  it('routes a runtime flat `source-url` part to the SourceUrl renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([sourceUrlPart()])} {...renderers} />);
+
+    const el = screen.getByTestId('source');
+    expect(el.getAttribute('data-source-id')).toBe('s-2');
+    expect(el.getAttribute('data-url')).toBe('https://flat');
+    expect(el.textContent).toBe('Flat');
+    expect(calls.SourceUrl).toHaveBeenCalledTimes(1);
+    expect(calls.SourceUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'source-url', sourceId: 's-2', url: 'https://flat', title: 'Flat' }),
+    );
+    expect(calls.SourceDocument).not.toHaveBeenCalled();
+    expect(calls.Text).not.toHaveBeenCalled();
   });
 
   it('renders source-document only via the SourceDocument renderer', () => {
@@ -161,6 +192,7 @@ describe('MessageFactory', () => {
 
     expect(screen.getByTestId('source-document').textContent).toBe('Doc');
     expect(calls.SourceDocument).toHaveBeenCalledTimes(1);
+    expect(calls.SourceUrl).not.toHaveBeenCalled();
   });
 
   it('renders data-${string} via the Data renderer', () => {

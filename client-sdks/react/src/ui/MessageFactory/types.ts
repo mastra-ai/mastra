@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { MastraDBMessage, AIV5Type } from '@mastra/core/agent/message-list';
 import type { ReactNode } from 'react';
 import type { AccumulatorPart } from '../../lib/mastra-db';
 
@@ -9,6 +9,25 @@ import type { AccumulatorPart } from '../../lib/mastra-db';
  * avoids TS2589 ("type instantiation is excessively deep") at the call sites.
  */
 export type PartByType<T extends string> = Extract<AccumulatorPart, { type: T }>;
+
+/** Narrowed part shape passed to the `Text` renderer. */
+export type TextPart = PartByType<'text'>;
+/** Narrowed part shape passed to the `Reasoning` renderer. */
+export type ReasoningPart = PartByType<'reasoning'>;
+/** Narrowed part shape passed to the `File` renderer. */
+export type FilePart = PartByType<'file'>;
+/** Narrowed part shape passed to the `StepStart` renderer. */
+export type StepStartPart = PartByType<'step-start'>;
+/** Narrowed part shape passed to the `ToolInvocation` renderer. */
+export type ToolInvocationPart = PartByType<'tool-invocation'>;
+/** Narrowed part shape passed to the `SourceDocument` renderer. */
+export type SourceDocumentPart = PartByType<'source-document'>;
+/**
+ * Flat `source-url` citation shape passed to the `SourceUrl` renderer. Both the
+ * runtime `type: 'source-url'` part and the legacy persisted `type: 'source'`
+ * part (normalized) are dispatched with this shape.
+ */
+export type SourceUrlPart = AIV5Type.SourceUrlUIPart;
 
 /**
  * The `data-${string}` member of the accumulator union (e.g. `data-signal`,
@@ -46,7 +65,13 @@ export type MessageRenderers = {
   File?: (part: PartByType<'file'>) => ReactNode;
   StepStart?: (part: PartByType<'step-start'>) => ReactNode;
   ToolInvocation?: (part: PartByType<'tool-invocation'>) => ReactNode;
-  SourceUrl?: (part: PartByType<'source'>) => ReactNode;
+  /**
+   * Receives the flat `source-url` citation shape ({@link AIV5Type.SourceUrlUIPart}).
+   * Both the runtime `type: 'source-url'` part and the legacy persisted
+   * `type: 'source'` part (whose nested `source` is normalized to this shape)
+   * are dispatched here, so the renderer always gets `sourceId`/`url`/`title`.
+   */
+  SourceUrl?: (part: SourceUrlPart) => ReactNode;
   SourceDocument?: (part: PartByType<'source-document'>) => ReactNode;
   Data?: (part: DataPart) => ReactNode;
   /** Covers runtime-only `dynamic-tool` and AI SDK v5 `tool-${string}` parts. */

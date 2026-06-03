@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { MastraDBMessage, AIV5Type } from '@mastra/core/agent/message-list';
 import type { ReactNode } from 'react';
 import { memo } from 'react';
 import type { AccumulatorPart } from '../../lib/mastra-db';
@@ -8,6 +8,7 @@ import type {
   MessageRenderers,
   MessageRoleRendererProps,
   MessageRoleRenderers,
+  PartByType,
 } from './types';
 
 export interface MessageFactoryProps extends MessageRenderers {
@@ -30,6 +31,20 @@ const isDynamicToolPart = (part: RuntimePart): part is DynamicToolPart =>
 const isDataPart = (part: RuntimePart): part is DataPart => part.type.startsWith('data-');
 
 /**
+ * Normalize the legacy persisted `type: 'source'` part (nested
+ * `source: { id, url, title }`) into the flat `AIV5Type.SourceUrlUIPart` shape
+ * the runtime accumulator emits, so the `SourceUrl` renderer receives one
+ * stable prop contract regardless of which discriminant produced the citation.
+ */
+const sourceToSourceUrl = (part: PartByType<'source'>): AIV5Type.SourceUrlUIPart => ({
+  type: 'source-url',
+  sourceId: part.source.id,
+  url: part.source.url,
+  title: part.source.title,
+  providerMetadata: part.providerMetadata,
+});
+
+/**
  * Resolve a stable key for a part so unchanged parts keep their identity across
  * streaming updates (and don't needlessly re-render).
  */
@@ -44,6 +59,10 @@ const getPartKey = (part: RuntimePart, index: number): string => {
       return (part as { reasoningId?: string }).reasoningId ?? `reasoning-${index}`;
     case 'tool-invocation':
       return part.toolInvocation.toolCallId ?? `tool-invocation-${index}`;
+    case 'source-url':
+      return part.sourceId || `source-url-${index}`;
+    case 'source':
+      return (part as PartByType<'source'>).source.id ?? `source-${index}`;
     default:
       break;
   }
@@ -84,6 +103,11 @@ const renderPart = (
     case 'tool-invocation':
       return renderers.ToolInvocation?.(part) ?? fallback?.(part) ?? null;
     case 'source':
+      // Legacy nested `type: 'source'` part — normalize to the flat shape the
+      // `SourceUrl` renderer expects so both discriminants share one contract.
+      return renderers.SourceUrl?.(sourceToSourceUrl(part)) ?? fallback?.(part) ?? null;
+    case 'source-url':
+      // Flat runtime/V5 citation part emitted by the accumulator.
       return renderers.SourceUrl?.(part) ?? fallback?.(part) ?? null;
     case 'source-document':
       return renderers.SourceDocument?.(part) ?? fallback?.(part) ?? null;

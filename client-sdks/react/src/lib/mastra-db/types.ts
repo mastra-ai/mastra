@@ -1,4 +1,4 @@
-import type { MastraMessagePart } from '@mastra/core/agent/message-list';
+import type { MastraMessagePart, AIV5Type } from '@mastra/core/agent/message-list';
 
 export type MastraProviderMetadata = Record<string, Record<string, unknown>>;
 
@@ -161,5 +161,15 @@ export type StreamingDataPart = {
  * at runtime; the extended text/reasoning parts add optional fields that
  * downstream consumers (e.g. `AIV5Adapter.toUIMessage`) preserve via
  * providerMetadata round-tripping.
+ *
+ * `AIV5Type.SourceUrlUIPart` is the flat `type: 'source-url'` shape the
+ * accumulator actually pushes for URL source citations (the typed
+ * `MastraMessagePart` only models the nested `type: 'source'` shape), so it is
+ * listed explicitly as a first-class member of the runtime union.
  */
-export type AccumulatorPart = MastraMessagePart | MastraTextPart | MastraReasoningPart | StreamingDataPart;
+export type AccumulatorPart =
+  | MastraMessagePart
+  | MastraTextPart
+  | MastraReasoningPart
+  | StreamingDataPart
+  | AIV5Type.SourceUrlUIPart;

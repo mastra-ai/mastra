@@ -6,4 +6,11 @@ export type {
   DynamicToolPart,
   DataPart,
   PartByType,
+  TextPart,
+  ReasoningPart,
+  FilePart,
+  StepStartPart,
+  ToolInvocationPart,
+  SourceDocumentPart,
+  SourceUrlPart,
 } from './types';
