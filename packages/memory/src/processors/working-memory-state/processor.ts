@@ -79,6 +79,7 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
       template.format === 'markdown' && !shouldRefreshSnapshot
         ? buildMarkdownDelta({
             lastSnapshot: args.lastSnapshot,
+            deltasSinceSnapshot: args.deltasSinceSnapshot,
             nextContents: contents,
           })
         : undefined;
@@ -90,6 +91,10 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
         cacheKey,
         tagName: 'working-memory',
         contents: deltaCandidate.contents,
+        // Stash the full post-edit text on the signal so the next turn can
+        // diff against the most recently emitted state instead of the older
+        // snapshot. Invisible to the model.
+        value: contents,
         attributes: {
           format: template.format,
           scope,
@@ -104,6 +109,9 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
       cacheKey,
       tagName: 'working-memory',
       contents,
+      // Mirror contents in value so the first delta after a snapshot has a
+      // typed prior-state to diff against without falling back to contents.
+      value: contents,
       attributes: {
         format: template.format,
         scope,
@@ -129,22 +137,35 @@ export function stableWorkingMemoryCacheKey(input: {
 }
 
 /**
- * Build a unified-diff delta from the prior snapshot's contents to the next
- * full contents. Returns undefined when:
- * - there's no prior snapshot to diff against
- * - the prior snapshot's contents aren't a plain string (multimodal signal)
+ * Build a unified-diff delta against the most recently emitted state. Prefers
+ * the latest delta's `value` (the post-edit full text) when available, falling
+ * back to the snapshot's `value` and finally the snapshot's `contents`. This
+ * keeps deltas incremental (B→C) instead of cumulative against a stale
+ * snapshot (A→C), which matters when many small edits land between snapshots.
+ *
+ * Returns undefined when:
+ * - there's no prior state to diff against
+ * - the prior state isn't a plain string (multimodal signal)
  * - the rendered patch would be at least as large as the next snapshot
  *
  * In any of these cases the caller falls back to emitting a full snapshot.
  */
 function buildMarkdownDelta(args: {
   lastSnapshot?: ProcessorActiveStateSignal;
+  deltasSinceSnapshot: ProcessorActiveStateSignal[];
   nextContents: string;
 }): { contents: string } | undefined {
-  const { lastSnapshot, nextContents } = args;
-  if (!lastSnapshot) return undefined;
+  const { lastSnapshot, deltasSinceSnapshot, nextContents } = args;
 
-  const prior = typeof lastSnapshot.contents === 'string' ? lastSnapshot.contents : undefined;
+  // `value` is stored on the persisted signal's metadata (see applyStateSignal
+  // in @mastra/core/agent/state-signals). Read from there to recover the
+  // post-edit full text from the most recently emitted state.
+  const latestDelta = deltasSinceSnapshot.at(-1);
+  const prior =
+    pickStringValue(readSignalValue(latestDelta)) ??
+    pickStringValue(readSignalValue(lastSnapshot)) ??
+    (typeof lastSnapshot?.contents === 'string' ? lastSnapshot.contents : undefined);
+
   if (prior === undefined) return undefined;
   if (prior === nextContents) return undefined;
 
@@ -152,6 +173,14 @@ function buildMarkdownDelta(args: {
   if (patch.length >= nextContents.length) return undefined;
 
   return { contents: patch };
+}
+
+function pickStringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readSignalValue(signal: ProcessorActiveStateSignal | undefined): unknown {
+  return (signal?.metadata as { value?: unknown } | undefined)?.value;
 }
 
 /**

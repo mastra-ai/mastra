@@ -1,5 +1,9 @@
 import type { MastraMemory, MemoryConfigInternal, WorkingMemoryTemplate } from '@mastra/core/memory';
-import type { ComputeStateSignalArgs, ProcessorStateSignalTracking } from '@mastra/core/processors';
+import type {
+  ComputeStateSignalArgs,
+  ProcessorActiveStateSignal,
+  ProcessorStateSignalTracking,
+} from '@mastra/core/processors';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -78,6 +82,9 @@ describe('WorkingMemoryStateProcessor', () => {
     expect(result?.contents).toBe('# Title\n- ready');
     expect(result?.contents).not.toContain('<working_memory_');
     expect(result?.attributes).toMatchObject({ format: 'markdown', scope: 'resource' });
+    // `value` mirrors the full post-edit text so the next delta has typed prior
+    // state to diff against. Invisible to the model.
+    expect(result?.value).toBe('# Title\n- ready');
   });
 
   it('dedups when cacheKey is unchanged and snapshot is still in the context window', async () => {
@@ -241,6 +248,46 @@ describe('WorkingMemoryStateProcessor', () => {
       expect(result?.cacheKey).toBe(stableWorkingMemoryCacheKey({ format: 'markdown', data: next.trim() }));
       // Patch must be strictly smaller than a full snapshot for delta to win.
       expect((result?.contents as string).length).toBeLessThan(next.length);
+      // Delta carries the full post-edit text on `value` so the next turn can
+      // diff incrementally instead of re-diffing against the older snapshot.
+      expect(result?.value).toBe(next.trim());
+    });
+
+    it('diffs against the latest delta value rather than the stale snapshot', async () => {
+      // Simulates: snapshot A → delta B (against A) → delta C (should diff against B, not A).
+      const template: WorkingMemoryTemplate = { format: 'markdown', content: '# tpl' };
+      const base =
+        '# User Profile\n' + Array.from({ length: 30 }, (_, i) => `- Field ${i}: value ${i}`).join('\n') + '\n';
+      const snapshotA = base + '- Favorite color: orange\n';
+      const deltaB = base + '- Favorite color: blue\n';
+      const next = base + '- Favorite color: green\n';
+      const memory = buildMemoryMock({ template, data: next });
+      const processor = new WorkingMemoryStateProcessor(memory);
+
+      const priorDelta = {
+        contents: '@@ stale-diff @@',
+        metadata: { state: { mode: 'delta', version: 2 }, value: deltaB },
+      } as unknown as ProcessorActiveStateSignal;
+
+      const result = await processor.computeStateSignal(
+        buildArgs({
+          contextWindow: { hasSnapshot: true },
+          lastSnapshot: priorSnapshot(snapshotA),
+          deltasSinceSnapshot: [priorDelta],
+          tracking: {
+            currentCacheKey: stableWorkingMemoryCacheKey({ format: 'markdown', data: deltaB }),
+            currentMode: 'delta',
+            version: 2,
+          },
+        }),
+      );
+
+      expect(result?.mode).toBe('delta');
+      // Diff was computed against deltaB (blue → green), not snapshotA (orange → green).
+      expect(result?.contents).toContain('-- Favorite color: blue');
+      expect(result?.contents).toContain('+- Favorite color: green');
+      expect(result?.contents).not.toContain('orange');
+      expect(result?.value).toBe(next.trim());
     });
 
     it('falls back to a snapshot when the prior snapshot dropped out of the window', async () => {
