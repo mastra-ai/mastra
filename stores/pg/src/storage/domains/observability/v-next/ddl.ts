@@ -258,13 +258,13 @@ function tableIndexes(): IndexSpec[] {
       columns: '("traceId")',
       where: ROOT_SPAN_WHERE,
     },
-    // Delta polling: cursor ordering. Full-table coverage so the same index
+    // Delta polling: transaction-safe cursor ordering. Full-table coverage so the same index
     // serves both listTraces (combined with the `parentSpanId IS NULL`
     // predicate) and listBranches (combined with `spanType IN (...)`).
     {
       name: 'mastra_span_events_cursor_idx',
       table: TABLE_SPAN_EVENTS,
-      columns: '("cursorId")',
+      columns: '("xactId", "cursorId")',
     },
 
     // metric_events
@@ -277,7 +277,7 @@ function tableIndexes(): IndexSpec[] {
     { name: 'mastra_metric_events_traceid_idx', table: TABLE_METRIC_EVENTS, columns: '("traceId")' },
     { name: 'mastra_metric_events_labels_gin', table: TABLE_METRIC_EVENTS, columns: '("labels")', using: 'gin' },
     { name: 'mastra_metric_events_tags_gin', table: TABLE_METRIC_EVENTS, columns: '("tags")', using: 'gin' },
-    { name: 'mastra_metric_events_cursor_idx', table: TABLE_METRIC_EVENTS, columns: '("cursorId")' },
+    { name: 'mastra_metric_events_cursor_idx', table: TABLE_METRIC_EVENTS, columns: '("xactId", "cursorId")' },
 
     // log_events
     { name: 'mastra_log_events_ts_idx', table: TABLE_LOG_EVENTS, columns: '("timestamp" DESC)' },
@@ -289,7 +289,7 @@ function tableIndexes(): IndexSpec[] {
       columns: '("entityType", "entityId", "timestamp" DESC)',
     },
     { name: 'mastra_log_events_tags_gin', table: TABLE_LOG_EVENTS, columns: '("tags")', using: 'gin' },
-    { name: 'mastra_log_events_cursor_idx', table: TABLE_LOG_EVENTS, columns: '("cursorId")' },
+    { name: 'mastra_log_events_cursor_idx', table: TABLE_LOG_EVENTS, columns: '("xactId", "cursorId")' },
 
     // score_events
     { name: 'mastra_score_events_traceid_idx', table: TABLE_SCORE_EVENTS, columns: '("traceId", "timestamp" DESC)' },
@@ -300,7 +300,7 @@ function tableIndexes(): IndexSpec[] {
       columns: '("entityType", "entityId", "timestamp" DESC)',
     },
     { name: 'mastra_score_events_tags_gin', table: TABLE_SCORE_EVENTS, columns: '("tags")', using: 'gin' },
-    { name: 'mastra_score_events_cursor_idx', table: TABLE_SCORE_EVENTS, columns: '("cursorId")' },
+    { name: 'mastra_score_events_cursor_idx', table: TABLE_SCORE_EVENTS, columns: '("xactId", "cursorId")' },
 
     // feedback_events
     {
@@ -319,7 +319,7 @@ function tableIndexes(): IndexSpec[] {
       columns: '("entityType", "entityId", "timestamp" DESC)',
     },
     { name: 'mastra_feedback_events_tags_gin', table: TABLE_FEEDBACK_EVENTS, columns: '("tags")', using: 'gin' },
-    { name: 'mastra_feedback_events_cursor_idx', table: TABLE_FEEDBACK_EVENTS, columns: '("cursorId")' },
+    { name: 'mastra_feedback_events_cursor_idx', table: TABLE_FEEDBACK_EVENTS, columns: '("xactId", "cursorId")' },
   ];
 }
 

@@ -1,4 +1,4 @@
-type ColumnType = 'bigserial' | 'boolean' | 'double precision' | 'jsonb' | 'text' | 'text[]' | 'timestamptz';
+type ColumnType = 'bigserial' | 'boolean' | 'double precision' | 'jsonb' | 'text' | 'text[]' | 'timestamptz' | 'xid8';
 
 interface SignalColumn {
   name: string;
@@ -8,6 +8,11 @@ interface SignalColumn {
 }
 
 const CURSOR_ID_COLUMN = { name: 'cursorId', type: 'bigserial' } as const satisfies SignalColumn;
+const XACT_ID_COLUMN = {
+  name: 'xactId',
+  type: 'xid8',
+  defaultSql: 'pg_current_xact_id()',
+} as const satisfies SignalColumn;
 
 const COMMON_CONTEXT_COLUMNS = [
   { name: 'traceId', type: 'text', nullable: true },
@@ -39,6 +44,7 @@ const COMMON_CONTEXT_COLUMNS = [
 
 export const SPAN_EVENT_COLUMNS = [
   CURSOR_ID_COLUMN,
+  XACT_ID_COLUMN,
   { name: 'traceId', type: 'text' },
   { name: 'spanId', type: 'text' },
   { name: 'parentSpanId', type: 'text', nullable: true },
@@ -84,6 +90,7 @@ export const SPAN_EVENT_COLUMNS = [
 
 export const METRIC_EVENT_COLUMNS = [
   CURSOR_ID_COLUMN,
+  XACT_ID_COLUMN,
   { name: 'metricId', type: 'text' },
   { name: 'timestamp', type: 'timestamptz' },
   { name: 'name', type: 'text' },
@@ -102,6 +109,7 @@ export const METRIC_EVENT_COLUMNS = [
 
 export const LOG_EVENT_COLUMNS = [
   CURSOR_ID_COLUMN,
+  XACT_ID_COLUMN,
   { name: 'logId', type: 'text' },
   { name: 'timestamp', type: 'timestamptz' },
   { name: 'level', type: 'text' },
@@ -115,6 +123,7 @@ export const LOG_EVENT_COLUMNS = [
 
 export const SCORE_EVENT_COLUMNS = [
   CURSOR_ID_COLUMN,
+  XACT_ID_COLUMN,
   { name: 'scoreId', type: 'text' },
   { name: 'timestamp', type: 'timestamptz' },
   { name: 'scorerId', type: 'text' },
@@ -131,6 +140,7 @@ export const SCORE_EVENT_COLUMNS = [
 
 export const FEEDBACK_EVENT_COLUMNS = [
   CURSOR_ID_COLUMN,
+  XACT_ID_COLUMN,
   { name: 'feedbackId', type: 'text' },
   { name: 'timestamp', type: 'timestamptz' },
   { name: 'feedbackSource', type: 'text' },
@@ -148,6 +158,7 @@ export const FEEDBACK_EVENT_COLUMNS = [
 
 export const SPAN_LIGHT_SELECT_COLUMN_NAMES = [
   'cursorId',
+  'xactId',
   'traceId',
   'spanId',
   'parentSpanId',
@@ -190,7 +201,9 @@ function columnNamesByType(columns: readonly SignalColumn[], type: ColumnType): 
 
 function typedColumnNames(columns: readonly SignalColumn[]): Set<string> {
   return new Set(
-    columns.filter(column => !['bigserial', 'jsonb', 'text[]'].includes(column.type)).map(column => column.name),
+    columns
+      .filter(column => !['bigserial', 'jsonb', 'text[]', 'xid8'].includes(column.type))
+      .map(column => column.name),
   );
 }
 

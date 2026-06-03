@@ -29,7 +29,13 @@ import type {
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
 import { rowToSpanRecord } from './helpers';
-import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
+import {
+  assertDeltaPollingEnabled,
+  decodeDeltaCursor,
+  deltaPollingFeatureEnabled,
+  encodeDeltaCursor,
+  readSafeXactHorizon,
+} from './polling';
 import { SPAN_SELECT_COLUMNS } from './sql';
 
 function asIsoTimestamp(value: unknown): string {
@@ -265,17 +271,20 @@ async function listTracesDelta(
     return { spans: [], delta: { limit, hasMore: false }, deltaCursor };
   }
 
-  const afterId = validateCursorId(after);
+  const afterCursor = decodeDeltaCursor(after);
+  const safeHorizon = await readSafeXactHorizon(client);
   const { conditions, params, nextParamIdx } = buildListTracesFilters(filters, span, 1);
   let i = nextParamIdx;
-  conditions.push(`r."cursorId" > $${i++}::bigint`);
-  params.push(afterId);
+  conditions.push(`(r."xactId", r."cursorId") > ($${i++}::xid8, $${i++}::bigint)`);
+  params.push(afterCursor.xactId, afterCursor.cursorId);
+  conditions.push(`r."xactId" < $${i++}::xid8`);
+  params.push(safeHorizon);
 
   const rows = await client.manyOrNone<Record<string, any>>(
     `SELECT ${SPAN_SELECT_COLUMNS_ALIASED}
      FROM ${span} r
      WHERE ${conditions.join(' AND ')}
-     ORDER BY r."cursorId" ASC
+     ORDER BY r."xactId" ASC, r."cursorId" ASC
      LIMIT $${i++}`,
     [...params, limit + 1],
   );
@@ -284,8 +293,8 @@ async function listTracesDelta(
   const visible = rows.slice(0, limit);
   const deltaCursor =
     visible.length > 0
-      ? encodeDeltaCursor(visible[visible.length - 1]!.cursorId)
-      : await readTracesStreamHeadCursor(client, span, filters);
+      ? encodeDeltaCursor(visible[visible.length - 1]!.xactId, visible[visible.length - 1]!.cursorId)
+      : encodeDeltaCursor(safeHorizon, 0);
 
   return {
     spans: toTraceSpans(visible.map(rowToSpanRecord)),
@@ -299,18 +308,9 @@ async function readTracesStreamHeadCursor(
   span: string,
   filters: ListTracesArgs['filters'],
 ): Promise<string> {
-  const { conditions, params } = buildListTracesFilters(filters, span, 1);
-  const whereClause = `WHERE ${conditions.join(' AND ')}`;
-  const filtered = await client.oneOrNone<{ cursorId: string | null }>(
-    `SELECT MAX(r."cursorId")::text AS "cursorId" FROM ${span} r ${whereClause}`,
-    params,
-  );
-  if (filtered?.cursorId != null) return encodeDeltaCursor(filtered.cursorId);
-
-  const head = await client.oneOrNone<{ cursorId: string | null }>(
-    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${span} WHERE "parentSpanId" IS NULL`,
-  );
-  return encodeDeltaCursor(head?.cursorId);
+  void span;
+  void filters;
+  return encodeDeltaCursor(await readSafeXactHorizon(client), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -604,15 +604,18 @@ async function listBranchesDelta(
 
   const { conditions, params, nextParamIdx } = built;
   let i = nextParamIdx;
-  const afterId = validateCursorId(after);
-  conditions.push(`r."cursorId" > $${i++}::bigint`);
-  params.push(afterId);
+  const afterCursor = decodeDeltaCursor(after);
+  const safeHorizon = await readSafeXactHorizon(client);
+  conditions.push(`(r."xactId", r."cursorId") > ($${i++}::xid8, $${i++}::bigint)`);
+  params.push(afterCursor.xactId, afterCursor.cursorId);
+  conditions.push(`r."xactId" < $${i++}::xid8`);
+  params.push(safeHorizon);
 
   const rows = await client.manyOrNone<Record<string, any>>(
     `SELECT ${SPAN_SELECT_COLUMNS_ALIASED}
      FROM ${span} r
      WHERE ${conditions.join(' AND ')}
-     ORDER BY r."cursorId" ASC
+     ORDER BY r."xactId" ASC, r."cursorId" ASC
      LIMIT $${i++}`,
     [...params, limit + 1],
   );
@@ -621,8 +624,8 @@ async function listBranchesDelta(
   const visible = rows.slice(0, limit);
   const deltaCursor =
     visible.length > 0
-      ? encodeDeltaCursor(visible[visible.length - 1]!.cursorId)
-      : await readBranchesStreamHeadCursor(client, span, filters);
+      ? encodeDeltaCursor(visible[visible.length - 1]!.xactId, visible[visible.length - 1]!.cursorId)
+      : encodeDeltaCursor(safeHorizon, 0);
 
   return {
     branches: toTraceSpans(visible.map(rowToSpanRecord)),
@@ -632,40 +635,15 @@ async function listBranchesDelta(
 }
 
 /**
- * Head cursor for branches. Like `readTracesStreamHeadCursor`, falls back to
- * the unfiltered branch stream when the filtered set is empty so polling can
- * resume against the whole branch surface.
- *
- * The fallback `MAX("cursorId") WHERE "spanType" IN (...)` query has no
- * time predicate and so scans every branch row ever inserted. That's fine
- * at the ~100 calls/sec target this adapter is built for; for very large
- * tables the planner can still serve it from `mastra_span_events_cursor_idx`
- * via a backward index scan that stops at the first match.
+ * Branch bootstrap cursor. It points at the safe transaction horizon, not at
+ * the current max cursorId, so a late-committing branch cannot be skipped.
  */
 async function readBranchesStreamHeadCursor(
   client: DbClient,
   span: string,
   filters: ListBranchesArgs['filters'],
 ): Promise<string> {
-  const built = buildListBranchesFilters(filters, filters?.spanType, 1);
-  if (built) {
-    const filtered = await client.oneOrNone<{ cursorId: string | null }>(
-      `SELECT MAX(r."cursorId")::text AS "cursorId" FROM ${span} r WHERE ${built.conditions.join(' AND ')}`,
-      built.params,
-    );
-    if (filtered?.cursorId != null) return encodeDeltaCursor(filtered.cursorId);
-  }
-
-  // Fallback: head of the all-branches stream regardless of filter.
-  const placeholders: string[] = [];
-  const params: unknown[] = [];
-  for (let n = 0; n < BRANCH_SPAN_TYPES.length; n++) {
-    placeholders.push(`$${n + 1}`);
-    params.push(BRANCH_SPAN_TYPES[n]);
-  }
-  const head = await client.oneOrNone<{ cursorId: string | null }>(
-    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${span} WHERE "spanType" IN (${placeholders.join(', ')})`,
-    params,
-  );
-  return encodeDeltaCursor(head?.cursorId);
+  void span;
+  void filters;
+  return encodeDeltaCursor(await readSafeXactHorizon(client), 0);
 }

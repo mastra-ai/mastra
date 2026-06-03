@@ -3,13 +3,13 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { DbClient } from '../../../client';
 import type { FilterAccumulator } from './filters';
 import { newFilterAccumulator, whereOrEmpty } from './filters';
-import { encodeDeltaCursor, validateCursorId } from './polling';
+import { decodeDeltaCursor, encodeDeltaCursor, readSafeXactHorizon } from './polling';
 
 type SortDirection = 'ASC' | 'DESC';
 
 type SignalItems<Key extends string, Item> = Record<Key, Item[]>;
 
-interface SignalListConfig<Filters, Row extends { cursorId?: unknown }, Item, Key extends string> {
+interface SignalListConfig<Filters, Row extends { cursorId?: unknown; xactId?: unknown }, Item, Key extends string> {
   client: DbClient;
   table: string;
   filters: Filters;
@@ -29,24 +29,21 @@ export async function readSignalStreamHeadCursor<Filters>({
   filters,
   applyFilters,
 }: Pick<
-  SignalListConfig<Filters, { cursorId?: unknown }, unknown, string>,
+  SignalListConfig<Filters, { cursorId?: unknown; xactId?: unknown }, unknown, string>,
   'client' | 'table' | 'filters' | 'applyFilters'
 >): Promise<string> {
-  const acc = newFilterAccumulator();
-  applyFilters(acc, filters);
-  const filtered = await client.oneOrNone<{ cursorId: string | null }>(
-    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table} ${whereOrEmpty(acc)}`,
-    acc.params,
-  );
-  if (filtered?.cursorId != null) return encodeDeltaCursor(filtered.cursorId);
-
-  const head = await client.oneOrNone<{ cursorId: string | null }>(
-    `SELECT MAX("cursorId")::text AS "cursorId" FROM ${table}`,
-  );
-  return encodeDeltaCursor(head?.cursorId);
+  void table;
+  void filters;
+  void applyFilters;
+  return encodeDeltaCursor(await readSafeXactHorizon(client), 0);
 }
 
-export async function listSignalPage<Filters, Row extends { cursorId?: unknown }, Item, Key extends string>(
+export async function listSignalPage<
+  Filters,
+  Row extends { cursorId?: unknown; xactId?: unknown },
+  Item,
+  Key extends string,
+>(
   config: SignalListConfig<Filters, Row, Item, Key> & {
     page: number;
     perPage: number;
@@ -109,7 +106,12 @@ export async function listSignalPage<Filters, Row extends { cursorId?: unknown }
   };
 }
 
-export async function listSignalDelta<Filters, Row extends { cursorId?: unknown }, Item, Key extends string>(
+export async function listSignalDelta<
+  Filters,
+  Row extends { cursorId?: unknown; xactId?: unknown },
+  Item,
+  Key extends string,
+>(
   config: SignalListConfig<Filters, Row, Item, Key> & {
     after: string | undefined;
     limit: number;
@@ -127,17 +129,20 @@ export async function listSignalDelta<Filters, Row extends { cursorId?: unknown 
     return { ...responseItems(responseKey, []), delta: { limit, hasMore: false }, deltaCursor };
   }
 
-  const afterId = validateCursorId(after);
+  const afterCursor = decodeDeltaCursor(after);
+  const safeHorizon = await readSafeXactHorizon(client);
   const acc = newFilterAccumulator();
   applyFilters(acc, filters);
-  acc.conditions.push(`"cursorId" > $${acc.next++}::bigint`);
-  acc.params.push(afterId);
+  acc.conditions.push(`("xactId", "cursorId") > ($${acc.next++}::xid8, $${acc.next++}::bigint)`);
+  acc.params.push(afterCursor.xactId, afterCursor.cursorId);
+  acc.conditions.push(`"xactId" < $${acc.next++}::xid8`);
+  acc.params.push(safeHorizon);
 
   const rows = await client.manyOrNone<Row>(
     `SELECT ${selectColumns}
      FROM ${table}
      ${whereOrEmpty(acc)}
-     ORDER BY "cursorId" ASC
+     ORDER BY "xactId" ASC, "cursorId" ASC
      LIMIT $${acc.next++}`,
     [...acc.params, limit + 1],
   );
@@ -146,8 +151,8 @@ export async function listSignalDelta<Filters, Row extends { cursorId?: unknown 
   const visible = rows.slice(0, limit);
   const deltaCursor =
     visible.length > 0
-      ? encodeDeltaCursor(visible[visible.length - 1]!.cursorId)
-      : await readSignalStreamHeadCursor({ client, table, filters, applyFilters });
+      ? encodeDeltaCursor(visible[visible.length - 1]!.xactId, visible[visible.length - 1]!.cursorId)
+      : encodeDeltaCursor(safeHorizon, 0);
 
   return {
     ...responseItems(responseKey, visible.map(mapRow)),

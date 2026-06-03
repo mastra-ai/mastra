@@ -15,6 +15,9 @@ time-series, percentiles) prune partitions by `timestamp`. A small
 discovery cache table powers stale-while-revalidate lookups for entity
 names/types/labels.
 
+Delta polling uses Postgres transaction IDs and a safe transaction horizon so
+concurrent writers cannot cause late-committing rows to be skipped.
+
 `ensureNativePartitions()` now swallows the `42P07 relation already exists`
 error around `CREATE TABLE IF NOT EXISTS … PARTITION OF`, matching the
 existing guard used for base-table and index DDL. This makes concurrent

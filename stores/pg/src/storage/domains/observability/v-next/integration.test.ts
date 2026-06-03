@@ -9,6 +9,7 @@ import { PoolAdapter } from '../../../client';
 import { PostgresStoreVNext } from '../../../index';
 import { connectionString, TEST_CONFIG } from '../../../test-utils';
 import { ALL_SIGNAL_TABLES, qualifiedTable, TABLE_DISCOVERY, TABLE_LOG_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { decodeDeltaCursor } from './polling';
 import { ObservabilityStoragePostgresVNext } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -276,6 +277,18 @@ async function readCursorId(
     [idValue],
   );
   return Number(row.cursorId);
+}
+
+function expectCursorAtOrAfter(actual: string, expected: string): void {
+  const actualCursor = decodeDeltaCursor(actual);
+  const expectedCursor = decodeDeltaCursor(expected);
+  const actualXact = BigInt(actualCursor.xactId);
+  const expectedXact = BigInt(expectedCursor.xactId);
+
+  expect(
+    actualXact > expectedXact ||
+      (actualXact === expectedXact && BigInt(actualCursor.cursorId) >= BigInt(expectedCursor.cursorId)),
+  ).toBe(true);
 }
 
 async function seedDiscoveryCache(
@@ -912,6 +925,70 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
   });
 
   describe('delta polling — monotonic across partitions / chunks', () => {
+    it('does not skip a lower cursorId that commits after a higher cursorId', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_delta_xact',
+      });
+      const txA = await harness.baseClient.connect();
+      const txB = await harness.baseClient.connect();
+      let txAReleased = false;
+      let txBReleased = false;
+
+      try {
+        await withDeltaPolling(async () => {
+          const table = qualifiedTable(harness.schema, TABLE_LOG_EVENTS);
+
+          await txA.query('BEGIN');
+          await txA.query(
+            `INSERT INTO ${table} ("logId", "timestamp", "level", "message")
+             VALUES ($1, $2, $3, $4)`,
+            ['delta-xact-a', dayAt(0, 8).toISOString(), 'info', 'lower cursor commits last'],
+          );
+
+          await txB.query('BEGIN');
+          await txB.query(
+            `INSERT INTO ${table} ("logId", "timestamp", "level", "message")
+             VALUES ($1, $2, $3, $4)`,
+            ['delta-xact-b', dayAt(0, 8, 0, 1).toISOString(), 'info', 'higher cursor commits first'],
+          );
+          await txB.query('COMMIT');
+          txB.release();
+          txBReleased = true;
+
+          const heldBack = await harness.domain.listLogs({ mode: 'delta', after: '0:0', limit: 10 });
+          expect(heldBack.logs).toEqual([]);
+
+          await txA.query('COMMIT');
+          txA.release();
+          txAReleased = true;
+
+          const caughtUp = await harness.domain.listLogs({ mode: 'delta', after: heldBack.deltaCursor, limit: 10 });
+          expect(caughtUp.logs.map(log => log.logId).sort()).toEqual(['delta-xact-a', 'delta-xact-b']);
+
+          const next = await harness.domain.listLogs({ mode: 'delta', after: caughtUp.deltaCursor, limit: 10 });
+          expect(next.logs).toEqual([]);
+        });
+      } finally {
+        if (!txAReleased) {
+          try {
+            await txA.query('ROLLBACK');
+          } catch {
+            // The transaction may already be committed.
+          }
+          txA.release();
+        }
+        if (!txBReleased) {
+          try {
+            await txB.query('ROLLBACK');
+          } catch {
+            // The transaction may already be committed.
+          }
+          txB.release();
+        }
+        await harness.close();
+      }
+    });
+
     it('every inserted root span surfaces exactly once across native-partition delta polls', async () => {
       const harness = await createHarness({
         schemaPrefix: 'obs_vnext_delta_native',
@@ -951,13 +1028,13 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
           }
 
           const seen = new Set<string>();
-          let cursor = '0';
+          let cursor = '0:0';
           let hasMore = true;
 
           while (hasMore) {
             const page = await harness.domain.listTraces({ mode: 'delta', after: cursor, limit: 2 });
             page.spans.forEach(span => seen.add(span.spanId));
-            expect(Number(page.deltaCursor)).toBeGreaterThanOrEqual(Number(cursor));
+            expectCursorAtOrAfter(page.deltaCursor, cursor);
             cursor = page.deltaCursor;
             hasMore = page.delta?.hasMore ?? false;
             if (!hasMore && page.spans.length === 0) {
