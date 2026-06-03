@@ -88,7 +88,6 @@ import {
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
 import { codeModeAgent } from './agents/code-mode-agent';
-import { workingMemoryClassicAgent, workingMemorySignalsAgent } from './agents/working-memory-test-agent';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -133,8 +132,6 @@ export const mastra = new Mastra({
     cryptoResearchAgent,
     slackDemoAgent,
     codeModeAgent,
-    workingMemoryClassicAgent,
-    workingMemorySignalsAgent,
   },
   processors: {
     moderationProcessor,
