@@ -100,6 +100,12 @@ In-memory storage resets when the process changes. Only suitable for development
 ]}
 />
 
+## Managed tables
+
+The storage implementation creates the core storage tables automatically, including `mastra_notifications` for notification inbox records and delivery metadata.
+
+`LibSQLStore` exposes notification storage through `getStore('notifications')`.
+
 ## Initialization
 
 When you pass storage to the Mastra class, `init()` is called automatically to create the [core schema](/reference/storage/overview#core-schema):

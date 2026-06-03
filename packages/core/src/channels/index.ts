@@ -23,6 +23,8 @@ export type {
   ChannelProvider,
   InlineLinkEntry,
   PostableMessage,
+  ResolveResourceId,
+  ResolveResourceIdContext,
   StaticToolDisplay,
   StreamingConfig,
   StreamingOnlyToolDisplay,

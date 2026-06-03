@@ -1,4 +1,4 @@
-import type { MastraUIMessage } from '@mastra/react';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 
 type StreamErrorChunk = {
   runId?: string;
@@ -34,12 +34,12 @@ const getFinishReason = (chunk: FinishChunkLike) => {
 export const isMaxStepsFinishChunk = (chunk: FinishChunkLike) => getFinishReason(chunk) === MAX_STEPS_FINISH_REASON;
 
 /**
- * Build a `MastraUIMessage` representing a stream `error` chunk so it can be
+ * Build a `MastraDBMessage` representing a stream `error` chunk so it can be
  * rendered by `error-aware-text`. Prefer the human-readable `message` field on
  * the error payload when present, falling back to a JSON dump so we never
  * silently swallow an error.
  */
-export const buildStreamErrorMessage = (chunk: StreamErrorChunk): MastraUIMessage => {
+export const buildStreamErrorMessage = (chunk: StreamErrorChunk): MastraDBMessage => {
   const errorValue = chunk.payload?.error;
   let text: string;
   if (typeof errorValue === 'string') {
@@ -68,9 +68,13 @@ export const buildStreamErrorMessage = (chunk: StreamErrorChunk): MastraUIMessag
   return {
     id: `error-${chunk.runId ?? 'unknown'}-${Date.now()}`,
     role: 'assistant',
-    parts: [{ type: 'text', text }],
-    metadata: { status: 'error' },
-  } as MastraUIMessage;
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata: { status: 'error' },
+    },
+  } as MastraDBMessage;
 };
 
 export const buildMaxStepsStreamErrorMessage = (chunk: FinishChunkLike, maxSteps?: number) =>

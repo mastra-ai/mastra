@@ -127,6 +127,16 @@ export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
 
 /**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/send-message'>>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
+
+/**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface SubscribeAgentThreadParams {
@@ -1429,6 +1439,26 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+/**
+ * A single agent that references another agent as a sub-agent. Includes both
+ * public and the caller's own private agents — anything the caller can read.
+ */
+export interface StoredAgentDependent {
+  id: string;
+  name: string;
+}
+
+/**
+ * Response for listing dependents of a stored agent.
+ * `dependents` lists caller-readable references (with names).
+ * `hiddenCount` aggregates dependents the caller cannot read; it is only
+ * non-zero when the target agent is public.
+ */
+export interface StoredAgentDependentsResponse {
+  dependents: StoredAgentDependent[];
+  hiddenCount: number;
 }
 
 // ============================================================================

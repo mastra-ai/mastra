@@ -5,6 +5,7 @@ import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
+  MCPAuthInfoToUserMapper,
   MCPServerConfig,
   ServerInfo,
   ServerDetailInfo,
@@ -49,6 +50,7 @@ import type {
   LoggingLevel,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
+import type { Context } from 'hono';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
@@ -100,6 +102,7 @@ export class MCPServer extends MCPServerBase {
   private definedPrompts?: MastraPrompt[];
   private promptOptions?: MCPServerPrompts;
   private jsonSchemaValidator?: jsonSchemaValidator;
+  private mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
   private subscriptions: Set<string> = new Set();
   private currentLoggingLevel: LoggingLevel | undefined;
 
@@ -209,6 +212,7 @@ export class MCPServer extends MCPServerBase {
    * @param opts.prompts - Optional prompt configuration for exposing reusable templates
    * @param opts.id - Optional unique identifier (generated if not provided)
    * @param opts.description - Optional description of what the server does
+   * @param opts.mapAuthInfoToUser - Optional mapper from MCP `extra.authInfo` to the FGA user context
    *
    * @example
    * ```typescript
@@ -302,6 +306,7 @@ export class MCPServer extends MCPServerBase {
     this.resourceOptions = this.mergeAppResources(opts.resources, opts.appResources);
     this.promptOptions = opts.prompts;
     this.jsonSchemaValidator = opts.jsonSchemaValidator;
+    this.mapAuthInfoToUser = opts.mapAuthInfoToUser;
 
     const capabilities: ServerCapabilities = {
       tools: {},
@@ -598,7 +603,7 @@ export class MCPServer extends MCPServerBase {
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
     serverInstance.setRequestHandler(ListToolsRequestSchema, async (_request, extra) => {
-      const proxiedContext = this.createProxiedRequestContext(extra);
+      const proxiedContext = await this.createProxiedRequestContext(extra);
       const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
       return {
         tools: tools.map(([, tool]) => {
@@ -688,12 +693,7 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
-        const proxiedContext = new RequestContext();
-        if (extra) {
-          Object.entries(extra).forEach(([key, value]) => {
-            proxiedContext.set(key, value);
-          });
-        }
+        const proxiedContext = await this.createProxiedRequestContext(extra);
 
         const mcpOptions: MastraToolInvocationOptions = {
           messages: [],
@@ -1435,9 +1435,11 @@ export class MCPServer extends MCPServerBase {
    * ```
    */
   public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
+    const honoContext = context as unknown as Context;
+
     try {
       if (url.pathname === ssePath) {
-        return streamSSE(context, async stream => {
+        return streamSSE(honoContext, async stream => {
           await this.connectHonoSSE({
             messagePath,
             stream,
@@ -1445,22 +1447,22 @@ export class MCPServer extends MCPServerBase {
         });
       } else if (url.pathname === messagePath) {
         this.logger.debug('Received message');
-        const sessionId = context.req.query('sessionId');
+        const sessionId = honoContext.req.query('sessionId');
         this.logger.debug('Received message for sessionId', { sessionId });
         if (!sessionId) {
-          return context.text('No sessionId provided', 400);
+          return honoContext.text('No sessionId provided', 400);
         }
         if (!this.sseHonoTransports.has(sessionId)) {
-          return context.text(`No transport found for sessionId ${sessionId}`, 400);
+          return honoContext.text(`No transport found for sessionId ${sessionId}`, 400);
         }
-        const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(context);
+        const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(honoContext);
         if (!message) {
-          return context.text('Transport not found', 400);
+          return honoContext.text('Transport not found', 400);
         }
         return message;
       } else {
         this.logger.debug('Unknown path:', { path: url.pathname });
-        return context.text('Unknown path', 404);
+        return honoContext.text('Unknown path', 404);
       }
     } catch (e) {
       const mastraError = new MastraError(
@@ -2181,14 +2183,51 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
-  private createProxiedRequestContext(extra?: unknown): RequestContext {
+  private async createProxiedRequestContext(extra?: unknown): Promise<RequestContext> {
     const proxiedContext = new RequestContext();
+    let extraRecord: Record<string, unknown> | undefined;
     if (extra && typeof extra === 'object') {
-      Object.entries(extra as Record<string, unknown>).forEach(([key, value]) => {
+      extraRecord = extra as Record<string, unknown>;
+      Object.entries(extraRecord).forEach(([key, value]) => {
         proxiedContext.set(key, value);
       });
     }
+    await this.resolveMappedFGAUser(proxiedContext, extraRecord);
     return proxiedContext;
+  }
+
+  private async resolveMappedFGAUser(
+    requestContext?: RequestContext,
+    extra?: Record<string, unknown>,
+  ): Promise<unknown> {
+    if (!requestContext) {
+      return undefined;
+    }
+
+    const existingUser = requestContext.get('user');
+    if (existingUser) {
+      return existingUser;
+    }
+
+    if (!this.mapAuthInfoToUser) {
+      return undefined;
+    }
+
+    const authInfo = extra && 'authInfo' in extra ? extra.authInfo : requestContext.get('authInfo');
+    if (!authInfo) {
+      return undefined;
+    }
+
+    const user = await this.mapAuthInfoToUser({
+      authInfo,
+      extra: extra ?? { authInfo },
+      requestContext,
+    });
+    if (user) {
+      requestContext.set('user', user);
+    }
+
+    return user;
   }
 
   private async getAuthorizedConvertedToolEntries(
@@ -2200,7 +2239,7 @@ export class MCPServer extends MCPServerBase {
       return entries;
     }
 
-    const user = requestContext.get('user');
+    const user = await this.resolveMappedFGAUser(requestContext);
     if (!user) {
       return [];
     }
@@ -2228,18 +2267,28 @@ export class MCPServer extends MCPServerBase {
       return;
     }
 
-    const { checkFGA, FGADeniedError, MastraFGAPermissions } = await import('@mastra/core/auth/ee');
-    const resourceId = JSON.stringify([this.id, toolId]);
-    const user = requestContext?.get('user');
+    const { getMCPToolFGAResourceId, requireFGA, FGADeniedError, MastraFGAPermissions } =
+      await import('@mastra/core/auth/ee');
+    const resourceId = getMCPToolFGAResourceId(this.id, toolId);
+    const user = await this.resolveMappedFGAUser(requestContext);
     if (!user) {
       throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
     }
 
-    await checkFGA({
+    await requireFGA({
       fgaProvider,
       user,
       resource: { type: 'tool', id: resourceId },
       permission: MastraFGAPermissions.TOOLS_EXECUTE,
+      requestContext,
+      context: {
+        resourceId,
+      },
+      metadata: {
+        mcpServerId: this.id,
+        mcpServerName: this.name,
+        toolId,
+      },
     });
   }
 

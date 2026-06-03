@@ -16,6 +16,10 @@ import { SpannerDB } from './db';
 import { AgentsSpanner } from './domains/agents';
 import { BackgroundTasksSpanner } from './domains/background-tasks';
 import { BlobsSpanner } from './domains/blobs';
+import { ChannelsSpanner } from './domains/channels';
+import { DatasetsSpanner } from './domains/datasets';
+import { ExperimentsSpanner } from './domains/experiments';
+import { FavoritesSpanner } from './domains/favorites';
 import { MCPClientsSpanner } from './domains/mcp-clients';
 import { MCPServersSpanner } from './domains/mcp-servers';
 import { MemorySpanner } from './domains/memory';
@@ -27,6 +31,7 @@ import { ScorerDefinitionsSpanner } from './domains/scorer-definitions';
 import { ScoresSpanner } from './domains/scores';
 import { SkillsSpanner } from './domains/skills';
 import { WorkflowsSpanner } from './domains/workflows';
+import { WorkspacesSpanner } from './domains/workspaces';
 import { SpannerStore } from '.';
 import type { SpannerConfig } from '.';
 
@@ -134,6 +139,14 @@ if (ENABLE_TESTS) {
       const client = makeClient();
       return new ScoresSpanner({ database: client.instance(INSTANCE_ID).database(directDbId) });
     },
+    createDatasetsDomain: () => {
+      const client = makeClient();
+      return new DatasetsSpanner({ database: client.instance(INSTANCE_ID).database(directDbId) });
+    },
+    createExperimentsDomain: () => {
+      const client = makeClient();
+      return new ExperimentsSpanner({ database: client.instance(INSTANCE_ID).database(directDbId) });
+    },
   });
 
   // Direct-usage smoke test for the Agents domain (the shared
@@ -163,6 +176,776 @@ if (ENABLE_TESTS) {
       await agentsDomain.delete(agentId);
       const afterDelete = await agentsDomain.getById(agentId);
       expect(afterDelete).toBeNull();
+    });
+  });
+
+  // The shared test factory has no slot for workspaces (a versioned domain), so
+  // exercise its thin-record + version snapshot surface inline against the
+  // already-initialized shared database.
+  describe('WorkspacesSpanner integration', () => {
+    let workspaces: WorkspacesSpanner;
+
+    beforeAll(async () => {
+      const store = new SpannerStore(sharedConfig);
+      await store.init();
+      workspaces = (await store.getStore('workspaces')) as WorkspacesSpanner;
+    });
+
+    it('creates a draft workspace with a seed version', async () => {
+      const id = `ws-${randomUUID()}`;
+      const created = await workspaces.create({
+        workspace: { id, name: 'My Workspace', description: 'first', autoSync: true } as any,
+      });
+      expect(created.id).toBe(id);
+      expect(created.status).toBe('draft');
+      expect(created.activeVersionId).toBeUndefined();
+
+      const latest = await workspaces.getLatestVersion(id);
+      expect(latest?.versionNumber).toBe(1);
+      expect(latest?.name).toBe('My Workspace');
+      expect(latest?.autoSync).toBe(true);
+
+      const resolved = await workspaces.getByIdResolved(id, { status: 'draft' });
+      expect(resolved?.name).toBe('My Workspace');
+      expect(resolved?.description).toBe('first');
+    });
+
+    it('creates a new version when config fields change but not for metadata-only updates', async () => {
+      const id = `ws-${randomUUID()}`;
+      await workspaces.create({ workspace: { id, name: 'W', description: 'a' } as any });
+
+      // metadata-only update: no new version
+      await workspaces.update({ id, metadata: { team: 'x' } } as any);
+      expect(await workspaces.countVersions(id)).toBe(1);
+
+      // config change: bumps to version 2
+      const updated = await workspaces.update({ id, description: 'b' } as any);
+      expect(updated).toBeDefined();
+      expect(await workspaces.countVersions(id)).toBe(2);
+      const latest = await workspaces.getLatestVersion(id);
+      expect(latest?.versionNumber).toBe(2);
+      expect(latest?.description).toBe('b');
+      expect(latest?.changedFields).toContain('description');
+
+      // identical config value: no new version
+      await workspaces.update({ id, description: 'b' } as any);
+      expect(await workspaces.countVersions(id)).toBe(2);
+    });
+
+    it('auto-publishes when activeVersionId is set', async () => {
+      const id = `ws-${randomUUID()}`;
+      await workspaces.create({ workspace: { id, name: 'W' } as any });
+      const v1 = await workspaces.getLatestVersion(id);
+      const updated = await workspaces.update({ id, activeVersionId: v1!.id } as any);
+      expect(updated.status).toBe('published');
+      expect(updated.activeVersionId).toBe(v1!.id);
+    });
+
+    it('resolves the active version by default and a specific version by id', async () => {
+      const id = `ws-${randomUUID()}`;
+      await workspaces.create({ workspace: { id, name: 'orig' } as any });
+      const v1 = await workspaces.getLatestVersion(id);
+      await workspaces.update({ id, name: 'orig', description: 'v2desc' } as any);
+      const v2 = await workspaces.getVersionByNumber(id, 2);
+      await workspaces.update({ id, activeVersionId: v2!.id } as any);
+
+      const publishedResolved = await workspaces.getByIdResolved(id);
+      expect(publishedResolved?.description).toBe('v2desc');
+
+      const pinnedResolved = await workspaces.getByIdResolved(id, { versionId: v1!.id });
+      expect(pinnedResolved?.description).toBeUndefined();
+    });
+
+    it('lists workspaces and paginates versions', async () => {
+      const id = `ws-${randomUUID()}`;
+      const authorId = `author-${randomUUID()}`;
+      await workspaces.create({ workspace: { id, name: 'L', authorId } as any });
+      await workspaces.update({ id, description: 'v2' } as any);
+      await workspaces.update({ id, description: 'v3' } as any);
+
+      const listed = await workspaces.list({ authorId });
+      expect(listed.workspaces.map(w => w.id)).toContain(id);
+      expect(listed.total).toBe(1);
+
+      const versions = await workspaces.listVersions({ workspaceId: id, perPage: 2, page: 0 });
+      expect(versions.total).toBe(3);
+      expect(versions.versions).toHaveLength(2);
+      expect(versions.hasMore).toBe(true);
+    });
+
+    it('deletes a workspace and all its versions', async () => {
+      const id = `ws-${randomUUID()}`;
+      await workspaces.create({ workspace: { id, name: 'D' } as any });
+      await workspaces.update({ id, description: 'v2' } as any);
+      expect(await workspaces.countVersions(id)).toBe(2);
+
+      await workspaces.delete(id);
+      expect(await workspaces.getById(id)).toBeNull();
+      expect(await workspaces.countVersions(id)).toBe(0);
+    });
+
+    it('getById / getVersion return null for unknown ids', async () => {
+      expect(await workspaces.getById(`missing-${randomUUID()}`)).toBeNull();
+      expect(await workspaces.getVersion(`missing-${randomUUID()}`)).toBeNull();
+      expect(await workspaces.getVersionByNumber(`missing-${randomUUID()}`, 1)).toBeNull();
+      expect(await workspaces.getLatestVersion(`missing-${randomUUID()}`)).toBeNull();
+    });
+
+    it('createVersion appends a version and getVersion fetches it by id', async () => {
+      const id = `ws-${randomUUID()}`;
+      await workspaces.create({ workspace: { id, name: 'CV' } as any });
+      const versionId = randomUUID();
+      const created = await workspaces.createVersion({
+        id: versionId,
+        workspaceId: id,
+        versionNumber: 2,
+        name: 'CV',
+        description: 'manual v2',
+        autoSync: true,
+        changedFields: ['description'],
+        changeMessage: 'manual',
+      } as any);
+      expect(created.id).toBe(versionId);
+
+      const fetched = await workspaces.getVersion(versionId);
+      expect(fetched?.versionNumber).toBe(2);
+      expect(fetched?.description).toBe('manual v2');
+      expect(fetched?.autoSync).toBe(true);
+      expect(await workspaces.getVersionByNumber(id, 2)).toMatchObject({ id: versionId });
+      expect((await workspaces.getLatestVersion(id))?.versionNumber).toBe(2);
+    });
+
+    it('deleteVersion removes a single version; deleteVersionsByParentId clears all', async () => {
+      const id = `ws-${randomUUID()}`;
+      await workspaces.create({ workspace: { id, name: 'DV' } as any });
+      await workspaces.update({ id, description: 'v2' } as any);
+      const v2 = await workspaces.getVersionByNumber(id, 2);
+
+      await workspaces.deleteVersion(v2!.id);
+      expect(await workspaces.getVersion(v2!.id)).toBeNull();
+      expect(await workspaces.countVersions(id)).toBe(1);
+
+      await workspaces.deleteVersionsByParentId(id);
+      expect(await workspaces.countVersions(id)).toBe(0);
+    });
+
+    it('list paginates and filters by metadata', async () => {
+      const tag = `grp-${randomUUID()}`;
+      for (let i = 0; i < 3; i++) {
+        await workspaces.create({
+          workspace: { id: `ws-${randomUUID()}`, name: `M${i}`, metadata: { grp: tag } } as any,
+        });
+      }
+      const page0 = await workspaces.list({ metadata: { grp: tag }, page: 0, perPage: 2 });
+      expect(page0.total).toBe(3);
+      expect(page0.workspaces).toHaveLength(2);
+      expect(page0.hasMore).toBe(true);
+
+      const all = await workspaces.list({ metadata: { grp: tag }, perPage: false });
+      expect(all.workspaces).toHaveLength(3);
+      expect(all.hasMore).toBe(false);
+    });
+
+    it('listResolved merges the active version config into each record', async () => {
+      const authorId = `author-${randomUUID()}`;
+      const id = `ws-${randomUUID()}`;
+      await workspaces.create({ workspace: { id, name: 'R', description: 'd1', authorId } as any });
+      const resolved = await workspaces.listResolved({ authorId } as any);
+      const row = resolved.workspaces.find(w => w.id === id);
+      expect(row?.name).toBe('R');
+      expect(row?.description).toBe('d1');
+    });
+  });
+
+  // Dedicated, explicit per-method coverage for the favorites domain. The shared
+  // `createTestSuite` (registered at the top of this file) also exercises these
+  // paths; this block guarantees every public method has direct coverage and
+  // pins Spanner-specific behavior (composite primary key, counter persistence).
+  describe('FavoritesSpanner methods', () => {
+    let favorites: FavoritesSpanner;
+    let agents: AgentsSpanner;
+    let skills: SkillsSpanner;
+
+    const makeAgent = async (id: string) => {
+      await agents.create({
+        agent: { id, name: id, instructions: 'x', model: { provider: 'openai', name: 'gpt-4' } } as any,
+      });
+    };
+    const makeSkill = async (id: string) => {
+      await skills.create({ skill: { id, name: id, description: 'd', instructions: 'i' } as any });
+    };
+
+    beforeAll(async () => {
+      const store = new SpannerStore(sharedConfig);
+      await store.init();
+      favorites = (await store.getStore('favorites')) as FavoritesSpanner;
+      agents = (await store.getStore('agents')) as AgentsSpanner;
+      skills = (await store.getStore('skills')) as SkillsSpanner;
+    });
+
+    beforeEach(async () => {
+      await favorites.dangerouslyClearAll();
+    });
+
+    it('favorite increments the counter and is idempotent', async () => {
+      const id = `a-${randomUUID()}`;
+      await makeAgent(id);
+      expect(await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: id })).toEqual({
+        favorited: true,
+        favoriteCount: 1,
+      });
+      expect(await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: id })).toEqual({
+        favorited: true,
+        favoriteCount: 1,
+      });
+      expect(await favorites.favorite({ userId: 'u2', entityType: 'agent', entityId: id })).toEqual({
+        favorited: true,
+        favoriteCount: 2,
+      });
+      expect((await agents.getById(id))?.favoriteCount).toBe(2);
+    });
+
+    it('favorite throws when the entity does not exist', async () => {
+      await expect(
+        favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: `missing-${randomUUID()}` }),
+      ).rejects.toThrow();
+    });
+
+    it('unfavorite decrements, clamps at 0, and is idempotent', async () => {
+      const id = `s-${randomUUID()}`;
+      await makeSkill(id);
+      await favorites.favorite({ userId: 'u1', entityType: 'skill', entityId: id });
+      expect(await favorites.unfavorite({ userId: 'u1', entityType: 'skill', entityId: id })).toEqual({
+        favorited: false,
+        favoriteCount: 0,
+      });
+      // Idempotent + clamped.
+      expect(await favorites.unfavorite({ userId: 'u1', entityType: 'skill', entityId: id })).toEqual({
+        favorited: false,
+        favoriteCount: 0,
+      });
+      expect((await skills.getById(id))?.favoriteCount).toBe(0);
+    });
+
+    it('isFavorited / isFavoritedBatch report state per user', async () => {
+      const a1 = `a-${randomUUID()}`;
+      const a2 = `a-${randomUUID()}`;
+      await makeAgent(a1);
+      await makeAgent(a2);
+      await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: a1 });
+
+      expect(await favorites.isFavorited({ userId: 'u1', entityType: 'agent', entityId: a1 })).toBe(true);
+      expect(await favorites.isFavorited({ userId: 'u2', entityType: 'agent', entityId: a1 })).toBe(false);
+      expect(
+        await favorites.isFavoritedBatch({ userId: 'u1', entityType: 'agent', entityIds: [a1, a2, 'missing'] }),
+      ).toEqual(new Set([a1]));
+      expect((await favorites.isFavoritedBatch({ userId: 'u1', entityType: 'agent', entityIds: [] })).size).toBe(0);
+    });
+
+    it('listFavoritedIds is scoped by user and entity type', async () => {
+      const a1 = `a-${randomUUID()}`;
+      const s1 = `s-${randomUUID()}`;
+      await makeAgent(a1);
+      await makeSkill(s1);
+      await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: a1 });
+      await favorites.favorite({ userId: 'u1', entityType: 'skill', entityId: s1 });
+
+      expect(await favorites.listFavoritedIds({ userId: 'u1', entityType: 'agent' })).toEqual([a1]);
+      expect(await favorites.listFavoritedIds({ userId: 'u1', entityType: 'skill' })).toEqual([s1]);
+      expect(await favorites.listFavoritedIds({ userId: 'u2', entityType: 'agent' })).toEqual([]);
+    });
+
+    it('deleteFavoritesForEntity removes rows, resets the counter, and returns the count', async () => {
+      const id = `a-${randomUUID()}`;
+      await makeAgent(id);
+      await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: id });
+      await favorites.favorite({ userId: 'u2', entityType: 'agent', entityId: id });
+
+      const removed = await favorites.deleteFavoritesForEntity({ entityType: 'agent', entityId: id });
+      expect(removed).toBe(2);
+      expect((await agents.getById(id))?.favoriteCount).toBe(0);
+      expect(await favorites.isFavorited({ userId: 'u1', entityType: 'agent', entityId: id })).toBe(false);
+    });
+
+    it('agent and skill counters with colliding ids stay independent', async () => {
+      const id = `shared-${randomUUID()}`;
+      await makeAgent(id);
+      await makeSkill(id);
+      await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: id });
+      await favorites.favorite({ userId: 'u1', entityType: 'skill', entityId: id });
+      expect((await agents.getById(id))?.favoriteCount).toBe(1);
+      expect((await skills.getById(id))?.favoriteCount).toBe(1);
+    });
+
+    it('concurrent same-user favorite calls are idempotent (counter never exceeds 1)', async () => {
+      const id = `a-${randomUUID()}`;
+      await makeAgent(id);
+      // Fire several concurrent favorite() calls for the same key. Spanner's
+      // serializable isolation + ABORTED retry must collapse them into one row.
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: id })),
+      );
+      for (const r of results) expect(r.favorited).toBe(true);
+      expect((await agents.getById(id))?.favoriteCount).toBe(1);
+      expect(await favorites.listFavoritedIds({ userId: 'u1', entityType: 'agent' })).toEqual([id]);
+    });
+
+    it('favorites listing on agents respects draft/published/archived isolation rules', async () => {
+      // Favorites-feature queries (entityIds / pinFavoritedFor / favoritedOnly)
+      // intentionally return the favorited candidate set across all statuses —
+      // this matches the cross-adapter conformance contract (and the Postgres
+      // reference, which applies no default status). A normal list() with no
+      // favorites params still defaults to published-only.
+      const u = `u-${randomUUID()}`;
+      const draft = `a-${randomUUID()}`;
+      const published = `a-${randomUUID()}`;
+      await makeAgent(draft); // create() => draft
+      await makeAgent(published);
+      const pubV = await agents.getLatestVersion(published);
+      await agents.update({ id: published, activeVersionId: pubV!.id, status: 'published' } as any);
+
+      await favorites.favorite({ userId: u, entityType: 'agent', entityId: draft });
+      await favorites.favorite({ userId: u, entityType: 'agent', entityId: published });
+
+      // favoritedOnly returns BOTH (draft + published) — favorites span statuses.
+      const favOnly = await agents.list({ favoritedOnly: true, pinFavoritedFor: u, page: 0, perPage: 50 });
+      expect(favOnly.agents.map(a => a.id).sort()).toEqual([draft, published].sort());
+
+      // entityIds also bypasses the published default for the requested set.
+      const byIds = await agents.list({ entityIds: [draft], page: 0, perPage: 50 });
+      expect(byIds.agents.map(a => a.id)).toEqual([draft]);
+
+      // A plain list() (no favorites params) still hides the draft.
+      const plain = await agents.list({ entityIds: undefined, page: 0, perPage: 200 } as any);
+      const plainIds = plain.agents.map(a => a.id);
+      expect(plainIds).toContain(published);
+      expect(plainIds).not.toContain(draft);
+
+      // An explicit status filter is still honored alongside a favorites query.
+      const favPublished = await agents.list({
+        pinFavoritedFor: u,
+        favoritedOnly: true,
+        status: 'published',
+        page: 0,
+        perPage: 50,
+      });
+      expect(favPublished.agents.map(a => a.id)).toEqual([published]);
+
+      // pinFavoritedFor is a favorites-feature query: it suppresses the published
+      // default so the favorited draft surfaces too (matching the conformance
+      // contract / Postgres reference). Both favorited agents appear.
+      const pinned = await agents.list({ pinFavoritedFor: u, page: 0, perPage: 200 });
+      const pinnedIds = pinned.agents.map(a => a.id);
+      expect(pinnedIds).toContain(published);
+      expect(pinnedIds).toContain(draft);
+    });
+  });
+
+  describe('ChannelsSpanner methods', () => {
+    let channels: ChannelsSpanner;
+
+    const sampleInstallation = (over: Partial<any> = {}) => ({
+      id: `inst-${randomUUID()}`,
+      platform: 'slack',
+      agentId: `ag-${randomUUID()}`,
+      status: 'active' as const,
+      webhookId: `wh-${randomUUID()}`,
+      data: { botToken: 'xoxb', teamId: 'T1' },
+      configHash: `hash-${randomUUID()}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...over,
+    });
+
+    beforeAll(async () => {
+      const store = new SpannerStore(sharedConfig);
+      await store.init();
+      channels = (await store.getStore('channels')) as ChannelsSpanner;
+    });
+
+    beforeEach(async () => {
+      await channels.dangerouslyClearAll();
+    });
+
+    it('saveInstallation upserts and preserves createdAt; getInstallation round-trips JSON', async () => {
+      const created = new Date('2025-01-01T00:00:00.000Z');
+      const inst = sampleInstallation({ id: 'inst-1', status: 'pending', createdAt: created });
+      await channels.saveInstallation(inst);
+
+      let fetched = await channels.getInstallation('inst-1');
+      expect(fetched?.status).toBe('pending');
+      expect(fetched?.data).toEqual(inst.data);
+      expect(fetched?.createdAt.toISOString()).toBe('2025-01-01T00:00:00.000Z');
+
+      await channels.saveInstallation({ ...inst, status: 'active', data: { ...inst.data, teamId: 'T2' } });
+      fetched = await channels.getInstallation('inst-1');
+      expect(fetched?.status).toBe('active');
+      expect((fetched?.data as any).teamId).toBe('T2');
+      expect(fetched?.createdAt.toISOString()).toBe('2025-01-01T00:00:00.000Z');
+      expect(await channels.getInstallation('nope')).toBeNull();
+    });
+
+    it('getInstallationByAgent prefers active, then pending; scoped per platform', async () => {
+      const agentId = `ag-${randomUUID()}`;
+      await channels.saveInstallation(sampleInstallation({ id: 'p', platform: 'slack', agentId, status: 'pending' }));
+      await channels.saveInstallation(sampleInstallation({ id: 'a', platform: 'slack', agentId, status: 'active' }));
+      expect((await channels.getInstallationByAgent('slack', agentId))?.id).toBe('a');
+      expect(await channels.getInstallationByAgent('discord', agentId)).toBeNull();
+    });
+
+    it('getInstallationByWebhookId finds the row and tolerates missing/absent webhooks', async () => {
+      await channels.saveInstallation(sampleInstallation({ id: 'w', webhookId: 'wh-known' }));
+      // Two installs without a webhookId must coexist (NULL_FILTERED unique index).
+      await channels.saveInstallation(sampleInstallation({ id: 'n1', webhookId: undefined }));
+      await channels.saveInstallation(sampleInstallation({ id: 'n2', webhookId: undefined }));
+      expect((await channels.getInstallationByWebhookId('wh-known'))?.id).toBe('w');
+      expect(await channels.getInstallationByWebhookId('missing')).toBeNull();
+      expect((await channels.getInstallation('n1'))?.webhookId).toBeUndefined();
+    });
+
+    it('listInstallations returns per-platform installs newest-first; deleteInstallation is idempotent', async () => {
+      const t1 = new Date('2024-01-01T00:00:00.000Z');
+      const t2 = new Date('2024-01-02T00:00:00.000Z');
+      await channels.saveInstallation(
+        sampleInstallation({ id: 'i1', platform: 'slack', createdAt: t1, updatedAt: t1 }),
+      );
+      await channels.saveInstallation(
+        sampleInstallation({ id: 'i2', platform: 'slack', createdAt: t2, updatedAt: t2 }),
+      );
+      await channels.saveInstallation(sampleInstallation({ id: 'i3', platform: 'discord' }));
+      const slack = await channels.listInstallations('slack');
+      expect(slack.map(i => i.id)).toEqual(['i2', 'i1']); // newest-first
+      expect(await channels.listInstallations('telegram')).toEqual([]);
+
+      await channels.deleteInstallation('i1');
+      expect(await channels.getInstallation('i1')).toBeNull();
+      await expect(channels.deleteInstallation('i1')).resolves.not.toThrow();
+    });
+
+    it('saveConfig / getConfig upsert and deleteConfig removes per platform', async () => {
+      await channels.saveConfig({ platform: 'slack', data: { appConfigToken: 'old' }, updatedAt: new Date() });
+      await channels.saveConfig({
+        platform: 'slack',
+        data: { appConfigToken: 'new', clientId: 'c1' },
+        updatedAt: new Date(),
+      });
+      const cfg = await channels.getConfig('slack');
+      expect((cfg?.data as any).appConfigToken).toBe('new');
+      expect((cfg?.data as any).clientId).toBe('c1');
+      expect(await channels.getConfig('discord')).toBeNull();
+
+      await channels.deleteConfig('slack');
+      expect(await channels.getConfig('slack')).toBeNull();
+      await expect(channels.deleteConfig('slack')).resolves.not.toThrow();
+    });
+  });
+
+  describe('ExperimentsSpanner methods', () => {
+    let experiments: ExperimentsSpanner;
+
+    const baseExp = (over: Partial<any> = {}) => ({
+      datasetId: null,
+      datasetVersion: null,
+      targetType: 'agent' as const,
+      targetId: 'agent-1',
+      totalItems: 1,
+      ...over,
+    });
+    const baseResult = (experimentId: string, over: Partial<any> = {}) => ({
+      experimentId,
+      itemId: `item-${randomUUID()}`,
+      itemDatasetVersion: null,
+      input: { q: 'x' },
+      output: null,
+      groundTruth: null,
+      error: null,
+      startedAt: new Date(),
+      completedAt: new Date(),
+      retryCount: 0,
+      ...over,
+    });
+
+    beforeAll(async () => {
+      const store = new SpannerStore(sharedConfig);
+      await store.init();
+      experiments = (await store.getStore('experiments')) as ExperimentsSpanner;
+    });
+
+    beforeEach(async () => {
+      await experiments.dangerouslyClearAll();
+    });
+
+    it('createExperiment applies defaults and getExperimentById round-trips', async () => {
+      const exp = await experiments.createExperiment(baseExp({ name: 'e1', metadata: { k: 'v' } }));
+      expect(exp.status).toBe('pending');
+      expect(exp.succeededCount).toBe(0);
+      expect(exp.failedCount).toBe(0);
+      expect(exp.skippedCount).toBe(0);
+      expect(exp.startedAt).toBeNull();
+      const fetched = await experiments.getExperimentById({ id: exp.id });
+      expect(fetched?.name).toBe('e1');
+      expect(fetched?.metadata).toEqual({ k: 'v' });
+      expect(await experiments.getExperimentById({ id: 'missing' })).toBeNull();
+    });
+
+    it('updateExperiment patches fields, bumps counts, and throws when missing', async () => {
+      const exp = await experiments.createExperiment(baseExp());
+      const started = new Date();
+      const updated = await experiments.updateExperiment({
+        id: exp.id,
+        status: 'running',
+        succeededCount: 2,
+        startedAt: started,
+      });
+      expect(updated.status).toBe('running');
+      expect(updated.succeededCount).toBe(2);
+      expect(updated.startedAt?.toISOString()).toBe(started.toISOString());
+      await expect(experiments.updateExperiment({ id: 'missing', status: 'failed' })).rejects.toThrow();
+    });
+
+    it('listExperiments filters and paginates', async () => {
+      const targetId = `t-${randomUUID()}`;
+      for (let i = 0; i < 3; i++) await experiments.createExperiment(baseExp({ targetId }));
+      await experiments.createExperiment(baseExp({ targetId: 'other' }));
+
+      const page0 = await experiments.listExperiments({ targetId, pagination: { page: 0, perPage: 2 } });
+      expect(page0.pagination.total).toBe(3);
+      expect(page0.experiments).toHaveLength(2);
+      expect(page0.pagination.hasMore).toBe(true);
+    });
+
+    it('addExperimentResult stores rich JSON; listExperimentResults orders by startedAt ASC', async () => {
+      const exp = await experiments.createExperiment(baseExp());
+      const errObj = { message: 'boom', code: 'E1' };
+      const r1 = await experiments.addExperimentResult(
+        baseResult(exp.id, { itemId: 'i1', startedAt: new Date(Date.now() - 1000), error: errObj, output: null }),
+      );
+      expect(r1.error).toEqual(errObj);
+      await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i2', output: { a: 1 } }));
+
+      const fetched = await experiments.getExperimentResultById({ id: r1.id });
+      expect(fetched?.input).toEqual({ q: 'x' });
+      expect(await experiments.getExperimentResultById({ id: 'missing' })).toBeNull();
+
+      const list = await experiments.listExperimentResults({
+        experimentId: exp.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(list.results).toHaveLength(2);
+      expect(new Date(list.results[0]!.startedAt).getTime()).toBeLessThanOrEqual(
+        new Date(list.results[1]!.startedAt).getTime(),
+      );
+    });
+
+    it('updateExperimentResult sets review status/tags and is a no-op without changes', async () => {
+      const exp = await experiments.createExperiment(baseExp());
+      const r = await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i1' }));
+      const updated = await experiments.updateExperimentResult({
+        id: r.id,
+        experimentId: exp.id,
+        status: 'reviewed',
+        tags: ['a', 'b'],
+      });
+      expect(updated.status).toBe('reviewed');
+      expect(updated.tags).toEqual(['a', 'b']);
+      // No-op (no status/tags) returns the existing row.
+      const same = await experiments.updateExperimentResult({ id: r.id });
+      expect(same.status).toBe('reviewed');
+      await expect(experiments.updateExperimentResult({ id: 'missing', status: 'complete' })).rejects.toThrow();
+    });
+
+    it('updateExperimentResult honors experimentId scoping (incl. the no-op path)', async () => {
+      const expA = await experiments.createExperiment(baseExp());
+      const expB = await experiments.createExperiment(baseExp());
+      const r = await experiments.addExperimentResult(baseResult(expA.id, { itemId: 'i1' }));
+
+      // Wrong experiment with a patch → not found.
+      await expect(
+        experiments.updateExperimentResult({ id: r.id, experimentId: expB.id, status: 'reviewed' }),
+      ).rejects.toThrow();
+      // Wrong experiment on the no-op path → also not found (scoping honored).
+      await expect(experiments.updateExperimentResult({ id: r.id, experimentId: expB.id })).rejects.toThrow();
+      // Correct experiment on the no-op path → returns the row.
+      const ok = await experiments.updateExperimentResult({ id: r.id, experimentId: expA.id });
+      expect(ok.id).toBe(r.id);
+    });
+
+    it('getReviewSummary aggregates review-status counts per experiment', async () => {
+      const exp = await experiments.createExperiment(baseExp());
+      await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i1', status: 'needs-review' }));
+      await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i2', status: 'reviewed' }));
+      await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i3', status: 'complete' }));
+      await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i4' })); // null status
+
+      const summary = await experiments.getReviewSummary();
+      const row = summary.find(s => s.experimentId === exp.id);
+      expect(row).toMatchObject({ total: 4, needsReview: 1, reviewed: 1, complete: 1 });
+    });
+
+    it('deleteExperimentResults clears results; deleteExperiment cascades', async () => {
+      const exp = await experiments.createExperiment(baseExp());
+      await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i1' }));
+      await experiments.deleteExperimentResults({ experimentId: exp.id });
+      expect(
+        (await experiments.listExperimentResults({ experimentId: exp.id, pagination: { page: 0, perPage: 10 } }))
+          .results,
+      ).toHaveLength(0);
+
+      await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i2' }));
+      await experiments.deleteExperiment({ id: exp.id });
+      expect(await experiments.getExperimentById({ id: exp.id })).toBeNull();
+      expect(
+        (await experiments.listExperimentResults({ experimentId: exp.id, pagination: { page: 0, perPage: 10 } }))
+          .results,
+      ).toHaveLength(0);
+    });
+  });
+
+  describe('DatasetsSpanner methods', () => {
+    let datasets: DatasetsSpanner;
+
+    beforeAll(async () => {
+      const store = new SpannerStore(sharedConfig);
+      await store.init();
+      datasets = (await store.getStore('datasets')) as DatasetsSpanner;
+    });
+
+    beforeEach(async () => {
+      await datasets.dangerouslyClearAll();
+    });
+
+    it('createDataset / getDatasetById / updateDataset / listDatasets', async () => {
+      const ds = await datasets.createDataset({ name: 'd1', description: 'orig', metadata: { a: 1 } });
+      expect(ds.version).toBe(0);
+      expect((await datasets.getDatasetById({ id: ds.id }))?.name).toBe('d1');
+      expect(await datasets.getDatasetById({ id: 'missing' })).toBeNull();
+
+      const updated = await datasets.updateDataset({ id: ds.id, description: 'changed', tags: ['x'] });
+      expect(updated.description).toBe('changed');
+      expect(updated.tags).toEqual(['x']);
+
+      const list = await datasets.listDatasets({ pagination: { page: 0, perPage: 10 } });
+      expect(list.datasets.map(d => d.id)).toContain(ds.id);
+    });
+
+    it('addItem / updateItem / deleteItem drive SCD-2 versioning and history', async () => {
+      const ds = await datasets.createDataset({ name: 'd' });
+      const item = await datasets.addItem({ datasetId: ds.id, input: { q: 'a' }, metadata: { m: 1 } });
+      expect(item.datasetVersion).toBe(1);
+      expect((await datasets.getDatasetById({ id: ds.id }))?.version).toBe(1);
+
+      const updated = await datasets.updateItem({ id: item.id, datasetId: ds.id, input: { q: 'b' } });
+      expect(updated.datasetVersion).toBe(2);
+      expect(updated.input).toEqual({ q: 'b' });
+      // createdAt preserved across the new version.
+      expect(updated.createdAt.toISOString()).toBe(item.createdAt.toISOString());
+
+      const history = await datasets.getItemHistory(item.id);
+      expect(history).toHaveLength(2);
+      expect(history[0]!.datasetVersion).toBeGreaterThan(history[1]!.datasetVersion);
+      expect(history.find(h => h.datasetVersion === 1)!.validTo).toBe(2);
+      expect(history.find(h => h.datasetVersion === 2)!.validTo).toBeNull();
+
+      await datasets.deleteItem({ id: item.id, datasetId: ds.id });
+      expect(await datasets.getItemById({ id: item.id })).toBeNull();
+      const tombstone = (await datasets.getItemHistory(item.id)).find(h => h.isDeleted);
+      expect(tombstone?.validTo).toBeNull();
+    });
+
+    it('getItemById / getItemsByVersion / listItems support time-travel and search', async () => {
+      const ds = await datasets.createDataset({ name: 'd' });
+      const item = await datasets.addItem({ datasetId: ds.id, input: { q: 'findme-alpha' } });
+      await datasets.updateItem({ id: item.id, datasetId: ds.id, input: { q: 'findme-beta' } });
+
+      expect((await datasets.getItemById({ id: item.id }))?.input).toEqual({ q: 'findme-beta' });
+      expect((await datasets.getItemById({ id: item.id, datasetVersion: 1 }))?.input).toEqual({ q: 'findme-alpha' });
+
+      const v1 = await datasets.getItemsByVersion({ datasetId: ds.id, version: 1 });
+      expect(v1.map(i => i.input)).toEqual([{ q: 'findme-alpha' }]);
+
+      const current = await datasets.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } });
+      expect(current.items).toHaveLength(1);
+      const past = await datasets.listItems({ datasetId: ds.id, version: 1, pagination: { page: 0, perPage: 10 } });
+      expect(past.items[0]!.input).toEqual({ q: 'findme-alpha' });
+
+      const search = await datasets.listItems({
+        datasetId: ds.id,
+        search: 'beta',
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(search.items).toHaveLength(1);
+      const noHit = await datasets.listItems({ datasetId: ds.id, search: 'zzz', pagination: { page: 0, perPage: 10 } });
+      expect(noHit.items).toHaveLength(0);
+    });
+
+    it('batchInsertItems uses a single version bump; batchDeleteItems tombstones all', async () => {
+      const ds = await datasets.createDataset({ name: 'd' });
+      const items = await datasets.batchInsertItems({
+        datasetId: ds.id,
+        items: [{ input: { i: 1 } }, { input: { i: 2 } }, { input: { i: 3 } }],
+      });
+      expect(items).toHaveLength(3);
+      expect(new Set(items.map(i => i.datasetVersion)).size).toBe(1);
+      expect((await datasets.getDatasetById({ id: ds.id }))?.version).toBe(1);
+      expect((await datasets.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).items).toHaveLength(
+        3,
+      );
+
+      await datasets.batchDeleteItems({ datasetId: ds.id, itemIds: items.map(i => i.id) });
+      expect((await datasets.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).items).toHaveLength(
+        0,
+      );
+      expect((await datasets.getDatasetById({ id: ds.id }))?.version).toBe(2);
+    });
+
+    it('empty batch insert/delete are no-ops and do not bump the version', async () => {
+      const ds = await datasets.createDataset({ name: 'd' });
+      const inserted = await datasets.batchInsertItems({ datasetId: ds.id, items: [] });
+      expect(inserted).toEqual([]);
+      await datasets.batchDeleteItems({ datasetId: ds.id, itemIds: [] });
+      await datasets.batchDeleteItems({ datasetId: ds.id, itemIds: ['does-not-exist'] });
+      expect((await datasets.getDatasetById({ id: ds.id }))?.version).toBe(0);
+      expect(
+        (await datasets.listDatasetVersions({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).versions,
+      ).toHaveLength(0);
+    });
+
+    it('enforces a unique (datasetId, version) snapshot invariant', async () => {
+      const ds = await datasets.createDataset({ name: 'd' });
+      await datasets.createDatasetVersion(ds.id, 5);
+      await expect(datasets.createDatasetVersion(ds.id, 5)).rejects.toThrow();
+      // Same version number is allowed under a different dataset.
+      const ds2 = await datasets.createDataset({ name: 'd2' });
+      await expect(datasets.createDatasetVersion(ds2.id, 5)).resolves.toMatchObject({ version: 5 });
+    });
+
+    it('createDatasetVersion / listDatasetVersions record and page snapshots', async () => {
+      const ds = await datasets.createDataset({ name: 'd' });
+      // Item mutations record versions automatically.
+      await datasets.addItem({ datasetId: ds.id, input: { i: 1 } });
+      await datasets.addItem({ datasetId: ds.id, input: { i: 2 } });
+      // Direct snapshot row.
+      const manual = await datasets.createDatasetVersion(ds.id, 99);
+      expect(manual.version).toBe(99);
+
+      const page0 = await datasets.listDatasetVersions({ datasetId: ds.id, pagination: { page: 0, perPage: 2 } });
+      expect(page0.pagination.total).toBe(3);
+      expect(page0.versions).toHaveLength(2);
+      // DESC by version → newest (99) first.
+      expect(page0.versions[0]!.version).toBe(99);
+    });
+
+    it('deleteDataset removes the dataset, its items, and versions', async () => {
+      const ds = await datasets.createDataset({ name: 'd' });
+      await datasets.addItem({ datasetId: ds.id, input: { i: 1 } });
+      await datasets.deleteDataset({ id: ds.id });
+      expect(await datasets.getDatasetById({ id: ds.id })).toBeNull();
+      expect((await datasets.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).items).toHaveLength(
+        0,
+      );
+      expect(
+        (await datasets.listDatasetVersions({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).versions,
+      ).toHaveLength(0);
     });
   });
 
@@ -2704,6 +3487,49 @@ if (ENABLE_TESTS) {
           expect(v?.metadata).toEqual({ team: 'core' });
           expect(v?.tree).toEqual({ files: [] });
         });
+
+        it('defaults visibility to private for authored skills and persists explicit values', async () => {
+          const authored = `skill-vis-${randomUUID()}`;
+          await skills.create({ skill: { id: authored, ...baseSnapshot, authorId: 'author-1' } as any });
+          expect(((await skills.getById(authored)) as any)?.visibility).toBe('private');
+
+          const pub = `skill-vis-${randomUUID()}`;
+          await skills.create({
+            skill: { id: pub, ...baseSnapshot, authorId: 'author-1', visibility: 'public' } as any,
+          });
+          expect(((await skills.getById(pub)) as any)?.visibility).toBe('public');
+
+          // update can change visibility on the thin record.
+          await skills.update({ id: pub, visibility: 'private' } as any);
+          expect(((await skills.getById(pub)) as any)?.visibility).toBe('private');
+        });
+      });
+
+      describe('list filters', () => {
+        it('filters by status and visibility', async () => {
+          const authorId = `author-${randomUUID()}`;
+          const draftPrivate = `skill-${randomUUID()}`;
+          const publishedPublic = `skill-${randomUUID()}`;
+          await skills.create({ skill: { id: draftPrivate, ...baseSnapshot, authorId, visibility: 'private' } as any });
+          await skills.create({
+            skill: { id: publishedPublic, ...baseSnapshot, authorId, visibility: 'public' } as any,
+          });
+          await skills.update({ id: publishedPublic, status: 'published' } as any);
+
+          const drafts = await skills.list({ authorId, status: 'draft', perPage: false });
+          expect(drafts.skills.map(s => s.id)).toEqual([draftPrivate]);
+
+          const publicOnes = await skills.list({ authorId, visibility: 'public', perPage: false });
+          expect(publicOnes.skills.map(s => s.id)).toEqual([publishedPublic]);
+
+          const publishedPublics = await skills.list({
+            authorId,
+            status: 'published',
+            visibility: 'public',
+            perPage: false,
+          });
+          expect(publishedPublics.skills.map(s => s.id)).toEqual([publishedPublic]);
+        });
       });
 
       describe('getById', () => {
@@ -4932,7 +5758,7 @@ if (ENABLE_TESTS) {
             filters: { name: ['agent.duration_ms'] } as any,
             pagination: { page: 0, perPage: 50 },
           });
-          const row = result.metrics.find(m => m.metricId === id)!;
+          const row = result.metrics.find((m: { metricId: string }) => m.metricId === id)!;
           expect(row.labels).toEqual({ a: '1', b: '2' });
           expect(row.tags).toEqual(['x', 'y']);
           expect(row.costMetadata).toEqual({ tier: 'pro' });
@@ -5101,7 +5927,9 @@ if (ENABLE_TESTS) {
             aggregation: 'sum',
             groupBy: ['provider'],
           });
-          const byProvider = new Map(result.groups.map(g => [g.dimensions.provider, g.value]));
+          const byProvider = new Map(
+            result.groups.map((g: { dimensions: { provider: any }; value: any }) => [g.dimensions.provider, g.value]),
+          );
           expect(byProvider.get('openai')).toBe(300);
           expect(byProvider.get('anthropic')).toBe(50);
         });
@@ -5113,7 +5941,9 @@ if (ENABLE_TESTS) {
             aggregation: 'sum',
             groupBy: ['env'],
           });
-          const byEnv = new Map(result.groups.map(g => [g.dimensions.env, g.value]));
+          const byEnv = new Map(
+            result.groups.map((g: { dimensions: { env: any }; value: any }) => [g.dimensions.env, g.value]),
+          );
           expect(byEnv.get('prod')).toBe(300);
           expect(byEnv.get('staging')).toBe(50);
         });
@@ -5151,7 +5981,12 @@ if (ENABLE_TESTS) {
           expect(result.series).toHaveLength(1);
           // 3 distinct minutes for agent.duration_ms (T, T+1m, T+2m)
           expect(result.series[0]!.points).toHaveLength(3);
-          const valuesByBucket = new Map(result.series[0]!.points.map(p => [p.timestamp.toISOString(), p.value]));
+          const valuesByBucket = new Map(
+            result.series[0]!.points.map((p: { timestamp: { toISOString: () => any }; value: any }) => [
+              p.timestamp.toISOString(),
+              p.value,
+            ]),
+          );
           expect(valuesByBucket.get(baseDate.toISOString())).toBe(100);
           expect(valuesByBucket.get(new Date(baseDate.getTime() + 60_000).toISOString())).toBe(200);
           expect(valuesByBucket.get(new Date(baseDate.getTime() + 120_000).toISOString())).toBe(50);
@@ -5180,7 +6015,7 @@ if (ENABLE_TESTS) {
             interval: '1h',
             groupBy: ['provider'],
           });
-          const seriesByName = new Map(result.series.map(s => [s.name, s]));
+          const seriesByName = new Map(result.series.map((s: { name: any }) => [s.name, s]));
           expect(seriesByName.has('openai')).toBe(true);
           expect(seriesByName.has('anthropic')).toBe(true);
           expect(seriesByName.get('openai')!.points[0]!.value).toBe(300);
@@ -5206,9 +6041,9 @@ if (ENABLE_TESTS) {
             interval: '1h',
           });
           expect(result.series).toHaveLength(2);
-          const p50 = result.series.find(s => s.percentile === 0.5)!;
+          const p50 = result.series.find((s: { percentile: number }) => s.percentile === 0.5)!;
           expect(p50.points[0]!.value).toBeCloseTo(50.5, 5);
-          const p99 = result.series.find(s => s.percentile === 0.99)!;
+          const p99 = result.series.find((s: { percentile: number }) => s.percentile === 0.99)!;
           expect(p99.points[0]!.value).toBeCloseTo(99.01, 5);
         });
 
@@ -5793,6 +6628,26 @@ if (ENABLE_TESTS) {
           name: 'ObservabilitySpanner',
           create: database =>
             new ObservabilitySpanner({ database: database as any, initMode: 'validate', disableMetrics: false }),
+        },
+        {
+          name: 'ChannelsSpanner',
+          create: database => new ChannelsSpanner({ database: database as any, initMode: 'validate' }),
+        },
+        {
+          name: 'DatasetsSpanner',
+          create: database => new DatasetsSpanner({ database: database as any, initMode: 'validate' }),
+        },
+        {
+          name: 'ExperimentsSpanner',
+          create: database => new ExperimentsSpanner({ database: database as any, initMode: 'validate' }),
+        },
+        {
+          name: 'FavoritesSpanner',
+          create: database => new FavoritesSpanner({ database: database as any, initMode: 'validate' }),
+        },
+        {
+          name: 'WorkspacesSpanner',
+          create: database => new WorkspacesSpanner({ database: database as any, initMode: 'validate' }),
         },
       ];
 

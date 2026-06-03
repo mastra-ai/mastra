@@ -83,11 +83,6 @@ const sidebars = {
           label: 'Tools',
         },
         {
-          type: 'doc',
-          id: 'agents/code-mode',
-          label: 'Code Mode',
-        },
-        {
           type: 'html',
           value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
         },
@@ -150,21 +145,29 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/sdk-agents',
+          label: 'SDK Agents',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/adding-voice',
           label: 'Voice',
         },
         {
           type: 'doc',
-          id: 'agents/signals',
-          label: 'Signals',
+          id: 'agents/code-mode',
+          label: 'Code Mode',
           customProps: {
             tags: ['alpha'],
           },
         },
         {
           type: 'doc',
-          id: 'agents/response-caching',
-          label: 'Response Caching',
+          id: 'agents/signals',
+          label: 'Signals',
           customProps: {
             tags: ['alpha'],
           },
@@ -469,6 +472,11 @@ const sidebars = {
           type: 'doc',
           id: 'server/request-context',
           label: 'Request Context',
+        },
+        {
+          type: 'doc',
+          id: 'server/pubsub',
+          label: 'PubSub',
         },
         {
           type: 'doc',
