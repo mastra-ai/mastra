@@ -1493,24 +1493,27 @@ export class GithubSignals implements Processor<'github-signals'> {
   }
 
   #findLatestGithubSignal(messages: MastraDBMessage[]): (GithubPRSignal & { tagName: string }) | undefined {
-    for (const message of [...messages].reverse()) {
-      const signal = getSignalMetadata(message);
-      if (!signal || (signal.tagName !== GITHUB_SUBSCRIBE_PR_TAG && signal.tagName !== GITHUB_UNSUBSCRIBE_PR_TAG))
-        continue;
-      const attributes = isPlainObject(signal.attributes) ? signal.attributes : {};
-      const metadata = isPlainObject(signal.metadata) ? signal.metadata : {};
-      const github = isPlainObject(metadata.github) ? metadata.github : {};
-      const number = readNumber(attributes.number) ?? readNumber(github.number);
-      if (!number) continue;
-      return {
-        tagName: String(signal.tagName),
-        id: readString(signal.id) ?? message.id,
-        owner: readString(attributes.owner) ?? readString(github.owner),
-        repo: readString(attributes.repo) ?? readString(github.repo),
-        number,
-      };
+    const message = messages.at(-1);
+    if (!message) return undefined;
+
+    const signal = getSignalMetadata(message);
+    if (!signal || (signal.tagName !== GITHUB_SUBSCRIBE_PR_TAG && signal.tagName !== GITHUB_UNSUBSCRIBE_PR_TAG)) {
+      return undefined;
     }
-    return undefined;
+
+    const attributes = isPlainObject(signal.attributes) ? signal.attributes : {};
+    const metadata = isPlainObject(signal.metadata) ? signal.metadata : {};
+    const github = isPlainObject(metadata.github) ? metadata.github : {};
+    const number = readNumber(attributes.number) ?? readNumber(github.number);
+    if (!number) return undefined;
+
+    return {
+      tagName: String(signal.tagName),
+      id: readString(signal.id) ?? message.id,
+      owner: readString(attributes.owner) ?? readString(github.owner),
+      repo: readString(attributes.repo) ?? readString(github.repo),
+      number,
+    };
   }
 
   async #sendStatus(

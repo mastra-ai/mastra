@@ -445,6 +445,50 @@ describe('GithubSignals', () => {
     expect(subscriptions).toEqual([expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 17439 })]);
   });
 
+  it('does not replay historical subscribe signals when they are not the latest message', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-historical-subscribe',
+      resourceId: 'resource-historical-subscribe',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({ githubUpdatedAt: '2026-01-01T00:00:00.000Z', contentHash: 'hash' })),
+    };
+    const signal = createSignal({
+      ...GithubSignals.signals.subscribeToPR({ owner: 'mastra-ai', repo: 'mastra', number: 17449 }),
+      type: 'reactive',
+    });
+    const messageList = new MessageList({ threadId: thread.id, resourceId: thread.resourceId });
+    messageList.add(
+      [
+        signal.toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+        {
+          id: 'assistant-after-merge',
+          role: 'assistant',
+          type: 'text',
+          thread_id: thread.id,
+          resourceId: thread.resourceId,
+          content: { format: 2, parts: [{ type: 'text', text: 'PR merged and auto-unsubscribed.' }] },
+          createdAt: new Date(),
+        } as any,
+      ],
+      'input',
+    );
+
+    await runGithubSignalsProcessor({
+      processor: new GithubSignals({ threadStore, syncClient }),
+      messageList,
+      requestContext: createRequestContext(thread),
+    });
+
+    expect(syncClient.syncPullRequest).not.toHaveBeenCalled();
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
+  });
+
   it('does not emit subscription hints for unrelated tool calls', async () => {
     const thread: StorageThreadType = {
       id: 'thread-no-hint',
