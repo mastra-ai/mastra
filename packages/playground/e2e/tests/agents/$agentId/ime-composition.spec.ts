@@ -91,6 +91,9 @@ test('Enter during IME composition does not submit, Enter after composition does
   });
 
   // Now Enter should submit the message normally, navigating away from /chat/new.
+  // Wait for the composer to be idle (Send enabled) so the Enter is not dropped
+  // by the handler's running-thread guard.
+  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled({ timeout: 10000 });
   await chatInput.focus();
   await page.keyboard.press('Enter');
 
@@ -124,6 +127,12 @@ test('Enter after IME switch (no compositionend) still submits — #16464 regres
     el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }));
   });
   // …and deliberately DO NOT fire compositionend, mimicking the IME-switch case.
+
+  // Wait until the composer is idle with text queued (Send enabled). The
+  // assistant-ui keydown handler short-circuits before preventDefault when the
+  // thread is still running, so without this the synthetic Enter below can
+  // racily observe a running composer and leave defaultPrevented false.
+  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled({ timeout: 10000 });
 
   // A subsequent Enter with isComposing=false (the IME is no longer active) should
   // submit, because the guard reads from the live event, not a stale ref. The
