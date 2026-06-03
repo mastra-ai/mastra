@@ -9,15 +9,15 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.11",
+    "@hono/node-server": "^1.19.14",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
-    "get-port": "^7.1.0",
-    "hono": "^4.12.8",
+    "get-port": "^7.2.0",
+    "hono": "^4.12.23",
     "vitest": "catalog:"
   },
   "peerDependencies": {

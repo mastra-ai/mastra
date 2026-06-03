@@ -5,5 +5,5 @@ overrides:
   ssri: '>=6.0.2'
 
 allowBuilds:
-  esbuild: true
-  snyk: false
+  esbuild: set this to true or false
+  snyk: set this to true or false
