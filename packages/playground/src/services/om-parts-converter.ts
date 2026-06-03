@@ -228,17 +228,62 @@ const mapAssistantParts = (
     };
   });
 
+const collectTerminalCycleIds = (messages: MastraDBMessage[]) => {
+  const observation = new Set<string>();
+  const buffering = new Set<string>();
+
+  for (const msg of messages) {
+    const parts = msg.content?.parts;
+    if (!Array.isArray(parts)) continue;
+
+    for (const part of parts as any[]) {
+      const cycleId = part?.data?.cycleId;
+      if (!cycleId) continue;
+
+      if (part.type === 'data-om-observation-end' || part.type === 'data-om-observation-failed') {
+        observation.add(cycleId);
+      }
+
+      if (
+        part.type === 'data-om-buffering-end' ||
+        part.type === 'data-om-buffering-failed' ||
+        part.type === 'data-om-activation'
+      ) {
+        buffering.add(cycleId);
+      }
+    }
+  }
+
+  return { observation, buffering };
+};
+
 /**
  * Mark in-progress OM markers as disconnected when a stream is interrupted
  * (user cancel, network error, process exit). Preserves the original part type so
  * the badge stays anchored, only adding disconnection metadata to the data payload.
  */
-export const markOmMarkersAsDisconnected = (messages: MastraDBMessage[]): MastraDBMessage[] =>
-  mapAssistantParts(messages, parts => {
+export const markOmMarkersAsDisconnected = (messages: MastraDBMessage[]): MastraDBMessage[] => {
+  const terminalCycleIds = collectTerminalCycleIds(messages);
+
+  return mapAssistantParts(messages, parts => {
     let changed = false;
     const nextParts = parts.map((part: any) => {
       // Raw start markers (keep original type for badge anchoring).
-      if (part.type === 'data-om-observation-start' || part.type === 'data-om-buffering-start') {
+      if (part.type === 'data-om-observation-start') {
+        const cycleId = part.data?.cycleId;
+        if (!cycleId || part.data?.disconnectedAt || terminalCycleIds.observation.has(cycleId)) return part;
+
+        changed = true;
+        return {
+          ...part,
+          data: { ...part.data, disconnectedAt: new Date().toISOString(), _state: 'disconnected' },
+        };
+      }
+
+      if (part.type === 'data-om-buffering-start') {
+        const cycleId = part.data?.cycleId;
+        if (!cycleId || part.data?.disconnectedAt || terminalCycleIds.buffering.has(cycleId)) return part;
+
         changed = true;
         return {
           ...part,
@@ -263,6 +308,7 @@ export const markOmMarkersAsDisconnected = (messages: MastraDBMessage[]): Mastra
     });
     return { parts: nextParts, changed };
   });
+};
 
 /**
  * Inject synthetic `data-om-buffering-end` parts after buffer-status resolves so
@@ -271,6 +317,8 @@ export const markOmMarkersAsDisconnected = (messages: MastraDBMessage[]): Mastra
  */
 export const injectBufferingEnds = (messages: MastraDBMessage[], record?: any): MastraDBMessage[] => {
   const chunksByCycleId = new Map<string, any>();
+  const terminalCycleIds = collectTerminalCycleIds(messages).buffering;
+
   if (record?.bufferedObservationChunks) {
     for (const chunk of record.bufferedObservationChunks) {
       if (chunk.cycleId) chunksByCycleId.set(chunk.cycleId, chunk);
@@ -283,7 +331,12 @@ export const injectBufferingEnds = (messages: MastraDBMessage[], record?: any): 
 
     for (const part of parts) {
       newParts.push(part);
-      if (part.type === 'data-om-buffering-start' && part.data?.cycleId && !part.data?.disconnectedAt) {
+      if (
+        part.type === 'data-om-buffering-start' &&
+        part.data?.cycleId &&
+        !part.data?.disconnectedAt &&
+        !terminalCycleIds.has(part.data.cycleId)
+      ) {
         const cycleId = part.data.cycleId;
         const opType = part.data.operationType;
 
@@ -307,6 +360,7 @@ export const injectBufferingEnds = (messages: MastraDBMessage[], record?: any): 
         }
 
         newParts.push({ type: 'data-om-buffering-end', data: endData });
+        terminalCycleIds.add(cycleId);
         changed = true;
       }
     }
