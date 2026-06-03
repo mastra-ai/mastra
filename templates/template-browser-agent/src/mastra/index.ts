@@ -10,10 +10,15 @@ import {
 } from '@mastra/observability';
 import { browserAgent } from './agents/browser-agent';
 
+const tursoUrl = process.env.TURSO_DATABASE_URL;
+if (!tursoUrl) {
+  throw new Error('TURSO_DATABASE_URL is not set. Use `file:./mastra.db` for local dev or a Turso libSQL URL.');
+}
+
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: process.env.TURSO_DATABASE_URL!,
+    url: tursoUrl,
     authToken: process.env.TURSO_AUTH_TOKEN,
   }),
   agents: { browserAgent },

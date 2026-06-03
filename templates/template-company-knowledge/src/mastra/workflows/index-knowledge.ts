@@ -47,15 +47,19 @@ const fetchStep = createStep({
           variables: { first: limit },
         }),
       });
-      const json = (await res.json()) as any;
-      for (const issue of json?.data?.issues?.nodes ?? []) {
-        docs.push({
-          id: `linear:${issue.id}`,
-          source: 'linear',
-          title: `${issue.identifier} ${issue.title}`,
-          url: issue.url,
-          text: `${issue.title}\n\n${issue.description ?? ''}`.trim(),
-        });
+      if (!res.ok) {
+        console.warn(`Linear fetch failed while indexing company knowledge: ${res.status} ${res.statusText}`);
+      } else {
+        const json = (await res.json()) as any;
+        for (const issue of json?.data?.issues?.nodes ?? []) {
+          docs.push({
+            id: `linear:${issue.id}`,
+            source: 'linear',
+            title: `${issue.identifier} ${issue.title}`,
+            url: issue.url,
+            text: `${issue.title}\n\n${issue.description ?? ''}`.trim(),
+          });
+        }
       }
     }
 
@@ -74,53 +78,59 @@ const fetchStep = createStep({
           filter: { value: 'page', property: 'object' },
         }),
       });
-      const searchJson = (await searchRes.json()) as any;
+      if (!searchRes.ok) {
+        console.warn(
+          `Notion search failed while indexing company knowledge: ${searchRes.status} ${searchRes.statusText}`,
+        );
+      } else {
+        const searchJson = (await searchRes.json()) as any;
 
-      for (const page of searchJson?.results ?? []) {
-        let title = '(untitled)';
-        const props = page.properties ?? {};
-        for (const key of Object.keys(props)) {
-          const prop = props[key];
-          if (prop?.type === 'title' && Array.isArray(prop.title)) {
-            title =
-              prop.title
-                .map((t: any) => t?.plain_text ?? '')
-                .join('')
-                .trim() || title;
-            break;
+        for (const page of searchJson?.results ?? []) {
+          let title = '(untitled)';
+          const props = page.properties ?? {};
+          for (const key of Object.keys(props)) {
+            const prop = props[key];
+            if (prop?.type === 'title' && Array.isArray(prop.title)) {
+              title =
+                prop.title
+                  .map((t: any) => t?.plain_text ?? '')
+                  .join('')
+                  .trim() || title;
+              break;
+            }
           }
-        }
 
-        // Best-effort: fetch block children for page content
-        let text = title;
-        try {
-          const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children?page_size=50`, {
-            headers: {
-              Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
-              'Notion-Version': '2022-06-28',
-            },
+          // Best-effort: fetch block children for page content
+          let text = title;
+          try {
+            const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children?page_size=50`, {
+              headers: {
+                Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
+                'Notion-Version': '2022-06-28',
+              },
+            });
+            const blocksJson = (await blocksRes.json()) as any;
+            text =
+              (blocksJson?.results ?? [])
+                .map((b: any) => {
+                  const rich = b[b.type]?.rich_text;
+                  if (!Array.isArray(rich)) return '';
+                  return rich.map((t: any) => t.plain_text ?? '').join('');
+                })
+                .filter(Boolean)
+                .join('\n\n') || title;
+          } catch {
+            // keep title only
+          }
+
+          docs.push({
+            id: `notion:${page.id}`,
+            source: 'notion',
+            title,
+            url: page.url ?? '',
+            text,
           });
-          const blocksJson = (await blocksRes.json()) as any;
-          text =
-            (blocksJson?.results ?? [])
-              .map((b: any) => {
-                const rich = b[b.type]?.rich_text;
-                if (!Array.isArray(rich)) return '';
-                return rich.map((t: any) => t.plain_text ?? '').join('');
-              })
-              .filter(Boolean)
-              .join('\n\n') || title;
-        } catch {
-          // keep title only
         }
-
-        docs.push({
-          id: `notion:${page.id}`,
-          source: 'notion',
-          title,
-          url: page.url ?? '',
-          text,
-        });
       }
     }
 

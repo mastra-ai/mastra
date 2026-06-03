@@ -28,6 +28,7 @@ const workspace = new Workspace({
   name: 'Claw Workspace',
   filesystem: new LocalFilesystem({ basePath: workspaceRoot }),
   sandbox: new LocalSandbox({ workingDirectory: workspaceRoot }),
+  skills: ['skills'],
 });
 
 export const claw = new Agent({

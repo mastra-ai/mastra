@@ -13,7 +13,12 @@ import { meetingNotesOutputSchema } from '../agents/meeting-notes';
 export const meetingsUploadRoute = registerApiRoute('/meetings/upload', {
   method: 'POST',
   handler: async c => {
-    const body = (await c.req.json()) as { title?: string; transcript?: string };
+    let body: { title?: string; transcript?: string };
+    try {
+      body = (await c.req.json()) as { title?: string; transcript?: string };
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400);
+    }
     if (!body.transcript || typeof body.transcript !== 'string') {
       return c.json({ error: 'Missing `transcript` (string) in body.' }, 400);
     }

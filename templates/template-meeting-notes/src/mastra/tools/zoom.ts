@@ -167,7 +167,9 @@ export const fetchZoomTranscript = createTool({
       );
     }
     const token = await getZoomAccessToken();
-    const res = await fetch(`${transcriptFile.download_url}?access_token=${token}`);
+    const downloadUrl = new URL(transcriptFile.download_url);
+    downloadUrl.searchParams.set('access_token', token);
+    const res = await fetch(downloadUrl);
     if (!res.ok) {
       throw new Error(`Failed to download transcript: ${res.status}`);
     }

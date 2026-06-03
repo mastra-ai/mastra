@@ -26,8 +26,8 @@ On Neon, make sure `CREATE EXTENSION IF NOT EXISTS vector;` has been run on your
 
 Run the `index-knowledge` workflow from Mastra Studio (`pnpm dev` → workflows tab) or programmatically. It will:
 
-1. Pull up to N recent Linear issues (via the Linear MCP server).
-2. Search Notion pages the integration has access to (via the Notion MCP server).
+1. Pull up to N recent Linear issues via the Linear GraphQL API.
+2. Search Notion pages the integration has access to via the Notion REST API.
 3. Embed each document with `mastra/openai/text-embedding-3-small` through the Mastra Gateway.
 4. Upsert into the `company_knowledge` pgvector index.
 

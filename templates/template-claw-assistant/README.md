@@ -14,17 +14,17 @@ Claw has resource-scoped observational memory, so it remembers your preferences 
 ## Setup
 
 ```bash
-pnpm install
+npm install
 cp .env.example .env
 # fill in MASTRA_GATEWAY_API_KEY (TURSO_DATABASE_URL defaults to file:./mastra.db)
-pnpm dev
+npm run dev
 ```
 
-Then open Mastra Studio (URL printed by `pnpm dev`) and chat with the `claw` agent.
+Then open Mastra Studio (URL printed by `npm run dev`) and chat with the `claw` agent.
 
 ## Workspace layout
 
-```
+```text
 workspace/
 ├── skills/
 │   ├── general-tasks/SKILL.md
