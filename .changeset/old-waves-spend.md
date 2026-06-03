@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Added automatic GitHub Signals PR subscription when using PR-related slash commands (/review, //critique-pr, //gh-pr-comments, //gh-fix-ci, //gh-fix-lint, //selfreview). When experimental GitHub Signals are enabled in /settings, these commands now auto-subscribe the current thread to the relevant PR.
+Auto-subscribe to the current branch's PR via GitHub Signals at the end of each agent run. When experimental GitHub Signals are enabled in /settings and the checked-out branch has an open PR, the thread is automatically subscribed (once per thread, fire-and-forget).
