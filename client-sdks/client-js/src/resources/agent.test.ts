@@ -5,7 +5,13 @@ import { z } from 'zod/v3';
 
 import { MastraClient } from '../client';
 import type { Body } from '../route-types.generated';
-import type { ClientOptions, SendAgentSignalParams, SubscribeAgentThreadParams } from '../types';
+import type {
+  ClientOptions,
+  QueueAgentMessageParams,
+  SendAgentMessageParams,
+  SendAgentSignalParams,
+  SubscribeAgentThreadParams,
+} from '../types';
 import { processClientTools } from '../utils/process-client-tools';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { Agent } from './agent';
@@ -68,6 +74,153 @@ describe('Agent signal routes', () => {
     await agent.sendSignal(signalParams);
     return mockRequest;
   };
+
+  it('sends messages to the send-message route with string payloads unchanged', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      message: 'hello',
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } satisfies SendAgentMessageParams;
+    const routeBody: Body<'POST /agents/:agentId/send-message'> = params;
+
+    await agent.sendMessage(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-message', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('sends messages to the send-message route with object payloads unchanged', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      message: {
+        contents: 'hello',
+        attributes: { source: 'test' },
+        metadata: { client: 'sdk' },
+        providerOptions: { mastra: { channel: 'web' } },
+      },
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } satisfies SendAgentMessageParams;
+    const routeBody: Body<'POST /agents/:agentId/send-message'> = params;
+
+    await agent.sendMessage(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/send-message', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('queues messages to the queue-message route with parts payloads unchanged', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'queued-run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      message: [
+        { type: 'text', text: 'describe this' },
+        { type: 'file', data: 'file-data', mediaType: 'text/plain' },
+      ],
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      ifIdle: { streamOptions: { maxSteps: 3 } },
+    } satisfies QueueAgentMessageParams;
+    const routeBody: Body<'POST /agents/:agentId/queue-message'> = params;
+
+    await agent.queueMessage(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-message', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('processes clientTools and requestContext in ifIdle.streamOptions when sending messages', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'message-run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const clientTools = {
+      testTool: {
+        id: 'testTool',
+        description: 'A test tool',
+        inputSchema: z.object({ input: z.string() }),
+        execute: vi.fn(),
+      },
+    };
+
+    const params = {
+      message: 'hello',
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      ifIdle: {
+        streamOptions: {
+          maxSteps: 3,
+          instructions: 'Use the tool when needed.',
+          requestContext: { userId: 'user-123' },
+          clientTools,
+        },
+      },
+    } as unknown as SendAgentMessageParams;
+
+    await agent.sendMessage(params);
+
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+    const sentBody = mockRequest.mock.calls[0][1].body;
+    expect(sentBody.ifIdle.streamOptions.clientTools).toEqual(processClientTools(clientTools as any));
+    expect(sentBody.ifIdle.streamOptions.requestContext).toEqual({ userId: 'user-123' });
+    expect(sentBody.ifIdle.streamOptions.maxSteps).toBe(3);
+    expect(sentBody.ifIdle.streamOptions.instructions).toBe('Use the tool when needed.');
+    expect(agent['getSignalRuntimeOptions']({ runId: 'message-run-123' })?.clientTools).toBe(clientTools);
+  });
+
+  it('processes clientTools and requestContext in ifIdle.streamOptions when queueing messages', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'queued-run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const clientTools = {
+      testTool: {
+        id: 'testTool',
+        description: 'A test tool',
+        inputSchema: z.object({ input: z.string() }),
+        execute: vi.fn(),
+      },
+    };
+
+    const params = {
+      message: 'hello later',
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      ifIdle: {
+        streamOptions: {
+          maxSteps: 3,
+          instructions: 'Use the queued tool when needed.',
+          requestContext: { userId: 'user-123' },
+          clientTools,
+        },
+      },
+    } as unknown as QueueAgentMessageParams;
+
+    await agent.queueMessage(params);
+
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+    const sentBody = mockRequest.mock.calls[0][1].body;
+    expect(sentBody.ifIdle.streamOptions.clientTools).toEqual(processClientTools(clientTools as any));
+    expect(sentBody.ifIdle.streamOptions.requestContext).toEqual({ userId: 'user-123' });
+    expect(sentBody.ifIdle.streamOptions.maxSteps).toBe(3);
+    expect(sentBody.ifIdle.streamOptions.instructions).toBe('Use the queued tool when needed.');
+    expect(agent['getSignalRuntimeOptions']({ runId: 'queued-run-123' })?.clientTools).toBe(clientTools);
+  });
 
   it('sends run-targeted signals with active behavior unchanged', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');

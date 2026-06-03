@@ -413,7 +413,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     name: 'Code Agent',
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
+    tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools, storage),
     scorers: {
       outcome: {
         scorer: outcomeScorer,
@@ -481,6 +481,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       handler: () => syncGateways(),
     },
   ];
+  const heartbeatHandlers = config?.heartbeatHandlers ?? defaultHeartbeatHandlers;
 
   // Build lightweight provider access for resolving built-in packs at startup.
   // Anthropic/OpenAI use AuthStorage; other providers use env API keys.
@@ -679,7 +680,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       workspace: config?.workspace ?? getDynamicWorkspace,
       browser: config?.browser,
       modes,
-      heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
+      heartbeatHandlers,
       modelAuthChecker: provider => {
         // Gateway key only authorizes providers that the Mastra gateway actually serves
         const gatewayKey =

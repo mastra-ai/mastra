@@ -47,6 +47,8 @@ import {
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
 import { ProviderLogo } from '@/domains/llm';
+import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
+import { isSignalData } from '@/lib/ai-ui/messages/signal-data';
 
 export type UIMessagePart =
   | { type: 'text'; text: string; state?: string }
@@ -58,7 +60,8 @@ export type UIMessagePart =
       toolCallId?: string;
       input?: unknown;
       output?: unknown;
-    };
+    }
+  | { type: 'data-signal'; data?: unknown };
 
 export type ChatMessagePart = MastraDBMessage['content']['parts'][number] | UIMessagePart;
 
@@ -167,6 +170,9 @@ const isOutputToolPart = (
 ): part is Extract<UIMessagePart, { type: 'dynamic-tool' | `tool-${string}` }> =>
   (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) && 'state' in part;
 
+const isDataSignalPart = (part: ChatMessagePart): part is Extract<UIMessagePart, { type: 'data-signal' }> =>
+  part.type === 'data-signal';
+
 const getNameFromInput = (input: unknown): string => {
   if (!input || typeof input !== 'object' || !('name' in input)) return 'unknown';
   return typeof input.name === 'string' ? input.name : 'unknown';
@@ -221,6 +227,10 @@ export const MessageRow = ({ message }: MessageRowProps) => {
         if (part.type === 'reasoning') {
           if (!isStreamingReasoningPart(part) || part.state !== 'streaming') return null;
           return <ReasoningMessage key={key} text="Reasoning..." streaming />;
+        }
+
+        if (isDataSignalPart(part)) {
+          return isSignalData(part.data) ? <SignalBadge key={key} signal={part.data} /> : null;
         }
 
         if (isLegacyToolInvocationPart(part)) {

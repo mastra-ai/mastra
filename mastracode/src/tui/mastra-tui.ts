@@ -498,6 +498,7 @@ export class MastraTUI {
 
     // Initialize harness (but don't select thread yet)
     await this.state.harness.init();
+    await this.state.harness.getMastra()?.startWorkers();
 
     // Check for existing threads and prompt for resume
     await promptForThreadSelection(this.state);

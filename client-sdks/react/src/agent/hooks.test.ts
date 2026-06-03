@@ -11,6 +11,7 @@ import type { ClientToolsInput } from './types';
 // getAgent(). This lets us assert what the React hook actually forwards to the
 // underlying client-js Agent methods.
 const sendSignalMock = vi.fn(async () => ({ accepted: true, runId: 'run-mock' }));
+const sendMessageMock = vi.fn(async () => ({ accepted: true, runId: 'run-mock' }));
 let nextApproveToolCallChunks: Array<any> = [];
 const approveToolCallProcessDataStreamMock = vi.fn(
   async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
@@ -99,6 +100,7 @@ vi.mock('@mastra/client-js', () => ({
     getAgent() {
       return {
         sendSignal: sendSignalMock,
+        sendMessage: sendMessageMock,
         approveToolCall: approveToolCallMock,
         sendToolApproval: sendToolApprovalMock,
         declineToolCall: declineToolCallMock,
@@ -144,6 +146,7 @@ describe('useChat forwards clientTools', () => {
 
   beforeEach(() => {
     sendSignalMock.mockClear();
+    sendMessageMock.mockClear();
     approveToolCallMock.mockClear();
     sendToolApprovalMock.mockClear();
     declineToolCallMock.mockClear();
@@ -277,7 +280,7 @@ describe('useChat forwards clientTools', () => {
     );
 
     await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
-    sendSignalMock.mockClear();
+    sendMessageMock.mockClear();
 
     await act(async () => {
       await result.current.sendMessage({
@@ -287,9 +290,7 @@ describe('useChat forwards clientTools', () => {
       });
     });
 
-    expect(sendSignalMock).toHaveBeenCalledWith(
-      expect.objectContaining({ signal: expect.objectContaining({ contents: 'paris' }), threadId: 'thread-1' }),
-    );
+    expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({ message: 'paris', threadId: 'thread-1' }));
     expect(result.current.isRunning).toBe(false);
     expect(result.current.isAwaitingToolApproval).toBe(true);
   });
@@ -757,7 +758,7 @@ describe('useChat forwards clientTools', () => {
     expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps hook-prop clientTools on sendSignal when threadId is provided', async () => {
+  it('keeps hook-prop clientTools on sendMessage when threadId is provided', async () => {
     const { result } = renderHook(
       () =>
         useChat({
@@ -782,11 +783,11 @@ describe('useChat forwards clientTools', () => {
     const subscribeCalls = subscribeToThreadMock.mock.calls as unknown as Array<[any]>;
     const params = subscribeCalls[0]?.[0];
     expect(params).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
-    const signalCalls = sendSignalMock.mock.calls as unknown as Array<[any]>;
-    expect(signalCalls[0]?.[0].ifIdle.streamOptions.clientTools).toBe(clientTools);
+    const messageCalls = sendMessageMock.mock.calls as unknown as Array<[any]>;
+    expect(messageCalls[0]?.[0].ifIdle.streamOptions.clientTools).toBe(clientTools);
   });
 
-  it('keeps per-send clientTools and continuation options on sendSignal', async () => {
+  it('keeps per-send clientTools and continuation options on sendMessage', async () => {
     keepSubscriptionOpen = true;
     const perSendClientTools = {
       testTool: {
@@ -842,9 +843,9 @@ describe('useChat forwards clientTools', () => {
     expect(subscribeToThreadMock).toHaveBeenCalledTimes(1);
     expect(subscribeParams).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
 
-    expect(sendSignalMock).toHaveBeenCalledTimes(2);
-    const signalCalls = sendSignalMock.mock.calls as unknown as Array<[any]>;
-    expect(signalCalls[0]?.[0].ifIdle.streamOptions).toEqual(
+    expect(sendMessageMock).toHaveBeenCalledTimes(2);
+    const messageCalls = sendMessageMock.mock.calls as unknown as Array<[any]>;
+    expect(messageCalls[0]?.[0].ifIdle.streamOptions).toEqual(
       expect.objectContaining({
         maxSteps: 3,
         instructions: 'use the hook tool',
@@ -852,7 +853,7 @@ describe('useChat forwards clientTools', () => {
         clientTools,
       }),
     );
-    expect(signalCalls[1]?.[0].ifIdle.streamOptions).toEqual(
+    expect(messageCalls[1]?.[0].ifIdle.streamOptions).toEqual(
       expect.objectContaining({
         maxSteps: 5,
         instructions: 'use the per-send tool',
@@ -883,6 +884,7 @@ describe('useChat forwards clientTools', () => {
     expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
     const calls = streamUntilIdleMock.mock.calls as unknown as Array<[unknown, { clientTools: unknown }]>;
     expect(calls[0]?.[1].clientTools).toBe(clientTools);
+    expect(sendMessageMock).not.toHaveBeenCalled();
     expect(sendSignalMock).not.toHaveBeenCalled();
   });
 

@@ -371,7 +371,12 @@ export const useChat = ({
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
       setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-      if (chunk.type === 'data-user-message' && isDataChunk(chunk) && typeof chunk.data?.id === 'string') {
+      if (
+        chunk.type === 'data-user-message' &&
+        isDataChunk(chunk) &&
+        (chunk.data?.type === 'user-message' || chunk.data?.type === 'user') &&
+        typeof chunk.data?.id === 'string'
+      ) {
         onSignalEcho?.(chunk.data.id);
       }
 
@@ -697,15 +702,28 @@ export const useChat = ({
     }
 
     const resolvedSignalId = signalId ?? uuid();
-    onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
+    const messageContents = getSignalContents(coreUserMessages);
+    const streamOptions = {
+      maxSteps,
+      modelSettings: {
+        frequencyPenalty,
+        presencePenalty,
+        maxRetries,
+        maxOutputTokens: maxTokens,
+        temperature,
+        topK,
+        topP,
+      },
+      instructions,
+      requestContext: resolvedRequestContext,
+      providerOptions: providerOptions as any,
+      requireToolApproval,
+      tracingOptions,
+    };
 
     try {
-      await agent.sendSignal({
-        signal: {
-          id: resolvedSignalId,
-          type: 'user-message',
-          contents: getSignalContents(coreUserMessages),
-        },
+      const result = await agent.sendMessage({
+        message: messageContents,
         resourceId: resourceId || agentId,
         threadId,
         ifIdle: {
@@ -716,16 +734,42 @@ export const useChat = ({
           },
         },
       });
+      const echoedSignalId =
+        result.signal &&
+        typeof result.signal === 'object' &&
+        'id' in result.signal &&
+        typeof result.signal.id === 'string'
+          ? result.signal.id
+          : resolvedSignalId;
+      onSignalSent?.(echoedSignalId, getSignalPreview(coreUserMessages));
       if (pendingToolApprovalIdsRef.current.size > 0) {
         setIsRunning(false);
       }
     } catch (error) {
-      onSignalEcho?.(resolvedSignalId);
       if (isThreadSignalUnsupportedError(error)) {
-        markThreadSignalsUnsupported();
-        setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToMastraDBMessage)]);
-        await streamWithLegacyRoute();
-        return;
+        onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
+        try {
+          await agent.sendSignal({
+            signal: {
+              id: resolvedSignalId,
+              type: 'user-message',
+              contents: messageContents,
+            },
+            resourceId: resourceId || agentId,
+            threadId,
+            ifIdle: { streamOptions },
+          });
+          return;
+        } catch (signalError) {
+          onSignalEcho?.(resolvedSignalId);
+          if (isThreadSignalUnsupportedError(signalError)) {
+            markThreadSignalsUnsupported();
+            setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToMastraDBMessage)]);
+            await streamWithLegacyRoute();
+            return;
+          }
+          throw signalError;
+        }
       }
       throw error;
     }

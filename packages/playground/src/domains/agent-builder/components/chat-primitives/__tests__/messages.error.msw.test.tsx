@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MastraReactProvider } from '@mastra/react';
-import type { MastraUIMessage } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -42,18 +42,28 @@ const Providers = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const userMessage = (text: string): MastraUIMessage => ({
-  id: 'user-1',
-  role: 'user',
-  parts: [{ type: 'text', text, state: 'done' } as MastraUIMessage['parts'][number]],
-});
+const userMessage = (text: string): MastraDBMessage =>
+  ({
+    id: 'user-1',
+    role: 'user',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+    },
+  }) as unknown as MastraDBMessage;
 
-const errorMessage = (text: string): MastraUIMessage => ({
-  id: 'error-1',
-  role: 'assistant',
-  parts: [{ type: 'text', text } as MastraUIMessage['parts'][number]],
-  metadata: { status: 'error' } as MastraUIMessage['metadata'],
-});
+const errorMessage = (text: string): MastraDBMessage =>
+  ({
+    id: 'error-1',
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata: { status: 'error' },
+    },
+  }) as unknown as MastraDBMessage;
 
 const openAIServerErrorPayload = JSON.stringify({
   message:
@@ -159,13 +169,13 @@ describe('MessageRow error retry against StreamChatProvider', () => {
         });
         return new HttpResponse(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
       }),
-      http.post(`${BASE_URL}/api/agents/${AGENT_ID}/signals`, async ({ request }) => {
+      http.post(`${BASE_URL}/api/agents/${AGENT_ID}/send-message`, async ({ request }) => {
         onSend(await request.json());
-        return HttpResponse.json({ runId: 'retry-run' });
+        return HttpResponse.json({ accepted: true, runId: 'retry-run' });
       }),
     );
 
-    const initialMessages: MastraUIMessage[] = [
+    const initialMessages: MastraDBMessage[] = [
       userMessage('build me a standup bot'),
       errorMessage(openAIServerErrorPayload),
     ];
