@@ -147,6 +147,22 @@ export class MastraTUI {
   constructor(options: MastraTUIOptions) {
     this.state = createTUIState(options);
 
+    options.githubSignals?.onSubscriptionsChanged(event => {
+      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentResourceId = this.state.harness.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
+      this.state.activeGithubPrSubscriptions = event.subscriptions.map(subscription => ({
+        owner: subscription.owner,
+        repo: subscription.repo,
+        prNumber: subscription.number,
+        lastSyncStatus: subscription.lastSyncStatus,
+        lastNotificationKind: subscription.lastNotificationKind,
+        lastNotificationPriority: subscription.lastNotificationPriority,
+      }));
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
+
     // Load user preferences
     const savedSettings = loadSettings();
     this.state.quietMode = savedSettings.preferences.quietMode;

@@ -775,6 +775,8 @@ describe('GithubSignals', () => {
     const threadStore = createThreadStore(thread);
     const messageList = new MessageList({ threadId: thread.id, resourceId: thread.resourceId });
     const processor = new GithubSignals({ threadStore, syncOnSubscribe: false });
+    const onSubscriptionsChanged = vi.fn();
+    processor.onSubscriptionsChanged(onSubscriptionsChanged);
 
     const result = await runGithubSignalsProcessor({
       processor,
@@ -793,6 +795,11 @@ describe('GithubSignals', () => {
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123, lastSyncStatus: 'skipped' }),
     ]);
+    expect(onSubscriptionsChanged).toHaveBeenLastCalledWith({
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      subscriptions: [expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123 })],
+    });
 
     await expect(
       tools.github_unsubscribe_pr.execute(
@@ -802,6 +809,11 @@ describe('GithubSignals', () => {
     ).resolves.toMatchObject({ unsubscribed: true, owner: 'mastra-ai', repo: 'mastra', number: 123 });
     savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
+    expect(onSubscriptionsChanged).toHaveBeenLastCalledWith({
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      subscriptions: [],
+    });
     processor.stopAllPolling();
   });
 

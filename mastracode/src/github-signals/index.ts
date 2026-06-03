@@ -138,6 +138,14 @@ export type GithubSignalsOptions = {
   threadStore?: GithubSignalsThreadStore;
 };
 
+export type GithubSubscriptionsChangedEvent = {
+  threadId: string;
+  resourceId: string;
+  subscriptions: GithubPRSubscription[];
+};
+
+type GithubSubscriptionsChangedHandler = (event: GithubSubscriptionsChangedEvent) => void;
+
 type GithubPRSignal = {
   id: string;
   owner?: string;
@@ -859,6 +867,7 @@ export class GithubSignals implements Processor<'github-signals'> {
   readonly #polling = new Map<string, GithubPollingState>();
   #agent?: GithubSignalAgent;
   #agentOptions: GithubSignalAgentOptions = {};
+  #subscriptionsChangedHandler?: GithubSubscriptionsChangedHandler;
 
   constructor(options: GithubSignalsOptions = {}) {
     this.#options = options;
@@ -869,6 +878,10 @@ export class GithubSignals implements Processor<'github-signals'> {
   addAgent(agent: GithubSignalAgent, options: GithubSignalAgentOptions = {}): void {
     this.#agent = agent;
     this.#agentOptions = options;
+  }
+
+  onSubscriptionsChanged(handler: GithubSubscriptionsChangedHandler): void {
+    this.#subscriptionsChangedHandler = handler;
   }
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
@@ -1147,6 +1160,10 @@ export class GithubSignals implements Processor<'github-signals'> {
     return getGithubMetadata(loadedThread.metadata).subscriptions;
   }
 
+  #notifySubscriptionsChanged(input: GithubSubscriptionsChangedEvent): void {
+    this.#subscriptionsChangedHandler?.(input);
+  }
+
   async #pollThread(input: GithubPollingThread): Promise<number> {
     const key = this.#pollingKey(input);
     const state = this.#polling.get(key);
@@ -1237,6 +1254,7 @@ export class GithubSignals implements Processor<'github-signals'> {
           metadata: setGithubMetadata(loadedThread.metadata, { subscriptions }),
         },
       });
+      this.#notifySubscriptionsChanged({ threadId: input.threadId, resourceId: input.resourceId, subscriptions });
       if (subscriptions.length === 0) this.stopPollingForThread(input);
       return subscriptions.length;
     } catch (error) {
@@ -1441,6 +1459,7 @@ export class GithubSignals implements Processor<'github-signals'> {
         metadata: setGithubMetadata(loadedThread.metadata, { subscriptions }),
       },
     });
+    this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
     if (baselineSnapshot) {
       await this.#sendBaselineNotification({
         threadId: input.threadId!,
@@ -1476,6 +1495,7 @@ export class GithubSignals implements Processor<'github-signals'> {
           metadata: setGithubMetadata(loadedThread.metadata, { subscriptions }),
         },
       });
+      this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
       if (subscriptions.length === 0)
         this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
     }
