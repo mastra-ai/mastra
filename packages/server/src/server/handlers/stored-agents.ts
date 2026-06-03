@@ -22,7 +22,6 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
-import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
 import { attachAuthor, prepareAuthorEnrichment } from './author-enrichment';
 import {
   assertReadAccess,

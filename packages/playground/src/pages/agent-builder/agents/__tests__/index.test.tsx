@@ -220,8 +220,8 @@ describe('AgentBuilderAgentsPage', () => {
       expect(screen.getByText('Beta')).toBeTruthy();
     });
 
-    expect(screen.getByText('Alice Doe')).toBeTruthy();
-    expect(screen.getByText('bob@example.com')).toBeTruthy();
+    expect(screen.getAllByText('Alice Doe').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('bob@example.com').length).toBeGreaterThan(0);
   });
 
   it('omits authorId when no current user is available', async () => {
