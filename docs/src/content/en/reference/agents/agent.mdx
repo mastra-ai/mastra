@@ -155,7 +155,7 @@ The model receives this as:
 <user name="Devin" from="slack">Can we simplify the API surface?</user>
 ```
 
-The UI sees just the message contents but can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
+The UI sees the message contents and can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
 
 ### `sendMessage(message, options)`
 
@@ -370,9 +370,9 @@ const result = await agent.sendNotificationSignal(
 ]}
 />
 
-Returns `{ accepted: true, record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void> }`. `signal` and `runId` are present for immediate delivery decisions. Deferred, summarized, persisted, and discarded notifications return the stored record and decision without starting a stream.
+Returns `{ accepted: true, record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void> }`. `record` is the stored inbox record. `decision` is the delivery-policy result. `signal` and `runId` are present when ingress emits a signal immediately, including the immediate summary emitted for active high-priority notifications. `persisted` is present when the emitted signal is persisted without waking an idle thread.
 
-Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle and batch as full notifications when the thread is active. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries when active and stay inbox-only when idle.
+Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle; when the thread is active, Mastra emits a summary immediately and keeps `deliverAt` for later full delivery when the thread is idle. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries in both active and idle threads; idle low-priority summaries reach subscribers without waking the model loop. For the full flow, visit [Signals](/docs/agents/signals#notification-signals).
 
 ### `subscribeToThread(options)`
 
@@ -488,7 +488,7 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     type: '{ deliveryPolicy?: NotificationDeliveryPolicyConfig }',
     isOptional: true,
     description:
-      'Notification delivery configuration for `sendNotificationSignal()`. The policy can return `deliver`, `queue`, `defer`, `summarize`, `persist`, or `discard` decisions.',
+      'Notification delivery configuration for `sendNotificationSignal()`. `deliveryPolicy` can define `decide`, `sources`, `priorities`, or `default` rules that return `deliver`, `queue`, `defer`, `summarize`, `persist`, or `discard` decisions.',
   },
   {
     name: 'workflows',
