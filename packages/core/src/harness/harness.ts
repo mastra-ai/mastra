@@ -539,7 +539,7 @@ export class Harness<TState = {}> {
     return { ...this.state };
   }
 
-  private async applyStateUpdates(updates: Partial<TState>): Promise<void> {
+  protected async applyStateUpdates(updates: Partial<TState>): Promise<void> {
     const changedKeys = Object.keys(updates);
     const newState = { ...this.state, ...updates };
 

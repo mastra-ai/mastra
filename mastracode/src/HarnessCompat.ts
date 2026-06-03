@@ -88,6 +88,30 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     }
   }
 
+  /**
+   * Sync state updates to the V1 session so that `getState()` (which merges
+   * session state over base state) returns the values written by the base
+   * `Harness.updateState` path.  Without this, task tools that mutate state
+   * via `updateState` write to the base state only and the session's stale
+   * default (`tasks: []`) shadows the real task list.
+   */
+  protected async applyStateUpdates(updates: Partial<TState>): Promise<void> {
+    await super.applyStateUpdates(updates);
+
+    let session: Session<TState> | undefined;
+    try {
+      session = this.#session;
+    } catch {
+      session = undefined;
+    }
+    if (!session) return;
+
+    const { currentModelId, modeId, ...stateUpdates } = updates as Partial<TState> & SessionStateFields;
+    if (Object.keys(stateUpdates).length > 0) {
+      await session.setState(stateUpdates as Partial<TState>);
+    }
+  }
+
   getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
     return super.getSubagentModelId({ agentType });
   }

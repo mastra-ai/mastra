@@ -35,6 +35,10 @@ vi.mock('@mastra/core/harness', () => ({
       return Promise.resolve();
     }
 
+    protected async applyStateUpdates(updates: Record<string, unknown>) {
+      legacyState = { ...legacyState, ...updates };
+    }
+
     setThreadSetting(opts: unknown) {
       legacySetThreadSetting(opts);
       return Promise.resolve();
@@ -178,6 +182,29 @@ describe('HarnessCompat session-derived state', () => {
     await harness.switchMode({ modeId: 'plan' });
 
     expect(legacySwitchMode).toHaveBeenCalledWith({ modeId: 'plan' });
+  });
+
+  it('syncs updateState writes to the V1 session via applyStateUpdates', async () => {
+    const { HarnessCompat } = await import('./HarnessCompat.js');
+    const session = createSession();
+    const harnessV1 = {
+      session: vi.fn(async () => session),
+      getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
+    };
+
+    const harness = new HarnessCompat({} as never, harnessV1 as never);
+    await harness.switchThread({ threadId: 'thread-id' });
+
+    // Simulate the Harness.updateState path which calls applyStateUpdates
+    // directly (bypassing HarnessCompat.setState).
+    const tasks = [{ id: 'task_1', content: 'Fix bug', status: 'in_progress', activeForm: 'Fixing bug' }];
+    await (
+      harness as unknown as { applyStateUpdates: (u: Record<string, unknown>) => Promise<void> }
+    ).applyStateUpdates({ tasks });
+
+    // The session must have been synced so getState() doesn't shadow the tasks.
+    expect(session.setState).toHaveBeenCalledWith({ tasks });
+    expect((harness.getState() as Record<string, unknown>).tasks).toEqual(tasks);
   });
 
   it('keeps per-agent subagent model overrides in harness state', async () => {
