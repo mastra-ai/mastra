@@ -40,6 +40,22 @@ export const codeSupervisor = new Agent({
 })
 ```
 
+For Claude Code, ACP support is provided by the `@agentclientprotocol/claude-agent-acp` bridge package. Configure the ACP agent command to run the bridge, then select a Claude model after session creation:
+
+```typescript title="src/mastra/agents/claude-code-agent.ts"
+import { AcpAgent } from '@mastra/acp'
+
+export const claudeCodeAgent = new AcpAgent({
+  id: 'claude-code-agent',
+  name: 'Claude Code Agent',
+  description: 'Use Claude Code through ACP.',
+  command: 'npx',
+  args: ['@agentclientprotocol/claude-agent-acp'],
+  cwd: process.cwd(),
+  model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
+})
+```
+
 ## Constructor parameters
 
 <PropertiesTable
