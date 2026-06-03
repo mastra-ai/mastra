@@ -13,7 +13,7 @@ export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads' }: Th
     <div className="h-full w-full pb-2 pl-2">
       <nav
         aria-label={ariaLabel}
-        className="bg-surface3 rounded-studio-panel border border-border1/50 h-full overflow-y-auto p-1"
+        className="bg-surface3 rounded-studio-panel border border-border1/50 h-full overflow-y-auto overflow-x-hidden p-1"
       >
         {children}
       </nav>
@@ -76,7 +76,7 @@ export const ThreadListItem = ({
         href={href}
         to={to}
         variant="ghost"
-        className={cn('w-full justify-start rounded-xl', isActive && 'bg-surface4 text-neutral6')}
+        className={cn('w-full justify-start rounded-xl min-w-0', isActive && 'bg-surface4 text-neutral6')}
       >
         {children}
       </Button>
