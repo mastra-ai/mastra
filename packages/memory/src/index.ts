@@ -46,11 +46,7 @@ import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { recallTool } from './tools/om-tools';
-import {
-  updateWorkingMemoryTool,
-  __experimental_updateWorkingMemoryToolVNext,
-  deepMergeWorkingMemory,
-} from './tools/working-memory';
+import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 
 export {
   ModelByInputTokens,
@@ -263,6 +259,7 @@ export class Memory extends MastraMemory {
       },
       observationalMemory: config.options?.observationalMemory as ObservationalMemoryOptions | boolean | undefined,
     });
+    this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     this.threadConfig = mergedConfig;
 
     // Validate retrieval vector config at construction time
@@ -808,6 +805,7 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfigInternal;
   }): Promise<{ success: boolean; reason: string }> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
+    this.assertWorkingMemoryStateSignalsCompatibility(config);
 
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
@@ -1365,7 +1363,15 @@ ${workingMemory}`;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
+    this.assertWorkingMemoryStateSignalsCompatibility(config);
     if (!config.workingMemory?.enabled) {
+      return null;
+    }
+
+    // When working memory is opted into the state-signals delivery path, suppress
+    // the system-message rendering. The WorkingMemoryStateProcessor delivers the
+    // template + data as a state signal instead.
+    if (config.workingMemory?.useStateSignals) {
       return null;
     }
 
@@ -1789,6 +1795,14 @@ Notes:
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
+  private assertWorkingMemoryStateSignalsCompatibility(config?: MemoryConfigInternal): void {
+    if (config?.workingMemory?.useStateSignals === true && this.isVNextWorkingMemoryConfig(config)) {
+      throw new Error(
+        "workingMemory.useStateSignals is not supported with workingMemory.version: 'vnext'. Use stable template working memory or disable useStateSignals.",
+      );
+    }
+  }
+
   private getObservationEmbeddingIndexName(dimensions?: number): string {
     const defaultDimensions = 384;
     const usedDimensions = dimensions ?? defaultDimensions;
@@ -2085,12 +2099,14 @@ Notes:
 
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
+    this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     const tools: Record<string, ToolAction<any, any, any>> = {};
 
     if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
-      tools.updateWorkingMemory = this.isVNextWorkingMemoryConfig(mergedConfig)
-        ? __experimental_updateWorkingMemoryToolVNext(mergedConfig)
-        : updateWorkingMemoryTool(mergedConfig);
+      const { name, tool } = createWorkingMemoryTool(mergedConfig, {
+        vNext: this.isVNextWorkingMemoryConfig(mergedConfig),
+      });
+      tools[name] = tool;
     }
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
@@ -2848,6 +2864,11 @@ Notes:
       processors.push(om);
     }
 
+    const wm = await this.createWorkingMemoryStateProcessor(configuredProcessors, context);
+    if (wm) {
+      processors.push(wm);
+    }
+
     return processors;
   }
 
@@ -2906,6 +2927,31 @@ Notes:
       temporalMarkers: effectiveConfig.temporalMarkers,
     });
   }
+
+  /**
+   * Creates a WorkingMemoryStateProcessor when working memory is enabled and the
+   * `useStateSignals` opt-in is set. Returns null otherwise or if the processor
+   * is already present in the user's configured processors.
+   */
+  private async createWorkingMemoryStateProcessor(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor | null> {
+    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
+    const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
+    this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
+    if (!mergedConfig.workingMemory?.enabled) return null;
+    if (!mergedConfig.workingMemory?.useStateSignals) return null;
+
+    const { WORKING_MEMORY_STATE_PROCESSOR_ID, WorkingMemoryStateProcessor } =
+      await import('./processors/working-memory-state');
+    const alreadyConfigured = configuredProcessors.some(
+      p => !('workflow' in p) && p.id === WORKING_MEMORY_STATE_PROCESSOR_ID,
+    );
+    if (alreadyConfigured) return null;
+
+    return new WorkingMemoryStateProcessor(this, runtimeMemory?.memoryConfig);
+  }
 }
 
 // Re-export memory processors from @mastra/core for backward compatibility
@@ -2916,3 +2962,10 @@ export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMeta
 
 // Observational Memory utilities
 export { getObservationsAsOf } from './processors/observational-memory';
+
+// Working memory state-signal processor (opt-in via workingMemory.useStateSignals)
+export {
+  WorkingMemoryStateProcessor,
+  WORKING_MEMORY_STATE_ID,
+  WORKING_MEMORY_STATE_PROCESSOR_ID,
+} from './processors/working-memory-state';

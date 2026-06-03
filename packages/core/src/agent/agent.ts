@@ -44,6 +44,7 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
+import { isWorkingMemoryToolName } from '../memory/working-memory-utils';
 import { resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
 import {
   createNotificationSignal,
@@ -6114,7 +6115,7 @@ export class Agent<
     const messageListResponses = messageList.get.response.aiV4.core();
 
     const usedWorkingMemory = messageListResponses.some(
-      m => m.role === 'tool' && m.content.some(c => c.toolName === 'updateWorkingMemory'),
+      m => m.role === 'tool' && m.content.some(c => isWorkingMemoryToolName(c.toolName)),
     );
     // working memory updates the thread, so we need to get the latest thread if we used it
     const memory = await this.getMemory({ requestContext });
