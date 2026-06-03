@@ -3518,9 +3518,13 @@ describe('ProcessorRunner', () => {
         thread,
         resourceId: 'resource-1',
       });
+      let latestThread: any = thread;
       const memory = {
-        getThreadById: vi.fn(async () => thread),
-        saveThread: vi.fn(async ({ thread: t }: { thread: typeof thread }) => t),
+        getThreadById: vi.fn(async () => latestThread),
+        saveThread: vi.fn(async ({ thread: t }: { thread: any }) => {
+          latestThread = t;
+          return t;
+        }),
       };
 
       const computeCalls: Array<{ trackingVersion: number | undefined }> = [];
@@ -3528,10 +3532,10 @@ describe('ProcessorRunner', () => {
         inputProcessors: [
           {
             id: 'state-processor',
-            computeStateSignal: ({ sendStateSignal, tracking }: any) => {
+            computeStateSignal: async ({ sendStateSignal, tracking }: any) => {
               computeCalls.push({ trackingVersion: (tracking as any)?.version });
               if (computeCalls.length === 1) {
-                sendStateSignal!({ cacheKey: 'intermediate', contents: 'intermediate' });
+                await sendStateSignal!({ cacheKey: 'intermediate', contents: 'intermediate' });
               }
               return { cacheKey: 'final', contents: 'final' };
             },
@@ -3555,6 +3559,13 @@ describe('ProcessorRunner', () => {
 
       expect(computeCalls).toHaveLength(1);
       expect(memory.saveThread).toHaveBeenCalledTimes(2);
+      const firstTracking =
+        memory.saveThread.mock.calls[0]?.[0]?.thread?.metadata?.mastra?.stateSignals?.['state-processor'];
+      const secondTracking =
+        memory.saveThread.mock.calls[1]?.[0]?.thread?.metadata?.mastra?.stateSignals?.['state-processor'];
+      expect(firstTracking?.version).toBe(1);
+      expect(secondTracking?.version).toBe(2);
+      expect(secondTracking?.lastSignalId).not.toBe(firstTracking?.lastSignalId);
     });
   });
 
