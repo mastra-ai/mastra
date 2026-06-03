@@ -1,9 +1,34 @@
+import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { AgentBrowser } from '@mastra/agent-browser';
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 
 const headless = process.env.BROWSER_HEADLESS !== 'false';
+
+function getProjectRoot() {
+  const cwd = process.cwd();
+  const devRuntimePath = `${path.sep}src${path.sep}mastra${path.sep}public`;
+  const buildRuntimePath = `${path.sep}.mastra${path.sep}output`;
+
+  if (cwd.includes(devRuntimePath)) {
+    return cwd.slice(0, cwd.indexOf(devRuntimePath));
+  }
+  if (cwd.includes(buildRuntimePath)) {
+    return cwd.slice(0, cwd.indexOf(buildRuntimePath));
+  }
+  return cwd;
+}
+
+const workspaceRoot = path.resolve(getProjectRoot(), process.env.CLAW_WORKSPACE_DIR || './workspace');
+
+const workspace = new Workspace({
+  id: 'claw-workspace',
+  name: 'Claw Workspace',
+  filesystem: new LocalFilesystem({ basePath: workspaceRoot }),
+  sandbox: new LocalSandbox({ workingDirectory: workspaceRoot }),
+});
 
 export const claw = new Agent({
   id: 'claw',
@@ -75,6 +100,7 @@ export const claw = new Agent({
       },
     },
   }),
+  workspace,
   browser: new AgentBrowser({ headless }),
   tools: {
     web_search: openai.tools.webSearch({}),
