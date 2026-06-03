@@ -43,7 +43,10 @@ import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
+import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
+import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
+import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -1041,6 +1044,24 @@ export class Mastra<
       );
     }
     storage = augmentWithInit(storage);
+
+    // The evented workflow engine (used internally by the agentic loop) requires
+    // `workflows` and `backgroundTasks` storage domains. When a user provides a
+    // MastraCompositeStore with only specific domains (e.g. just `notifications`),
+    // these infrastructure domains may be missing. Patch them in with lightweight
+    // in-memory defaults so the engine works transparently without requiring users
+    // to configure internal implementation details.
+    if (storage.stores) {
+      if (!storage.stores.workflows || !storage.stores.backgroundTasks) {
+        const fallbackDb = new InMemoryDB();
+        if (!storage.stores.workflows) {
+          storage.stores.workflows = new WorkflowsInMemory({ db: fallbackDb });
+        }
+        if (!storage.stores.backgroundTasks) {
+          storage.stores.backgroundTasks = new BackgroundTasksInMemory({ db: fallbackDb });
+        }
+      }
+    }
 
     // Validate and assign observability instance
     if (config?.observability) {
