@@ -69,14 +69,14 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
     if (!contents) return;
 
     const cacheKey = stableWorkingMemoryCacheKey({ format: template.format, data: contents });
-    const shouldRefreshSnapshot = Boolean(args.lastSnapshot && !args.contextWindow.hasSnapshot);
-    if (args.tracking?.currentCacheKey === cacheKey && !shouldRefreshSnapshot) return;
+    const shouldMakeSnapshot = !args.contextWindow.hasSnapshot;
+    if (args.tracking?.currentCacheKey === cacheKey && !shouldMakeSnapshot) return;
 
     const mergedConfig = this.memory.getMergedThreadConfig(this.memoryConfig);
     const scope = mergedConfig.workingMemory?.scope ?? 'resource';
 
     const deltaCandidate =
-      template.format === 'markdown' && !shouldRefreshSnapshot
+      template.format === 'markdown' && !shouldMakeSnapshot
         ? buildMarkdownDelta({
             lastSnapshot: args.lastSnapshot,
             deltasSinceSnapshot: args.deltasSinceSnapshot,
@@ -91,6 +91,7 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
         cacheKey,
         tagName: 'working-memory',
         contents: deltaCandidate.contents,
+        delta: deltaCandidate.contents,
         // Stash the full post-edit text on the signal so the next turn can
         // diff against the most recently emitted state instead of the older
         // snapshot. Invisible to the model.
@@ -164,13 +165,10 @@ function buildMarkdownDelta(args: {
   const prior =
     pickStringValue(readSignalValue(latestDelta)) ??
     pickStringValue(readSignalValue(lastSnapshot)) ??
-    (typeof lastSnapshot?.contents === 'string' ? lastSnapshot.contents : undefined);
-
-  if (prior === undefined) return undefined;
-  if (prior === nextContents) return undefined;
+    (typeof lastSnapshot?.contents === 'string' ? lastSnapshot.contents : undefined) ??
+    '';
 
   const patch = renderHunksOnly(prior, nextContents);
-  if (patch.length >= nextContents.length) return undefined;
 
   return { contents: patch };
 }
@@ -193,7 +191,7 @@ function readSignalValue(signal: ProcessorActiveStateSignal | undefined): unknow
  * noise that can flip the snapshot-vs-delta size guard against the delta.
  */
 function renderHunksOnly(prior: string, next: string): string {
-  const { hunks } = structuredPatch('', '', prior, next, '', '', { context: 3 });
+  const { hunks } = structuredPatch('', '', prior, next, '', '', { context: 0 });
   return hunks
     .map(hunk => {
       const header = `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`;
