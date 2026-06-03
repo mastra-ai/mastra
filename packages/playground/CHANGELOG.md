@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.12.1-alpha.0
+
+### Patch Changes
+
+- Fixed Studio chat reloads so persisted signal messages render the same way as live streamed signals. ([#17548](https://github.com/mastra-ai/mastra/pull/17548))
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0-alpha.0
+  - @mastra/client-js@1.23.1-alpha.0
+  - @mastra/react@0.5.1-alpha.0
+  - @mastra/playground-ui@32.0.1-alpha.0
+
 ## 1.12.0
 
 ### Minor Changes
