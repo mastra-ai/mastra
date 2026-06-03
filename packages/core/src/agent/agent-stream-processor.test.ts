@@ -217,6 +217,46 @@ describe('Processor state persistence across processOutputStream and processOutp
     expect(stateInOutputResult?.streamProcessed).toBe(true);
     expect(stateInOutputResult?.chunks).toEqual(['Hello ', 'World']);
   });
+
+  it('exposes prior processOutputStream state to the step-finish lifecycle chunk', async () => {
+    // Regression for #16687: lifecycle chunks (step-start/step-finish) are routed
+    // through output processors via a separate ProcessorRunner. That runner must share
+    // the same processorStates map as the main model-output path, otherwise the
+    // step-finish chunk is handled with a fresh, empty state and loses continuity.
+    const stateByChunkType: Record<string, Record<string, unknown>> = {};
+
+    class LifecycleStateProcessor implements Processor {
+      readonly id = 'lifecycle-state-processor';
+      readonly name = 'Lifecycle State Processor';
+
+      async processOutputStream({ part, state }: any) {
+        if (part.type === 'text-delta') {
+          state.sawText = true;
+        }
+        // Snapshot the state the processor sees for each chunk type
+        stateByChunkType[part.type] = { ...state };
+        return part;
+      }
+    }
+
+    const agent = new Agent({
+      id: 'lifecycle-agent',
+      name: 'lifecycle-agent',
+      instructions: 'Test agent',
+      model: mockModel as any,
+      outputProcessors: [new LifecycleStateProcessor()],
+    });
+
+    const stream = await agent.stream('test message');
+    for await (const _chunk of stream.textStream) {
+      // consume
+    }
+
+    // The processor must have observed the step-finish lifecycle chunk...
+    expect(stateByChunkType['step-finish']).toBeDefined();
+    // ...and at that point it must still see the state set while handling text-delta.
+    expect(stateByChunkType['step-finish']?.sawText).toBe(true);
+  });
 });
 
 describe('OutputProcessor Metadata with Streaming (Issue #11454)', () => {

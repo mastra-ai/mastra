@@ -41,6 +41,15 @@ export type {
   ReflectionConfig,
   ObserverResult,
   ReflectorResult,
+  // Observation marker config
+  ObservationMarkerConfig,
+  // Observation data parts
+  DataOmObservationStartPart,
+  DataOmObservationEndPart,
+  DataOmObservationFailedPart,
+  DataOmStatusPart,
+  DataOmThreadUpdatePart,
+  DataOmObservationPart,
   // Buffering data parts
   DataOmBufferingStartPart,
   DataOmBufferingEndPart,

@@ -12,10 +12,18 @@ export const observabilityRuntimeStrategySchema = z.enum([
   'event-sourced',
 ]);
 
+export const editorSourceSchema = z.enum(['code', 'db']);
+
 export const systemPackagesResponseSchema = z.object({
   packages: z.array(mastraPackageSchema),
   isDev: z.boolean(),
   cmsEnabled: z.boolean(),
+  /**
+   * The editor's configured source, when set. `'code'` swaps Studio's
+   * Save/Publish UI for Download JSON + Open PR. `'db'` keeps the standard
+   * Save/Publish flow. Omitted when the editor has no explicit source.
+   */
+  editorSource: editorSourceSchema.optional(),
   observabilityEnabled: z.boolean(),
   storageType: z.string().optional(),
   observabilityStorageType: z.string().optional(),

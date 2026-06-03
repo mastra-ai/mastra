@@ -1,4 +1,4 @@
-import { Agent, createSignal } from '@mastra/core/agent';
+import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
@@ -10,6 +10,7 @@ import { MockMemory } from '@mastra/core/memory';
 import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
@@ -228,11 +229,35 @@ export function mockAgentMethods(agent: Agent) {
   // Mock declineToolCallGenerate method - returns same format as generate
   vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
 
+  vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
+    accepted: true,
+    runId: 'test-run',
+    toolCallId: 'test-tool',
+  } as any);
+
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
 
   vi.spyOn(agent, 'sendSignal').mockImplementation((signal: any, target: any) => {
     const createdSignal = createSignal(signal);
+    return {
+      accepted: true,
+      runId: target?.runId ?? 'test-run',
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'sendMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
+    return {
+      accepted: true,
+      runId: target?.runId ?? 'test-run',
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'queueMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
     return {
       accepted: true,
       runId: target?.runId ?? 'test-run',
@@ -574,6 +599,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     getToolProvider: vi
       .fn()
       .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
+    getToolProviderOrThrow: vi.fn().mockImplementation((id: string) => {
+      if (id === 'test-provider') return mockToolProvider;
+      throw new UnknownToolProviderError(id, ['test-provider']);
+    }),
     getProcessorProviders: vi.fn().mockReturnValue({ 'test-provider': mockProcessorProvider }),
     getProcessorProvider: vi
       .fn()

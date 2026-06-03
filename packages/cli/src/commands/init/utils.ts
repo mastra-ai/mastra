@@ -12,6 +12,7 @@ import yoctoSpinner from 'yocto-spinner';
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
 import { getToken, loadCredentials } from '../auth/credentials.js';
+import { resolveCurrentOrg } from '../auth/orgs.js';
 import {
   cursorGlobalMCPConfigPath,
   windsurfGlobalMCPConfigPath,
@@ -30,6 +31,8 @@ export type Component = (typeof COMPONENTS)[number];
 export interface ObservabilityPromptResult {
   enabled?: boolean;
   token?: string;
+  orgId?: string;
+  orgName?: string;
 }
 
 interface ObservabilitySelectionEvent {
@@ -81,7 +84,8 @@ export async function promptForObservability(
         const creds = await loadCredentials();
         if (creds) p.log.info(`Logged in as ${creds.user.email}`);
       }
-      return { enabled: true, token };
+      const org = await resolveCurrentOrg(token, { forcePrompt: true });
+      return { enabled: true, token, orgId: org.orgId, orgName: org.orgName };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       p.log.warn(`Could not sign in to Mastra: ${message}`);
@@ -650,7 +654,7 @@ export const getAPIKey = async (provider: LLMProvider) => {
       key = 'GROQ_API_KEY';
       return key;
     case 'google':
-      key = 'GOOGLE_GENERATIVE_AI_API_KEY';
+      key = 'GOOGLE_API_KEY';
       return key;
     case 'cerebras':
       key = 'CEREBRAS_API_KEY';
@@ -1019,6 +1023,8 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
     ...rest,
     observability: observability?.enabled,
     observabilityToken: observability?.token,
+    observabilityOrgId: observability?.orgId,
+    observabilityOrgName: observability?.orgName,
     skills: configureMastraToolingForAgents?.skills as string[] | undefined,
     mcpServer: configureMastraToolingForAgents?.mcpServer as Editor | undefined,
   };

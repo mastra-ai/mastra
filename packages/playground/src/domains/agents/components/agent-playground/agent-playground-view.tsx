@@ -20,8 +20,14 @@ interface AgentPlaygroundViewProps {
   isPublishing: boolean;
   hasDraft: boolean;
   readOnly: boolean;
+  isCodeSourceAgent?: boolean;
+  showCodeModeActions?: boolean;
+  canOpenPr?: boolean;
+  openPrTitle?: string;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
+  onDownloadJson?: () => Promise<void>;
+  onOpenPr?: () => Promise<void>;
   isViewingPreviousVersion?: boolean;
 }
 
@@ -36,8 +42,14 @@ function LeftPanel({
   isPublishing,
   hasDraft,
   readOnly,
+  isCodeSourceAgent,
+  showCodeModeActions,
+  canOpenPr,
+  openPrTitle,
   onSaveDraft,
   onPublish,
+  onDownloadJson,
+  onOpenPr,
   isViewingPreviousVersion,
 }: {
   agentId: string;
@@ -50,8 +62,14 @@ function LeftPanel({
   isPublishing: boolean;
   hasDraft: boolean;
   readOnly: boolean;
+  isCodeSourceAgent?: boolean;
+  showCodeModeActions?: boolean;
+  canOpenPr?: boolean;
+  openPrTitle?: string;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
+  onDownloadJson?: () => Promise<void>;
+  onOpenPr?: () => Promise<void>;
   isViewingPreviousVersion?: boolean;
 }) {
   const { versionSelector, actionBar } = AgentPlaygroundVersionBar({
@@ -64,8 +82,14 @@ function LeftPanel({
     isPublishing,
     hasDraft,
     readOnly,
+    isCodeSourceAgent,
+    showCodeModeActions,
+    canOpenPr,
+    openPrTitle,
     onSaveDraft,
     onPublish,
+    onDownloadJson,
+    onOpenPr,
     isViewingPreviousVersion,
   });
 
@@ -109,8 +133,14 @@ export function AgentPlaygroundView({
   isPublishing,
   hasDraft,
   readOnly,
+  isCodeSourceAgent,
+  showCodeModeActions,
+  canOpenPr,
+  openPrTitle,
   onSaveDraft,
   onPublish,
+  onDownloadJson,
+  onOpenPr,
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
@@ -142,8 +172,14 @@ export function AgentPlaygroundView({
             isPublishing={isPublishing}
             hasDraft={hasDraft}
             readOnly={readOnly}
+            isCodeSourceAgent={isCodeSourceAgent}
+            showCodeModeActions={showCodeModeActions}
+            canOpenPr={canOpenPr}
+            openPrTitle={openPrTitle}
             onSaveDraft={onSaveDraft}
             onPublish={onPublish}
+            onDownloadJson={onDownloadJson}
+            onOpenPr={onOpenPr}
             isViewingPreviousVersion={isViewingPreviousVersion}
           />
         </CollapsiblePanel>

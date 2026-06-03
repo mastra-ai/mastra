@@ -4,11 +4,18 @@ import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
-import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
+import type {
+  AgentThreadSubscription,
+  SendAgentNotificationSignalOptions,
+  SendAgentNotificationSignalResult,
+  ToolsInput,
+  ToolsetsInput,
+} from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
+import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
@@ -65,6 +72,14 @@ type HarnessStreamState = {
   isSuspended: boolean;
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
+};
+
+type HarnessSendNotificationSignalOptions = {
+  ifActive?: SendAgentNotificationSignalOptions['ifActive'];
+  ifIdle?: SendAgentNotificationSignalOptions['ifIdle'];
+  tracingContext?: TracingContext;
+  tracingOptions?: TracingOptions;
+  requestContext?: RequestContext;
 };
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
@@ -130,8 +145,8 @@ function toSystemReminderContent(
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
   const metadata = getRecordValue(payload.metadata);
-  const message = getStringValue(payload.contents);
-  if (message === undefined) return undefined;
+  const message = signalContentsToText(payload.contents);
+  if (!message) return undefined;
 
   return {
     type: 'system_reminder',
@@ -165,7 +180,8 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
 
   const signal = createSignal({
     id,
-    type: 'user-message',
+    type: 'user',
+    tagName: 'user',
     contents: rawContents as AgentSignalContents,
     attributes: getRecordValue(payload.attributes) as AgentSignalInput['attributes'],
     createdAt: getStringValue(payload.createdAt),
@@ -179,6 +195,98 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
     content,
     createdAt: signal.createdAt,
     attributes: signal.attributes,
+  };
+}
+
+function signalContentsToText(contents: unknown): string {
+  if (typeof contents === 'string') return contents;
+  if (!Array.isArray(contents)) return '';
+  return contents
+    .filter((part): part is { type: 'text'; text: string } => getRecordValue(part)?.type === 'text')
+    .map(part => part.text)
+    .join('\n');
+}
+
+function toStateSignalContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'state_signal' }> | undefined {
+  const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
+  const stateId = getStringValue(stateMetadata?.id) ?? getStringValue(payload.tagName) ?? 'state';
+
+  return {
+    type: 'state_signal',
+    id: getStringValue(payload.id),
+    stateId,
+    mode: stateMetadata?.mode === 'delta' ? 'delta' : 'snapshot',
+    cacheKey: getStringValue(stateMetadata?.cacheKey),
+    version: typeof stateMetadata?.version === 'number' ? stateMetadata.version : undefined,
+    message: signalContentsToText(payload.contents),
+  };
+}
+
+function toNotificationSummaryContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'notification_summary' }> | undefined {
+  const metadataSummary = getRecordValue(getRecordValue(payload.metadata)?.notificationSummary);
+  const bySource = getRecordValue(metadataSummary?.bySource) ?? {};
+  const byPriority = getRecordValue(metadataSummary?.byPriority) ?? {};
+  const notificationIds = Array.isArray(metadataSummary?.notificationIds)
+    ? metadataSummary.notificationIds.filter((id): id is string => typeof id === 'string')
+    : [];
+  const pending = typeof metadataSummary?.pending === 'number' ? metadataSummary.pending : undefined;
+
+  return {
+    type: 'notification_summary',
+    id: getStringValue(payload.id),
+    message: signalContentsToText(payload.contents),
+    pending: pending ?? notificationIds.length,
+    bySource: Object.fromEntries(
+      Object.entries(bySource).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+    ),
+    byPriority: Object.fromEntries(
+      Object.entries(byPriority).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+    ),
+    notificationIds,
+  };
+}
+
+function toReactiveSignalContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'reactive_signal' }> | undefined {
+  const tagName = getStringValue(payload.tagName);
+  if (!tagName) return undefined;
+
+  return {
+    type: 'reactive_signal',
+    id: getStringValue(payload.id),
+    tagName,
+    message: signalContentsToText(payload.contents),
+    attributes: getRecordValue(payload.attributes),
+    metadata: getRecordValue(payload.metadata),
+  };
+}
+
+function toNotificationContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'notification' }> | undefined {
+  const attributes = getRecordValue(payload.attributes) ?? {};
+  const metadata = getRecordValue(payload.metadata) ?? {};
+  const notificationMetadata = getRecordValue(metadata.notification);
+  const message = signalContentsToText(payload.contents);
+  if (!message) return undefined;
+
+  return {
+    type: 'notification',
+    id: getStringValue(payload.id),
+    notificationId: getStringValue(attributes.id) ?? getStringValue(notificationMetadata?.recordId),
+    message,
+    source: getStringValue(attributes.source) ?? getStringValue(notificationMetadata?.source),
+    kind:
+      getStringValue(attributes.kind) ?? getStringValue(attributes.type) ?? getStringValue(notificationMetadata?.kind),
+    priority: getStringValue(attributes.priority) ?? getStringValue(notificationMetadata?.priority),
+    status: getStringValue(attributes.status) ?? getStringValue(notificationMetadata?.status),
+    attributes,
+    metadata,
   };
 }
 
@@ -1609,30 +1717,110 @@ export class Harness<TState = {}> {
     await this.ensureAgentThreadSubscription(this.getCurrentAgent(), this.currentThreadId);
   }
 
-  private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
-    if (this.followUpQueue.length === 0) return;
+  private createMessageInput({
+    content,
+    files,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+  }): AgentSignalContents {
+    if (!files?.length) return content;
+
+    const fileParts = files.map(f => {
+      const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+      if (isText) {
+        let textContent = f.data;
+        const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+        if (base64Match) {
+          try {
+            textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+          } catch {
+            // Fall through with raw data
+          }
+        }
+        const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+        const maxBacktickRun = Math.max(0, ...Array.from(textContent.matchAll(/`+/g), match => match[0].length));
+        const fence = '`'.repeat(Math.max(3, maxBacktickRun + 1));
+        return { type: 'text' as const, text: `${label}\n${fence}\n${textContent}\n${fence}` };
+      }
+      return {
+        type: 'file' as const,
+        data: f.data,
+        mediaType: f.mediaType,
+        ...(f.filename ? { filename: f.filename } : {}),
+      };
+    });
+
+    return [{ type: 'text', text: content }, ...fileParts];
+  }
+
+  private async buildAgentMessageStreamOptions({
+    requestContext: requestContextInput,
+    tracingContext,
+    tracingOptions,
+  }: {
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<Record<string, unknown>> {
+    if (!this.currentThreadId) {
+      throw new Error('Cannot build stream options without a current thread');
+    }
+
+    this.abortRequested = false;
+    this.abortController ??= new AbortController();
+    const requestContext = await this.buildRequestContext(requestContextInput);
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const streamOptions: Record<string, unknown> = {
+      memory: { thread: this.currentThreadId, resource: this.resourceId },
+      abortSignal: this.abortController.signal,
+      requestContext,
+      maxSteps: 1000,
+      savePerStep: false,
+      requireToolApproval: !isYolo,
+      modelSettings: { temperature: 1 },
+      ...(tracingContext && { tracingContext }),
+      ...(tracingOptions && { tracingOptions }),
+    };
+    streamOptions.toolsets = await this.buildToolsets(requestContext);
+    return streamOptions;
+  }
+
+  private async drainFollowUpQueue(options?: {
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<boolean> {
+    if (this.followUpQueue.length === 0) return false;
 
     const next = this.followUpQueue.shift()!;
-    if (this.agentThreadSubscription) {
-      // When called from processSubscribedThreadStream → finishSubscribedStreamRun,
-      // sendMessage would deadlock: it waits for the new run to finish via
-      // waitForCurrentThreadStreamIdle, but the subscription consumer is blocked
-      // here and cannot advance the generator to process that run. Send the
-      // signal directly and let the subscription handle the run lifecycle.
-      const signal = this.sendSignal({
-        content: next.content,
-        requestContext: next.requestContext,
-        tracingContext: options?.tracingContext,
-        tracingOptions: options?.tracingOptions,
-      });
-      await signal.accepted;
-    } else {
-      await this.sendMessage({
-        content: next.content,
-        requestContext: next.requestContext,
-        tracingContext: options?.tracingContext,
-        tracingOptions: options?.tracingOptions,
-      });
+    try {
+      if (this.agentThreadSubscription && this.currentThreadId) {
+        const agent = this.getCurrentAgent();
+        const streamOptions = await this.buildAgentMessageStreamOptions({
+          requestContext: next.requestContext,
+          tracingContext: options?.tracingContext,
+          tracingOptions: options?.tracingOptions,
+        });
+        const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
+          resourceId: this.resourceId,
+          threadId: this.currentThreadId,
+          ifIdle: { streamOptions: streamOptions as any },
+        });
+        this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length, runId: result.runId });
+      } else {
+        this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
+        await this.sendMessage({
+          content: next.content,
+          requestContext: next.requestContext,
+          tracingContext: options?.tracingContext,
+          tracingOptions: options?.tracingOptions,
+        });
+      }
+      return true;
+    } catch (error) {
+      this.followUpQueue.unshift(next);
+      this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
+      throw error;
     }
   }
 
@@ -1756,7 +1944,9 @@ export class Harness<TState = {}> {
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
-    const signal = createSignal('content' in input ? { type: 'user-message', contents: input.content } : input);
+    const signal = createSignal(
+      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
+    );
     const accepted = Promise.resolve().then(async () => {
       if (!this.currentThreadId) {
         const thread = await this.createThread();
@@ -1776,22 +1966,11 @@ export class Harness<TState = {}> {
         return { accepted: result.accepted, runId: result.runId };
       }
 
-      this.abortRequested = false;
-      this.abortController ??= new AbortController();
-      const requestContext = await this.buildRequestContext(requestContextInput);
-      const isYolo = (this.state as Record<string, unknown>).yolo === true;
-      const streamOptions: Record<string, unknown> = {
-        memory: { thread: this.currentThreadId, resource: this.resourceId },
-        abortSignal: this.abortController.signal,
-        requestContext,
-        maxSteps: 1000,
-        savePerStep: false,
-        requireToolApproval: !isYolo,
-        modelSettings: { temperature: 1 },
-        ...(tracingContext && { tracingContext }),
-        ...(tracingOptions && { tracingOptions }),
-      };
-      streamOptions.toolsets = await this.buildToolsets(requestContext);
+      const streamOptions = await this.buildAgentMessageStreamOptions({
+        requestContext: requestContextInput,
+        tracingContext,
+        tracingOptions,
+      });
 
       const result = agent.sendSignal(signal, {
         resourceId: this.resourceId,
@@ -1803,6 +1982,45 @@ export class Harness<TState = {}> {
     });
 
     return { id: signal.id, type: signal.type, accepted };
+  }
+
+  /**
+   * Send a notification signal to the current agent/thread.
+   */
+  async sendNotificationSignal(
+    input: SendNotificationSignalInput,
+    options: HarnessSendNotificationSignalOptions = {},
+  ): Promise<SendAgentNotificationSignalResult> {
+    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    if (!this.currentThreadId) {
+      const thread = await this.createThread();
+      this.currentThreadId = thread.id;
+    }
+
+    const agent = this.getCurrentAgent();
+    await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
+
+    if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
+      return agent.sendNotificationSignal(input, {
+        resourceId: this.resourceId,
+        threadId: this.currentThreadId,
+        ifActive,
+        ifIdle,
+      });
+    }
+
+    const streamOptions = await this.buildAgentMessageStreamOptions({
+      requestContext: requestContextInput,
+      tracingContext,
+      tracingOptions,
+    });
+
+    return agent.sendNotificationSignal(input, {
+      resourceId: this.resourceId,
+      threadId: this.currentThreadId,
+      ifActive,
+      ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+    });
   }
 
   /**
@@ -1822,32 +2040,7 @@ export class Harness<TState = {}> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
   }): Promise<void> {
-    let messageInput: AgentSignalContents = content;
-    if (files?.length) {
-      const fileParts = files.map(f => {
-        const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
-        if (isText) {
-          let textContent = f.data;
-          const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
-          if (base64Match) {
-            try {
-              textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
-            } catch {
-              // Fall through with raw data
-            }
-          }
-          const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
-          return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
-        }
-        return {
-          type: 'file' as const,
-          data: f.data,
-          mediaType: f.mediaType,
-          ...(f.filename ? { filename: f.filename } : {}),
-        };
-      });
-      messageInput = [{ type: 'text', text: content }, ...fileParts];
-    }
+    const messageInput = this.createMessageInput({ content, files });
 
     const wasActive = this.isCurrentThreadStreamActive();
     let emittedAgentEnd = false;
@@ -2017,7 +2210,7 @@ export class Harness<TState = {}> {
     if (msg.role === 'signal') {
       const signal = mastraDBMessageToSignal(msg as MastraDBMessage);
 
-      if (signal.type === 'user-message') {
+      if (signal.type === 'user') {
         const signalContent = signalContentsToHarnessContent(signal.contents);
         if (signalContent.length > 0) {
           return {
@@ -2030,21 +2223,94 @@ export class Harness<TState = {}> {
         }
       }
 
-      if (signal.type === 'system-reminder') {
+      if (signal.type === 'state') {
+        const stateSignal = toStateSignalContent({
+          id: signal.id,
+          type: signal.type,
+          tagName: signal.tagName,
+          contents: signal.contents,
+          metadata: signal.metadata,
+        });
+        if (stateSignal) {
+          content.push(stateSignal);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
+      if (signal.type === 'reactive' && signal.tagName === 'system-reminder') {
         const reminder = toSystemReminderContent({
           type: signal.type,
-          contents:
-            typeof signal.contents === 'string'
-              ? signal.contents
-              : signal.contents
-                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-                  .map(p => p.text)
-                  .join('\n'),
+          contents: signalContentsToText(signal.contents),
           attributes: signal.attributes ?? msg.content.metadata,
           metadata: signal.metadata,
         });
         if (reminder) {
           content.push(reminder);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
+      if (signal.type === 'notification' && signal.tagName === 'notification-summary') {
+        const notificationSummary = toNotificationSummaryContent({
+          id: signal.id,
+          contents: signal.contents,
+          attributes: signal.attributes,
+          metadata: signal.metadata,
+        });
+        if (notificationSummary) {
+          content.push(notificationSummary);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
+      if (signal.type === 'notification' && signal.tagName === 'notification') {
+        const notification = toNotificationContent({
+          id: signal.id,
+          contents: signal.contents,
+          attributes: signal.attributes,
+          metadata: signal.metadata,
+        });
+        if (notification) {
+          content.push(notification);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
+      if (signal.type === 'reactive') {
+        const reactiveSignal = toReactiveSignalContent({
+          id: signal.id,
+          type: signal.type,
+          tagName: signal.tagName,
+          contents: signal.contents,
+          attributes: signal.attributes,
+          metadata: signal.metadata,
+        });
+        if (reactiveSignal) {
+          content.push(reactiveSignal);
         }
 
         return {
@@ -2138,6 +2404,26 @@ export class Harness<TState = {}> {
           });
           break;
         }
+        case 'data-signal': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          if (data.type === 'state') {
+            const stateSignal = toStateSignalContent(data);
+            if (stateSignal) content.push(stateSignal);
+          } else if (data.type === 'reactive' && data.tagName === 'system-reminder') {
+            const reminder = toSystemReminderContent(data);
+            if (reminder) content.push(reminder);
+          } else if (data.type === 'notification' && data.tagName === 'notification-summary') {
+            const notificationSummary = toNotificationSummaryContent(data);
+            if (notificationSummary) content.push(notificationSummary);
+          } else if (data.type === 'notification' && data.tagName === 'notification') {
+            const notification = toNotificationContent(data);
+            if (notification) content.push(notification);
+          } else if (data.type === 'reactive') {
+            const reactiveSignal = toReactiveSignalContent(data);
+            if (reactiveSignal) content.push(reactiveSignal);
+          }
+          break;
+        }
         case 'data-user-message': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
           const message = toUserSignalMessage(data);
@@ -2146,6 +2432,7 @@ export class Harness<TState = {}> {
           }
           break;
         }
+        // Back-compat: persisted streams may still contain data-system-reminder parts
         case 'data-system-reminder': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
           const reminder = toSystemReminderContent(data);
@@ -2695,6 +2982,41 @@ export class Harness<TState = {}> {
         }
         break;
       }
+      case 'data-signal': {
+        const payload = (chunk as any).data as Record<string, unknown> | undefined;
+        if (payload?.type === 'state') {
+          const stateSignal = toStateSignalContent(payload);
+          if (stateSignal) {
+            state.currentMessage.content.push(stateSignal);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'reactive' && payload.tagName === 'system-reminder') {
+          const reminder = toSystemReminderContent(payload);
+          if (reminder) {
+            state.currentMessage.content.push(reminder);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'notification' && payload.tagName === 'notification-summary') {
+          const notificationSummary = toNotificationSummaryContent(payload);
+          if (notificationSummary) {
+            state.currentMessage.content.push(notificationSummary);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'notification' && payload.tagName === 'notification') {
+          const notification = toNotificationContent(payload);
+          if (notification) {
+            state.currentMessage.content.push(notification);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'reactive') {
+          const reactiveSignal = toReactiveSignalContent(payload);
+          if (reactiveSignal) {
+            state.currentMessage.content.push(reactiveSignal);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        }
+        break;
+      }
       case 'data-user-message': {
         const payload = (chunk as any).data as Record<string, unknown> | undefined;
         const message = payload ? toUserSignalMessage(payload) : undefined;
@@ -2716,6 +3038,7 @@ export class Harness<TState = {}> {
         }
         break;
       }
+      // Back-compat: persisted streams may still contain data-system-reminder parts
       case 'data-system-reminder': {
         const payload = (chunk as any).data as Record<string, unknown> | undefined;
         const reminder = payload ? toSystemReminderContent(payload) : undefined;
@@ -2814,6 +3137,7 @@ export class Harness<TState = {}> {
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
     this.followUpQueue = [];
+    this.emit({ type: 'follow_up_queued', count: 0 });
     await this.sendMessage({ content, requestContext });
   }
 
@@ -2907,6 +3231,8 @@ export class Harness<TState = {}> {
     this.displayState.pendingPlanApproval = null;
     this.displayState.activeSubagents = new Map();
     this.displayState.currentMessage = null;
+    this.followUpQueue = [];
+    this.displayState.queuedFollowUps = 0;
     this.displayState.modifiedFiles = new Map();
     this.displayState.tasks = [];
     this.displayState.previousTasks = [];
@@ -3572,6 +3898,11 @@ export class Harness<TState = {}> {
         ds.tasks = event.tasks;
         break;
 
+      // ── Follow-up queue ────────────────────────────────────────────────
+      case 'follow_up_queued':
+        ds.queuedFollowUps = event.count;
+        break;
+
       // ── Thread lifecycle ───────────────────────────────────────────────
       case 'thread_changed':
         this.resetThreadDisplayState();
@@ -3855,8 +4186,8 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   private startHeartbeats(): void {
-    const handlers = this.config.heartbeatHandlers;
-    if (!handlers?.length) return;
+    const handlers = [...(this.config.heartbeatHandlers ?? [])];
+    if (!handlers.length) return;
 
     for (const hb of handlers) {
       if (this.heartbeatTimers.has(hb.id)) continue;

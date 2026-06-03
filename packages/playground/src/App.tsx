@@ -27,6 +27,7 @@ import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
+import AgentChannelsPage from './pages/agents/agent-channels';
 import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentReview from './pages/agents/agent-review';
@@ -119,6 +120,7 @@ declare global {
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
+    MASTRA_PLATFORM_PROJECT_ID?: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
@@ -445,6 +447,7 @@ export const routes: RouteObject[] = [
               ]
             : []),
           { path: 'traces', element: <AgentTraces /> },
+          { path: 'channels', element: <AgentChannelsPage /> },
         ],
       },
 
