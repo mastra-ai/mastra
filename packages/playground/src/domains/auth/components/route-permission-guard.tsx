@@ -2,12 +2,7 @@ import { Spinner } from '@mastra/playground-ui';
 import { Navigate, useLocation } from 'react-router';
 
 import { usePermissions } from '../hooks/use-permissions';
-import {
-  getFirstAccessibleRoute,
-  getPermissionForRoute,
-  hasRoutePermission,
-  useRoutePermissions,
-} from '../route-permissions';
+import { getFirstAccessibleRoute, getPermissionForRoute, hasRoutePermission } from '../route-permissions';
 
 /**
  * Guards routes based on the current user's permissions.
@@ -21,13 +16,11 @@ import {
 export function RoutePermissionGuard({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
   const { hasPermission, hasAnyPermission, rbacEnabled, isAuthenticated, isLoading } = usePermissions();
-  const { isLoading: patternsLoading } = useRoutePermissions();
 
-  // While loading, be defensive: don't leak protected content before the gate
-  // can run. Show a spinner until both the user's permissions and the
-  // authoritative permission patterns (which the route table is validated
-  // against) are resolved.
-  if (isLoading || patternsLoading) {
+  // While the user's permissions load, be defensive: don't leak protected
+  // content before gating can run. The authoritative permission patterns are
+  // already loaded and validated by RoutePermissionsGate higher in the tree.
+  if (isLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner />
@@ -46,7 +39,14 @@ export function RoutePermissionGuard({ children }: { children: React.ReactNode }
   // User has permission — allow through
   if (hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission)) return <>{children}</>;
 
-  // No permission — redirect to first accessible route
+  // No permission — redirect to first accessible route.
   const fallback = getFirstAccessibleRoute(hasPermission, hasAnyPermission);
+
+  // Guard against an infinite redirect loop: if the computed fallback is the
+  // page we're already on (e.g. the user has no accessible gated route and
+  // we're already on the public fallback), render the children instead of
+  // navigating back to ourselves.
+  if (fallback === pathname) return <>{children}</>;
+
   return <Navigate to={fallback} replace />;
 }

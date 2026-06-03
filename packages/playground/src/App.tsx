@@ -7,6 +7,7 @@ import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } fr
 import type { LoaderFunctionArgs, RouteObject } from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-builder-root-layout';
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
+import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -679,7 +680,9 @@ function App() {
     <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
       <RoleImpersonationProvider>
         <PostHogProvider>
-          <RouterProvider router={router} />
+          <RoutePermissionsGate>
+            <RouterProvider router={router} />
+          </RoutePermissionsGate>
         </PostHogProvider>
       </RoleImpersonationProvider>
     </MastraReactProvider>

@@ -8,16 +8,15 @@
  *
  * IMPORTANT: The permission strings below are hardcoded literals. They are
  * validated at runtime against the authoritative permission patterns served by
- * `GET /auth/permission-patterns` (see `useRoutePermissions`), so the browser
- * never imports the server-only `@mastra/core/auth/ee` code. The runtime check
- * preserves the typo protection the old compile-time `P()` validator gave
- * (e.g. 'scorers:read' vs 'scores:read').
+ * `GET /auth/permission-patterns` (see `RoutePermissionsGate`), so the browser
+ * never imports the server-only `@mastra/core/auth/ee` code. The gate preserves
+ * the typo protection the old compile-time `P()` validator gave (e.g.
+ * 'scorers:read' vs 'scores:read') by throwing on an unknown literal.
  *
  * @see COR-829 Studio View Permissions
  */
 
 import type { PermissionPattern } from '@mastra/client-js';
-import { usePermissionPatterns } from './hooks/use-permission-patterns';
 
 export type RoutePermission = {
   /** The route path (used for redirects) */
@@ -39,8 +38,8 @@ export type RoutePermission = {
  * Ordered by redirect priority - when determining where to send a user,
  * we'll redirect to the first route they have permission to access.
  *
- * Permission literals are validated at runtime by `useRoutePermissions` against
- * the server's PERMISSION_PATTERNS. Common gotchas the validation catches:
+ * Permission literals are validated at runtime by `RoutePermissionsGate`
+ * against the server's PERMISSION_PATTERNS. Common gotchas the validation catches:
  * - 'mcp' not 'mcps' (UI route is /mcps but resource is 'mcp')
  * - 'scores' not 'scorers' (UI route is /scorers but resource is 'scores')
  * - 'stored-prompt-blocks' for prompts (uses /stored/prompt-blocks routes)
@@ -81,7 +80,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
  * Collect the permission literals referenced by the route table (excluding
  * 'public'), so callers can validate them against the server's patterns.
  */
-function collectRouteLiterals(routes: RoutePermission[]): PermissionPattern[] {
+export function collectRouteLiterals(routes: RoutePermission[]): PermissionPattern[] {
   return [
     ...new Set(
       routes.flatMap(r => (Array.isArray(r.permission) ? r.permission : [r.permission])).filter(p => p !== 'public'),
@@ -156,39 +155,4 @@ export function getFirstAccessibleRoute(
   }
   // Fall back to /resources if no gated routes are accessible
   return '/resources';
-}
-
-export type UseRoutePermissionsResult = {
-  /** The route → permission registry. */
-  routes: RoutePermission[];
-  /** True while the authoritative permission patterns are still loading. */
-  isLoading: boolean;
-};
-
-/**
- * Hook that exposes the route-permission registry and validates each hardcoded
- * permission literal against the server's authoritative PERMISSION_PATTERNS.
- *
- * Validation runs at runtime (dev-time `console.error`) instead of the old
- * compile-time `P()` guard, preserving typo protection without importing the
- * server-only EE permission source into the browser bundle.
- *
- * Consumers should treat `isLoading` as "don't redirect / render nothing yet"
- * so gating decisions are never made against an empty pattern set.
- */
-export function useRoutePermissions(): UseRoutePermissionsResult {
-  const { patterns, isLoading } = usePermissionPatterns();
-
-  if (import.meta.env?.DEV && !isLoading && patterns.size > 0) {
-    for (const literal of collectRouteLiterals(ROUTE_PERMISSIONS)) {
-      if (!patterns.has(literal)) {
-        console.error(
-          `[route-permissions] Unknown permission pattern "${literal}". ` +
-            `It is not in the server's PERMISSION_PATTERNS — check for a typo.`,
-        );
-      }
-    }
-  }
-
-  return { routes: ROUTE_PERMISSIONS, isLoading };
 }

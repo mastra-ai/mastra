@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { BuilderSettingsResponse } from '@mastra/client-js';
+import type { BuilderAvailableModelsResponse, BuilderSettingsResponse } from '@mastra/client-js';
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
@@ -16,6 +16,10 @@ import { server } from '@/test/msw-server';
 const builderEnabled: BuilderSettingsResponse = {
   enabled: true,
   features: { agent: {} },
+};
+
+const emptyAvailableModels: BuilderAvailableModelsResponse = {
+  providers: [],
 };
 
 const unauthenticatedCapabilities = {
@@ -108,10 +112,14 @@ const baseAgent = {
   updatedAt: new Date().toISOString(),
 };
 
-function defaultHandlers() {
+function defaultHandlers(onAvailableModels?: () => void) {
   return [
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(unauthenticatedCapabilities)),
     http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderEnabled)),
+    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => {
+      onAvailableModels?.();
+      return HttpResponse.json(emptyAvailableModels);
+    }),
   ];
 }
 
@@ -179,6 +187,23 @@ describe('AgentBuilderAgentsPage', () => {
     await act(() => new Promise(resolve => setTimeout(resolve, 0)));
     expect(screen.queryByText('No agents yet')).toBeNull();
     expect(screen.queryByText('Create an agent')).toBeNull();
+  });
+
+  it('seeds the builder-available-models cache so the model picker is warm on the create/edit page', async () => {
+    const onAvailableModels = vi.fn<() => void>();
+    server.use(
+      ...defaultHandlers(onAvailableModels),
+      ...userHandler({ id: 'user-1' }),
+      http.get(`${BASE_URL}/api/stored/agents`, () =>
+        HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+      ),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(onAvailableModels).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('omits authorId when no current user is available', async () => {

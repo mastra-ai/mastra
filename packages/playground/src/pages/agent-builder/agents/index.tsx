@@ -19,6 +19,7 @@ import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
 } from '@/domains/agent-builder/components/agent-list/agent-builder-list';
+import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
@@ -28,6 +29,11 @@ export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const { canWrite, canUseFavorites } = useBuilderAgentAccess();
   const [search, setSearch] = useState('');
+  // Prefetch and seed the ['builder-available-models'] cache (return value
+  // ignored) from the agent list — the entry point users pass through before
+  // creating/opening an agent — so the model picker is already warm by the time
+  // the create/edit page mounts instead of paying the cold gateway fetch then.
+  useAgentBuilderAllowedModels({ enabled: canWrite });
   const { Link: FrameworkLink } = useLinkComponent();
 
   const listParams = useMemo<ListStoredAgentsParams>(() => {
