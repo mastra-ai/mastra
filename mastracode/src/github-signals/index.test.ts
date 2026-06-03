@@ -838,6 +838,7 @@ describe('GithubSignals', () => {
                 lastSyncError: 'old-error',
                 lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
                 lastObservedContentHash: 'old-hash',
+                lastObservedThreadContentHash: 'old-thread-hash',
               },
             ],
           },
@@ -853,6 +854,7 @@ describe('GithubSignals', () => {
         htmlUrl: 'https://github.com/mastra-ai/mastra/pull/123',
         githubUpdatedAt: '2026-01-01T00:05:00.000Z',
         contentHash: 'new-hash',
+        threadContentHash: 'new-thread-hash',
       })),
     };
     const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000, agentId: 'code-agent' });
@@ -875,6 +877,7 @@ describe('GithubSignals', () => {
       lastSyncStatus: 'success',
       lastObservedGithubUpdatedAt: '2026-01-01T00:05:00.000Z',
       lastObservedContentHash: 'new-hash',
+      lastObservedThreadContentHash: 'new-thread-hash',
       lastNotificationKind: 'pull-request-activity',
       lastNotificationPriority: 'medium',
       lastNotificationSummary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
@@ -962,6 +965,74 @@ describe('GithubSignals', () => {
       lastObservedMergeableState: 'unstable',
       lastObservedCiState: 'pending',
       lastObservedReviewStateHash: 'reviews-0',
+    });
+    expect(subscription.lastNotificationKind).toBeUndefined();
+  });
+
+  it('updates the GitHub cursor without notifying when only pending check details change', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-check-churn',
+      resourceId: 'resource-check-churn',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 17447,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-06-03T05:06:31.000Z',
+                lastObservedContentHash: 'old-check-hash',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'unstable',
+                lastObservedCiState: 'pending',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(
+        async () =>
+          ({
+            title: '07 feat(mastracode): add GitHub signal subscriptions',
+            state: 'open',
+            githubUpdatedAt: '2026-06-03T05:11:30.000Z',
+            contentHash: 'new-check-hash',
+            threadContentHash: 'same-thread-hash',
+            headSha: 'same-head-sha',
+            ciState: 'pending',
+            mergeableState: 'unstable',
+            unresolvedReviewThreads: 0,
+            reviewStateHash: 'reviews-0',
+            checks: [{ name: 'changed-tests', status: 'queued', conclusion: undefined }],
+          }) satisfies GithubPullRequestSnapshot,
+      ),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription).toMatchObject({
+      lastObservedGithubUpdatedAt: '2026-06-03T05:11:30.000Z',
+      lastObservedContentHash: 'new-check-hash',
+      lastObservedThreadContentHash: 'same-thread-hash',
+      lastObservedHeadSha: 'same-head-sha',
+      lastObservedCiState: 'pending',
     });
     expect(subscription.lastNotificationKind).toBeUndefined();
   });

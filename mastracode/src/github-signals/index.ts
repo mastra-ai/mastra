@@ -37,6 +37,8 @@ export type GithubPRSubscription = {
   lastSyncError?: string;
   lastObservedGithubUpdatedAt?: string;
   lastObservedContentHash?: string;
+  lastObservedThreadContentHash?: string;
+  lastObservedHeadSha?: string;
   lastObservedState?: string;
   lastObservedMergeableState?: string;
   lastObservedCiState?: string;
@@ -313,6 +315,12 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
       ...(readString(rawSubscription.lastObservedContentHash)
         ? { lastObservedContentHash: readString(rawSubscription.lastObservedContentHash)! }
         : {}),
+      ...(readString(rawSubscription.lastObservedThreadContentHash)
+        ? { lastObservedThreadContentHash: readString(rawSubscription.lastObservedThreadContentHash)! }
+        : {}),
+      ...(readString(rawSubscription.lastObservedHeadSha)
+        ? { lastObservedHeadSha: readString(rawSubscription.lastObservedHeadSha)! }
+        : {}),
       ...(readString(rawSubscription.lastObservedState)
         ? { lastObservedState: readString(rawSubscription.lastObservedState)! }
         : {}),
@@ -550,6 +558,7 @@ function classifyGithubActivityNotification(input: {
       summary: `${pr} has CI still running${names ? `: ${names}` : ''}`,
     };
   }
+  if (input.snapshot.ciState === 'pending' && input.subscription.lastObservedCiState === 'pending') return undefined;
   if (isBotOnlyActivity(input.snapshot)) return undefined;
   return {
     kind: 'pull-request-activity',
@@ -588,6 +597,8 @@ function classifyGithubBaselineNotification(input: {
 function applySnapshotCursor(subscription: GithubPRSubscription, snapshot: GithubPullRequestSnapshot): void {
   if (snapshot.githubUpdatedAt) subscription.lastObservedGithubUpdatedAt = snapshot.githubUpdatedAt;
   if (snapshot.contentHash) subscription.lastObservedContentHash = snapshot.contentHash;
+  if (snapshot.threadContentHash) subscription.lastObservedThreadContentHash = snapshot.threadContentHash;
+  if (snapshot.headSha) subscription.lastObservedHeadSha = snapshot.headSha;
   if (snapshot.state) subscription.lastObservedState = snapshot.state;
   if (snapshot.mergeableState) subscription.lastObservedMergeableState = snapshot.mergeableState;
   if (snapshot.ciState) subscription.lastObservedCiState = snapshot.ciState;
@@ -1203,17 +1214,29 @@ export class GithubSignals implements Processor<'github-signals'> {
 
         const previousGithubUpdatedAt = subscription.lastObservedGithubUpdatedAt;
         const previousContentHash = subscription.lastObservedContentHash;
+        const previousThreadContentHash = subscription.lastObservedThreadContentHash;
+        const previousHeadSha = subscription.lastObservedHeadSha;
         if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
 
         // First observation (no previous cursor) always counts as changed so we
         // emit a baseline notification with the PR's current state.
         const isFirstObservation = syncResult.ok && snapshot && !previousGithubUpdatedAt && !previousContentHash;
 
+        const legacyAggregateChanged =
+          previousContentHash &&
+          snapshot?.contentHash &&
+          previousContentHash !== snapshot.contentHash &&
+          !previousThreadContentHash &&
+          !previousHeadSha;
         const changed =
           isFirstObservation ||
           (syncResult.ok &&
             snapshot &&
-            ((previousContentHash && snapshot.contentHash && previousContentHash !== snapshot.contentHash) ||
+            (legacyAggregateChanged ||
+              (previousThreadContentHash &&
+                snapshot.threadContentHash &&
+                previousThreadContentHash !== snapshot.threadContentHash) ||
+              (previousHeadSha && snapshot.headSha && previousHeadSha !== snapshot.headSha) ||
               (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
               (subscription.lastObservedMergeableState &&
                 snapshot.mergeableState &&
