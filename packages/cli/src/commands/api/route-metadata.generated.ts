@@ -241,8 +241,10 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "approved",
       "format",
+      "messages",
       "requestContext",
       "resourceId",
+      "streamOptions",
       "threadId",
       "toolCallId"
     ],
