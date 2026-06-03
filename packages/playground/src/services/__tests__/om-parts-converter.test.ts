@@ -43,6 +43,28 @@ describe('markOmMarkersAsDisconnected', () => {
     const [message] = markOmMarkersAsDisconnected([userMessage]);
     expect(partsOf(message)[0].data?._state).toBeUndefined();
   });
+
+  it('does not mark completed observation cycles as disconnected', () => {
+    const [message] = markOmMarkersAsDisconnected([
+      assistantMessage([
+        omPart('om-observation-start', { cycleId: 'cycle-done' }),
+        omPart('om-observation-end', { cycleId: 'cycle-done', completedAt: '2026-05-29T00:00:01.000Z' }),
+      ]),
+    ]);
+
+    expect(partsOf(message)[0].data?.disconnectedAt).toBeUndefined();
+    expect(partsOf(message)[0].data?._state).toBeUndefined();
+  });
+
+  it('does not mark buffering cycles with a later activation as disconnected', () => {
+    const [startMessage] = markOmMarkersAsDisconnected([
+      assistantMessage([omPart('om-buffering-start', { cycleId: 'cycle-activated' })], 'msg-start'),
+      assistantMessage([omPart('om-activation', { cycleId: 'cycle-activated' })], 'msg-activation'),
+    ]);
+
+    expect(partsOf(startMessage)[0].data?.disconnectedAt).toBeUndefined();
+    expect(partsOf(startMessage)[0].data?._state).toBeUndefined();
+  });
 });
 
 describe('injectBufferingEnds', () => {
@@ -65,6 +87,28 @@ describe('injectBufferingEnds', () => {
       assistantMessage([omPart('om-buffering-start', { cycleId: 'cycle-3', disconnectedAt: 'yes' })]),
     ]);
     expect(partsOf(message)).toHaveLength(1);
+  });
+
+  it('does not duplicate synthetic buffering-end parts when called repeatedly', () => {
+    const messages = [
+      assistantMessage([omPart('om-buffering-start', { cycleId: 'cycle-repeat', operationType: 'observation' })]),
+    ];
+
+    const once = injectBufferingEnds(messages);
+    const twice = injectBufferingEnds(once);
+
+    expect(partsOf(twice[0]).filter(part => part.type === 'data-om-buffering-end')).toHaveLength(1);
+  });
+
+  it('does not inject an end when the cycle already has a terminal marker later', () => {
+    const [message] = injectBufferingEnds([
+      assistantMessage([
+        omPart('om-buffering-start', { cycleId: 'cycle-complete', operationType: 'observation' }),
+        omPart('om-buffering-end', { cycleId: 'cycle-complete', completedAt: '2026-05-29T00:00:01.000Z' }),
+      ]),
+    ]);
+
+    expect(partsOf(message).filter(part => part.type === 'data-om-buffering-end')).toHaveLength(1);
   });
 });
 

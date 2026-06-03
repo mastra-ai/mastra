@@ -207,19 +207,22 @@ export function MastraRuntimeProvider({
   };
 
   // Helper to update progress from streamed data-om-status parts
-  const handleProgressUpdate = (data: any) => {
-    // Ignore progress from a different thread (e.g., if user switched threads mid-stream)
-    if (data.threadId && data.threadId !== threadId) {
-      return;
-    }
-    setStreamProgress({
-      windows: data.windows,
-      recordId: data.recordId,
-      threadId: data.threadId,
-      stepNumber: data.stepNumber,
-      generationCount: data.generationCount,
-    });
-  };
+  const handleProgressUpdate = useCallback(
+    (data: any) => {
+      // Ignore progress from a different thread (e.g., if user switched threads mid-stream)
+      if (data.threadId && data.threadId !== threadId) {
+        return;
+      }
+      setStreamProgress({
+        windows: data.windows,
+        recordId: data.recordId,
+        threadId: data.threadId,
+        stepNumber: data.stepNumber,
+        generationCount: data.generationCount,
+      });
+    },
+    [setStreamProgress, threadId],
+  );
 
   // Helper to refresh OM sidebar when observation/reflection completes
   const refreshObservationalMemory = (operationType?: string) => {
@@ -272,8 +275,7 @@ export function MastraRuntimeProvider({
     if (lastProgress) {
       handleProgressUpdate(lastProgress);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount
+  }, [handleProgressUpdate, initialMessages, markCycleIdActivated]);
 
   const {
     frequencyPenalty,
