@@ -510,9 +510,17 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       });
     }
 
-    const exported = tracer.llmobs?.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
-    if (exported?.traceId && exported?.spanId) {
-      this.rememberFinishedSpanContext(span.traceId, span.id, exported);
+    try {
+      const exported = tracer.llmobs?.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
+      if (exported?.traceId && exported?.spanId) {
+        this.rememberFinishedSpanContext(span.traceId, span.id, exported);
+      }
+    } catch (error) {
+      this.logger.error('[DatadogBridge] Failed to export dd span for score lookup', {
+        error,
+        spanId: span.id,
+        spanName: span.name,
+      });
     }
 
     try {

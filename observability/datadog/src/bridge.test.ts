@@ -639,6 +639,26 @@ describe('DatadogBridge', () => {
       expect(apmSpan.finish).toHaveBeenCalledWith(span.endTime!.getTime());
     });
 
+    it('still finishes the eager dd span when exportSpan throws', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const spanResult = bridge.createSpan(createMockSpanOptions())!;
+      const apmSpan = capturedApmSpans[0];
+
+      mockExportSpan.mockImplementationOnce(() => {
+        throw new Error('exportSpan failed');
+      });
+
+      const span = createMockSpan({
+        id: spanResult.spanId,
+        traceId: spanResult.traceId,
+      });
+
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockExportSpan).toHaveBeenCalled();
+      expect(apmSpan.finish).toHaveBeenCalledWith(span.endTime!.getTime());
+    });
+
     it('promotes requestContextKeys to flat LLMObs tags during annotation', async () => {
       const bridge = new DatadogBridge({
         mlApp: 'test',
