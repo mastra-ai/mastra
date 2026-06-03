@@ -1283,7 +1283,7 @@ export class GithubSignals implements Processor<'github-signals'> {
       priority: input.notification.priority,
       summary: input.notification.summary,
       dedupeKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}:${input.dedupeSuffix}`,
-      coalesceKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`,
+      coalesceKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}:${input.notification.kind}`,
       attributes: {
         owner: input.subscription.owner,
         repo: input.subscription.repo,

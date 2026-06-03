@@ -1014,7 +1014,11 @@ describe('GithubSignals', () => {
     await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
 
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'github', kind: 'pull-request-activity' }),
+      expect.objectContaining({
+        source: 'github',
+        kind: 'pull-request-activity',
+        coalesceKey: 'github:mastra-ai/mastra#123:pull-request-activity',
+      }),
       expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
