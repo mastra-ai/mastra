@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { createTool } from '../tools';
+import type { ToolExecutionContext } from '../tools';
 import { createNotificationSignal } from './signals';
 import type { NotificationsStorage } from './storage';
 import type { ListNotificationsInput, NotificationRecord, NotificationStatus } from './types';
@@ -34,7 +35,7 @@ async function deliverNotifications({
 }: {
   notifications: NotificationRecord[];
   storage: NotificationsStorage;
-  context: any;
+  context: ToolExecutionContext;
 }) {
   let delivered = 0;
   let markedSeen = 0;

@@ -27,6 +27,8 @@ const statusTimestamp = (status: NotificationStatus, now: Date) => {
 };
 
 const cloneDate = (value?: Date) => (value ? new Date(value) : undefined);
+const cloneValue = <T>(value: T | undefined): T | undefined =>
+  value === undefined ? undefined : structuredClone(value);
 
 const cloneRecord = (record: NotificationRecord): NotificationRecord => ({
   ...record,
@@ -40,8 +42,9 @@ const cloneRecord = (record: NotificationRecord): NotificationRecord => ({
   deliverAt: cloneDate(record.deliverAt),
   summaryAt: cloneDate(record.summaryAt),
   lastDeliveryAttemptAt: cloneDate(record.lastDeliveryAttemptAt),
-  attributes: record.attributes ? { ...record.attributes } : undefined,
-  metadata: record.metadata ? { ...record.metadata } : undefined,
+  payload: cloneValue(record.payload),
+  attributes: cloneValue(record.attributes),
+  metadata: cloneValue(record.metadata),
 });
 
 function rowToNotification(row: Record<string, any>): NotificationRecord {
@@ -153,11 +156,11 @@ export class NotificationsMongoDB extends NotificationsStorage {
 
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
     return [
-      { collection: TABLE_NOTIFICATIONS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_NOTIFICATIONS, keys: { threadId: 1, id: 1 }, options: { unique: true } },
       { collection: TABLE_NOTIFICATIONS, keys: { threadId: 1, status: 1, updatedAt: -1 } },
       {
         collection: TABLE_NOTIFICATIONS,
-        keys: { threadId: 1, source: 1, status: 1, agentId: 1, resourceId: 1, dedupeKey: 1, coalesceKey: 1 },
+        keys: { threadId: 1, source: 1, kind: 1, status: 1, agentId: 1, resourceId: 1, dedupeKey: 1, coalesceKey: 1 },
       },
       { collection: TABLE_NOTIFICATIONS, keys: { status: 1, deliverAt: 1, summaryAt: 1 } },
     ];
@@ -198,14 +201,18 @@ export class NotificationsMongoDB extends NotificationsStorage {
 
     if (existing) {
       const now = new Date();
-      const attributes = input.attributes ? { ...existing.attributes, ...input.attributes } : existing.attributes;
-      const metadata = input.metadata ? { ...existing.metadata, ...input.metadata } : existing.metadata;
+      const attributes = input.attributes
+        ? { ...cloneValue(existing.attributes), ...cloneValue(input.attributes) }
+        : cloneValue(existing.attributes);
+      const metadata = input.metadata
+        ? { ...cloneValue(existing.metadata), ...cloneValue(input.metadata) }
+        : cloneValue(existing.metadata);
       await collection.updateOne(
-        { id: existing.id },
+        { threadId: existing.threadId, id: existing.id },
         {
           $set: {
             summary: input.summary,
-            payload: input.payload ?? existing.payload ?? null,
+            payload: cloneValue(input.payload ?? existing.payload) ?? null,
             priority: input.priority ?? existing.priority,
             attributes: attributes ?? null,
             updatedAt: now,
@@ -231,21 +238,21 @@ export class NotificationsMongoDB extends NotificationsStorage {
       priority: input.priority ?? 'medium',
       status: 'pending',
       summary: input.summary,
-      payload: input.payload,
+      payload: cloneValue(input.payload),
       resourceId: input.resourceId,
       agentId: input.agentId,
       sourceId: input.sourceId,
       dedupeKey: input.dedupeKey,
       coalesceKey: input.coalesceKey,
       coalescedCount: 1,
-      attributes: input.attributes ? { ...input.attributes } : undefined,
+      attributes: cloneValue(input.attributes),
       createdAt: now,
       updatedAt: now,
       deliverAt: input.deliverAt,
       summaryAt: input.summaryAt,
       deliveryReason: input.deliveryReason,
       deliveryAttempts: 0,
-      metadata: input.metadata ? { ...input.metadata } : undefined,
+      metadata: cloneValue(input.metadata),
     };
 
     await collection.insertOne(recordToDocument(record));
@@ -303,9 +310,9 @@ export class NotificationsMongoDB extends NotificationsStorage {
     const set: Record<string, unknown> = {
       ...(input.status ? { status: input.status, ...statusTimestamp(input.status, now) } : {}),
       ...(input.summary !== undefined ? { summary: input.summary } : {}),
-      ...(input.payload !== undefined ? { payload: input.payload } : {}),
-      ...(input.attributes !== undefined ? { attributes: input.attributes } : {}),
-      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+      ...(input.payload !== undefined ? { payload: cloneValue(input.payload) } : {}),
+      ...(input.attributes !== undefined ? { attributes: cloneValue(input.attributes) } : {}),
+      ...(input.metadata !== undefined ? { metadata: cloneValue(input.metadata) } : {}),
       ...(input.deliverAt !== undefined ? { deliverAt: input.deliverAt } : {}),
       ...(input.summaryAt !== undefined ? { summaryAt: input.summaryAt } : {}),
       ...(input.deliveryReason !== undefined ? { deliveryReason: input.deliveryReason } : {}),
@@ -318,7 +325,9 @@ export class NotificationsMongoDB extends NotificationsStorage {
     };
 
     const collection = await this.getCollection();
-    await collection.updateOne({ id: input.id }, { $set: set } as UpdateFilter<Record<string, any>>);
+    await collection.updateOne({ threadId: input.threadId, id: input.id }, { $set: set } as UpdateFilter<
+      Record<string, any>
+    >);
 
     const updated = await this.getNotification({ threadId: input.threadId, id: input.id });
     if (!updated) throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
@@ -332,6 +341,7 @@ export class NotificationsMongoDB extends NotificationsStorage {
       {
         threadId: input.threadId,
         source: input.source,
+        kind: input.kind,
         status: 'pending',
         agentId: input.agentId ?? null,
         resourceId: input.resourceId ?? null,

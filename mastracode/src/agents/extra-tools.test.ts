@@ -176,7 +176,7 @@ describe('getToolCategory – extra tools', () => {
     expect(getToolCategory(MC_TOOLS.SEARCH_CONTENT)).toBe('read');
     expect(getToolCategory(MC_TOOLS.FIND_FILES)).toBe('read');
     expect(getToolCategory(MC_TOOLS.LSP_INSPECT)).toBe('read');
-    expect(getToolCategory(MC_TOOLS.NOTIFICATION_INBOX)).toBe('read');
+    expect(getToolCategory(MC_TOOLS.NOTIFICATION_INBOX)).toBe('edit');
     expect(getToolCategory(MC_TOOLS.STRING_REPLACE_LSP)).toBe('edit');
     expect(getToolCategory(MC_TOOLS.EXECUTE_COMMAND)).toBe('execute');
   });

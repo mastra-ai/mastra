@@ -12,6 +12,14 @@ export type NotificationDispatchConfig = {
   batchSize?: number;
 };
 
+export function parseNotificationDispatchNow(input?: string): Date {
+  const now = input ? new Date(input) : new Date();
+  if (Number.isNaN(now.getTime())) {
+    throw new Error(`Invalid notification dispatch time: ${input}`);
+  }
+  return now;
+}
+
 export function createNotificationDispatchWorkflow({
   cron = '*/1 * * * *',
   batchSize = 100,
@@ -32,10 +40,12 @@ export function createNotificationDispatchWorkflow({
         return { delivered: 0, failed: 0 };
       }
 
+      const now = parseNotificationDispatchNow(inputData.now);
+
       const result = await dispatchDueNotifications({
         mastra,
         storage,
-        now: inputData.now ? new Date(inputData.now) : new Date(),
+        now,
         limit: inputData.limit ?? batchSize,
       });
 

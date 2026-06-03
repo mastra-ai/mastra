@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
 import { InMemoryNotificationsStorage } from './storage';
-import { createNotificationDispatchWorkflow } from './workflow';
+import { createNotificationDispatchWorkflow, parseNotificationDispatchNow } from './workflow';
 import {
   createNotificationInboxTool,
   createNotificationSignal,
@@ -39,6 +39,62 @@ describe('notification inbox', () => {
     await expect(storage.listNotifications({ threadId: 'thread-1', resourceId: 'missing' })).resolves.toEqual([]);
   });
 
+  it('stores same notification id independently across threads', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    await storage.createNotification({
+      id: 'shared',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci',
+      summary: 'Thread 1',
+    });
+    await storage.createNotification({
+      id: 'shared',
+      threadId: 'thread-2',
+      source: 'github',
+      kind: 'ci',
+      summary: 'Thread 2',
+    });
+
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'shared' })).resolves.toMatchObject({
+      threadId: 'thread-1',
+      summary: 'Thread 1',
+    });
+    await expect(storage.getNotification({ threadId: 'thread-2', id: 'shared' })).resolves.toMatchObject({
+      threadId: 'thread-2',
+      summary: 'Thread 2',
+    });
+  });
+
+  it('deep-clones notification payload, attributes, and metadata at storage boundaries', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const payload = { nested: { count: 1 } };
+    const attributes = { nested: { label: 'first' } } as any;
+    const metadata = { nested: { version: 1 } };
+    const created = await storage.createNotification({
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci',
+      summary: 'CI failed',
+      payload,
+      attributes,
+      metadata,
+    });
+
+    payload.nested.count = 2;
+    attributes.nested.label = 'mutated';
+    metadata.nested.version = 2;
+    (created.payload as any).nested.count = 3;
+    (created.attributes as any).nested.label = 'returned';
+    (created.metadata as any).nested.version = 3;
+
+    await expect(storage.getNotification({ threadId: 'thread-1', id: created.id })).resolves.toMatchObject({
+      payload: { nested: { count: 1 } },
+      attributes: { nested: { label: 'first' } },
+      metadata: { nested: { version: 1 } },
+    });
+  });
+
   it('coalesces duplicate pending notifications by dedupe or coalesce key', async () => {
     const storage = new InMemoryNotificationsStorage();
     const first = await storage.createNotification({
@@ -60,6 +116,26 @@ describe('notification inbox', () => {
     expect(second.summary).toBe('CI failed: 3 tests');
     expect(second.coalescedCount).toBe(2);
     await expect(storage.listNotifications({ threadId: 'thread-1' })).resolves.toHaveLength(1);
+  });
+
+  it('does not coalesce notifications with different kinds', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    await storage.createNotification({
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      summary: 'CI failed',
+      dedupeKey: 'shared-key',
+    });
+    await storage.createNotification({
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'issue',
+      summary: 'Issue opened',
+      dedupeKey: 'shared-key',
+    });
+
+    await expect(storage.listNotifications({ threadId: 'thread-1' })).resolves.toHaveLength(2);
   });
 
   it('creates individual and summary notification signals', async () => {
@@ -98,28 +174,28 @@ describe('notification inbox', () => {
       },
     });
 
-    const summarySignal = createNotificationSummarySignal(summarizeNotifications([github, slack]));
+    await storage.updateNotification({ threadId: 'thread-1', id: slack.id, status: 'seen' });
+    const seenSlack = await storage.getNotification({ threadId: 'thread-1', id: slack.id });
+    const summarySignal = createNotificationSummarySignal(summarizeNotifications([github, seenSlack!]));
     expect(summarySignal).toMatchObject({
       type: 'notification',
       tagName: 'notification-summary',
-      attributes: { pending: 2, priority: 'high' },
+      attributes: { pending: 1, priority: 'high' },
       metadata: {
         notification: {
           signal: 'summary',
-          pending: 2,
-          groups: [
-            { source: 'github', count: 1 },
-            { source: 'slack', count: 1 },
-          ],
-          byPriority: { high: 1, medium: 1 },
-          notificationIds: ['n1', 'n2'],
+          pending: 1,
+          groups: [{ source: 'github', count: 1 }],
+          byPriority: { high: 1 },
+          notificationIds: ['n1'],
           priority: 'high',
         },
       },
     });
     expect(summarySignal.metadata?.notificationSummary).toMatchObject({
-      notificationIds: ['n1', 'n2'],
-      bySource: { github: 1, slack: 1 },
+      pending: 1,
+      notificationIds: ['n1'],
+      bySource: { github: 1 },
     });
   });
 
@@ -325,6 +401,37 @@ describe('notification inbox', () => {
     });
   });
 
+  it('records delivery failure when a notification signal is rejected', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({ accepted: false, runId: 'run-1', signal }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.delivered).toEqual([]);
+    expect(result.signals).toEqual([]);
+    expect(result.failed).toMatchObject([{ record: { id: 'n1' }, error: 'Notification n1 signal was rejected' }]);
+    const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
+    expect(stored).toMatchObject({
+      status: 'pending',
+      deliveryAttempts: 1,
+      lastDeliveryError: 'Notification n1 signal was rejected',
+    });
+    expect(stored?.deliveredSignalId).toBeUndefined();
+  });
+
   it('groups due summary notifications by agent, resource, and thread', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
@@ -365,6 +472,40 @@ describe('notification inbox', () => {
       summaryAt: undefined,
       summarySignalId: result.signals[0]?.id,
     });
+  });
+
+  it('records summary delivery failure when a notification summary signal is rejected', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({ accepted: false, runId: 'run-1', signal }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'medium',
+      summary: 'CI failed',
+      summaryAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.delivered).toEqual([]);
+    expect(result.signals).toEqual([]);
+    expect(result.failed).toMatchObject([
+      { record: { id: 'n1' }, error: 'Notification summary for thread thread-1 was rejected' },
+    ]);
+    const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
+    expect(stored).toMatchObject({
+      status: 'pending',
+      summaryAt: now,
+      deliveryAttempts: 1,
+      lastDeliveryError: 'Notification summary for thread thread-1 was rejected',
+    });
+    expect(stored?.summarySignalId).toBeUndefined();
   });
 
   it('summarizes high-priority active notifications before full idle delivery', async () => {
@@ -580,6 +721,10 @@ describe('notification inbox', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+
+  it('rejects invalid notification dispatch workflow times', () => {
+    expect(() => parseNotificationDispatchNow('not-a-date')).toThrow('Invalid notification dispatch time: not-a-date');
   });
 
   it('creates a scheduled notification dispatch workflow', () => {

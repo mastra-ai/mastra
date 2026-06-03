@@ -367,7 +367,7 @@ export const TOOL_PROVIDER_CONNECTIONS_SCHEMA: Record<string, StorageColumn> = {
 };
 
 export const NOTIFICATIONS_SCHEMA: Record<string, StorageColumn> = {
-  id: { type: 'text', nullable: false, primaryKey: true },
+  id: { type: 'text', nullable: false },
   threadId: { type: 'text', nullable: false },
   source: { type: 'text', nullable: false },
   kind: { type: 'text', nullable: false },
@@ -713,6 +713,7 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
     columns: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
     compositePrimaryKey: ['authorId', 'providerId', 'connectionId'],
   },
+  [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
 };
 
 /**

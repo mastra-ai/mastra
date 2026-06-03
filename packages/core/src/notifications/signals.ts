@@ -96,18 +96,20 @@ export function createNotificationSummarySignal(summary: NotificationSummary): C
 }
 
 export function summarizeNotifications(notifications: NotificationRecord[]): NotificationSummary {
-  return notifications.reduce<NotificationSummary>(
+  const pendingNotifications = notifications.filter(notification => notification.status === 'pending');
+  const first = pendingNotifications[0] ?? notifications[0];
+  return pendingNotifications.reduce<NotificationSummary>(
     (summary, notification) => {
-      summary.pending += notification.status === 'pending' ? 1 : 0;
+      summary.pending += 1;
       summary.bySource[notification.source] = (summary.bySource[notification.source] ?? 0) + 1;
       summary.byPriority[notification.priority] = (summary.byPriority[notification.priority] ?? 0) + 1;
       summary.notificationIds.push(notification.id);
       return summary;
     },
     {
-      threadId: notifications[0]?.threadId ?? '',
-      resourceId: notifications[0]?.resourceId,
-      agentId: notifications[0]?.agentId,
+      threadId: first?.threadId ?? '',
+      resourceId: first?.resourceId,
+      agentId: first?.agentId,
       pending: 0,
       bySource: {},
       byPriority: {},

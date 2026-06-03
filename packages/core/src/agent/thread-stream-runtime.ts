@@ -151,7 +151,7 @@ export class AgentThreadStreamRuntime {
     if (!activeRunId) return 'idle';
 
     const activeRecord = state.threadRunsById.get(activeRunId);
-    if (activeRecord && activeRecord.output.status !== 'running') {
+    if (activeRecord && !this.#isThreadBlockingRun(state, activeRecord)) {
       state.activeThreadRunIds.delete(key);
       return 'idle';
     }

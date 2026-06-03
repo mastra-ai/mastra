@@ -42,6 +42,9 @@ function parseDate(value: unknown): Date | undefined {
   return value == null ? undefined : new Date(String(value));
 }
 
+const cloneValue = <T>(value: T | undefined): T | undefined =>
+  value === undefined ? undefined : structuredClone(value);
+
 function rowToNotification(row: Record<string, unknown>): NotificationRecord {
   return {
     id: String(row.id),
@@ -109,7 +112,7 @@ export class NotificationsLibSQL extends NotificationsStorage {
           args: [],
         },
         {
-          sql: `CREATE INDEX IF NOT EXISTS idx_notifications_coalescing ON "${TABLE_NOTIFICATIONS}" ("threadId", "source", "status", "agentId", "resourceId", "dedupeKey", "coalesceKey")`,
+          sql: `CREATE INDEX IF NOT EXISTS idx_notifications_coalescing ON "${TABLE_NOTIFICATIONS}" ("threadId", "source", "kind", "status", "agentId", "resourceId", "dedupeKey", "coalesceKey")`,
           args: [],
         },
         {
@@ -129,14 +132,18 @@ export class NotificationsLibSQL extends NotificationsStorage {
     const existing = await this.findCoalescable(input);
     if (existing) {
       const now = new Date();
-      const attributes = input.attributes ? { ...existing.attributes, ...input.attributes } : existing.attributes;
-      const metadata = input.metadata ? { ...existing.metadata, ...input.metadata } : existing.metadata;
+      const attributes = input.attributes
+        ? { ...cloneValue(existing.attributes), ...cloneValue(input.attributes) }
+        : cloneValue(existing.attributes);
+      const metadata = input.metadata
+        ? { ...cloneValue(existing.metadata), ...cloneValue(input.metadata) }
+        : cloneValue(existing.metadata);
       await this.#db.update({
         tableName: TABLE_NOTIFICATIONS,
-        keys: { id: existing.id },
+        keys: { threadId: existing.threadId, id: existing.id },
         data: {
           summary: input.summary,
-          payload: input.payload ?? existing.payload ?? null,
+          payload: cloneValue(input.payload ?? existing.payload) ?? null,
           priority: input.priority ?? existing.priority,
           attributes: attributes ?? null,
           updatedAt: now,
@@ -161,21 +168,21 @@ export class NotificationsLibSQL extends NotificationsStorage {
       priority: input.priority ?? 'medium',
       status: 'pending',
       summary: input.summary,
-      payload: input.payload,
+      payload: cloneValue(input.payload),
       resourceId: input.resourceId,
       agentId: input.agentId,
       sourceId: input.sourceId,
       dedupeKey: input.dedupeKey,
       coalesceKey: input.coalesceKey,
       coalescedCount: 1,
-      attributes: input.attributes ? { ...input.attributes } : undefined,
+      attributes: cloneValue(input.attributes),
       createdAt: now,
       updatedAt: now,
       deliverAt: input.deliverAt,
       summaryAt: input.summaryAt,
       deliveryReason: input.deliveryReason,
       deliveryAttempts: 0,
-      metadata: input.metadata ? { ...input.metadata } : undefined,
+      metadata: cloneValue(input.metadata),
     };
 
     await this.#db.insert({
@@ -282,13 +289,13 @@ export class NotificationsLibSQL extends NotificationsStorage {
     const now = new Date();
     await this.#db.update({
       tableName: TABLE_NOTIFICATIONS,
-      keys: { id: input.id },
+      keys: { threadId: input.threadId, id: input.id },
       data: {
         ...(input.status ? { status: input.status, ...statusTimestamp(input.status, now) } : {}),
         ...(input.summary !== undefined ? { summary: input.summary } : {}),
-        ...(input.payload !== undefined ? { payload: input.payload } : {}),
-        ...(input.attributes !== undefined ? { attributes: input.attributes } : {}),
-        ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+        ...(input.payload !== undefined ? { payload: cloneValue(input.payload) } : {}),
+        ...(input.attributes !== undefined ? { attributes: cloneValue(input.attributes) } : {}),
+        ...(input.metadata !== undefined ? { metadata: cloneValue(input.metadata) } : {}),
         ...(input.deliverAt !== undefined ? { deliverAt: input.deliverAt } : {}),
         ...(input.summaryAt !== undefined ? { summaryAt: input.summaryAt } : {}),
         ...(input.deliveryReason !== undefined ? { deliveryReason: input.deliveryReason } : {}),
@@ -315,10 +322,11 @@ export class NotificationsLibSQL extends NotificationsStorage {
     const coalesceKey = input.coalesceKey ?? null;
 
     const result = await this.#client.execute({
-      sql: `SELECT ${buildSelectColumns(TABLE_NOTIFICATIONS)} FROM "${TABLE_NOTIFICATIONS}" WHERE "threadId" = ? AND "source" = ? AND "status" = ? AND (("agentId" = ?) OR ("agentId" IS NULL AND ? IS NULL)) AND (("resourceId" = ?) OR ("resourceId" IS NULL AND ? IS NULL)) AND ((? IS NOT NULL AND "dedupeKey" = ?) OR (? IS NOT NULL AND "coalesceKey" = ?)) ORDER BY "updatedAt" DESC LIMIT 1`,
+      sql: `SELECT ${buildSelectColumns(TABLE_NOTIFICATIONS)} FROM "${TABLE_NOTIFICATIONS}" WHERE "threadId" = ? AND "source" = ? AND "kind" = ? AND "status" = ? AND (("agentId" = ?) OR ("agentId" IS NULL AND ? IS NULL)) AND (("resourceId" = ?) OR ("resourceId" IS NULL AND ? IS NULL)) AND ((? IS NOT NULL AND "dedupeKey" = ?) OR (? IS NOT NULL AND "coalesceKey" = ?)) ORDER BY "updatedAt" DESC LIMIT 1`,
       args: [
         input.threadId,
         input.source,
+        input.kind,
         'pending',
         agentId,
         agentId,

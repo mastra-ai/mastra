@@ -22,6 +22,9 @@ export abstract class NotificationsStorage extends StorageDomain {
 }
 
 const cloneDate = (value?: Date) => (value ? new Date(value) : undefined);
+const notificationKey = (threadId: string, id: string) => `${threadId}\0${id}`;
+const cloneValue = <T>(value: T | undefined): T | undefined =>
+  value === undefined ? undefined : structuredClone(value);
 
 const cloneRecord = (record: NotificationRecord): NotificationRecord => ({
   ...record,
@@ -35,8 +38,9 @@ const cloneRecord = (record: NotificationRecord): NotificationRecord => ({
   deliverAt: cloneDate(record.deliverAt),
   summaryAt: cloneDate(record.summaryAt),
   lastDeliveryAttemptAt: cloneDate(record.lastDeliveryAttemptAt),
-  attributes: record.attributes ? { ...record.attributes } : undefined,
-  metadata: record.metadata ? { ...record.metadata } : undefined,
+  payload: cloneValue(record.payload),
+  attributes: cloneValue(record.attributes),
+  metadata: cloneValue(record.metadata),
 });
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
@@ -70,17 +74,21 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
       const next: NotificationRecord = {
         ...existing,
         summary: input.summary,
-        payload: input.payload ?? existing.payload,
+        payload: cloneValue(input.payload ?? existing.payload),
         priority: input.priority ?? existing.priority,
-        attributes: input.attributes ? { ...existing.attributes, ...input.attributes } : existing.attributes,
+        attributes: input.attributes
+          ? { ...cloneValue(existing.attributes), ...cloneValue(input.attributes) }
+          : cloneValue(existing.attributes),
         updatedAt: now,
         deliverAt: input.deliverAt ?? existing.deliverAt,
         summaryAt: input.summaryAt ?? existing.summaryAt,
         deliveryReason: input.deliveryReason ?? existing.deliveryReason,
         coalescedCount: (existing.coalescedCount ?? 1) + 1,
-        metadata: input.metadata ? { ...existing.metadata, ...input.metadata } : existing.metadata,
+        metadata: input.metadata
+          ? { ...cloneValue(existing.metadata), ...cloneValue(input.metadata) }
+          : cloneValue(existing.metadata),
       };
-      this.#notifications.set(existing.id, next);
+      this.#notifications.set(notificationKey(next.threadId, next.id), next);
       return cloneRecord(next);
     }
 
@@ -93,23 +101,23 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
       priority: input.priority ?? 'medium',
       status: 'pending',
       summary: input.summary,
-      payload: input.payload,
+      payload: cloneValue(input.payload),
       resourceId: input.resourceId,
       agentId: input.agentId,
       sourceId: input.sourceId,
       dedupeKey: input.dedupeKey,
       coalesceKey: input.coalesceKey,
       coalescedCount: 1,
-      attributes: input.attributes ? { ...input.attributes } : undefined,
+      attributes: cloneValue(input.attributes),
       createdAt: now,
       updatedAt: now,
       deliverAt: input.deliverAt,
       summaryAt: input.summaryAt,
       deliveryReason: input.deliveryReason,
       deliveryAttempts: 0,
-      metadata: input.metadata ? { ...input.metadata } : undefined,
+      metadata: cloneValue(input.metadata),
     };
-    this.#notifications.set(record.id, record);
+    this.#notifications.set(notificationKey(record.threadId, record.id), record);
     return cloneRecord(record);
   }
 
@@ -142,14 +150,14 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
   }
 
   async getNotification(input: { threadId: string; id: string }): Promise<NotificationRecord | null> {
-    const record = this.#notifications.get(input.id);
-    if (!record || record.threadId !== input.threadId) return null;
+    const record = this.#notifications.get(notificationKey(input.threadId, input.id));
+    if (!record) return null;
     return cloneRecord(record);
   }
 
   async updateNotification(input: UpdateNotificationInput): Promise<NotificationRecord> {
-    const existing = this.#notifications.get(input.id);
-    if (!existing || existing.threadId !== input.threadId) {
+    const existing = this.#notifications.get(notificationKey(input.threadId, input.id));
+    if (!existing) {
       throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
     }
     const now = new Date();
@@ -157,9 +165,9 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
       ...existing,
       ...(input.status ? { status: input.status, ...statusTimestamp(input.status, now) } : {}),
       ...(input.summary !== undefined ? { summary: input.summary } : {}),
-      ...(input.payload !== undefined ? { payload: input.payload } : {}),
-      ...(input.attributes !== undefined ? { attributes: input.attributes } : {}),
-      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+      ...(input.payload !== undefined ? { payload: cloneValue(input.payload) } : {}),
+      ...(input.attributes !== undefined ? { attributes: cloneValue(input.attributes) } : {}),
+      ...(input.metadata !== undefined ? { metadata: cloneValue(input.metadata) } : {}),
       ...(input.deliverAt !== undefined ? { deliverAt: input.deliverAt ?? undefined } : {}),
       ...(input.summaryAt !== undefined ? { summaryAt: input.summaryAt ?? undefined } : {}),
       ...(input.deliveryReason !== undefined ? { deliveryReason: input.deliveryReason } : {}),
@@ -170,7 +178,7 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
       ...(input.summarySignalId !== undefined ? { summarySignalId: input.summarySignalId } : {}),
       updatedAt: now,
     };
-    this.#notifications.set(next.id, next);
+    this.#notifications.set(notificationKey(next.threadId, next.id), next);
     return cloneRecord(next);
   }
 
@@ -181,7 +189,12 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
   private findCoalescable(input: CreateNotificationInput): NotificationRecord | undefined {
     if (!input.dedupeKey && !input.coalesceKey) return undefined;
     return [...this.#notifications.values()].find(record => {
-      if (record.threadId !== input.threadId || record.source !== input.source || record.status !== 'pending')
+      if (
+        record.threadId !== input.threadId ||
+        record.source !== input.source ||
+        record.kind !== input.kind ||
+        record.status !== 'pending'
+      )
         return false;
       if (record.agentId !== input.agentId || record.resourceId !== input.resourceId) return false;
       return Boolean(

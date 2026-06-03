@@ -98,6 +98,9 @@ async function sendNotificationRecord({
   const target: SendAgentSignalOptions = { resourceId: current.resourceId, threadId: current.threadId };
   const result = agent.sendSignal(signal, target);
   await result.persisted;
+  if (!result.accepted) {
+    throw new Error(`Notification ${current.id} signal was rejected`);
+  }
   const updated = await storage.updateNotification({
     id: current.id,
     threadId: current.threadId,
@@ -131,6 +134,9 @@ async function sendNotificationSummary({
     : { resourceId: first.resourceId, threadId: first.threadId };
   const result = (agent as NotificationDispatchAgent).sendSignal(signal, target);
   await result.persisted;
+  if (!result.accepted) {
+    throw new Error(`Notification summary for thread ${first.threadId} was rejected`);
+  }
 
   const updatedRecords: NotificationRecord[] = [];
   for (const record of records) {

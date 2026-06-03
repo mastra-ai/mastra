@@ -215,7 +215,7 @@ export type AgentNotificationConfig = {
  * @experimental Agent notification signal APIs are experimental and may change in a future release.
  */
 export type SendAgentNotificationSignalResult = {
-  accepted: true;
+  accepted: boolean;
   record: NotificationRecord;
   decision: NotificationDeliveryDecision;
   runId?: string;

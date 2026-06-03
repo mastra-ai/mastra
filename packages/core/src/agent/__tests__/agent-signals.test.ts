@@ -55,6 +55,7 @@ function nextTick() {
 class AsyncCallbackPubSub extends PubSub {
   #subscribers = new Map<string, Set<EventCallback>>();
   #index = 0;
+  #pending = new Set<Promise<void>>();
 
   async publish(topic: string, event: any): Promise<void> {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
@@ -64,9 +65,17 @@ class AsyncCallbackPubSub extends PubSub {
       createdAt: new Date(),
       index: this.#index++,
     };
-    setTimeout(() => {
-      for (const subscriber of subscribers) subscriber(envelope);
-    }, 0);
+    const pending = new Promise<void>(resolve => {
+      setTimeout(() => {
+        try {
+          for (const subscriber of subscribers) subscriber(envelope);
+        } finally {
+          resolve();
+        }
+      }, 0);
+    });
+    this.#pending.add(pending);
+    pending.finally(() => this.#pending.delete(pending));
   }
 
   async subscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -79,7 +88,9 @@ class AsyncCallbackPubSub extends PubSub {
     this.#subscribers.get(topic)?.delete(cb);
   }
 
-  async flush(): Promise<void> {}
+  async flush(): Promise<void> {
+    await Promise.all([...this.#pending]);
+  }
 }
 
 async function readNextRun(iterator: AsyncIterator<any>) {
@@ -1160,6 +1171,43 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('keeps immediate notification records pending when runtime rejects delivery', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'rejected-notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'rejected-notification-agent',
+      name: 'Rejected Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+    });
+    new Mastra({ agents: { rejectedNotificationAgent: agent }, storage, logger: false });
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
+      accepted: false,
+      runId: 'run-1',
+      signal: createSignal({ type: 'notification', tagName: 'notification', contents: 'Rejected' }),
+    } as any);
+
+    try {
+      const result = await agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', priority: 'medium', summary: 'Rejected notification' },
+        { resourceId: 'notification-user', threadId: 'notification-thread' },
+      );
+
+      expect(result.accepted).toBe(false);
+      expect(result.record).toMatchObject({
+        status: 'pending',
+        deliveryAttempts: 1,
+        lastDeliveryError: 'Notification signal was rejected',
+      });
+      expect(result.record.deliveredSignalId).toBeUndefined();
+      const stored = await notifications.getNotification({ threadId: 'notification-thread', id: result.record.id });
+      expect(stored).toMatchObject({ status: 'pending', deliveryAttempts: 1 });
+      expect(stored?.deliveredSignalId).toBeUndefined();
+    } finally {
+      sendSignal.mockRestore();
+    }
+  });
+
   it('batches active high notifications for full delivery and active medium or low notifications for summaries', async () => {
     let releaseFirst!: () => void;
     const firstFinished = new Promise<void>(resolve => {
@@ -1907,6 +1955,7 @@ describe('Agent signals', () => {
 
       await withTimeout(iterator.next(), 'Timed out waiting for approval run start');
       await withTimeout(iterator.next(), 'Timed out waiting for approval chunk');
+      expect(runtime.getThreadState({ resourceId, threadId })).toBe('active');
 
       const result = runtime.sendMessage(agent, 'Queued behind approval', { resourceId, threadId });
 

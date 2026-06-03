@@ -6712,6 +6712,16 @@ export class Agent<
           { ...target, ifIdle: { ...target.ifIdle, behavior: 'persist' } },
           this.getPubSub(),
         );
+        if (!result.accepted) {
+          const failed = await notifications.updateNotification({
+            id: updated.id,
+            threadId: updated.threadId,
+            deliveryAttempts: (updated.deliveryAttempts ?? 0) + 1,
+            lastDeliveryAttemptAt: new Date(),
+            lastDeliveryError: 'Notification summary signal was rejected',
+          });
+          return { ...result, record: failed, decision };
+        }
         const summarized = await notifications.updateNotification({
           id: updated.id,
           threadId: updated.threadId,
@@ -6730,6 +6740,18 @@ export class Agent<
       target,
       this.getPubSub(),
     );
+    if (!result.accepted) {
+      const failed = await notifications.updateNotification({
+        id: record.id,
+        threadId: record.threadId,
+        deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
+        lastDeliveryAttemptAt: new Date(),
+        lastDeliveryError: 'Notification signal was rejected',
+        deliveryReason: decision.reason,
+      });
+      return { ...result, record: failed, decision };
+    }
+
     const updated = await notifications.updateNotification({
       id: record.id,
       threadId: record.threadId,

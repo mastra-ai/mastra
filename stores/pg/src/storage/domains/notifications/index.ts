@@ -32,6 +32,9 @@ const parseDate = (value: unknown): Date | undefined => {
   return value instanceof Date ? value : new Date(String(value));
 };
 
+const cloneValue = <T>(value: T | undefined): T | undefined =>
+  value === undefined ? undefined : structuredClone(value);
+
 function rowToNotification(row: Record<string, unknown>): NotificationRecord {
   return {
     id: String(row.id),
@@ -138,7 +141,7 @@ export class NotificationsPG extends NotificationsStorage {
       {
         name: `${schemaPrefix}idx_notifications_coalescing`,
         table: TABLE_NOTIFICATIONS,
-        columns: ['threadId', 'source', 'status', 'agentId', 'resourceId', 'dedupeKey', 'coalesceKey'],
+        columns: ['threadId', 'source', 'kind', 'status', 'agentId', 'resourceId', 'dedupeKey', 'coalesceKey'],
       },
       {
         name: `${schemaPrefix}idx_notifications_due`,
@@ -200,7 +203,7 @@ export class NotificationsPG extends NotificationsStorage {
     await this.#db.clearTable({ tableName: TABLE_NOTIFICATIONS });
   }
 
-  private async updateNotificationRow(id: string, data: Record<string, unknown>): Promise<void> {
+  private async updateNotificationRow(threadId: string, id: string, data: Record<string, unknown>): Promise<void> {
     const entries = Object.entries(data).filter(([, value]) => value !== undefined);
     if (entries.length === 0) return;
 
@@ -213,21 +216,25 @@ export class NotificationsPG extends NotificationsStorage {
       return value;
     });
 
-    await this.#db.client.none(`UPDATE ${tableName} SET ${setColumns.join(', ')} WHERE "id" = $${values.length + 1}`, [
-      ...values,
-      id,
-    ]);
+    await this.#db.client.none(
+      `UPDATE ${tableName} SET ${setColumns.join(', ')} WHERE "threadId" = $${values.length + 1} AND "id" = $${values.length + 2}`,
+      [...values, threadId, id],
+    );
   }
 
   async createNotification(input: CreateNotificationInput): Promise<NotificationRecord> {
     const existing = await this.findCoalescable(input);
     if (existing) {
       const now = new Date();
-      const attributes = input.attributes ? { ...existing.attributes, ...input.attributes } : existing.attributes;
-      const metadata = input.metadata ? { ...existing.metadata, ...input.metadata } : existing.metadata;
-      await this.updateNotificationRow(existing.id, {
+      const attributes = input.attributes
+        ? { ...cloneValue(existing.attributes), ...cloneValue(input.attributes) }
+        : cloneValue(existing.attributes);
+      const metadata = input.metadata
+        ? { ...cloneValue(existing.metadata), ...cloneValue(input.metadata) }
+        : cloneValue(existing.metadata);
+      await this.updateNotificationRow(existing.threadId, existing.id, {
         summary: input.summary,
-        payload: input.payload ?? existing.payload ?? null,
+        payload: cloneValue(input.payload ?? existing.payload) ?? null,
         priority: input.priority ?? existing.priority,
         attributes: attributes ?? null,
         updatedAt: now,
@@ -251,21 +258,21 @@ export class NotificationsPG extends NotificationsStorage {
       priority: input.priority ?? 'medium',
       status: 'pending',
       summary: input.summary,
-      payload: input.payload,
+      payload: cloneValue(input.payload),
       resourceId: input.resourceId,
       agentId: input.agentId,
       sourceId: input.sourceId,
       dedupeKey: input.dedupeKey,
       coalesceKey: input.coalesceKey,
       coalescedCount: 1,
-      attributes: input.attributes ? { ...input.attributes } : undefined,
+      attributes: cloneValue(input.attributes),
       createdAt: now,
       updatedAt: now,
       deliverAt: input.deliverAt,
       summaryAt: input.summaryAt,
       deliveryReason: input.deliveryReason,
       deliveryAttempts: 0,
-      metadata: input.metadata ? { ...input.metadata } : undefined,
+      metadata: cloneValue(input.metadata),
     };
 
     await this.#db.insert({ tableName: TABLE_NOTIFICATIONS, record: normalizeRecordForInsert(record) });
@@ -356,12 +363,12 @@ export class NotificationsPG extends NotificationsStorage {
     }
 
     const now = new Date();
-    await this.updateNotificationRow(input.id, {
+    await this.updateNotificationRow(input.threadId, input.id, {
       ...(input.status ? { status: input.status, ...statusTimestamp(input.status, now) } : {}),
       ...(input.summary !== undefined ? { summary: input.summary } : {}),
-      ...(input.payload !== undefined ? { payload: input.payload } : {}),
-      ...(input.attributes !== undefined ? { attributes: input.attributes } : {}),
-      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+      ...(input.payload !== undefined ? { payload: cloneValue(input.payload) } : {}),
+      ...(input.attributes !== undefined ? { attributes: cloneValue(input.attributes) } : {}),
+      ...(input.metadata !== undefined ? { metadata: cloneValue(input.metadata) } : {}),
       ...(input.deliverAt !== undefined ? { deliverAt: input.deliverAt } : {}),
       ...(input.summaryAt !== undefined ? { summaryAt: input.summaryAt } : {}),
       ...(input.deliveryReason !== undefined ? { deliveryReason: input.deliveryReason } : {}),
@@ -384,10 +391,11 @@ export class NotificationsPG extends NotificationsStorage {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
     const row = await this.#db.client.oneOrNone(
-      `SELECT * FROM ${tableName} WHERE "threadId" = $1 AND "source" = $2 AND "status" = $3 AND (("agentId" = $4::text) OR ("agentId" IS NULL AND $4::text IS NULL)) AND (("resourceId" = $5::text) OR ("resourceId" IS NULL AND $5::text IS NULL)) AND (($6::text IS NOT NULL AND "dedupeKey" = $6::text) OR ($7::text IS NOT NULL AND "coalesceKey" = $7::text)) ORDER BY "updatedAt" DESC LIMIT 1`,
+      `SELECT * FROM ${tableName} WHERE "threadId" = $1 AND "source" = $2 AND "kind" = $3 AND "status" = $4 AND (("agentId" = $5::text) OR ("agentId" IS NULL AND $5::text IS NULL)) AND (("resourceId" = $6::text) OR ("resourceId" IS NULL AND $6::text IS NULL)) AND (($7::text IS NOT NULL AND "dedupeKey" = $7::text) OR ($8::text IS NOT NULL AND "coalesceKey" = $8::text)) ORDER BY "updatedAt" DESC LIMIT 1`,
       [
         input.threadId,
         input.source,
+        input.kind,
         'pending',
         input.agentId ?? null,
         input.resourceId ?? null,
