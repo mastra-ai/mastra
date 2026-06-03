@@ -496,13 +496,6 @@ function classifyGithubActivityNotification(input: {
       summary: `${pr} has failing CI${names ? `: ${names}` : ''}`,
     };
   }
-  if (
-    input.snapshot.ciState === 'success' &&
-    input.subscription.lastObservedCiState &&
-    input.subscription.lastObservedCiState !== 'success'
-  ) {
-    return { kind: 'pull-request-ci-recovered', priority: 'medium', summary: `${pr} CI recovered` };
-  }
   if (input.snapshot.mergeableState === 'dirty' && input.subscription.lastObservedMergeableState !== 'dirty') {
     return {
       kind: 'pull-request-conflict',
@@ -520,6 +513,13 @@ function classifyGithubActivityNotification(input: {
       priority: 'medium',
       summary: `${pr} merge conflicts were resolved`,
     };
+  }
+  if (
+    input.snapshot.ciState === 'success' &&
+    input.subscription.lastObservedCiState &&
+    input.subscription.lastObservedCiState !== 'success'
+  ) {
+    return { kind: 'pull-request-ci-recovered', priority: 'medium', summary: `${pr} CI recovered` };
   }
   if (
     input.snapshot.reviewStateHash &&

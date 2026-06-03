@@ -1407,6 +1407,20 @@ describe('GithubSignals', () => {
       expect.objectContaining({ kind: 'pull-request-ci-recovered', priority: 'medium' }),
       expect.anything(),
     );
+    const conflictBeatsRecovery = await runPoll(
+      createThreadWithCursor({ lastObservedCiState: 'pending', lastObservedMergeableState: 'unknown' }),
+      {
+        title: 'PR',
+        state: 'open',
+        contentHash: 'dirty-ci-ok',
+        ciState: 'success',
+        mergeableState: 'dirty',
+      },
+    );
+    expect(conflictBeatsRecovery).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'pull-request-conflict', priority: 'high' }),
+      expect.anything(),
+    );
     const reviewActivity = await runPoll(createThreadWithCursor({ lastObservedReviewStateHash: 'reviews-1' }), {
       title: 'PR',
       state: 'open',
