@@ -3,7 +3,9 @@ import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
+import { MODEL_TOKENS } from '../../../../../../docs/src/plugins/remark-model-tokens/models';
 import { MessageList } from '../../../agent/message-list';
+import { SpanType } from '../../../observability';
 import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
@@ -327,6 +329,239 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     ]);
     expect(result.stepResult.reason).toBe('length');
     expect(result.stepResult.isContinued).toBe(false);
+  });
+
+  it('creates a client tool observability span early and ends it with streamed args', async () => {
+    const carrier = {
+      traceparent: '00-1234567890abcdef1234567890abcdef-abcdef1234567890-01',
+    };
+    const clientToolSpan = {
+      id: 'abcdef1234567890',
+      traceId: '1234567890abcdef1234567890abcdef',
+      type: SpanType.CLIENT_TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      traceId: '1234567890abcdef1234567890abcdef',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => clientToolSpan),
+      findParent: vi.fn(),
+    };
+    const inject = vi.fn(() => carrier);
+
+    const tools = {
+      getWeather: {
+        id: 'getWeather',
+        description: 'Get weather',
+        inputSchema: z.object({ location: z.string() }),
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-input-start',
+                  id: 'call-1',
+                  toolName: 'getWeather',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'tool-input-delta',
+                  id: 'call-1',
+                  delta: '{"location":"Paris"}',
+                },
+                {
+                  type: 'tool-input-end',
+                  id: 'call-1',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      toolCallStreaming: true,
+      mastra: {
+        observability: {
+          getClientObservabilityProxy: () => ({ inject }),
+        },
+      } as any,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: agentRunSpan } as any;
+
+    const result = await llmExecutionStep.execute(executeParams);
+    const enqueuedChunks = (controller.enqueue as Mock).mock.calls.map(([chunk]) => chunk);
+    const streamingStartChunk = enqueuedChunks.find(chunk => chunk.type === 'tool-call-input-streaming-start');
+
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.CLIENT_TOOL_CALL,
+        name: "client_tool: 'getWeather'",
+        entityType: 'tool',
+        entityId: 'getWeather',
+        entityName: 'getWeather',
+        attributes: expect.objectContaining({
+          toolDescription: 'Get weather',
+          toolType: 'client-tool',
+        }),
+      }),
+    );
+    expect(inject).toHaveBeenCalledWith(clientToolSpan);
+    expect(streamingStartChunk?.payload.observability).toEqual(carrier);
+    expect(clientToolSpan.end).toHaveBeenCalledWith({ metadata: { args: { location: 'Paris' } } });
+    expect(result.output.toolCalls?.[0]).toMatchObject({
+      toolCallId: 'call-1',
+      toolName: 'getWeather',
+      args: { location: 'Paris' },
+      observability: carrier,
+    });
+  });
+
+  it('resolves streamed tool payload transforms without rescanning tools per delta', async () => {
+    const onInputDelta = vi.fn();
+    const rawTools = {
+      registeredLookup: {
+        id: 'lookup_by_model_name',
+        inputSchema: z.object({ query: z.string() }),
+        onInputDelta,
+        transform: {
+          display: {
+            inputDelta: ({ inputTextDelta }: { inputTextDelta?: string }) => inputTextDelta?.toUpperCase(),
+          },
+        },
+      },
+    };
+    let toolEnumerationCount = 0;
+    const tools = new Proxy(rawTools, {
+      ownKeys(target) {
+        toolEnumerationCount += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const toolInputDeltas = ['{"query":"', ...Array.from({ length: 12 }, (_, index) => `part-${index} `), '"}'];
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__,
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-input-start',
+                  id: 'call-1',
+                  toolName: 'lookup_by_model_name',
+                  providerExecuted: false,
+                },
+                ...toolInputDeltas.map(delta => ({
+                  type: 'tool-input-delta' as const,
+                  id: 'call-1',
+                  delta,
+                })),
+                {
+                  type: 'tool-input-end',
+                  id: 'call-1',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      toolCallStreaming: true,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    const enqueuedChunks = (controller.enqueue as Mock).mock.calls.map(([chunk]) => chunk);
+    const deltaChunks = enqueuedChunks.filter(chunk => chunk.type === 'tool-call-delta');
+
+    expect(toolEnumerationCount).toBeLessThanOrEqual(5);
+    expect(onInputDelta).toHaveBeenCalledTimes(toolInputDeltas.length);
+    expect(deltaChunks).toHaveLength(toolInputDeltas.length);
+    expect(deltaChunks.map(chunk => chunk.metadata?.mastra?.toolPayloadTransform?.display?.['input-delta'])).toEqual(
+      toolInputDeltas.map(delta => ({ transformed: delta.toUpperCase() })),
+    );
   });
 
   it('merges model config headers with explicit modelSettings headers and lets modelSettings override duplicates', async () => {

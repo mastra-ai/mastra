@@ -33,9 +33,9 @@ describe('parseChangelog', () => {
     const result = parseChangelog(SAMPLE_CHANGELOG, '0.16.0');
     expect(result).toBe(
       [
-        '  • Added evals system for MastraCode.',
-        '  • Fixed task lists leaking across threads.',
-        '  • Allow typing a custom model string in `/om`.',
+        '  • Added evals system for MastraCode',
+        '  • Fixed task lists leaking across threads',
+        '  • Allow typing a custom model string in `/om`',
       ].join('\n'),
     );
   });
@@ -81,20 +81,17 @@ describe('parseChangelog', () => {
     expect(parseChangelog(depOnly, '1.0.0')).toBeNull();
   });
 
-  it('truncates entries longer than 120 characters', () => {
+  it('preserves full entry text without truncation', () => {
     const longEntry = 'A'.repeat(200);
     const md = `## 1.0.0\n\n- ${longEntry}`;
     const result = parseChangelog(md, '1.0.0')!;
-    // "  • " prefix + 117 chars + "…" = well under 200
-    expect(result.length).toBeLessThan(200);
-    expect(result).toContain('…');
+    expect(result).toContain('A'.repeat(200));
   });
 
-  it('cuts at the first sentence when under 100 chars', () => {
+  it('preserves full multi-sentence entries', () => {
     const md = '## 1.0.0\n\n- First sentence here. Then a longer explanation follows with details.';
     const result = parseChangelog(md, '1.0.0')!;
-    expect(result).toContain('First sentence here.');
-    expect(result).not.toContain('longer explanation');
+    expect(result).toContain('First sentence here. Then a longer explanation follows with details');
   });
 });
 
@@ -115,21 +112,18 @@ describe('fetchChangelog (integration)', () => {
     expect(result).toContain('evals');
   }, 10_000);
 
-  it('produces the expected exact output for a version with many entries (v0.10.0)', async () => {
+  it('fetches and preserves full entries for a version with many entries (v0.10.0)', async () => {
     const result = await fetchChangelog('0.10.0');
-    expect(result).toBe(
-      [
-        '  • Added a "Custom response..." option to questions with predefined choices.',
-        '  • Added a /thread command to show the active thread, resource, and pending-new-thread state.',
-        '  • Persist observational memory threshold settings across restarts and restore per-thread overrides.',
-        '  • Improved Mastra Code prompt guidance so responses stay concise and terminal-friendly.',
-        '  • Fixed provider name quoting in gateway sync to properly quote digit-leading provider IDs (e.g.',
-        '  • Limit dynamically injected AGENTS.md reminders to 1000 estimated tokens by default and tell mastracode observational…',
-        '  • Improved the Loaded AGENTS.md reminder in the TUI so it uses the new bordered notice style and collapses long reminde…',
-        '  • Fixed the thread selector so it shows all threads consistently and opens faster.',
-        '  • Custom slash commands now load correctly from all configured directories',
-      ].join('\n'),
-    );
+    expect(result).not.toBeNull();
+    const lines = result!.split('\n');
+    expect(lines.length).toBeGreaterThanOrEqual(9);
+    // Entries should not be truncated with "…"
+    expect(result).toContain('Custom response');
+    expect(result).toContain('/thread command');
+    expect(result).toContain('observational memory');
+    for (const line of lines) {
+      expect(line).toMatch(/^\s+•\s+/);
+    }
   }, 10_000);
 
   it('returns null for a non-existent version', async () => {

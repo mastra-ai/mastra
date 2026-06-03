@@ -1,7 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { stepCountIs, tool } from '@internal/ai-sdk-v5';
 import { getLLMTestMode } from '@internal/llm-recorder';
@@ -16,6 +15,7 @@ import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import type { ProcessInputStepArgs } from '../processors';
 import { createTool } from '../tools';
+import type { MastraToolInvocationPart } from './message-list/state/types';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
 
@@ -778,7 +778,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       const toolResultIds = new Set(
         assistantMsg!.content.parts
           .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-          .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
+          .map(p => (p as MastraToolInvocationPart).toolInvocation.toolCallId),
       );
       expect(assistantMsg!.content.toolInvocations?.length).toBe(toolResultIds.size);
     }, 500000);
@@ -857,7 +857,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       const toolResultIds = new Set(
         assistantMsg!.content.parts
           .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-          .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
+          .map(p => (p as MastraToolInvocationPart).toolInvocation.toolCallId),
       );
       expect(assistantMsg!.content.toolInvocations?.length).toBe(toolResultIds.size);
     }, 500000);

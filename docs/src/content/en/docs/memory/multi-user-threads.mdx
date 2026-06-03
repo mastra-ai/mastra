@@ -74,7 +74,7 @@ const memory = new Memory({
 export const collabAgent = new Agent({
   id: 'collab',
   name: 'CollabAgent',
-  model: 'openai/gpt-5.4-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory,
   instructions: `
 You are a collaborative document assistant. Multiple users talk to you in the SAME thread.

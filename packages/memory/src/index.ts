@@ -46,11 +46,7 @@ import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { recallTool } from './tools/om-tools';
-import {
-  updateWorkingMemoryTool,
-  __experimental_updateWorkingMemoryToolVNext,
-  deepMergeWorkingMemory,
-} from './tools/working-memory';
+import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 
 export {
   ModelByInputTokens,
@@ -168,7 +164,11 @@ function isSystemReminderMessage(message: MastraDBMessage): boolean {
 
   const metadata = message.content.metadata;
   if (message.role === 'signal') {
-    return isRecord(metadata) && isRecord(metadata.signal) && metadata.signal.type === 'system-reminder';
+    return (
+      isRecord(metadata) &&
+      isRecord(metadata.signal) &&
+      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
+    );
   }
 
   if (message.role !== 'user') {
@@ -259,6 +259,7 @@ export class Memory extends MastraMemory {
       },
       observationalMemory: config.options?.observationalMemory as ObservationalMemoryOptions | boolean | undefined,
     });
+    this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     this.threadConfig = mergedConfig;
 
     // Validate retrieval vector config at construction time
@@ -804,6 +805,7 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfigInternal;
   }): Promise<{ success: boolean; reason: string }> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
+    this.assertWorkingMemoryStateSignalsCompatibility(config);
 
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
@@ -1153,6 +1155,10 @@ ${workingMemory}`;
                 message_id: message.id,
                 thread_id: message.threadId,
                 resource_id: message.resourceId,
+                role: message.role,
+                content: textForEmbedding,
+                created_at:
+                  message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
               })),
             });
           }),
@@ -1357,7 +1363,15 @@ ${workingMemory}`;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
+    this.assertWorkingMemoryStateSignalsCompatibility(config);
     if (!config.workingMemory?.enabled) {
+      return null;
+    }
+
+    // When working memory is opted into the state-signals delivery path, suppress
+    // the system-message rendering. The WorkingMemoryStateProcessor delivers the
+    // template + data as a state signal instead.
+    if (config.workingMemory?.useStateSignals) {
       return null;
     }
 
@@ -1616,11 +1630,13 @@ ${workingMemory}`;
             maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
             providerOptions: omConfig.observation.providerOptions,
             bufferTokens: omConfig.observation.bufferTokens,
+            bufferOnIdle: omConfig.observation.bufferOnIdle,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
             instruction: omConfig.observation.instruction,
             threadTitle: omConfig.observation.threadTitle,
+            observeAttachments: omConfig.observation.observeAttachments,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1777,6 +1793,14 @@ Notes:
       config.workingMemory;
 
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
+  }
+
+  private assertWorkingMemoryStateSignalsCompatibility(config?: MemoryConfigInternal): void {
+    if (config?.workingMemory?.useStateSignals === true && this.isVNextWorkingMemoryConfig(config)) {
+      throw new Error(
+        "workingMemory.useStateSignals is not supported with workingMemory.version: 'vnext'. Use stable template working memory or disable useStateSignals.",
+      );
+    }
   }
 
   private getObservationEmbeddingIndexName(dimensions?: number): string {
@@ -1991,7 +2015,13 @@ Notes:
 
     const embeddingData: Array<{
       embeddings: number[][];
-      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+      metadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      >;
     }> = [];
     let dimension: number | undefined;
 
@@ -2025,6 +2055,9 @@ Notes:
             message_id: message.id,
             thread_id: message.threadId,
             resource_id: message.resourceId,
+            role: message.role,
+            content: textForEmbedding,
+            created_at: message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
           })),
         });
       }),
@@ -2034,11 +2067,13 @@ Notes:
       const { indexName } = await this.createEmbeddingIndex(dimension);
 
       const allVectors: number[][] = [];
-      const allMetadata: Array<{
-        message_id: string;
-        thread_id: string | undefined;
-        resource_id: string | undefined;
-      }> = [];
+      const allMetadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      > = [];
 
       for (const data of embeddingData) {
         allVectors.push(...data.embeddings);
@@ -2064,12 +2099,14 @@ Notes:
 
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
+    this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     const tools: Record<string, ToolAction<any, any, any>> = {};
 
     if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
-      tools.updateWorkingMemory = this.isVNextWorkingMemoryConfig(mergedConfig)
-        ? __experimental_updateWorkingMemoryToolVNext(mergedConfig)
-        : updateWorkingMemoryTool(mergedConfig);
+      const { name, tool } = createWorkingMemoryTool(mergedConfig, {
+        vNext: this.isVNextWorkingMemoryConfig(mergedConfig),
+      });
+      tools[name] = tool;
     }
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
@@ -2117,7 +2154,13 @@ Notes:
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
           embeddings: number[][];
-          metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+          metadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          >;
         }> = [];
         let dimension: number | undefined;
 
@@ -2170,6 +2213,12 @@ Notes:
                   message_id: message.id,
                   thread_id: existingMessage.threadId,
                   resource_id: existingMessage.resourceId,
+                  role: existingMessage.role,
+                  content: textForEmbedding,
+                  created_at:
+                    existingMessage.createdAt instanceof Date
+                      ? existingMessage.createdAt.toISOString()
+                      : String(existingMessage.createdAt),
                 })),
               });
               messageIdsWithNewEmbeddings.add(message.id);
@@ -2216,11 +2265,13 @@ Notes:
 
           // Flatten all embeddings and metadata into single arrays
           const allVectors: number[][] = [];
-          const allMetadata: Array<{
-            message_id: string;
-            thread_id: string | undefined;
-            resource_id: string | undefined;
-          }> = [];
+          const allMetadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          > = [];
 
           for (const data of embeddingData) {
             allVectors.push(...data.embeddings);
@@ -2582,7 +2633,13 @@ Notes:
 
     const embeddingData: Array<{
       embeddings: number[][];
-      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+      metadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      >;
     }> = [];
     let dimension: number | undefined;
 
@@ -2618,6 +2675,9 @@ Notes:
             message_id: message.id,
             thread_id: message.threadId,
             resource_id: message.resourceId,
+            role: message.role,
+            content: textForEmbedding,
+            created_at: message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
           })),
         });
       }),
@@ -2629,11 +2689,13 @@ Notes:
 
       // Flatten all embeddings and metadata into single arrays
       const allVectors: number[][] = [];
-      const allMetadata: Array<{
-        message_id: string;
-        thread_id: string | undefined;
-        resource_id: string | undefined;
-      }> = [];
+      const allMetadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      > = [];
 
       for (const data of embeddingData) {
         allVectors.push(...data.embeddings);
@@ -2802,6 +2864,11 @@ Notes:
       processors.push(om);
     }
 
+    const wm = await this.createWorkingMemoryStateProcessor(configuredProcessors, context);
+    if (wm) {
+      processors.push(wm);
+    }
+
     return processors;
   }
 
@@ -2860,6 +2927,31 @@ Notes:
       temporalMarkers: effectiveConfig.temporalMarkers,
     });
   }
+
+  /**
+   * Creates a WorkingMemoryStateProcessor when working memory is enabled and the
+   * `useStateSignals` opt-in is set. Returns null otherwise or if the processor
+   * is already present in the user's configured processors.
+   */
+  private async createWorkingMemoryStateProcessor(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor | null> {
+    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
+    const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
+    this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
+    if (!mergedConfig.workingMemory?.enabled) return null;
+    if (!mergedConfig.workingMemory?.useStateSignals) return null;
+
+    const { WORKING_MEMORY_STATE_PROCESSOR_ID, WorkingMemoryStateProcessor } =
+      await import('./processors/working-memory-state');
+    const alreadyConfigured = configuredProcessors.some(
+      p => !('workflow' in p) && p.id === WORKING_MEMORY_STATE_PROCESSOR_ID,
+    );
+    if (alreadyConfigured) return null;
+
+    return new WorkingMemoryStateProcessor(this, runtimeMemory?.memoryConfig);
+  }
 }
 
 // Re-export memory processors from @mastra/core for backward compatibility
@@ -2870,3 +2962,10 @@ export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMeta
 
 // Observational Memory utilities
 export { getObservationsAsOf } from './processors/observational-memory';
+
+// Working memory state-signal processor (opt-in via workingMemory.useStateSignals)
+export {
+  WorkingMemoryStateProcessor,
+  WORKING_MEMORY_STATE_ID,
+  WORKING_MEMORY_STATE_PROCESSOR_ID,
+} from './processors/working-memory-state';

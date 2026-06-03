@@ -184,7 +184,9 @@ export class MessageHistory implements Processor {
 
         // Strip working memory tags from string content
         if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
-          newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
+          const cleanedContent = removeWorkingMemoryTags(newMessage.content.content);
+          newMessage.content.content =
+            cleanedContent !== newMessage.content.content ? cleanedContent.trim() : newMessage.content.content;
         }
 
         if (Array.isArray(newMessage.content?.parts)) {
@@ -201,9 +203,10 @@ export class MessageHistory implements Processor {
               // Strip working memory tags from text parts
               if (p.type === `text`) {
                 const text = typeof p.text === 'string' ? p.text : '';
+                const cleaned = removeWorkingMemoryTags(text);
                 return {
                   ...p,
-                  text: removeWorkingMemoryTags(text).trim(),
+                  text: cleaned !== text ? cleaned.trim() : text,
                 };
               }
               return p;

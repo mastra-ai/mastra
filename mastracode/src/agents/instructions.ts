@@ -1,25 +1,22 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
-import type { z } from 'zod';
-import type { stateSchema } from '../schema.js';
-import { detectCommonBinaries } from '../utils/binaries.js';
-import { getCurrentGitBranch } from '../utils/project.js';
+import type { MastraCodeComposedState } from '../schema.js';
+import { detectCommonBinariesAsync } from '../utils/binaries.js';
+import { getCurrentGitBranchAsync } from '../utils/project.js';
 import type { PromptContext } from './prompts/index.js';
 import { buildFullPrompt } from './prompts/index.js';
 
-type MastraCodeState = z.infer<typeof stateSchema>;
-
-export function getDynamicInstructions({ requestContext }: { requestContext: { get(key: string): unknown } }) {
-  const harnessContext = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-  const state = harnessContext?.state;
+export async function getDynamicInstructions({ requestContext }: { requestContext: { get(key: string): unknown } }) {
+  const harnessContext = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
+  const state = harnessContext?.getState?.();
   const modeId = harnessContext?.modeId ?? 'build';
   const projectPath = state?.projectPath ?? process.cwd();
 
   const promptCtx: PromptContext = {
     projectPath,
     projectName: state?.projectName ?? '',
-    gitBranch: getCurrentGitBranch(projectPath) ?? state?.gitBranch,
+    gitBranch: (await getCurrentGitBranchAsync(projectPath)) ?? state?.gitBranch,
     platform: process.platform,
-    commonBinaries: detectCommonBinaries(),
+    commonBinaries: await detectCommonBinariesAsync(),
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,
     modelId: state?.currentModelId || undefined,

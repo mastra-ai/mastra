@@ -1,11 +1,11 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import type { MastraUIMessage } from '@mastra/react';
-import { resolveToChildMessages } from '@mastra/react';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';
 import { LoadingBadge } from './loading-badge';
+import { resolveToChildMessages } from './resolve-child-messages';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 interface SubAgentToolResult {
   toolName: string;
@@ -23,7 +23,7 @@ interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCal
     subAgentToolResults?: SubAgentToolResult[];
     text?: string;
   };
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
@@ -54,7 +54,7 @@ export const AgentBadgeWrapper = ({
     return <LoadingBadge />;
   }
 
-  const convertedMessages = data?.messages ? (toAISdkV5Messages(data.messages) as MastraUIMessage[]) : [];
+  const convertedMessages = data?.messages ? toAISdkV5Messages(data.messages) : [];
 
   // Build child messages from available sources:
   // 1. childMessages (built during live streaming by toUIMessageFromAgent)

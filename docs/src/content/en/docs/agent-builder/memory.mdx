@@ -1,0 +1,75 @@
+---
+title: "Memory | Agent Builder"
+description: Configure the default memory shape for Agent Builder agents, including observational memory, message history, and semantic recall.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Memory
+
+:::note
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+:::
+
+The Agent Builder pins a default memory shape onto every new agent through `builder.configuration.agent.memory`. The default applies when an end user creates a new agent and doesn't override it.
+
+## Quickstart
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        memory: { observationalMemory: true },
+      },
+    },
+  },
+})
+```
+
+Observational memory lets the agent learn long-lived facts from past conversations. Storage on the `Mastra` instance is required — see the [Memory overview](/docs/memory/overview) for the prerequisites.
+
+## Observational memory model
+
+Observational memory runs an Observer and Reflector model on top of every conversation. The default model is `__GATEWAY_GOOGLE_MODEL__`, which requires a `GOOGLE_API_KEY` environment variable in any environment where the Builder agent will run. Mastra also falls back to `GOOGLE_GENERATIVE_AI_API_KEY`.
+
+To use a different model, set `observationalMemory.model` to any model ID supported by the Mastra model router (and provide the matching provider credentials):
+
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        memory: {
+          observationalMemory: {
+            model: '__GATEWAY_OPENAI_MODEL__',
+          },
+        },
+      },
+    },
+  },
+})
+```
+
+The `model` field applies to both the Observer and Reflector. You can also override each one independently via `observation.model` and `reflection.model`. See the [SerializedMemoryConfig reference](/reference/memory/serialized-memory-config) for the full shape.
+
+## Storage and vector requirements
+
+Memory features layer on top of `Mastra.storage`:
+
+- **Message history** (`options.lastMessages`) requires storage.
+- **Observational memory** (`observationalMemory: true`) requires storage.
+- **Semantic recall** (`options.semanticRecall`) requires storage plus a registered vector adapter (`vector`) and an embedder (`embedder`).
+
+If a required adapter is missing, Mastra throws a descriptive error at agent run time. See [Semantic recall](/docs/memory/semantic-recall) for the full list of supported vector stores and embedders.
+
+## Related
+
+- [Memory overview](/docs/memory/overview) — concepts and core configuration.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — the full `memory` field schema.
+- [Configuration](/docs/agent-builder/configuration) — wire `memory` alongside the rest of the Builder config.

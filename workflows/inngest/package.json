@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -18,6 +18,16 @@
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./connect": {
+      "import": {
+        "types": "./dist/connect.d.ts",
+        "default": "./dist/connect.js"
+      },
+      "require": {
+        "types": "./dist/connect.d.ts",
+        "default": "./dist/connect.cjs"
       }
     },
     "./package.json": "./package.json"

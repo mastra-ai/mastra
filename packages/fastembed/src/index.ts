@@ -1,13 +1,10 @@
-import fsp from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import { customProvider as customProviderV2 } from '@internal/ai-sdk-v5';
 import { customProvider as customProviderLegacy } from '@internal/ai-sdk-v4';
 import type { EmbeddingModelV3 } from '@internal/ai-v6';
 import type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 import type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 import { customProvider as customProviderV3 } from '@internal/ai-v6';
-import { FlagEmbedding, EmbeddingModel } from './fastembed.js';
+import { getCachedModel, warmupFastEmbedModels, type FastEmbedModelType } from './model-cache.js';
 
 export {
   EmbeddingModel,
@@ -22,28 +19,17 @@ export type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 export type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 export type { EmbeddingModel as EmbeddingModelV3 } from '@internal/ai-v6';
 
-async function getModelCachePath() {
-  const cachePath = path.join(os.homedir(), '.cache', 'mastra', 'fastembed-models');
-  await fsp.mkdir(cachePath, { recursive: true });
-  return cachePath;
-}
-
 /**
  * Pre-download fastembed models without creating ONNX sessions.
  * Call this before running tests in parallel to avoid concurrent download races.
  */
 export async function warmup() {
-  const cacheDir = await getModelCachePath();
-  await FlagEmbedding.retrieveModel(EmbeddingModel.BGESmallENV15, cacheDir, false);
-  await FlagEmbedding.retrieveModel(EmbeddingModel.BGEBaseENV15, cacheDir, false);
+  await warmupFastEmbedModels();
 }
 
 // Shared function to generate embeddings using fastembed
-async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' | 'BGEBaseENV15') {
-  const model = await FlagEmbedding.init({
-    model: EmbeddingModel[modelType],
-    cacheDir: await getModelCachePath(),
-  });
+async function generateEmbeddings(values: string[], modelType: FastEmbedModelType) {
+  const model = await getCachedModel(modelType);
 
   // model.embed() returns an AsyncGenerator that processes texts in batches (default size 256)
   const embeddings = model.embed(values);
