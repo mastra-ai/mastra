@@ -6799,21 +6799,6 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // Delegate to the idle-loop wrapper when `untilIdle` is set.
-    if (streamOptions?.untilIdle) {
-      const { untilIdle, ...rest } = streamOptions;
-      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
-      return runStreamUntilIdle<OUTPUT>(
-        this,
-        messages,
-        { ...rest, maxIdleMs },
-        {
-          activeStreams: this.#activeStreamUntilIdle,
-          bgManager: this.#mastra?.backgroundTaskManager,
-        },
-      );
-    }
-
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
@@ -6828,6 +6813,23 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+
+    // Delegate to the idle-loop wrapper when `untilIdle` is set (from
+    // per-call options OR defaultOptions). Strip `untilIdle` before passing
+    // to the wrapper so its internal agent.stream() call doesn't recurse.
+    if (mergedOptions.untilIdle) {
+      const { untilIdle, ...rest } = streamOptions ?? {};
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      return runStreamUntilIdle<OUTPUT>(
+        this,
+        messages,
+        { ...rest, maxIdleMs },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
 
     await this.#requireAgentExecutionFGA(mergedOptions);
 
@@ -7114,9 +7116,20 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // Delegate to the idle-loop wrapper when `untilIdle` is set.
-    if (streamOptions?.untilIdle) {
-      const { untilIdle, ...rest } = streamOptions;
+    const defaultOptions = await this.getDefaultOptions({
+      requestContext: streamOptions?.requestContext,
+    });
+
+    const mergedStreamOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (streamOptions ?? {}) as Record<string, unknown>,
+    ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+
+    // Delegate to the idle-loop wrapper when `untilIdle` is set (from
+    // per-call options OR defaultOptions). Strip `untilIdle` before passing
+    // to the wrapper so its internal agent.stream() call doesn't recurse.
+    if (mergedStreamOptions.untilIdle) {
+      const { untilIdle, ...rest } = streamOptions ?? {};
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
       return runResumeStreamUntilIdle<OUTPUT>(
         this,
@@ -7128,15 +7141,6 @@ export class Agent<
         },
       );
     }
-
-    const defaultOptions = await this.getDefaultOptions({
-      requestContext: streamOptions?.requestContext,
-    });
-
-    const mergedStreamOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (streamOptions ?? {}) as Record<string, unknown>,
-    ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
 
     const runId = streamOptions?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
