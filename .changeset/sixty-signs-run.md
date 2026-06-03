@@ -1,8 +1,5 @@
 ---
-'@mastra/core': minor
-'@mastra/client-js': patch
-'@mastra/react': patch
-'@mastra/server': patch
+'@mastra/core': patch
 ---
 
 Added `untilIdle` option to `stream()` and `resumeStream()` methods. Pass `untilIdle: true` (or `untilIdle: { maxIdleMs: 60_000 }`) to keep the stream open across background-task continuations — same behavior as the now-deprecated `streamUntilIdle()` method.
