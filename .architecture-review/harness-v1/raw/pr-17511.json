@@ -1,0 +1,54 @@
+{
+  "additions": 22,
+  "baseRefName": "main",
+  "commits": [
+    {
+      "authoredDate": "2026-06-03T12:01:24Z",
+      "authors": [
+        {
+          "email": "158243242+devin-ai-integration[bot]@users.noreply.github.com",
+          "id": "BOT_kgDOCW6Zqg",
+          "login": "devin-ai-integration[bot]",
+          "name": "Devin AI"
+        },
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "Ward Peeters"
+        }
+      ],
+      "committedDate": "2026-06-03T12:01:24Z",
+      "messageBody": "…tive\n\nWhen no thread has been opened yet (pendingNewThread is true), #session\nis undefined. Previously, pressing Shift+Tab to cycle modes would throw\n'No active session to switch mode'. Now switchMode falls back to the\nlegacy path, consistent with getCurrentMode().\n\nCo-Authored-By: Ward Peeters <ward@coding-tech.com>",
+      "messageHeadline": "fix(mastracode): fall back to legacy switchMode when no session is ac…",
+      "oid": "cc60c9cff82c57a0141b7bf0d6902be505971f58"
+    }
+  ],
+  "deletions": 4,
+  "files": [
+    {
+      "path": ".changeset/plain-laws-go.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/HarnessCompat.test.ts",
+      "additions": 15,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/HarnessCompat.ts",
+      "additions": 2,
+      "deletions": 4,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "devin/1780487978-fix-switchmode-no-session",
+  "mergedAt": "2026-06-03T12:57:20Z",
+  "number": 17511,
+  "state": "MERGED",
+  "title": "fix(mastracode): fall back to legacy switchMode when no session is active",
+  "url": "https://github.com/mastra-ai/mastra/pull/17511"
+}

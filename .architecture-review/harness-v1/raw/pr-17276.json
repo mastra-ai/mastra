@@ -1,0 +1,261 @@
+{
+  "additions": 1850,
+  "baseRefName": "main",
+  "commits": [
+    {
+      "authoredDate": "2026-05-27T23:25:35Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        }
+      ],
+      "committedDate": "2026-05-29T12:27:04Z",
+      "messageBody": "",
+      "messageHeadline": "setup simple mode refactor for harness v1",
+      "oid": "259bd9ae45b5f1813918d2c7f2e86b417d662d7f"
+    },
+    {
+      "authoredDate": "2026-05-28T14:41:20Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-29T12:27:04Z",
+      "messageBody": "Add a harness storage domain with in-memory persistence and wire Harness v1 session creation, listing, cloning, and memory-backed thread state through it.\n\nUpdate mastracode compatibility to resolve Harness v1 storage from the Mastra composite store instead of passing legacy storage directly.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "feat(core): persist harness v1 sessions",
+      "oid": "fce9243a7e79c678ac81dfd11511e15b24cd3b17"
+    },
+    {
+      "authoredDate": "2026-05-29T12:21:01Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-29T12:27:04Z",
+      "messageBody": "Allow Harness V1 instances to own sessions with a configurable ownerId and wire MastraCode to use a stable machine/project scoped owner identifier.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "feat(core): add harness owner ids",
+      "oid": "81c55c4debcbcdc003827c5f1026b661d3c409a9"
+    },
+    {
+      "authoredDate": "2026-05-29T14:35:58Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-29T14:35:58Z",
+      "messageBody": "Remove unused owner ID imports and use a type import for the Harness V1 test mock so CI lint passes.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(mastracode): satisfy harness owner lint",
+      "oid": "ff44bcc54d31bace03b8a77baf0e3cb2c6ca44a1"
+    },
+    {
+      "authoredDate": "2026-05-29T15:17:34Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-29T15:17:34Z",
+      "messageBody": "Tighten Harness V1 session validation, storage isolation, and MastraCode compatibility behavior so owner-scoped sessions preserve legacy semantics.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(core): address harness owner review",
+      "oid": "bb6c18d9c3c7375458a0fa17b97b1fca4c3d58a8"
+    },
+    {
+      "authoredDate": "2026-06-01T08:47:50Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "Ward Peeters"
+        }
+      ],
+      "committedDate": "2026-06-01T08:47:50Z",
+      "messageBody": "",
+      "messageHeadline": "Merge branch 'main' into wardpeet/harness-v1",
+      "oid": "6e79db863a6d632f9e5fde4a17a5d83ac34ac276"
+    }
+  ],
+  "deletions": 139,
+  "files": [
+    {
+      "path": "mastracode/src/HarnessCompat.ts",
+      "additions": 182,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/__tests__/index.test.ts",
+      "additions": 91,
+      "deletions": 7,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/index.ts",
+      "additions": 239,
+      "deletions": 131,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/commands/threads.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/package.json",
+      "additions": 10,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 198,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.types.ts",
+      "additions": 265,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/mode.test.ts",
+      "additions": 104,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/mode.ts",
+      "additions": 67,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.test.ts",
+      "additions": 344,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 165,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.types.ts",
+      "additions": 39,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/base.ts",
+      "additions": 4,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/base.ts",
+      "additions": 17,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/index.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.test.ts",
+      "additions": 69,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.ts",
+      "additions": 31,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/types.ts",
+      "additions": 12,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/index.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/mock.ts",
+      "additions": 4,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/tsup.config.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "wardpeet/harness-v1",
+  "mergedAt": "2026-06-01T09:02:16Z",
+  "number": 17276,
+  "state": "MERGED",
+  "title": "feat(core, mastracode): add scoped Harness V1 session owner IDs",
+  "url": "https://github.com/mastra-ai/mastra/pull/17276"
+}

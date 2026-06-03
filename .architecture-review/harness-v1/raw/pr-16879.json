@@ -1,0 +1,750 @@
+{
+  "additions": 48194,
+  "baseRefName": "feat/harness-v1-agent-run-output",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T11:05:15Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T11:51:03Z",
+      "messageBody": "Rename the existing core Harness implementation to HarnessLegacy while preserving the temporary Harness export alias for downstream consumers. Update legacy harness tests to use the renamed class and add the core changeset for the migration step.",
+      "messageHeadline": "chore(core): rename legacy harness class",
+      "oid": "3dbe86cd4655834f0f5d17fe37bef709ff1c14f9"
+    },
+    {
+      "authoredDate": "2026-05-20T11:42:20Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T11:52:34Z",
+      "messageBody": "Add the @mastra/core/harness/v1 export and build entry as the next stacked Harness v1 migration step. Introduce minimal Harness and Session scaffold exports plus shared stable type re-exports so follow-up PRs can add the audited v1 type layer and runtime behavior.",
+      "messageHeadline": "feat(core): add harness v1 subpath scaffold",
+      "oid": "8c38a5009278e846759136bc348a489656b4a645"
+    },
+    {
+      "authoredDate": "2026-05-20T12:14:37Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T12:33:59Z",
+      "messageBody": "Add the public Harness v1 type, config, context, error, and event surface behind the existing @mastra/core/harness/v1 subpath. Keep this slice compile-only so the storage domain and runtime behavior can land in the next stacked PRs.",
+      "messageHeadline": "feat(core): add harness v1 type layer",
+      "oid": "7a49669dce227713bfa7c4a209ce3d3e8dc0069c"
+    },
+    {
+      "authoredDate": "2026-05-20T13:23:34Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T13:23:34Z",
+      "messageBody": "Add the Harness v1 storage contract for session records, leases, and attachments.\n\nWire the in-memory implementation into InMemoryStore and the composite storage domains so v1 sessions have a standard development/test backing store.",
+      "messageHeadline": "feat(core): add harness storage domain",
+      "oid": "300dcc546416f329b9c1dec98c7b4e831a9ab43d"
+    },
+    {
+      "authoredDate": "2026-05-20T16:27:58Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T16:27:58Z",
+      "messageBody": "Extracts the forked Harness v1 registry slice into @mastra/core/harness/v1, including durable session resolution, leases, lifecycle, model discovery, thread utilities, workspace provider registration, and focused regression coverage.",
+      "messageHeadline": "feat(core): add harness v1 registry",
+      "oid": "df3ee880910eface225190df96d263393fae72b7"
+    },
+    {
+      "authoredDate": "2026-05-20T16:48:39Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T16:48:39Z",
+      "messageBody": "Ports the forked Session state, mode, and model-selection layer into the stacked Harness v1 implementation. Adds CAS-backed persistence, state change events, model override events, and regression coverage for record version and lease-renewal behavior.",
+      "messageHeadline": "feat(core): add harness v1 session state",
+      "oid": "d3c99f275b2022eb597f0c9abb3eeb17c17bf12e"
+    },
+    {
+      "authoredDate": "2026-05-20T17:31:44Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T17:31:44Z",
+      "messageBody": "Add the next Harness v1 Session slice: status accessors, idle waiters, token usage reads, and listMessages history readback.\n\nShare the legacy-compatible message converter with v1 and cover signal rows, system reminders, completed tool calls without result payloads, no-memory behavior, and resource-scoped reads.",
+      "messageHeadline": "feat(core): add harness v1 session accessors",
+      "oid": "2156509669559bfe1093668dc72757a6f5936f1c"
+    },
+    {
+      "authoredDate": "2026-05-20T18:11:54Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T18:11:54Z",
+      "messageBody": "Add thread-stream runtime lookup and waiter APIs for signal-started runs so Harness v1 can recover the MastraModelOutput after Agent.sendSignal reserves a run.\n\nWaiters now resolve on registration and reject on abort or idle wake setup failure, with focused coverage for the timing windows.",
+      "messageHeadline": "feat(core): expose agent thread run outputs",
+      "oid": "5ab333bd203ddbea5be56c3bee2181141e38b197"
+    },
+    {
+      "authoredDate": "2026-05-21T00:18:59Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T00:18:59Z",
+      "messageBody": "Sync the current Harness v1 runtime and storage foundation from the latest fork tree, including Session lifecycle, message admission, queueing, built-in HITL/task tools, wakeup worker support, and expanded in-memory harness storage coverage.\n\nAdapt the runtime to the official stacked base by using the agent run-output waiter, preserving public v1 exports, guarding workspace/session lifecycle races, and keeping Mastra worker shutdown behavior deterministic.",
+      "messageHeadline": "feat(core): sync latest harness v1 foundation",
+      "oid": "0454bfd03be1b1e79fd167af682c6d5a92948272"
+    }
+  ],
+  "deletions": 177,
+  "files": [
+    {
+      "path": ".changeset/brave-bobcats-dress.md",
+      "additions": 18,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/calm-showers-build.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/cute-pots-admire.md",
+      "additions": 27,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/fuzzy-cities-throw.md",
+      "additions": 9,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/lucky-flies-fail.md",
+      "additions": 32,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/rare-rats-wish.md",
+      "additions": 9,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/shaggy-crabs-brush.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/solid-news-open.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/tough-clubs-mate.md",
+      "additions": 11,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/package.json",
+      "additions": 30,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/__tests__/agent-thread-run-output.test.ts",
+      "additions": 202,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/agent/agent.ts",
+      "additions": 36,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/thread-stream-runtime.ts",
+      "additions": 92,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/background-tasks/manager.test.ts",
+      "additions": 458,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/background-tasks/manager.ts",
+      "additions": 231,
+      "deletions": 14,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/background-tasks/shutdown.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/background-tasks/workflow.ts",
+      "additions": 37,
+      "deletions": 16,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/__tests__/harness-tool-suspension.test.ts",
+      "additions": 5,
+      "deletions": 5,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/_shared/message-conversion.ts",
+      "additions": 337,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/clone-thread.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/display-state.test.ts",
+      "additions": 18,
+      "deletions": 18,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/fork-clone-metadata.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/get-om-record.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/harness.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/index.ts",
+      "additions": 7,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/list-threads-fork-filter.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/mode-model-persistence.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/om-failure-abort.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/om-threshold-persistence.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/resource-id.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/signal-history.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/signal-messages.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/switch-model.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/task-tools.test.ts",
+      "additions": 4,
+      "deletions": 4,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/thread-locking.test.ts",
+      "additions": 5,
+      "deletions": 5,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/token-usage.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/tracing-propagation.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/__test-utils__/fake-output.ts",
+      "additions": 76,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/__test-utils__/index.ts",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/__test-utils__/mock-agent.ts",
+      "additions": 353,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/__test-utils__/setup.ts",
+      "additions": 83,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/attachments.test.ts",
+      "additions": 406,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/channel-registry.ts",
+      "additions": 201,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/errors.ts",
+      "additions": 440,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.ts",
+      "additions": 951,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/export-map.test.ts",
+      "additions": 71,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.modes.test.ts",
+      "additions": 90,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.test.ts",
+      "additions": 3772,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 3748,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 254,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/list-messages.test.ts",
+      "additions": 208,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/models.test.ts",
+      "additions": 170,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.abort.test.ts",
+      "additions": 222,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.builtin-tools.test.ts",
+      "additions": 347,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.discrete-accessors.test.ts",
+      "additions": 303,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.display-state.test.ts",
+      "additions": 143,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.events.test.ts",
+      "additions": 598,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.goal-judge.test.ts",
+      "additions": 112,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.goal.test.ts",
+      "additions": 434,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.injectSystemReminder.test.ts",
+      "additions": 170,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.message.test.ts",
+      "additions": 1300,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.mode-state.test.ts",
+      "additions": 109,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.models.test.ts",
+      "additions": 205,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.permissions.test.ts",
+      "additions": 248,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.queue.test.ts",
+      "additions": 2153,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.signal-routing.test.ts",
+      "additions": 84,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.signal.test.ts",
+      "additions": 267,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.skills.test.ts",
+      "additions": 423,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.skills.use.test.ts",
+      "additions": 714,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.spawn-subagent.test.ts",
+      "additions": 242,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.subagent-events.test.ts",
+      "additions": 272,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.subscription-lifecycle.test.ts",
+      "additions": 126,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.suspend.test.ts",
+      "additions": 1145,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.test.ts",
+      "additions": 278,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.tool-context.test.ts",
+      "additions": 357,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 7762,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/spawn-subagent-tool.ts",
+      "additions": 282,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/threads.settings.test.ts",
+      "additions": 224,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/threads.test.ts",
+      "additions": 1293,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/types.ts",
+      "additions": 1728,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/workspace-provider.ts",
+      "additions": 89,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/workspace-registry.test.ts",
+      "additions": 267,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/workspace-registry.ts",
+      "additions": 571,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/workspace-runtime.test.ts",
+      "additions": 613,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/workspace-session.test.ts",
+      "additions": 195,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/workspace-resolution.test.ts",
+      "additions": 10,
+      "deletions": 10,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/mastra/index.ts",
+      "additions": 790,
+      "deletions": 62,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/mastra/workers-filter.test.ts",
+      "additions": 1657,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/base.ts",
+      "additions": 4,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/background-tasks/__tests__/base.test.ts",
+      "additions": 72,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/background-tasks/__tests__/inmemory.test.ts",
+      "additions": 15,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/background-tasks/base.ts",
+      "additions": 22,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/background-tasks/inmemory.ts",
+      "additions": 11,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/base.ts",
+      "additions": 950,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/index.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.test.ts",
+      "additions": 2331,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.ts",
+      "additions": 3180,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/types.ts",
+      "additions": 1049,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/index.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/inmemory-db.ts",
+      "additions": 44,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-latest-foundation-sync",
+  "mergedAt": null,
+  "number": 16879,
+  "state": "CLOSED",
+  "title": "Add latest Harness v1 runtime foundation",
+  "url": "https://github.com/mastra-ai/mastra/pull/16879"
+}

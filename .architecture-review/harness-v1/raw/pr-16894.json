@@ -1,0 +1,48 @@
+{
+  "additions": 638,
+  "baseRefName": "feat/harness-v1-attachments",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T10:35:39Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T10:35:39Z",
+      "messageBody": "Add Session.message execution for Harness v1, including default, streaming, and structured sync calls. The runtime forwards created user signals to agents with memory/request context, mode/model/tool overrides, attachment file parts, event emission, token usage, and run/trace bookkeeping.",
+      "messageHeadline": "feat(core): add Harness v1 session messages",
+      "oid": "b7342ae2341b70b7e070f01baaddcd701158e858"
+    }
+  ],
+  "deletions": 2,
+  "files": [
+    {
+      "path": ".changeset/tasty-pans-beam.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.message.test.ts",
+      "additions": 268,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 365,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-session-message",
+  "mergedAt": null,
+  "number": 16894,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 session messages",
+  "url": "https://github.com/mastra-ai/mastra/pull/16894"
+}

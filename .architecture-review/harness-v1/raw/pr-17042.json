@@ -1,0 +1,276 @@
+{
+  "additions": 1409,
+  "baseRefName": "feat/mastracode-harness-v1-runtime",
+  "commits": [
+    {
+      "authoredDate": "2026-05-25T22:39:20Z",
+      "authors": [
+        {
+          "email": "tylerdbarnes@gmail.com",
+          "id": "MDQ6VXNlcjE0MTkwNzQz",
+          "login": "TylerBarnes",
+          "name": "Tyler Barnes"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-25T22:39:20Z",
+      "messageBody": "Inject MastraCode runtime state into Harness v1 shared workspace initialization so workspace factories can resolve the project path during startup.\n\nMatch the legacy Harness internal Mastra logger behavior to avoid surfacing expected observability storage capability warnings in the TUI, and only attach the local storage exporter when local tracing storage is active.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(mastracode): restore v1 startup context",
+      "oid": "cf3ddc27f5d0aacd065607c0e36551b57a095782"
+    },
+    {
+      "authoredDate": "2026-05-25T22:55:19Z",
+      "authors": [
+        {
+          "email": "tylerdbarnes@gmail.com",
+          "id": "MDQ6VXNlcjE0MTkwNzQz",
+          "login": "TylerBarnes",
+          "name": "Tyler Barnes"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-25T22:55:19Z",
+      "messageBody": "Ensure Harness v1 treats yolo turns and MastraCode's always-allowed task tools as allow decisions, including tools that declare their own approval requirement.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(mastracode): respect yolo tool approvals",
+      "oid": "64cca04e8e07a6e84cf01e74dd92fa91cf1a3a60"
+    },
+    {
+      "authoredDate": "2026-05-25T23:53:58Z",
+      "authors": [
+        {
+          "email": "tylerdbarnes@gmail.com",
+          "id": "MDQ6VXNlcjE0MTkwNzQz",
+          "login": "TylerBarnes",
+          "name": "Tyler Barnes"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-25T23:53:58Z",
+      "messageBody": "Register request_access prompts through the native Harness v1 sandbox-access path and preserve those pending resumes instead of downgrading them to generic tool suspensions.\n\nRebuild resume request context with model, memory, toolsets, and approval state so approved sandbox requests continue the original run. Propagate the MastraCode workspace factory onto v1 agents so resumed and follow-up turns keep local workspace tools available.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(mastracode): resume sandbox access with workspace context",
+      "oid": "d4d7652674115c7c12b85794c7a03144f6305f86"
+    },
+    {
+      "authoredDate": "2026-05-25T23:56:11Z",
+      "authors": [
+        {
+          "email": "tylerdbarnes@gmail.com",
+          "id": "MDQ6VXNlcjE0MTkwNzQz",
+          "login": "TylerBarnes",
+          "name": "Tyler Barnes"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-25T23:56:11Z",
+      "messageBody": "Drop the changeset files from this fix branch so the Harness v1 follow-up PR only contains code and test changes.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "chore: remove Harness v1 fix changesets",
+      "oid": "839317ffa35d6302d29efe62543993bde0d9c572"
+    },
+    {
+      "authoredDate": "2026-05-26T21:51:09Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-26T21:51:09Z",
+      "messageBody": "…tup (#17068)",
+      "messageHeadline": "fix(mastracode): recover from stale Harness v1 session leases on star…",
+      "oid": "24f6f833203a1d8c02b3701ba1fe84667782101e"
+    },
+    {
+      "authoredDate": "2026-05-26T22:26:38Z",
+      "authors": [
+        {
+          "email": "tylerdbarnes@gmail.com",
+          "id": "MDQ6VXNlcjE0MTkwNzQz",
+          "login": "TylerBarnes",
+          "name": "Tyler Barnes"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-26T22:26:38Z",
+      "messageBody": "Resolve conflicts with MastraCode Harness v1 startup, workspace, memory, and lease recovery fixes while preserving parent branch compatibility updates.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "Merge parent Harness v1 runtime branch",
+      "oid": "17f3bb66148b1396f2dd7cf85c81d2ccb819678f"
+    },
+    {
+      "authoredDate": "2026-05-26T22:39:08Z",
+      "authors": [
+        {
+          "email": "tylerdbarnes@gmail.com",
+          "id": "MDQ6VXNlcjE0MTkwNzQz",
+          "login": "TylerBarnes",
+          "name": "Tyler Barnes"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-26T22:39:08Z",
+      "messageBody": "Persist per-turn yolo state on Harness v1 pending resumes so resumed turns keep approval bypass semantics, and keep MastraCode always-allowed tools visible even when raw permission rules deny them.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(mastracode): preserve yolo resume permissions",
+      "oid": "4509352c1887223268d0d96df1d540597923bfe6"
+    }
+  ],
+  "deletions": 175,
+  "files": [
+    {
+      "path": ".changeset/cute-mails-brush.md",
+      "additions": 24,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/README.md",
+      "additions": 19,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/__tests__/index.test.ts",
+      "additions": 47,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/config.ts",
+      "additions": 18,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/index.ts",
+      "additions": 7,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/lease-recovery-prompt.ts",
+      "additions": 62,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.test.ts",
+      "additions": 541,
+      "deletions": 20,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.ts",
+      "additions": 379,
+      "deletions": 76,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/index.ts",
+      "additions": 27,
+      "deletions": 5,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/main.ts",
+      "additions": 33,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/permissions.ts",
+      "additions": 4,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tools/__tests__/request-sandbox-access.test.ts",
+      "additions": 11,
+      "deletions": 7,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tools/request-sandbox-access.ts",
+      "additions": 36,
+      "deletions": 14,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/mastra-tui.ts",
+      "additions": 16,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.message.test.ts",
+      "additions": 4,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.suspend.test.ts",
+      "additions": 71,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 94,
+      "deletions": 35,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/loop/workflows/agentic-execution/tool-call-step.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/loop/workflows/agentic-execution/tool-call-step.ts",
+      "additions": 12,
+      "deletions": 9,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/types.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "fix/mastracode-v1-project-path-workspace",
+  "mergedAt": "2026-05-26T22:42:51Z",
+  "number": 17042,
+  "state": "MERGED",
+  "title": "fix: stabilize MastraCode Harness v1 startup and resumes",
+  "url": "https://github.com/mastra-ai/mastra/pull/17042"
+}

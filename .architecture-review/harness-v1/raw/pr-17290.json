@@ -1,0 +1,126 @@
+{
+  "additions": 539,
+  "baseRefName": "main",
+  "commits": [
+    {
+      "authoredDate": "2026-05-29T15:27:25Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-01T09:10:48Z",
+      "messageBody": "Add event emitter primitives for harness v1 sessions and expose subscription hooks for lifecycle, mode, model, and thread clone updates.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "feat(core): add harness v1 events",
+      "oid": "70d88277ae1f5277c76131cc6cea63e5a8bf2a35"
+    },
+    {
+      "authoredDate": "2026-05-29T15:30:59Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-01T09:11:14Z",
+      "messageBody": "Remove the public onEvent harness config so event observation has one public API through subscribe().\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(core): keep harness event API focused",
+      "oid": "2434c2ffe232b6bc5e7b0d962c08b1ff19147026"
+    },
+    {
+      "authoredDate": "2026-06-01T10:49:15Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-01T10:49:15Z",
+      "messageBody": "Narrow the changeset package scope to @mastra/core and replace a real-looking test model ID with the existing placeholder pattern.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(core): address harness event review feedback",
+      "oid": "4f241ab9e424a1e7231fa7f62be8afadda770fec"
+    }
+  ],
+  "deletions": 2,
+  "files": [
+    {
+      "path": ".changeset/eager-beers-sip.md",
+      "additions": 15,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.test.ts",
+      "additions": 83,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.ts",
+      "additions": 291,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 15,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.test.ts",
+      "additions": 106,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 25,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.types.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "wardpeet/harness-v1-p2",
+  "mergedAt": "2026-06-01T11:21:45Z",
+  "number": 17290,
+  "state": "MERGED",
+  "title": "feat(core): add harness v1 events",
+  "url": "https://github.com/mastra-ai/mastra/pull/17290"
+}

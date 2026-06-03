@@ -1,0 +1,60 @@
+{
+  "additions": 741,
+  "baseRefName": "feat/harness-v1-session-signals",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T11:01:40Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T11:01:40Z",
+      "messageBody": "Adds the Harness v1 Session queue/admitQueue runtime on top of the existing harness storage queue receipt model. Queued turns persist to pendingQueue, drain FIFO through the current message runtime, stamp turn events with queuedItemId, enforce maxQueueDepth, and handle duplicate or conflicting admission ids.\n\nIncludes focused queue tests for FIFO execution, max-depth rejection, idempotent admission, conflict detection, event stamping, and queued attachment replay.",
+      "messageHeadline": "feat(core): add Harness v1 session queue",
+      "oid": "f07b3673d124ab7704a1e85d75692f97ecca5897"
+    }
+  ],
+  "deletions": 20,
+  "files": [
+    {
+      "path": ".changeset/tiny-apes-swim.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/errors.ts",
+      "additions": 13,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.queue.test.ts",
+      "additions": 284,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 432,
+      "deletions": 20,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/types.ts",
+      "additions": 7,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-session-queue",
+  "mergedAt": null,
+  "number": 16896,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 session queue",
+  "url": "https://github.com/mastra-ai/mastra/pull/16896"
+}

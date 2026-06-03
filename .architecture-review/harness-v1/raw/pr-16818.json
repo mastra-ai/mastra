@@ -1,0 +1,72 @@
+{
+  "additions": 56,
+  "baseRefName": "chore/harness-legacy-rename",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T11:42:20Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T11:52:34Z",
+      "messageBody": "Add the @mastra/core/harness/v1 export and build entry as the next stacked Harness v1 migration step. Introduce minimal Harness and Session scaffold exports plus shared stable type re-exports so follow-up PRs can add the audited v1 type layer and runtime behavior.",
+      "messageHeadline": "feat(core): add harness v1 subpath scaffold",
+      "oid": "8c38a5009278e846759136bc348a489656b4a645"
+    }
+  ],
+  "deletions": 0,
+  "files": [
+    {
+      "path": ".changeset/tough-clubs-mate.md",
+      "additions": 11,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/package.json",
+      "additions": 10,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 21,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/shared.ts",
+      "additions": 7,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/tsup.config.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "chore/harness-v1-subpath-scaffold",
+  "mergedAt": "2026-05-20T14:53:34Z",
+  "number": 16818,
+  "state": "MERGED",
+  "title": "feat(core): add harness v1 subpath scaffold",
+  "url": "https://github.com/mastra-ai/mastra/pull/16818"
+}

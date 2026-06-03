@@ -1,0 +1,321 @@
+{
+  "additions": 3212,
+  "baseRefName": "feat/harness-v1-complete-core",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T19:32:37Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T19:32:37Z",
+      "messageBody": "",
+      "messageHeadline": "feat(mastracode): add Harness v1 adapter",
+      "oid": "a3e64529b345325365c744e992f821bb20ce5ba2"
+    },
+    {
+      "authoredDate": "2026-05-21T20:06:16Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T20:06:16Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): harden harness v1 compatibility",
+      "oid": "7c6030a0e9dc94c2275d9bc2d60cd64dff7137ec"
+    },
+    {
+      "authoredDate": "2026-05-21T20:20:59Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T20:20:59Z",
+      "messageBody": "",
+      "messageHeadline": "fix(core): preserve harness admission dedupe",
+      "oid": "3d81d550cc786331a127d3ac4586938cdfaeb69f"
+    },
+    {
+      "authoredDate": "2026-05-21T20:33:34Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T20:33:34Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): harden headless mode preflight",
+      "oid": "09ffc473b0dc6b220f1364f56fcf141fb5d0f5d2"
+    },
+    {
+      "authoredDate": "2026-05-21T21:13:01Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T21:13:01Z",
+      "messageBody": "",
+      "messageHeadline": "refactor(mastracode): promote harness v1 runtime",
+      "oid": "8f93854b4b37e590d0c89e24c81899a8b811a48c"
+    },
+    {
+      "authoredDate": "2026-05-21T22:13:10Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T22:13:10Z",
+      "messageBody": "",
+      "messageHeadline": "Merge parent harness v1 stack into mastracode",
+      "oid": "580add656da7b417a80538a77c58d3e4bb46dd97"
+    },
+    {
+      "authoredDate": "2026-05-21T22:17:36Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T22:17:36Z",
+      "messageBody": "…nto feature/pf-565-harness-v1-mastracode",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "05f2e5f4d283b4c376801139b70eaceb2ff0ffa3"
+    },
+    {
+      "authoredDate": "2026-05-21T22:32:08Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T22:32:08Z",
+      "messageBody": "…nto feature/pf-565-harness-v1-mastracode\n\n# Conflicts:\n#\tpackages/core/src/harness/v1/spawn-subagent-tool.ts",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "837a32e502fdfc1aeabec980e6fc0e1fc9466382"
+    }
+  ],
+  "deletions": 85,
+  "files": [
+    {
+      "path": ".changeset/icy-worms-mix.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/loud-buckets-brush.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/__tests__/index.test.ts",
+      "additions": 31,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/events.ts",
+      "additions": 52,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/index.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/legacy-compat.ts",
+      "additions": 10,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/message-content.ts",
+      "additions": 52,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/model-ids.ts",
+      "additions": 7,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.test.ts",
+      "additions": 623,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.ts",
+      "additions": 1578,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/thread-conversion.ts",
+      "additions": 19,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/headless-integration.test.ts",
+      "additions": 120,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/headless.ts",
+      "additions": 36,
+      "deletions": 22,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/index.test.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/index.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tools/__tests__/request-sandbox-access.test.ts",
+      "additions": 53,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tools/request-sandbox-access.ts",
+      "additions": 19,
+      "deletions": 7,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/thread-stream-runtime.ts",
+      "additions": 8,
+      "deletions": 8,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/types.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/index.ts",
+      "additions": 2,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/errors.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 7,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.injectSystemReminder.test.ts",
+      "additions": 37,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.message.test.ts",
+      "additions": 13,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.signal-routing.test.ts",
+      "additions": 58,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.signal.test.ts",
+      "additions": 42,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.spawn-subagent.test.ts",
+      "additions": 24,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.test.ts",
+      "additions": 18,
+      "deletions": 4,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 351,
+      "deletions": 34,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/types.ts",
+      "additions": 33,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feature/pf-565-harness-v1-mastracode",
+  "mergedAt": null,
+  "number": 16933,
+  "state": "CLOSED",
+  "title": "feat(mastracode): add Harness v1 adapter",
+  "url": "https://github.com/mastra-ai/mastra/pull/16933"
+}

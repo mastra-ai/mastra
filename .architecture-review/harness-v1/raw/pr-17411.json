@@ -1,0 +1,405 @@
+{
+  "additions": 1517,
+  "baseRefName": "main",
+  "commits": [
+    {
+      "authoredDate": "2026-06-01T13:19:33Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-02T13:05:43Z",
+      "messageBody": "Add state management and workspace context to Harness v1 so sessions can expose request state and workspace tools natively during the v1 migration.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "feat(core): add state and workspace to harness v1",
+      "oid": "d538bed37d3a97a88e2c6777b48895afab1c4a56"
+    },
+    {
+      "authoredDate": "2026-06-01T13:40:50Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-02T13:05:44Z",
+      "messageBody": "Remove changesets for the Harness v1 state and workspace work because changelog entries are not needed yet.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "chore: remove harness v1 changesets",
+      "oid": "27dc9353d82f1162f3a8d9f55f5cd4d391884311"
+    },
+    {
+      "authoredDate": "2026-06-01T14:57:35Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        }
+      ],
+      "committedDate": "2026-06-02T13:05:44Z",
+      "messageBody": "Move session-derived model fields out of Mastra Code harness state and compose them from Harness v1 sessions through HarnessCompat. This keeps app-level config in harness state while session-owned model values stay with the session.\\n\\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "feat(core): compose session state in harness compat",
+      "oid": "54a2ccf3b2e6c91c38b4448fcae066d8a2bef906"
+    },
+    {
+      "authoredDate": "2026-06-01T22:59:48Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-02T13:05:44Z",
+      "messageBody": "Keep subagent model selection on the legacy harness state path so v0 behavior remains unchanged while HarnessCompat derives only session model and mode from v1 sessions.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(core): keep subagent model state in harness compat",
+      "oid": "6be410ad924c186ffdb3a5c1b2802465f8667bb2"
+    },
+    {
+      "authoredDate": "2026-06-01T23:04:24Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-02T13:05:45Z",
+      "messageBody": "This PR does not need changeset entries yet, so remove the changesets added for the harness v1 and HarnessCompat work.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "chore: remove harness compat changesets",
+      "oid": "bd7c44a9613067dc85d2ce48a88a7f2f7fd644b4"
+    },
+    {
+      "authoredDate": "2026-06-02T11:47:32Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (zai-coding-plan/glm-5.1)"
+        }
+      ],
+      "committedDate": "2026-06-02T13:05:45Z",
+      "messageBody": "Session now owns state machinery (getState, setState, updateState,\nschema validation, update queue). Harness only passes stateSchema and\ninitialState config to created sessions. HarnessCompat composes legacy\nharness state with session-owned state and session-derived fields\n(currentModelId, modeId).\n\nCo-Authored-By: Mastra Code (zai-coding-plan/glm-5.1) <noreply@mastra.ai>",
+      "messageHeadline": "refactor(core): move state ownership from Harness v1 to Session",
+      "oid": "5b9c9445c85a3e16973cec8a6edb7095896bfa14"
+    },
+    {
+      "authoredDate": "2026-06-02T12:30:46Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (zai-coding-plan/glm-5.1)"
+        }
+      ],
+      "committedDate": "2026-06-02T13:05:45Z",
+      "messageBody": "Session now owns workspace resolution with lazy caching, removing the\nworkspaceFn/setWorkspace mutation callback pattern from Harness.\n\nCo-Authored-By: Mastra Code (zai-coding-plan/glm-5.1) <noreply@mastra.ai>",
+      "messageHeadline": "refactor(core): simplify v1 session workspace to single DynamicArgument",
+      "oid": "60c0f82d2c3160f5193571e4aa49c4cb628afbe5"
+    },
+    {
+      "authoredDate": "2026-06-02T19:13:42Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-02T19:13:42Z",
+      "messageBody": "Keep the currently selected model when HarnessCompat switches between v1 sessions so thread changes do not reset back to the mode default.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(mastracode): preserve model when switching threads",
+      "oid": "3df4a449e662d3a11f56aa1d802d18daf37948af"
+    },
+    {
+      "authoredDate": "2026-06-02T19:41:30Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-02T19:41:30Z",
+      "messageBody": "Use the Harness request-context getter when reading composed state so v1 session-derived fields are included without assuming a direct state snapshot is present.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(mastracode): read composed harness state defensively",
+      "oid": "8f1f2634182492871a68f03a69fe325fdf73da0a"
+    },
+    {
+      "authoredDate": "2026-06-03T09:17:17Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-03T09:17:17Z",
+      "messageBody": "Add v1 harness tool composition, permission and subagent config plumbing, and canonical workspace Skill support for session skill APIs. This removes the separate HarnessSkill shape so configured skills use the same Skill/SkillMetadata model as workspace-discovered skills.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "feat(core): add v1 harness tools and canonical skills",
+      "oid": "bdc92b48672811719314495c42b8a833cdb8987e"
+    },
+    {
+      "authoredDate": "2026-06-03T09:21:30Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-03T09:21:30Z",
+      "messageBody": "Do not forward legacy MastraCode subagent definitions into the new Harness v1 subagent registry yet. The legacy shape does not declare agentId and subagents are still executed by HarnessCompat/v0 until the v1 subagent runtime is implemented.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(mastracode): keep v0 subagents out of harness v1",
+      "oid": "2a0e7329fb632f0f845411a7ccacd58811e466ad"
+    },
+    {
+      "authoredDate": "2026-06-03T10:05:29Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        }
+      ],
+      "committedDate": "2026-06-03T10:05:29Z",
+      "messageBody": "",
+      "messageHeadline": "update requestContext",
+      "oid": "12b8620d6be7c5eae849fa8e78f2e0f260ea4510"
+    },
+    {
+      "authoredDate": "2026-06-03T10:08:48Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "Ward Peeters"
+        }
+      ],
+      "committedDate": "2026-06-03T10:08:48Z",
+      "messageBody": "",
+      "messageHeadline": "Merge branch 'main' into wardpeet/harness-workspace",
+      "oid": "7ad4e5df49b76ed28ee8587c081adc56e965815d"
+    },
+    {
+      "authoredDate": "2026-06-03T11:33:11Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        }
+      ],
+      "committedDate": "2026-06-03T11:33:49Z",
+      "messageBody": "The v1 request context no longer exposes workspace directly, so drop the stale assertion from the focused harness workspace tests. Workspace resolution remains covered through the skill discovery tests.\\n\\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "test(core): remove stale harness workspace context expectation",
+      "oid": "d89bc28281735685e2de031dc496ec0317dfb9e8"
+    }
+  ],
+  "deletions": 85,
+  "files": [
+    {
+      "path": "mastracode/src/HarnessCompat.test.ts",
+      "additions": 187,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/HarnessCompat.ts",
+      "additions": 86,
+      "deletions": 13,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/agents/instructions.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/agents/tools.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/index.ts",
+      "additions": 23,
+      "deletions": 17,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/schema.ts",
+      "additions": 9,
+      "deletions": 5,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.ts",
+      "additions": 20,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.state-workspace.test.ts",
+      "additions": 132,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.tools.test.ts",
+      "additions": 113,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 134,
+      "deletions": 7,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.types.ts",
+      "additions": 71,
+      "deletions": 8,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 6,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/permissions.types.ts",
+      "additions": 12,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 256,
+      "deletions": 26,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.types.ts",
+      "additions": 19,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/skills.test.ts",
+      "additions": 226,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/skills.types.ts",
+      "additions": 19,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/subagents.types.ts",
+      "additions": 73,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/tools.test.ts",
+      "additions": 56,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/tools.ts",
+      "additions": 69,
+      "deletions": 0,
+      "changeType": "ADDED"
+    }
+  ],
+  "headRefName": "wardpeet/harness-workspace",
+  "mergedAt": "2026-06-03T11:54:43Z",
+  "number": 17411,
+  "state": "MERGED",
+  "title": "feat(core): compose Harness v1 session state",
+  "url": "https://github.com/mastra-ai/mastra/pull/17411"
+}

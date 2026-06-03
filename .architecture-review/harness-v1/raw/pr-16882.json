@@ -1,0 +1,66 @@
+{
+  "additions": 951,
+  "baseRefName": "feat/harness-v1-event-id-helpers",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T06:06:26Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T09:30:17Z",
+      "messageBody": "Add message and queue admission evidence types and in-memory storage support for Harness v1 idempotency.\n\nCover duplicate detection, conflict handling, tombstone compaction, and session version invalidation with storage-domain tests.",
+      "messageHeadline": "feat(core): add Harness v1 admission storage",
+      "oid": "4dd3afab2131e95373126b1ad5f0c7c539c651b9"
+    }
+  ],
+  "deletions": 1,
+  "files": [
+    {
+      "path": ".changeset/tangy-coats-act.md",
+      "additions": 26,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/base.ts",
+      "additions": 69,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.test.ts",
+      "additions": 382,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.ts",
+      "additions": 377,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/types.ts",
+      "additions": 87,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/inmemory-db.ts",
+      "additions": 10,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-admission-storage",
+  "mergedAt": null,
+  "number": 16882,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 admission storage",
+  "url": "https://github.com/mastra-ai/mastra/pull/16882"
+}

@@ -1,0 +1,120 @@
+{
+  "additions": 1112,
+  "baseRefName": "feat/harness-v1-type-layer",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T13:23:34Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T13:23:34Z",
+      "messageBody": "Add the Harness v1 storage contract for session records, leases, and attachments.\n\nWire the in-memory implementation into InMemoryStore and the composite storage domains so v1 sessions have a standard development/test backing store.",
+      "messageHeadline": "feat(core): add harness storage domain",
+      "oid": "300dcc546416f329b9c1dec98c7b4e831a9ab43d"
+    }
+  ],
+  "deletions": 82,
+  "files": [
+    {
+      "path": ".changeset/brave-bobcats-dress.md",
+      "additions": 18,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/package.json",
+      "additions": 10,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/types.ts",
+      "additions": 18,
+      "deletions": 82,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/base.ts",
+      "additions": 4,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/base.ts",
+      "additions": 167,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/index.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.test.ts",
+      "additions": 291,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.ts",
+      "additions": 249,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/types.ts",
+      "additions": 295,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/index.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/inmemory-db.ts",
+      "additions": 9,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/mock.test.ts",
+      "additions": 43,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/mock.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/storage/domains/harness.d.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/tsup.config.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-storage-domain",
+  "mergedAt": "2026-05-20T15:25:10Z",
+  "number": 16827,
+  "state": "MERGED",
+  "title": "feat(core): add Harness v1 storage domain",
+  "url": "https://github.com/mastra-ai/mastra/pull/16827"
+}

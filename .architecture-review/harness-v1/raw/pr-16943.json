@@ -1,0 +1,1218 @@
+{
+  "additions": 7861,
+  "baseRefName": "feat/harness-v1-complete-core",
+  "commits": [
+    {
+      "authoredDate": "2026-05-22T01:13:22Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T10:06:23Z",
+      "messageBody": "",
+      "messageHeadline": "feat(mastracode): run on harness v1 runtime",
+      "oid": "e9b0448692c10eab646faa2755a3b834de5bb364"
+    },
+    {
+      "authoredDate": "2026-05-22T11:17:38Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T11:17:38Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): harden harness v1 runtime parity",
+      "oid": "553f9fcdf0441aede891453b4cbcaf5ade139004"
+    },
+    {
+      "authoredDate": "2026-05-22T12:23:14Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T12:23:14Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): complete provider callback parity follow-ups",
+      "oid": "1905c346d3adb5f735e0a131b5f7198ee6cf69ea"
+    },
+    {
+      "authoredDate": "2026-05-22T12:33:59Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code"
+        }
+      ],
+      "committedDate": "2026-05-22T12:33:59Z",
+      "messageBody": "Wire MastraCode subagent definitions into Harness v1's subagents registry so the runtime exposes the canonical spawn_subagent tool instead of injecting the legacy subagent alias. Keep UI/history compatibility for older persisted subagent tool calls while guiding new turns to spawn_subagent.\n\nCo-Authored-By: Mastra Code <noreply@mastra.ai>",
+      "messageHeadline": "Adopt native Harness v1 subagent spawning in MastraCode",
+      "oid": "cc93818cbbf94f65908a0b1325aa780cd7a8de80"
+    },
+    {
+      "authoredDate": "2026-05-22T13:04:47Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T13:04:47Z",
+      "messageBody": "…nto pr-16943",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "79fd21aa4a01a296471814beb806aec05dc1d5f8"
+    },
+    {
+      "authoredDate": "2026-05-22T13:21:45Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T13:21:45Z",
+      "messageBody": "…nto pr-16943",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "fcf86bec91105a573e958347048de03d4f0d5d5d"
+    },
+    {
+      "authoredDate": "2026-05-22T13:26:00Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T13:26:00Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): resolve subagent model from harness context",
+      "oid": "7829476701e1bba8723e53dfaf550c266c743d40"
+    },
+    {
+      "authoredDate": "2026-05-22T13:30:30Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T13:30:30Z",
+      "messageBody": "…nto pr-16943",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "6d2c1bb314f9582961a7bf03805c10439455abb2"
+    },
+    {
+      "authoredDate": "2026-05-22T13:34:17Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T13:34:17Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): retain om progress from harness v1",
+      "oid": "69dd30ebb0c7324d5aeab215c3af7cb082263a7d"
+    },
+    {
+      "authoredDate": "2026-05-22T14:26:29Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T14:26:29Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): sync v1 runtime controls",
+      "oid": "7c2dc564c61e84218e2bb33ab0548482641d43df"
+    },
+    {
+      "authoredDate": "2026-05-22T14:29:43Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T14:29:43Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): track v1 modified files",
+      "oid": "bfa42a676812761b666ea213dbc497a4f12ccf47"
+    },
+    {
+      "authoredDate": "2026-05-22T14:45:20Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T14:45:20Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): adopt forked v1 subagents",
+      "oid": "caedc1a5eefcb60ace60861c92af2c7c07429c4f"
+    },
+    {
+      "authoredDate": "2026-05-22T15:08:39Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T15:08:39Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): resolve v1 tool permissions per call",
+      "oid": "6344e771f6227f361e1f5c06a1177b2f9b9000bd"
+    },
+    {
+      "authoredDate": "2026-05-22T15:42:35Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T15:42:35Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): preserve late om stream events",
+      "oid": "321d263744b86d51a6e5edee31252a0080c00e6a"
+    },
+    {
+      "authoredDate": "2026-05-22T15:47:25Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T15:47:25Z",
+      "messageBody": "",
+      "messageHeadline": "feat(harness): expose live signal route",
+      "oid": "66979f21c58c310f5fbe128ca8bdc4f798e986a1"
+    },
+    {
+      "authoredDate": "2026-05-22T15:51:54Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T15:51:54Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): validate custom event emission",
+      "oid": "bed27f631473010f22b7cba51a9ccbb10ee996aa"
+    },
+    {
+      "authoredDate": "2026-05-22T16:02:55Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:02:55Z",
+      "messageBody": "# Conflicts:\n#\tpackages/core/src/agent/__tests__/agent-signals.test.ts\n#\tpackages/core/src/agent/thread-stream-runtime.ts",
+      "messageHeadline": "Merge remote-tracking branch 'origin/main' into pr-16943",
+      "oid": "872f94c659f7452e6dc53d360725d2f13f3cd6e7"
+    },
+    {
+      "authoredDate": "2026-05-22T16:04:58Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:04:58Z",
+      "messageBody": "",
+      "messageHeadline": "docs(harness): document storage capability boundaries",
+      "oid": "c8229d4086fddae7f2af0566a0f9d3b8bf810842"
+    },
+    {
+      "authoredDate": "2026-05-22T16:07:12Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:07:12Z",
+      "messageBody": "",
+      "messageHeadline": "docs(mastracode): document native subagent runtime",
+      "oid": "ea7963dfb2915a75308a7e9fd118fbb03c707925"
+    },
+    {
+      "authoredDate": "2026-05-22T16:14:18Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:14:18Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): replay events for closed sessions",
+      "oid": "57910575b72e5550ee8f3370677d8489d7eb78a0"
+    },
+    {
+      "authoredDate": "2026-05-22T16:19:02Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:19:02Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): bridge om activation events",
+      "oid": "7bd1599428a05fb9ae61acb48aac6712d46b79c6"
+    },
+    {
+      "authoredDate": "2026-05-22T16:26:52Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:26:52Z",
+      "messageBody": "",
+      "messageHeadline": "chore(harness): update generated route metadata",
+      "oid": "96b5e53674e68d619920b0aba0d088e2fa4839bb"
+    },
+    {
+      "authoredDate": "2026-05-22T16:45:54Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:45:54Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): polish headless thread setup",
+      "oid": "317c0369b103ac14ff1a1151257ab18f086c32b9"
+    },
+    {
+      "authoredDate": "2026-05-22T17:59:22Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T17:59:45Z",
+      "messageBody": "",
+      "messageHeadline": "feat(harness): filter workspace action journal entries",
+      "oid": "8d3c34fdf0e9880369f4036918b8ceb6544a8226"
+    },
+    {
+      "authoredDate": "2026-05-22T19:08:42Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T19:08:42Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): complete harness v1 runtime adoption",
+      "oid": "94280850ccbb543d19c39822f10d37394c44c869"
+    },
+    {
+      "authoredDate": "2026-05-22T22:04:44Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:04:44Z",
+      "messageBody": "…nto pr-16943\n\n# Conflicts:\n#\tpackages/core/src/harness/v1/session.ts\n#\tpackages/core/src/harness/v1/workspace-runtime.test.ts\n#\tpackages/server/src/server/handlers/harness.ts",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "128d054c8a7594bdbe2784577e92b2bd018c1dc5"
+    },
+    {
+      "authoredDate": "2026-05-22T22:11:01Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:11:01Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): harden harness event bridge",
+      "oid": "f24632c21d9d87f6e8723abd90b3435036f3eef3"
+    },
+    {
+      "authoredDate": "2026-05-22T22:21:35Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:21:35Z",
+      "messageBody": "…nto pr-16943",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "16ea0e1b27f09c52fef54f4dc68e670354869486"
+    },
+    {
+      "authoredDate": "2026-05-22T22:26:23Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:26:23Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): honor harness subagent model context",
+      "oid": "e6824448bed0d9b98626b89702f9ab3e69124983"
+    },
+    {
+      "authoredDate": "2026-05-22T22:35:06Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:35:06Z",
+      "messageBody": "…nto pr-16943",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "413848b7d277c6143a36fe43fbea29a1dc635732"
+    },
+    {
+      "authoredDate": "2026-05-22T22:46:28Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:46:28Z",
+      "messageBody": "…nto pr-16943",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "f03c2e93fc83aa3e2f3d26082fda8460df074b33"
+    },
+    {
+      "authoredDate": "2026-05-22T22:49:47Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:49:47Z",
+      "messageBody": "…nto pr-16943",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "1778951b685de2db9e1d524fa44c866399ebfbbb"
+    },
+    {
+      "authoredDate": "2026-05-22T22:52:23Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:52:23Z",
+      "messageBody": "…nto pr-16943",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "4ca8bee9d5113c6aa0f624360eb4fef83ee8935a"
+    },
+    {
+      "authoredDate": "2026-05-23T05:35:01Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T05:35:01Z",
+      "messageBody": "…nto pr-16943",
+      "messageHeadline": "Merge remote-tracking branch 'origin/feat/harness-v1-complete-core' i…",
+      "oid": "51323b7efb01eb79c63b92302625b29f8a2da774"
+    },
+    {
+      "authoredDate": "2026-05-23T06:56:08Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T06:56:08Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): tighten replay and workspace action taxonomy",
+      "oid": "38ec49df9efef4007bc88c6c3ac2377b03a153d2"
+    },
+    {
+      "authoredDate": "2026-05-23T07:11:46Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T07:11:46Z",
+      "messageBody": "",
+      "messageHeadline": "fix(server): keep harness event parser peer compatible",
+      "oid": "53df8aff6a2b7082b976745fb708df1f032fc428"
+    },
+    {
+      "authoredDate": "2026-05-23T07:33:55Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T07:33:55Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): tighten native harness v1 adapter",
+      "oid": "fd5a1d9fd89b17968390d11820ec44481b634ea6"
+    },
+    {
+      "authoredDate": "2026-05-23T08:09:11Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T08:09:11Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): complete native harness runtime adoption",
+      "oid": "04822e3647b71705836e2edcb0a081d94449431f"
+    },
+    {
+      "authoredDate": "2026-05-23T08:37:15Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T08:37:15Z",
+      "messageBody": "",
+      "messageHeadline": "Merge remote-tracking branch 'origin/main' into pr-16943",
+      "oid": "71a1c55ba5478361c783938702f1c6da584f8b17"
+    },
+    {
+      "authoredDate": "2026-05-23T08:44:27Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T08:44:27Z",
+      "messageBody": "",
+      "messageHeadline": "fix(mastracode): preserve sandbox access suspensions",
+      "oid": "2bbd089d0ce4886bb746a52fd5a9eb9bdd61d35a"
+    },
+    {
+      "authoredDate": "2026-05-24T19:06:41Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T19:06:41Z",
+      "messageBody": "Merge the latest Harness v1 core into the MastraCode runtime PR branch. Preserve the runtime adapter while forwarding explicit pending IDs through approval, question, plan, sandbox, and tool-suspension responses, and keep forked subagents under child permission gates instead of forcing yolo mode.",
+      "messageHeadline": "fix(mastracode): refresh harness v1 runtime branch",
+      "oid": "8567eba37eb17333b53f46a3bc22ac0467d12cbd"
+    },
+    {
+      "authoredDate": "2026-05-24T20:11:01Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T20:11:01Z",
+      "messageBody": "Add priority, deadline, and notBefore controls for Harness queue admissions.\n\nPersist and hash the scheduling inputs, enforce notBefore in the scheduler, and wake delayed queue items when they become runnable.\n\nThread the queue body fields through the server schema, generated client route types, and CLI route metadata.",
+      "messageHeadline": "feat(core): add harness queue scheduling options",
+      "oid": "318abc78300e901c596994fdfdf71ad7a5cc643d"
+    },
+    {
+      "authoredDate": "2026-05-24T21:01:42Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T21:01:42Z",
+      "messageBody": "Add reject/drop-oldest queue backpressure handling for Harness sessions.\n\nEmit queue_full_dropped evidence, fail dropped receipts, and settle dropped queue promises.\n\nReplace silent goal-continuation queue-full drops with durable events while preserving active and accepted recovery heads.",
+      "messageHeadline": "feat(core): add harness queue backpressure",
+      "oid": "704a3850214ab5fe3393064b9968c3a620f91816"
+    },
+    {
+      "authoredDate": "2026-05-26T13:00:24Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        }
+      ],
+      "committedDate": "2026-05-26T13:00:24Z",
+      "messageBody": "",
+      "messageHeadline": "add dummy request context",
+      "oid": "a6e8ec5ac43b6f886105062b390dd75b862d7608"
+    },
+    {
+      "authoredDate": "2026-05-26T18:36:58Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-05-26T18:36:58Z",
+      "messageBody": "Preserve user signal delivery attributes and non-text content during Harness v1 history replay, normalize sandbox stream chunks into shell output events, and improve MastraCode runtime memory and startup recovery behavior.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "fix(mastracode): tighten harness v1 compatibility",
+      "oid": "ace45ed84ab8d3e4b43fa9bd8031468b52b01ef5"
+    },
+    {
+      "authoredDate": "2026-05-26T22:42:50Z",
+      "authors": [
+        {
+          "email": "tylerdbarnes@gmail.com",
+          "id": "MDQ6VXNlcjE0MTkwNzQz",
+          "login": "TylerBarnes",
+          "name": "Tyler Barnes"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        },
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-26T22:42:50Z",
+      "messageBody": "This fixes a few Harness v1 issues that showed up while trying\nMastraCode locally. It's still not enough for it to work properly, but\nit gets it past a few issues.\n\nThe shared workspace factory now gets MastraCode runtime state, so\nstartup no longer fails when workspace setup needs `projectPath`:\n\n```ts\nworkspace: ({ requestContext }) =>\n  config.workspace!({\n    requestContext: this.withRuntimeHarnessContext(requestContext),\n    mastra: this.mastra,\n  })\n```\n\nThe internal v1 Mastra instance also matches legacy Harness logging\nbehavior, so expected storage capability noise does not leak into the\nTUI.\n\nYolo mode and MastraCode task tools now bypass v1 approval prompts\ncorrectly. `task_write`, `task_update`, `task_complete`, and\n`task_check` stay allowed even if permission rules are stricter.\n\n`request_access` now uses the native v1 sandbox-access resume path, and\nresume rebuilds the request context with model, memory, toolsets, yolo\nstate, and workspace context so approving sandbox access continues the\noriginal run instead of leaving it idle.\n\nValidated with focused mastracode/core tests and typechecks.\n\n---------\n\nCo-authored-by: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>\nCo-authored-by: Mohamed BEN HAMDOUNE <mbenhamd@gmail.com>",
+      "messageHeadline": "fix: stabilize MastraCode Harness v1 startup and resumes (#17042)",
+      "oid": "e4c999d03b7745b72e2496e2683d3e28d9514ba0"
+    },
+    {
+      "authoredDate": "2026-05-27T07:52:22Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-27T07:52:22Z",
+      "messageBody": "…ness-v1-runtime\n\nResolve MastraCode Harness v1 runtime conflicts by preserving the runtime adapter path, carrying forward configDir propagation, and aligning sandbox access suspension with Harness v1 request ids.",
+      "messageHeadline": "Merge branch 'feat/harness-v1-complete-core' into feat/mastracode-har…",
+      "oid": "0f78a89815795b992bb7785370c7f5bfcebbdfd9"
+    }
+  ],
+  "deletions": 348,
+  "files": [
+    {
+      "path": ".changeset/blue-results-pull.md",
+      "additions": 19,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/cute-mails-brush.md",
+      "additions": 24,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/full-monkeys-teach.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/harness-v1-mastracode-runtime.md",
+      "additions": 7,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/mastracode-subagent-model-precedence.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/sweet-sites-show.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/tired-regions-act.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "client-sdks/client-js/src/route-types.generated.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "docs/src/mastra-code/customization.mdx",
+      "additions": 11,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "docs/src/mastra-code/modes.mdx",
+      "additions": 3,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "docs/src/mastra-code/reference.mdx",
+      "additions": 4,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "docs/src/mastra-code/tools.mdx",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/README.md",
+      "additions": 19,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/__tests__/index.test.ts",
+      "additions": 61,
+      "deletions": 16,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/__tests__/tool-approval-libsql.test.ts",
+      "additions": 2,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/agents/__tests__/model.test.ts",
+      "additions": 57,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/agents/extra-tools.test.ts",
+      "additions": 4,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/agents/memory.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/agents/model.ts",
+      "additions": 6,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/agents/prompts/base.ts",
+      "additions": 3,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/agents/prompts/tool-guidance.ts",
+      "additions": 5,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/config.ts",
+      "additions": 196,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/events.test.ts",
+      "additions": 247,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/events.ts",
+      "additions": 275,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/index.ts",
+      "additions": 13,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/lease-recovery-prompt.ts",
+      "additions": 62,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/observational-memory.ts",
+      "additions": 32,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.test.ts",
+      "additions": 1496,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.ts",
+      "additions": 2200,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/subagents.ts",
+      "additions": 40,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/headless-integration.test.ts",
+      "additions": 22,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/headless.ts",
+      "additions": 68,
+      "deletions": 24,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/index.ts",
+      "additions": 141,
+      "deletions": 112,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/main.ts",
+      "additions": 34,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/permissions.ts",
+      "additions": 7,
+      "deletions": 4,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tool-names.ts",
+      "additions": 9,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tools/__tests__/request-sandbox-access.test.ts",
+      "additions": 83,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tools/request-sandbox-access.ts",
+      "additions": 115,
+      "deletions": 25,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/components/__tests__/om-progress.test.ts",
+      "additions": 6,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/components/om-progress.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/components/tool-execution-enhanced.ts",
+      "additions": 2,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/event-dispatch.ts",
+      "additions": 12,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/handlers/index.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/handlers/message.ts",
+      "additions": 2,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/handlers/prompts.ts",
+      "additions": 86,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/handlers/tool.ts",
+      "additions": 29,
+      "deletions": 15,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/mastra-tui.ts",
+      "additions": 49,
+      "deletions": 17,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/render-messages.ts",
+      "additions": 9,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mc-harness-v1-mc-audit.md",
+      "additions": 1238,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/cli/src/commands/api/route-metadata.generated.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/_shared/message-conversion.ts",
+      "additions": 21,
+      "deletions": 5,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/builtin-tools/spawn-subagent.ts",
+      "additions": 0,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/errors.ts",
+      "additions": 13,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.ts",
+      "additions": 14,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.config-keys.test.ts",
+      "additions": 11,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 11,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/list-messages.test.ts",
+      "additions": 15,
+      "deletions": 19,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.actions.test.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.events.test.ts",
+      "additions": 43,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.goal.test.ts",
+      "additions": 97,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.message.test.ts",
+      "additions": 4,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.queue.test.ts",
+      "additions": 291,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.scheduler.test.ts",
+      "additions": 62,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.skills.test.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.skills.use.test.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.spawn-subagent.test.ts",
+      "additions": 15,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.suspend.test.ts",
+      "additions": 71,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 386,
+      "deletions": 62,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.workspace-policy.test.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/types.ts",
+      "additions": 29,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/loop/workflows/agentic-execution/tool-call-step.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/loop/workflows/agentic-execution/tool-call-step.ts",
+      "additions": 12,
+      "deletions": 9,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/types.ts",
+      "additions": 8,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/server/src/server/handlers/harness.test.ts",
+      "additions": 6,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/server/src/server/handlers/harness.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/server/src/server/schemas/harness.ts",
+      "additions": 8,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/mastracode-harness-v1-runtime",
+  "mergedAt": null,
+  "number": 16943,
+  "state": "CLOSED",
+  "title": "feat(mastracode): run on Harness v1 runtime",
+  "url": "https://github.com/mastra-ai/mastra/pull/16943"
+}

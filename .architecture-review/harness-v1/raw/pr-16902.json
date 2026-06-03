@@ -1,0 +1,48 @@
+{
+  "additions": 409,
+  "baseRefName": "feat/harness-v1-display-state",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T12:01:07Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T12:01:07Z",
+      "messageBody": "",
+      "messageHeadline": "feat(core): add Harness v1 goals",
+      "oid": "7b977f8ab6695a2dff1778e12f000f1ad4534e0e"
+    }
+  ],
+  "deletions": 0,
+  "files": [
+    {
+      "path": ".changeset/tangy-pillows-jam.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.goal.test.ts",
+      "additions": 240,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 164,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-goals",
+  "mergedAt": null,
+  "number": 16902,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 goals",
+  "url": "https://github.com/mastra-ai/mastra/pull/16902"
+}

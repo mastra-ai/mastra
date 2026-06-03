@@ -1,0 +1,66 @@
+{
+  "additions": 242,
+  "baseRefName": "feat/harness-v1-agent-run-output",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T04:56:08Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T09:29:22Z",
+      "messageBody": "Add the stable harness-v1 event id grammar, parser, and JSON snapshot helper for the v1 event stream.\n\nExpose the helpers from the v1 subpath and cover the export map, deterministic event stamping, listener dispatch, and JSON validation with focused tests.",
+      "messageHeadline": "feat(core): add Harness v1 event id helpers",
+      "oid": "01e78c770535c7257f23a22d1721e0d851cd355b"
+    }
+  ],
+  "deletions": 4,
+  "files": [
+    {
+      "path": ".changeset/fruity-mirrors-matter.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.test.ts",
+      "additions": 70,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.ts",
+      "additions": 118,
+      "deletions": 4,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/export-map.test.ts",
+      "additions": 43,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 4,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/types.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-event-id-helpers",
+  "mergedAt": null,
+  "number": 16881,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 event id helpers",
+  "url": "https://github.com/mastra-ai/mastra/pull/16881"
+}

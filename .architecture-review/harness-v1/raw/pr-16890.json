@@ -1,0 +1,84 @@
+{
+  "additions": 1076,
+  "baseRefName": "feat/harness-v1-admission-storage",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T09:07:05Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T10:14:26Z",
+      "messageBody": "Add Harness v1 attachment upload and delete support backed by the harness storage domain. Persist bytes with SHA-256 digest metadata, open semantic attachment metadata, and tests for binary files, primitive/element payload validation, storage failures, and explicit session ownership.",
+      "messageHeadline": "feat(core): add Harness v1 attachments",
+      "oid": "861eccdd3713aed23d262bae8c1ec3c7dff58616"
+    }
+  ],
+  "deletions": 33,
+  "files": [
+    {
+      "path": ".changeset/ten-cobras-smash.md",
+      "additions": 30,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.test.ts",
+      "additions": 474,
+      "deletions": 7,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 318,
+      "deletions": 4,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/types.ts",
+      "additions": 72,
+      "deletions": 9,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/workspace-registry.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/base.ts",
+      "additions": 2,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.test.ts",
+      "additions": 60,
+      "deletions": 6,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/inmemory.ts",
+      "additions": 55,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/types.ts",
+      "additions": 63,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-attachments",
+  "mergedAt": null,
+  "number": 16890,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 attachments",
+  "url": "https://github.com/mastra-ai/mastra/pull/16890"
+}

@@ -1,0 +1,60 @@
+{
+  "additions": 998,
+  "baseRefName": "feat/harness-v1-session-state",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T17:31:44Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T09:27:12Z",
+      "messageBody": "Add the next Harness v1 Session slice: status accessors, idle waiters, token usage reads, and listMessages history readback.\n\nShare the legacy-compatible message converter with v1 and cover signal rows, system reminders, completed tool calls without result payloads, no-memory behavior, and resource-scoped reads.",
+      "messageHeadline": "feat(core): add harness v1 session accessors",
+      "oid": "4bb0dc82b9c9eaae2c5fb6510fce02007f45f718"
+    }
+  ],
+  "deletions": 2,
+  "files": [
+    {
+      "path": ".changeset/shaggy-crabs-brush.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/_shared/message-conversion.ts",
+      "additions": 337,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/list-messages.test.ts",
+      "additions": 387,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.accessors.test.ts",
+      "additions": 138,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 131,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-session-operations",
+  "mergedAt": null,
+  "number": 16848,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 session accessors",
+  "url": "https://github.com/mastra-ai/mastra/pull/16848"
+}
