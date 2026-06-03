@@ -16,12 +16,28 @@ import type {
   SSOLoginConfig,
 } from '@mastra/core/auth';
 import type { EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions, MastraAuthRequest } from '@mastra/core/server';
-import { getRequestHeader, MastraAuthProvider } from '@mastra/core/server';
+import type { MastraAuthProviderOptions } from '@mastra/core/server';
+import { MastraAuthProvider } from '@mastra/core/server';
 
 import { MastraCloudAuth } from './client';
 import { parseSessionCookie } from './session/cookie';
 import type { CloudUser } from './types';
+
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
+  if (request instanceof Request) {
+    return request.headers.get(name);
+  }
+
+  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
+}
 
 /**
  * Configuration options for MastraCloudAuthProvider.

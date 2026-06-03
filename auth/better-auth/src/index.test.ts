@@ -259,6 +259,27 @@ describe('MastraAuthBetterAuth', () => {
       expect(call.headers.get('Cookie')).toBe('better-auth.session_token=raw123');
     });
 
+    it('should handle HonoRequest with .raw property', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      const honoReq = {
+        raw: new Request('http://localhost/test', {
+          headers: { Cookie: 'better-auth.session_token=hono-token' },
+        }),
+      } as any;
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      const result = await auth.authenticateToken('hono-token', honoReq);
+
+      expect(result).toEqual({ session: mockSession, user: mockUser });
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe('better-auth.session_token=hono-token');
+    });
+
     it('should inject session cookie when session name appears only inside a cookie value', async () => {
       mockAuth.api.getSession.mockResolvedValue({
         session: mockSession,

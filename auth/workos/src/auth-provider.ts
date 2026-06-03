@@ -16,13 +16,29 @@ import type {
   SSOLoginConfig,
 } from '@mastra/core/auth';
 import type { EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions, MastraAuthRequest } from '@mastra/core/server';
-import { getWebRequest, MastraAuthProvider } from '@mastra/core/server';
+import type { MastraAuthProviderOptions } from '@mastra/core/server';
+import { MastraAuthProvider } from '@mastra/core/server';
 import { AuthService, sessionEncryption } from '@workos/authkit-session';
 import type { AuthKitConfig } from '@workos/authkit-session';
 import { WorkOS } from '@workos-inc/node';
 import type { OrganizationMembership } from '@workos-inc/node';
 import { LRUCache } from 'lru-cache';
+
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+function getWebRequest(request: MastraAuthRequest): Request | undefined {
+  if (request instanceof Request) {
+    return request;
+  }
+
+  return request.raw instanceof Request ? request.raw : undefined;
+}
 
 import { WebSessionStorage } from './session-storage.js';
 import type { WorkOSUser, MastraAuthWorkosOptions } from './types.js';

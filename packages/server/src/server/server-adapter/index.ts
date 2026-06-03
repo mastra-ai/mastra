@@ -495,6 +495,14 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       token = context.getQuery('apiKey') || null;
     }
 
+    const fallbackHeaders = new Headers();
+    for (const headerName of ['authorization', 'cookie']) {
+      const headerValue = context.getHeader(headerName);
+      if (headerValue) {
+        fallbackHeaders.set(headerName, headerValue);
+      }
+    }
+
     // Delegate to coreAuthMiddleware for all auth logic
     const result = await coreAuthMiddleware({
       path: context.path,
@@ -504,7 +512,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       authConfig,
       customRouteAuthConfig: this.customRouteAuthConfig,
       requestContext: context.requestContext,
-      rawRequest: context.request ?? new Request(`http://localhost${context.path}`, { method: context.method }),
+      rawRequest:
+        context.request ??
+        new Request(`http://localhost${context.path}`, { method: context.method, headers: fallbackHeaders }),
       token,
       buildAuthorizeContext: context.buildAuthorizeContext ?? (() => null),
       requiresAuth: route.requiresAuth,

@@ -288,6 +288,18 @@ export type AuthResult =
 
 const pass: AuthResult = { action: 'next' };
 
+const adaptToMastraAuthRequest = (request: MastraAuthRequest): MastraAuthRequest => {
+  if (!(request instanceof Request)) {
+    return request;
+  }
+
+  return {
+    raw: request,
+    headers: request.headers,
+    header: name => request.headers.get(name) ?? undefined,
+  };
+};
+
 export interface GetAuthenticatedUserOptions {
   mastra: Mastra;
   token: string;
@@ -370,10 +382,11 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   let user: unknown;
   let refreshHeaders: Record<string, string> | undefined;
+  const authRequest = adaptToMastraAuthRequest(rawRequest);
 
   try {
     if (typeof authConfig.authenticateToken === 'function') {
-      user = await authConfig.authenticateToken(token ?? '', rawRequest);
+      user = await authConfig.authenticateToken(token ?? '', authRequest);
     } else {
       throw new Error('No token verification method configured');
     }
@@ -408,7 +421,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
               const cookieValue = refreshedCookie.includes('=')
                 ? refreshedCookie.split('=').slice(1).join('=')
                 : refreshedCookie;
-              user = await authConfig.authenticateToken(cookieValue, refreshedRequest as any);
+              user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
             }
             if (!user) {
               refreshHeaders = undefined;
@@ -506,7 +519,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {
-      const isAuthorized = await authConfig.authorizeUser(user, rawRequest);
+      const isAuthorized = await authConfig.authorizeUser(user, authRequest);
 
       if (!isAuthorized) {
         return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };

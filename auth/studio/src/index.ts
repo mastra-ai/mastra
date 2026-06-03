@@ -8,8 +8,24 @@ import type {
 } from '@mastra/core/auth';
 import type { EEUser, IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
 import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
-import { getRequestHeader, MastraAuthProvider } from '@mastra/core/server';
-import type { MastraAuthProviderOptions, MastraAuthRequest } from '@mastra/core/server';
+import { MastraAuthProvider } from '@mastra/core/server';
+import type { MastraAuthProviderOptions } from '@mastra/core/server';
+
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
+  if (request instanceof Request) {
+    return request.headers.get(name);
+  }
+
+  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
+}
 
 export interface StudioUser extends EEUser {
   id: string;

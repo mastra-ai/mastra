@@ -1,9 +1,25 @@
 import type { IUserProvider, ICredentialsProvider, CredentialsResult } from '@mastra/core/auth';
 import type { EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions, MastraAuthRequest } from '@mastra/core/server';
-import { getRequestHeader, MastraAuthProvider } from '@mastra/core/server';
+import type { MastraAuthProviderOptions } from '@mastra/core/server';
+import { MastraAuthProvider } from '@mastra/core/server';
 
 import type { Auth, Session, User } from 'better-auth';
+
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
+  if (request instanceof Request) {
+    return request.headers.get(name);
+  }
+
+  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
+}
 
 /**
  * User type returned by Better Auth session verification.

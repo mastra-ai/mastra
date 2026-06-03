@@ -5,6 +5,7 @@ import type { Workflow } from '../workflows';
 export interface HonoContextLike {
   req: {
     header(name: string): string | undefined;
+    query(name: string): string | undefined;
     json(): Promise<unknown>;
   };
   text(text: string, status?: number, headers?: Record<string, string>): Response;
