@@ -7,8 +7,15 @@ import type { ProviderSection, ToolkitOption } from './use-provider-toolkit-grou
 
 const TEST_ID_PREFIX = 'tools-toolkit';
 
+interface ToolkitRow {
+  id: string;
+  label: string;
+  /** Backend-provided toolkit icon (typically a URL/data-URI). Absent for Built-in. */
+  icon?: string;
+}
+
 interface ToolkitFilterRowProps {
-  item: ToolkitOption;
+  item: ToolkitRow;
   checked: boolean;
   disabled: boolean;
   onToggle: (id: string) => void;
@@ -42,6 +49,15 @@ const ToolkitFilterRow = memo(({ item, checked, disabled, onToggle }: ToolkitFil
           data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
           className="h-3.5 w-3.5 shrink-0 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5 data-[state=checked]:shadow-none"
         />
+        {item.icon && (
+          <img
+            src={item.icon}
+            alt=""
+            aria-hidden
+            data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
+            className="h-4 w-4 shrink-0 rounded object-contain"
+          />
+        )}
         <span className="truncate">{item.label}</span>
       </label>
     </li>
@@ -69,13 +85,15 @@ interface ProviderToolkitSectionProps {
 const ProviderToolkitSection = ({ provider, term, isChecked, onToggle, disabled }: ProviderToolkitSectionProps) => {
   const { data, isLoading } = useToolkits(provider.providerId);
 
-  const toolkits = useMemo(() => {
+  const toolkits = useMemo<ToolkitRow[]>(() => {
     const names = new Map<string, string>();
+    const icons = new Map<string, string>();
     for (const toolkit of data?.data ?? []) {
       names.set(toolkit.slug, toolkit.name ?? toolkit.slug);
+      if (toolkit.icon) icons.set(toolkit.slug, toolkit.icon);
     }
-    const rows = provider.presentSlugs
-      .map(slug => ({ id: slug, label: names.get(slug) ?? slug }))
+    const rows: ToolkitRow[] = provider.presentSlugs
+      .map(slug => ({ id: slug, label: names.get(slug) ?? slug, icon: icons.get(slug) }))
       .sort((a, b) => a.label.localeCompare(b.label));
     if (!term) return rows;
     return rows.filter(t => t.label.toLowerCase().includes(term));

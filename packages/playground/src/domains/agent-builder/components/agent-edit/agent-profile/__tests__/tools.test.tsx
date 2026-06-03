@@ -11,7 +11,7 @@ import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import type { AgentTool } from '../../../../types/agent-tool';
 import { Tools } from '../tools';
-import { composioProvider, composioToolkits } from './fixtures/toolkits';
+import { GMAIL_ICON_URL, composioProvider, composioToolkits } from './fixtures/toolkits';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -287,6 +287,25 @@ describe('Tools — toolkit filter pane', () => {
     expect(getByTestId('tools-toolkit-filter-checkbox-__built-in__').getAttribute('aria-checked')).toBe('true');
   });
 
+  it('renders the backend toolkit icon for toolkits that have one, and none for Built-in or icon-less toolkits', async () => {
+    const { findByTestId, getByTestId, queryByTestId } = render(
+      <FormHarness>
+        <Tools availableAgentTools={mixedTools} />
+      </FormHarness>,
+    );
+
+    await findByTestId('tools-toolkit-filter-item-gmail');
+
+    // Gmail has an icon in the fixture → it renders an <img> with that src.
+    const gmailIcon = getByTestId('tools-toolkit-filter-icon-gmail') as HTMLImageElement;
+    expect(gmailIcon.tagName).toBe('IMG');
+    expect(gmailIcon.getAttribute('src')).toBe(GMAIL_ICON_URL);
+
+    // Slack has no icon, and Built-in never has one.
+    expect(queryByTestId('tools-toolkit-filter-icon-slack')).toBeNull();
+    expect(queryByTestId('tools-toolkit-filter-icon-__built-in__')).toBeNull();
+  });
+
   it('shows a skeleton while providers load, then reveals the provider toolkits', async () => {
     let resolveProviders: () => void = () => {};
     const providersGate = new Promise<void>(resolve => {
@@ -458,14 +477,13 @@ describe('Tools — integration rows without a connection', () => {
     expect(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS')).toBeTruthy();
     // Card stays selectable — checkbox span is still rendered.
     expect(getByTestId('tool-card-check-integration-composio:GMAIL_FETCH_EMAILS')).toBeTruthy();
-    // Inline hint is shown.
-    expect(getByText('Needs connection')).toBeTruthy();
+    // The control is just an outline "Add connection" button.
+    expect(getByText('Add connection')).toBeTruthy();
   });
 
-  it('clicking Connect kicks off the OAuth popup and authorize call', async () => {
+  it('clicking Add connection authorizes and opens the provider consent popup', async () => {
     const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
-    // Stub window.open so useAuthorize's default popup opener resolves
-    // synchronously without a real browser.
+    // Stub window.open so useAuthorize's default opener resolves synchronously.
     const originalOpen = window.open;
     window.open = openPopup as unknown as typeof window.open;
 
@@ -481,8 +499,8 @@ describe('Tools — integration rows without a connection', () => {
       await waitFor(() => {
         expect(openPopup).toHaveBeenCalledWith(
           'https://oauth.example/authorize',
-          expect.any(String),
-          expect.any(String),
+          '_blank',
+          expect.stringContaining('popup'),
         );
       });
     } finally {
@@ -624,38 +642,37 @@ describe('Tools — checked integration rows render the connection picker', () =
     hasConnection: true,
   };
 
-  it('renders the IntegrationConnectionPicker beneath a checked integration card', async () => {
+  it('shows active connections as inline badges on the card (pending ones excluded)', async () => {
     sharedServer.use(
-      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items: [] })),
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({
+          items: [
+            { connectionId: 'conn_work', status: 'active', label: 'work' },
+            { connectionId: 'conn_pending', status: 'pending', label: 'pending' },
+          ],
+        }),
+      ),
     );
 
-    const { findByTestId } = render(
+    const uncheckedIntegrationTool: AgentTool = { ...checkedIntegrationTool, isChecked: false };
+
+    const { findByTestId, queryByTestId, queryByText } = render(
       <PickerHarness>
-        <Tools availableAgentTools={[checkedIntegrationTool]} />
+        <Tools availableAgentTools={[uncheckedIntegrationTool]} />
       </PickerHarness>,
     );
 
-    expect(await findByTestId('integration-connection-picker-composio-gmail')).toBeTruthy();
+    // The active connection is shown directly as a badge on the card — no manage dialog.
+    const badge = await findByTestId('connection-badge-composio-gmail-conn_work');
+    expect(badge.textContent).toContain('work');
+    expect(queryByText('Use')).toBeNull();
+
+    // Pending connections are not surfaced.
+    expect(queryByTestId('connection-badge-composio-gmail-conn_pending')).toBeNull();
+    expect(queryByText('pending')).toBeNull();
   });
 
-  it('does NOT render the picker for an unchecked integration row', async () => {
-    sharedServer.use(
-      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items: [] })),
-    );
-
-    const unchecked = { ...checkedIntegrationTool, isChecked: false };
-    const { queryByTestId, findByTestId } = render(
-      <PickerHarness>
-        <Tools availableAgentTools={[unchecked]} />
-      </PickerHarness>,
-    );
-
-    // Card present, picker absent.
-    await findByTestId('tool-card-check-integration-composio:GMAIL_FETCH_EMAILS');
-    expect(queryByTestId('integration-connection-picker-composio-gmail')).toBeNull();
-  });
-
-  it('toggling a tool ON with exactly one existing connection does NOT auto-pin (picker is source of truth)', async () => {
+  it('auto-pins the existing connection on a checked integration card (badges = used)', async () => {
     sharedServer.use(
       http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
         HttpResponse.json({ items: [{ connectionId: 'conn_only', status: 'active', label: 'only' }] }),
@@ -663,33 +680,26 @@ describe('Tools — checked integration rows render the connection picker', () =
     );
 
     const spy = vi.fn();
-    const unchecked = { ...checkedIntegrationTool, isChecked: false };
-    const { getByTestId } = render(
+    const { findByTestId, getByTestId } = render(
       <PickerHarness onState={spy}>
-        <Tools availableAgentTools={[unchecked]} />
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
       </PickerHarness>,
     );
 
-    // Let the connections fan-out settle so we know the picker has data
-    // available; the toggle should still leave the pinned list empty.
+    await findByTestId('connection-badge-composio-gmail-conn_only');
     await waitFor(() => {
-      expect(getByTestId('tool-card-integration-composio:GMAIL_FETCH_EMAILS')).toBeTruthy();
+      fireEvent.click(getByTestId('spy-form-state'));
+      const state = spy.mock.calls.at(-1)?.[0] as AgentBuilderEditFormValues;
+      const pinned = (
+        state as unknown as {
+          toolProviders: { composio?: { connections?: { gmail?: Array<{ connectionId: string }> } } };
+        }
+      ).toolProviders.composio?.connections?.gmail;
+      expect(pinned).toEqual([expect.objectContaining({ kind: 'author', toolkit: 'gmail', connectionId: 'conn_only' })]);
     });
-    await new Promise(r => setTimeout(r, 50));
-
-    fireEvent.click(getByTestId('tool-card-integration-composio:GMAIL_FETCH_EMAILS'));
-
-    fireEvent.click(getByTestId('spy-form-state'));
-    const state = spy.mock.calls[0][0] as AgentBuilderEditFormValues;
-    const pinned = (
-      state as unknown as {
-        toolProviders: { composio?: { connections?: { gmail?: Array<unknown> } } };
-      }
-    ).toolProviders.composio?.connections?.gmail;
-    expect(pinned ?? []).toEqual([]);
   });
 
-  it('toggling a tool ON with two existing connections does NOT auto-pin', async () => {
+  it('auto-pins every active connection on a checked integration card', async () => {
     sharedServer.use(
       http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
         HttpResponse.json({
@@ -702,23 +712,22 @@ describe('Tools — checked integration rows render the connection picker', () =
     );
 
     const spy = vi.fn();
-    const unchecked = { ...checkedIntegrationTool, isChecked: false };
-    const { getByTestId } = render(
+    const { findByTestId, getByTestId } = render(
       <PickerHarness onState={spy}>
-        <Tools availableAgentTools={[unchecked]} />
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
       </PickerHarness>,
     );
 
-    await new Promise(r => setTimeout(r, 50));
-    fireEvent.click(getByTestId('tool-card-integration-composio:GMAIL_FETCH_EMAILS'));
-
-    fireEvent.click(getByTestId('spy-form-state'));
-    const state = spy.mock.calls[0][0] as AgentBuilderEditFormValues;
-    const pinned = (
-      state as unknown as {
-        toolProviders: { composio?: { connections?: { gmail?: Array<unknown> } } };
-      }
-    ).toolProviders.composio?.connections?.gmail;
-    expect(pinned ?? []).toEqual([]);
+    await findByTestId('connection-badge-composio-gmail-conn_work');
+    await waitFor(() => {
+      fireEvent.click(getByTestId('spy-form-state'));
+      const state = spy.mock.calls.at(-1)?.[0] as AgentBuilderEditFormValues;
+      const pinned = (
+        state as unknown as {
+          toolProviders: { composio?: { connections?: { gmail?: Array<{ connectionId: string }> } } };
+        }
+      ).toolProviders.composio?.connections?.gmail;
+      expect(pinned?.map(c => c.connectionId).sort()).toEqual(['conn_personal', 'conn_work']);
+    });
   });
 });

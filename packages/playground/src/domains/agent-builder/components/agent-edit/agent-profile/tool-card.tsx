@@ -1,6 +1,7 @@
-import { Txt, cn } from '@mastra/playground-ui';
+import { Button, Txt } from '@mastra/playground-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { IntegrationConnectionPicker } from '../../../../tool-providers/components/integration-connection-picker';
+import { Plus } from 'lucide-react';
+import { ConnectionBadges } from '../../../../tool-providers/components/connection-badges';
 import { useAuthorize } from '../../../../tool-providers/hooks/use-authorize';
 import type { AgentTool } from '../../../types/agent-tool';
 import { AgentSelectableCard } from '../agent-selectable-card';
@@ -14,17 +15,19 @@ interface ToolCardProps {
 }
 
 /**
- * A single tool tile. For integration tools it also renders the
- * "Needs connection" control (when unconnected) and the connection picker
- * (when checked). Native tools render just the selectable card.
+ * A single tool tile. For integration tools it shows the toolkit's connections
+ * as badges and a "Connect" button to authorize a new account. Native tools
+ * render just the selectable card.
  */
 export const ToolCard = ({ item, editable, multipleAllowed, onToggle, onConnected }: ToolCardProps) => {
   const isIntegration = item.type === 'integration' && !!item.providerId && !!item.toolkit;
   const needsConnection = isIntegration && item.hasConnection === false;
-  const showPicker = isIntegration && item.isChecked;
+  // Offer Connect when there is no connection yet, or to add more on a selected
+  // tool when the toolkit supports multiple connections.
+  const showConnect = isIntegration && (needsConnection || (item.isChecked && multipleAllowed));
 
-  return (
-    <div className="flex flex-col gap-2">
+  if (!isIntegration) {
+    return (
       <AgentSelectableCard
         title={item.name}
         subtitle={item.description || 'No description provided'}
@@ -34,25 +37,41 @@ export const ToolCard = ({ item, editable, multipleAllowed, onToggle, onConnecte
         ariaLabel={item.name}
         testId={`tool-card-${item.type}-${item.id}`}
         checkTestId={`tool-card-check-${item.type}-${item.id}`}
+        footer={<div className="h-7" />}
       />
-      {needsConnection && (
-        <IntegrationConnectControl
-          item={item}
-          providerId={item.providerId!}
-          toolkit={item.toolkit!}
-          disabled={!editable}
-          onConnected={connectionId => onConnected(item, connectionId)}
-        />
-      )}
-      {showPicker && (
-        <IntegrationConnectionPicker
-          providerId={item.providerId!}
-          toolkit={item.toolkit!}
-          multipleAllowed={multipleAllowed}
-          disabled={!editable}
-        />
-      )}
-    </div>
+    );
+  }
+
+  return (
+    <AgentSelectableCard
+      title={item.name}
+      subtitle={item.description || 'No description provided'}
+      isSelected={item.isChecked}
+      disabled={!editable}
+      onClick={() => onToggle(item, !item.isChecked)}
+      ariaLabel={item.name}
+      testId={`tool-card-${item.type}-${item.id}`}
+      checkTestId={`tool-card-check-${item.type}-${item.id}`}
+      footer={
+        <div className="flex flex-col gap-2">
+          <ConnectionBadges
+            providerId={item.providerId!}
+            toolkit={item.toolkit!}
+            isChecked={item.isChecked}
+            disabled={!editable}
+          />
+          {showConnect && (
+            <IntegrationConnectControl
+              item={item}
+              providerId={item.providerId!}
+              toolkit={item.toolkit!}
+              disabled={!editable}
+              onConnected={connectionId => onConnected(item, connectionId)}
+            />
+          )}
+        </div>
+      }
+    />
   );
 };
 
@@ -90,6 +109,9 @@ const IntegrationConnectControl = ({
       { providerId, toolkit, scope: 'per-author' },
       {
         onSuccess: result => {
+          // Refresh both the per-toolkit list (drives the connection badges) and
+          // the fan-out cache so the new account shows up without a manual reload.
+          void queryClient.invalidateQueries({ queryKey: ['tool-integration-connections', providerId, toolkit] });
           void queryClient.invalidateQueries({
             queryKey: ['tool-integration-connections-all', providerId, toolkit],
           });
@@ -102,24 +124,20 @@ const IntegrationConnectControl = ({
   };
 
   return (
-    <div className="flex items-center justify-between gap-2 px-2">
-      <Txt variant="ui-xs" className="text-neutral3">
-        Needs connection
-      </Txt>
-      <button
+    <div className="flex items-center gap-2">
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         onClick={handleConnect}
         disabled={disabled || authorize.isPending}
         data-testid={`tool-card-connect-${item.type}-${item.id}`}
-        className={cn(
-          'shrink-0 rounded border border-border1 bg-surface4 px-2 py-0.5 text-ui-xs text-neutral6',
-          'hover:bg-surface5 disabled:cursor-not-allowed disabled:opacity-60',
-        )}
       >
-        {authorize.isPending ? 'Connecting…' : 'Connect'}
-      </button>
+        <Plus />
+        {authorize.isPending ? 'Connecting…' : 'Add connection'}
+      </Button>
       {authorize.error && (
-        <Txt variant="ui-xs" className="ml-1 text-red-500">
+        <Txt variant="ui-xs" className="text-red-500">
           {String(authorize.error)}
         </Txt>
       )}

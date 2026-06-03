@@ -7,8 +7,8 @@ import { z } from 'zod';
  *
  * `kind` is locked to `'author'` for v1. `scope` defaults to `'per-author'` at
  * the runtime layer when absent. Display labels live on the connection row
- * itself and are renamed via `PATCH /tool-providers/.../connections/...` —
- * the form pin only carries identifiers.
+ * itself and are renamed via `PATCH /tool-providers/.../connections/...`, but
+ * pins preserve them because multi-connection toolkits require labels on save.
  */
 
 export const connectionFormSchema = z
@@ -16,6 +16,7 @@ export const connectionFormSchema = z
     kind: z.literal('author'),
     toolkit: z.string().min(1),
     connectionId: z.string().min(1),
+    label: z.string().optional(),
     scope: z.enum(['shared', 'per-author', 'caller-supplied']).optional(),
   })
   .passthrough();

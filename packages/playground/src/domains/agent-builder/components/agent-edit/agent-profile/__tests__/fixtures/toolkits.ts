@@ -14,9 +14,11 @@ export const composioProvider: ListToolProvidersResponse = {
   ],
 };
 
+export const GMAIL_ICON_URL = 'https://example.com/icons/gmail.png';
+
 export const composioToolkits: ListToolProviderToolkitsResponse = {
   data: [
-    { slug: 'gmail', name: 'Gmail' },
+    { slug: 'gmail', name: 'Gmail', icon: GMAIL_ICON_URL },
     { slug: 'slack', name: 'Slack' },
   ],
 };

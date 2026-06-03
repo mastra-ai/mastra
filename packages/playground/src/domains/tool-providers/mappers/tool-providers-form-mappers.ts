@@ -29,6 +29,7 @@ export function buildToolProvidersForSave(
         kind: 'author' as const,
         toolkit: connection.toolkit,
         connectionId: connection.connectionId,
+        ...(connection.label?.trim() ? { label: connection.label.trim() } : {}),
         ...(connection.scope ? { scope: connection.scope } : {}),
       }));
     }
@@ -82,6 +83,7 @@ export function extractFormToolProviders(value: unknown): ToolProvidersFormValue
         kind: 'author' as const,
         toolkit,
         connectionId: c.connectionId,
+        ...(c.label?.trim() ? { label: c.label.trim() } : {}),
         ...(c.scope ? { scope: c.scope } : {}),
       }));
     }

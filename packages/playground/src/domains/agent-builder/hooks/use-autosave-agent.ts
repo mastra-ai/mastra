@@ -1,6 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFormContext } from 'react-hook-form';
+import { useFormContext, useFormState } from 'react-hook-form';
 import { useDebouncedCallback } from 'use-debounce';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
@@ -27,14 +27,20 @@ export function useAutosaveAgent({
   savedDisplayMs = DEFAULT_SAVED_DISPLAY_MS,
 }: UseAutosaveAgentArgs) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
+  const { isDirty } = useFormState({ control: formMethods.control });
   const { save } = useSaveAgent({ agentId, availableAgentTools, availableSkills, silent: true });
 
   const [status, setStatus] = useState<AutosaveStatus>('idle');
   const [lastError, setLastError] = useState<Error | null>(null);
 
   const latestValuesRef = useRef<AgentBuilderEditFormValues>(formMethods.getValues());
+  const isDirtyRef = useRef(isDirty);
   const requestSeqRef = useRef(0);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
 
   const clearSavedTimer = () => {
     if (savedTimerRef.current) {
@@ -75,6 +81,7 @@ export function useAutosaveAgent({
   useEffect(() => {
     const subscription = formMethods.watch(values => {
       latestValuesRef.current = values as AgentBuilderEditFormValues;
+      if (!isDirtyRef.current) return;
       debouncedSave();
     });
     return () => {

@@ -1,4 +1,4 @@
-export { IntegrationConnectionPicker } from './integration-connection-picker';
+export { ConnectionBadges } from './connection-badges';
 export { IntegrationToolsSection } from './integration-tools-section';
 export { ToolProviderDialog } from './tool-provider-dialog';
 export { ToolkitList } from './toolkit-list';
