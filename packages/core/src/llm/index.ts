@@ -82,6 +82,7 @@ export {
   PROVIDER_REGISTRY,
   parseModelString,
   getProviderConfig,
+  isProviderRegistered,
   modelSupportsAttachments,
 } from './model/provider-registry.js';
 export type {

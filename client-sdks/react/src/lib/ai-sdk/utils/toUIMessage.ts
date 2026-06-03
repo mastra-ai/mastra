@@ -490,7 +490,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
     case 'reasoning-start': {
       const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') {
+      if (!lastMessage || lastMessage.role !== 'assistant' || lastMessage.metadata?.completionResult) {
         const newMessage: MastraUIMessage = {
           id: `reasoning-${chunk.runId + Date.now()}`,
           role: 'assistant',
