@@ -9,6 +9,7 @@ import {
   normalizePerPage,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_FAVORITES,
 } from '@mastra/core/storage';
 import type {
   AgentInstructionBlock,
@@ -417,8 +418,26 @@ export class AgentsSpanner extends AgentsStorage {
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     // Default to status='published' so list() never leaks drafts/archived to
     // callers that omit the filter.
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      metadata,
+      status,
+      entityIds,
+      pinFavoritedFor,
+      favoritedOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
+
+    // Default to status='published' so list() never leaks drafts/archived to
+    // callers that omit the filter. Favorites-feature queries (entityIds /
+    // pinFavoritedFor / favoritedOnly) operate on the favorited candidate set
+    // and must see entities regardless of lifecycle status, so the default is
+    // suppressed for them unless the caller passes an explicit status.
+    const favoritesQuery = entityIds !== undefined || pinFavoritedFor !== undefined || favoritedOnly !== undefined;
+    const effectiveStatus = status ?? (favoritesQuery ? undefined : 'published');
 
     if (page < 0) {
       throw new MastraError(
@@ -436,16 +455,27 @@ export class AgentsSpanner extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
+      // Empty entityIds can never match a row — short-circuit before querying.
+      if (entityIds && entityIds.length === 0) {
+        return { agents: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
       const tableName = quoteIdent(TABLE_AGENTS, 'table name');
+      const favoritesTable = quoteIdent(TABLE_FAVORITES, 'table name');
       const conditions: string[] = [];
       const params: Record<string, any> = {};
 
-      if (status) {
-        conditions.push(`${quoteIdent('status', 'column name')} = @status`);
-        params.status = status;
+      // A favorites JOIN is only needed when a viewer is supplied (favorited-first
+      // ordering and/or favoritedOnly filtering).
+      const useJoin = Boolean(pinFavoritedFor);
+      if (useJoin) params.pinUserId = pinFavoritedFor;
+
+      if (effectiveStatus) {
+        conditions.push(`a.${quoteIdent('status', 'column name')} = @status`);
+        params.status = effectiveStatus;
       }
       if (authorId !== undefined) {
-        conditions.push(`${quoteIdent('authorId', 'column name')} = @authorId`);
+        conditions.push(`a.${quoteIdent('authorId', 'column name')} = @authorId`);
         params.authorId = authorId;
       }
       if (metadata && Object.keys(metadata).length > 0) {
@@ -461,15 +491,34 @@ export class AgentsSpanner extends AgentsStorage {
             });
           }
           const param = `m${i++}`;
-          conditions.push(`JSON_VALUE(metadata, '$.${key}') = @${param}`);
+          conditions.push(`JSON_VALUE(a.metadata, '$.${key}') = @${param}`);
           params[param] = typeof value === 'string' ? value : JSON.stringify(value);
         }
       }
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map((id, i) => {
+          const param = `eid${i}`;
+          params[param] = id;
+          return `@${param}`;
+        });
+        conditions.push(`a.${quoteIdent('id', 'column name')} IN (${placeholders.join(', ')})`);
+      }
+      if (useJoin && favoritedOnly) {
+        conditions.push(`s.${quoteIdent('userId', 'column name')} IS NOT NULL`);
+      } else if (favoritedOnly) {
+        // favoritedOnly without a viewer can never match a real favorite row.
+        conditions.push('1 = 0');
+      }
 
+      const joinClause = useJoin
+        ? `LEFT JOIN ${favoritesTable} s ON s.${quoteIdent('entityType', 'column name')} = 'agent'` +
+          ` AND s.${quoteIdent('entityId', 'column name')} = a.${quoteIdent('id', 'column name')}` +
+          ` AND s.${quoteIdent('userId', 'column name')} = @pinUserId`
+        : '';
       const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       const [countRows] = await this.database.run({
-        sql: `SELECT COUNT(*) AS count FROM ${tableName} ${whereSql}`,
+        sql: `SELECT COUNT(*) AS count FROM ${tableName} a ${joinClause} ${whereSql}`,
         params,
         json: true,
       });
@@ -481,9 +530,16 @@ export class AgentsSpanner extends AgentsStorage {
 
       const limit = perPageInput === false ? total : perPage;
       const dirSql = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const orderParts: string[] = [];
+      if (useJoin) {
+        // Favorited entities first, then the requested ordering.
+        orderParts.push(`(s.${quoteIdent('userId', 'column name')} IS NOT NULL) DESC`);
+      }
+      orderParts.push(`a.${quoteIdent(field, 'column name')} ${dirSql}`);
+      orderParts.push(`a.${quoteIdent('id', 'column name')} ${dirSql}`);
       const [rows] = await this.database.run({
-        sql: `SELECT * FROM ${tableName} ${whereSql}
-              ORDER BY ${quoteIdent(field, 'column name')} ${dirSql}, id ${dirSql}
+        sql: `SELECT a.* FROM ${tableName} a ${joinClause} ${whereSql}
+              ORDER BY ${orderParts.join(', ')}
               LIMIT @limit OFFSET @offset`,
         params: { ...params, limit, offset },
         json: true,

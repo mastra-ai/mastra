@@ -25,6 +25,8 @@ import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
+import type { NotificationDispatchConfig } from '../notifications/workflow';
+import { createNotificationDispatchWorkflow } from '../notifications/workflow';
 import type {
   DefinitionSource,
   ObservabilityEntrypoint,
@@ -427,6 +429,13 @@ export interface Config<
   scheduler?: WorkflowSchedulerConfig;
 
   /**
+   * Notification runtime configuration. Notification dispatch is scheduled automatically by default.
+   */
+  notifications?: {
+    dispatch?: NotificationDispatchConfig;
+  };
+
+  /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
    * Routes are automatically registered and agents can reference channel configs.
    *
@@ -534,6 +543,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -560,6 +570,7 @@ export class Mastra<
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #schedulerConfig?: WorkflowSchedulerConfig;
+  #notificationDispatchConfig?: NotificationDispatchConfig;
   /**
    * Tracks whether any registered workflow has declared a `schedule` config.
    * Used as a fast short-circuit so users without scheduled workflows pay
@@ -1084,6 +1095,7 @@ export class Mastra<
     }
 
     this.#schedulerConfig = config?.scheduler;
+    this.#notificationDispatchConfig = config?.notifications?.dispatch;
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
@@ -1145,6 +1157,12 @@ export class Mastra<
           this.addScorer(scorer, key, { source: 'code' });
         }
       });
+    }
+
+    if (this.#notificationDispatchConfig?.enabled !== false) {
+      const workflow = createNotificationDispatchWorkflow(this.#notificationDispatchConfig);
+      this.addWorkflow(workflow, workflow.id);
+      this.#hiddenWorkflowKeys.add(workflow.id);
     }
 
     if (config?.workflows) {
@@ -3257,15 +3275,19 @@ export class Mastra<
    * ```
    */
   public listWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+    const workflows = Object.fromEntries(
+      Object.entries(this.#workflows).filter(([key]) => !this.#hiddenWorkflowKeys.has(key)),
+    ) as Record<string, Workflow>;
+
     if (props.serialized) {
-      return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
+      return Object.entries(workflows).reduce((acc, [k, v]) => {
         return {
           ...acc,
           [k]: { name: v.name },
         };
       }, {});
     }
-    return this.#workflows;
+    return workflows;
   }
 
   /**

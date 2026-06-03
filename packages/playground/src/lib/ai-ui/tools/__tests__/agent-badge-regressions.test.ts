@@ -1,4 +1,3 @@
-import type * as MastraReact from '@mastra/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,14 +9,9 @@ vi.mock('@/hooks/use-agent-messages', () => ({
   useAgentMessages: mockUseAgentMessages,
 }));
 
-vi.mock('@mastra/react', async () => {
-  const actual = await vi.importActual<typeof MastraReact>('@mastra/react');
-
-  return {
-    ...actual,
-    resolveToChildMessages: mockResolveToChildMessages,
-  };
-});
+vi.mock('../badges/resolve-child-messages', () => ({
+  resolveToChildMessages: mockResolveToChildMessages,
+}));
 
 vi.mock('../badges/agent-badge', () => ({
   AgentBadge: mockAgentBadge,

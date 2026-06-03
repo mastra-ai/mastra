@@ -9,13 +9,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const chatState: { isRunning: boolean; messages: unknown[] } = { isRunning: false, messages: [] };
 const chatListeners = new Set<() => void>();
 const sentMessages: unknown[] = [];
+const useChatCalls: Array<Record<string, unknown>> = [];
 
 const triggerRerender = () => {
   for (const listener of chatListeners) listener();
 };
 
 vi.mock('@mastra/react', () => {
-  const useChat = () => {
+  const useChat = (options: Record<string, unknown>) => {
+    useChatCalls.push(options);
     // Force consumers to subscribe so they re-render when state changes.
     const [, setTick] = useState(0);
     const ref = useRef<() => void>(() => {});
@@ -81,12 +83,36 @@ describe('StreamChatProvider', () => {
     chatState.isRunning = false;
     chatState.messages = [];
     sentMessages.length = 0;
+    useChatCalls.length = 0;
     vi.useFakeTimers();
   });
 
   afterEach(() => {
+    delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
     cleanup();
     vi.useRealTimers();
+  });
+
+  it('opts the agent builder into thread signals by default', () => {
+    renderWithProviders(
+      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
+        <RenderTracker hook={useStreamRunning} onRender={() => {}} />
+      </StreamChatProvider>,
+    );
+
+    expect(useChatCalls.at(-1)).toMatchObject({ enableThreadSignals: true });
+  });
+
+  it('preserves the explicit thread signals opt-out', () => {
+    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+
+    renderWithProviders(
+      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
+        <RenderTracker hook={useStreamRunning} onRender={() => {}} />
+      </StreamChatProvider>,
+    );
+
+    expect(useChatCalls.at(-1)).toMatchObject({ enableThreadSignals: false });
   });
 
   it('only re-renders running subscribers when isRunning changes (not when messages change)', () => {
