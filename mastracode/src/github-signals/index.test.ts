@@ -171,14 +171,14 @@ describe('GithubSignals', () => {
   it('creates typed subscribe and unsubscribe PR signals', () => {
     expect(GithubSignals.signals.subscribeToPR({ owner: 'mastra-ai', repo: 'mastra', number: 123 })).toEqual(
       expect.objectContaining({
-        type: 'user',
+        type: 'reactive',
         tagName: 'github-subscribe-pr',
         attributes: { owner: 'mastra-ai', repo: 'mastra', number: 123 },
       }),
     );
     expect(GithubSignals.signals.unsubscribeFromPR({ owner: 'mastra-ai', repo: 'mastra', number: 123 })).toEqual(
       expect.objectContaining({
-        type: 'user',
+        type: 'reactive',
         tagName: 'github-unsubscribe-pr',
         attributes: { owner: 'mastra-ai', repo: 'mastra', number: 123 },
       }),
@@ -358,7 +358,7 @@ describe('GithubSignals', () => {
     expect(sendSignal).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        type: 'user',
+        type: 'reactive',
         tagName: 'github-subscribe-pr',
         attributes: { owner: 'mastra-ai', repo: 'mastra', number: 17439 },
       }),
@@ -372,7 +372,7 @@ describe('GithubSignals', () => {
     expect(sendSignal).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        type: 'user',
+        type: 'reactive',
         tagName: 'github-unsubscribe-pr',
         attributes: { owner: 'mastra-ai', repo: 'mastra', number: 17439 },
       }),

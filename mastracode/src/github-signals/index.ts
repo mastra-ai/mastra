@@ -816,7 +816,7 @@ export class GithubSignals implements Processor<'github-signals'> {
     subscribeToPR(input: GithubSubscribePRSignalInput): AgentSignalInput {
       const normalized = typeof input === 'number' ? { number: input } : input;
       return {
-        type: 'user',
+        type: 'reactive',
         tagName: GITHUB_SUBSCRIBE_PR_TAG,
         contents: `Subscribe to GitHub PR #${normalized.number}`,
         attributes: {
@@ -835,7 +835,7 @@ export class GithubSignals implements Processor<'github-signals'> {
     unsubscribeFromPR(input: GithubUnsubscribePRSignalInput): AgentSignalInput {
       const normalized = typeof input === 'number' ? { number: input } : input;
       return {
-        type: 'user',
+        type: 'reactive',
         tagName: GITHUB_UNSUBSCRIBE_PR_TAG,
         contents: `Unsubscribe from GitHub PR #${normalized.number}`,
         attributes: {
