@@ -665,11 +665,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     stateSchema: typedStateSchema,
     initialState,
     workspace,
-    subagents: subagents?.length
-      ? {
-          types: Object.fromEntries(subagents.map(sa => [sa.id, sa as never])),
-        }
-      : undefined,
     resolveModel: modelId => resolveModel(modelId) as LanguageModel,
     toolCategoryResolver: name => (getToolCategory(name) ?? null) as never,
   });
