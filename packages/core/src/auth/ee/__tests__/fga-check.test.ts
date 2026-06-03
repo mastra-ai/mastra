@@ -155,6 +155,32 @@ describe('checkFGA', () => {
     expect(provider.require).not.toHaveBeenCalled();
   });
 
+  it.each([{}, { actorKind: 'user' }])(
+    'should not bypass provider checks for malformed system actor value %o',
+    async systemActor => {
+      const provider = createMockFGAProvider(true);
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-1');
+
+      await requireFGA({
+        fgaProvider: provider,
+        user: { id: 'user-1' },
+        resource: { type: 'workflow', id: 'nightly-workflow' },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext,
+        systemActor: systemActor as any,
+      });
+
+      expect(provider.require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({
+          resource: { type: 'workflow', id: 'nightly-workflow' },
+          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        }),
+      );
+    },
+  );
+
   it('should not treat user or request-context data as the trusted system actor signal', async () => {
     const provider = createMockFGAProvider(true);
     const requestContext = new RequestContext();

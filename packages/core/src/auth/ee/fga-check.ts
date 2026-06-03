@@ -10,7 +10,7 @@ import type { MastraFGAPermissionInput } from './interfaces/permissions.generate
 import { getSafeLicenseSummary } from './license';
 
 export type SystemActorSignal =
-  | boolean
+  | true
   | {
       actorKind: 'system';
       sourceWorkflow?: string;
@@ -51,6 +51,22 @@ function mergeFGAContext({
   }
 
   return Object.keys(mergedContext).length > 0 ? mergedContext : undefined;
+}
+
+function isSystemActorSignal(systemActor: unknown): systemActor is SystemActorSignal {
+  if (systemActor === true) {
+    return true;
+  }
+
+  if (typeof systemActor !== 'object' || systemActor === null) {
+    return false;
+  }
+
+  const candidate = systemActor as { actorKind?: unknown; sourceWorkflow?: unknown };
+  return (
+    candidate.actorKind === 'system' &&
+    (candidate.sourceWorkflow === undefined || typeof candidate.sourceWorkflow === 'string')
+  );
 }
 
 export function getAgentFGAResourceId(agentId: string): string {
@@ -99,14 +115,14 @@ export async function requireFGA(options: RequireFGAOptions): Promise<void> {
   const fgaContext = mergeFGAContext({ context, requestContext, metadata });
   const license = getSafeLicenseSummary();
 
-  if (systemActor) {
+  if (isSystemActorSignal(systemActor)) {
     const tenantOrganizationId = fgaContext?.requestContext?.get('organizationId');
     if (typeof tenantOrganizationId !== 'string' || tenantOrganizationId.length === 0) {
       throw new FGADeniedError(user, resource, permission, 'system actor requires organizationId / tenant scope');
     }
 
     const sourceWorkflow =
-      (typeof systemActor === 'object' ? systemActor.sourceWorkflow : undefined) ??
+      (systemActor === true ? undefined : systemActor.sourceWorkflow) ??
       (typeof fgaContext?.metadata?.['sourceWorkflow'] === 'string'
         ? fgaContext.metadata['sourceWorkflow']
         : undefined);

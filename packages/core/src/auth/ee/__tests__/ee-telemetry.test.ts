@@ -174,11 +174,12 @@ describe('EE telemetry', () => {
   });
 
   it('emits FGA feature usage for system actor bypasses', async () => {
+    const fgaProvider = createMockFGAProvider();
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'org-1');
 
     await checkFGA({
-      fgaProvider: createMockFGAProvider(),
+      fgaProvider,
       user: undefined,
       resource: { type: 'workflow', id: 'nightly-workflow' },
       permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
@@ -186,6 +187,7 @@ describe('EE telemetry', () => {
       systemActor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
     });
 
+    expect(fgaProvider.require).not.toHaveBeenCalled();
     expect(captureEEEvent).toHaveBeenCalledWith(
       'ee_feature_used',
       expect.any(String),
