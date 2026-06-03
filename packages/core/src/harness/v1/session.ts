@@ -389,27 +389,13 @@ export class Session<TState = {}> {
     const harnessContext = {
       sessionId: this.#id,
       getState: () => this.getState(),
-      setState: (updates: Partial<TState>) => this.setState(updates),
-      updateState: <TResult>(
-        updater: (
-          state: Readonly<TState>,
-        ) =>
-          | { updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }
-          | Promise<{ updates?: Partial<TState>; events?: Parameters<EventEmitter['emit']>[0][]; result: TResult }>,
-      ) => this.updateState(updater),
       threadId: this.#threadId,
       resourceId: this.#resourceId,
       modeId: this.#mode.id,
       modelId: this.#modelId,
-      workspace: undefined as Workspace | undefined,
-      listSkills: () => this.listSkills(),
-      getSkill: (name: string) => this.getSkill(name),
-      useSkill: (name: string, opts?: { args?: Record<string, unknown> }) => this.useSkill(name, opts),
-      refreshSkills: () => this.refreshSkills(),
     };
 
     requestContext.set('harness', harnessContext);
-    harnessContext.workspace = await this.#getResolvedWorkspace(requestContext);
 
     return requestContext;
   }
