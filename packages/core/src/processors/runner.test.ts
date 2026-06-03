@@ -3410,6 +3410,152 @@ describe('ProcessorRunner', () => {
         }),
       ).rejects.toThrow('computeStateSignal requires Mastra memory');
     });
+
+    it('honors processor.stateId over processor.id in computeStateSignal', async () => {
+      messageList = new MessageList({ threadId: 'thread-1' });
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      };
+      requestContext.set('MastraMemory', { thread, resourceId: 'resource-1' });
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread: t }) => t),
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'default-id',
+            stateId: 'custom-state-id',
+            computeStateSignal: () => ({ cacheKey: 'ck', contents: 'state' }),
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+      });
+
+      const signalMessage = messageList.get.all.db().at(-1);
+      expect(signalMessage?.content.metadata?.signal?.metadata?.state?.id).toBe('custom-state-id');
+      const savedThread = memory.saveThread.mock.calls[0]?.[0]?.thread;
+      expect(savedThread.metadata.mastra.stateSignals['custom-state-id']).toBeDefined();
+      expect(savedThread.metadata.mastra.stateSignals['default-id']).toBeUndefined();
+    });
+
+    it('honors processor.stateId over processor.id in sendStateSignal from processInputStep', async () => {
+      messageList = new MessageList({ threadId: 'thread-1' });
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      };
+      requestContext.set('MastraMemory', { thread, resourceId: 'resource-1' });
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread: t }) => t),
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'default-id',
+            stateId: 'custom-state-id',
+            processInputStep: async ({ sendStateSignal }) => {
+              await sendStateSignal?.({ cacheKey: 'ck', contents: 'state from step' });
+            },
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+      });
+
+      const signalMessage = messageList.get.all.db().at(-1);
+      expect((signalMessage?.content as any)?.metadata?.signal?.metadata?.state?.id).toBe('custom-state-id');
+    });
+
+    it('refreshes thread metadata after intermediate sendStateSignal in computeStateSignal', async () => {
+      const ml = new MessageList({ threadId: 'thread-1' });
+      const requestContext = new RequestContext();
+      const thread = {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      };
+      requestContext.set('MastraMemory', {
+        thread,
+        resourceId: 'resource-1',
+      });
+      const memory = {
+        getThreadById: vi.fn(async () => thread),
+        saveThread: vi.fn(async ({ thread: t }: { thread: typeof thread }) => t),
+      };
+
+      const computeCalls: Array<{ trackingVersion: number | undefined }> = [];
+      const r = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'state-processor',
+            computeStateSignal: ({ sendStateSignal, tracking }: any) => {
+              computeCalls.push({ trackingVersion: (tracking as any)?.version });
+              if (computeCalls.length === 1) {
+                sendStateSignal!({ cacheKey: 'intermediate', contents: 'intermediate' });
+              }
+              return { cacheKey: 'final', contents: 'final' };
+            },
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await r.runProcessInputStep({
+        messageList: ml,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext,
+        memory: memory as any,
+      });
+
+      expect(computeCalls).toHaveLength(1);
+      expect(memory.saveThread).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('processor sendSignal', () => {

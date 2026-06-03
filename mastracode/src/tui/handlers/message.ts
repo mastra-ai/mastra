@@ -65,6 +65,7 @@ type StreamedStateSignalPart = {
   type: 'state_signal';
   stateId: string;
   mode: 'snapshot' | 'delta';
+  cacheKey?: string;
   version?: number;
   message?: string;
 };
@@ -122,6 +123,10 @@ function toStreamedStateSignalPart(part: HarnessMessageContent): StreamedStateSi
     type: 'state_signal',
     stateId: stateSignal.stateId,
     mode: stateSignal.mode === 'delta' ? 'delta' : 'snapshot',
+    cacheKey:
+      typeof (stateSignal as Record<string, unknown>).cacheKey === 'string'
+        ? ((stateSignal as Record<string, unknown>).cacheKey as string)
+        : undefined,
     version: typeof stateSignal.version === 'number' ? stateSignal.version : undefined,
     message: typeof stateSignal.message === 'string' ? stateSignal.message : undefined,
   };
@@ -266,7 +271,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     .filter((part): part is StreamedReactiveSignalPart => part !== undefined);
 
   for (const stateSignal of stateSignalParts) {
-    const stateSignalKey = `${message.id}:${stateSignal.stateId}:${stateSignal.version ?? ''}:${stateSignal.message ?? ''}`;
+    const stateSignalKey = `state:${message.id}:${stateSignal.cacheKey ?? ''}:${stateSignal.stateId}:${stateSignal.mode}:${stateSignal.version ?? ''}:${stateSignal.message ?? ''}`;
     if (!state.currentRunSystemReminderKeys.has(stateSignalKey)) {
       state.currentRunSystemReminderKeys.add(stateSignalKey);
       addInlineStateSignal(ctx, stateSignal);

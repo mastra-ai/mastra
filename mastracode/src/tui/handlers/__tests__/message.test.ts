@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
 import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
+import { StateSignalComponent } from '../../components/state-signal.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
@@ -320,5 +321,59 @@ describe('handleMessageUpdate system reminders', () => {
     ]);
     expect(state.allSystemReminderComponents[0]).toBeInstanceOf(TemporalGapComponent);
     expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+  });
+
+  it('dedupes state signals with same stateId but different cacheKey/mode', () => {
+    const assistant = new AssistantMessageComponent(undefined, false);
+    state.chatContainer.addChild(assistant);
+    state.streamingComponent = assistant;
+
+    // First state signal with cacheKey 'a'
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'state_signal',
+          stateId: 'browser',
+          mode: 'snapshot',
+          cacheKey: 'session-a',
+          message: 'Page A',
+        } as never,
+      ]),
+    );
+    const firstStateComponents = state.chatContainer.children.filter(c => c instanceof StateSignalComponent);
+    expect(firstStateComponents).toHaveLength(1);
+
+    // Same stateId + cacheKey + mode → deduped
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'state_signal',
+          stateId: 'browser',
+          mode: 'snapshot',
+          cacheKey: 'session-a',
+          message: 'Page A',
+        } as never,
+      ]),
+    );
+    const afterDupe = state.chatContainer.children.filter(c => c instanceof StateSignalComponent);
+    expect(afterDupe).toHaveLength(1);
+
+    // Same stateId but different cacheKey → NOT deduped
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'state_signal',
+          stateId: 'browser',
+          mode: 'snapshot',
+          cacheKey: 'session-b',
+          message: 'Page B',
+        } as never,
+      ]),
+    );
+    const afterDifferentCacheKey = state.chatContainer.children.filter(c => c instanceof StateSignalComponent);
+    expect(afterDifferentCacheKey).toHaveLength(2);
   });
 });

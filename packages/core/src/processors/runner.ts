@@ -372,7 +372,7 @@ export class ProcessorRunner {
     if (!loadedThread) {
       throw new Error(`[Processor:${processor.id}] computeStateSignal could not load thread ${resolvedThreadId}`);
     }
-    const thread = {
+    let thread = {
       ...loadedThread,
       id: resolvedThreadId,
       resourceId: loadedThread.resourceId ?? resolvedResourceId,
@@ -422,6 +422,10 @@ export class ProcessorRunner {
           defaultId: stateId,
           writeSignal: signal => writer?.custom(signal.toDataPart()),
         });
+        if (!sendResult.skipped) {
+          const updated = await resolvedMemory.getThreadById({ threadId: resolvedThreadId });
+          if (updated) thread = { ...thread, metadata: updated.metadata };
+        }
         return sendResult.skipped ? sendResult : sendResult.signal;
       },
     })) as ComputeStateSignalResult;
@@ -1524,7 +1528,7 @@ export class ProcessorRunner {
               threadId: resolvedThreadId,
               memoryConfig: memoryContext?.memoryConfig,
               messageList,
-              defaultId: processor.id,
+              defaultId: processor.stateId ?? processor.id,
               writeSignal: signal => writer?.custom(signal.toDataPart()),
             });
             return result.skipped ? result : result.signal;

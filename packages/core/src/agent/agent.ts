@@ -5758,14 +5758,18 @@ export class Agent<
           : browser.isBrowserRunning();
         if (!running) return { isOpen: false };
 
-        const state = await browser.getBrowserState(browserThreadId);
-        const activeTab = state?.tabs[state.activeTabIndex];
-        return {
-          isOpen: true,
-          currentUrl: activeTab?.url ?? (await browser.getCurrentUrl(browserThreadId)) ?? undefined,
-          pageTitle: activeTab?.title,
-          tabCount: state?.tabs.length,
-        };
+        try {
+          const state = await browser.getBrowserState(browserThreadId);
+          const activeTab = state?.tabs[state.activeTabIndex];
+          return {
+            isOpen: true,
+            currentUrl: activeTab?.url ?? (await browser.getCurrentUrl(browserThreadId)) ?? undefined,
+            pageTitle: activeTab?.title,
+            tabCount: state?.tabs.length,
+          };
+        } catch {
+          return { isOpen: false };
+        }
       };
       const currentBrowserState = await getBrowserContextState();
       const browserCtx: BrowserContext = {

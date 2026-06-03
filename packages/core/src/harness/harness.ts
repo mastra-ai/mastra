@@ -130,8 +130,8 @@ function toSystemReminderContent(
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
   const metadata = getRecordValue(payload.metadata);
-  const message = getStringValue(payload.contents);
-  if (message === undefined) return undefined;
+  const message = signalContentsToText(payload.contents);
+  if (!message) return undefined;
 
   return {
     type: 'system_reminder',
@@ -2281,6 +2281,7 @@ export class Harness<TState = {}> {
           }
           break;
         }
+        // Back-compat: persisted streams may still contain data-system-reminder parts
         case 'data-system-reminder': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
           const reminder = toSystemReminderContent(data);
@@ -2874,6 +2875,7 @@ export class Harness<TState = {}> {
         }
         break;
       }
+      // Back-compat: persisted streams may still contain data-system-reminder parts
       case 'data-system-reminder': {
         const payload = (chunk as any).data as Record<string, unknown> | undefined;
         const reminder = payload ? toSystemReminderContent(payload) : undefined;

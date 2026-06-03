@@ -119,6 +119,47 @@ describe('Harness signal messages', () => {
     ]);
   });
 
+  it('normalizes system-reminder contents from text-part arrays', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const thread = await harness.createThread();
+
+    await storage.stores.memory!.saveMessages({
+      messages: [
+        createSignal({
+          id: 'signal-array',
+          type: 'system-reminder',
+          contents: [
+            { type: 'text', text: 'First line' },
+            { type: 'text', text: 'Second line' },
+          ],
+          attributes: { type: 'dynamic-agents-md', path: '/tmp/AGENTS.md' },
+          createdAt: new Date('2026-05-04T00:00:00.000Z'),
+        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      ],
+    });
+
+    await expect(harness.listMessages()).resolves.toEqual([
+      {
+        id: 'signal-array',
+        role: 'user',
+        content: [
+          {
+            type: 'system_reminder',
+            message: 'First line\nSecond line',
+            reminderType: 'dynamic-agents-md',
+            path: '/tmp/AGENTS.md',
+            precedesMessageId: undefined,
+            gapText: undefined,
+            gapMs: undefined,
+            timestamp: undefined,
+          },
+        ],
+        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      },
+    ]);
+  });
+
   it('renders persisted generic reactive signals', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);

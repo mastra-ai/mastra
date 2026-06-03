@@ -213,5 +213,25 @@ describe('Agent browser integration', () => {
       // With threadId, returns composite ID
       expect(browser.getSessionId('thread-456')).toBe('browser-123:thread-456');
     });
+
+    it('continues when browser state lookup fails', async () => {
+      const browser = createMockBrowser();
+      browser.isBrowserRunning = vi.fn().mockReturnValue(true);
+      browser.getBrowserState = vi.fn().mockRejectedValue(new Error('CDP connection lost'));
+
+      const agent = new Agent({
+        id: 'test-agent' as const,
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+        browser,
+      });
+
+      const result = await agent.generate('Hello');
+
+      // Should not throw, returns degraded state instead of aborting
+      expect(result.text).toBe('OK');
+      expect(browser.getBrowserState).toHaveBeenCalled();
+    });
   });
 });
