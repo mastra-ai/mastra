@@ -122,6 +122,28 @@ describe('Tools Handlers', () => {
       });
       expect(result['shared-key']).toHaveProperty('description', 'From bundler');
     });
+
+    it('should dedupe the same tool registered under different keys, preferring the registered key', async () => {
+      // Mirrors the deployer flow: an agent registers the tool by its intrinsic id
+      // (get-weather) while the CLI bundler registers the same instance by export name
+      // (weatherTool). The merged response must list it once, under the registered key.
+      const weatherTool: ToolAction = createTool({
+        id: 'get-weather',
+        description: 'Get current weather for a location',
+        execute: vi.fn(),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        tools: { [weatherTool.id]: weatherTool },
+      });
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: { weatherTool },
+      });
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result).toHaveProperty('weatherTool');
+      expect(result).not.toHaveProperty('get-weather');
+    });
   });
 
   describe('getToolByIdHandler', () => {
