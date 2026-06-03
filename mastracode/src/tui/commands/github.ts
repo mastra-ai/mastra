@@ -4,7 +4,14 @@ import { GITHUB_SIGNALS_METADATA_KEY } from '../../github-signals/index.js';
 import type { GithubPRSignalInput } from '../../github-signals/index.js';
 import { loadSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
+import type { TUIState } from '../state.js';
 import type { SlashCommandContext } from './types.js';
+
+/** Minimal context shared by both SlashCommandContext and EventHandlerContext. */
+interface GithubContext {
+  state: TUIState;
+  showInfo: (message: string) => void;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -41,12 +48,12 @@ function parseGithubPRReference(input: string): GithubPRSignalInput | undefined 
   return undefined;
 }
 
-async function getCurrentGithubThread(ctx: SlashCommandContext): Promise<{
+async function getCurrentGithubThread(ctx: GithubContext): Promise<{
   threadId?: string;
   resourceId?: string;
   metadata?: Record<string, unknown>;
 }> {
-  const harness = ctx.harness as unknown as {
+  const harness = ctx.state.harness as unknown as {
     getCurrentThreadId?: () => string | undefined;
     getResourceId?: () => string | undefined;
     listThreads?: (input?: {
@@ -145,7 +152,7 @@ async function syncGithubSubscriptions(ctx: SlashCommandContext): Promise<void> 
   }
 }
 
-async function detectCurrentPullRequest(ctx: SlashCommandContext): Promise<string> {
+async function detectCurrentPullRequest(ctx: GithubContext): Promise<string> {
   return new Promise(resolve => {
     execFile(
       'gh',
@@ -164,7 +171,7 @@ async function detectCurrentPullRequest(ctx: SlashCommandContext): Promise<strin
  * via `gh pr view`. Runs silently — errors are swallowed so the calling code
  * is never disrupted.
  */
-export async function tryAutoSubscribeToBranchPR(ctx: SlashCommandContext): Promise<void> {
+export async function tryAutoSubscribeToBranchPR(ctx: GithubContext): Promise<void> {
   if (!loadSettings().signals.experimentalGithubSignals) return;
 
   const githubSignalsProcessor = ctx.state.options?.githubSignals;

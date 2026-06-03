@@ -30,10 +30,17 @@ function createContext() {
     removed: true,
     remainingSubscriptions: 0,
   }));
+  const harness = {
+    sendSignal,
+    getCurrentThreadId: vi.fn(() => 'thread-1'),
+    getResourceId: vi.fn(() => 'resource-1'),
+    listThreads: vi.fn(async () => []),
+  };
   const ctx = {
     state: {
       ui: { requestRender: vi.fn() },
       projectInfo: { rootPath: '/repo' },
+      harness,
       options: {
         githubSignals: {
           isPollingThread: vi.fn(() => false),
@@ -44,12 +51,7 @@ function createContext() {
         },
       },
     },
-    harness: {
-      sendSignal,
-      getCurrentThreadId: vi.fn(() => 'thread-1'),
-      getResourceId: vi.fn(() => 'resource-1'),
-      listThreads: vi.fn(async () => []),
-    },
+    harness,
     showInfo: vi.fn(),
     showError: vi.fn(),
   } as unknown as SlashCommandContext;
