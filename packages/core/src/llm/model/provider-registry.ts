@@ -12,7 +12,6 @@ import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import staticRegistry from './provider-registry.json';
-import { parseModelString } from './provider-registry.static.js';
 import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';
 
 // Re-export types for convenience
@@ -374,9 +373,35 @@ export const PROVIDER_MODELS = new Proxy({} as ProviderModels, {
   },
 });
 
-// `parseModelString` is a pure helper with no Node deps. It lives in the
-// browser-safe static module to avoid drift; re-exported here for convenience.
-export { parseModelString };
+/**
+ * Parse a model string to extract provider and model ID
+ * Examples:
+ *   "openai/gpt-4o" -> { provider: "openai", modelId: "gpt-4o" }
+ *   "fireworks/accounts/etc/model" -> { provider: "fireworks", modelId: "accounts/etc/model" }
+ *   "gpt-4o" -> { provider: null, modelId: "gpt-4o" }
+ */
+export function parseModelString(modelString: string): { provider: string | null; modelId: string } {
+  const firstSlashIndex = modelString.indexOf('/');
+
+  if (firstSlashIndex !== -1) {
+    // Has at least one slash - extract everything before first slash as provider
+    const provider = modelString.substring(0, firstSlashIndex);
+    const modelId = modelString.substring(firstSlashIndex + 1);
+
+    if (provider && modelId) {
+      return {
+        provider,
+        modelId,
+      };
+    }
+  }
+
+  // No slash or invalid format
+  return {
+    provider: null,
+    modelId: modelString,
+  };
+}
 
 /**
  * Get provider configuration by provider ID

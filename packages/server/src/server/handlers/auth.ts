@@ -30,6 +30,7 @@ import {
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
   refreshResponseSchema,
+  permissionPatternsResponseSchema,
 } from '../schemas/auth';
 import { createPublicRoute, createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -52,6 +53,21 @@ function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
       });
   }
   return _buildCapabilitiesPromise;
+}
+
+let _permissionPatternsPromise: Promise<string[] | undefined> | undefined;
+function loadPermissionPatterns(): Promise<string[] | undefined> {
+  if (!_permissionPatternsPromise) {
+    _permissionPatternsPromise = import('@mastra/core/auth/ee')
+      .then(m => Object.keys(m.PERMISSION_PATTERNS))
+      .catch(() => {
+        console.error(
+          '[@mastra/server] EE permission patterns require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _permissionPatternsPromise;
 }
 
 /**
@@ -728,6 +744,30 @@ export const GET_ROLE_PERMISSIONS_ROUTE = createRoute({
 });
 
 // ============================================================================
+// GET /auth/permission-patterns
+// ============================================================================
+
+export const GET_PERMISSION_PATTERNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/permission-patterns',
+  requiresAuth: true,
+  responseType: 'json',
+  responseSchema: permissionPatternsResponseSchema,
+  summary: 'List valid permission patterns',
+  description:
+    'Returns the authoritative list of valid permission-pattern strings. Used by Studio to validate the route→permission literals it ships and to gate the sidebar.',
+  tags: ['Auth'],
+  handler: async () => {
+    try {
+      const patterns = await loadPermissionPatterns();
+      return { patterns: patterns ?? [] };
+    } catch (error) {
+      return handleError(error, 'Error getting permission patterns');
+    }
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -741,4 +781,5 @@ export const AUTH_ROUTES = [
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
   GET_ROLE_PERMISSIONS_ROUTE,
+  GET_PERMISSION_PATTERNS_ROUTE,
 ] as const;

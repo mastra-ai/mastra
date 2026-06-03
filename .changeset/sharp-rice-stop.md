@@ -1,7 +1,11 @@
 ---
-'@mastra/core': patch
+'@mastra/server': minor
+'@mastra/client-js': minor
 ---
 
-Added a browser-safe `@mastra/core/auth/ee/permissions` export so Studio can import permission constants and types without pulling in the server-only telemetry/Node code from the full `@mastra/core/auth/ee` barrel.
+Add server endpoints so Studio can resolve agent-builder model availability and auth permission patterns without importing server-only EE code in the browser:
 
-Added a browser-safe `@mastra/core/agent-builder/ee/allowlist` export (`isModelAllowed`, `MODEL_NOT_ALLOWED_CODE`, and related error helpers) backed by a static-registry-only reader, so Studio can enforce model allowlists without statically importing the Node-only provider registry (`node:fs`/`node:os`/`node:module`/`node:path`).
+- `GET /editor/builder/models/available` returns the provider/model list already filtered by the active builder model policy (`requiresAuth: true`, `stored-agents:read`).
+- `GET /auth/permission-patterns` returns the valid permission-pattern strings. It is gated by `requiresAuth: true` with no finer-grained permission: the response is the non-sensitive route-permission vocabulary that every authenticated user needs to gate their own sidebar/redirects, and there is no narrower permission that fits.
+
+`@mastra/client-js` gains `getBuilderAvailableModels()` and `getPermissionPatterns()` to consume these endpoints.

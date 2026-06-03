@@ -1,7 +1,13 @@
+import { Spinner } from '@mastra/playground-ui';
 import { Navigate, useLocation } from 'react-router';
 
 import { usePermissions } from '../hooks/use-permissions';
-import { getFirstAccessibleRoute, getPermissionForRoute, hasRoutePermission } from '../route-permissions';
+import {
+  getFirstAccessibleRoute,
+  getPermissionForRoute,
+  hasRoutePermission,
+  useRoutePermissions,
+} from '../route-permissions';
 
 /**
  * Guards routes based on the current user's permissions.
@@ -15,9 +21,19 @@ import { getFirstAccessibleRoute, getPermissionForRoute, hasRoutePermission } fr
 export function RoutePermissionGuard({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
   const { hasPermission, hasAnyPermission, rbacEnabled, isAuthenticated, isLoading } = usePermissions();
+  const { isLoading: patternsLoading } = useRoutePermissions();
 
-  // Don't guard while loading — prevents flash redirects
-  if (isLoading) return <>{children}</>;
+  // While loading, be defensive: don't leak protected content before the gate
+  // can run. Show a spinner until both the user's permissions and the
+  // authoritative permission patterns (which the route table is validated
+  // against) are resolved.
+  if (isLoading || patternsLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
 
   // No RBAC or not authenticated — no gating
   if (!rbacEnabled || !isAuthenticated) return <>{children}</>;

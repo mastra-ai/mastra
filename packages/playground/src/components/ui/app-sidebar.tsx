@@ -7,7 +7,7 @@ import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
+import { getPermissionForRoute, hasRoutePermission, useRoutePermissions } from '@/domains/auth/route-permissions';
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
@@ -52,6 +52,7 @@ export function AppSidebar() {
     isAuthenticated: isPermissionsAuthenticated,
     isLoading: isPermissionsLoading,
   } = usePermissions();
+  const { isLoading: isPatternsLoading } = useRoutePermissions();
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -61,7 +62,7 @@ export function AppSidebar() {
   const filterItem = (item: NavItem) => {
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
-    if (rbacEnabled && isPermissionsAuthenticated && isPermissionsLoading) return true;
+    if (rbacEnabled && isPermissionsAuthenticated && (isPermissionsLoading || isPatternsLoading)) return true;
     const requiredPermission = getPermissionForRoute(item.url);
     if (!hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission)) {
       return false;

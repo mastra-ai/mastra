@@ -91,16 +91,6 @@
         "default": "./dist/auth/ee/index.cjs"
       }
     },
-    "./auth/ee/permissions": {
-      "import": {
-        "types": "./dist/auth/ee/permissions.d.ts",
-        "default": "./dist/auth/ee/permissions.js"
-      },
-      "require": {
-        "types": "./dist/auth/ee/permissions.d.ts",
-        "default": "./dist/auth/ee/permissions.cjs"
-      }
-    },
     "./agent-builder/ee": {
       "import": {
         "types": "./dist/agent-builder/ee/index.d.ts",
@@ -109,16 +99,6 @@
       "require": {
         "types": "./dist/agent-builder/ee/index.d.ts",
         "default": "./dist/agent-builder/ee/index.cjs"
-      }
-    },
-    "./agent-builder/ee/allowlist": {
-      "import": {
-        "types": "./dist/agent-builder/ee/allowlist.d.ts",
-        "default": "./dist/agent-builder/ee/allowlist.js"
-      },
-      "require": {
-        "types": "./dist/agent-builder/ee/allowlist.d.ts",
-        "default": "./dist/agent-builder/ee/allowlist.cjs"
       }
     },
     "./background-tasks": {

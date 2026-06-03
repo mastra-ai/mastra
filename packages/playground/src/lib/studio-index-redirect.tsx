@@ -1,6 +1,6 @@
 import { Navigate } from 'react-router';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { getFirstAccessibleRoute } from '@/domains/auth/route-permissions';
+import { getFirstAccessibleRoute, useRoutePermissions } from '@/domains/auth/route-permissions';
 
 /**
  * Decides where to land when the user hits `/`.
@@ -19,8 +19,9 @@ export const StudioIndexRedirect = () => {
     isLoading: isPermissionsLoading,
     isAuthenticated,
   } = usePermissions();
+  const { isLoading: isPatternsLoading } = useRoutePermissions();
 
-  if (isPermissionsLoading) return null;
+  if (isPermissionsLoading || isPatternsLoading) return null;
 
   // If RBAC is disabled or not authenticated, go to /agents (default behavior)
   if (!rbacEnabled || !isAuthenticated) {
