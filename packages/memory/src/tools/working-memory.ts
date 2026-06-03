@@ -1,4 +1,3 @@
-import { SET_WORKING_MEMORY_TOOL_NAME, UPDATE_WORKING_MEMORY_TOOL_NAME } from '@mastra/core/memory';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
@@ -6,6 +5,11 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
+
+// Keep these in sync with @mastra/core/memory. @mastra/memory supports older
+// peer-compatible @mastra/core versions that may not export the newer names.
+const UPDATE_WORKING_MEMORY_TOOL_NAME = 'updateWorkingMemory';
+const SET_WORKING_MEMORY_TOOL_NAME = 'setWorkingMemory';
 
 /**
  * Deep merges two objects, with special handling for null values (delete) and arrays (replace).

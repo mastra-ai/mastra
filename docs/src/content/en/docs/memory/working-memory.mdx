@@ -441,7 +441,7 @@ What changes:
 
 You inherit the standard state-signal benefits: thread-scoped tracking metadata, `cacheKey` dedup so identical snapshots are only emitted once, and `contextWindow.hasSnapshot` re-injection when an older snapshot rolls out of the window.
 
-The default (`useStateSignals: false`) keeps the existing system-message behavior unchanged.
+The default (`useStateSignals: false`) keeps the existing system-message behavior unchanged. `useStateSignals` is not supported with template working memory `version: 'vnext'`.
 
 ## Examples
 
