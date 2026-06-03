@@ -259,6 +259,7 @@ export class Memory extends MastraMemory {
       },
       observationalMemory: config.options?.observationalMemory as ObservationalMemoryOptions | boolean | undefined,
     });
+    this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     this.threadConfig = mergedConfig;
 
     // Validate retrieval vector config at construction time
@@ -804,6 +805,7 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfigInternal;
   }): Promise<{ success: boolean; reason: string }> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
+    this.assertWorkingMemoryStateSignalsCompatibility(config);
 
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
@@ -1361,6 +1363,7 @@ ${workingMemory}`;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
+    this.assertWorkingMemoryStateSignalsCompatibility(config);
     if (!config.workingMemory?.enabled) {
       return null;
     }
@@ -1792,6 +1795,14 @@ Notes:
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
+  private assertWorkingMemoryStateSignalsCompatibility(config?: MemoryConfigInternal): void {
+    if (config?.workingMemory?.useStateSignals === true && this.isVNextWorkingMemoryConfig(config)) {
+      throw new Error(
+        "workingMemory.useStateSignals is not supported with workingMemory.version: 'vnext'. Use stable template working memory or disable useStateSignals.",
+      );
+    }
+  }
+
   private getObservationEmbeddingIndexName(dimensions?: number): string {
     const defaultDimensions = 384;
     const usedDimensions = dimensions ?? defaultDimensions;
@@ -2088,6 +2099,7 @@ Notes:
 
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
+    this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     const tools: Record<string, ToolAction<any, any, any>> = {};
 
     if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
@@ -2927,6 +2939,7 @@ Notes:
   ): Promise<InputProcessor | null> {
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
     const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
+    this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     if (!mergedConfig.workingMemory?.enabled) return null;
     if (!mergedConfig.workingMemory?.useStateSignals) return null;
 
