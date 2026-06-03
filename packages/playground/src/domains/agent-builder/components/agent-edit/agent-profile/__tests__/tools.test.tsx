@@ -686,6 +686,37 @@ describe('Tools — toolkit row connection management', () => {
     expect(queryByTestId('toolkit-connection-loading-composio-gmail')).toBeNull();
   });
 
+  it('renders connection-name badges under a connected tool card', async () => {
+    const connectedWithLabels: AgentTool = {
+      ...checkedIntegrationTool,
+      connectionLabels: ['work', 'personal'],
+    };
+
+    const { findByTestId, getByText } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[connectedWithLabels]} />
+      </PickerHarness>,
+    );
+
+    const badges = await findByTestId('tool-card-connections-integration-composio:GMAIL_FETCH_EMAILS');
+    expect(badges.className).toContain('flex-wrap');
+    expect(badges.className).toContain('gap-2');
+    expect(getByText('work')).toBeTruthy();
+    expect(getByText('personal')).toBeTruthy();
+  });
+
+  it('does not render the connection-badges container when a connected tool has no labels', async () => {
+    const { findByTestId, queryByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
+      </PickerHarness>,
+    );
+
+    // Card still renders (selectable), but no badge container without labels.
+    await findByTestId('tool-card-check-integration-composio:GMAIL_FETCH_EMAILS');
+    expect(queryByTestId('tool-card-connections-integration-composio:GMAIL_FETCH_EMAILS')).toBeNull();
+  });
+
   it('shows a manage cog (not a Connect button) on the toolkit row when a connection exists', async () => {
     sharedServer.use(
       http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>

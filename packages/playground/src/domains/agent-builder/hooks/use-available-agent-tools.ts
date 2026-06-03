@@ -51,7 +51,7 @@ export function useAvailableAgentTools({
   // `scopeToSelf: true` ensures admins viewing/editing another user's agent
   // only see their own connections in the Builder picker — never other
   // authors' rows.
-  const { hasConnection } = useAllConnections({ scopeToSelf: true });
+  const { hasConnection, getConnections } = useAllConnections({ scopeToSelf: true });
   const toolProvidersFormValue = useWatch<AgentBuilderEditFormValues>({
     name: 'toolProviders',
   }) as AgentBuilderEditFormValues['toolProviders'];
@@ -86,6 +86,9 @@ export function useAvailableAgentTools({
       providerId: item.providerId,
       toolkit: item.toolkit,
       hasConnection: hasConnection(item.providerId, item.toolkit),
+      connectionLabels: getConnections(item.providerId, item.toolkit)
+        .filter(connection => connection.status === 'active')
+        .map(connection => connection.label || connection.connectionId),
     }));
 
     return [...native, ...integration];
@@ -101,5 +104,6 @@ export function useAvailableAgentTools({
     integrationTools,
     toolProvidersFormValue,
     hasConnection,
+    getConnections,
   ]);
 }

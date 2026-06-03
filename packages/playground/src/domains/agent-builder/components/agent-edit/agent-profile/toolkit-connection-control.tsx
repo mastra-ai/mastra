@@ -1,6 +1,6 @@
 import { Button, Skeleton } from '@mastra/playground-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
@@ -196,20 +196,6 @@ export const ToolkitConnectionControl = ({
 
   return (
     <div className="flex items-center gap-1" data-testid={`toolkit-connection-${testIdSuffix}`}>
-      {multipleAllowed && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          tooltip="Add connection"
-          aria-label={`Add ${toolkit} connection`}
-          onClick={handleConnect}
-          disabled={disabled || authorize.isPending}
-          data-testid={`toolkit-connect-add-${testIdSuffix}`}
-        >
-          <Plus />
-        </Button>
-      )}
       <Button
         type="button"
         variant="ghost"

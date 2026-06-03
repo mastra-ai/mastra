@@ -15,6 +15,10 @@ export interface AgentTool {
   // `(providerId, toolkit)` pair. Only meaningful for `type === 'integration'`.
   // Unconnected integration rows cannot be selected in the picker.
   hasConnection?: boolean;
+  // Display names of the active connections for this tool's `(providerId,
+  // toolkit)` pair. Only meaningful for `type === 'integration'`; rendered as
+  // badges under the tool card so users can see which connection(s) it uses.
+  connectionLabels?: string[];
 }
 
 export interface AvailableToolsRecord {
