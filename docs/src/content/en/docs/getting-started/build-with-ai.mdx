@@ -29,6 +29,23 @@ In addition to documentation access, the [MCP Docs Server](/docs/build-with-ai/m
 
 Learn how to use the [MCP Docs Server](/docs/build-with-ai/mcp-docs-server).
 
+## Mastra CLI
+
+The [Mastra CLI](/reference/cli/mastra) gives your coding agent a direct line to your Mastra runtime. Agents can invoke agents, run workflows, execute tools, inspect memory, run evals, and query traces and logs.
+
+```bash npm2yarn
+npm install mastra@latest -g
+```
+
+For example, your coding agent can run an agent, then pull traces to inspect the results:
+
+```bash
+mastra api --url http://localhost:4111 agent run weather-agent '{"messages":"What is the weather in London?"}'
+mastra api --url http://localhost:4111 trace list
+```
+
+See the [CLI commands reference](/reference/cli/mastra) for the full list of available commands.
+
 ## Embedded package docs
 
 Mastra packages ship with embedded documentation in `dist/docs`. When you install a Mastra package, your AI agent can read these files directly from `node_modules` to understand the package's APIs and patterns.

@@ -11,6 +11,15 @@ const sidebars = {
     { type: 'doc', id: 'configuration', label: 'Configuration' },
     {
       type: 'category',
+      label: 'ACP',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'acp/acp-agent', label: 'AcpAgent' },
+        { type: 'doc', id: 'acp/create-acp-tool', label: 'createACPTool()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       collapsed: true,
       items: [

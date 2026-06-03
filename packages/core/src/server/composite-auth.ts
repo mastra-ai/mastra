@@ -1,4 +1,3 @@
-import type { HonoRequest } from 'hono';
 import type {
   ISSOProvider,
   ISessionProvider,
@@ -9,6 +8,7 @@ import type {
   SSOLoginConfig,
 } from '../auth';
 import { MastraAuthProvider } from './auth';
+import type { MastraAuthRequest } from './request-types';
 
 type PrimitiveAuthUser = string | number | boolean | bigint | symbol | null | undefined;
 
@@ -138,7 +138,7 @@ export class CompositeAuth
   // MastraAuthProvider Implementation
   // ============================================================================
 
-  async authenticateToken(token: string, request: HonoRequest): Promise<unknown | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<unknown | null> {
     for (const provider of this.providers) {
       try {
         const user = await provider.authenticateToken(token, request);
@@ -153,7 +153,7 @@ export class CompositeAuth
     return null;
   }
 
-  async authorizeUser(user: unknown, request: HonoRequest): Promise<boolean> {
+  async authorizeUser(user: unknown, request: MastraAuthRequest): Promise<boolean> {
     for (const provider of this.providers) {
       const authorized = await provider.authorizeUser(user, request);
       if (authorized) {
