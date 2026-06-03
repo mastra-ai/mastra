@@ -89,7 +89,7 @@ function applyGoogleSchemaCompat(schema: Record<string, unknown>, model?: ToolPr
   if (!layer.shouldApply()) return schema;
 
   return stripGeminiUnsupportedJsonSchemaKeywords(
-    layer.processToJSONSchema(schema, 'input') as Record<string, unknown>,
+    fixTypelessProperties(layer.processToJSONSchema(schema, 'input') as Record<string, unknown>),
   );
 }
 

@@ -1,6 +1,7 @@
 import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
+import { MODEL_TOKENS } from '../../../../../../../docs/src/plugins/remark-model-tokens/models';
 import { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools/tool';
 import { CoreToolBuilder } from '../../../../tools/tool-builder/builder';
@@ -493,6 +494,11 @@ describe('prepareToolsAndToolChoice', () => {
         toolChoice: undefined,
         activeTools: undefined,
         targetVersion: 'v2',
+        model: {
+          modelId: MODEL_TOKENS.__GATEWAY_GOOGLE_MODEL__,
+          provider: 'openrouter',
+          supportsStructuredOutputs: false,
+        },
       });
 
       expect(result.tools).toBeDefined();
@@ -582,7 +588,7 @@ describe('prepareToolsAndToolChoice', () => {
           requestContext: new RequestContext(),
           tracingContext: {},
           model: {
-            modelId: 'google/gemini-3.1-flash-lite',
+            modelId: MODEL_TOKENS.__GATEWAY_GOOGLE_MODEL__,
             provider: 'openrouter',
             specificationVersion: 'v2',
             supportsStructuredOutputs: false,
@@ -596,7 +602,7 @@ describe('prepareToolsAndToolChoice', () => {
         activeTools: undefined,
         targetVersion: 'v2',
         model: {
-          modelId: 'google/gemini-3.1-flash-lite',
+          modelId: MODEL_TOKENS.__GATEWAY_GOOGLE_MODEL__,
           provider: 'openrouter',
           supportsStructuredOutputs: false,
         },

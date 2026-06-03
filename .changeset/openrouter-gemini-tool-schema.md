@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Sanitize prepared tool schemas for Google/Gemini models, including OpenRouter-hosted Gemini models.
+Fixed OpenRouter Gemini supervisor failures by removing unsupported tool-schema fields from Gemini-compatible requests.
