@@ -233,7 +233,6 @@ export async function ensurePartmanHypertables(client: DbClient, schema: string)
   const partmanMajor = getPartmanMajor(await getPartmanVersion(client));
 
   for (const table of ALL_SIGNAL_TABLES) {
-    const partmanRow = formatPartmanParentTable(schema, table);
     const exists = await client.oneOrNone<{ exists: boolean }>(
       `SELECT EXISTS (
          SELECT 1 FROM partman.part_config
@@ -288,9 +287,9 @@ export async function ensurePartmanHypertables(client: DbClient, schema: string)
         const registered = await client.oneOrNone<{ exists: boolean }>(
           `SELECT EXISTS (
              SELECT 1 FROM partman.part_config
-             WHERE parent_table = $1
+             WHERE parent_table = format('%I.%I', $1::text, $2::text)
            ) AS "exists"`,
-          [partmanRow],
+          [schema, table],
         );
         if (registered?.exists) break;
         if (attempt === 2) throw error;
@@ -298,10 +297,6 @@ export async function ensurePartmanHypertables(client: DbClient, schema: string)
       }
     }
   }
-}
-
-function formatPartmanParentTable(schema: string, table: string): string {
-  return `${schema}.${table}`;
 }
 
 // ---------------------------------------------------------------------------

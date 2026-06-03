@@ -9,6 +9,7 @@ import { PoolAdapter } from '../../../client';
 import { PostgresStoreVNext } from '../../../index';
 import { connectionString, TEST_CONFIG } from '../../../test-utils';
 import { ALL_SIGNAL_TABLES, qualifiedTable, TABLE_DISCOVERY, TABLE_LOG_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { ensurePartmanHypertables } from './partitioning';
 import { decodeDeltaCursor } from './polling';
 import { ObservabilityStoragePostgresVNext } from './index';
 
@@ -1295,6 +1296,44 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await client.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
         await pool.end();
       }
+    });
+  });
+
+  describe('pg_partman — deadlock recovery', () => {
+    it('re-checks part_config with quoted parent_table formatting after a deadlock', async () => {
+      const recoveryChecks: Array<{ query: string; values?: QueryValues }> = [];
+      let deadlockThrown = false;
+      let recoveryChecked = false;
+      let createCalls = 0;
+
+      const client = {
+        oneOrNone: vi.fn(async (query: string, values?: QueryValues) => {
+          if (query.includes('extversion')) return { extversion: '5.0.0' };
+          if (!query.includes('partman.part_config')) return null;
+
+          if (deadlockThrown && !recoveryChecked) {
+            recoveryChecked = true;
+            recoveryChecks.push({ query, values });
+            return { exists: true };
+          }
+
+          return { exists: false };
+        }),
+        none: vi.fn(async () => {
+          createCalls += 1;
+          if (!deadlockThrown) {
+            deadlockThrown = true;
+            throw new Error('deadlock detected');
+          }
+        }),
+      } as unknown as DbClient;
+
+      await expect(ensurePartmanHypertables(client, 'Needs Quote')).resolves.toBeUndefined();
+
+      expect(createCalls).toBeGreaterThan(0);
+      expect(recoveryChecks).toHaveLength(1);
+      expect(recoveryChecks[0]!.query).toContain(`parent_table = format('%I.%I', $1::text, $2::text)`);
+      expect(recoveryChecks[0]!.values).toEqual(['Needs Quote', TABLE_SPAN_EVENTS]);
     });
   });
 });
