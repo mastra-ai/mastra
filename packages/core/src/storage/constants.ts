@@ -48,6 +48,9 @@ export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 // Tool provider connections
 export const TABLE_TOOL_PROVIDER_CONNECTIONS = 'mastra_tool_provider_connections';
 
+// Notifications
+export const TABLE_NOTIFICATIONS = 'mastra_notifications';
+
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -83,7 +86,8 @@ export type TABLE_NAMES =
   | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
   | typeof TABLE_CHANNEL_CONFIG
-  | typeof TABLE_TOOL_PROVIDER_CONNECTIONS;
+  | typeof TABLE_TOOL_PROVIDER_CONNECTIONS
+  | typeof TABLE_NOTIFICATIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -360,6 +364,40 @@ export const TOOL_PROVIDER_CONNECTIONS_SCHEMA: Record<string, StorageColumn> = {
   scope: { type: 'text', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const NOTIFICATIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false },
+  threadId: { type: 'text', nullable: false },
+  source: { type: 'text', nullable: false },
+  kind: { type: 'text', nullable: false },
+  priority: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  summary: { type: 'text', nullable: false },
+  payload: { type: 'jsonb', nullable: true },
+  resourceId: { type: 'text', nullable: true },
+  agentId: { type: 'text', nullable: true },
+  sourceId: { type: 'text', nullable: true },
+  dedupeKey: { type: 'text', nullable: true },
+  coalesceKey: { type: 'text', nullable: true },
+  coalescedCount: { type: 'integer', nullable: false },
+  attributes: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+  deliveredAt: { type: 'timestamp', nullable: true },
+  seenAt: { type: 'timestamp', nullable: true },
+  dismissedAt: { type: 'timestamp', nullable: true },
+  archivedAt: { type: 'timestamp', nullable: true },
+  discardedAt: { type: 'timestamp', nullable: true },
+  deliverAt: { type: 'timestamp', nullable: true },
+  summaryAt: { type: 'timestamp', nullable: true },
+  deliveryReason: { type: 'text', nullable: true },
+  deliveryAttempts: { type: 'integer', nullable: false },
+  lastDeliveryAttemptAt: { type: 'timestamp', nullable: true },
+  lastDeliveryError: { type: 'text', nullable: true },
+  deliveredSignalId: { type: 'text', nullable: true },
+  summarySignalId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
 };
 
 export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
@@ -661,6 +699,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_TOOL_PROVIDER_CONNECTIONS]: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
+  [TABLE_NOTIFICATIONS]: NOTIFICATIONS_SCHEMA,
 };
 
 /**
@@ -674,6 +713,7 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
     columns: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
     compositePrimaryKey: ['authorId', 'providerId', 'connectionId'],
   },
+  [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
 };
 
 /**

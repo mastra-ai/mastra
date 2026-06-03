@@ -113,6 +113,9 @@ The storage implementation handles collection creation and management automatica
 - `mastra_traces`: Stores telemetry and tracing data
 - `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
+- `mastra_notifications`: Stores notification inbox records and delivery metadata
+
+`MongoDBStore` exposes notification storage through `getStore('notifications')`.
 
 ### Initialization
 

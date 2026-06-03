@@ -11,11 +11,21 @@ const sidebars = {
     { type: 'doc', id: 'configuration', label: 'Configuration' },
     {
       type: 'category',
+      label: 'ACP',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'acp/acp-agent', label: 'AcpAgent' },
+        { type: 'doc', id: 'acp/create-acp-tool', label: 'createACPTool()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
+        { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -464,6 +474,19 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'PubSub',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'pubsub/caching-pubsub', label: 'CachingPubSub' },
+        { type: 'doc', id: 'pubsub/event-emitter', label: 'EventEmitterPubSub' },
+        { type: 'doc', id: 'pubsub/google-cloud-pubsub', label: 'GoogleCloudPubSub' },
+        { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
+        { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
+        { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'RAG',
       collapsed: true,
       items: [
@@ -679,7 +702,11 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'workspace/agentcore-runtime-sandbox', label: 'AgentCoreRuntimeSandbox' },
+        {
+          type: 'doc',
+          id: 'workspace/agentcore-runtime-sandbox',
+          label: 'AgentCoreRuntimeSandbox',
+        },
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
         { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
