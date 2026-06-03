@@ -888,6 +888,72 @@ describe('GithubSignals', () => {
     processor.stopAllPolling();
   });
 
+  it('updates the GitHub cursor without notifying when only githubUpdatedAt changes', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-timestamp-only',
+      resourceId: 'resource-timestamp-only',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 17447,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-06-03T03:51:10.000Z',
+                lastObservedContentHash: 'same-semantic-hash',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'unstable',
+                lastObservedCiState: 'pending',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(
+        async () =>
+          ({
+            title: '07 feat(mastracode): add GitHub signal subscriptions',
+            state: 'open',
+            githubUpdatedAt: '2026-06-03T04:02:44.000Z',
+            contentHash: 'same-semantic-hash',
+            ciState: 'pending',
+            mergeableState: 'unstable',
+            unresolvedReviewThreads: 0,
+            reviewStateHash: 'reviews-0',
+            checks: [{ name: 'changed-tests', status: 'queued', conclusion: undefined }],
+          }) satisfies GithubPullRequestSnapshot,
+      ),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription).toMatchObject({
+      lastObservedGithubUpdatedAt: '2026-06-03T04:02:44.000Z',
+      lastObservedContentHash: 'same-semantic-hash',
+      lastObservedMergeableState: 'unstable',
+      lastObservedCiState: 'pending',
+      lastObservedReviewStateHash: 'reviews-0',
+    });
+    expect(subscription.lastNotificationKind).toBeUndefined();
+  });
+
   it('sends GitHub notifications through the registered agent with polling target stream options', async () => {
     const thread: StorageThreadType = {
       id: 'thread-sender',

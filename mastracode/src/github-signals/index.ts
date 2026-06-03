@@ -1195,10 +1195,7 @@ export class GithubSignals implements Processor<'github-signals'> {
           isFirstObservation ||
           (syncResult.ok &&
             snapshot &&
-            ((previousGithubUpdatedAt &&
-              snapshot.githubUpdatedAt &&
-              previousGithubUpdatedAt !== snapshot.githubUpdatedAt) ||
-              (previousContentHash && snapshot.contentHash && previousContentHash !== snapshot.contentHash) ||
+            ((previousContentHash && snapshot.contentHash && previousContentHash !== snapshot.contentHash) ||
               (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
               (subscription.lastObservedMergeableState &&
                 snapshot.mergeableState &&
