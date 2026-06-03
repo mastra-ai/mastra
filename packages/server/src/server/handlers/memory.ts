@@ -270,10 +270,24 @@ function getStorageFromContext({ mastra }: Pick<MemoryContext, 'mastra'>): Mastr
 }
 
 function agentSupportsMemory(agent: Agent | null): boolean {
-  if (!agent) return true;
+  if (!agent) return true; // unresolved → storage fallback still applies
 
-  const candidate = agent as Agent & { supportsMemory?: () => boolean };
-  return typeof candidate.supportsMemory === 'function' ? candidate.supportsMemory() : true;
+  const candidate = agent as Agent & {
+    supportsMemory?: () => boolean;
+    hasOwnMemory?: () => boolean;
+  };
+
+  // Explicit opt-out via duck-typed supportsMemory() (kept as an escape hatch)
+  if (typeof candidate.supportsMemory === 'function' && !candidate.supportsMemory()) {
+    return false;
+  }
+
+  // A resolved agent with no own memory genuinely has memory disabled
+  if (typeof candidate.hasOwnMemory === 'function' && !candidate.hasOwnMemory()) {
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -548,13 +562,6 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
       }
 
       if (!agentSupportsMemory(agent)) {
-        return { result: false };
-      }
-
-      // A resolved agent with no memory genuinely has memory disabled — do not
-      // fall back to storage (that fallback only covers agents we couldn't resolve,
-      // e.g. stored agents that can't be hydrated, or requests with no agentId).
-      if (agentId && agent) {
         return { result: false };
       }
 
