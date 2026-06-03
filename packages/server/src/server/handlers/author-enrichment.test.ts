@@ -99,6 +99,13 @@ describe('prepareAuthorEnrichment', () => {
     expect(map).toBeNull();
   });
 
+  it('returns null when provider has getCurrentUser but no getUser', async () => {
+    const provider = { authenticateToken: vi.fn(), getCurrentUser: vi.fn() }; // no getUser
+    const mastra = makeMastra(provider);
+    const map = await prepareAuthorEnrichment(mastra, ctx, ['a']);
+    expect(map).toBeNull();
+  });
+
   it('returns null when auth is a config object (no authenticateToken)', async () => {
     const mastra = makeMastra({ public: [] }); // looks like MastraAuthConfig, not provider
     const map = await prepareAuthorEnrichment(mastra, ctx, ['a']);
