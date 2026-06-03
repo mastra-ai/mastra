@@ -152,5 +152,29 @@
     "@mastra/s3": "0.5.1",
     "@mastra/vercel": "0.2.0"
   },
-  "changesets": []
+  "changesets": [
+    "agent-delete-dependents-warning",
+    "blue-dryers-do",
+    "breezy-rooms-run",
+    "client-js-message-helpers",
+    "dirty-poems-tease",
+    "dull-papers-buy",
+    "fiery-monkeys-pick",
+    "funky-paws-repair",
+    "fuzzy-loops-fix",
+    "green-birds-knock",
+    "hip-pandas-wink",
+    "lemon-moose-leave",
+    "message-factory",
+    "notification-inbox-signals",
+    "plain-laws-go",
+    "playground-posthog-mastra-cloud",
+    "public-drinks-kick",
+    "react-message-helpers",
+    "shy-donuts-dig",
+    "state-processor-browser-signals",
+    "studio-auth-header-handoff",
+    "vast-spies-ring",
+    "working-memory-state-signals-opt-in"
+  ]
 }
