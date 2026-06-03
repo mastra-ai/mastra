@@ -2,7 +2,7 @@
 
 A research assistant that answers questions about libraries, APIs, and documentation by searching the live web and citing its sources. It uses a Mastra `web_search` tool routed through Mastra Gateway/OpenRouter web search — no extra search API key needed.
 
-The agent has observational memory (powered by a lightweight `gpt-5-nano` observer) so it learns what docs and topics you've asked about, building persistent context over time. All state is persisted to Turso (libSQL).
+The agent uses observational memory so it learns what docs and topics you've asked about, building persistent context over time. All state is persisted to Turso (libSQL).
 
 ## Demo
 

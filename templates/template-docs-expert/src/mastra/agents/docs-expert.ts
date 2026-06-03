@@ -49,9 +49,6 @@ A numbered list of every source you cited:
   memory: new Memory({
     options: {
       lastMessages: 20,
-      observationalMemory: {
-        model: 'mastra/openai/gpt-5-nano',
-      },
     },
   }),
 });
