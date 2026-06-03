@@ -1,0 +1,141 @@
+---
+title: "Durable agents | Agents"
+description: Learn how durable agents keep an agentic run alive across requests and connections, so clients can disconnect and reconnect without losing events.
+packages:
+  - "@mastra/core"
+---
+
+# Durable agents
+
+A durable agent wraps an existing [`Agent`](/reference/agents/agent) so a run can outlive a single request. The agentic loop streams its events over [PubSub](/docs/server/pubsub) and stores them in a cache, so a client can disconnect and reconnect to an in-progress run without missing anything.
+
+## When to use durable agents
+
+Use a durable agent when the caller's connection should not own the lifetime of the run. Common cases:
+
+- Long runs where a browser tab might close or a network might drop mid-stream.
+- Resuming a run after a [tool approval](/docs/agents/agent-approval) without re-running earlier steps.
+- Reconnecting from a different client or process to watch a run that is already in progress.
+
+For short request/response interactions, plain `agent.stream()` and `agent.generate()` are simpler.
+
+## How it works
+
+A durable agent runs the agentic loop as a Mastra workflow instead of a plain async function. Each step publishes events to a PubSub topic, and the result you stream from subscribes to that topic rather than reading the loop's output directly. Because events flow through PubSub and are cached, the run's progress is decoupled from any single subscriber.
+
+Two pieces make a run durable:
+
+- **PubSub** carries stream events. It defaults to an in-process `EventEmitterPubSub`, so durable agents work out of the box with no extra infrastructure.
+- **A cache** stores those events so they can be replayed. This is what makes a stream resumable: a reconnecting client replays what it missed before receiving live events.
+
+## Quickstart
+
+Create a durable agent with [`createDurableAgent`](/reference/agents/durable-agent#createdurableagentoptions) and register it on the Mastra instance like any other agent.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { createDurableAgent } from '@mastra/core/agent/durable'
+
+const agent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const durableAgent = createDurableAgent({ agent })
+
+export const mastra = new Mastra({
+  agents: { myAgent: durableAgent },
+})
+```
+
+Stream a response and read the result. Call `cleanup()` when you are done with the run to unsubscribe from PubSub.
+
+```typescript
+const { output, runId, cleanup } = await durableAgent.stream('Hello!')
+
+const text = await output.text
+
+cleanup()
+```
+
+## Resumable streams
+
+A durable agent stores stream events in a cache so a client can reconnect to a run that is already in progress. The cache is resolved in this order:
+
+- If you pass a `cache`, the agent uses it.
+- Otherwise it inherits the cache configured on the Mastra instance.
+- If neither is set, it falls back to an in-memory cache.
+
+For a run that must survive a process restart or be shared across instances, pass a persistent backend such as Redis. Set `cache` to `false` to opt out of caching, which makes streams non-resumable.
+
+```typescript title="src/mastra/index.ts"
+import { createDurableAgent } from '@mastra/core/agent/durable'
+
+const durableAgent = createDurableAgent({
+  agent,
+  cache: redisCache,
+})
+```
+
+To reconnect after a dropped connection, call `observe()` with the `runId`. It replays cached events from an optional `offset`, then delivers live events as the run continues.
+
+```typescript
+const { output, cleanup } = await durableAgent.observe(runId)
+
+for await (const chunk of output.fullStream) {
+  console.log(chunk)
+}
+
+cleanup()
+```
+
+:::warning
+The `cleanup()` returned by `observe()` destroys the run's cached events and registry entries. Only call it when you are done with the run entirely. If the run is suspended and you intend to resume it, let the auto-cleanup timer handle cleanup instead.
+:::
+
+## Resuming a suspended run
+
+When a run suspends — for example, to wait for a tool approval — resume it with `resume()`. Pass the original `runId` and the data the run was waiting on. The loop continues from where it left off rather than starting over.
+
+```typescript
+const { output, cleanup } = await durableAgent.resume(runId, {
+  approved: true,
+})
+
+await output.text
+cleanup()
+```
+
+After a stream finishes or errors, registry entries are cleaned up automatically after a grace period (30 seconds by default), which gives late observers a chance to attach. Auto-cleanup does not fire while a run is suspended, so a suspended run stays resumable until you handle it.
+
+## Choosing an execution variant
+
+All variants stream over PubSub and share the same `stream()`, `resume()`, and `observe()` API. They differ in how the underlying workflow runs.
+
+- **`createDurableAgent`** runs the workflow to completion before the call returns. Use it when the caller wants to drive the run and read its output directly.
+- **`createEventedAgent`** runs the workflow non-blocking, so the run progresses independently of the caller. The call still returns a result you can stream from. Use it for fire-and-forget execution on the built-in workflow engine.
+- **`createInngestAgent`** (from `@mastra/inngest`) runs the workflow on Inngest for distributed, cross-process durability. Use it when a run must survive process restarts across a cluster.
+
+```typescript title="src/mastra/index.ts"
+import { createEventedAgent } from '@mastra/core/agent/durable'
+
+const eventedAgent = createEventedAgent({ agent })
+
+export const mastra = new Mastra({
+  agents: { myAgent: eventedAgent },
+})
+```
+
+:::note
+Visit the [DurableAgent reference](/reference/agents/durable-agent) for the full set of options and method signatures.
+:::
+
+## Related
+
+- [DurableAgent reference](/reference/agents/durable-agent)
+- [Agent approval](/docs/agents/agent-approval)
+- [Background tasks](/docs/agents/background-tasks)
+- [PubSub](/docs/server/pubsub)
