@@ -6818,7 +6818,7 @@ export class Agent<
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
     // to the wrapper so its internal agent.stream() call doesn't recurse.
     if (mergedOptions.untilIdle) {
-      const { untilIdle, ...rest } = streamOptions ?? {};
+      const { untilIdle, ...rest } = mergedOptions ?? {};
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
       return runStreamUntilIdle<OUTPUT>(
         this,
@@ -7129,7 +7129,7 @@ export class Agent<
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
     // to the wrapper so its internal agent.stream() call doesn't recurse.
     if (mergedStreamOptions.untilIdle) {
-      const { untilIdle, ...rest } = streamOptions ?? {};
+      const { untilIdle, ...rest } = mergedStreamOptions ?? {};
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
       return runResumeStreamUntilIdle<OUTPUT>(
         this,
