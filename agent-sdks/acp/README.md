@@ -115,7 +115,7 @@ const codeAgentTool = createACPTool({
 
 ## Session and workspace behavior
 
-`createACPTool` and `AcpAgent` start the configured command on first use and create an ACP session. Sessions persist across calls by default. Set `persistSession: false` to stop the ACP process after each prompt.
+`createACPTool` and `AcpAgent` start the configured command on first use and create an ACP session. Sessions persist across calls for the same tool or agent instance by default. Set `persistSession: false` to isolate each prompt and stop the ACP process after it completes.
 
 ```typescript
 const codeAgent = new AcpAgent({
