@@ -15,12 +15,17 @@ export interface ScoresOverTimePoint {
   [scorer: string]: string | number;
 }
 
-export function useScoreMetrics() {
+export interface UseScoreMetricsParams {
+  dateRange?: { start?: Date; end?: Date };
+}
+
+export function useScoreMetrics(params?: UseScoreMetricsParams) {
   const client = useMastraClient();
   const requestContext = useMergedRequestContext();
+  const dateRange = params?.dateRange;
 
   return useQuery({
-    queryKey: ['score-metrics', requestContext],
+    queryKey: ['score-metrics', requestContext, dateRange?.start?.toISOString(), dateRange?.end?.toISOString()],
     queryFn: async () => {
       const scorersMap = await client.listScorers(requestContext);
       const scorerIds = Object.keys(scorersMap ?? {});
@@ -34,7 +39,7 @@ export function useScoreMetrics() {
       const allResults = await Promise.all(
         scorerIds.map(scorerId =>
           client.listScores({
-            filters: { scorerId },
+            filters: { scorerId, ...(dateRange ? { timestamp: dateRange } : {}) },
             pagination: { page: 0, perPage: 100 },
             orderBy: { field: 'timestamp', direction: 'DESC' },
           }),
