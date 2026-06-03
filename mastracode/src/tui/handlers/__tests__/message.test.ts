@@ -197,6 +197,36 @@ describe('handleMessageUpdate system reminders', () => {
     expect(rendered).toContain('CI failed on main');
   });
 
+  it('wraps long streamed full notifications within the terminal width', () => {
+    const originalColumns = process.stdout.columns;
+    process.stdout.columns = 80;
+
+    try {
+      handleMessageUpdate(
+        ctx,
+        createAssistantMessage([
+          {
+            type: 'notification',
+            message:
+              'mastra-ai/mastra#17449: feat(storage): add notification storage adapters was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
+            source: 'github',
+            kind: 'pull-request-merged',
+            priority: 'high',
+            status: 'delivered',
+          } as never,
+        ]),
+      );
+    } finally {
+      process.stdout.columns = originalColumns;
+    }
+
+    const component = state.chatContainer.children[0];
+    expect(component).toBeInstanceOf(NotificationComponent);
+    const renderedLines = stripAnsi((component as NotificationComponent).render(80).join('\n')).split('\n');
+    expect(renderedLines.some(line => line.includes('automatically unsubscribed'))).toBe(true);
+    expect(Math.max(...renderedLines.map(line => line.length))).toBeLessThanOrEqual(80);
+  });
+
   it('deduplicates repeated streamed reminders within the same assistant run', () => {
     const message = createAssistantMessage([
       {
