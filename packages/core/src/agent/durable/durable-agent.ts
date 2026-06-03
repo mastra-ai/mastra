@@ -773,8 +773,6 @@ export class DurableAgent<
   }
 
   /**
-   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
-   *
    * Stream until all background tasks complete and the agent is idle.
    * Mirrors the regular Agent's streamUntilIdle but adapted for durable execution.
    */
