@@ -36,6 +36,11 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 export { formatToolResult };
 
 const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
+const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+
+function shouldRenderReactiveSignal(tagName: string): boolean {
+  return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
+}
 
 type MessageWithAttributes = HarnessMessage & {
   attributes?: Record<string, string | number | boolean | null | undefined>;
@@ -373,6 +378,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   ) as { type: 'reactive_signal'; tagName: string; message?: string } | undefined;
 
   if (reactiveSignalPart) {
+    if (!shouldRenderReactiveSignal(reactiveSignalPart.tagName)) return;
     const component = new ReactiveSignalComponent({
       tagName: reactiveSignalPart.tagName,
       message: reactiveSignalPart.message,

@@ -121,6 +121,21 @@ describe('handleMessageUpdate system reminders', () => {
     expect(rendered).toContain('Build is still running');
   });
 
+  it('does not render streamed GitHub subscribe operation signals', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'reactive_signal',
+          tagName: 'github-subscribe-pr',
+          message: 'Subscribe to GitHub PR #17241',
+        } as never,
+      ]),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(0);
+  });
+
   it('keeps spacing when a streamed reminder is inserted before pending assistant text', () => {
     addUserMessage(state, {
       id: 'user-1',
