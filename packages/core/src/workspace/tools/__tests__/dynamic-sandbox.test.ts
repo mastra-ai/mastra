@@ -158,6 +158,29 @@ describe('dynamic sandbox tools', () => {
     expect(String(output)).toContain('done');
   });
 
+  it('should point to sandboxCacheKey when a fresh RequestContext cannot find a background process', async () => {
+    const workspace = new Workspace({
+      sandbox: () => new LocalSandbox({ workingDirectory: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const started = await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute(
+      { command: 'echo done', background: true },
+      { requestContext: new RequestContext() },
+    );
+    const pid = String(started).match(/PID: ([^)]+)/)?.[1];
+
+    expect(pid).toBeDefined();
+
+    const output = await tools[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT].execute(
+      { pid: pid!, wait: true },
+      { requestContext: new RequestContext() },
+    );
+
+    expect(String(output)).toContain(`No background process found with PID ${pid}`);
+    expect(String(output)).toContain('sandboxCacheKey');
+  });
+
   it('should throw a clear error when the resolved sandbox lacks process support', async () => {
     const sandbox = makeCommandOnlySandbox();
     const workspace = new Workspace({ sandbox: () => sandbox });

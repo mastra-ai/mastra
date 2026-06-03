@@ -2579,6 +2579,52 @@ Line 3 conclusion`;
       expect(other).not.toBe(first);
     });
 
+    it('should retry sandbox resolver after a failure for the same RequestContext', async () => {
+      let resolverCalls = 0;
+      const workspace = new Workspace({
+        sandbox: () => {
+          resolverCalls++;
+          if (resolverCalls === 1) {
+            throw new Error('temporary sandbox failure');
+          }
+          return new LocalSandbox({ workingDirectory: tempDir });
+        },
+      });
+      const requestContext = new RequestContext();
+
+      await expect(workspace.resolveSandbox({ requestContext })).rejects.toThrow('temporary sandbox failure');
+      const resolved = await workspace.resolveSandbox({ requestContext });
+
+      expect(resolverCalls).toBe(2);
+      expect(resolved).toBeDefined();
+      expect(resolved!.provider).toBe('local');
+    });
+
+    it('should retry sandbox resolver after a failure for the same sandboxCacheKey', async () => {
+      let resolverCalls = 0;
+      const workspace = new Workspace({
+        sandbox: () => {
+          resolverCalls++;
+          if (resolverCalls === 1) {
+            return Promise.reject(new Error('temporary keyed sandbox failure'));
+          }
+          return new LocalSandbox({ workingDirectory: tempDir });
+        },
+        sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string | undefined,
+      });
+
+      await expect(
+        workspace.resolveSandbox({ requestContext: new RequestContext([['thread-id', 't1']]) }),
+      ).rejects.toThrow('temporary keyed sandbox failure');
+      const resolved = await workspace.resolveSandbox({
+        requestContext: new RequestContext([['thread-id', 't1']]),
+      });
+
+      expect(resolverCalls).toBe(2);
+      expect(resolved).toBeDefined();
+      expect(resolved!.provider).toBe('local');
+    });
+
     it('should clear cached sandboxes by sandboxCacheKey', async () => {
       let resolverCalls = 0;
       const workspace = new Workspace({

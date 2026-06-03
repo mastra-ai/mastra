@@ -822,6 +822,20 @@ export class Workspace<
   }
 
   /**
+   * Returns true when the sandbox is resolved dynamically per request.
+   */
+  hasSandboxResolver(): boolean {
+    return this._sandboxResolver !== undefined;
+  }
+
+  /**
+   * Returns true when resolver-backed sandboxes are cached by a stable key.
+   */
+  hasSandboxCacheKey(): boolean {
+    return this._sandboxCacheKey !== undefined;
+  }
+
+  /**
    * Resolve the sandbox for a given request context. Calls the resolver function
    * if configured, otherwise returns the static sandbox (or undefined). Results
    * are memoized by `sandboxCacheKey` when set, else per RequestContext instance.
@@ -833,22 +847,35 @@ export class Workspace<
     if (cacheKey != null) {
       let keyed = this._sandboxKeyCache.get(cacheKey);
       if (!keyed) {
-        keyed = Promise.resolve(this._sandboxResolver({ requestContext }));
+        keyed = Promise.resolve().then(() => this._sandboxResolver!({ requestContext }));
         this._sandboxKeyCache.set(cacheKey, keyed);
+        keyed.catch(() => {
+          if (this._sandboxKeyCache.get(cacheKey) === keyed) {
+            this._sandboxKeyCache.delete(cacheKey);
+          }
+        });
       }
       return keyed;
     }
 
     let pending = this._sandboxRequestCache.get(requestContext);
     if (!pending) {
-      pending = Promise.resolve(this._sandboxResolver({ requestContext }));
+      pending = Promise.resolve().then(() => this._sandboxResolver!({ requestContext }));
       this._sandboxRequestCache.set(requestContext, pending);
+      pending.catch(() => {
+        if (this._sandboxRequestCache.get(requestContext) === pending) {
+          this._sandboxRequestCache.delete(requestContext);
+        }
+      });
     }
     return pending;
   }
 
   /**
    * Clear cached resolver-backed sandboxes stored by `sandboxCacheKey`.
+   *
+   * This only clears the keyed cache. Per-RequestContext WeakMap entries are
+   * garbage-collection managed and cannot be cleared by this method.
    *
    * The workspace does not own resolver-returned sandboxes, so this only drops
    * references from the workspace cache. Callers remain responsible for

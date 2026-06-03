@@ -42,4 +42,6 @@ const workspace = new Workspace({
 });
 ```
 
-Use `workspace.clearSandboxCache(cacheKey)` when a cached sandbox is no longer needed. This drops the workspace cache entry without destroying the resolver-owned sandbox.
+Failed sandbox resolver calls are removed from the cache so later calls can retry. Use `workspace.clearSandboxCache(cacheKey)` to drop a keyed sandbox reference when your own lifecycle code has destroyed or replaced that sandbox.
+
+When background process tools cannot find a PID on a dynamic sandbox without `sandboxCacheKey`, the tool output now points to `sandboxCacheKey` so callers can fix continuity across follow-up requests.

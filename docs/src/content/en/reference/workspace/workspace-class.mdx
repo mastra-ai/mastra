@@ -569,6 +569,8 @@ const sandbox = await workspace.resolveSandbox({ requestContext: ctx })
 
 Clear resolver-backed sandboxes cached by `sandboxCacheKey`. Pass a cache key to clear one entry, or omit it to clear all keyed sandbox entries.
 
+This method does not clear the per-`RequestContext` weak cache. Those entries are garbage-collection managed.
+
 The workspace does not own resolver-returned sandboxes. This method only drops workspace references. Destroy the sandbox in your own lifecycle code.
 
 ```typescript
