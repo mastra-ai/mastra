@@ -51,17 +51,42 @@ function truncateInput(value: unknown, max: number): string {
 
 export interface DatasetReviewProps {
   datasetId: string;
+  /** When set, scopes the review (and completed) lists to items produced by this experiment. */
+  experimentId?: string;
+  /**
+   * Optional request from the parent to auto-feature this item. Whenever this prop changes
+   * to a non-null value, the matching review row is selected. Internal interactions still
+   * own the featured state afterwards; pass a fresh value on each request (e.g. clear it
+   * to `null` when navigating away so a re-open of the same id retriggers selection).
+   */
+  featuredItemId?: string | null;
 }
 
-export function DatasetReview({ datasetId }: DatasetReviewProps) {
+export function DatasetReview({ datasetId, experimentId, featuredItemId: featuredItemIdRequest }: DatasetReviewProps) {
   const client = useMastraClient();
   const { data: dataset } = useDataset(datasetId);
-  const { data: reviewItems, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
-  const { data: completedItems, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
+  const { data: reviewItemsRaw, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
+  const { data: completedItemsRaw, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
+  const reviewItems = useMemo(
+    () => (experimentId ? (reviewItemsRaw ?? []).filter(i => i.experimentId === experimentId) : reviewItemsRaw),
+    [reviewItemsRaw, experimentId],
+  );
+  const completedItems = useMemo(
+    () => (experimentId ? (completedItemsRaw ?? []).filter(i => i.experimentId === experimentId) : completedItemsRaw),
+    [completedItemsRaw, experimentId],
+  );
   const { updateExperimentResult } = useDatasetMutations();
 
   // Local state
-  const [featuredItemId, setFeaturedItemId] = useState<string | null>(null);
+  const [featuredItemId, setFeaturedItemId] = useState<string | null>(featuredItemIdRequest ?? null);
+
+  // Respond to external "feature this item" requests from the parent (e.g. clicking
+  // a "Review" button on an experiment result). The parent passes the same id again
+  // by clearing to null in between so a repeat request still re-fires this effect.
+  useEffect(() => {
+    if (featuredItemIdRequest !== undefined) setFeaturedItemId(featuredItemIdRequest);
+  }, [featuredItemIdRequest]);
+
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [showCompleted, setShowCompleted] = useState(false);
@@ -83,7 +108,14 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   const [localItems, setLocalItems] = useState<ReviewItem[] | null>(null);
   const items = useMemo(() => localItems ?? reviewItems ?? [], [localItems, reviewItems]);
 
-  // Sync server data to local on initial load
+  // Reset the local cache when the scope changes (different experiment or dataset)
+  // so it re-hydrates from the new queue below, instead of keeping the previous
+  // experiment's rows and running mutations against the wrong results.
+  useEffect(() => {
+    setLocalItems(null);
+  }, [datasetId, experimentId]);
+
+  // Sync server data to local on initial load (and after a scope reset above)
   useEffect(() => {
     if (reviewItems && localItems === null) {
       setLocalItems(reviewItems);

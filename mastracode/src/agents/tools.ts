@@ -1,16 +1,63 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { HarnessRequestContext } from '@mastra/core/harness';
+import { createNotificationInboxTool, NotificationsStorage } from '@mastra/core/notifications';
+import type {
+  CreateNotificationInput,
+  ListDueNotificationsInput,
+  ListNotificationsInput,
+  UpdateNotificationInput,
+} from '@mastra/core/notifications';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
 import type { MastraCodeComposedState } from '../schema';
+import { MC_TOOLS } from '../tool-names.js';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
 /** Minimal shape for tools passed to createDynamicTools. */
 type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
+
+class LazyNotificationsStorage extends NotificationsStorage {
+  constructor(private readonly storage: MastraCompositeStore) {
+    super();
+  }
+
+  private async getNotificationsStorage(): Promise<NotificationsStorage> {
+    const notifications = await this.storage.getStore('notifications');
+    if (!notifications) {
+      throw new Error('notification_inbox requires a notifications storage domain');
+    }
+    return notifications;
+  }
+
+  async createNotification(input: CreateNotificationInput) {
+    return (await this.getNotificationsStorage()).createNotification(input);
+  }
+
+  async listNotifications(input: ListNotificationsInput) {
+    return (await this.getNotificationsStorage()).listNotifications(input);
+  }
+
+  async listDueNotifications(input: ListDueNotificationsInput) {
+    return (await this.getNotificationsStorage()).listDueNotifications(input);
+  }
+
+  async getNotification(input: { threadId: string; id: string }) {
+    return (await this.getNotificationsStorage()).getNotification(input);
+  }
+
+  async updateNotification(input: UpdateNotificationInput) {
+    return (await this.getNotificationsStorage()).updateNotification(input);
+  }
+
+  async dangerouslyClearAll() {
+    return (await this.getNotificationsStorage()).dangerouslyClearAll();
+  }
+}
 
 function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookManager): ToolLike {
   if (!hookManager || typeof tool?.execute !== 'function') {
@@ -50,6 +97,7 @@ export function createDynamicTools(
   extraTools?: Record<string, ToolLike> | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike>),
   hookManager?: HookManager,
   disabledTools?: string[],
+  storage?: MastraCompositeStore,
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
@@ -65,6 +113,12 @@ export function createDynamicTools(
     const tools: Record<string, ToolLike> = {
       request_access: requestSandboxAccessTool,
     };
+
+    if (storage) {
+      tools[MC_TOOLS.NOTIFICATION_INBOX] = createNotificationInboxTool({
+        storage: new LazyNotificationsStorage(storage),
+      });
+    }
 
     if (hasTavilyKey()) {
       tools.web_search = createWebSearchTool();

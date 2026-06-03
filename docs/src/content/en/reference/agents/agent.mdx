@@ -155,7 +155,7 @@ The model receives this as:
 <user name="Devin" from="slack">Can we simplify the API surface?</user>
 ```
 
-The UI sees just the message contents but can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
+The UI sees the message contents and can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
 
 ### `sendMessage(message, options)`
 
@@ -278,6 +278,102 @@ Sends a signal to an active run or memory thread.
 
 Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory.
 
+### `sendNotificationSignal(notification, options)`
+
+Creates or coalesces a notification inbox record, resolves the notification delivery policy, and sends a notification signal when the decision is immediate.
+
+```typescript
+const result = await agent.sendNotificationSignal(
+  {
+    source: 'github',
+    kind: 'ci-status',
+    priority: 'high',
+    summary: 'CI failed on main: 3 tests failed.',
+    dedupeKey: 'github:acme/app:main:ci',
+  },
+  {
+    resourceId: 'user-123',
+    threadId: 'thread-abc',
+  },
+)
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'notification.source',
+    type: 'string',
+    description: 'External system that produced the notification, such as `github`, `slack`, or `email`.',
+  },
+  {
+    name: 'notification.kind',
+    type: 'string',
+    description: 'Notification kind within the source, such as `ci-status`, `mention`, or `direct-message`.',
+  },
+  {
+    name: 'notification.summary',
+    type: 'string',
+    description: 'LLM-facing summary used as the notification signal contents.',
+  },
+  {
+    name: 'notification.priority',
+    type: "'low' | 'medium' | 'high' | 'urgent'",
+    isOptional: true,
+    description: 'Priority used by the notification delivery policy. Defaults to `medium`.',
+  },
+  {
+    name: 'notification.payload',
+    type: 'unknown',
+    isOptional: true,
+    description: 'Structured payload stored on the inbox record for tools or application code.',
+  },
+  {
+    name: 'notification.dedupeKey',
+    type: 'string',
+    isOptional: true,
+    description: 'Key used to coalesce duplicate pending notifications from the same source and thread.',
+  },
+  {
+    name: 'notification.coalesceKey',
+    type: 'string',
+    isOptional: true,
+    description: 'Key used to combine related pending notifications from the same source and thread.',
+  },
+  {
+    name: 'notification.attributes',
+    type: 'Record<string, JSONValue>',
+    isOptional: true,
+    description: 'Extra attributes copied onto the emitted notification signal.',
+  },
+  {
+    name: 'notification.metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Application metadata stored on the inbox record.',
+  },
+  {
+    name: 'options.resourceId',
+    type: 'string',
+    description: 'Resource ID for the notification inbox and target memory thread.',
+  },
+  {
+    name: 'options.threadId',
+    type: 'string',
+    description: 'Thread ID for the notification inbox and target memory thread.',
+  },
+  {
+    name: 'options.ifIdle.streamOptions',
+    type: 'AgentExecutionOptions',
+    isOptional: true,
+    description: 'Options for the stream that starts when an immediate notification wakes an idle thread.',
+  },
+]}
+/>
+
+Returns `{ accepted: true, record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void> }`. `record` is the stored inbox record. `decision` is the delivery-policy result. `signal` and `runId` are present when ingress emits a signal immediately, including the immediate summary emitted for active high-priority notifications. `persisted` is present when the emitted signal is persisted without waking an idle thread.
+
+Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle; when the thread is active, Mastra emits a summary immediately and keeps `deliverAt` for later full delivery when the thread is idle. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries in both active and idle threads; idle low-priority summaries reach subscribers without waking the model loop. For the full flow, visit [Signals](/docs/agents/signals#notification-signals).
+
 ### `subscribeToThread(options)`
 
 Subscribes to raw stream chunks for a memory thread. Use this before calling `sendMessage()`, `queueMessage()`, or `sendSignal()` when you need to render stream output, observe signal echoes, or abort the active run.
@@ -386,6 +482,13 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     isOptional: true,
     description:
       'Shared policy for transforming tool payloads before display streams or user-visible transcript messages receive them. Use per-tool `transform` on `createTool()` for tool-local rules.',
+  },
+  {
+    name: 'notifications',
+    type: '{ deliveryPolicy?: NotificationDeliveryPolicyConfig }',
+    isOptional: true,
+    description:
+      'Notification delivery configuration for `sendNotificationSignal()`. `deliveryPolicy` can define `decide`, `sources`, `priorities`, or `default` rules that return `deliver`, `queue`, `defer`, `summarize`, `persist`, or `discard` decisions.',
   },
   {
     name: 'workflows',

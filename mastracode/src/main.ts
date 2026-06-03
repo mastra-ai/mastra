@@ -102,6 +102,7 @@ async function tuiMain(pipedInput?: string | null) {
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    githubSignals: result.githubSignals,
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
   tui.run().catch(error => {
@@ -124,6 +125,7 @@ const asyncCleanup = async () => {
   const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([
     mcpManager?.disconnect(),
+    harness?.getMastra()?.stopWorkers(),
     harness?.stopHeartbeats(),
     closeSignalsPubSub?.(),
     analytics?.shutdown(),
