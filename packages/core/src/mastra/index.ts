@@ -427,7 +427,7 @@ export interface Config<
   scheduler?: WorkflowSchedulerConfig;
 
   /**
-   * Notification runtime configuration.
+   * Notification runtime configuration. Notification dispatch is scheduled automatically by default.
    */
   notifications?: {
     dispatch?: NotificationDispatchConfig;
@@ -1140,7 +1140,7 @@ export class Mastra<
       });
     }
 
-    if (this.#notificationDispatchConfig?.enabled) {
+    if (this.#notificationDispatchConfig?.enabled !== false) {
       const workflow = createNotificationDispatchWorkflow(this.#notificationDispatchConfig);
       this.addWorkflow(workflow, workflow.id);
     }

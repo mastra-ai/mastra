@@ -15,8 +15,7 @@ import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
-import { dispatchDueNotifications as dispatchStoredNotifications } from '../notifications';
-import type { DispatchDueNotificationsResult, SendNotificationSignalInput } from '../notifications';
+import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
@@ -82,9 +81,6 @@ type HarnessSendNotificationSignalOptions = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
 };
-
-const NOTIFICATION_DISPATCH_HEARTBEAT_ID = 'notification-dispatch';
-const NOTIFICATION_DISPATCH_INTERVAL_MS = 60_000;
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
@@ -1828,20 +1824,6 @@ export class Harness<TState = {}> {
     }
   }
 
-  async dispatchDueNotifications(): Promise<DispatchDueNotificationsResult | undefined> {
-    const mastra = this.#internalMastra;
-    if (!mastra) return undefined;
-
-    const notifications = await mastra.getStorage()?.getStore('notifications');
-    if (!notifications) return undefined;
-
-    return dispatchStoredNotifications({ mastra, storage: notifications });
-  }
-
-  private dispatchDueNotificationsAfterTurn(): void {
-    void this.dispatchDueNotifications().catch(() => undefined);
-  }
-
   private isActiveAgentThreadSubscription(subscription: AgentThreadSubscription<any>): boolean {
     return this.agentThreadSubscription === subscription;
   }
@@ -1861,10 +1843,7 @@ export class Harness<TState = {}> {
     this.currentTraceId = null;
     this.abortController = null;
     this.abortRequested = false;
-    const drainedFollowUp = await this.drainFollowUpQueue();
-    if (!drainedFollowUp) {
-      this.dispatchDueNotificationsAfterTurn();
-    }
+    await this.drainFollowUpQueue();
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
@@ -4208,16 +4187,6 @@ export class Harness<TState = {}> {
 
   private startHeartbeats(): void {
     const handlers = [...(this.config.heartbeatHandlers ?? [])];
-    if (this.#internalMastra && !handlers.some(handler => handler.id === NOTIFICATION_DISPATCH_HEARTBEAT_ID)) {
-      handlers.push({
-        id: NOTIFICATION_DISPATCH_HEARTBEAT_ID,
-        intervalMs: NOTIFICATION_DISPATCH_INTERVAL_MS,
-        immediate: false,
-        handler: async () => {
-          await this.dispatchDueNotifications();
-        },
-      });
-    }
     if (!handlers.length) return;
 
     for (const hb of handlers) {

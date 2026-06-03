@@ -6,6 +6,7 @@ export const NOTIFICATION_DISPATCH_WORKFLOW_ID = '__mastra_notification_dispatch
 export const NOTIFICATION_DISPATCH_SCHEDULE_ID = 'dispatch';
 
 export type NotificationDispatchConfig = {
+  /** Defaults to true. Set false to opt out of automatic scheduled dispatch. */
   enabled?: boolean;
   cron?: string;
   batchSize?: number;

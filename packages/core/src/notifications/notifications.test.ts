@@ -507,7 +507,7 @@ describe('notification inbox', () => {
     });
   });
 
-  it('registers notification dispatch workflow when dispatch config is enabled', async () => {
+  it('registers notification dispatch workflow by default', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({
       id: 'notification-workflow-registration-storage',
@@ -516,12 +516,59 @@ describe('notification inbox', () => {
     const mastra = new Mastra({
       storage,
       logger: false,
-      notifications: { dispatch: { enabled: true, cron: '*/5 * * * *', batchSize: 25 } },
     });
 
     try {
       const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
       expect(workflow.id).toBe('__mastra_notification_dispatcher');
+      expect(workflow.getScheduleConfigs()).toMatchObject([
+        {
+          id: 'dispatch',
+          cron: '*/1 * * * *',
+          inputData: { limit: 100 },
+          metadata: { internal: true, feature: 'notifications' },
+        },
+      ]);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('allows notification dispatch workflow registration to be disabled', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({
+      id: 'notification-workflow-disabled-storage',
+      domains: { notifications },
+    });
+    const mastra = new Mastra({
+      storage,
+      logger: false,
+      notifications: { dispatch: { enabled: false } },
+    });
+
+    try {
+      expect(() => (mastra as any).getWorkflow('__mastra_notification_dispatcher')).toThrow(
+        'Workflow with ID __mastra_notification_dispatcher not found',
+      );
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('uses notification dispatch workflow config when provided', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({
+      id: 'notification-workflow-config-storage',
+      domains: { notifications },
+    });
+    const mastra = new Mastra({
+      storage,
+      logger: false,
+      notifications: { dispatch: { cron: '*/5 * * * *', batchSize: 25 } },
+    });
+
+    try {
+      const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
       expect(workflow.getScheduleConfigs()).toMatchObject([
         {
           id: 'dispatch',
