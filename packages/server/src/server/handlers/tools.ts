@@ -121,8 +121,13 @@ export const LIST_TOOLS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
-      const allTools =
-        registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : mastra.listTools() || {};
+      // Merge tools from both sources: mastra.listTools() includes dynamically created tools (e.g., MCP tools),
+      // while registeredTools includes tools discovered by the CLI bundler.
+      // registeredTools is spread last so bundler-discovered tools take precedence on key conflicts.
+      const allTools = {
+        ...mastra.listTools(),
+        ...(registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : {}),
+      };
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
