@@ -5,6 +5,7 @@ import type { AccumulatorPart, MastraDBMessageMetadata } from '../../lib/mastra-
 import type {
   DataPart,
   DynamicToolPart,
+  MessageFactoryPart,
   MessageRenderers,
   MessageRoleRendererProps,
   MessageRoleRenderers,
@@ -24,7 +25,7 @@ export interface MessageFactoryProps extends MessageRenderers {
 }
 
 /** A part as it actually appears at runtime, including boundary-cast tool parts. */
-type RuntimePart = AccumulatorPart | DynamicToolPart;
+type RuntimePart = MessageFactoryPart;
 
 const isDynamicToolPart = (part: RuntimePart): part is DynamicToolPart =>
   // `tool-invocation` is the v4 typed discriminant and must NOT be treated as a

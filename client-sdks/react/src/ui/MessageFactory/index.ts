@@ -9,6 +9,7 @@ export type {
   ErrorRendererProps,
   TaskRendererProps,
   DynamicToolPart,
+  MessageFactoryPart,
   DataPart,
   PartByType,
   TextPart,

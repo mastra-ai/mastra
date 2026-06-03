@@ -26,4 +26,6 @@ The factory only surfaces metadata to the slots and never filters it (for exampl
 
 `MastraDBMessageMetadata.isTaskCompleteResult` is now typed as the `{ passed?, suppressFeedback? }` completion-verdict shape (matching `completionResult`) instead of `boolean`, so the `Task` slot resolves verdicts from either field without a cast.
 
+Also exports a new `MessageFactoryPart` type — the exact union of part shapes MessageFactory can dispatch (the typed accumulator parts plus the runtime-only `dynamic-tool` / `tool-${string}` parts) — so consumers can type part arrays passed to MessageFactory precisely instead of using `unknown[]`.
+
 Existing behavior is unchanged when the `status` prop is omitted.

@@ -56,6 +56,15 @@ export type DynamicToolPart = {
 };
 
 /**
+ * Every part shape `MessageFactory` can dispatch at runtime: the typed
+ * accumulator union plus the boundary-cast `dynamic-tool` / `tool-${string}`
+ * parts. This is the single source of truth for the factory's internal
+ * `RuntimePart` and the precise union consumers (e.g. Storybook) should type
+ * part arrays against instead of `unknown[]`.
+ */
+export type MessageFactoryPart = AccumulatorPart | DynamicToolPart;
+
+/**
  * Optional, per-part-type render functions. Each renderer receives the exact
  * narrowed part shape for its discriminant, so destructuring is fully
  * type-checked and only the renderer matching a part's `type` is ever invoked.
