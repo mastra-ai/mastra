@@ -165,8 +165,9 @@ function buildMarkdownDelta(args: {
   const prior =
     pickStringValue(readSignalValue(latestDelta)) ??
     pickStringValue(readSignalValue(lastSnapshot)) ??
-    (typeof lastSnapshot?.contents === 'string' ? lastSnapshot.contents : undefined) ??
-    '';
+    (typeof lastSnapshot?.contents === 'string' ? lastSnapshot.contents : undefined);
+  ('');
+  if (!prior) return;
 
   const patch = renderHunksOnly(prior, nextContents);
 
