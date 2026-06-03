@@ -262,6 +262,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'guide/notification-signal-provider',
+          label: 'Signals: Notification Provider',
+        },
+        {
+          type: 'doc',
           id: 'guide/publishing-mcp-server',
           label: 'Publishing an MCP Server',
         },
