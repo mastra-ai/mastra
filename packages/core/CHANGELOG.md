@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.40.0-alpha.0
+
+### Minor Changes
+
+- Added support for Gateway embedding routing with `mastra/provider/model` IDs: ([#17469](https://github.com/mastra-ai/mastra/pull/17469))
+
+  ```ts
+  const embedder = new ModelRouterEmbeddingModel('mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__');
+  ```
+
 ## 1.39.0
 
 ### Minor Changes
