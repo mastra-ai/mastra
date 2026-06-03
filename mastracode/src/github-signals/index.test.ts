@@ -1421,6 +1421,21 @@ describe('GithubSignals', () => {
       expect.objectContaining({ kind: 'pull-request-conflict', priority: 'high' }),
       expect.anything(),
     );
+    const dirtySuppressesCiPending = await runPoll(
+      createThreadWithCursor({ lastObservedCiState: 'success', lastObservedMergeableState: 'dirty' }),
+      {
+        title: 'PR',
+        state: 'open',
+        contentHash: 'dirty-ci-pending',
+        ciState: 'pending',
+        mergeableState: 'dirty',
+        checks: [
+          { name: 'PR Triage', status: 'queued', conclusion: undefined },
+          { name: 'summarize', status: 'queued', conclusion: undefined },
+        ],
+      },
+    );
+    expect(dirtySuppressesCiPending).not.toHaveBeenCalled();
     const reviewActivity = await runPoll(createThreadWithCursor({ lastObservedReviewStateHash: 'reviews-1' }), {
       title: 'PR',
       state: 'open',

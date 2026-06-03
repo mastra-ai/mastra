@@ -514,6 +514,7 @@ function classifyGithubActivityNotification(input: {
       summary: `${pr} merge conflicts were resolved`,
     };
   }
+  if (input.snapshot.mergeableState === 'dirty') return undefined;
   if (
     input.snapshot.ciState === 'success' &&
     input.subscription.lastObservedCiState &&
