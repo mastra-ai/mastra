@@ -1,13 +1,14 @@
 import type { MastraDBMessage, AIV5Type } from '@mastra/core/agent/message-list';
 import type { ReactNode } from 'react';
 import { memo } from 'react';
-import type { AccumulatorPart } from '../../lib/mastra-db';
+import type { AccumulatorPart, MastraDBMessageMetadata } from '../../lib/mastra-db';
 import type {
   DataPart,
   DynamicToolPart,
   MessageRenderers,
   MessageRoleRendererProps,
   MessageRoleRenderers,
+  MessageStatusRenderers,
   PartByType,
 } from './types';
 
@@ -16,6 +17,8 @@ export interface MessageFactoryProps extends MessageRenderers {
   message: MastraDBMessage;
   /** Optional wrappers keyed off `message.role`. */
   roles?: MessageRoleRenderers;
+  /** Optional message-level slots dispatched off `message.content.metadata`. */
+  status?: MessageStatusRenderers;
   /** Rendered for any part that has no matching renderer. Defaults to `null`. */
   fallback?: (part: AccumulatorPart | DynamicToolPart) => ReactNode;
 }
@@ -137,6 +140,31 @@ const PartRenderer = memo(({ part, renderers, fallback }: PartRendererProps) => 
 ));
 PartRenderer.displayName = 'PartRenderer';
 
+/**
+ * Concatenate the text of every `text` part into a single string. Used as the
+ * body forwarded to the replacement (`Tripwire`/`Warning`/`Error`) and adjacent
+ * (`Task`) status slots, so consumers don't re-derive it from parts.
+ */
+const joinText = (parts: RuntimePart[]): string =>
+  parts
+    .filter((part): part is PartByType<'text'> => part.type === 'text')
+    .map(part => part.text)
+    .join('');
+
+/**
+ * Normalize the two task-completion metadata fields into one
+ * `{ passed, suppressFeedback }` verdict, or `undefined` when neither is set.
+ * `completionResult` (network mode) takes precedence; `isTaskCompleteResult`
+ * (supervisor mode) is the fallback. Both share the same persisted shape.
+ */
+const resolveTaskVerdict = (
+  metadata: MastraDBMessageMetadata | undefined,
+): { passed: boolean; suppressFeedback?: boolean } | undefined => {
+  const verdict = metadata?.completionResult ?? metadata?.isTaskCompleteResult;
+  if (!verdict) return undefined;
+  return { passed: !!verdict.passed, suppressFeedback: verdict.suppressFeedback };
+};
+
 const roleRendererFor = (
   role: MastraDBMessage['role'],
   roles?: MessageRoleRenderers,
@@ -155,23 +183,49 @@ const roleRendererFor = (
   }
 };
 
-const MessageFactoryComponent = ({ message, roles, fallback, ...renderers }: MessageFactoryProps) => {
+const MessageFactoryComponent = ({ message, roles, status, fallback, ...renderers }: MessageFactoryProps) => {
   const parts = (message.content.parts ?? []) as RuntimePart[];
+  const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
 
-  const content = (
-    <>
-      {parts.map((part, index) => (
-        <PartRenderer key={getPartKey(part, index)} part={part} renderers={renderers} fallback={fallback} />
-      ))}
-    </>
-  );
+  // Replacement status slots: when the message-level status matches and a slot
+  // is provided, the slot renders *instead of* the parts walk. If the status
+  // matches but no slot is provided, fall through to the normal parts walk.
+  let content: ReactNode;
+  if (metadata?.status === 'tripwire' && status?.Tripwire) {
+    content = status.Tripwire({ text: joinText(parts), tripwire: metadata.tripwire, message });
+  } else if (metadata?.status === 'warning' && status?.Warning) {
+    content = status.Warning({ text: joinText(parts), message });
+  } else if (metadata?.status === 'error' && status?.Error) {
+    content = status.Error({ text: joinText(parts), message });
+  } else {
+    content = (
+      <>
+        {parts.map((part, index) => (
+          <PartRenderer key={getPartKey(part, index)} part={part} renderers={renderers} fallback={fallback} />
+        ))}
+      </>
+    );
+
+    // Adjacent `Task` slot: when a completion verdict exists it renders after
+    // the parts. The factory always invokes `Task` when a verdict is present —
+    // it does not filter on `suppressFeedback` (the consumer decides).
+    const verdict = resolveTaskVerdict(metadata);
+    if (verdict && status?.Task) {
+      content = (
+        <>
+          {content}
+          {status.Task({ ...verdict, text: joinText(parts), message })}
+        </>
+      );
+    }
+  }
 
   const RoleWrapper = roleRendererFor(message.role, roles);
   if (RoleWrapper) {
     return <>{RoleWrapper({ message, children: content })}</>;
   }
 
-  return content;
+  return <>{content}</>;
 };
 
 /**

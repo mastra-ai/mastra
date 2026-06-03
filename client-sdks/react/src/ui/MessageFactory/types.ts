@@ -1,6 +1,7 @@
 import type { MastraDBMessage, AIV5Type } from '@mastra/core/agent/message-list';
+import type { IsTaskCompletePayload } from '@mastra/core/stream';
 import type { ReactNode } from 'react';
-import type { AccumulatorPart } from '../../lib/mastra-db';
+import type { AccumulatorPart, TripwireMetadata } from '../../lib/mastra-db';
 
 /**
  * Extract the concrete part shape for a given discriminant from the runtime
@@ -96,4 +97,68 @@ export type MessageRoleRenderers = {
   Assistant?: (props: MessageRoleRendererProps) => ReactNode;
   System?: (props: MessageRoleRendererProps) => ReactNode;
   Signal?: (props: MessageRoleRendererProps) => ReactNode;
+};
+
+/**
+ * Props passed to the `Tripwire` status slot. Rendered *instead of* the parts
+ * walk when `message.content.metadata.status === 'tripwire'`. `text` is the
+ * message's joined text body (the reason a notice would display).
+ */
+export type TripwireRendererProps = {
+  text: string;
+  tripwire?: TripwireMetadata;
+  message: MastraDBMessage;
+};
+
+/**
+ * Props passed to the `Warning` status slot. Rendered *instead of* the parts
+ * walk when `message.content.metadata.status === 'warning'`.
+ */
+export type WarningRendererProps = {
+  text: string;
+  message: MastraDBMessage;
+};
+
+/**
+ * Props passed to the `Error` status slot. Rendered *instead of* the parts
+ * walk when `message.content.metadata.status === 'error'`.
+ */
+export type ErrorRendererProps = {
+  text: string;
+  message: MastraDBMessage;
+};
+
+/**
+ * Props passed to the `Task` status slot. Rendered *alongside* (after) the
+ * parts walk when a task-completion verdict exists on the message metadata
+ * (`completionResult ?? isTaskCompleteResult`).
+ *
+ * Shaped as the persisted subset of {@link IsTaskCompletePayload}: only
+ * `passed` and `suppressFeedback` survive persistence (the accumulator writes
+ * `completionResult: { passed }`). The richer payload fields (`iteration`,
+ * `results`, `duration`, `reason`, ...) are not available from stored metadata.
+ */
+export type TaskRendererProps = Pick<IsTaskCompletePayload, 'passed'> &
+  Partial<Pick<IsTaskCompletePayload, 'suppressFeedback'>> & {
+    text: string;
+    message: MastraDBMessage;
+  };
+
+/**
+ * Optional message-level slots dispatched off `message.content.metadata`.
+ *
+ * - `Tripwire` / `Warning` / `Error` are *replacement* slots: when
+ *   `metadata.status` matches, the slot renders instead of the parts walk.
+ * - `Task` is an *adjacent* slot: when a completion verdict exists it renders
+ *   alongside the parts.
+ *
+ * The factory only reads metadata and forwards it; it never filters (e.g. it
+ * still invokes `Task` when `suppressFeedback` is true). The consumer decides
+ * what to render or skip.
+ */
+export type MessageStatusRenderers = {
+  Tripwire?: (props: TripwireRendererProps) => ReactNode;
+  Warning?: (props: WarningRendererProps) => ReactNode;
+  Error?: (props: ErrorRendererProps) => ReactNode;
+  Task?: (props: TaskRendererProps) => ReactNode;
 };

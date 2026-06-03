@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import { MessageFactory } from './MessageFactory';
-import type { MessageRenderers, MessageRoleRenderers } from './types';
+import type { MessageRenderers, MessageRoleRenderers, MessageStatusRenderers } from './types';
 
 // Boundary cast mirrors how the accumulator stores runtime-only parts.
 const asParts = (parts: unknown[]): MastraDBMessage['content']['parts'] => parts as MastraDBMessage['content']['parts'];
@@ -12,6 +12,17 @@ const makeMessage = (parts: unknown[], role: MastraDBMessage['role'] = 'assistan
   role,
   createdAt: new Date(),
   content: { format: 2, parts: asParts(parts) },
+});
+
+const makeMessageWithMetadata = (
+  parts: unknown[],
+  metadata: Record<string, unknown>,
+  role: MastraDBMessage['role'] = 'assistant',
+): MastraDBMessage => ({
+  id: 'story-1',
+  role,
+  createdAt: new Date(),
+  content: { format: 2, parts: asParts(parts), metadata: metadata as MastraDBMessage['content']['metadata'] },
 });
 
 const card: React.CSSProperties = {
@@ -97,4 +108,64 @@ const SignalComponent = () => {
 
 export const SignalRole: Story = {
   render: () => <SignalComponent />,
+};
+
+const status: MessageStatusRenderers = {
+  Tripwire: props => (
+    <div style={{ ...card, background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' }}>
+      🚧 Tripwire{props.tripwire?.processorId ? ` (${props.tripwire.processorId})` : ''}:{' '}
+      {props.tripwire?.reason ?? props.text}
+    </div>
+  ),
+  Warning: props => (
+    <div style={{ ...card, background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}>⚠️ {props.text}</div>
+  ),
+  Error: props => (
+    <div style={{ ...card, background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' }}>❌ {props.text}</div>
+  ),
+  Task: props => (
+    <div style={{ ...card, background: props.passed ? '#f0fdf4' : '#fef2f2' }}>
+      {props.passed ? '✅' : '🔁'} task {props.passed ? 'passed' : 'not complete'}
+      {props.suppressFeedback ? ' (feedback suppressed)' : ''}
+    </div>
+  ),
+};
+
+// Replacement status slots (Tripwire / Warning / Error) render INSTEAD of the
+// parts; the adjacent Task slot renders ALONGSIDE the parts. This story shows
+// all four so the slot surface is visually inspectable.
+const StatusSlotsComponent = () => (
+  <div style={{ maxWidth: '60ch', margin: '0 auto', display: 'grid', gap: 16 }}>
+    <MessageFactory
+      message={makeMessageWithMetadata([{ type: 'text', text: 'Blocked input.' }], {
+        status: 'tripwire',
+        tripwire: { reason: 'PII detected in prompt', processorId: 'pii-guard' },
+      })}
+      status={status}
+      {...renderers}
+    />
+    <MessageFactory
+      message={makeMessageWithMetadata([{ type: 'text', text: 'Approaching the token budget.' }], {
+        status: 'warning',
+      })}
+      status={status}
+      {...renderers}
+    />
+    <MessageFactory
+      message={makeMessageWithMetadata([{ type: 'text', text: 'The model run failed.' }], { status: 'error' })}
+      status={status}
+      {...renderers}
+    />
+    <MessageFactory
+      message={makeMessageWithMetadata([{ type: 'text', text: 'Drafted the summary.' }], {
+        completionResult: { passed: true },
+      })}
+      status={status}
+      {...renderers}
+    />
+  </div>
+);
+
+export const StatusSlots: Story = {
+  render: () => <StatusSlotsComponent />,
 };

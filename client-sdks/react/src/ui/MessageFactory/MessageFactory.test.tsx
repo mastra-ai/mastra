@@ -4,7 +4,13 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AccumulatorPart } from '../../lib/mastra-db';
 import { MessageFactory } from './MessageFactory';
-import type { DynamicToolPart, MessageRenderers, MessageRoleRenderers } from './types';
+import type {
+  DynamicToolPart,
+  MessageRenderers,
+  MessageRoleRendererProps,
+  MessageRoleRenderers,
+  MessageStatusRenderers,
+} from './types';
 
 afterEach(() => {
   cleanup();
@@ -17,6 +23,21 @@ const makeMessage = (parts: AccumulatorPart[], role: MastraDBMessage['role'] = '
   content: {
     format: 2,
     parts: parts as MastraDBMessage['content']['parts'],
+  },
+});
+
+const makeMessageWithMetadata = (
+  parts: AccumulatorPart[],
+  metadata: Record<string, unknown>,
+  role: MastraDBMessage['role'] = 'assistant',
+): MastraDBMessage => ({
+  id: 'm-1',
+  role,
+  createdAt: new Date(0),
+  content: {
+    format: 2,
+    parts: parts as MastraDBMessage['content']['parts'],
+    metadata: metadata as MastraDBMessage['content']['metadata'],
   },
 });
 
@@ -295,5 +316,174 @@ describe('MessageFactory', () => {
 
     expect(screen.queryByTestId('signal-wrapper')).toBeNull();
     expect(screen.getByTestId('text').textContent).toBe('plain');
+  });
+
+  // Every role the two playground chat surfaces wrap (user / assistant / system
+  // / signal) must reach its matching wrapper. This is the role half of the
+  // surface-coverage matrix; the part/status halves are covered above.
+  it.each([
+    ['user', 'User'],
+    ['assistant', 'Assistant'],
+    ['system', 'System'],
+    ['signal', 'Signal'],
+  ] as const)('wraps a %s message with its matching role wrapper', (role, slot) => {
+    const { renderers } = makeSpyRenderers();
+    const roles: MessageRoleRenderers = {
+      [slot]: ({ children }: MessageRoleRendererProps) => <section data-testid={`${role}-wrapper`}>{children}</section>,
+    };
+    render(<MessageFactory message={makeMessage([textPart(role)], role)} roles={roles} {...renderers} />);
+
+    const wrapper = screen.getByTestId(`${role}-wrapper`);
+    expect(wrapper.querySelector('[data-testid="text"]')?.textContent).toBe(role);
+  });
+
+  describe('status slots', () => {
+    it('renders the Tripwire slot instead of the parts, forwarding text + tripwire metadata', () => {
+      const { calls, renderers } = makeSpyRenderers();
+      const tripwire = { reason: 'guardrail tripped', processorId: 'blocked' };
+      const status: MessageStatusRenderers = {
+        Tripwire: props => (
+          <div
+            data-testid="tripwire"
+            data-text={props.text}
+            data-reason={props.tripwire?.reason}
+            data-processor={props.tripwire?.processorId}
+          />
+        ),
+      };
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('halt')], { status: 'tripwire', tripwire })}
+          status={status}
+          {...renderers}
+        />,
+      );
+
+      const el = screen.getByTestId('tripwire');
+      expect(el.getAttribute('data-text')).toBe('halt');
+      expect(el.getAttribute('data-reason')).toBe('guardrail tripped');
+      expect(el.getAttribute('data-processor')).toBe('blocked');
+      expect(calls.Text).not.toHaveBeenCalled();
+    });
+
+    it('renders the Warning slot instead of the parts', () => {
+      const { calls, renderers } = makeSpyRenderers();
+      const status: MessageStatusRenderers = {
+        Warning: props => <div data-testid="warning">{props.text}</div>,
+      };
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('careful')], { status: 'warning' })}
+          status={status}
+          {...renderers}
+        />,
+      );
+
+      expect(screen.getByTestId('warning').textContent).toBe('careful');
+      expect(calls.Text).not.toHaveBeenCalled();
+    });
+
+    it('renders the Error slot instead of the parts', () => {
+      const { calls, renderers } = makeSpyRenderers();
+      const status: MessageStatusRenderers = {
+        Error: props => <div data-testid="error">{props.text}</div>,
+      };
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('boom')], { status: 'error' })}
+          status={status}
+          {...renderers}
+        />,
+      );
+
+      expect(screen.getByTestId('error').textContent).toBe('boom');
+      expect(calls.Text).not.toHaveBeenCalled();
+    });
+
+    it('falls through to the parts walk when the status matches but no slot is provided', () => {
+      const { calls, renderers } = makeSpyRenderers();
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('still here')], { status: 'tripwire' })}
+          {...renderers}
+        />,
+      );
+
+      expect(screen.getByTestId('text').textContent).toBe('still here');
+      expect(calls.Text).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders the Task slot ADJACENT to the parts when completionResult exists', () => {
+      const { calls, renderers } = makeSpyRenderers();
+      const status: MessageStatusRenderers = {
+        Task: props => <div data-testid="task" data-passed={String(props.passed)} />,
+      };
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('did work')], { completionResult: { passed: true } })}
+          status={status}
+          {...renderers}
+        />,
+      );
+
+      expect(screen.getByTestId('text').textContent).toBe('did work');
+      expect(screen.getByTestId('task').getAttribute('data-passed')).toBe('true');
+      expect(calls.Text).toHaveBeenCalledTimes(1);
+    });
+
+    it('drives the Task slot from isTaskCompleteResult when completionResult is absent', () => {
+      const { renderers } = makeSpyRenderers();
+      const status: MessageStatusRenderers = {
+        Task: props => <div data-testid="task" data-passed={String(props.passed)} />,
+      };
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('done')], { isTaskCompleteResult: { passed: false } })}
+          status={status}
+          {...renderers}
+        />,
+      );
+
+      expect(screen.getByTestId('task').getAttribute('data-passed')).toBe('false');
+    });
+
+    it('still invokes the Task slot when suppressFeedback is true (no factory filtering)', () => {
+      const { renderers } = makeSpyRenderers();
+      const status: MessageStatusRenderers = {
+        Task: props => <div data-testid="task" data-suppressed={String(props.suppressFeedback)} />,
+      };
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('x')], {
+            completionResult: { passed: true, suppressFeedback: true },
+          })}
+          status={status}
+          {...renderers}
+        />,
+      );
+
+      expect(screen.getByTestId('task').getAttribute('data-suppressed')).toBe('true');
+    });
+
+    it('wraps a replacement slot with a matching role wrapper', () => {
+      const { renderers } = makeSpyRenderers();
+      const roles: MessageRoleRenderers = {
+        Assistant: ({ children }) => <section data-testid="assistant-wrapper">{children}</section>,
+      };
+      const status: MessageStatusRenderers = {
+        Error: props => <div data-testid="error">{props.text}</div>,
+      };
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('boom')], { status: 'error' })}
+          roles={roles}
+          status={status}
+          {...renderers}
+        />,
+      );
+
+      const wrapper = screen.getByTestId('assistant-wrapper');
+      expect(wrapper.querySelector('[data-testid="error"]')?.textContent).toBe('boom');
+    });
   });
 });

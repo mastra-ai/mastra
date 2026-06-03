@@ -478,8 +478,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           ...metadata,
           status: 'tripwire',
           tripwire: {
+            reason: chunk.payload.reason,
             retry: chunk.payload.retry,
-            tripwirePayload: chunk.payload.metadata,
+            metadata: chunk.payload.metadata,
             processorId: chunk.payload.processorId,
           },
         },

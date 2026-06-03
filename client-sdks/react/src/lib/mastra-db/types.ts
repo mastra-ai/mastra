@@ -1,18 +1,13 @@
 import type { MastraMessagePart, AIV5Type } from '@mastra/core/agent/message-list';
+import type { TripwirePayload } from '@mastra/core/stream';
 
 export type MastraProviderMetadata = Record<string, Record<string, unknown>>;
 
 /**
  * Tripwire metadata included when a processor triggers a tripwire.
+ * Canonical shape sourced from core's `tripwire` stream-chunk payload.
  */
-export type TripwireMetadata = {
-  /** Whether the agent should retry with feedback */
-  retry?: boolean;
-  /** Custom metadata from the processor */
-  tripwirePayload?: unknown;
-  /** ID of the processor that triggered the tripwire */
-  processorId?: string;
-};
+export type TripwireMetadata = TripwirePayload;
 
 export type ToolApprovalArgs = Record<string, unknown>;
 
@@ -76,10 +71,14 @@ export type MastraDBMessageMetadata = {
   backgroundTasks?: Record<string, BackgroundTaskEntry>;
   /** Number of background tasks currently executing for this message. */
   runningBackgroundTasksCount?: number;
-  /** Task-completion result returned by the run. */
+  /** Task-completion result returned by the run (network mode). */
   completionResult?: CompletionResult;
-  /** Whether the run reported `isTaskComplete`. */
-  isTaskCompleteResult?: boolean;
+  /**
+   * Task-completion verdict from the supervisor `isTaskComplete` path. Shares
+   * the `{ passed, suppressFeedback }` shape with `completionResult`; core
+   * persists it as an object and reads it back as one (see `MessageMerger`).
+   */
+  isTaskCompleteResult?: CompletionResult;
   /** Signal-echo dedupe: signalId of the user message echoed back. */
   signalEchoIds?: string[];
   /** Network-mode bookkeeping. */
