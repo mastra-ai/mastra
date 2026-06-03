@@ -17,6 +17,11 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `GET` | `/api/agents/:agentId` | Get agent by ID (supports version query params) |
 | `POST` | `/api/agents/:agentId/generate` | Generate agent response |
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
+| `POST` | `/api/agents/:agentId/send-message` | Send a user message to an active or idle thread |
+| `POST` | `/api/agents/:agentId/queue-message` | Queue a user message for the next thread turn |
+| `POST` | `/api/agents/:agentId/signals` | Send a lower-level signal to an active or idle thread |
+| `POST` | `/api/agents/:agentId/threads/subscribe` | Subscribe to a thread stream |
+| `POST` | `/api/agents/:agentId/send-tool-approval` | Approve or decline a tool call and resume through a thread subscription |
 | `POST` | `/api/agents/:agentId/resume-stream` | Resume a suspended agent stream with custom data |
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
 | `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
@@ -72,6 +77,100 @@ GET /api/agents/my-agent?versionId=abc123
     promptTokens: number;
     completionTokens: number;
   };
+}
+```
+
+### Agent message routes
+
+Use `POST /api/agents/:agentId/send-message` to send a user message to the active agent loop or wake an idle thread. Use `POST /api/agents/:agentId/queue-message` when the active run should finish before Mastra starts a follow-up run.
+
+Both routes accept the same request body:
+
+```typescript prettier:false
+{
+  message: string | Array<TextPart | FilePart> | {
+    contents: string | Array<TextPart | FilePart>;
+    attributes?: Record<string, JSONValue>;
+    metadata?: Record<string, unknown>;
+    providerOptions?: ProviderMetadata;
+  };
+  runId?: string;
+  resourceId?: string;
+  threadId?: string;
+  ifActive?: {
+    behavior?: 'deliver' | 'persist' | 'discard';
+    attributes?: Record<string, string | number | boolean>;
+  };
+  ifIdle?: {
+    behavior?: 'wake' | 'persist' | 'discard';
+    streamOptions?: Omit<AgentExecutionOptions, 'messages'>;
+    attributes?: Record<string, string | number | boolean>;
+  };
+}
+```
+
+When `runId` is omitted, `resourceId` and `threadId` are required. `ifIdle` only applies to thread-targeted requests, not run-targeted requests.
+
+#### Send a message
+
+```bash
+curl -X POST http://localhost:4111/api/agents/supportAgent/send-message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "message": {
+      "contents": "Show the shorter version.",
+      "attributes": { "sentFrom": "web" }
+    },
+    "resourceId": "user_123",
+    "threadId": "thread_456"
+  }'
+```
+
+#### Queue a message
+
+```bash
+curl -X POST http://localhost:4111/api/agents/supportAgent/queue-message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "message": "Also check whether the tests need updates.",
+    "resourceId": "user_123",
+    "threadId": "thread_456"
+  }'
+```
+
+Both routes return:
+
+```typescript prettier:false
+{
+  accepted: true;
+  runId: string;
+  signal?: CreatedAgentSignal;
+}
+```
+
+### Subscription tool approval routes
+
+Use `POST /api/agents/:agentId/send-tool-approval` when the client already has an active thread subscription. The route resumes the run and returns a JSON acknowledgement. Resumed stream chunks are delivered through `POST /api/agents/:agentId/threads/subscribe`.
+
+The route accepts this request body:
+
+```typescript prettier:false
+{
+  resourceId: string;
+  threadId: string;
+  toolCallId: string;
+  approved: boolean;
+  requestContext?: Record<string, unknown>;
+}
+```
+
+The route returns:
+
+```typescript prettier:false
+{
+  accepted: true;
+  runId: string;
+  toolCallId?: string;
 }
 ```
 

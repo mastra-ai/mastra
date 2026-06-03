@@ -72,6 +72,9 @@ export function transformRequest({ url, body }: { url: string; body: unknown }):
   // Replace the property but preserve valid JSON structure
   stringifiedBody = stringifiedBody.replaceAll(/"strict":(true|false),/g, '');
   stringifiedBody = stringifiedBody.replaceAll(/,"strict":(true|false)/g, '');
+  // Anthropic tool definitions may include eager_input_streaming depending on SDK version
+  stringifiedBody = stringifiedBody.replaceAll(/"eager_input_streaming":(true|false),/g, '');
+  stringifiedBody = stringifiedBody.replaceAll(/,"eager_input_streaming":(true|false)/g, '');
   // Normalize dates/timestamps in remembered messages (timezone/date differences cause hash mismatches)
   stringifiedBody = stringifiedBody.replaceAll(/\d{4},\s*\w{3},\s*\d{1,2}/g, 'REDACTED_DATE');
   stringifiedBody = stringifiedBody.replaceAll(/\d{1,2}:\d{2}\s*(AM|PM)/gi, 'REDACTED_TIME');

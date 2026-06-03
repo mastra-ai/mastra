@@ -61,6 +61,41 @@ See the [MastraEditor reference](/reference/editor/mastra-editor) for all config
 
 :::
 
+## Code and database sources
+
+The editor stores agent overrides in one of two sources, set with the `source` option on `MastraEditor`:
+
+| Source | Where overrides live | Studio actions |
+| - | - | - |
+| `db` (default) | The configured storage backend. | Save and publish drafts. |
+| `code` | Per-agent JSON files on disk, tracked in your repository. | Download the override file or save it to the filesystem. |
+
+The default `db` source is best when non-developers iterate through Studio and you want versioning, drafts, and runtime version targeting. The `code` source is best when overrides should live in your repository alongside the rest of your code, reviewed through pull requests and deployed with your application.
+
+To use the code source, set `source: 'code'`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+export const mastra = new Mastra({
+  agents: {
+    /* your existing agents */
+  },
+  editor: new MastraEditor({
+    source: 'code',
+  }),
+})
+```
+
+When `source` is `'code'`, the editor writes each override to a deterministic JSON file under `./mastra/editor/agents/<agentId>.json`. Set `codePath` to change the directory. Because the files are deterministic, every save produces a clean diff you can commit and review.
+
+### Versioning with the code source
+
+The code source uses the Git history of each per-agent JSON file as its version history. Each commit that changes a file appears as a read-only version in Studio, labeled with the commit message. Saving in Studio updates the working file in place rather than creating a database draft, so the version dropdown reflects your actual commit history.
+
+This means versions and rollbacks are managed through Git rather than through draft and publish actions.
+
 ## Studio
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1775596827/editor-overview_obqupx.mp4" />
@@ -118,8 +153,10 @@ The same operations are available over HTTP through the Mastra server. Use these
 | `GET` | `/stored/agents/:storedAgentId` | Get a stored agent by ID. |
 | `PATCH` | `/stored/agents/:storedAgentId` | Update a stored agent. |
 | `DELETE` | `/stored/agents/:storedAgentId` | Delete a stored agent. |
+| `GET` | `/stored/agents/:storedAgentId/dependents` | List agents that reference this agent as a sub-agent. |
+| `POST` | `/stored/agents/:storedAgentId/export` | Export a stored agent's override as a deterministic JSON config. |
 
-The Client SDK wraps these endpoints with `client.listStoredAgents()`, `client.createStoredAgent()`, and `client.getStoredAgent()`. Version management endpoints live under `/stored/agents/:storedAgentId/versions`, see [version management](/reference/client-js/agents#version-management) for the full list.
+The dependents endpoint helps warn before deleting or unsharing an agent that other agents depend on: `dependents` lists caller-readable agents by `id` and `name`, while `hiddenCount` aggregates cross-workspace references the caller cannot read (surfaced only when the target is public). The export endpoint returns only the fields the agent's [`editor` config](/reference/agents/agent#editor-overrides) allows, so the output matches the per-agent file the code source writes to disk. The Client SDK wraps these endpoints with `client.listStoredAgents()`, `client.createStoredAgent()`, `client.getStoredAgent()`, `client.getStoredAgent(id).dependents()`, and `client.getStoredAgent(id).export()`. Version management endpoints live under `/stored/agents/:storedAgentId/versions`, see [version management](/reference/client-js/agents#version-management) for the full list.
 
 ### Automated experimentation
 
@@ -149,6 +186,32 @@ When you edit a code-defined agent through the editor, only specific fields can 
 | Tools | Add tools from the tool registry, integration providers, or MCP clients. Code-defined tools remain available. |
 
 Fields like the agent's `id`, `name`, and `model` come from your code and can't be changed through the editor for code-defined agents. The variables are also read-only.
+
+### Controlling what is editable
+
+Use the `editor` field on a code-defined agent to control which fields the editor can override. This lets you keep some fields code-owned while allowing edits to others:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  name: 'support-agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  editor: { instructions: true, tools: { description: true } },
+})
+```
+
+The `editor` field accepts these shapes:
+
+| Value | Result |
+| - | - |
+| Omitted | Instructions and tools are editable. |
+| `false` | Nothing is editable. The agent is locked. |
+| `{ instructions: true }` | Instructions are editable. |
+| `{ tools: true }` | Tool membership and descriptions are editable. |
+| `{ tools: { description: true } }` | Only tool descriptions are editable. Membership is locked. |
+
+When a field is owned by code, Studio shows it as read-only and the server strips it from saved overrides, so the stored config only contains the fields you allow. See the [`editor` overrides reference](/reference/agents/agent#editor-overrides) for the full type.
 
 ## Versioning
 

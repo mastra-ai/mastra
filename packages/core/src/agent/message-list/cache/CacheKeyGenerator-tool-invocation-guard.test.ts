@@ -52,6 +52,60 @@ describe('CacheKeyGenerator tool-invocation null guard (#16756)', () => {
     expect(() => CacheKeyGenerator.fromDBParts(parts as any)).not.toThrow();
   });
 
+  it('fromDBParts should generate the same key for data parts with reordered object keys', () => {
+    const messagePartsFromTextStorage = [
+      {
+        type: 'data-om-status' as const,
+        data: {
+          windows: {
+            buffered: {
+              observations: {
+                chunks: 0,
+                messageTokens: 0,
+                projectedMessageRemoval: 0,
+                observationTokens: 0,
+                status: 'idle',
+              },
+              reflection: {
+                inputObservationTokens: 0,
+                observationTokens: 0,
+                status: 'idle',
+              },
+            },
+          },
+        },
+      },
+    ];
+
+    const messagePartsFromJsonbSnapshot = [
+      {
+        type: 'data-om-status' as const,
+        data: {
+          windows: {
+            buffered: {
+              reflection: {
+                status: 'idle',
+                observationTokens: 0,
+                inputObservationTokens: 0,
+              },
+              observations: {
+                chunks: 0,
+                status: 'idle',
+                messageTokens: 0,
+                observationTokens: 0,
+                projectedMessageRemoval: 0,
+              },
+            },
+          },
+        },
+      },
+    ];
+
+    expect(CacheKeyGenerator.fromDBParts(messagePartsFromTextStorage as any)).toBe(
+      CacheKeyGenerator.fromDBParts(messagePartsFromJsonbSnapshot as any),
+    );
+  });
+
   it('fromAIV4Part should still work correctly with valid tool-invocation parts', () => {
     const validPart = {
       type: 'tool-invocation' as const,

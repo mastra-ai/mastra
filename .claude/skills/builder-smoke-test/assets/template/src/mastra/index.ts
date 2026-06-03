@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import { Mastra } from '@mastra/core/mastra';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { MastraEditor } from '@mastra/editor';
-import { builderAgent } from '@mastra/editor/ee';
+import { createBuilderAgent } from '@mastra/editor/ee';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
 import { SlackProvider } from '@mastra/slack';
@@ -28,7 +28,7 @@ export const mastra = new Mastra({
   storage,
   workspace: builderWorkspace,
   agents: {
-    builderAgent,
+    builderAgent: createBuilderAgent(),
     weatherAgent,
   },
   tools: {
@@ -96,14 +96,14 @@ export const mastra = new Mastra({
           tools: true,
           agents: true,
           workflows: true,
-          stars: true,
+          favorites: true,
           skills: true,
           model: true,
           browser: true,
           avatarUpload: true,
         },
         skill: {
-          stars: true,
+          favorites: true,
         },
       },
       configuration: {

@@ -1,24 +1,21 @@
-import type { HonoRequest } from 'hono';
 import { describe, expect, it } from 'vitest';
+import type { MastraAuthRequest } from './request-types';
 import { SimpleAuth } from './simple-auth';
 
-const mockRequest = (headers: Record<string, string | string[]> = {}) =>
-  ({
-    url: 'http://localhost/test',
+const mockRequest = (headers: Record<string, string> = {}) =>
+  new Request('http://localhost/test', {
     method: 'GET',
-    header: (name: string) => headers[name],
-  }) as HonoRequest;
+    headers,
+  });
 
-/**
- * Mock a standard Web Request (what c.req.raw returns in Hono).
- * This does NOT have a .header() method — only .headers.get().
- */
-const mockRawRequest = (headers: Record<string, string> = {}) =>
-  ({
-    url: 'http://localhost/test',
-    method: 'GET',
-    headers: new Headers(headers),
-  }) as unknown as HonoRequest;
+const mockRawRequest = (headers: Record<string, string> = {}): MastraAuthRequest => {
+  const raw = mockRequest(headers);
+  return {
+    raw,
+    headers: raw.headers,
+    header: name => raw.headers.get(name) ?? undefined,
+  };
+};
 
 describe('SimpleAuth', () => {
   describe('constructor', () => {
@@ -289,15 +286,15 @@ describe('SimpleAuth', () => {
     });
   });
 
-  describe('raw Request compatibility (c.req.raw)', () => {
-    it('should authenticate via direct token when given a raw Request', async () => {
+  describe('Hono-shaped request compatibility (c.req)', () => {
+    it('should authenticate via direct token when given a Hono-shaped request', async () => {
       const user = { id: 1, name: 'John' };
       const auth = new SimpleAuth({ tokens: { 'valid-token': user } });
       const result = await auth.authenticateToken('valid-token', mockRawRequest());
       expect(result).toEqual(user);
     });
 
-    it('should authenticate via Authorization header from raw Request', async () => {
+    it('should authenticate via Authorization header from Hono-shaped request', async () => {
       const user = { id: 1, name: 'User' };
       const auth = new SimpleAuth({ tokens: { 'header-token': user } });
       const request = mockRawRequest({ Authorization: 'Bearer header-token' });
@@ -306,7 +303,7 @@ describe('SimpleAuth', () => {
       expect(result).toEqual(user);
     });
 
-    it('should authenticate via cookie from raw Request', async () => {
+    it('should authenticate via cookie from Hono-shaped request', async () => {
       const user = { id: 1, name: 'Cookie User' };
       const auth = new SimpleAuth({ tokens: { 'cookie-token': user } });
       const request = mockRawRequest({ Cookie: 'mastra-token=cookie-token' });
@@ -315,13 +312,13 @@ describe('SimpleAuth', () => {
       expect(result).toEqual(user);
     });
 
-    it('should reject invalid token with raw Request', async () => {
+    it('should reject invalid token with Hono-shaped request', async () => {
       const auth = new SimpleAuth({ tokens: { 'valid-token': { id: 1 } } });
       const result = await auth.authenticateToken('invalid-token', mockRawRequest());
       expect(result).toBeNull();
     });
 
-    it('should check custom headers from raw Request', async () => {
+    it('should check custom headers from Hono-shaped request', async () => {
       const user = { id: 1, name: 'User' };
       const auth = new SimpleAuth({
         tokens: { 'api-token': user },

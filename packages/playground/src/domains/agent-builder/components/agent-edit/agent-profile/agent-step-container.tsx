@@ -35,8 +35,8 @@ export const AgentStepContainer = ({ children, cta, title, description }: AgentS
       />
       <div
         className={cn(
-          'relative h-full overflow-y-auto bg-surface3 rounded-2xl grid ',
-          title ? 'grid-rows-[auto_1fr_auto]' : 'grid-rows-[1fr_auto]',
+          'relative h-full overflow-hidden bg-surface3 rounded-2xl grid min-h-0',
+          title ? 'grid-rows-[auto_minmax(0,1fr)_auto]' : 'grid-rows-[minmax(0,1fr)_auto]',
         )}
       >
         {title && (
@@ -45,7 +45,7 @@ export const AgentStepContainer = ({ children, cta, title, description }: AgentS
             {description && <p className="text-neutral3">{description}</p>}
           </div>
         )}
-        <div className="h-full overflow-y-auto">{children}</div>
+        <div className="min-h-0 overflow-y-auto">{children}</div>
         {showLastStepCtas ? (
           <div className="flex justify-center items-center gap-2 shrink-0 pb-6">
             <Button variant="outline" onClick={() => startViewTransition(() => next())} disabled={isStreaming}>

@@ -1,6 +1,7 @@
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { Processor } from '../index';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
 
 export type BatchPartsState = {
   batch: ChunkType[];
@@ -50,8 +51,9 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
+    writer?: { custom: (data: ChunkType) => Promise<void> };
   }): Promise<ChunkType | null> {
-    const { part, state } = args;
+    const { part, state, writer } = args;
 
     // Initialize state if not present
     if (!state.batch) {
@@ -83,7 +85,21 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     if (this.options.emitOnNonText && part.type !== 'text-delta') {
       const batchedChunk = this.flushBatch(state as BatchPartsState);
       if (batchedChunk) {
-        // Queue the non-text part for next emission so it isn't lost
+        // We have two parts to emit (the batched text and this non-text part)
+        // but can only return one. When running inside the processor chain,
+        // return the batched text (so it flows through any downstream
+        // processors) and stash the non-text part for the runner to re-drive
+        // through the whole chain right after. This avoids deferring the
+        // non-text part to the next processOutputStream call — which never
+        // happens when the stream stops on this part (e.g. a `stopWhen`
+        // condition halting the agentic loop on a tool result), dropping the
+        // part from the stream entirely.
+        if (writer) {
+          state[REPROCESS_PART_KEY] = part;
+          return batchedChunk;
+        }
+        // No writer (e.g. direct unit invocation): fall back to deferring the
+        // non-text part to the next call.
         state.pendingNonText = part;
         return batchedChunk;
       }
