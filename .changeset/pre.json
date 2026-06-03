@@ -152,5 +152,10 @@
     "@mastra/s3": "0.5.1",
     "@mastra/vercel": "0.2.0"
   },
-  "changesets": []
+  "changesets": [
+    "free-parts-reply",
+    "green-birds-knock",
+    "old-waves-spend",
+    "polite-signals-load"
+  ]
 }

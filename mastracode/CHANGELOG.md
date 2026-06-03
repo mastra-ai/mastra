@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.22.1-alpha.0
+
+### Patch Changes
+
+- Auto-subscribe to the current branch's PR via GitHub Signals at the end of each agent run. When experimental GitHub Signals are enabled in /settings and the checked-out branch has an open PR, the thread is automatically subscribed (once per thread, fire-and-forget). ([#17538](https://github.com/mastra-ai/mastra/pull/17538))
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0-alpha.0
+
 ## 0.22.0
 
 ### Minor Changes
