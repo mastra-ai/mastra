@@ -28,23 +28,32 @@ const TEMPLATE = `# User
 async function createMemory({
   useStateSignals,
   dbPath,
+  variant = 'default',
+  template,
+  schema,
 }: {
   useStateSignals: boolean;
   dbPath: string;
+  variant?: string;
+  template?: string;
+  schema?: any;
 }): Promise<Memory> {
+  const workingMemory: any = {
+    enabled: true,
+    scope: 'resource',
+    useStateSignals,
+  };
+  if (schema) {
+    workingMemory.schema = schema;
+  } else {
+    workingMemory.template = template ?? TEMPLATE;
+  }
   return new Memory({
     storage: new LibSQLStore({
-      id: `wm-state-signal-${useStateSignals ? 'on' : 'off'}`,
-      url: `file:${dbPath}/store-${useStateSignals ? 'on' : 'off'}.db`,
+      id: `wm-state-signal-${useStateSignals ? 'on' : 'off'}-${variant}`,
+      url: `file:${dbPath}/store-${useStateSignals ? 'on' : 'off'}-${variant}.db`,
     }),
-    options: {
-      workingMemory: {
-        enabled: true,
-        template: TEMPLATE,
-        scope: 'resource',
-        useStateSignals,
-      },
-    },
+    options: { workingMemory },
   });
 }
 
@@ -529,6 +538,202 @@ describe('Working memory via state signals (opt-in)', () => {
       );
 
       expect(wmCallParts.length).toBe(0);
+    });
+  });
+
+  describe('incremental delta value anchor', () => {
+    it('diffs against the most recently emitted value (B->C), not the last full snapshot (A->C)', async () => {
+      const memory = await createMemory({ useStateSignals: true, dbPath, variant: 'value-anchor' });
+      const thread = await memory.createThread({
+        threadId: 'thread-value-anchor',
+        resourceId: 'resource-value-anchor',
+      });
+
+      const processors = await memory.getInputProcessors();
+      const wm = processors.find(p => p.id === WORKING_MEMORY_STATE_PROCESSOR_ID) as {
+        computeStateSignal: (args: any) => Promise<any>;
+      };
+
+      // Seed with a fat-enough template so the size guard allows the delta path.
+      const longHeader = '# User Profile\n' + Array.from({ length: 20 }, (_, i) => `- field${i}: value${i}`).join('\n');
+      const stateA = `${longHeader}\n- current: alpha`;
+      await memory.updateWorkingMemory({
+        threadId: thread.id,
+        resourceId: 'resource-value-anchor',
+        workingMemory: stateA,
+      });
+
+      const baseArgs = {
+        stepNumber: 0,
+        steps: [],
+        state: {},
+        resourceId: 'resource-value-anchor',
+        threadId: thread.id,
+        activeStateSignals: [],
+        contextWindow: { hasSnapshot: true },
+        deltasSinceSnapshot: [],
+      };
+
+      // Turn 1: emit snapshot A.
+      const snapA = await wm.computeStateSignal({ ...baseArgs, lastSnapshot: undefined, tracking: undefined });
+      expect(snapA.mode).toBe('snapshot');
+      expect(snapA.value).toBe(stateA.trim());
+
+      // Turn 2: write B, expect delta computed against snapshot A.
+      const stateB = `${longHeader}\n- current: beta`;
+      await memory.updateWorkingMemory({
+        threadId: thread.id,
+        resourceId: 'resource-value-anchor',
+        workingMemory: stateB,
+      });
+      const lastSnapshotAB = {
+        contents: snapA.contents,
+        metadata: { value: snapA.value },
+      };
+      const deltaB = await wm.computeStateSignal({
+        ...baseArgs,
+        lastSnapshot: lastSnapshotAB,
+        tracking: {
+          currentCacheKey: snapA.cacheKey,
+          currentMode: 'snapshot',
+          version: 1,
+          lastSignalId: 's-1',
+          lastSnapshotSignalId: 's-1',
+          updatedAt: new Date().toISOString(),
+          activeCopies: [],
+        },
+      });
+      expect(deltaB.mode).toBe('delta');
+      expect(deltaB.value).toBe(stateB.trim());
+      // The diff body should reference the alpha->beta swap.
+      expect(deltaB.contents).toContain('-- current: alpha');
+      expect(deltaB.contents).toContain('+- current: beta');
+
+      // Turn 3: write C. If the anchor were the stale snapshot A, the diff would
+      // reference alpha. The new behavior should anchor on B's value, so only
+      // the beta->gamma hunk should appear.
+      const stateC = `${longHeader}\n- current: gamma`;
+      await memory.updateWorkingMemory({
+        threadId: thread.id,
+        resourceId: 'resource-value-anchor',
+        workingMemory: stateC,
+      });
+      const deltaC = await wm.computeStateSignal({
+        ...baseArgs,
+        lastSnapshot: lastSnapshotAB,
+        deltasSinceSnapshot: [
+          {
+            contents: deltaB.contents,
+            metadata: { value: deltaB.value },
+          },
+        ],
+        tracking: {
+          currentCacheKey: deltaB.cacheKey,
+          currentMode: 'delta',
+          version: 2,
+          lastSignalId: 's-2',
+          lastSnapshotSignalId: 's-1',
+          updatedAt: new Date().toISOString(),
+          activeCopies: [],
+        },
+      });
+      expect(deltaC.mode).toBe('delta');
+      expect(deltaC.value).toBe(stateC.trim());
+      // Incremental: should reference beta -> gamma, NOT alpha -> gamma.
+      expect(deltaC.contents).toContain('-- current: beta');
+      expect(deltaC.contents).toContain('+- current: gamma');
+      expect(deltaC.contents).not.toContain('alpha');
+    });
+  });
+
+  describe('schema mode (JSON-backed working memory)', () => {
+    const schema = {
+      _def: { typeName: 'ZodObject' },
+      shape: () => ({}),
+      // Minimal duck-typed schema; Memory only checks for presence to switch modes.
+    } as any;
+
+    it('always emits snapshot mode (never delta) for schema-backed working memory', async () => {
+      // Schema mode: gate delta off, payloads are JSON strings.
+      const memory = new Memory({
+        storage: new LibSQLStore({
+          id: 'wm-state-signal-schema',
+          url: `file:${dbPath}/store-schema.db`,
+        }),
+        options: {
+          workingMemory: {
+            enabled: true,
+            scope: 'resource',
+            useStateSignals: true,
+            schema,
+          },
+        },
+      });
+
+      const thread = await memory.createThread({
+        threadId: 'thread-schema',
+        resourceId: 'resource-schema',
+      });
+
+      // Seed JSON-backed working memory.
+      await memory.updateWorkingMemory({
+        threadId: thread.id,
+        resourceId: 'resource-schema',
+        workingMemory: JSON.stringify({ name: 'Caleb', favoriteColor: 'orange' }),
+      });
+
+      const processors = await memory.getInputProcessors();
+      const wm = processors.find(p => p.id === WORKING_MEMORY_STATE_PROCESSOR_ID) as {
+        computeStateSignal: (args: any) => Promise<any>;
+      };
+      expect(wm).toBeDefined();
+
+      const baseArgs = {
+        stepNumber: 0,
+        steps: [],
+        state: {},
+        resourceId: 'resource-schema',
+        threadId: thread.id,
+        activeStateSignals: [],
+        contextWindow: { hasSnapshot: true },
+        deltasSinceSnapshot: [],
+      };
+
+      const first = await wm.computeStateSignal({ ...baseArgs, lastSnapshot: undefined, tracking: undefined });
+      expect(first).toBeDefined();
+      expect(first.mode).toBe('snapshot');
+      // Contents and value should be the JSON-serialized payload.
+      expect(typeof first.contents).toBe('string');
+      const parsed = JSON.parse(first.contents as string);
+      expect(parsed.name).toBe('Caleb');
+      expect(parsed.favoriteColor).toBe('orange');
+      expect(first.value).toBe(first.contents);
+
+      // Update the JSON payload and re-run with a prior snapshot. Even though
+      // the value changed, schema mode must always return a snapshot - never a
+      // delta - because unified-diff doesn't make sense for opaque JSON blobs.
+      await memory.updateWorkingMemory({
+        threadId: thread.id,
+        resourceId: 'resource-schema',
+        workingMemory: JSON.stringify({ name: 'Caleb', favoriteColor: 'purple' }),
+      });
+      const second = await wm.computeStateSignal({
+        ...baseArgs,
+        lastSnapshot: { contents: first.contents, metadata: { value: first.value } },
+        tracking: {
+          currentCacheKey: first.cacheKey,
+          currentMode: 'snapshot',
+          version: 1,
+          lastSignalId: 's-1',
+          lastSnapshotSignalId: 's-1',
+          updatedAt: new Date().toISOString(),
+          activeCopies: [],
+        },
+      });
+      expect(second.mode).toBe('snapshot');
+      expect(second.cacheKey).not.toBe(first.cacheKey);
+      const parsed2 = JSON.parse(second.contents as string);
+      expect(parsed2.favoriteColor).toBe('purple');
     });
   });
 });
