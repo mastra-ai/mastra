@@ -44,9 +44,7 @@ import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 const embedder = new ModelRouterEmbeddingModel("mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__");
 ```
 
-Gateway-routed models do not forward local thread/resource context as upstream Gateway memory headers. If you want Observational Memory for a Gateway-routed actor model, configure local observer and reflector models in your Mastra memory setup; those models may also use gateway-prefixed IDs.
-
-Pass `memory.thread` and `memory.resource` when you generate/stream responses to provide local memory context:
+Pass `memory.thread` and `memory.resource` when you generate/stream responses to enable Observational Memory:
 
 ```typescript title="src/mastra/run.ts"
 import { weatherAgent } from "./agents/weather-agent";
