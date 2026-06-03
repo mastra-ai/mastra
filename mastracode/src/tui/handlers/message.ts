@@ -78,6 +78,14 @@ type StreamedReactiveSignalPart = {
   message?: string;
 };
 
+// These are internal control-plane signals handled by GithubSignals. The user-visible
+// result is rendered by github-sync-status, so showing these would duplicate the UI.
+const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+
+function shouldRenderReactiveSignal(tagName: string): boolean {
+  return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
+}
+
 type StreamedNotificationSummaryPart = {
   type: 'notification_summary';
   message: string;
@@ -373,6 +381,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   }
 
   for (const reactiveSignal of reactiveSignalParts) {
+    if (!shouldRenderReactiveSignal(reactiveSignal.tagName)) continue;
     const reactiveSignalKey = `${message.id}:${reactiveSignal.tagName}:${reactiveSignal.message ?? ''}`;
     if (!state.currentRunSystemReminderKeys.has(reactiveSignalKey)) {
       state.currentRunSystemReminderKeys.add(reactiveSignalKey);

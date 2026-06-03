@@ -138,6 +138,15 @@ describe('setupKeyboardShortcuts', () => {
       'clear',
     ]);
     expect(goalCommand?.getArgumentCompletions?.('pa').map(command => command.value)).toEqual(['pause']);
+    const githubCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'github') as
+      | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
+      | undefined;
+    expect(githubCommand?.getArgumentCompletions?.('').map(command => command.value)).toEqual([
+      'subscribe',
+      'unsubscribe',
+      'debug',
+    ]);
+    expect(githubCommand?.getArgumentCompletions?.('un').map(command => command.value)).toEqual(['unsubscribe']);
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
     expect(commandNames.indexOf('goal')).toBeLessThan(commandNames.indexOf('judge'));
     expect(commandNames).toContain('skill/');

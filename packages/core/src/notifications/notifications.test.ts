@@ -211,17 +211,34 @@ describe('notification inbox', () => {
       resourceId: 'resource-1',
       agentId: 'agent-1',
     });
+    await storage.createNotification({
+      id: 'n2',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'pull-request-activity',
+      summary: 'CI is still running',
+      resourceId: 'resource-1',
+      agentId: 'agent-1',
+    });
     const sendSignal = vi.fn(signal => ({ accepted: true, runId: 'run-1', signal }));
     const tool = createNotificationInboxTool({ storage });
 
     await expect(tool.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } } as any)).resolves.toMatchObject(
       {
-        notifications: [{ id: 'n1', status: 'pending' }],
+        notifications: expect.arrayContaining([
+          expect.objectContaining({ id: 'n1', status: 'pending' }),
+          expect.objectContaining({ id: 'n2', status: 'pending' }),
+        ]),
       },
     );
     await expect(
       tool.execute?.({ action: 'search', query: 'launch' }, { agent: { threadId: 'thread-1' } } as any),
     ).resolves.toMatchObject({ notifications: [{ id: 'n1' }] });
+    await expect(
+      tool.execute?.({ action: 'search', query: 'github', status: 'pending', source: 'github' }, {
+        agent: { threadId: 'thread-1' },
+      } as any),
+    ).resolves.toMatchObject({ notifications: [{ id: 'n2' }] });
     await expect(
       tool.execute?.({ action: 'read', id: 'n1' }, {
         agent: { agentId: 'agent-1', threadId: 'thread-1', resourceId: 'resource-1' },
