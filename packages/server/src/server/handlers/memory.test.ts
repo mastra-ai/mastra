@@ -121,7 +121,7 @@ describe('Memory Handlers', () => {
       expect(result).toMatchObject({ result: true });
     });
 
-    it('should use storage fallback when a registered agent has no local memory', async () => {
+    it('should return false when a registered agent has no memory configured', async () => {
       const agentWithoutMemory = new Agent({
         id: 'no-memory-agent',
         name: 'Agent Without Memory',
@@ -139,7 +139,7 @@ describe('Memory Handlers', () => {
         agentId: 'no-memory-agent',
       });
 
-      expect(result).toEqual({ result: true });
+      expect(result).toEqual({ result: false });
     });
 
     it('should return false when an agent explicitly does not support Mastra memory', async () => {

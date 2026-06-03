@@ -547,6 +547,13 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
         return { result: true, memoryType: 'local' as const, observationalMemory: omStatus };
       }
 
+      // If the agent was resolved but has no memory configured, return false.
+      // The storage fallback below only applies when the agent cannot be found at all
+      // (e.g. stored agents whose memory instance can't be hydrated).
+      if (agent) {
+        return { result: false };
+      }
+
       if (!agentSupportsMemory(agent)) {
         return { result: false };
       }
