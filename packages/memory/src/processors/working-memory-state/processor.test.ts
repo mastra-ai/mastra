@@ -77,7 +77,6 @@ describe('WorkingMemoryStateProcessor', () => {
     // Plain text contents — runtime wraps in <working-memory ...>…</working-memory> via tagName.
     expect(result?.contents).toBe('# Title\n- ready');
     expect(result?.contents).not.toContain('<working_memory_');
-    expect(result?.value).toEqual({ data: '# Title\n- ready' });
     expect(result?.attributes).toMatchObject({ format: 'markdown', scope: 'resource' });
   });
 
@@ -201,5 +200,103 @@ describe('WorkingMemoryStateProcessor', () => {
     const md = stableWorkingMemoryCacheKey({ format: 'markdown', data: '{}' });
     const json = stableWorkingMemoryCacheKey({ format: 'json', data: '{}' });
     expect(md).not.toBe(json);
+  });
+
+  describe('delta emission', () => {
+    const priorSnapshot = (contents: string): ComputeStateSignalArgs['lastSnapshot'] =>
+      ({
+        contents,
+        metadata: { state: { mode: 'snapshot', version: 1 } },
+      }) as unknown as ComputeStateSignalArgs['lastSnapshot'];
+
+    it('emits a unified-diff delta when a prior markdown snapshot exists in the window', async () => {
+      const template: WorkingMemoryTemplate = { format: 'markdown', content: '# tpl' };
+      const base =
+        '# User Profile\n' + Array.from({ length: 30 }, (_, i) => `- Field ${i}: value ${i}`).join('\n') + '\n';
+      const prior = base + '- Favorite color: orange\n';
+      const next = base + '- Favorite color: blue\n';
+      const memory = buildMemoryMock({ template, data: next });
+      const processor = new WorkingMemoryStateProcessor(memory);
+
+      const result = await processor.computeStateSignal(
+        buildArgs({
+          contextWindow: { hasSnapshot: true },
+          lastSnapshot: priorSnapshot(prior),
+          deltasSinceSnapshot: [],
+          tracking: {
+            currentCacheKey: stableWorkingMemoryCacheKey({ format: 'markdown', data: prior }),
+            currentMode: 'snapshot',
+            version: 1,
+          },
+        }),
+      );
+
+      expect(result?.mode).toBe('delta');
+      expect(result?.attributes).toMatchObject({ format: 'markdown', scope: 'resource', patch: 'unified-diff' });
+      // Unified diff hunk markers should appear in contents.
+      expect(result?.contents).toMatch(/@@/);
+      expect(result?.contents).toContain('-- Favorite color: orange');
+      expect(result?.contents).toContain('+- Favorite color: blue');
+      // Cache key still matches the full next contents (after trim, same as processor).
+      expect(result?.cacheKey).toBe(stableWorkingMemoryCacheKey({ format: 'markdown', data: next.trim() }));
+      // Patch must be strictly smaller than a full snapshot for delta to win.
+      expect((result?.contents as string).length).toBeLessThan(next.length);
+    });
+
+    it('falls back to a snapshot when the prior snapshot dropped out of the window', async () => {
+      const template: WorkingMemoryTemplate = { format: 'markdown', content: '# tpl' };
+      const next = '# User Profile\n- Name: Caleb\n- Favorite color: blue\n';
+      const memory = buildMemoryMock({ template, data: next });
+      const processor = new WorkingMemoryStateProcessor(memory);
+
+      const result = await processor.computeStateSignal(
+        buildArgs({
+          contextWindow: { hasSnapshot: false },
+          lastSnapshot: priorSnapshot('# anything'),
+        }),
+      );
+
+      expect(result?.mode).toBe('snapshot');
+      expect(result?.contents).toBe(next.trim());
+    });
+
+    it('falls back to a snapshot when the unified-diff payload would not be smaller than the next snapshot', async () => {
+      const template: WorkingMemoryTemplate = { format: 'markdown', content: '# tpl' };
+      const prior = 'a';
+      const next = 'b';
+      const memory = buildMemoryMock({ template, data: next });
+      const processor = new WorkingMemoryStateProcessor(memory);
+
+      const result = await processor.computeStateSignal(
+        buildArgs({
+          contextWindow: { hasSnapshot: true },
+          lastSnapshot: priorSnapshot(prior),
+        }),
+      );
+
+      expect(result?.mode).toBe('snapshot');
+      expect(result?.contents).toBe('b');
+    });
+
+    it('never emits a delta in schema mode (always snapshot)', async () => {
+      const template: WorkingMemoryTemplate = {
+        format: 'json',
+
+        content: { type: 'object' } as any,
+      };
+      const next = '{"name":"Caleb","color":"blue"}';
+      const memory = buildMemoryMock({ template, data: next });
+      const processor = new WorkingMemoryStateProcessor(memory);
+
+      const result = await processor.computeStateSignal(
+        buildArgs({
+          contextWindow: { hasSnapshot: true },
+          lastSnapshot: priorSnapshot('{"name":"Caleb","color":"orange"}'),
+        }),
+      );
+
+      expect(result?.mode).toBe('snapshot');
+      expect(result?.contents).toBe(next);
+    });
   });
 });
