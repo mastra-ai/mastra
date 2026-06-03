@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.38.0-alpha.8",
+  "version": "1.38.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -479,6 +479,16 @@
       "require": {
         "types": "./dist/tools/index.d.ts",
         "default": "./dist/tools/index.cjs"
+      }
+    },
+    "./notifications": {
+      "import": {
+        "types": "./dist/notifications/index.d.ts",
+        "default": "./dist/notifications/index.js"
+      },
+      "require": {
+        "types": "./dist/notifications/index.d.ts",
+        "default": "./dist/notifications/index.cjs"
       }
     },
     "./tts": {

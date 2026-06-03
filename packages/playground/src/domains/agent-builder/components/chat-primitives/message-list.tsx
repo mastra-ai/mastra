@@ -32,17 +32,22 @@ interface MessageListProps {
   skeletonTestId?: string;
 }
 
+/**
+ * Detects whether the last assistant message has a part that is *actively*
+ * streaming output. Completed tool calls (`output-available` / `output-error`)
+ * are excluded so the pending indicator stays visible during quiet moments —
+ * e.g. while the server is internally retrying via
+ * `StreamErrorRetryProcessor` after the previous step finished cleanly.
+ */
 const hasStreamingPart = (message: MastraUIMessage | undefined) => {
   if (!message) return false;
   return message.parts.some(part => {
     if (part.type === 'reasoning' || part.type === 'text') {
       return (part as { state?: string }).state === 'streaming';
     }
-    if (part.type === 'dynamic-tool') {
-      return true;
-    }
-    if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-      return true;
+    if (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) {
+      const state = (part as { state?: string }).state;
+      return state !== 'output-available' && state !== 'output-error';
     }
     return false;
   });

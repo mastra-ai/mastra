@@ -159,7 +159,8 @@ function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processInputStep === 'function' ||
       typeof (obj as any).processOutputStream === 'function' ||
       typeof (obj as any).processOutputResult === 'function' ||
-      typeof (obj as any).processOutputStep === 'function')
+      typeof (obj as any).processOutputStep === 'function' ||
+      typeof (obj as any).computeStateSignal === 'function')
   );
 }
 
@@ -264,7 +265,8 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processInputStep: Function })
     | (Processor<TProcessorId> & { processOutputStream: Function })
     | (Processor<TProcessorId> & { processOutputResult: Function })
-    | (Processor<TProcessorId> & { processOutputStep: Function }),
+    | (Processor<TProcessorId> & { processOutputStep: Function })
+    | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
   unknown,

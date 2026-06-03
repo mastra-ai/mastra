@@ -710,7 +710,14 @@ https://mastra.ai/en/docs/memory/overview`,
     const isWorkingMemoryEnabled =
       typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.enabled !== false;
 
-    if (isWorkingMemoryEnabled) {
+    // When useStateSignals is opted in, the WorkingMemoryStateProcessor delivers
+    // working memory via the state-signal lane. Skip the legacy system-message
+    // injection so the model doesn't receive the WORKING_MEMORY_SYSTEM_INSTRUCTION
+    // block alongside the signal.
+    const useStateSignals =
+      typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.useStateSignals === true;
+
+    if (isWorkingMemoryEnabled && !useStateSignals) {
       if (!memoryStore)
         throw new MastraError({
           category: 'USER',
