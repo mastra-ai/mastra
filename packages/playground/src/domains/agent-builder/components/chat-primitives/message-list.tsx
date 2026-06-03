@@ -1,6 +1,6 @@
-import type { MastraUIMessage } from '@mastra/react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { ChatMessage, ChatMessagePart } from './messages';
 import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
 import { useAutoScroll } from '@/domains/agent-builder/hooks/use-auto-scroll';
 
@@ -25,7 +25,7 @@ const useDelayedFlag = (flag: boolean, delayMs: number) => {
 const SKELETON_DELAY_MS = 300;
 
 interface MessageListProps {
-  messages: MastraUIMessage[];
+  messages: ChatMessage[];
   isLoading?: boolean;
   isRunning?: boolean;
   emptyState?: ReactNode;
@@ -39,14 +39,22 @@ interface MessageListProps {
  * e.g. while the server is internally retrying via
  * `StreamErrorRetryProcessor` after the previous step finished cleanly.
  */
-const hasStreamingPart = (message: MastraUIMessage | undefined) => {
+const getMessageParts = (message: ChatMessage): ChatMessagePart[] => {
+  if ('content' in message) return message.content.parts;
+  return message.parts;
+};
+
+const hasStreamingPart = (message: ChatMessage | undefined) => {
   if (!message) return false;
-  return message.parts.some(part => {
+  return getMessageParts(message).some(part => {
     if (part.type === 'reasoning' || part.type === 'text') {
-      return (part as { state?: string }).state === 'streaming';
+      return 'state' in part && part.state === 'streaming';
     }
-    if (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) {
-      const state = (part as { state?: string }).state;
+    if (part.type === 'tool-invocation') {
+      return 'toolInvocation' in part && part.toolInvocation.state !== 'result';
+    }
+    if (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) {
+      const state = 'state' in part ? part.state : undefined;
       return state !== 'output-available' && state !== 'output-error';
     }
     return false;

@@ -586,11 +586,10 @@ describe('Agent signal routes', () => {
       result: { ok: true },
     });
 
-    // A continuation run was POSTed with the assistant tool-call message plus the tool result.
+    // Threaded continuations rely on persisted memory for assistant messages and send only tool results.
     expect(streamUntilIdleSpy).toHaveBeenCalled();
     const continuationCall = streamUntilIdleSpy.mock.calls.at(-1) as [any[], { memory?: unknown }];
     expect(continuationCall[0]).toEqual([
-      ...assistantMessages,
       {
         role: 'tool',
         content: [
@@ -604,6 +603,57 @@ describe('Agent signal routes', () => {
       },
     ]);
     expect(continuationCall[1]?.memory).toEqual({ thread: 'thread-123', resource: 'resource-123' });
+  });
+
+  it('preserves assistant non-user messages for stateless client-tool continuations', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const assistantMessages = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'myTool', args: { x: 'hi' } }],
+      },
+    ];
+    const chunks = [
+      {
+        type: 'tool-call',
+        runId: 'run-stateless',
+        payload: { toolCallId: 'call-1', toolName: 'myTool', args: { x: 'hi' } },
+      },
+      {
+        type: 'finish',
+        runId: 'run-stateless',
+        payload: { stepResult: { reason: 'tool-calls' }, messages: { nonUser: assistantMessages } },
+      },
+    ];
+    const streamUntilIdleSpy = vi
+      .spyOn(agent, 'streamUntilIdle')
+      .mockResolvedValue({ body: { cancel: vi.fn() } } as never);
+    const clientTools = {
+      myTool: {
+        id: 'myTool',
+        description: 'tool',
+        inputSchema: z.object({ x: z.string() }),
+        execute: vi.fn(async () => ({ ok: true })),
+      },
+    };
+
+    await mockSignalAndSubscriptionRequests(agent, 'run-stateless', chunks, {
+      signal: { type: 'user-message', contents: 'hello' },
+      ifIdle: { streamOptions: { clientTools } },
+    } as SendAgentSignalParams);
+
+    const subscribed = await agent.subscribeToThread({} as SubscribeAgentThreadParams);
+    await subscribed.processDataStream({ onChunk: async () => {} });
+
+    const continuationCall = streamUntilIdleSpy.mock.calls.at(-1) as [any[], { memory?: unknown }];
+    expect(continuationCall[0]).toEqual([
+      ...assistantMessages,
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'myTool', result: { ok: true } }],
+      },
+    ]);
+    expect(continuationCall[1]?.memory).toBeUndefined();
   });
 
   it('executes multiple client tools after one tool-calls finish', async () => {
@@ -664,7 +714,6 @@ describe('Agent signal routes', () => {
     expect(received.filter(chunk => chunk.type === 'tool-result')).toHaveLength(2);
     const [continuationMessages] = streamUntilIdleSpy.mock.calls.at(-1) as [any[]];
     expect(continuationMessages).toEqual([
-      ...assistantMessages,
       {
         role: 'tool',
         content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'firstTool', result: { first: true } }],
@@ -851,7 +900,10 @@ describe('Agent signal routes', () => {
     expect((executeSpy.mock.calls[0] as any[])[0]).toEqual({ run: 'a' });
     expect(streamUntilIdleSpy).toHaveBeenCalledTimes(1);
     const [continuationMessages] = streamUntilIdleSpy.mock.calls.at(-1) as [any[]];
-    expect(continuationMessages[0]).toEqual(assistantMessages[0]);
+    expect(continuationMessages[0]).toEqual({
+      role: 'tool',
+      content: [{ type: 'tool-result', toolCallId: 'call-a', toolName: 'myTool', result: { args: { run: 'a' } } }],
+    });
   });
 
   it('continues receiving later run chunks through the same subscription stream', async () => {

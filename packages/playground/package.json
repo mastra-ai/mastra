@@ -98,6 +98,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.2.2",

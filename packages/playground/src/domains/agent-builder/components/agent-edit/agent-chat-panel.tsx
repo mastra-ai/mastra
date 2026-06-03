@@ -1,6 +1,4 @@
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { Avatar, Txt } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
@@ -79,7 +77,6 @@ export const AgentChatPanelProvider = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const emptyMessages = useMemo(() => [] as never[], [agentId]);
   const storedMessages = data?.messages ?? emptyMessages;
-  const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
 
   const meta = useMemo<AgentChatMeta>(
     () => ({ isConversationLoading, agentName, agentDescription, agentAvatarUrl }),
@@ -87,7 +84,7 @@ export const AgentChatPanelProvider = ({
   );
 
   return (
-    <StreamChatProvider agentId={agentId} threadId={threadId} initialMessages={v5Messages}>
+    <StreamChatProvider agentId={agentId} threadId={threadId} initialMessages={storedMessages}>
       <AgentChatMetaContext.Provider value={meta}>{children}</AgentChatMetaContext.Provider>
     </StreamChatProvider>
   );
