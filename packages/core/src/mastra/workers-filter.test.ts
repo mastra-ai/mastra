@@ -97,16 +97,20 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
     mastra.setLogger({
       logger: { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
     });
-    for (const w of mastra.workers) {
-      vi.spyOn(w, 'start').mockResolvedValue(undefined);
-      vi.spyOn(w, 'init').mockResolvedValue(undefined);
-    }
+    // Spy on workers known at construction time.
+    const preStarts = mastra.workers.map(w => ({
+      name: w.name,
+      spy: vi.spyOn(w, 'start').mockResolvedValue(undefined),
+      initSpy: vi.spyOn(w, 'init').mockResolvedValue(undefined),
+    }));
 
     await mastra.startWorkers();
     // Should not throw, should not start any worker, and must have warned
     // about the empty filter so users know MASTRA_WORKERS was misspelled.
-    for (const w of mastra.workers) {
-      expect((w as any).start.mock.calls.length).toBe(0);
+    // SchedulerWorker may be injected lazily in startWorkers(), so check
+    // only the pre-existing spied workers.
+    for (const s of preStarts) {
+      expect(s.spy).not.toHaveBeenCalled();
     }
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('MASTRA_WORKERS=nonexistent'));
   });

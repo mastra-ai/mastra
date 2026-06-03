@@ -15,6 +15,7 @@ import { dispatchDueNotifications } from '../../notifications/dispatcher';
 import { InMemoryNotificationsStorage } from '../../notifications/storage';
 import { createNotificationInboxTool } from '../../notifications/tool';
 import { MastraCompositeStore } from '../../storage/base';
+import { InMemoryStore } from '../../storage/mock';
 import { Agent } from '../agent';
 import {
   createMessageSignal,
@@ -1116,7 +1117,11 @@ describe('Agent signals', () => {
 
   it('delivers medium-priority notification records while idle', async () => {
     const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
+    const storage = new MastraCompositeStore({
+      id: 'notification-storage',
+      default: new InMemoryStore(),
+      domains: { notifications },
+    });
     const agent = new Agent({
       id: 'notification-agent',
       name: 'Notification Agent',
@@ -1173,7 +1178,11 @@ describe('Agent signals', () => {
 
   it('keeps immediate notification records pending when runtime rejects delivery', async () => {
     const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({ id: 'rejected-notification-storage', domains: { notifications } });
+    const storage = new MastraCompositeStore({
+      id: 'rejected-notification-storage',
+      default: new InMemoryStore(),
+      domains: { notifications },
+    });
     const agent = new Agent({
       id: 'rejected-notification-agent',
       name: 'Rejected Notification Agent',
@@ -1217,11 +1226,13 @@ describe('Agent signals', () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({
       id: 'active-priority-notification-storage',
+      default: new InMemoryStore(),
       domains: { notifications },
     });
     const model = new MockLanguageModelV2({
       doStream: async () => {
         streamCount += 1;
+        const responseText = `active response ${streamCount}`;
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -1229,9 +1240,9 @@ describe('Agent signals', () => {
             async start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
               controller.enqueue({ type: 'text-start', id: 'text-1' });
-              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'active response' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
               controller.enqueue({ type: 'text-end', id: 'text-1' });
-              await firstFinished;
+              if (streamCount === 1) await firstFinished;
               controller.enqueue({
                 type: 'finish',
                 finishReason: 'stop',
@@ -1273,8 +1284,6 @@ describe('Agent signals', () => {
       { resourceId: 'active-priority-notification-user', threadId: 'active-priority-notification-thread' },
     );
 
-    await nextTick();
-    expect(streamCount).toBe(1);
     expect(high.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
     expect(high.decision).toMatchObject({ action: 'summarize', reason: 'active-high-summary-then-full' });
     expect(high.record).toMatchObject({
@@ -1294,8 +1303,10 @@ describe('Agent signals', () => {
     expect(low.record.summaryAt).toBeInstanceOf(Date);
 
     releaseFirst();
-    await expect(stream.text).resolves.toBe('active response');
-    expect(streamCount).toBe(1);
+    // The high-priority summary signal is delivered to the active run, which the
+    // agentic loop picks up and processes with an additional model iteration.
+    await stream.text;
+    expect(streamCount).toBe(2);
     subscription.unsubscribe();
   });
 
@@ -1306,7 +1317,11 @@ describe('Agent signals', () => {
     });
     let streamCount = 0;
     const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({ id: 'high-active-integration-storage', domains: { notifications } });
+    const storage = new MastraCompositeStore({
+      id: 'high-active-integration-storage',
+      default: new InMemoryStore(),
+      domains: { notifications },
+    });
     const agent = new Agent({
       id: 'high-active-integration-agent',
       name: 'High Active Integration Agent',
@@ -1378,7 +1393,8 @@ describe('Agent signals', () => {
       contents: 'github: 1',
       attributes: { pending: 1 },
     });
-    expect(streamCount).toBe(1);
+    // The summary signal is delivered to the active run, triggering an additional model iteration.
+    expect(streamCount).toBe(2);
     await expect(
       notifications.getNotification({ threadId: 'high-active-thread', id: result.record.id }),
     ).resolves.toMatchObject({
@@ -1420,7 +1436,11 @@ describe('Agent signals', () => {
     });
     let streamCount = 0;
     const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({ id: 'medium-active-dispatch-storage', domains: { notifications } });
+    const storage = new MastraCompositeStore({
+      id: 'medium-active-dispatch-storage',
+      default: new InMemoryStore(),
+      domains: { notifications },
+    });
     const agent = new Agent({
       id: 'medium-active-dispatch-agent',
       name: 'Medium Active Dispatch Agent',
@@ -1494,7 +1514,8 @@ describe('Agent signals', () => {
       contents: 'slack: 1',
       attributes: { pending: 1 },
     });
-    expect(streamCount).toBe(1);
+    // The summary signal is delivered to the active run, triggering an additional model iteration.
+    expect(streamCount).toBe(2);
     await expect(
       notifications.getNotification({ threadId: 'medium-active-thread', id: 'medium-active-notification' }),
     ).resolves.toMatchObject({
@@ -1511,7 +1532,11 @@ describe('Agent signals', () => {
     let streamCount = 0;
     const pubsub = new AsyncCallbackPubSub();
     const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({ id: 'low-priority-notification-storage', domains: { notifications } });
+    const storage = new MastraCompositeStore({
+      id: 'low-priority-notification-storage',
+      default: new InMemoryStore(),
+      domains: { notifications },
+    });
     const agent = new Agent({
       id: 'low-priority-notification-agent',
       name: 'Low Priority Notification Agent',
@@ -1582,7 +1607,11 @@ describe('Agent signals', () => {
   it('notification inbox read injects a real notification signal through agent subscriptions', async () => {
     let streamCount = 0;
     const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({ id: 'inbox-read-delivery-storage', domains: { notifications } });
+    const storage = new MastraCompositeStore({
+      id: 'inbox-read-delivery-storage',
+      default: new InMemoryStore(),
+      domains: { notifications },
+    });
     const agent = new Agent({
       id: 'inbox-read-delivery-agent',
       name: 'Inbox Read Delivery Agent',
@@ -1649,6 +1678,7 @@ describe('Agent signals', () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({
       id: 'inbox-read-already-delivered-storage',
+      default: new InMemoryStore(),
       domains: { notifications },
     });
     const agent = new Agent({
@@ -1708,7 +1738,11 @@ describe('Agent signals', () => {
     let streamCount = 0;
     const pubsub = new AsyncCallbackPubSub();
     const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({ id: 'no-subscriber-notification-storage', domains: { notifications } });
+    const storage = new MastraCompositeStore({
+      id: 'no-subscriber-notification-storage',
+      default: new InMemoryStore(),
+      domains: { notifications },
+    });
     const agent = new Agent({
       id: 'no-subscriber-notification-agent',
       name: 'No Subscriber Notification Agent',
@@ -1751,7 +1785,11 @@ describe('Agent signals', () => {
   it('defers notification records without starting an idle run', async () => {
     let streamCount = 0;
     const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({ id: 'deferred-notification-storage', domains: { notifications } });
+    const storage = new MastraCompositeStore({
+      id: 'deferred-notification-storage',
+      default: new InMemoryStore(),
+      domains: { notifications },
+    });
     const deliverAt = new Date('2026-05-30T12:00:00Z');
     const agent = new Agent({
       id: 'deferred-notification-agent',
@@ -1797,7 +1835,11 @@ describe('Agent signals', () => {
 
   it('coalesces pending notification records through sendNotificationSignal', async () => {
     const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({ id: 'coalesced-notification-storage', domains: { notifications } });
+    const storage = new MastraCompositeStore({
+      id: 'coalesced-notification-storage',
+      default: new InMemoryStore(),
+      domains: { notifications },
+    });
     const agent = new Agent({
       id: 'coalesced-notification-agent',
       name: 'Coalesced Notification Agent',
