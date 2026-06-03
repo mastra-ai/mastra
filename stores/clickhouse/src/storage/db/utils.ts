@@ -73,7 +73,6 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_NOTIFICATIONS]: `ReplacingMergeTree()`,
   mastra_channel_installations: `ReplacingMergeTree()`,
   mastra_channel_config: `ReplacingMergeTree()`,
-  [TABLE_NOTIFICATIONS]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

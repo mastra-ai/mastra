@@ -25,10 +25,6 @@ export type NotificationSummarySignalMetadata = {
   priority?: NotificationPriority;
 };
 
-export type NotificationSignalMetadataEnvelope = {
-  notification: NotificationSignalMetadata | NotificationSummarySignalMetadata;
-};
-
 export type NotificationRecord = {
   id: string;
   threadId: string;

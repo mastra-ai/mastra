@@ -680,7 +680,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       workspace: config?.workspace ?? getDynamicWorkspace,
       browser: config?.browser,
       modes,
-      heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
+      heartbeatHandlers,
       modelAuthChecker: provider => {
         // Gateway key only authorizes providers that the Mastra gateway actually serves
         const gatewayKey =
