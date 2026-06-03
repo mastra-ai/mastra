@@ -36,6 +36,8 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 export { formatToolResult };
 
 const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
+// These are internal control-plane signals handled by GithubSignals. The user-visible
+// result is rendered by github-sync-status, so showing these would duplicate the UI.
 const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
 
 function shouldRenderReactiveSignal(tagName: string): boolean {

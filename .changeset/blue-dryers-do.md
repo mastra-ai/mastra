@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Improved GitHub PR notifications in Mastra Code with clearer status, subscription hints, automatic merged PR cleanup, and more reliable inbox access.
+Added GitHub PR notifications in Mastra Code with subscription management, PR status badges, subscription hints, automatic merged PR cleanup, and inbox access.
