@@ -16,8 +16,9 @@ function isProcessRunning(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (err: unknown) {
+    // EPERM means the process exists but we don't have permission to signal it.
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
@@ -132,7 +133,11 @@ export async function acquireDevLock(dotMastraPath: string): Promise<void> {
 export async function updateDevLock(dotMastraPath: string, host: string, port: number): Promise<void> {
   const lockPath = getLockPath(dotMastraPath);
   const data: LockData = { pid: process.pid, host, port };
-  await writeFile(lockPath, JSON.stringify(data), 'utf-8');
+  try {
+    await writeFile(lockPath, JSON.stringify(data), 'utf-8');
+  } catch {
+    // Best-effort; if the lockfile can't be updated, don't block dev startup.
+  }
 }
 
 /**
