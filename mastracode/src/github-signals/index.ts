@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -1047,19 +1047,25 @@ export class GithubSignals implements Processor<'github-signals'> {
           owner: z.string().optional(),
           repo: z.string().optional(),
         }),
-        execute: async (input, context) => {
-          await this.#sendToolSignal({
-            signal: GithubSignals.signals.subscribeToPR(input),
-            agentId: context?.agent?.agentId,
-            threadId: context?.agent?.threadId ?? threadContext.threadId,
-            resourceId: context?.agent?.resourceId ?? threadContext.resourceId,
-          });
-          return {
-            subscribed: true,
+        execute: async input => {
+          const result = await this.#subscribe({
+            id: `github-tool-subscribe-${randomUUID()}`,
             owner: input.owner,
             repo: input.repo,
             number: input.number,
-            message: `GitHub PR #${input.number} subscription signal sent.`,
+            threadId: threadContext.threadId,
+            resourceId: threadContext.resourceId,
+          });
+          return {
+            subscribed: true,
+            owner: result.owner,
+            repo: result.repo,
+            number: result.number,
+            syncStatus: result.syncResult?.ok === false ? 'error' : result.syncResult ? 'success' : undefined,
+            message:
+              result.syncResult?.ok === false
+                ? `Subscribed to ${result.owner}/${result.repo}#${result.number}, but gitcrawl sync failed: ${result.syncResult.error}`
+                : `Subscribed to ${result.owner}/${result.repo}#${result.number}.`,
           };
         },
       }),
@@ -1071,45 +1077,28 @@ export class GithubSignals implements Processor<'github-signals'> {
           owner: z.string().optional(),
           repo: z.string().optional(),
         }),
-        execute: async (input, context) => {
-          await this.#sendToolSignal({
-            signal: GithubSignals.signals.unsubscribeFromPR(input),
-            agentId: context?.agent?.agentId,
-            threadId: context?.agent?.threadId ?? threadContext.threadId,
-            resourceId: context?.agent?.resourceId ?? threadContext.resourceId,
-          });
-          return {
-            unsubscribed: true,
+        execute: async input => {
+          const result = await this.#unsubscribe({
+            id: `github-tool-unsubscribe-${randomUUID()}`,
             owner: input.owner,
             repo: input.repo,
             number: input.number,
-            message: `GitHub PR #${input.number} unsubscribe signal sent.`,
+            threadId: threadContext.threadId,
+            resourceId: threadContext.resourceId,
+          });
+          return {
+            unsubscribed: result.removed ?? false,
+            owner: result.owner,
+            repo: result.repo,
+            number: result.number,
+            remainingSubscriptions: result.remainingSubscriptions,
+            message: result.removed
+              ? `Unsubscribed from ${result.owner}/${result.repo}#${result.number}.`
+              : `No GitHub subscription found for ${result.owner}/${result.repo}#${result.number}.`,
           };
         },
       }),
     };
-  }
-
-  async #sendToolSignal(input: {
-    signal: AgentSignalInput;
-    agentId?: string;
-    threadId?: string;
-    resourceId?: string;
-  }): Promise<void> {
-    if (!input.threadId || !input.resourceId) {
-      throw new Error('GitHub tools require threadId and resourceId.');
-    }
-    const agent = this.#getNotificationAgent({ agentId: input.agentId });
-    if (!agent?.sendSignal) {
-      throw new Error('Could not find an agent for GitHub tool signal delivery.');
-    }
-    const result = agent.sendSignal(input.signal, {
-      resourceId: input.resourceId,
-      threadId: input.threadId,
-      ifActive: { behavior: 'deliver' },
-      ifIdle: { behavior: 'wake' },
-    });
-    if (result.accepted instanceof Promise) await result.accepted;
   }
 
   async #resolveRepository(input: GithubPRSignal & { abortSignal?: AbortSignal }): Promise<GithubRepository> {
