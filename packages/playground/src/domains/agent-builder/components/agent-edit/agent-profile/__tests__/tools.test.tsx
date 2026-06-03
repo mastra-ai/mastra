@@ -263,6 +263,9 @@ describe('Tools — toolkit filter pane', () => {
     sharedServer.use(
       http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json(composioProvider)),
       http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () => HttpResponse.json(composioToolkits)),
+      // Each provider toolkit row mounts a connection control that lists its
+      // connections; default to none so the rows show the "Connect" button.
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items: [] })),
     );
   });
 
@@ -417,6 +420,12 @@ describe('Tools — toolkit filter pane', () => {
 describe('Tools — integration rows without a connection', () => {
   beforeEach(() => {
     sharedServer.use(
+      // The toolkit row mounts a connection control, so the provider +
+      // toolkit lists must resolve for it to render.
+      http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json(composioProvider)),
+      http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () => HttpResponse.json(composioToolkits)),
+      // No existing connections → the toolkit row shows "Connect".
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items: [] })),
       http.post(`${BASE_URL}/api/tool-providers/composio/authorize`, () =>
         HttpResponse.json({ url: 'https://oauth.example/authorize', authId: 'auth_abc' }),
       ),
@@ -429,12 +438,19 @@ describe('Tools — integration rows without a connection', () => {
   const ConnectHarness = ({
     children,
     onState,
+    defaultToolProviders,
   }: {
     children: ReactNode;
     onState?: (state: AgentBuilderEditFormValues) => void;
+    defaultToolProviders?: AgentBuilderEditFormValues['toolProviders'];
   }) => {
     const methods = useForm<AgentBuilderEditFormValues>({
-      defaultValues: { tools: {}, agents: {}, workflows: {}, toolProviders: {} } as AgentBuilderEditFormValues,
+      defaultValues: {
+        tools: {},
+        agents: {},
+        workflows: {},
+        toolProviders: defaultToolProviders ?? {},
+      } as AgentBuilderEditFormValues,
     });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return (
@@ -466,35 +482,37 @@ describe('Tools — integration rows without a connection', () => {
     hasConnection: false,
   };
 
-  it('renders a Connect button alongside the selectable card when an integration row has no connection', () => {
-    const { getByTestId, getByText } = render(
+  it('shows a muted "Requires connection" hint on the card and a Connect button on the toolkit row', async () => {
+    const { findByTestId, getByTestId, getByText, queryByTestId } = render(
       <ConnectHarness>
         <Tools availableAgentTools={[unconnectedIntegrationTool]} />
       </ConnectHarness>,
     );
 
-    // Connect button is present.
-    expect(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS')).toBeTruthy();
-    // Card stays selectable — checkbox span is still rendered.
+    // Card stays selectable — checkbox span is still rendered — and shows the hint.
     expect(getByTestId('tool-card-check-integration-composio:GMAIL_FETCH_EMAILS')).toBeTruthy();
-    // The control is just an outline "Add connection" button.
-    expect(getByText('Add connection')).toBeTruthy();
+    expect(getByText('Requires connection')).toBeTruthy();
+
+    // The connection control now lives on the toolkit row, not the card.
+    expect(queryByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS')).toBeNull();
+    const connectBtn = await findByTestId('toolkit-connect-composio-gmail');
+    expect(connectBtn.textContent).toContain('Connect');
   });
 
-  it('clicking Add connection authorizes and opens the provider consent popup', async () => {
+  it('clicking the toolkit-row Connect button authorizes and opens the provider consent popup', async () => {
     const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
     // Stub window.open so useAuthorize's default opener resolves synchronously.
     const originalOpen = window.open;
     window.open = openPopup as unknown as typeof window.open;
 
     try {
-      const { getByTestId } = render(
+      const { findByTestId } = render(
         <ConnectHarness>
           <Tools availableAgentTools={[unconnectedIntegrationTool]} />
         </ConnectHarness>,
       );
 
-      fireEvent.click(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS'));
+      fireEvent.click(await findByTestId('toolkit-connect-composio-gmail'));
 
       await waitFor(() => {
         expect(openPopup).toHaveBeenCalledWith(
@@ -508,68 +526,51 @@ describe('Tools — integration rows without a connection', () => {
     }
   });
 
-  it('auto-pins the new connection on a checked integration card after successful OAuth', async () => {
+  it('pins the new connection into the toolkit form field after successful OAuth when a tool is selected', async () => {
     const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
     const originalOpen = window.open;
     window.open = openPopup as unknown as typeof window.open;
 
+    // After OAuth completes the connections list must report the new active
+    // account so the toolkit control pins it into the form.
+    let authorized = false;
+    sharedServer.use(
+      http.post(`${BASE_URL}/api/tool-providers/composio/authorize`, () => {
+        authorized = true;
+        return HttpResponse.json({ url: 'https://oauth.example/authorize', authId: 'auth_abc' });
+      }),
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({
+          items: authorized ? [{ connectionId: 'auth_abc', status: 'active', label: 'work' }] : [],
+        }),
+      ),
+    );
+
     const spy = vi.fn();
     try {
+      // A tool in the gmail toolkit is already selected in the form.
       const checkedAndUnconnected: AgentTool = { ...unconnectedIntegrationTool, isChecked: true };
-      const { getByTestId } = render(
-        <ConnectHarness onState={spy}>
+      const { findByTestId, getByTestId } = render(
+        <ConnectHarness
+          onState={spy}
+          defaultToolProviders={
+            {
+              composio: { tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } }, connections: {} },
+            } as AgentBuilderEditFormValues['toolProviders']
+          }
+        >
           <Tools availableAgentTools={[checkedAndUnconnected]} />
         </ConnectHarness>,
       );
 
-      fireEvent.click(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS'));
+      fireEvent.click(await findByTestId('toolkit-connect-composio-gmail'));
 
-      // Wait for the OAuth poll loop (2s default) to resolve. The auth-status
-      // handler immediately returns `completed`, so after one poll the
-      // mutation onSuccess fires and the parent writes the pin.
       await waitFor(
         () => {
           fireEvent.click(getByTestId('spy-form-state'));
           const state = spy.mock.calls[spy.mock.calls.length - 1]?.[0] as AgentBuilderEditFormValues | undefined;
           expect(state?.toolProviders?.composio?.connections?.gmail).toEqual([
-            { kind: 'author', toolkit: 'gmail', connectionId: 'auth_abc', scope: 'per-author' },
-          ]);
-        },
-        { timeout: 5000 },
-      );
-    } finally {
-      window.open = originalOpen;
-    }
-  }, 10000);
-
-  it('auto-checks the tool AND auto-pins the new connection when Connect is clicked on an unchecked card', async () => {
-    const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
-    const originalOpen = window.open;
-    window.open = openPopup as unknown as typeof window.open;
-
-    const spy = vi.fn();
-    try {
-      const { getByTestId } = render(
-        <ConnectHarness onState={spy}>
-          <Tools availableAgentTools={[unconnectedIntegrationTool]} />
-        </ConnectHarness>,
-      );
-
-      fireEvent.click(getByTestId('tool-card-connect-integration-composio:GMAIL_FETCH_EMAILS'));
-
-      // Clicking Connect on an unchecked card means "I want this tool with
-      // this new connection" — the tool gets added to `tools` and the
-      // freshly-authorized connection gets pinned in one step.
-      await waitFor(
-        () => {
-          fireEvent.click(getByTestId('spy-form-state'));
-          const state = spy.mock.calls[spy.mock.calls.length - 1]?.[0] as AgentBuilderEditFormValues | undefined;
-          expect(state?.toolProviders?.composio?.tools?.GMAIL_FETCH_EMAILS).toEqual({
-            toolkit: 'gmail',
-            description: 'Fetch emails',
-          });
-          expect(state?.toolProviders?.composio?.connections?.gmail).toEqual([
-            { kind: 'author', toolkit: 'gmail', connectionId: 'auth_abc', scope: 'per-author' },
+            { kind: 'author', toolkit: 'gmail', connectionId: 'auth_abc', label: 'work', scope: 'per-author' },
           ]);
         },
         { timeout: 5000 },
@@ -580,7 +581,7 @@ describe('Tools — integration rows without a connection', () => {
   }, 10000);
 });
 
-describe('Tools — checked integration rows render the connection picker', () => {
+describe('Tools — toolkit row connection management', () => {
   beforeEach(() => {
     // Stamp the providers list + toolkit list shared by all picker scenarios.
     sharedServer.use(
@@ -604,12 +605,19 @@ describe('Tools — checked integration rows render the connection picker', () =
   const PickerHarness = ({
     children,
     onState,
+    defaultToolProviders,
   }: {
     children: ReactNode;
     onState?: (state: AgentBuilderEditFormValues) => void;
+    defaultToolProviders?: AgentBuilderEditFormValues['toolProviders'];
   }) => {
     const methods = useForm<AgentBuilderEditFormValues>({
-      defaultValues: { tools: {}, agents: {}, workflows: {}, toolProviders: {} } as AgentBuilderEditFormValues,
+      defaultValues: {
+        tools: {},
+        agents: {},
+        workflows: {},
+        toolProviders: defaultToolProviders ?? {},
+      } as AgentBuilderEditFormValues,
     });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     // Expose form state to assertions via a spy button.
@@ -642,7 +650,43 @@ describe('Tools — checked integration rows render the connection picker', () =
     hasConnection: true,
   };
 
-  it('shows active connections as inline badges on the card (pending ones excluded)', async () => {
+  // Form state for a gmail tool already selected — the toolkit control only
+  // pins connections while a tool in the toolkit is selected in the form.
+  const gmailToolSelected: AgentBuilderEditFormValues['toolProviders'] = {
+    composio: { tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } }, connections: {} },
+  } as AgentBuilderEditFormValues['toolProviders'];
+
+  it('shows a skeleton while the connections query is loading, then resolves the control', async () => {
+    let releaseConnections: () => void = () => {};
+    const connectionsGate = new Promise<void>(resolve => {
+      releaseConnections = resolve;
+    });
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, async () => {
+        await connectionsGate;
+        return HttpResponse.json({ items: [{ connectionId: 'conn_only', status: 'active', label: 'only' }] });
+      }),
+    );
+
+    const { findByTestId, queryByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
+      </PickerHarness>,
+    );
+
+    // While loading, neither Connect nor the cog flashes — a skeleton stands in.
+    await findByTestId('toolkit-connection-loading-composio-gmail');
+    expect(queryByTestId('toolkit-connect-composio-gmail')).toBeNull();
+    expect(queryByTestId('toolkit-manage-composio-gmail')).toBeNull();
+
+    releaseConnections();
+
+    // Once resolved, the skeleton is replaced by the manage cog.
+    await findByTestId('toolkit-manage-composio-gmail');
+    expect(queryByTestId('toolkit-connection-loading-composio-gmail')).toBeNull();
+  });
+
+  it('shows a manage cog (not a Connect button) on the toolkit row when a connection exists', async () => {
     sharedServer.use(
       http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
         HttpResponse.json({
@@ -654,25 +698,126 @@ describe('Tools — checked integration rows render the connection picker', () =
       ),
     );
 
-    const uncheckedIntegrationTool: AgentTool = { ...checkedIntegrationTool, isChecked: false };
-
-    const { findByTestId, queryByTestId, queryByText } = render(
+    const { findByTestId, queryByTestId } = render(
       <PickerHarness>
-        <Tools availableAgentTools={[uncheckedIntegrationTool]} />
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
       </PickerHarness>,
     );
 
-    // The active connection is shown directly as a badge on the card — no manage dialog.
-    const badge = await findByTestId('connection-badge-composio-gmail-conn_work');
-    expect(badge.textContent).toContain('work');
-    expect(queryByText('Use')).toBeNull();
+    // An active connection exists → the row shows the manage cog, not Connect.
+    await findByTestId('toolkit-manage-composio-gmail');
+    expect(queryByTestId('toolkit-connect-composio-gmail')).toBeNull();
 
-    // Pending connections are not surfaced.
-    expect(queryByTestId('connection-badge-composio-gmail-conn_pending')).toBeNull();
-    expect(queryByText('pending')).toBeNull();
+    // The card no longer renders connection badges.
+    expect(queryByTestId('connection-badge-composio-gmail-conn_work')).toBeNull();
   });
 
-  it('auto-pins the existing connection on a checked integration card (badges = used)', async () => {
+  it('opening the manage cog renders the rename + disconnect dialog and disconnect is gated by an AlertDialog', async () => {
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({ items: [{ connectionId: 'conn_only', status: 'active', label: 'only' }] }),
+      ),
+      http.delete(`${BASE_URL}/api/tool-providers/composio/connections/conn_only`, () =>
+        HttpResponse.json({ success: true }),
+      ),
+    );
+
+    const { findByTestId, getByTestId, queryByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
+      </PickerHarness>,
+    );
+
+    fireEvent.click(await findByTestId('toolkit-manage-composio-gmail'));
+
+    // The dialog always opens on the connection list; drill into the account.
+    await findByTestId('toolkit-manage-composio-gmail-list');
+    fireEvent.click(getByTestId('toolkit-manage-composio-gmail-list-item-conn_only'));
+
+    // Rename input + Disconnect button are present.
+    await findByTestId('toolkit-manage-composio-gmail-input');
+    fireEvent.click(getByTestId('toolkit-manage-composio-gmail-disconnect'));
+
+    // Disconnect first opens the confirmation AlertDialog.
+    await findByTestId('toolkit-manage-composio-gmail-disconnect-dialog');
+    fireEvent.click(getByTestId('toolkit-manage-composio-gmail-disconnect-confirm'));
+
+    // After confirming the last account, the dialog closes.
+    await waitFor(() => expect(queryByTestId('toolkit-manage-composio-gmail-disconnect-dialog')).toBeNull());
+  });
+
+  it('the manage cog always opens on the connection list, even for a single account', async () => {
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({ items: [{ connectionId: 'conn_only', status: 'active', label: 'only' }] }),
+      ),
+    );
+
+    const { findByTestId, getByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
+      </PickerHarness>,
+    );
+
+    fireEvent.click(await findByTestId('toolkit-manage-composio-gmail'));
+
+    // List is shown first even though there is only one account.
+    await findByTestId('toolkit-manage-composio-gmail-list');
+    fireEvent.click(getByTestId('toolkit-manage-composio-gmail-list-item-conn_only'));
+
+    // The form has a back affordance to return to the list.
+    await findByTestId('toolkit-manage-composio-gmail-input');
+    getByTestId('toolkit-manage-composio-gmail-back');
+    fireEvent.click(getByTestId('toolkit-manage-composio-gmail-back'));
+    await findByTestId('toolkit-manage-composio-gmail-list');
+  });
+
+  it('opening the manage cog with multiple active connections shows a list, drilling into one to manage it', async () => {
+    let items = [
+      { connectionId: 'conn_work', status: 'active', label: 'work' },
+      { connectionId: 'conn_personal', status: 'active', label: 'personal' },
+    ];
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items })),
+      http.delete(`${BASE_URL}/api/tool-providers/composio/connections/conn_work`, () => {
+        items = items.filter(item => item.connectionId !== 'conn_work');
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    const { findByTestId, getByTestId, queryByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
+      </PickerHarness>,
+    );
+
+    fireEvent.click(await findByTestId('toolkit-manage-composio-gmail'));
+
+    // Multiple accounts → a list is shown first, one row per connection.
+    await findByTestId('toolkit-manage-composio-gmail-list');
+    getByTestId('toolkit-manage-composio-gmail-list-item-conn_personal');
+
+    // Drilling into one account shows the rename + disconnect form with a back affordance.
+    fireEvent.click(getByTestId('toolkit-manage-composio-gmail-list-item-conn_work'));
+    await findByTestId('toolkit-manage-composio-gmail-input');
+    getByTestId('toolkit-manage-composio-gmail-back');
+
+    // Back returns to the list without closing the dialog.
+    fireEvent.click(getByTestId('toolkit-manage-composio-gmail-back'));
+    await findByTestId('toolkit-manage-composio-gmail-list');
+
+    // Disconnecting one of two accounts returns to the list, now showing only
+    // the remaining account.
+    fireEvent.click(getByTestId('toolkit-manage-composio-gmail-list-item-conn_work'));
+    fireEvent.click(await findByTestId('toolkit-manage-composio-gmail-disconnect'));
+    fireEvent.click(await findByTestId('toolkit-manage-composio-gmail-disconnect-confirm'));
+
+    await findByTestId('toolkit-manage-composio-gmail-list');
+    await waitFor(() => expect(queryByTestId('toolkit-manage-composio-gmail-list-item-conn_work')).toBeNull());
+    getByTestId('toolkit-manage-composio-gmail-list-item-conn_personal');
+  });
+
+  it('pins the toolkit active connection into the form while a tool in the toolkit is selected', async () => {
     sharedServer.use(
       http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
         HttpResponse.json({ items: [{ connectionId: 'conn_only', status: 'active', label: 'only' }] }),
@@ -681,12 +826,12 @@ describe('Tools — checked integration rows render the connection picker', () =
 
     const spy = vi.fn();
     const { findByTestId, getByTestId } = render(
-      <PickerHarness onState={spy}>
+      <PickerHarness onState={spy} defaultToolProviders={gmailToolSelected}>
         <Tools availableAgentTools={[checkedIntegrationTool]} />
       </PickerHarness>,
     );
 
-    await findByTestId('connection-badge-composio-gmail-conn_only');
+    await findByTestId('toolkit-manage-composio-gmail');
     await waitFor(() => {
       fireEvent.click(getByTestId('spy-form-state'));
       const state = spy.mock.calls.at(-1)?.[0] as AgentBuilderEditFormValues;
@@ -695,11 +840,13 @@ describe('Tools — checked integration rows render the connection picker', () =
           toolProviders: { composio?: { connections?: { gmail?: Array<{ connectionId: string }> } } };
         }
       ).toolProviders.composio?.connections?.gmail;
-      expect(pinned).toEqual([expect.objectContaining({ kind: 'author', toolkit: 'gmail', connectionId: 'conn_only' })]);
+      expect(pinned).toEqual([
+        expect.objectContaining({ kind: 'author', toolkit: 'gmail', connectionId: 'conn_only' }),
+      ]);
     });
   });
 
-  it('auto-pins every active connection on a checked integration card', async () => {
+  it('pins every active connection while a tool in the toolkit is selected', async () => {
     sharedServer.use(
       http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
         HttpResponse.json({
@@ -713,12 +860,12 @@ describe('Tools — checked integration rows render the connection picker', () =
 
     const spy = vi.fn();
     const { findByTestId, getByTestId } = render(
-      <PickerHarness onState={spy}>
+      <PickerHarness onState={spy} defaultToolProviders={gmailToolSelected}>
         <Tools availableAgentTools={[checkedIntegrationTool]} />
       </PickerHarness>,
     );
 
-    await findByTestId('connection-badge-composio-gmail-conn_work');
+    await findByTestId('toolkit-manage-composio-gmail');
     await waitFor(() => {
       fireEvent.click(getByTestId('spy-form-state'));
       const state = spy.mock.calls.at(-1)?.[0] as AgentBuilderEditFormValues;
@@ -729,5 +876,76 @@ describe('Tools — checked integration rows render the connection picker', () =
       ).toolProviders.composio?.connections?.gmail;
       expect(pinned?.map(c => c.connectionId).sort()).toEqual(['conn_personal', 'conn_work']);
     });
+  });
+
+  it('renders the backend provider icon on the rename form when the toolkit has one', async () => {
+    sharedServer.use(
+      // Override the shared toolkit list so gmail carries an icon.
+      http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () => HttpResponse.json(composioToolkits)),
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({ items: [{ connectionId: 'conn_only', status: 'active', label: 'only' }] }),
+      ),
+    );
+
+    const { findByTestId, getByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
+      </PickerHarness>,
+    );
+
+    fireEvent.click(await findByTestId('toolkit-manage-composio-gmail'));
+    await findByTestId('toolkit-manage-composio-gmail-list');
+    fireEvent.click(getByTestId('toolkit-manage-composio-gmail-list-item-conn_only'));
+
+    // The rename form shows the resolved provider icon, not the generic fallback.
+    const input = await findByTestId('toolkit-manage-composio-gmail-input');
+    const form = input.closest('[data-testid="toolkit-manage-composio-gmail-dialog"]') as HTMLElement;
+    const icon = form.querySelector('img') as HTMLImageElement;
+    expect(icon).not.toBeNull();
+    expect(icon.getAttribute('src')).toBe(GMAIL_ICON_URL);
+  });
+
+  it('shows an "Add connection" action on the list when the provider allows multiple connections', async () => {
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({ items: [{ connectionId: 'conn_only', status: 'active', label: 'only' }] }),
+      ),
+    );
+
+    const { findByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
+      </PickerHarness>,
+    );
+
+    fireEvent.click(await findByTestId('toolkit-manage-composio-gmail'));
+    await findByTestId('toolkit-manage-composio-gmail-list');
+
+    // The provider supports multiple connections per toolkit, so the list
+    // offers an add-connection action in the footer.
+    await findByTestId('toolkit-manage-composio-gmail-add');
+  });
+
+  it('hides the "Add connection" action when the provider only allows a single connection', async () => {
+    sharedServer.use(
+      http.get(`${BASE_URL}/api/tool-providers`, () =>
+        HttpResponse.json({
+          providers: [{ id: 'composio', name: 'Composio', capabilities: { multipleConnectionsPerToolkit: false } }],
+        }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({ items: [{ connectionId: 'conn_only', status: 'active', label: 'only' }] }),
+      ),
+    );
+
+    const { findByTestId, getByTestId, queryByTestId } = render(
+      <PickerHarness>
+        <Tools availableAgentTools={[checkedIntegrationTool]} />
+      </PickerHarness>,
+    );
+
+    fireEvent.click(await findByTestId('toolkit-manage-composio-gmail'));
+    getByTestId('toolkit-manage-composio-gmail-list');
+    await waitFor(() => expect(queryByTestId('toolkit-manage-composio-gmail-add')).toBeNull());
   });
 });

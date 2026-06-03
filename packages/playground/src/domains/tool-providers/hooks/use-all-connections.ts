@@ -94,7 +94,7 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   // ("does this row have any connection?") and auto-pin ("if exactly one
   // exists, write it into the form on toggle-on").
   const connectionsByKey = useMemo(() => {
-    const map = new Map<string, Array<{ connectionId: string; label?: string | null }>>();
+    const map = new Map<string, Array<{ connectionId: string; label?: string | null; status?: string }>>();
     pairs.forEach((pair, idx) => {
       const items = connectionsQueries[idx]?.data?.items ?? [];
       map.set(`${pair.providerId}:${pair.toolkit}`, items);
@@ -102,8 +102,12 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
     return map;
   }, [pairs, connectionsQueries]);
 
+  // A toolkit "has a connection" only when at least one connection is active.
+  // Pending/failed rows don't count — this keeps the card hint in sync with the
+  // toolkit row control, which also treats only active connections as usable.
   const hasConnection = useMemo(
-    () => (providerId: string, toolkit: string) => (connectionsByKey.get(`${providerId}:${toolkit}`)?.length ?? 0) > 0,
+    () => (providerId: string, toolkit: string) =>
+      (connectionsByKey.get(`${providerId}:${toolkit}`) ?? []).some(connection => connection.status === 'active'),
     [connectionsByKey],
   );
 

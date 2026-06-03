@@ -22,18 +22,17 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
   const { builtIn, providers, allToolkitIds, isProvidersLoading } = useProviderToolkitGroups(availableAgentTools);
 
   const toolkits = useToolkitSelection(allToolkitIds);
-  const { toggle, pinConnection } = useToolSelection();
+  const { toggle } = useToolSelection();
 
-  // Per-provider capability lookup so the picker knows whether multiple
+  // Per-provider capability lookup so the toolkit pane knows whether multiple
   // connections per toolkit are allowed for a given provider.
   const providersQuery = useToolProviders();
-  const multipleAllowedFor = useMemo(() => {
+  const multipleAllowedByProvider = useMemo(() => {
     const map = new Map<string, boolean>();
     for (const provider of providersQuery.data?.providers ?? []) {
       map.set(provider.id, provider.capabilities?.multipleConnectionsPerToolkit ?? false);
     }
-    return (item: AgentTool) =>
-      item.type === 'integration' && item.providerId ? (map.get(item.providerId) ?? false) : false;
+    return map;
   }, [providersQuery.data?.providers]);
 
   if (availableAgentTools.length === 0) {
@@ -59,6 +58,7 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
           onSelectAll={toolkits.selectAll}
           onClearAll={toolkits.clearAll}
           disabled={!editable}
+          multipleAllowedByProvider={multipleAllowedByProvider}
         />
       )}
 
@@ -69,9 +69,7 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
         onOnlySelectedChange={setOnlySelected}
         onSearch={setSearch}
         emptyStateDetails={emptyStateDetails}
-        multipleAllowedFor={multipleAllowedFor}
         onToggle={toggle}
-        onConnected={pinConnection}
       />
     </div>
   );

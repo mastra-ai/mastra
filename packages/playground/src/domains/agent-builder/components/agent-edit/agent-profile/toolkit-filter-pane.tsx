@@ -3,6 +3,7 @@ import { memo, useMemo, useState } from 'react';
 import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import { AgentSearchbar } from '../agent-searchbar';
+import { ToolkitConnectionControl } from './toolkit-connection-control';
 import type { ProviderSection, ToolkitOption } from './use-provider-toolkit-groups';
 
 const TEST_ID_PREFIX = 'tools-toolkit';
@@ -19,50 +20,65 @@ interface ToolkitFilterRowProps {
   checked: boolean;
   disabled: boolean;
   onToggle: (id: string) => void;
+  /** Set for provider toolkit rows; absent for the Built-in group. */
+  providerId?: string;
+  multipleAllowed?: boolean;
 }
 
-const ToolkitFilterRow = memo(({ item, checked, disabled, onToggle }: ToolkitFilterRowProps) => {
-  const agentColor = useAgentColor();
-  const checkboxStyle = checked
-    ? {
-        backgroundColor: agentColor.background,
-        borderColor: agentColor.background,
-        color: agentColor.foreground,
-      }
-    : undefined;
+const ToolkitFilterRow = memo(
+  ({ item, checked, disabled, onToggle, providerId, multipleAllowed }: ToolkitFilterRowProps) => {
+    const agentColor = useAgentColor();
+    const checkboxStyle = checked
+      ? {
+          backgroundColor: agentColor.background,
+          borderColor: agentColor.background,
+          color: agentColor.foreground,
+        }
+      : undefined;
 
-  return (
-    <li>
-      <label
-        data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
-        data-checked={checked ? 'true' : 'false'}
-        className={cn(
-          'flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors hover:bg-surface4',
-          disabled && 'cursor-not-allowed opacity-60',
-        )}
-      >
-        <Checkbox
-          checked={checked}
-          disabled={disabled}
-          onCheckedChange={() => onToggle(item.id)}
-          style={checkboxStyle}
-          data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
-          className="h-3.5 w-3.5 shrink-0 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5 data-[state=checked]:shadow-none"
-        />
-        {item.icon && (
-          <img
-            src={item.icon}
-            alt=""
-            aria-hidden
-            data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
-            className="h-4 w-4 shrink-0 rounded object-contain"
+    return (
+      <li className="flex items-center gap-1">
+        <label
+          data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
+          data-checked={checked ? 'true' : 'false'}
+          className={cn(
+            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors hover:bg-surface4',
+            disabled && 'cursor-not-allowed opacity-60',
+          )}
+        >
+          <Checkbox
+            checked={checked}
+            disabled={disabled}
+            onCheckedChange={() => onToggle(item.id)}
+            style={checkboxStyle}
+            data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
+            className="h-3.5 w-3.5 shrink-0 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5 data-[state=checked]:shadow-none"
           />
+          {item.icon && (
+            <img
+              src={item.icon}
+              alt=""
+              aria-hidden
+              data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
+              className="h-4 w-4 shrink-0 rounded object-contain"
+            />
+          )}
+          <span className="truncate">{item.label}</span>
+        </label>
+        {providerId && (
+          <div className="shrink-0">
+            <ToolkitConnectionControl
+              providerId={providerId}
+              toolkit={item.id}
+              disabled={disabled}
+              multipleAllowed={multipleAllowed}
+            />
+          </div>
         )}
-        <span className="truncate">{item.label}</span>
-      </label>
-    </li>
-  );
-});
+      </li>
+    );
+  },
+);
 
 ToolkitFilterRow.displayName = 'ToolkitFilterRow';
 
@@ -72,6 +88,7 @@ interface ProviderToolkitSectionProps {
   isChecked: (id: string) => boolean;
   onToggle: (id: string) => void;
   disabled: boolean;
+  multipleAllowed: boolean;
 }
 
 /**
@@ -82,7 +99,14 @@ interface ProviderToolkitSectionProps {
  * paint — there's no slug→name swap. Search is a plain synchronous filter over
  * the resolved rows, so it simply has nothing to act on until the data is in.
  */
-const ProviderToolkitSection = ({ provider, term, isChecked, onToggle, disabled }: ProviderToolkitSectionProps) => {
+const ProviderToolkitSection = ({
+  provider,
+  term,
+  isChecked,
+  onToggle,
+  disabled,
+  multipleAllowed,
+}: ProviderToolkitSectionProps) => {
   const { data, isLoading } = useToolkits(provider.providerId);
 
   const toolkits = useMemo<ToolkitRow[]>(() => {
@@ -129,6 +153,8 @@ const ProviderToolkitSection = ({ provider, term, isChecked, onToggle, disabled 
             checked={isChecked(item.id)}
             disabled={disabled}
             onToggle={onToggle}
+            providerId={provider.providerId}
+            multipleAllowed={multipleAllowed}
           />
         ))}
       </ul>
@@ -145,6 +171,8 @@ interface ToolkitFilterPaneProps {
   onSelectAll: () => void;
   onClearAll: () => void;
   disabled?: boolean;
+  /** Per-provider capability: whether a toolkit may hold multiple connections. */
+  multipleAllowedByProvider: Map<string, boolean>;
 }
 
 /**
@@ -164,6 +192,7 @@ export const ToolkitFilterPane = ({
   onSelectAll,
   onClearAll,
   disabled = false,
+  multipleAllowedByProvider,
 }: ToolkitFilterPaneProps) => {
   const [search, setSearch] = useState('');
   const term = search.trim().toLowerCase();
@@ -238,6 +267,7 @@ export const ToolkitFilterPane = ({
               isChecked={isChecked}
               onToggle={onToggle}
               disabled={disabled}
+              multipleAllowed={multipleAllowedByProvider.get(provider.providerId) ?? false}
             />
           ))}
 

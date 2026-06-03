@@ -12,9 +12,7 @@ interface ToolGridProps {
   onOnlySelectedChange: (next: boolean) => void;
   onSearch: (value: string) => void;
   emptyStateDetails: ReactNode;
-  multipleAllowedFor: (item: AgentTool) => boolean;
   onToggle: (item: AgentTool, next: boolean) => void;
-  onConnected: (item: AgentTool, connectionId: string) => void;
 }
 
 /**
@@ -28,9 +26,7 @@ export const ToolGrid = ({
   onOnlySelectedChange,
   onSearch,
   emptyStateDetails,
-  multipleAllowedFor,
   onToggle,
-  onConnected,
 }: ToolGridProps) => {
   const agentColor = useAgentColor();
   const filterCheckboxStyle: CSSProperties | undefined = onlySelected
@@ -78,14 +74,7 @@ export const ToolGrid = ({
       ) : (
         <div className="grid min-h-0 grid-cols-1 content-start gap-2 lg:gap-6 overflow-y-auto sm:grid-cols-2 2xl:grid-cols-3">
           {tools.map(item => (
-            <ToolCard
-              key={`${item.type}__${item.id}`}
-              item={item}
-              editable={editable}
-              multipleAllowed={multipleAllowedFor(item)}
-              onToggle={onToggle}
-              onConnected={onConnected}
-            />
+            <ToolCard key={`${item.type}__${item.id}`} item={item} editable={editable} onToggle={onToggle} />
           ))}
         </div>
       )}

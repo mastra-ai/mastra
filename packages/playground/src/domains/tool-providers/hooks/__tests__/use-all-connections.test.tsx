@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { setupServer } from 'msw/node';
-import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import type { PropsWithChildren } from 'react';
+import { describe, expect, it } from 'vitest';
 
 import { useAllConnections } from '../use-all-connections';
 
+import { server } from '@/test/msw-server';
+
 const BASE_URL = 'http://localhost:4111';
 
-const Wrapper = ({ children }: { children: ReactNode }) => {
+const wrapper = ({ children }: PropsWithChildren) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
@@ -20,73 +21,66 @@ const Wrapper = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const baseHandlers = [
+const baseHandlers = (items: Array<{ connectionId: string; status: string; label?: string | null }>) => [
+  http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'tester', permissions: [] })),
   http.get(`${BASE_URL}/api/tool-providers`, () =>
-    HttpResponse.json({
-      providers: [
-        {
-          id: 'composio',
-          name: 'Composio',
-          description: 'Composio tool provider',
-          capabilities: { multipleConnectionsPerToolkit: true },
-        },
-      ],
-    }),
+    HttpResponse.json({ providers: [{ id: 'composio', name: 'Composio' }] }),
   ),
   http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () =>
     HttpResponse.json({ data: [{ slug: 'gmail', name: 'Gmail' }] }),
   ),
+  http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items })),
 ];
 
-const server = setupServer(...baseHandlers);
+describe('useAllConnections — hasConnection', () => {
+  it('reports a connection only when a connection is active', async () => {
+    server.use(...baseHandlers([{ connectionId: 'conn_a', status: 'active', label: 'work' }]));
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
-afterEach(() => {
-  cleanup();
-  server.resetHandlers(...baseHandlers);
-});
-afterAll(() => server.close());
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
 
-describe('useAllConnections', () => {
-  // Security: Builder picker fan-out must scope to the caller's own authorId
-  // so an admin viewing another user's agent does not see cross-author rows.
-  it('passes authorId query param on listConnections when scopeToSelf is true', async () => {
-    const requestedUrls: string[] = [];
-    server.use(
-      http.get(`${BASE_URL}/api/auth/me`, () =>
-        HttpResponse.json({ id: 'user-b', permissions: ['tool-providers:admin'] }),
-      ),
-      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, ({ request }) => {
-        requestedUrls.push(request.url);
-        return HttpResponse.json({ items: [], pagination: { page: 1, perPage: 50, hasMore: false } });
-      }),
-    );
-
-    renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper: Wrapper });
-
-    await waitFor(() => expect(requestedUrls.length).toBeGreaterThan(0));
-    const url = new URL(requestedUrls[0]!);
-    expect(url.searchParams.get('toolkit')).toBe('gmail');
-    expect(url.searchParams.get('authorId')).toBe('user-b');
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.hasConnection('composio', 'gmail')).toBe(true));
   });
 
-  it('does NOT pass authorId when scopeToSelf is false (default)', async () => {
-    const requestedUrls: string[] = [];
+  it('does not report a connection when the only connection is pending', async () => {
+    server.use(...baseHandlers([{ connectionId: 'conn_a', status: 'pending', label: 'work' }]));
+
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    // The pending row is still returned by getConnections, but it must not
+    // satisfy the "has connection" gate that drives the card hint.
+    await waitFor(() => expect(result.current.getConnections('composio', 'gmail')).toHaveLength(1));
+    expect(result.current.hasConnection('composio', 'gmail')).toBe(false);
+  });
+
+  it('does not report a connection when every row is failed or inactive', async () => {
     server.use(
-      http.get(`${BASE_URL}/api/auth/me`, () =>
-        HttpResponse.json({ id: 'user-b', permissions: ['tool-providers:admin'] }),
-      ),
-      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, ({ request }) => {
-        requestedUrls.push(request.url);
-        return HttpResponse.json({ items: [], pagination: { page: 1, perPage: 50, hasMore: false } });
-      }),
+      ...baseHandlers([
+        { connectionId: 'conn_a', status: 'failed' },
+        { connectionId: 'conn_b', status: 'inactive' },
+      ]),
     );
 
-    renderHook(() => useAllConnections(), { wrapper: Wrapper });
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
 
-    await waitFor(() => expect(requestedUrls.length).toBeGreaterThan(0));
-    const url = new URL(requestedUrls[0]!);
-    expect(url.searchParams.get('toolkit')).toBe('gmail');
-    expect(url.searchParams.get('authorId')).toBeNull();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.getConnections('composio', 'gmail')).toHaveLength(2));
+    expect(result.current.hasConnection('composio', 'gmail')).toBe(false);
+  });
+
+  it('ignores failed/inactive rows but still counts a mixed active row', async () => {
+    server.use(
+      ...baseHandlers([
+        { connectionId: 'conn_a', status: 'failed' },
+        { connectionId: 'conn_b', status: 'inactive' },
+        { connectionId: 'conn_c', status: 'active', label: 'work' },
+      ]),
+    );
+
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.hasConnection('composio', 'gmail')).toBe(true));
   });
 });

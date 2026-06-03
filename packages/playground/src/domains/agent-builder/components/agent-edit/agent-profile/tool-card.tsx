@@ -1,46 +1,23 @@
-import { Button, Txt } from '@mastra/playground-ui';
-import { useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
-import { ConnectionBadges } from '../../../../tool-providers/components/connection-badges';
-import { useAuthorize } from '../../../../tool-providers/hooks/use-authorize';
+import { Txt } from '@mastra/playground-ui';
 import type { AgentTool } from '../../../types/agent-tool';
 import { AgentSelectableCard } from '../agent-selectable-card';
 
 interface ToolCardProps {
   item: AgentTool;
   editable: boolean;
-  multipleAllowed: boolean;
   onToggle: (item: AgentTool, next: boolean) => void;
-  onConnected: (item: AgentTool, connectionId: string) => void;
 }
 
 /**
- * A single tool tile. For integration tools it shows the toolkit's connections
- * as badges and a "Connect" button to authorize a new account. Native tools
- * render just the selectable card.
+ * A single tool tile. Connections are managed per-toolkit in the left filter
+ * pane, not per-tool, so the card only signals selectability. When an
+ * integration tool's toolkit has no connection yet, it shows a muted
+ * "Requires connection" hint; otherwise it keeps the footer spacer so cards
+ * stay aligned across the grid.
  */
-export const ToolCard = ({ item, editable, multipleAllowed, onToggle, onConnected }: ToolCardProps) => {
+export const ToolCard = ({ item, editable, onToggle }: ToolCardProps) => {
   const isIntegration = item.type === 'integration' && !!item.providerId && !!item.toolkit;
   const needsConnection = isIntegration && item.hasConnection === false;
-  // Offer Connect when there is no connection yet, or to add more on a selected
-  // tool when the toolkit supports multiple connections.
-  const showConnect = isIntegration && (needsConnection || (item.isChecked && multipleAllowed));
-
-  if (!isIntegration) {
-    return (
-      <AgentSelectableCard
-        title={item.name}
-        subtitle={item.description || 'No description provided'}
-        isSelected={item.isChecked}
-        disabled={!editable}
-        onClick={() => onToggle(item, !item.isChecked)}
-        ariaLabel={item.name}
-        testId={`tool-card-${item.type}-${item.id}`}
-        checkTestId={`tool-card-check-${item.type}-${item.id}`}
-        footer={<div className="h-7" />}
-      />
-    );
-  }
 
   return (
     <AgentSelectableCard
@@ -53,94 +30,20 @@ export const ToolCard = ({ item, editable, multipleAllowed, onToggle, onConnecte
       testId={`tool-card-${item.type}-${item.id}`}
       checkTestId={`tool-card-check-${item.type}-${item.id}`}
       footer={
-        <div className="flex flex-col gap-2">
-          <ConnectionBadges
-            providerId={item.providerId!}
-            toolkit={item.toolkit!}
-            isChecked={item.isChecked}
-            disabled={!editable}
-          />
-          {showConnect && (
-            <IntegrationConnectControl
-              item={item}
-              providerId={item.providerId!}
-              toolkit={item.toolkit!}
-              disabled={!editable}
-              onConnected={connectionId => onConnected(item, connectionId)}
-            />
-          )}
-        </div>
+        isIntegration ? (
+          needsConnection ? (
+            <Txt
+              variant="ui-xs"
+              className="flex h-7 items-center text-neutral3"
+              data-testid={`tool-card-requires-connection-${item.type}-${item.id}`}
+            >
+              Requires connection
+            </Txt>
+          ) : (
+            <div className="h-7" />
+          )
+        ) : undefined
       }
     />
-  );
-};
-
-interface IntegrationConnectControlProps {
-  item: AgentTool;
-  providerId: string;
-  toolkit: string;
-  disabled: boolean;
-  /**
-   * Fires after a successful OAuth handshake with the new connection's id.
-   * Used by the parent to auto-pin the connection into the form when the
-   * tool is already selected.
-   */
-  onConnected?: (connectionId: string) => void;
-}
-
-/**
- * Compact "Needs connection" hint + Connect button rendered beneath an
- * integration tool's selectable card. The card itself stays selectable so
- * users can pre-select tools and run OAuth after. On success we invalidate
- * the `tool-integration-connections-all` query so the hint disappears.
- */
-const IntegrationConnectControl = ({
-  item,
-  providerId,
-  toolkit,
-  disabled,
-  onConnected,
-}: IntegrationConnectControlProps) => {
-  const queryClient = useQueryClient();
-  const authorize = useAuthorize();
-
-  const handleConnect = () => {
-    authorize.mutate(
-      { providerId, toolkit, scope: 'per-author' },
-      {
-        onSuccess: result => {
-          // Refresh both the per-toolkit list (drives the connection badges) and
-          // the fan-out cache so the new account shows up without a manual reload.
-          void queryClient.invalidateQueries({ queryKey: ['tool-integration-connections', providerId, toolkit] });
-          void queryClient.invalidateQueries({
-            queryKey: ['tool-integration-connections-all', providerId, toolkit],
-          });
-          if (result.status === 'completed') {
-            onConnected?.(result.connectionId);
-          }
-        },
-      },
-    );
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleConnect}
-        disabled={disabled || authorize.isPending}
-        data-testid={`tool-card-connect-${item.type}-${item.id}`}
-      >
-        <Plus />
-        {authorize.isPending ? 'Connecting…' : 'Add connection'}
-      </Button>
-      {authorize.error && (
-        <Txt variant="ui-xs" className="text-red-500">
-          {String(authorize.error)}
-        </Txt>
-      )}
-    </div>
   );
 };
