@@ -44,6 +44,14 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
+import { isWorkingMemoryToolName } from '../memory/working-memory-utils';
+import { resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
+import {
+  createNotificationSignal,
+  createNotificationSummarySignal,
+  summarizeNotifications,
+} from '../notifications/signals';
+import type { SendNotificationSignalInput } from '../notifications/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
 import {
   EntityType,
@@ -112,6 +120,7 @@ import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
   AgentGenerateOptions,
+  AgentNotificationConfig,
   AgentStreamOptions,
   ToolsetsInput,
   ToolsInput,
@@ -123,6 +132,7 @@ import type {
   AgentMessageInput,
   AgentMethodType,
   AgentSignal,
+  AgentStateSignalInput,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
   PublicStructuredOutputOptions,
@@ -130,8 +140,12 @@ import type {
   QueueAgentMessageResult,
   SendAgentMessageOptions,
   SendAgentMessageResult,
+  SendAgentNotificationSignalOptions,
+  SendAgentNotificationSignalResult,
   SendAgentSignalOptions,
   SendAgentSignalResult,
+  SendAgentStateSignalOptions,
+  SendAgentStateSignalResult,
   StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
@@ -346,6 +360,7 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  #notifications?: AgentNotificationConfig;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #editorConfig?: AgentEditorConfig;
   /**
@@ -553,6 +568,10 @@ export class Agent<
 
     if (config.backgroundTasks) {
       this.#backgroundTasks = config.backgroundTasks;
+    }
+
+    if (config.notifications) {
+      this.#notifications = config.notifications;
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -1066,15 +1085,17 @@ export class Agent<
     });
     workflow.__setLogger(this.logger);
 
+    const stateSignalProcessors: Processor[] = [];
+
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
       let step: Step<string, unknown, any, any, any, any>;
       if (isProcessorWorkflow(processorOrWorkflow)) {
         step = processorOrWorkflow;
+        stateSignalProcessors.push(...(processorOrWorkflow.__stateSignalProcessors ?? []));
       } else {
         // Set processorIndex on the processor for span attributes
-        const processor = processorOrWorkflow;
-        // @ts-expect-error - processorIndex is set at runtime for span attributes
+        const processor = processorOrWorkflow as Processor;
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
         step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
@@ -1083,12 +1104,20 @@ export class Agent<
           (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
             toolProvider.getLoadedToolsForRequestContext.bind(processor);
         }
+        if (processor.computeStateSignal) {
+          stateSignalProcessors.push(processor);
+        }
       }
       workflow = workflow.then(step);
     }
 
+    const committedWorkflow = workflow.commit() as T;
+    if (stateSignalProcessors.length > 0 && isProcessorWorkflow(committedWorkflow)) {
+      committedWorkflow.__stateSignalProcessors = stateSignalProcessors;
+    }
+
     // The resulting workflow is compatible with both Input and Output processor types
-    return [workflow.commit() as T];
+    return [committedWorkflow];
   }
 
   /**
@@ -3446,12 +3475,16 @@ export class Agent<
           llm instanceof MastraLLMVNext
             ? mergeProviderOptions(providerOptions, llm.getProviderOptions())
             : providerOptions;
+        const memory = await this.getMemory({ requestContext });
         const result = await runner.runProcessInputStep({
           messageList,
           stepNumber,
           steps: [],
           ...observabilityContext,
           requestContext,
+          memory,
+          resourceId,
+          threadId,
           // Cast needed: legacy v1 models return LanguageModelV1 which doesn't satisfy MastraLanguageModel.
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
@@ -5739,12 +5772,33 @@ export class Agent<
         ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning(browserThreadId)
         : browser.isBrowserRunning();
 
+      const getBrowserContextState = async (): Promise<Partial<BrowserContext> | undefined> => {
+        const running = browserThreadId
+          ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning(browserThreadId)
+          : browser.isBrowserRunning();
+        if (!running) return { isOpen: false };
+
+        try {
+          const state = await browser.getBrowserState(browserThreadId);
+          const activeTab = state?.tabs[state.activeTabIndex];
+          return {
+            isOpen: true,
+            currentUrl: activeTab?.url ?? (await browser.getCurrentUrl(browserThreadId)) ?? undefined,
+            pageTitle: activeTab?.title,
+            tabCount: state?.tabs.length,
+          };
+        } catch {
+          return { isOpen: false };
+        }
+      };
+      const currentBrowserState = await getBrowserContextState();
       const browserCtx: BrowserContext = {
         provider: browser.provider,
         providerType: browser.providerType,
         sessionId: browser.getSessionId(browserThreadId),
         headless: browser.headless,
-        currentUrl: isThreadRunning ? ((await browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
+        ...currentBrowserState,
+        getState: getBrowserContextState,
         // For CLI providers, include CDP URL so agent can pass it to CLI commands
         // Only expose CDP URL if the thread is actually running to avoid stale endpoints
         cdpUrl:
@@ -6065,7 +6119,7 @@ export class Agent<
     const messageListResponses = messageList.get.response.aiV4.core();
 
     const usedWorkingMemory = messageListResponses.some(
-      m => m.role === 'tool' && m.content.some(c => c.toolName === 'updateWorkingMemory'),
+      m => m.role === 'tool' && m.content.some(c => isWorkingMemoryToolName(c.toolName)),
     );
     // working memory updates the thread, so we need to get the latest thread if we used it
     const memory = await this.getMemory({ requestContext });
@@ -6580,6 +6634,138 @@ export class Agent<
     target: QueueAgentMessageOptions<OUTPUT>,
   ): QueueAgentMessageResult {
     return agentThreadStreamRuntime.queueMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent state signal APIs are experimental and may change in a future release.
+   */
+  sendStateSignal<OUTPUT = TOutput>(
+    state: AgentStateSignalInput,
+    target: SendAgentStateSignalOptions<OUTPUT>,
+  ): Promise<SendAgentStateSignalResult> {
+    return agentThreadStreamRuntime.sendStateSignal(this as Agent<any, any, any, any>, state, target, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent notification signal APIs are experimental and may change in a future release.
+   */
+  async sendNotificationSignal<OUTPUT = TOutput>(
+    notification: SendNotificationSignalInput,
+    target: SendAgentNotificationSignalOptions<OUTPUT>,
+  ): Promise<SendAgentNotificationSignalResult> {
+    const notifications = await this.#mastra?.getStorage()?.getStore('notifications');
+    if (!notifications) {
+      throw new Error('sendNotificationSignal requires a notifications storage domain');
+    }
+
+    const record = await notifications.createNotification({
+      ...notification,
+      agentId: this.id,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+    });
+
+    const threadState = agentThreadStreamRuntime.getThreadState(
+      { resourceId: target.resourceId, threadId: target.threadId },
+      this.getPubSub(),
+    );
+    const decision = await resolveNotificationDeliveryDecision({
+      config: this.#notifications?.deliveryPolicy,
+      now: new Date(),
+      record,
+      threadState,
+    });
+
+    if (decision.action === 'discard') {
+      const updated = await notifications.updateNotification({
+        id: record.id,
+        threadId: record.threadId,
+        status: 'discarded',
+        deliveryReason: decision.reason,
+      });
+      return { accepted: true, record: updated, decision };
+    }
+
+    if (decision.action === 'persist') {
+      const updated = await notifications.updateNotification({
+        id: record.id,
+        threadId: record.threadId,
+        deliveryReason: decision.reason,
+      });
+      return { accepted: true, record: updated, decision };
+    }
+
+    if (decision.action === 'defer' || decision.action === 'summarize') {
+      const shouldEmitSummaryNow = decision.action === 'summarize' && record.priority === 'high' && decision.deliverAt;
+      const updated = await notifications.updateNotification({
+        id: record.id,
+        threadId: record.threadId,
+        deliverAt: decision.action === 'defer' ? decision.deliverAt : (decision.deliverAt ?? record.deliverAt),
+        summaryAt: shouldEmitSummaryNow
+          ? null
+          : decision.action === 'summarize'
+            ? decision.summaryAt
+            : (decision.summaryAt ?? record.summaryAt),
+        deliveryReason: decision.reason,
+      });
+
+      if (shouldEmitSummaryNow) {
+        const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
+        const result = agentThreadStreamRuntime.sendSignal(
+          this as Agent<any, any, any, any>,
+          signal,
+          { ...target, ifIdle: { ...target.ifIdle, behavior: 'persist' } },
+          this.getPubSub(),
+        );
+        if (!result.accepted) {
+          const failed = await notifications.updateNotification({
+            id: updated.id,
+            threadId: updated.threadId,
+            deliveryAttempts: (updated.deliveryAttempts ?? 0) + 1,
+            lastDeliveryAttemptAt: new Date(),
+            lastDeliveryError: 'Notification summary signal was rejected',
+          });
+          return { ...result, record: failed, decision };
+        }
+        const summarized = await notifications.updateNotification({
+          id: updated.id,
+          threadId: updated.threadId,
+          summarySignalId: result.signal.id,
+        });
+        return { ...result, record: summarized, decision };
+      }
+
+      return { accepted: true, record: updated, decision };
+    }
+
+    const signal = createNotificationSignal({ ...record, status: 'delivered' });
+    const result = agentThreadStreamRuntime.sendSignal(
+      this as Agent<any, any, any, any>,
+      signal,
+      target,
+      this.getPubSub(),
+    );
+    if (!result.accepted) {
+      const failed = await notifications.updateNotification({
+        id: record.id,
+        threadId: record.threadId,
+        deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
+        lastDeliveryAttemptAt: new Date(),
+        lastDeliveryError: 'Notification signal was rejected',
+        deliveryReason: decision.reason,
+      });
+      return { ...result, record: failed, decision };
+    }
+
+    const updated = await notifications.updateNotification({
+      id: record.id,
+      threadId: record.threadId,
+      status: 'delivered',
+      deliveredSignalId: result.signal.id,
+      deliveryReason: decision.reason,
+    });
+
+    return { ...result, record: updated, decision };
   }
 
   /**

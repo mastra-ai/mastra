@@ -39,6 +39,7 @@ describe('agent signal UI conversion', () => {
       type: 'system-reminder',
       contents: 'continue',
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      attributes: { status: 'pending' },
       metadata: { reminderType: 'anthropic-prefill-processor-retry' },
     });
 
@@ -50,13 +51,14 @@ describe('agent signal UI conversion', () => {
       expect(uiMessage.role).toBe('system');
       expect(uiMessage.parts).toEqual([
         {
-          type: 'data-system-reminder',
+          type: 'data-signal',
           data: {
             id: 'signal-system-1',
             type: 'reactive',
             tagName: 'system-reminder',
             contents: 'continue',
             createdAt: '2024-01-01T00:00:00.000Z',
+            attributes: { status: 'pending' },
             metadata: { reminderType: 'anthropic-prefill-processor-retry' },
           },
         },
@@ -103,7 +105,7 @@ describe('agent signal UI conversion', () => {
 
       const assistantMsg = messages.find(m => m.role === 'assistant')!;
       expect(assistantMsg).toBeDefined();
-      expect(assistantMsg.parts.some(p => p.type === 'data-system-reminder')).toBe(true);
+      expect(assistantMsg.parts.some(p => p.type === 'data-signal')).toBe(true);
     }
   });
 
@@ -155,7 +157,7 @@ describe('agent signal UI conversion', () => {
 
     const v5Messages = list.get.all.aiV5.ui();
     expect(v5Messages.every(m => m.role !== 'system')).toBe(true);
-    const converted = v5Messages.find(m => m.parts.some(p => p.type === 'data-system-reminder'));
+    const converted = v5Messages.find(m => m.parts.some(p => p.type === 'data-signal'));
     expect(converted).toBeDefined();
     expect(converted!.role).toBe('assistant');
   });

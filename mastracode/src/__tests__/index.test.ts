@@ -92,6 +92,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
   };
 }
 
@@ -520,5 +521,29 @@ describe('createMastraCode', () => {
       | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+  });
+
+  it('configures GitHubSignals as an input processor for local PR subscriptions', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+    });
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
+    const { GithubSignals } = await import('../github-signals/index.js');
+    const startPollingForThread = vi.spyOn(GithubSignals.prototype, 'startPollingForThread').mockResolvedValue(true);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { inputProcessors?: Array<{ id?: string }> }
+      | undefined;
+    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('github-signals');
+    expect(startPollingForThread).toHaveBeenCalledWith(
+      { threadId: 'thread-1', resourceId: 'thread-resource' },
+      { pollImmediately: true },
+    );
   });
 });

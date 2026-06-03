@@ -26,7 +26,7 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
       messageList.markResponseMessageBoundary(typedInput.stepResult?.messageId ?? typedInput.messageId);
       for (const pendingSignal of pendingSignals) {
         const signalForTranscript = messageList.addSignal(pendingSignal);
-        controller.enqueue(signalForTranscript.toDataPart() as ChunkType<OUTPUT>);
+        controller.enqueue(signalForTranscript.toDataPart() as unknown as ChunkType<OUTPUT>);
       }
 
       return {

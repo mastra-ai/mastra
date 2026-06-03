@@ -615,10 +615,10 @@ It accepts [common flags][common-flags].
 Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, self-hosted Mastra servers, or hosted Mastra Platform Observability APIs.
 
 ```bash
-mastra api agent list --pretty
+mastra api agent list
 mastra api agent run weather-agent '{"messages":"What is the weather in London?"}'
 mastra api tool execute get-weather '{"location":"San Francisco"}'
-mastra api trace list '{"page":0,"perPage":20}' --pretty
+mastra api trace list '{"page":0,"perPage":20}'
 ```
 
 Use `mastra api <resource> <action> --help` to see examples for a command.
@@ -729,7 +729,7 @@ mastra api trace list '{"page":0,"perPage":20}'
 Routes that support filters accept them in the same JSON input. For example, observability trace listing supports pagination and route-supported filters:
 
 ```bash
-mastra api trace list '{"page":0,"perPage":20,"filters":{"spanType":"agent"}}' --pretty
+mastra api trace list '{"page":0,"perPage":20,"filters":{"spanType":"agent"}}'
 ```
 
 ### Get command-specific help
@@ -985,8 +985,8 @@ Lists observability traces. Pass optional JSON input for route-supported filters
 
 ```bash
 mastra api trace list [input]
-mastra api trace list '{"page":0,"perPage":20}' --pretty
-mastra api trace list '{"page":0,"perPage":20}' --verbose --pretty
+mastra api trace list '{"page":0,"perPage":20}'
+mastra api trace list '{"page":0,"perPage":20}' --verbose
 ```
 
 `trace list` returns lightweight root span records by default so you can page through traces without fetching large input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full root span records.
