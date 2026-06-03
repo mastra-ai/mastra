@@ -905,7 +905,7 @@ describe('GithubSignals', () => {
     processor.stopAllPolling();
   });
 
-  it('uses the configured notification sender with the explicit polling target', async () => {
+  it('sends GitHub notifications through the registered agent with polling target stream options', async () => {
     const thread: StorageThreadType = {
       id: 'thread-sender',
       resourceId: 'resource-sender',
@@ -939,15 +939,26 @@ describe('GithubSignals', () => {
         contentHash: 'new-hash',
       })),
     };
-    const notificationSender = vi.fn(async () => ({ accepted: true }));
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
     const processor = new GithubSignals({ threadStore: createThreadStore(thread), syncClient });
-    processor.addNotificationSender(notificationSender);
+    processor.addAgent(
+      { sendSignal: vi.fn(), sendNotificationSignal },
+      {
+        getNotificationStreamOptions: async target => ({
+          memory: { resource: target.resourceId, thread: target.threadId },
+        }),
+      },
+    );
 
     await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
 
-    expect(notificationSender).toHaveBeenCalledWith(
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({ source: 'github', kind: 'pull-request-activity' }),
-      { resourceId: thread.resourceId, threadId: thread.id },
+      expect.objectContaining({
+        resourceId: thread.resourceId,
+        threadId: thread.id,
+        ifIdle: { streamOptions: { memory: { resource: thread.resourceId, thread: thread.id } } },
+      }),
     );
   });
 

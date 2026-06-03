@@ -150,10 +150,14 @@ type GithubSignalAgent = {
   sendNotificationSignal?(notification: unknown, target: unknown): { accepted?: unknown } | Promise<unknown>;
 };
 
-type GithubNotificationSender = (
-  notification: unknown,
-  target: { resourceId: string; threadId: string },
-) => Promise<unknown>;
+type GithubNotificationStreamOptions = Record<string, unknown>;
+
+type GithubSignalAgentOptions = {
+  getNotificationStreamOptions?: (target: {
+    resourceId: string;
+    threadId: string;
+  }) => GithubNotificationStreamOptions | Promise<GithubNotificationStreamOptions>;
+};
 
 type GithubSignalsMastra = {
   getStorage?: () => { getStore?: (name: 'memory') => Promise<unknown> } | undefined;
@@ -854,7 +858,7 @@ export class GithubSignals implements Processor<'github-signals'> {
   readonly #repositoryResolver: GithubRepositoryResolver;
   readonly #polling = new Map<string, GithubPollingState>();
   #agent?: GithubSignalAgent;
-  #notificationSender?: GithubNotificationSender;
+  #agentOptions: GithubSignalAgentOptions = {};
 
   constructor(options: GithubSignalsOptions = {}) {
     this.#options = options;
@@ -862,12 +866,9 @@ export class GithubSignals implements Processor<'github-signals'> {
     this.#repositoryResolver = options.repositoryResolver ?? new GitRemoteRepositoryResolver();
   }
 
-  addAgent(agent: GithubSignalAgent): void {
+  addAgent(agent: GithubSignalAgent, options: GithubSignalAgentOptions = {}): void {
     this.#agent = agent;
-  }
-
-  addNotificationSender(sender: GithubNotificationSender): void {
-    this.#notificationSender = sender;
+    this.#agentOptions = options;
   }
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
@@ -1326,8 +1327,11 @@ export class GithubSignals implements Processor<'github-signals'> {
         },
       },
     };
-    if (this.#notificationSender) await this.#notificationSender(notificationInput, input.target);
-    else await input.agent?.sendNotificationSignal?.(notificationInput, input.target);
+    const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(input.target);
+    await input.agent?.sendNotificationSignal?.(
+      notificationInput,
+      streamOptions ? { ...input.target, ifIdle: { streamOptions } } : input.target,
+    );
   }
 
   async #sendBaselineNotification(input: {
@@ -1337,7 +1341,7 @@ export class GithubSignals implements Processor<'github-signals'> {
     snapshot: GithubPullRequestSnapshot;
   }): Promise<void> {
     const agent = this.#getNotificationAgent({});
-    if (!this.#notificationSender && !agent?.sendNotificationSignal) return;
+    if (!agent?.sendNotificationSignal) return;
     await this.#sendGithubNotification({
       agent,
       subscription: input.subscription,
@@ -1356,7 +1360,7 @@ export class GithubSignals implements Processor<'github-signals'> {
     previousContentHash?: string;
   }): Promise<{ kind: string; priority: 'medium' | 'high'; summary: string } | undefined> {
     const agent = this.#getNotificationAgent(input.polling);
-    if (!this.#notificationSender && !agent?.sendNotificationSignal) return undefined;
+    if (!agent?.sendNotificationSignal) return undefined;
     const notification = classifyGithubActivityNotification({
       subscription: input.subscription,
       snapshot: input.snapshot,

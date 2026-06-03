@@ -11,6 +11,7 @@ import type {
   HarnessConfig,
   HarnessMode,
   HarnessSubagent,
+  HarnessRequestContext,
 } from '@mastra/core/harness';
 import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
 import type { HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
@@ -23,7 +24,7 @@ import {
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
@@ -445,7 +446,34 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
 
-  githubSignalsProcessor?.addAgent(codeAgent);
+  githubSignalsProcessor?.addAgent(codeAgent, {
+    getNotificationStreamOptions: ({ resourceId, threadId }) => {
+      const requestContext = new RequestContext();
+      const harnessContext: HarnessRequestContext = {
+        harnessId: harness.id,
+        state: harness.getState(),
+        getState: () => harness.getState(),
+        setState: updates => harness.setState(updates),
+        threadId,
+        resourceId,
+        modeId: harness.getCurrentModeId(),
+        workspace: harness.getWorkspace(),
+        registerQuestion: params => harness.registerQuestion(params),
+        registerPlanApproval: params => harness.registerPlanApproval(params),
+        getSubagentModelId: params => harness.getSubagentModelId(params),
+      };
+      requestContext.set('harness', harnessContext);
+
+      return {
+        memory: { thread: threadId, resource: resourceId },
+        requestContext,
+        maxSteps: 1000,
+        savePerStep: false,
+        requireToolApproval: (harness.getState() as Record<string, unknown>).yolo !== true,
+        modelSettings: { temperature: 1 },
+      };
+    },
+  });
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
@@ -799,10 +827,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
 
   if (githubSignalsProcessor) {
-    githubSignalsProcessor.addNotificationSender((notification, target) =>
-      harness.sendNotificationSignal(notification as any, target),
-    );
-
     const startGithubPollingForCurrentThread = async (threadId?: string | null) => {
       if (!threadId) return;
       githubSignalsProcessor.stopAllPolling();
