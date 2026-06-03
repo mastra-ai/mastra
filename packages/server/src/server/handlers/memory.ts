@@ -551,7 +551,14 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
         return { result: false };
       }
 
-      // Fallback to storage (covers stored agents whose memory can't be resolved)
+      // A resolved agent with no memory genuinely has memory disabled — do not
+      // fall back to storage (that fallback only covers agents we couldn't resolve,
+      // e.g. stored agents that can't be hydrated, or requests with no agentId).
+      if (agentId && agent) {
+        return { result: false };
+      }
+
+      // Fallback to storage (covers unresolved/stored agents and the no-agentId case)
       const storage = getStorageFromContext({ mastra });
       if (storage) {
         return { result: true };
