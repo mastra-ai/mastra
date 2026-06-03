@@ -566,7 +566,6 @@ export async function dev({
     const forceExit = setTimeout(() => process.exit(0), 3000);
     forceExit.unref();
 
-    releaseDevLock(dotMastraPath);
     devLogger.shutdown();
 
     if (currentServerProcess) {
@@ -591,6 +590,7 @@ export async function dev({
       .close()
       .catch(() => {})
       .finally(() => {
+        releaseDevLock(dotMastraPath);
         clearTimeout(forceExit);
         process.exit(0);
       });

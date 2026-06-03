@@ -1,5 +1,5 @@
 import { readFileSync, unlinkSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import pc from 'picocolors';
@@ -46,6 +46,45 @@ function parseLockContents(contents: string): LockData | null {
   return null;
 }
 
+function printDuplicateError(lock: LockData): never {
+  console.error('');
+  console.error(
+    pc.red('  ✗ ') + pc.bold(pc.red('Another instance of `mastra dev` is already running in this directory')),
+  );
+  console.error('');
+  console.error(`  ${pc.red('│')} PID ${pc.bold(String(lock.pid))} is still active.`);
+  if (lock.host && lock.port) {
+    console.error(`  ${pc.red('│')} Server running at ${pc.cyan(`${lock.host}:${lock.port}`)}`);
+  }
+  console.error(`  ${pc.red('│')} Only one dev server can run per project at a time.`);
+  console.error(`  ${pc.red('│')} Running multiple instances causes resource conflicts`);
+  console.error(`  ${pc.red('│')} (e.g. database locks, port collisions).`);
+  console.error('');
+  console.error(`  ${pc.dim('To fix this:')}`);
+  console.error(`  ${pc.dim('•')} Stop the other \`mastra dev\` process (PID ${lock.pid}), or`);
+  console.error(`  ${pc.dim('•')} If that process is stuck, run: ${pc.cyan(`kill ${lock.pid}`)}`);
+  console.error('');
+  process.exit(1);
+}
+
+async function checkAndRemoveStaleLock(lockPath: string): Promise<void> {
+  try {
+    const contents = await readFile(lockPath, 'utf-8');
+    const lock = parseLockContents(contents);
+
+    if (lock && isProcessRunning(lock.pid)) {
+      printDuplicateError(lock);
+    }
+
+    // Stale lockfile — the process is gone. Remove it.
+    await unlink(lockPath);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      // Unexpected read error — log and continue rather than blocking startup
+    }
+  }
+}
+
 /**
  * Attempt to acquire the dev lock. If another `mastra dev` instance is
  * already running against the same `.mastra` directory, print a
@@ -54,42 +93,37 @@ function parseLockContents(contents: string): LockData | null {
  */
 export async function acquireDevLock(dotMastraPath: string): Promise<void> {
   const lockPath = getLockPath(dotMastraPath);
+  const data: LockData = { pid: process.pid };
 
+  // First attempt: try to atomically create the lockfile
   try {
-    const contents = await readFile(lockPath, 'utf-8');
-    const lock = parseLockContents(contents);
-
-    if (lock && isProcessRunning(lock.pid)) {
-      console.error('');
-      console.error(
-        pc.red('  ✗ ') + pc.bold(pc.red('Another instance of `mastra dev` is already running in this directory')),
-      );
-      console.error('');
-      console.error(`  ${pc.red('│')} PID ${pc.bold(String(lock.pid))} is still active.`);
-      if (lock.host && lock.port) {
-        console.error(`  ${pc.red('│')} Server running at ${pc.cyan(`${lock.host}:${lock.port}`)}`);
-      }
-      console.error(`  ${pc.red('│')} Only one dev server can run per project at a time.`);
-      console.error(`  ${pc.red('│')} Running multiple instances causes resource conflicts`);
-      console.error(`  ${pc.red('│')} (e.g. database locks, port collisions).`);
-      console.error('');
-      console.error(`  ${pc.dim('To fix this:')}`);
-      console.error(`  ${pc.dim('•')} Stop the other \`mastra dev\` process (PID ${lock.pid}), or`);
-      console.error(`  ${pc.dim('•')} If that process is stuck, run: ${pc.cyan(`kill ${lock.pid}`)}`);
-      console.error('');
-      process.exit(1);
-    }
-
-    // Stale lockfile — the process is gone. Remove and continue.
+    await writeFile(lockPath, JSON.stringify(data), { encoding: 'utf-8', flag: 'wx' });
+    return;
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      // Unexpected read error — log and continue rather than blocking startup
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
+      // Unexpected write error — continue without lock rather than blocking startup
+      return;
     }
   }
 
-  // Write our own PID
-  const data: LockData = { pid: process.pid };
-  await writeFile(lockPath, JSON.stringify(data), 'utf-8');
+  // Lockfile exists — check if it's stale and remove if so
+  await checkAndRemoveStaleLock(lockPath);
+
+  // Second attempt after stale-lock cleanup
+  try {
+    await writeFile(lockPath, JSON.stringify(data), { encoding: 'utf-8', flag: 'wx' });
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      // Another process claimed the lock between our check and write
+      const contents = await readFile(lockPath, 'utf-8');
+      const lock = parseLockContents(contents);
+      if (lock && isProcessRunning(lock.pid)) {
+        printDuplicateError(lock);
+      }
+      // If the PID is dead, overwrite as a last resort
+      await writeFile(lockPath, JSON.stringify(data), 'utf-8');
+    }
+  }
 }
 
 /**
