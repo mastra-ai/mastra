@@ -475,6 +475,19 @@ export const API_ROUTE_METADATA = {
       "listProperty": "permissions"
     }
   },
+  "GET /auth/permission-patterns": {
+    "method": "GET",
+    "path": "/auth/permission-patterns",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "patterns"
+    }
+  },
   "GET /workflows": {
     "method": "GET",
     "path": "/workflows",
@@ -5160,6 +5173,19 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "GET /editor/builder/models/available": {
+    "method": "GET",
+    "path": "/editor/builder/models/available",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "providers"
     }
   },
   "GET /editor/builder/infrastructure": {
