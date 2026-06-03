@@ -704,14 +704,21 @@ export class MCPServer extends MCPServerBase {
             elicitation: sessionElicitation,
             extra,
           },
-          // Runtime guard for callers that still read the legacy top-level key.
-          get elicitation() {
-            throw new Error(`The "elicitation" key is now nested under "mcp.elicitation" in tool arguments`);
-          },
-          get extra() {
-            throw new Error(`The "extra" key is now nested under "mcp.extra" in tool arguments`);
-          },
         };
+        Object.defineProperties(mcpOptions, {
+          elicitation: {
+            enumerable: false,
+            get() {
+              throw new Error(`The "elicitation" key is now nested under "mcp.elicitation" in tool arguments`);
+            },
+          },
+          extra: {
+            enumerable: false,
+            get() {
+              throw new Error(`The "extra" key is now nested under "mcp.extra" in tool arguments`);
+            },
+          },
+        });
 
         await this.enforceToolExecutionFGA(request.params.name, proxiedContext);
 

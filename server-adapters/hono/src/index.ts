@@ -327,7 +327,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         const ctxToken = requestContext?.get(MASTRA_AUTH_TOKEN_KEY);
         // Only extract a Bearer token; other schemes (e.g. Basic) are not bearer tokens.
         const headerToken = c.req.header('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
-        const token = headerToken ?? (typeof ctxToken === 'string' ? ctxToken : undefined);
+        const token = typeof ctxToken === 'string' ? ctxToken : headerToken;
         await userHook({ req, requestContext, token });
       };
     }

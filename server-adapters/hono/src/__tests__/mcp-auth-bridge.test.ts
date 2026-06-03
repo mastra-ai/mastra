@@ -113,6 +113,23 @@ describe('Hono adapter: buildMcpRequestAuthBridge', () => {
       expect(calls[0].token).toBe('token-from-context');
     });
 
+    it('prefers the resolved requestContext token over the raw Authorization header', async () => {
+      const calls: Array<{ token?: string }> = [];
+      const adapter = buildAdapter({
+        serverConfig: {
+          mcp: {
+            setRequestAuth: (args: { token?: string }) => calls.push({ token: args.token }),
+          },
+        },
+      });
+
+      const requestContext = makeMockRequestContext({ [MASTRA_AUTH_TOKEN_KEY]: 'context-token' });
+      const c = makeMockHonoContext({ requestContext, authHeader: 'Bearer raw-token-from-header' });
+      await adapter.expose_buildBridge(c)!(makeMockReq());
+
+      expect(calls[0].token).toBe('context-token');
+    });
+
     it('takes precedence over the auto-bridge even when an auth provider is configured', async () => {
       const manualHook = vi.fn();
       const adapter = buildAdapter({

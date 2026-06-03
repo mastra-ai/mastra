@@ -1382,9 +1382,7 @@ describe('MCPServer', () => {
     });
 
     it('runs the hook on the stateful initialize request (new session path)', async () => {
-      // Track which JSON-RPC method each hook invocation corresponds to, so we can
-      // assert the hook fired on the initialize request that creates the session.
-      const methodsSeenByHook: Array<string | undefined> = [];
+      const hookCalls: string[] = [];
       authServer = new MCPServer({ name: 'AuthHookInitServer', version: '1.0.0', tools: authEchoTools });
 
       authHttpServer = http.createServer(async (req, res) => {
@@ -1396,27 +1394,26 @@ describe('MCPServer', () => {
           res,
           // Stateful: default sessionIdGenerator (sessions enabled)
           setRequestAuth: r => {
-            methodsSeenByHook.push(r.method); // HTTP method (POST/GET) proves hook ran per request
+            hookCalls.push(r.method ?? 'unknown');
             (r as any).auth = { token: 'tkn', clientId: 'cid' };
           },
         });
       });
       currentPort = await listenOnEphemeralPort(authHttpServer);
 
-      const client = new InternalMastraMCPClient({
-        name: 'auth-init-client',
-        server: { url: new URL(`http://localhost:${currentPort}/http`) },
+      const res = await fetch(`http://localhost:${currentPort}/http`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 't', version: '1' } },
+        }),
       });
-      // connect() performs the initialize handshake, exercising the new-session path.
-      await client.connect();
-      const tools = await client.tools();
-      expect(tools).toBeDefined();
-      expect(Object.keys(tools).length).toBeGreaterThan(0);
-      await client.disconnect();
 
-      // The initialize POST must have run the hook at least once.
-      expect(methodsSeenByHook.length).toBeGreaterThan(0);
-      expect(methodsSeenByHook.every(m => m !== undefined)).toBe(true);
+      expect(res.status).toBe(200);
+      expect(hookCalls).toEqual(['POST']);
     });
 
     it('runs the hook on existing-session requests and flows authInfo to tools', async () => {
@@ -2023,6 +2020,14 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(directToolOptions.mcp.extra.authInfo.token).toBe('test-auth-token-123');
     expect(directToolOptions.mcp.extra.authInfo.clientId).toBe('test-client-456');
     expect(directToolOptions.mcp.extra.sessionId).toBe('auth-test-session');
+    expect(Object.keys(directToolOptions)).not.toContain('elicitation');
+    expect(Object.keys(directToolOptions)).not.toContain('extra');
+    expect(Object.getOwnPropertyDescriptor(directToolOptions, 'elicitation')?.enumerable).toBe(false);
+    expect(Object.getOwnPropertyDescriptor(directToolOptions, 'extra')?.enumerable).toBe(false);
+    expect(() => directToolOptions.elicitation).toThrow(
+      'The "elicitation" key is now nested under "mcp.elicitation" in tool arguments',
+    );
+    expect(() => directToolOptions.extra).toThrow('The "extra" key is now nested under "mcp.extra" in tool arguments');
 
     // Verify requestContext is populated from mcp.extra for regular tools
     expect(directToolOptions.requestContext).toBeDefined();
