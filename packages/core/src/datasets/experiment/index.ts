@@ -15,6 +15,10 @@ type ExperimentItem = {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /** Resume data for suspended workflow steps, keyed by step ID */
+  resumeSteps?: Record<string, unknown>;
+  /** Flat resume data for single-step suspend workflows */
+  resumeData?: unknown;
 };
 
 // Re-export types and helpers
@@ -119,6 +123,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           input: dataItem.input,
           groundTruth: dataItem.groundTruth,
           metadata: dataItem.metadata,
+          resumeSteps: dataItem.resumeSteps,
+          resumeData: dataItem.resumeData,
         };
       });
       datasetVersion = null;

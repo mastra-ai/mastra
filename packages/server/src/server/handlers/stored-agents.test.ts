@@ -14,6 +14,7 @@ import {
   UPDATE_STORED_AGENT_ROUTE,
   DELETE_STORED_AGENT_ROUTE,
   PREVIEW_INSTRUCTIONS_ROUTE,
+  EXPORT_STORED_AGENT_ROUTE,
 } from './stored-agents';
 
 // Mock handleAutoVersioning to prevent version creation in tests
@@ -252,15 +253,28 @@ interface MockMastra {
   getStorage: ReturnType<typeof vi.fn>;
   getEditor: ReturnType<typeof vi.fn>;
   getServer: ReturnType<typeof vi.fn>;
+  getAgentById: ReturnType<typeof vi.fn>;
 }
 
 function createMockMastra(
-  options: { storage?: MockStorage; editor?: MockEditor; server?: Record<string, unknown> } = {},
+  options: {
+    storage?: MockStorage;
+    editor?: MockEditor;
+    server?: Record<string, unknown>;
+    agents?: Record<string, unknown>;
+  } = {},
 ): MockMastra {
   return {
     getStorage: vi.fn().mockReturnValue(options.storage),
     getEditor: vi.fn().mockReturnValue(options.editor),
     getServer: vi.fn().mockReturnValue(options.server ?? {}),
+    getAgentById: vi.fn().mockImplementation((agentId: string) => {
+      const agent = options.agents?.[agentId];
+      if (!agent) {
+        throw new Error(`Agent ${agentId} not found`);
+      }
+      return agent;
+    }),
   };
 }
 
@@ -526,6 +540,73 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).status).toBe(404);
         expect((error as HTTPException).message).toBe('Stored agent with id non-existent not found');
       }
+    });
+  });
+
+  describe('EXPORT_STORED_AGENT_ROUTE', () => {
+    it('should export deterministic JSON for a code agent override', async () => {
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'code-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ instructions: true, tools: { description: true } }),
+          },
+        },
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'code-agent',
+        instructions: 'Stored instructions',
+        tools: { weatherTool: { description: 'Check weather' } },
+        model: { provider: 'openai', name: 'gpt-4o' },
+        name: 'Code Agent',
+      });
+
+      expect(result).toEqual({
+        agentId: 'code-agent',
+        fileName: 'code-agent.json',
+        config: {
+          instructions: 'Stored instructions',
+          tools: { weatherTool: { description: 'Check weather' } },
+        },
+        content:
+          '{\n  "instructions": "Stored instructions",\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
+      });
+    });
+
+    it('should omit fields not owned by the editor config', async () => {
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'locked-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ instructions: false, tools: false }),
+          },
+        },
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'locked-agent',
+        instructions: 'Ignored instructions',
+        tools: { weatherTool: { description: 'Ignored tool' } },
+        integrationTools: { composio: { type: 'composio' } },
+        mcpClients: { local: { type: 'mcp' } },
+        requestContextSchema: { type: 'object' },
+      });
+
+      expect(result).toMatchObject({
+        agentId: 'locked-agent',
+        fileName: 'locked-agent.json',
+        config: {
+          requestContextSchema: { type: 'object' },
+        },
+        content: '{\n  "requestContextSchema": {\n    "type": "object"\n  }\n}\n',
+      });
     });
   });
 
@@ -890,6 +971,41 @@ describe('Stored Agents Handlers', () => {
       const stored = mockAgentsData.get('autopub-test');
       expect(stored?.activeVersionId).toBe(newVersionId);
     });
+
+    it('threads toolProviders into the auto-versioning snapshot config', async () => {
+      mockAgentsData.set('tp-snapshot-test', {
+        id: 'tp-snapshot-test',
+        name: 'TP Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-tp-1',
+      });
+
+      const { handleAutoVersioning } = await import('./version-helpers');
+      vi.mocked(handleAutoVersioning).mockClear();
+
+      const toolProviders = {
+        composio: {
+          tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } },
+          connections: {},
+        },
+      };
+
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'tp-snapshot-test',
+        toolProviders,
+      });
+
+      // 7th positional arg (index 6) is `providedConfigFields` — the snapshot
+      // config passed to the version writer. Without `toolProviders` here, the
+      // new version row drops the field on disk and reload shows nothing.
+      const call = vi.mocked(handleAutoVersioning).mock.calls.at(-1);
+      expect(call).toBeDefined();
+      const providedConfigFields = call?.[6] as Record<string, unknown> | undefined;
+      expect(providedConfigFields).toBeDefined();
+      expect(providedConfigFields?.toolProviders).toEqual(toolProviders);
+    });
   });
 
   describe('DELETE_STORED_AGENT_ROUTE', () => {
@@ -1022,9 +1138,9 @@ describe('Stored Agents Handlers', () => {
       });
       mockAgentsData.set('parent', {
         id: 'parent',
-        name: 'Parent with no sub-agents',
+        name: 'Parent with a real sub-agent',
         model: { name: 'gpt-4', provider: 'openai' },
-        agents: {},
+        agents: { 'some-child': { id: 'some-child', name: 'Child', model: { name: 'gpt-4', provider: 'openai' } } },
       });
 
       const result = await GET_STORED_AGENT_DEPENDENTS_ROUTE.handler({
@@ -1567,7 +1683,13 @@ describe('createStoredAgentBodySchema', () => {
   });
 });
 
-describe('Phase 6: UPDATE_STORED_AGENT_ROUTE allowlist enforcement', () => {
+describe('UPDATE_STORED_AGENT_ROUTE — model policy is surface-scoped, not enforced on save', () => {
+  // Per MODEL-POLICY-SURFACE-SCOPING-PLAN: save-path enforcement was removed
+  // because the policy is now surface-scoped (builder vs editor). The single
+  // server-side check would either over-enforce on the editor surface or
+  // under-enforce on the builder surface until per-surface enforcement lands.
+  //
+  // UI gating via ModelPolicyProvider is now the only enforcement layer.
   function makeBuilderEditor(opts: { allowed?: Array<{ provider: string; modelId?: string }> }) {
     const allowed = opts.allowed?.map(a => ({
       kind: 'known' as const,
@@ -1595,7 +1717,7 @@ describe('Phase 6: UPDATE_STORED_AGENT_ROUTE allowlist enforcement', () => {
     };
   }
 
-  it('rejects updates whose model is outside the allowlist with HTTP 422', async () => {
+  it('accepts updates whose model is outside the allowlist (UI gating enforces this)', async () => {
     const data = new Map<string, MockStoredAgent>();
     data.set('a1', {
       id: 'a1',
@@ -1612,23 +1734,12 @@ describe('Phase 6: UPDATE_STORED_AGENT_ROUTE allowlist enforcement', () => {
       getEditor: vi.fn().mockReturnValue(editor),
     };
 
-    let caught: HTTPException | undefined;
-    try {
-      await UPDATE_STORED_AGENT_ROUTE.handler({
-        ...createTestContext(mastra as unknown as MockMastra),
-        storedAgentId: 'a1',
-        model: { provider: 'anthropic', name: 'claude-opus-4-7' },
-      });
-    } catch (e) {
-      caught = e as HTTPException;
-    }
-
-    expect(caught).toBeInstanceOf(HTTPException);
-    expect(caught?.status).toBe(422);
-
-    const body = await caught!.getResponse().json();
-    expect(body.error.code).toBe('MODEL_NOT_ALLOWED');
-    expect(body.error.attempted).toMatchObject({ provider: 'anthropic', modelId: 'claude-opus-4-7' });
+    const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+      ...createTestContext(mastra as unknown as MockMastra),
+      storedAgentId: 'a1',
+      model: { provider: 'anthropic', name: 'claude-opus-4-6' },
+    });
+    expect(result).toMatchObject({ id: 'a1' });
   });
 
   it('passes update when model matches the allowlist', async () => {
@@ -1656,7 +1767,7 @@ describe('Phase 6: UPDATE_STORED_AGENT_ROUTE allowlist enforcement', () => {
     expect(result).toMatchObject({ id: 'a1' });
   });
 
-  it('skips enforcement when no builder is configured', async () => {
+  it('still works when no builder is configured', async () => {
     const data = new Map<string, MockStoredAgent>();
     data.set('a1', {
       id: 'a1',
@@ -1673,38 +1784,13 @@ describe('Phase 6: UPDATE_STORED_AGENT_ROUTE allowlist enforcement', () => {
     const result = await UPDATE_STORED_AGENT_ROUTE.handler({
       ...createTestContext(mastra as unknown as MockMastra),
       storedAgentId: 'a1',
-      model: { provider: 'anthropic', name: 'claude-opus-4-7' },
+      model: { provider: 'anthropic', name: 'claude-opus-4-6' },
     });
     expect(result).toMatchObject({ id: 'a1' });
   });
 
-  it('rejects creates whose model is outside the allowlist with HTTP 422', async () => {
-    const agentsStore = createMockAgentsStore(new Map());
-    const storage = createMockStorage(agentsStore);
-    const editor = makeBuilderEditor({
-      allowed: [{ provider: 'openai', modelId: 'gpt-5.5' }],
-    });
-    const mastra = {
-      getStorage: vi.fn().mockReturnValue(storage),
-      getEditor: vi.fn().mockReturnValue(editor),
-    };
-
-    let caught: HTTPException | undefined;
-    try {
-      await CREATE_STORED_AGENT_ROUTE.handler({
-        ...createTestContext(mastra as unknown as MockMastra),
-        name: 'New Agent',
-        model: { provider: 'anthropic', name: 'claude-opus-4-7' },
-      });
-    } catch (e) {
-      caught = e as HTTPException;
-    }
-
-    expect(caught).toBeInstanceOf(HTTPException);
-    expect(caught?.status).toBe(422);
-
-    const body = await caught!.getResponse().json();
-    expect(body.error.code).toBe('MODEL_NOT_ALLOWED');
-    expect(body.error.attempted).toMatchObject({ provider: 'anthropic', modelId: 'claude-opus-4-7' });
-  });
+  // Note: a CREATE-side counterpart test was removed alongside save-path
+  // enforcement. CREATE behavior is covered by the broader create tests above;
+  // the UPDATE assertion in this describe block is enough to lock in the
+  // surface-scoped policy direction.
 });

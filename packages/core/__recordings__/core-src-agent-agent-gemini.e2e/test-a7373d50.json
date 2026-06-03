@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-a7373d50",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle simple conversation ending with assistant in network",
     "createdAt": "2026-05-18T10:51:20.565Z",
-    "updatedAt": "2026-05-20T14:05:19.479Z"
+    "updatedAt": "2026-05-28T17:34:24.954Z"
   },
   "recordings": [
     {
@@ -73,7 +73,7 @@
             ]
           }
         },
-        "timestamp": 1779285916988
+        "timestamp": 1779989662388
       },
       "response": {
         "status": 200,
@@ -81,9 +81,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:18 GMT",
+          "date": "Thu, 28 May 2026 17:34:23 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1239",
+          "server-timing": "gfet4t7; dur=864",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -96,19 +96,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"none\",\n  \"prompt\": \"none\",\n  \"selectionReason\": \"The user is just responding to the greeting, so no further action is needed.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"none\",\n  \"prompt\": \"none\",\n  \"selectionReason\": \"The user is just saying hello and responding to a greeting. No tool or agent is necessary at this point.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.18549310244046724
+              "avgLogprobs": -0.2612904515759698
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 842,
-            "candidatesTokenCount": 52,
-            "totalTokenCount": 894,
+            "candidatesTokenCount": 58,
+            "totalTokenCount": 900,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -118,19 +118,19 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 52
+                "tokenCount": 58
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "nb8NapC8B9SlkdUP4p22wAE"
+          "responseId": "nnwYav7cKrnUjMcPitHLoQQ"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "dab874034415b0e5",
+      "hash": "13e7a34ad6a8d748",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -161,7 +161,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "\n    The none none has contributed to the task.\n    This is the result: \"The user is just responding to the greeting, so no further action is needed.\"\n    \n    \n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: I am doing well, thank you!\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the none none has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                  "text": "\n    The none none has contributed to the task.\n    This is the result: \"The user is just saying hello and responding to a greeting. No tool or agent is necessary at this point.\"\n    \n    \n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: I am doing well, thank you!\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the none none has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
                 }
               ]
             }
@@ -174,7 +174,7 @@
             ]
           }
         },
-        "timestamp": 1779285918271
+        "timestamp": 1779989663377
       },
       "response": {
         "status": 200,
@@ -183,22 +183,23 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:05:18 GMT",
+          "date": "Thu, 28 May 2026 17:34:24 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=547",
+          "server-timing": "gfet4t7; dur=617",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 747,\"totalTokenCount\": 747,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 747}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nr8Nar7ZHZizgLUPt6r40A8\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 747,\"totalTokenCount\": 747,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 747}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nr8Nar7ZHZizgLUPt6r40A8\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The user is just\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 747,\"totalTokenCount\": 747,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 747}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nr8Nar7ZHZizgLUPt6r40A8\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" responding to the greeting, so no further action is needed.\\\",\\n  \\\"final\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 747,\"totalTokenCount\": 747,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 747}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nr8Nar7ZHZizgLUPt6r40A8\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Result\\\": \\\"You're welcome! I'm glad to hear you're doing well.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 791,\"candidatesTokenCount\": 58,\"totalTokenCount\": 849,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 791}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 58}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nr8Nar7ZHZizgLUPt6r40A8\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"n3wYarHxLrij6MEP-6KIkAM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"n3wYarHxLrij6MEP-6KIkAM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The user is simply\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"n3wYarHxLrij6MEP-6KIkAM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" responding to a greeting, and no further action or tool is required. The agent\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"n3wYarHxLrij6MEP-6KIkAM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" has already provided an appropriate response.\\\",\\n  \\\"finalResult\\\": \\\"It's great to hear you're doing well! Is there anything I can help you with\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"n3wYarHxLrij6MEP-6KIkAM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" today?\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 797,\"candidatesTokenCount\": 74,\"totalTokenCount\": 871,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 797}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 74}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"n3wYarHxLrij6MEP-6KIkAM\"}\r\n\r\n"
         ],
-        "chunkTimings": [1, 0, 15, 94, 155],
+        "chunkTimings": [0, 1, 48, 138, 189, 32],
         "isStreaming": true
       }
     }

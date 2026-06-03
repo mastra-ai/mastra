@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dsql",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Amazon Aurora DSQL storage provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -29,7 +29,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@aws-sdk/types": "^3.731.0",
-    "@aws/aurora-dsql-node-postgres-connector": "^0.1.1",
+    "@aws/aurora-dsql-node-postgres-connector": "^0.1.9",
     "pg": "^8.14.0"
   },
   "devDependencies": {

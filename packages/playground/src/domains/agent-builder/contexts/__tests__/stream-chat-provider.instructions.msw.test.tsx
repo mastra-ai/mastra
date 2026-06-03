@@ -40,10 +40,14 @@ const Providers = ({ children }: { children: ReactNode }) => {
 
 describe('StreamChatProvider — modelSettings.instructions on the wire', () => {
   beforeEach(() => {
+    // These tests model the legacy `stream-until-idle` route. Opt out of thread
+    // signals so the hook drives that endpoint instead of the signal path.
+    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
   });
 
   afterEach(() => {
+    delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
     cleanup();
   });
 
@@ -95,6 +99,14 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     // The React layer flattens `modelSettings.instructions` to a top-level
     // `instructions` field on the wire (see client-sdks/react/src/agent/hooks.ts:266).
     expect(captured.body.instructions).toBe(snapshot);
+
+    // Supplying extraInstructions must NOT drop the rest of modelSettings.
+    // maxSteps is sent top-level; the remaining settings live under
+    // modelSettings (maxTokens is serialized as maxOutputTokens on the wire).
+    expect(captured.body.maxSteps).toBe(100);
+    expect(captured.body.modelSettings.maxRetries).toBe(3);
+    expect(captured.body.modelSettings.maxOutputTokens).toBe(5000);
+    expect(captured.body.modelSettings.temperature).toBe(1);
 
     // Confirm the snapshot is NOT smuggled into the user-facing messages array.
     const messages = captured.body.messages ?? [];

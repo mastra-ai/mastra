@@ -72,6 +72,39 @@ describe('provisionObservabilityProject', () => {
     expect(resolveCurrentOrgMock).toHaveBeenCalledWith('prompt-token', { forcePrompt: true });
   });
 
+  test('uses a provided organization instead of prompting again', async () => {
+    platformFetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          project: { id: 'p1', slug: 'my-app', name: 'my-app', organizationId: 'org_prompt' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ token: { id: 'k1', name: 'mastra observability – my-app' }, secret: 'sk_my_app' }),
+      );
+
+    const result = await provisionObservabilityProject({
+      defaultProjectName: 'my-app',
+      mode: 'create',
+      token: 'prompt-token',
+      org: { orgId: 'org_prompt', orgName: 'Prompt Org' },
+    });
+
+    expect(result.orgName).toBe('Prompt Org');
+    expect(result.projectId).toBe('p1');
+    expect(getTokenMock).not.toHaveBeenCalled();
+    expect(resolveCurrentOrgMock).not.toHaveBeenCalled();
+    expect(platformFetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://platform.test/v1/studio/projects',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'X-Mastra-Organization-Id': 'org_prompt' }),
+        body: JSON.stringify({ name: 'my-app', studioEnabled: false, serverEnabled: false }),
+      }),
+    );
+  });
+
   test('creates a new project when the org has none, defaulting to package name', async () => {
     platformFetchMock
       .mockResolvedValueOnce(jsonResponse({ projects: [] }))
@@ -328,7 +361,7 @@ describe('provisionObservabilityProject', () => {
     expect(result.projectId).toBe('p1');
     expect(result.projectName).toBe('my-app');
     expect(result.token).toBe('sk_my_app');
-    expect(resolveCurrentOrgMock).toHaveBeenCalledWith('test-token');
+    expect(resolveCurrentOrgMock).toHaveBeenCalledWith('test-token', { forcePrompt: true });
 
     // No picker, no name re-prompt, no list call.
     expect(selectMock).not.toHaveBeenCalled();
