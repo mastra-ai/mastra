@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
   handleSkillCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
-  handleNotifyCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -52,7 +51,6 @@ vi.mock('../commands/index.js', () => ({
   handleApiKeysCommand: vi.fn(),
   handleFeedbackCommand: vi.fn(),
   handleObservabilityCommand: vi.fn(),
-  handleNotifyCommand: mocks.handleNotifyCommand,
   handleGoalCommand: mocks.handleGoalCommand,
   handleJudgeCommand: mocks.handleJudgeCommand,
 }));
@@ -80,7 +78,6 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleGoalCommand.mockClear();
     mocks.handleSkillCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
-    mocks.handleNotifyCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
@@ -155,17 +152,6 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
-  });
-
-  it('routes /notify to handleNotifyCommand', async () => {
-    const state = { customSlashCommands: [] } as any;
-    const ctx = {} as any;
-
-    const handled = await dispatchSlashCommand('/notify inline contents', state, () => ctx);
-
-    expect(handled).toBe(true);
-    expect(mocks.handleNotifyCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.handleNotifyCommand).toHaveBeenCalledWith(ctx, ['inline', 'contents']);
   });
 
   it('routes /skill/name to handleSkillCommand', async () => {

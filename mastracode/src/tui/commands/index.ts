@@ -35,5 +35,4 @@ export { handleMemoryGatewayCommand } from './memory-gateway.js';
 export { handleApiKeysCommand } from './api-keys.js';
 export { handleFeedbackCommand } from './feedback.js';
 export { handleObservabilityCommand } from './observability.js';
-export { handleNotifyCommand } from './notify.js';
 export { handleGoalCommand, handleJudgeCommand } from './goal.js';
