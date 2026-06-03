@@ -1,8 +1,7 @@
 import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import type { ApiRoute, MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
-import type { HonoRequest } from 'hono';
+import type { ApiRoute, MastraAuthConfig, MastraAuthProvider, MastraAuthRequest } from '@mastra/core/server';
 
 import {
   MASTRA_RESOURCE_ID_KEY,
@@ -276,7 +275,7 @@ export interface AuthMiddlewareContext {
   authConfig: MastraAuthConfig;
   customRouteAuthConfig?: Map<string, boolean>;
   requestContext: { get: (key: string) => unknown; set: (key: string, value: unknown) => void };
-  rawRequest: unknown;
+  rawRequest: MastraAuthRequest;
   token: string | null;
   buildAuthorizeContext: () => unknown;
   /** When true, force authentication even if the path matches a public pattern. */
@@ -289,10 +288,22 @@ export type AuthResult =
 
 const pass: AuthResult = { action: 'next' };
 
+const adaptToMastraAuthRequest = (request: MastraAuthRequest): MastraAuthRequest => {
+  if (!(request instanceof Request)) {
+    return request;
+  }
+
+  return {
+    raw: request,
+    headers: request.headers,
+    header: name => request.headers.get(name) ?? undefined,
+  };
+};
+
 export interface GetAuthenticatedUserOptions {
   mastra: Mastra;
   token: string;
-  request: Request | HonoRequest;
+  request: MastraAuthRequest;
 }
 
 export const getAuthenticatedUser = async <TUser = unknown>({
@@ -310,7 +321,7 @@ export const getAuthenticatedUser = async <TUser = unknown>({
     return null;
   }
 
-  return (await authConfig.authenticateToken(normalizedToken, request as any)) as TUser | null;
+  return (await authConfig.authenticateToken(normalizedToken, request)) as TUser | null;
 };
 
 /**
@@ -371,10 +382,11 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   let user: unknown;
   let refreshHeaders: Record<string, string> | undefined;
+  const authRequest = adaptToMastraAuthRequest(rawRequest);
 
   try {
     if (typeof authConfig.authenticateToken === 'function') {
-      user = await authConfig.authenticateToken(token ?? '', rawRequest as any);
+      user = await authConfig.authenticateToken(token ?? '', authRequest);
     } else {
       throw new Error('No token verification method configured');
     }
@@ -409,7 +421,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
               const cookieValue = refreshedCookie.includes('=')
                 ? refreshedCookie.split('=').slice(1).join('=')
                 : refreshedCookie;
-              user = await authConfig.authenticateToken(cookieValue, refreshedRequest as any);
+              user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
             }
             if (!user) {
               refreshHeaders = undefined;
@@ -507,7 +519,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {
-      const isAuthorized = await authConfig.authorizeUser(user, rawRequest as any);
+      const isAuthorized = await authConfig.authorizeUser(user, authRequest);
 
       if (!isAuthorized) {
         return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };

@@ -195,7 +195,7 @@ await agent.queueMessage({
 
 ### `sendSignal()`
 
-Send a lower-level signal to an active agent run or memory thread. Use this for system-generated context such as reactive reminders or notifications. For user-authored input, prefer `sendMessage()` or `queueMessage()`.
+Send a lower-level signal to an active agent run or memory thread. Use this for system-generated context such as reactive reminders or notification-shaped context that doesn't need inbox storage. For durable notification records, use the server-side [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) API. For user-authored input, prefer `sendMessage()` or `queueMessage()`.
 
 ```typescript
 const agent = mastraClient.getAgent('support-agent')
@@ -293,7 +293,7 @@ Returns `{ accepted: true, runId: string }`.
 
 ### `subscribeToThread()`
 
-Subscribe to raw stream chunks for a memory thread. Use this to render output from a thread that may be started or continued by `sendMessage()`, `queueMessage()`, or `sendSignal()`.
+Subscribe to raw stream chunks for a memory thread. Use this to render output from a thread that may be started or continued by `sendMessage()`, `queueMessage()`, `sendSignal()`, or server-side notification dispatch.
 
 ```typescript
 const agent = mastraClient.getAgent('support-agent')

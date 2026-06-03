@@ -770,8 +770,11 @@ export class Agent extends BaseResource {
           }
 
           try {
+            const continuationMessages = threadId
+              ? toolResultMessages
+              : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages];
             const continuation = await agent.streamUntilIdle(
-              [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
+              continuationMessages as MessageListInput,
               {
                 ...activeRuntimeOptions,
                 runId: uuid(),

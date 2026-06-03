@@ -25,6 +25,7 @@ import { FavoritesPG } from './domains/favorites';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
+import { NotificationsPG } from './domains/notifications';
 import { ObservabilityPG } from './domains/observability';
 import { PromptBlocksPG } from './domains/prompt-blocks';
 import { SchedulesPG } from './domains/schedules';
@@ -46,6 +47,7 @@ const DEFAULT_IDLE_TIMEOUT_MS = 30000;
  */
 const ALL_DOMAINS = [
   MemoryPG,
+  NotificationsPG,
   ObservabilityPG,
   ScoresPG,
   ScorerDefinitionsPG,
@@ -91,6 +93,7 @@ export {
   MCPClientsPG,
   MCPServersPG,
   MemoryPG,
+  NotificationsPG,
   ObservabilityPG,
   PromptBlocksPG,
   ScorerDefinitionsPG,
@@ -165,6 +168,7 @@ export class PostgresStore extends MastraCompositeStore {
         scores: new ScoresPG(domainConfig),
         workflows: new WorkflowsPG(domainConfig),
         memory: new MemoryPG(domainConfig),
+        notifications: new NotificationsPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
         agents: new AgentsPG(domainConfig),
         promptBlocks: new PromptBlocksPG(domainConfig),
