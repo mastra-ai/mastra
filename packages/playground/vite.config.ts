@@ -21,75 +21,26 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_AUTO_DETECT_URL%%/g, 'true')
       .replace(/%%MASTRA_EXPERIMENTAL_FEATURES%%/g, process.env.EXPERIMENTAL_FEATURES || 'false')
       .replace(/%%MASTRA_EXPERIMENTAL_UI%%/g, process.env.MASTRA_EXPERIMENTAL_UI || 'false')
-      .replace(/%%MASTRA_AGENT_SIGNALS%%/g, process.env.MASTRA_AGENT_SIGNALS ?? 'true');
+      .replace(/%%MASTRA_AGENT_SIGNALS%%/g, process.env.MASTRA_AGENT_SIGNALS || 'false');
   },
 });
 
 // @mastra/core dist chunks contain Node.js builtins (stream, fs, crypto, etc.)
 // from server-only code (voice, workspace tools) that shares chunks with
-// browser-safe code. These code paths are never called in the browser, so we
-// resolve them to a throwing stub module.
-//
+// browser-safe code. These code paths are never called in the browser —
+// stub them so Rollup can resolve the imports without erroring.
 // enforce: 'pre' ensures this runs before Vite's built-in vite:resolve which
 // would otherwise replace them with __vite-browser-external (no named exports).
-//
-// We stub three things here:
-// - Node builtins (stream, fs, path, crypto, ...) leaked into shared chunks.
-// - Node-only npm packages imported by server-only core code (e.g. `execa`).
-// - `@standard-schema/spec`, a types-only package whose ESM build is empty;
-//   a bundled core dependency re-exports it at runtime, which the browser
-//   rejects ("does not provide an export named 'default'").
-//
-// Vite's dev server transforms these imports as native ESM, so every named
-// import must resolve to a real export — `syntheticNamedExports` only applies
-// to the Rollup prod build. We therefore emit explicit throwing named exports
-// for the symbols core actually imports, plus a Proxy default as a catch-all.
-const stubbedPackages = new Set(['execa', '@standard-schema/spec']);
-
-// Named bindings imported from Node builtins by @mastra/core's server-only
-// chunks. Keep in sync if a new leaked symbol surfaces (the error message names
-// the missing export). The Proxy default and `syntheticNamedExports` cover the
-// prod build and any value-position access; this list is what dev ESM needs.
-const stubbedNamedExports = [
-  'Transform',
-  'PassThrough',
-  'Readable',
-  'Writable',
-  'EventEmitter',
-  'createRequire',
-  'createHash',
-  'createHmac',
-  'randomBytes',
-  'randomUUID',
-  'existsSync',
-  'mkdirSync',
-  'readFileSync',
-  'writeFileSync',
-  'renameSync',
-  'statSync',
-  'lstatSync',
-  'readdirSync',
-  'rmSync',
-  'unlinkSync',
-  'realpathSync',
-  'constants',
-  'tmpdir',
-  'join',
-  'dirname',
-  'resolve',
-  'relative',
-  'normalize',
-  'isAbsolute',
-  'basename',
-  'extname',
-  'sep',
-];
+// Node-only npm packages imported by @mastra/core server-only code (e.g. sandbox).
+// These are never called in the browser — stub them alongside Node builtins.
+const nodeOnlyPackages = new Set(['execa']);
 
 const stubNodeBuiltinsPlugin: Plugin = {
   name: 'stub-node-builtins',
   enforce: 'pre',
+  apply: 'build',
   resolveId(source) {
-    if (stubbedPackages.has(source)) {
+    if (nodeOnlyPackages.has(source)) {
       return { id: `\0node-stub:${source}`, moduleSideEffects: false };
     }
     const mod = source.startsWith('node:') ? source.slice(5) : source;
@@ -100,23 +51,7 @@ const stubNodeBuiltinsPlugin: Plugin = {
   },
   load(id) {
     if (id.startsWith('\0node-stub:')) {
-      const named = stubbedNamedExports.map(name => `export const ${name} = stub;`).join('\n');
-      return {
-        code: `const stub = new Proxy(function () {}, {
-  get: (_target, property) => (property === 'default' ? stub : stub),
-  construct() {
-    throw new Error('Node builtin is not available in Studio browser code.');
-  },
-  apply() {
-    throw new Error('Node builtin is not available in Studio browser code.');
-  },
-});
-${named}
-export default stub;
-`,
-        syntheticNamedExports: 'default',
-        moduleSideEffects: false,
-      };
+      return { code: 'export default {}', syntheticNamedExports: true };
     }
   },
 };
