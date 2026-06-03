@@ -356,7 +356,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         // Environment & project:
         //   state.projectName, state.gitBranch
         // Model configuration:
-        //   state.currentModelId, state.subagentModelId
+        //   state.currentModelId
         // Agent settings:
         //   state.yolo, state.thinkingLevel, state.smartEditing
         // Observational memory settings:
@@ -373,7 +373,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           'harness.state.gitBranch',
           // Model configuration
           'harness.state.currentModelId',
-          'harness.state.subagentModelId',
           // Agent settings
           'harness.state.yolo',
           'harness.state.thinkingLevel',
@@ -637,7 +636,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (config?.omScope) {
     globalInitialState.omScope = config.omScope;
   }
-  // Seed subagent models from global settings
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
     if (key === 'default' || key === '_default') {
       globalInitialState.subagentModelId = modelId;
@@ -679,16 +677,34 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     }),
   );
 
-  const harnessV1 = new HarnessV1({
+  const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
+  const initialState: Partial<MastraCodeState> = {
+    projectPath: project.rootPath,
+    projectName: project.name,
+    gitBranch: project.gitBranch,
+    yolo: true,
+    ...globalInitialState,
+    ...config?.initialState,
+    // configDir must always win over initialState spreads to stay in sync
+    // with MCP/hooks/storage which were already initialized with this value.
+    configDir,
+  };
+  const workspace = config?.workspace ?? getDynamicWorkspace;
+
+  const harnessV1 = new HarnessV1<typeof modesV1, MastraCodeState>({
     ownerId,
     agents: { [CODE_AGENT_ID]: codeAgent },
     memory,
     modes: modesV1,
     defaultModeId,
     storage: harnessStorage,
+    stateSchema: typedStateSchema,
+    initialState,
+    workspace,
+    resolveModel: modelId => resolveModel(modelId) as LanguageModel,
+    toolCategoryResolver: name => (getToolCategory(name) ?? null) as never,
   });
 
-  const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const harness = new HarnessCompat<MastraCodeState>(
     {
       id: 'mastra-code',
@@ -701,18 +717,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       subagents,
       resolveModel: modelId => resolveModel(modelId) as LanguageModel,
       toolCategoryResolver: getToolCategory,
-      initialState: {
-        projectPath: project.rootPath,
-        projectName: project.name,
-        gitBranch: project.gitBranch,
-        yolo: true,
-        ...globalInitialState,
-        ...config?.initialState,
-        // configDir must always win over initialState spreads to stay in sync
-        // with MCP/hooks/storage which were already initialized with this value.
-        configDir,
-      },
-      workspace: config?.workspace ?? getDynamicWorkspace,
+      initialState,
+      workspace,
       browser: config?.browser,
       modes,
       heartbeatHandlers,
