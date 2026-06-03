@@ -29,6 +29,6 @@ export const mastra = new Mastra({
     url: tursoUrl,
     authToken: process.env.TURSO_AUTH_TOKEN,
   }),
-  editor: new MastraEditor({ source: 'code' } as any),
+  editor: new MastraEditor({ source: 'code' }),
   logger: new PinoLogger({ name: 'claw', level: 'info' }),
 });

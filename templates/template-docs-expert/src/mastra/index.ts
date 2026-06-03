@@ -17,7 +17,7 @@ export const mastra = new Mastra({
     authToken: process.env.TURSO_AUTH_TOKEN,
   }),
   agents: { docsExpert },
-  editor: new MastraEditor({ source: 'code' } as any),
+  editor: new MastraEditor({ source: 'code' }),
   logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
   observability: new Observability({
     configs: {

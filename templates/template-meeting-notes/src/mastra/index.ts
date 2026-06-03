@@ -20,7 +20,7 @@ export const mastra = new Mastra({
   }),
   agents: { meetingNotesAgent },
   workflows: { ingestMeetingWorkflow },
-  editor: new MastraEditor({ source: 'code' } as any),
+  editor: new MastraEditor({ source: 'code' }),
   logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
   server: {
     apiRoutes: [meetingsUploadRoute],
