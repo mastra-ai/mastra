@@ -7376,9 +7376,30 @@ export class Agent<
       resourceId: string;
       toolCallId?: string;
       approved: boolean;
+      messages?: MessageListInput;
+      streamOptions?: AgentExecutionOptions<OUTPUT>;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, approved, ...executionOptions } = options;
+    const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
+
+    if (messages && approved) {
+      const continuation = agentThreadStreamRuntime.continueWithMessages(
+        this as Agent<any, any, any, any>,
+        messages,
+        {
+          resourceId,
+          threadId,
+          runId: executionOptions.runId,
+          streamOptions: {
+            ...(streamOptions ?? {}),
+            ...executionOptions,
+          } as unknown as AgentExecutionOptions<OUTPUT>,
+        },
+        this.getPubSub(),
+      );
+      return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
+    }
+
     const runId = this.getActiveThreadRunId({ threadId, resourceId });
     if (!runId) {
       throw new MastraError({

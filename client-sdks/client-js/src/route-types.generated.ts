@@ -6961,6 +6961,8 @@ export type PostAgentsAgentIdSendToolApproval_Body = {
   toolCallId: string;
   approved: boolean;
   format?: string | undefined;
+  messages?: any[] | undefined;
+  streamOptions?: any | undefined;
 };
 
 export type PostAgentsAgentIdSendToolApproval_Response = {

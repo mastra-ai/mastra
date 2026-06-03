@@ -770,21 +770,22 @@ export class Agent extends BaseResource {
           }
 
           try {
-            const continuation = await agent.streamUntilIdle(
-              [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
-              {
+            await agent.sendToolApproval({
+              resourceId: resourceId || agent.agentId,
+              threadId,
+              toolCallId: pendingToolCalls[0]!.toolCallId,
+              approved: true,
+              requestContext: processedRequestContext,
+              messages: (threadId
+                ? toolResultMessages
+                : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]) as MessageListInput,
+              streamOptions: {
                 ...activeRuntimeOptions,
-                runId: uuid(),
                 requestContext: processedRequestContext,
                 memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
                 clientTools: processedClientTools,
-              } as never,
-            );
-            try {
-              void continuation.body?.cancel?.();
-            } catch {
-              // ignore
-            }
+              } as StreamParamsBaseWithoutMessages<any>,
+            });
           } catch (error) {
             console.error('Error running client-tool continuation:', error);
           } finally {
@@ -2753,6 +2754,8 @@ export class Agent extends BaseResource {
     toolCallId: string;
     approved: boolean;
     requestContext?: RequestContext | Record<string, any>;
+    messages?: MessageListInput;
+    streamOptions?: StreamParamsBaseWithoutMessages<any>;
   }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
     const { requestContext, ...rest } = params;
     return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
