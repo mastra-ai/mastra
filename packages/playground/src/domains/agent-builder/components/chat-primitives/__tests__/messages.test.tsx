@@ -107,6 +107,25 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).not.toContain('Web Search');
   });
 
+  it('renders signal data parts in agent-builder chat messages', () => {
+    const { container } = renderRow([
+      {
+        type: 'data-signal',
+        data: {
+          type: 'notification',
+          tagName: 'notification-summary',
+          contents: [{ type: 'text', text: 'github: 2' }],
+          attributes: { pending: 2, priority: 'high' },
+        },
+      } as ToolPart,
+    ]);
+
+    expect(container.textContent).toContain('Notification summary');
+    expect(container.textContent).toContain('github: 2');
+    expect(container.textContent).toContain('2 pending');
+    expect(container.textContent).toContain('high');
+  });
+
   it('renders MessageSetAgentName for streaming dynamic-tool', () => {
     const { container } = renderRow(
       [

@@ -71,6 +71,14 @@ describe('isProcessor', () => {
     expect(isProcessor(processor)).toBe(true);
   });
 
+  it('should return true for object with computeStateSignal method', () => {
+    const processor: Processor = {
+      id: 'test-processor',
+      computeStateSignal: () => ({ cacheKey: 'state', contents: 'state' }),
+    };
+    expect(isProcessor(processor)).toBe(true);
+  });
+
   it('should return true for processor with multiple methods', () => {
     const processor: Processor = {
       id: 'multi-processor',
@@ -295,7 +303,7 @@ describe('createStep with Processor', () => {
       expect(processInputStepMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
       expect(messageList.add).toHaveBeenCalledWith(expect.objectContaining({ role: 'signal' }), 'input');
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
-      expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-system-reminder', transient: true }));
+      expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-signal', transient: true }));
     });
 
     it('should provide sendSignal when phase is inputStep and messageList is synthesized', async () => {
