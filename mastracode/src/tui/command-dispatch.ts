@@ -41,6 +41,7 @@ import {
   handleFeedbackCommand,
   handleObservabilityCommand,
   handleGithubCommand,
+  tryAutoSubscribeToPR,
   handleGoalCommand,
   handleJudgeCommand,
 } from './commands/index.js';
@@ -56,6 +57,19 @@ import {
 import type { TUIState } from './state.js';
 
 const TRACKED_COMMANDS = new Set(['login', 'models', 'mode', 'memory-gateway', 'custom-providers', 'threads', 'new']);
+
+/** Custom commands that operate on a pull request and should auto-subscribe via GitHub Signals. */
+const PR_RELATED_CUSTOM_COMMANDS = new Set(['critique-pr', 'gh-pr-comments', 'gh-fix-ci', 'gh-fix-lint', 'selfreview']);
+
+/** Best-effort parse of a PR argument (number or URL) into a numeric PR reference for auto-subscribe. */
+function parsePRArgForAutoSubscribe(arg: string): number | undefined {
+  const trimmed = arg.trim().replace(/^#/, '');
+  const num = Number(trimmed);
+  if (Number.isFinite(num) && num > 0) return num;
+  const urlMatch = /\/pull\/(\d+)/.exec(trimmed);
+  if (urlMatch?.[1]) return Number(urlMatch[1]);
+  return undefined;
+}
 
 /**
  * Dispatch a slash command input to the appropriate handler.
@@ -284,6 +298,11 @@ async function handleGoalSourceCommand(
 ): Promise<void> {
   const customCommand = state.customSlashCommands.find(cmd => cmd.name === sourceName && cmd.goal === true);
   if (customCommand) {
+    // Auto-subscribe to the relevant PR when GitHub Signals are enabled.
+    if (PR_RELATED_CUSTOM_COMMANDS.has(customCommand.name)) {
+      tryAutoSubscribeToPR(ctx).catch(() => {});
+    }
+
     try {
       const processedContent = await processSlashCommand(customCommand, args, process.cwd());
       const objective = processedContent.trim();
@@ -334,6 +353,14 @@ async function handleCustomSlashCommand(
   ctx: SlashCommandContext,
   displayText: string,
 ): Promise<void> {
+  // Auto-subscribe to the relevant PR when GitHub Signals are enabled.
+  if (PR_RELATED_CUSTOM_COMMANDS.has(command.name)) {
+    // gh-fix-lint receives an explicit PR reference as its first argument;
+    // other PR-related commands operate on the current branch's PR.
+    const prRef = command.name === 'gh-fix-lint' && args[0] ? parsePRArgForAutoSubscribe(args[0]) : undefined;
+    tryAutoSubscribeToPR(ctx, prRef).catch(() => {});
+  }
+
   try {
     // Process the command template
     const processedContent = await processSlashCommand(command as any, args, process.cwd());

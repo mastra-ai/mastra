@@ -1,3 +1,4 @@
+import { tryAutoSubscribeToPR } from './github.js';
 import { sendSlashCommandMessage } from './send-slash-command-message.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -41,6 +42,12 @@ export async function handleReviewCommand(ctx: SlashCommandContext, args: string
 
     if (focusArea) {
       prompt += `\nPay special attention to: ${focusArea}\n`;
+    }
+
+    // Auto-subscribe to the PR when GitHub Signals are enabled (fire-and-forget).
+    const prNum = Number(prNumber);
+    if (Number.isFinite(prNum)) {
+      tryAutoSubscribeToPR(ctx, prNum).catch(() => {});
     }
   }
 

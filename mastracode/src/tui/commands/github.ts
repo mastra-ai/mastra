@@ -158,6 +158,38 @@ async function detectCurrentPullRequest(ctx: SlashCommandContext): Promise<strin
   });
 }
 
+/**
+ * Auto-subscribe the current thread to a GitHub PR when signals are enabled.
+ * Runs silently — errors are swallowed so the calling command is not disrupted.
+ *
+ * @param prRef Explicit PR reference (number or owner/repo#number). When omitted
+ *   the function tries to detect the PR for the current branch via `gh pr view`.
+ */
+export async function tryAutoSubscribeToPR(ctx: SlashCommandContext, prRef?: GithubPRSignalInput): Promise<void> {
+  if (!loadSettings().signals.experimentalGithubSignals) return;
+
+  const githubSignalsProcessor = ctx.state.options?.githubSignals;
+  if (!githubSignalsProcessor?.subscribeThreadToPR) return;
+
+  const { threadId, resourceId } = await getCurrentGithubThread(ctx);
+  if (!threadId || !resourceId) return;
+
+  let pr = prRef;
+  if (!pr) {
+    const currentPR = await detectCurrentPullRequest(ctx);
+    const parsed = currentPR ? parseGithubPRReference(currentPR) : undefined;
+    if (!parsed) return;
+    pr = parsed;
+  }
+
+  try {
+    const result = await githubSignalsProcessor.subscribeThreadToPR({ threadId, resourceId, pr });
+    ctx.showInfo(`Auto-subscribed to ${result.owner}/${result.repo}#${result.number} via GitHub Signals.`);
+  } catch {
+    // Silent — don't disrupt the command that triggered the auto-subscribe.
+  }
+}
+
 export async function handleGithubCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
   if (!loadSettings().signals.experimentalGithubSignals) {
     ctx.showError('Experimental GitHub signals are disabled. Enable them in /settings and restart MastraCode.');
