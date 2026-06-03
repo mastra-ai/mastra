@@ -351,11 +351,12 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'observability', description: 'Configure cloud observability' },
     {
       name: 'github',
-      description: 'Subscribe/debug GitHub PR signals',
+      description: 'Subscribe/sync/debug GitHub PR signals',
       getArgumentCompletions: (argumentPrefix: string) =>
         [
           { value: 'subscribe', label: 'subscribe', description: 'Subscribe this thread to a GitHub PR' },
           { value: 'unsubscribe', label: 'unsubscribe', description: 'Unsubscribe this thread from a GitHub PR' },
+          { value: 'sync', label: 'sync', description: 'Immediately sync subscribed GitHub PRs' },
           { value: 'debug', label: 'debug', description: 'Show GitHub signal subscription debug info' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },

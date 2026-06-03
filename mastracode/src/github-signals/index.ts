@@ -906,6 +906,10 @@ export class GithubSignals implements Processor<'github-signals'> {
     this.mastra = mastra as unknown as GithubSignalsMastra;
   }
 
+  async syncThreadNow(input: GithubPollingThread): Promise<number> {
+    return this.#pollThread(input);
+  }
+
   async startPollingForThread(
     input: GithubPollingThread,
     options: { pollImmediately?: boolean } = {},

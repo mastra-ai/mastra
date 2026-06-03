@@ -870,6 +870,53 @@ describe('GithubSignals', () => {
     processor.stopAllPolling();
   });
 
+  it('syncs subscribed PRs immediately on request', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-sync-now',
+      resourceId: 'resource-sync-now',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Add GitHub signals',
+        state: 'open',
+        githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+        contentHash: 'sync-now-hash',
+      })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient });
+
+    await expect(processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(1);
+
+    expect(syncClient.syncPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123 }),
+    );
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions[0]).toMatchObject({
+      lastSyncStatus: 'success',
+      lastObservedContentHash: 'sync-now-hash',
+    });
+  });
+
   it('polls subscribed PRs on the configured interval and updates thread metadata', async () => {
     vi.useFakeTimers();
     const thread: StorageThreadType = {

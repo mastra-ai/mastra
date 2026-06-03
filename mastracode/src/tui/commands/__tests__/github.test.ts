@@ -21,21 +21,29 @@ vi.mock('../../modal-question.js', () => ({
 
 function createContext() {
   const sendSignal = vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
+  const syncThreadNow = vi.fn(async () => 1);
   const ctx = {
     state: {
       ui: { requestRender: vi.fn() },
       projectInfo: { rootPath: '/repo' },
-      options: { githubSignals: { isPollingThread: vi.fn(() => false), getPollIntervalMs: vi.fn(() => 300_000) } },
+      options: {
+        githubSignals: {
+          isPollingThread: vi.fn(() => false),
+          getPollIntervalMs: vi.fn(() => 300_000),
+          syncThreadNow,
+        },
+      },
     },
     harness: {
       sendSignal,
       getCurrentThreadId: vi.fn(() => 'thread-1'),
+      getResourceId: vi.fn(() => 'resource-1'),
       listThreads: vi.fn(async () => []),
     },
     showInfo: vi.fn(),
     showError: vi.fn(),
   } as unknown as SlashCommandContext;
-  return { ctx, sendSignal };
+  return { ctx, sendSignal, syncThreadNow };
 }
 
 describe('handleGithubCommand', () => {
@@ -152,6 +160,28 @@ describe('handleGithubCommand', () => {
     expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'github-subscribe-pr' }));
   });
 
+  it('syncs GitHub subscriptions for the current thread', async () => {
+    const { ctx, sendSignal, syncThreadNow } = createContext();
+    vi.mocked((ctx.harness as any).listThreads).mockResolvedValue([
+      { id: 'thread-1', resourceId: 'resource-from-thread' },
+    ]);
+
+    await handleGithubCommand(ctx, ['sync']);
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(syncThreadNow).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-from-thread' });
+    expect(ctx.showInfo).toHaveBeenCalledWith('Synced 1 GitHub PR subscription.');
+  });
+
+  it('shows a no-op message when /github sync has no subscriptions', async () => {
+    const { ctx, syncThreadNow } = createContext();
+    syncThreadNow.mockResolvedValue(0);
+
+    await handleGithubCommand(ctx, ['sync']);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith('No GitHub PR subscriptions to sync.');
+  });
+
   it('shows GitHub subscription debug information for the current thread', async () => {
     const { ctx, sendSignal } = createContext();
     vi.mocked((ctx.state as any).options.githubSignals.isPollingThread).mockReturnValue(true);
@@ -205,7 +235,7 @@ describe('handleGithubCommand', () => {
 
     expect(sendSignal).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith(
-      'Usage: /github 123, /github owner/repo#123, /github unsubscribe 123, /github debug, or /github https://github.com/owner/repo/pull/123',
+      'Usage: /github 123, /github owner/repo#123, /github unsubscribe 123, /github sync, /github debug, or /github https://github.com/owner/repo/pull/123',
     );
   });
 });

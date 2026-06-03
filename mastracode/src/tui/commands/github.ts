@@ -41,17 +41,30 @@ function parseGithubPRReference(input: string): GithubPRSignalInput | undefined 
   return undefined;
 }
 
-async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<string> {
+async function getCurrentGithubThread(ctx: SlashCommandContext): Promise<{
+  threadId?: string;
+  resourceId?: string;
+  metadata?: Record<string, unknown>;
+}> {
   const harness = ctx.harness as unknown as {
     getCurrentThreadId?: () => string | undefined;
+    getResourceId?: () => string | undefined;
     listThreads?: (input?: {
       allResources?: boolean;
     }) => Promise<Array<{ id: string; resourceId?: string; metadata?: Record<string, unknown> }>>;
   };
   const threadId = harness.getCurrentThreadId?.();
-  if (!threadId) return 'GitHub Signals debug: no current thread.';
+  if (!threadId) return {};
 
   const thread = (await harness.listThreads?.({ allResources: true }))?.find(item => item.id === threadId);
+  return { threadId, resourceId: thread?.resourceId ?? harness.getResourceId?.(), metadata: thread?.metadata };
+}
+
+async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<string> {
+  const { threadId, resourceId, metadata } = await getCurrentGithubThread(ctx);
+  if (!threadId) return 'GitHub Signals debug: no current thread.';
+
+  const thread = { resourceId, metadata };
   const mastra = isPlainObject(thread?.metadata?.mastra) ? thread.metadata.mastra : {};
   const githubSignals = isPlainObject(mastra[GITHUB_SIGNALS_METADATA_KEY]) ? mastra[GITHUB_SIGNALS_METADATA_KEY] : {};
   const subscriptions = Array.isArray(githubSignals.subscriptions) ? githubSignals.subscriptions : [];
@@ -89,6 +102,31 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
   return [header, ...lines].join('\n');
 }
 
+async function syncGithubSubscriptions(ctx: SlashCommandContext): Promise<void> {
+  const githubSignalsProcessor = ctx.state.options?.githubSignals;
+  if (!githubSignalsProcessor?.syncThreadNow) {
+    ctx.showError('GitHub signals are not available. Enable them in /settings and restart MastraCode.');
+    return;
+  }
+
+  const { threadId, resourceId } = await getCurrentGithubThread(ctx);
+  if (!threadId || !resourceId) {
+    ctx.showError('GitHub sync requires a current thread.');
+    return;
+  }
+
+  try {
+    const count = await githubSignalsProcessor.syncThreadNow({ threadId, resourceId });
+    if (count === 0) {
+      ctx.showInfo('No GitHub PR subscriptions to sync.');
+      return;
+    }
+    ctx.showInfo(`Synced ${count} GitHub PR subscription${count === 1 ? '' : 's'}.`);
+  } catch (error) {
+    ctx.showError(`Failed to sync GitHub PR subscriptions: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function detectCurrentPullRequest(ctx: SlashCommandContext): Promise<string> {
   return new Promise(resolve => {
     execFile(
@@ -113,6 +151,10 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
     ctx.showInfo(await describeGithubSubscriptions(ctx));
     return;
   }
+  if (maybeAction === 'sync') {
+    await syncGithubSubscriptions(ctx);
+    return;
+  }
   const explicitSubscribe = maybeAction === 'subscribe' || maybeAction === 'sub';
   const action = maybeAction === 'unsubscribe' || maybeAction === 'unsub' ? 'unsubscribe' : 'subscribe';
   const referenceArgs = action === 'unsubscribe' || explicitSubscribe ? restArgs : args;
@@ -128,7 +170,7 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
   const parsed = parseGithubPRReference(reference);
   if (!parsed) {
     ctx.showError(
-      'Usage: /github 123, /github owner/repo#123, /github unsubscribe 123, /github debug, or /github https://github.com/owner/repo/pull/123',
+      'Usage: /github 123, /github owner/repo#123, /github unsubscribe 123, /github sync, /github debug, or /github https://github.com/owner/repo/pull/123',
     );
     return;
   }
