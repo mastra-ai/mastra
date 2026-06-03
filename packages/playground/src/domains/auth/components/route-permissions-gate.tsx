@@ -43,7 +43,7 @@ export function RoutePermissionsGate({ children }: { children: React.ReactNode }
   // Only validate when RBAC is actually in effect (non-empty pattern set).
   // RBAC-off resolves with an empty set and gating is a no-op.
   if (patterns.size > 0) {
-    for (const literal of collectRouteLiterals(ROUTE_PERMISSIONS)) {
+    for (const literal of ALL_SIDEBAR_PERMISSIONS) {
       if (!patterns.has(literal)) {
         throw new Error(
           `Invalid permission pattern: "${literal}". It is not in the server's ` +
