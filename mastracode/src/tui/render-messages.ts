@@ -431,7 +431,6 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
-
   const textContent = message.content
     .filter(c => c.type === 'text')
     .map(c => (c as { type: 'text'; text: string }).text)

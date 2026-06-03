@@ -53,7 +53,9 @@ export class NotificationComponent extends Container {
     }
 
     if (message) {
-      this.addChild(new Text(`${borderColor('│')} ${padLine(message, contentWidth)} ${borderColor('│')}`, BOX_INDENT, 0));
+      this.addChild(
+        new Text(`${borderColor('│')} ${padLine(message, contentWidth)} ${borderColor('│')}`, BOX_INDENT, 0),
+      );
     }
 
     this.addChild(new Text(borderColor(bottom), BOX_INDENT, 0));
