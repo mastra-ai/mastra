@@ -1,18 +1,13 @@
-import type { MastraMessagePart } from '@mastra/core/agent/message-list';
+import type { MastraMessagePart, AIV5Type } from '@mastra/core/agent/message-list';
+import type { TripwirePayload } from '@mastra/core/stream';
 
 export type MastraProviderMetadata = Record<string, Record<string, unknown>>;
 
 /**
  * Tripwire metadata included when a processor triggers a tripwire.
+ * Canonical shape sourced from core's `tripwire` stream-chunk payload.
  */
-export type TripwireMetadata = {
-  /** Whether the agent should retry with feedback */
-  retry?: boolean;
-  /** Custom metadata from the processor */
-  tripwirePayload?: unknown;
-  /** ID of the processor that triggered the tripwire */
-  processorId?: string;
-};
+export type TripwireMetadata = TripwirePayload;
 
 export type ToolApprovalArgs = Record<string, unknown>;
 
@@ -76,10 +71,14 @@ export type MastraDBMessageMetadata = {
   backgroundTasks?: Record<string, BackgroundTaskEntry>;
   /** Number of background tasks currently executing for this message. */
   runningBackgroundTasksCount?: number;
-  /** Task-completion result returned by the run. */
+  /** Task-completion result returned by the run (network mode). */
   completionResult?: CompletionResult;
-  /** Whether the run reported `isTaskComplete`. */
-  isTaskCompleteResult?: boolean;
+  /**
+   * Task-completion verdict from the supervisor `isTaskComplete` path. Shares
+   * the `{ passed, suppressFeedback }` shape with `completionResult`; core
+   * persists it as an object and reads it back as one (see `MessageMerger`).
+   */
+  isTaskCompleteResult?: CompletionResult;
   /** Signal-echo dedupe: signalId of the user message echoed back. */
   signalEchoIds?: string[];
   /** Network-mode bookkeeping. */
@@ -161,5 +160,15 @@ export type StreamingDataPart = {
  * at runtime; the extended text/reasoning parts add optional fields that
  * downstream consumers (e.g. `AIV5Adapter.toUIMessage`) preserve via
  * providerMetadata round-tripping.
+ *
+ * `AIV5Type.SourceUrlUIPart` is the flat `type: 'source-url'` shape the
+ * accumulator actually pushes for URL source citations (the typed
+ * `MastraMessagePart` only models the nested `type: 'source'` shape), so it is
+ * listed explicitly as a first-class member of the runtime union.
  */
-export type AccumulatorPart = MastraMessagePart | MastraTextPart | MastraReasoningPart | StreamingDataPart;
+export type AccumulatorPart =
+  | MastraMessagePart
+  | MastraTextPart
+  | MastraReasoningPart
+  | StreamingDataPart
+  | AIV5Type.SourceUrlUIPart;

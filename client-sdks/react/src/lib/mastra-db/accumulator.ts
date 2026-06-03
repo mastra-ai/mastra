@@ -1,4 +1,5 @@
 import type {
+  AIV5Type,
   MastraDBMessage,
   MastraMessagePart,
   MastraMessageContentV2,
@@ -477,8 +478,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           ...metadata,
           status: 'tripwire',
           tripwire: {
+            reason: chunk.payload.reason,
             retry: chunk.payload.retry,
-            tripwirePayload: chunk.payload.metadata,
+            metadata: chunk.payload.metadata,
             processorId: chunk.payload.processorId,
           },
         },
@@ -1175,13 +1177,17 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       const parts = [...lastMessage.content.parts];
       if (chunk.payload.sourceType === 'url') {
-        parts.push({
+        // Flat V5 `source-url` shape (see boundary cast policy above). Typed as
+        // the shared `AIV5Type.SourceUrlUIPart` so the literal is shape-checked,
+        // then stored via the storage-boundary cast like the other V5 parts.
+        const sourceUrlPart: AIV5Type.SourceUrlUIPart = {
           type: 'source-url',
           sourceId: chunk.payload.id,
           url: chunk.payload.url || '',
           title: chunk.payload.title,
           providerMetadata: chunk.payload.providerMetadata,
-        } as unknown as MastraMessagePart);
+        };
+        parts.push(sourceUrlPart as unknown as MastraMessagePart);
       } else if (chunk.payload.sourceType === 'document') {
         parts.push({
           type: 'source-document',

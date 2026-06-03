@@ -625,6 +625,8 @@ export const sendToolApprovalBodySchema = z.object({
   toolCallId: z.string(),
   approved: z.boolean(),
   format: z.string().optional(),
+  messages: z.array(coreMessageSchema).optional(),
+  streamOptions: z.any().optional(),
 });
 
 export const abortAgentThreadResponseSchema = z.object({
