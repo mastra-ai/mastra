@@ -159,13 +159,12 @@ async function detectCurrentPullRequest(ctx: SlashCommandContext): Promise<strin
 }
 
 /**
- * Auto-subscribe the current thread to a GitHub PR when signals are enabled.
- * Runs silently — errors are swallowed so the calling command is not disrupted.
- *
- * @param prRef Explicit PR reference (number or owner/repo#number). When omitted
- *   the function tries to detect the PR for the current branch via `gh pr view`.
+ * Auto-subscribe the current thread to the PR for the current git branch.
+ * Checks whether GitHub Signals are enabled and detects the branch's open PR
+ * via `gh pr view`. Runs silently — errors are swallowed so the calling code
+ * is never disrupted.
  */
-export async function tryAutoSubscribeToPR(ctx: SlashCommandContext, prRef?: GithubPRSignalInput): Promise<void> {
+export async function tryAutoSubscribeToBranchPR(ctx: SlashCommandContext): Promise<void> {
   if (!loadSettings().signals.experimentalGithubSignals) return;
 
   const githubSignalsProcessor = ctx.state.options?.githubSignals;
@@ -174,19 +173,15 @@ export async function tryAutoSubscribeToPR(ctx: SlashCommandContext, prRef?: Git
   const { threadId, resourceId } = await getCurrentGithubThread(ctx);
   if (!threadId || !resourceId) return;
 
-  let pr = prRef;
-  if (!pr) {
-    const currentPR = await detectCurrentPullRequest(ctx);
-    const parsed = currentPR ? parseGithubPRReference(currentPR) : undefined;
-    if (!parsed) return;
-    pr = parsed;
-  }
+  const currentPR = await detectCurrentPullRequest(ctx);
+  const pr = currentPR ? parseGithubPRReference(currentPR) : undefined;
+  if (!pr) return;
 
   try {
     const result = await githubSignalsProcessor.subscribeThreadToPR({ threadId, resourceId, pr });
     ctx.showInfo(`Auto-subscribed to ${result.owner}/${result.repo}#${result.number} via GitHub Signals.`);
   } catch {
-    // Silent — don't disrupt the command that triggered the auto-subscribe.
+    // Silent — don't disrupt the calling command.
   }
 }
 

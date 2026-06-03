@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { handleGithubCommand, tryAutoSubscribeToPR } from '../github.js';
+import { handleGithubCommand, tryAutoSubscribeToBranchPR } from '../github.js';
 import type { SlashCommandContext } from '../types.js';
 
 const askModalQuestionMock = vi.fn();
@@ -269,7 +269,7 @@ describe('handleGithubCommand', () => {
   });
 });
 
-describe('tryAutoSubscribeToPR', () => {
+describe('tryAutoSubscribeToBranchPR', () => {
   beforeEach(() => {
     loadSettingsMock.mockReset();
     execFileMock.mockReset();
@@ -279,12 +279,19 @@ describe('tryAutoSubscribeToPR', () => {
     });
   });
 
-  it('subscribes when given an explicit PR number', async () => {
+  it('detects the current branch PR and subscribes', async () => {
     const { ctx, subscribeThreadToPR } = createContext();
+    execFileMock.mockImplementation((_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+      callback(null, 'https://github.com/mastra-ai/mastra/pull/17447\n', '');
+    });
 
-    await tryAutoSubscribeToPR(ctx, 17447);
+    await tryAutoSubscribeToBranchPR(ctx);
 
-    expect(subscribeThreadToPR).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1', pr: 17447 });
+    expect(subscribeThreadToPR).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+    });
     expect(ctx.showInfo).toHaveBeenCalledWith('Auto-subscribed to mastra-ai/mastra#17447 via GitHub Signals.');
   });
 
@@ -292,7 +299,7 @@ describe('tryAutoSubscribeToPR', () => {
     const { ctx, subscribeThreadToPR } = createContext();
     loadSettingsMock.mockReturnValue({ signals: { experimentalGithubSignals: false } });
 
-    await tryAutoSubscribeToPR(ctx, 17447);
+    await tryAutoSubscribeToBranchPR(ctx);
 
     expect(subscribeThreadToPR).not.toHaveBeenCalled();
   });
@@ -301,30 +308,15 @@ describe('tryAutoSubscribeToPR', () => {
     const { ctx } = createContext();
     (ctx.state as any).options = {};
 
-    await tryAutoSubscribeToPR(ctx, 17447);
+    await tryAutoSubscribeToBranchPR(ctx);
 
     expect(ctx.showInfo).not.toHaveBeenCalled();
   });
 
-  it('detects the current branch PR when no explicit ref is given', async () => {
-    const { ctx, subscribeThreadToPR } = createContext();
-    execFileMock.mockImplementation((_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
-      callback(null, 'https://github.com/mastra-ai/mastra/pull/17447\n', '');
-    });
-
-    await tryAutoSubscribeToPR(ctx);
-
-    expect(subscribeThreadToPR).toHaveBeenCalledWith({
-      threadId: 'thread-1',
-      resourceId: 'resource-1',
-      pr: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
-    });
-  });
-
-  it('silently does nothing when no current PR is detected and no ref is given', async () => {
+  it('silently does nothing when no current PR is detected', async () => {
     const { ctx, subscribeThreadToPR } = createContext();
 
-    await tryAutoSubscribeToPR(ctx);
+    await tryAutoSubscribeToBranchPR(ctx);
 
     expect(subscribeThreadToPR).not.toHaveBeenCalled();
     expect(ctx.showError).not.toHaveBeenCalled();
@@ -332,9 +324,12 @@ describe('tryAutoSubscribeToPR', () => {
 
   it('swallows errors from subscribeThreadToPR', async () => {
     const { ctx, subscribeThreadToPR } = createContext();
+    execFileMock.mockImplementation((_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+      callback(null, 'https://github.com/mastra-ai/mastra/pull/17447\n', '');
+    });
     subscribeThreadToPR.mockRejectedValue(new Error('network error'));
 
-    await tryAutoSubscribeToPR(ctx, 17447);
+    await tryAutoSubscribeToBranchPR(ctx);
 
     expect(ctx.showError).not.toHaveBeenCalled();
   });

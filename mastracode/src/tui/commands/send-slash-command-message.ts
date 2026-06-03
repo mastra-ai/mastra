@@ -1,8 +1,24 @@
 import { addPendingUserMessage, removePendingUserMessage } from '../render-messages.js';
+import { tryAutoSubscribeToBranchPR } from './github.js';
 import type { SlashCommandContext } from './types.js';
 
 export function isCurrentThreadActive(ctx: SlashCommandContext): boolean {
   return ctx.harness.isCurrentThreadStreamActive?.() ?? ctx.harness.getDisplayState?.().isRunning ?? false;
+}
+
+/** Thread IDs that have already been checked for branch-level PR auto-subscribe. */
+const autoSubscribeCheckedThreads = new Set<string>();
+
+/**
+ * If GitHub Signals are enabled and the current git branch has an open PR,
+ * auto-subscribe this thread to that PR.  Runs at most once per thread
+ * (tracked via a module-level Set) and is completely fire-and-forget.
+ */
+function maybeAutoSubscribeThread(ctx: SlashCommandContext): void {
+  const threadId = ctx.harness.getCurrentThreadId?.();
+  if (!threadId || autoSubscribeCheckedThreads.has(threadId)) return;
+  autoSubscribeCheckedThreads.add(threadId);
+  tryAutoSubscribeToBranchPR(ctx).catch(() => {});
 }
 
 export async function sendSlashCommandMessage(
@@ -15,6 +31,9 @@ export async function sendSlashCommandMessage(
     await ctx.harness.createThread();
     ctx.state.pendingNewThread = false;
   }
+
+  // Auto-subscribe to the current branch's PR when GitHub Signals are enabled.
+  maybeAutoSubscribeThread(ctx);
 
   if (isCurrentThreadActive(ctx)) {
     const signal = ctx.harness.sendSignal({ content });
