@@ -13,10 +13,13 @@ export type {
   CorsOptions,
   ApiRoute,
   HttpLoggingConfig,
+  MCPServerOptions,
+  MCPRequestAuthInfo,
   ValidationErrorContext,
   ValidationErrorResponse,
   ValidationErrorHook,
 } from './types';
+export { defaultMapUserToAuthInfo } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
 export type { HonoRequestLike, MastraAuthRequest } from './request-types';

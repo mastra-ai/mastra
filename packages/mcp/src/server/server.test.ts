@@ -10,6 +10,7 @@ import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type {
   Resource,
   ResourceTemplate,
@@ -1198,6 +1199,261 @@ describe('MCPServer', () => {
       expect(toolResult.authInfo.token).toBe(TOKEN);
       expect(toolResult.authInfo.clientId).toBe('test-client-id');
       expect(toolResult.requestId).toBe('test-request-id');
+    });
+  });
+
+  describe('MCPServer HTTP Transport - setRequestAuth hook', () => {
+    vi.setConfig({ testTimeout: 30_000 });
+
+    let authHttpServer: http.Server;
+    let authServer: MCPServer;
+    let currentPort: number;
+
+    const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
+      new Promise<number>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, () => {
+          const address = server.address();
+          if (address && typeof address === 'object') resolve(address.port);
+          else reject(new Error('Failed to obtain ephemeral port'));
+        });
+      });
+
+    // Tool that echoes back the authInfo seen by the handler, so tests can assert
+    // the hook-populated req.auth flowed through to extra.authInfo.
+    const authEchoTools: ToolsInput = {
+      whoami: {
+        description: 'Echoes the authInfo seen by the handler',
+        parameters: z.object({}),
+        execute: async (_args, context) => {
+          const extra = context?.mcp?.extra as MCPRequestHandlerExtra | undefined;
+          return { authInfo: extra?.authInfo ?? null };
+        },
+      },
+    };
+
+    afterEach(async () => {
+      if (authHttpServer) {
+        authHttpServer.closeAllConnections?.();
+        await new Promise<void>((resolve, reject) => authHttpServer.close(err => (err ? reject(err) : resolve())));
+      }
+      if (authServer) await authServer.close();
+    });
+
+    it('runs the hook before handleRequest and populates extra.authInfo (stateless path)', async () => {
+      const calls: string[] = [];
+      authServer = new MCPServer({ name: 'AuthHookServer', version: '1.0.0', tools: authEchoTools });
+
+      authHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${currentPort}`);
+        await authServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: { sessionIdGenerator: undefined }, // stateless
+          setRequestAuth: r => {
+            calls.push('hook');
+            (r as any).auth = { token: 'tkn', clientId: 'cid', scopes: ['read'] };
+          },
+        });
+      });
+      currentPort = await listenOnEphemeralPort(authHttpServer);
+
+      const client = new InternalMastraMCPClient({
+        name: 'auth-hook-client',
+        server: { url: new URL(`http://localhost:${currentPort}/http`) },
+      });
+      await client.connect();
+      const tools = await client.tools();
+      const result = await tools['whoami'].execute!({});
+      await client.disconnect();
+
+      const payload = JSON.parse((result.content as any)[0].text);
+      expect(payload.authInfo).toEqual({ token: 'tkn', clientId: 'cid', scopes: ['read'] });
+      // Hook must have run at least once, exactly once per HTTP request reaching the transport.
+      expect(calls.length).toBeGreaterThan(0);
+    });
+
+    it('invokes the hook exactly once per request', async () => {
+      const perRequestCalls: number[] = [];
+      authServer = new MCPServer({ name: 'AuthHookOnceServer', version: '1.0.0', tools: authEchoTools });
+
+      authHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${currentPort}`);
+        let count = 0;
+        await authServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: { sessionIdGenerator: undefined },
+          setRequestAuth: r => {
+            count += 1;
+            (r as any).auth = { token: 'tkn' };
+          },
+        });
+        // Record how many times the hook fired for this single HTTP request.
+        perRequestCalls.push(count);
+      });
+      currentPort = await listenOnEphemeralPort(authHttpServer);
+
+      const client = new InternalMastraMCPClient({
+        name: 'auth-once-client',
+        server: { url: new URL(`http://localhost:${currentPort}/http`) },
+      });
+      await client.connect();
+      const tools = await client.tools();
+      await tools['whoami'].execute!({});
+      await client.disconnect();
+
+      // Every HTTP request that reached the transport ran the hook exactly once.
+      expect(perRequestCalls.length).toBeGreaterThan(0);
+      for (const c of perRequestCalls) expect(c).toBe(1);
+    });
+
+    it('does not reach the transport when the hook throws', async () => {
+      authServer = new MCPServer({ name: 'AuthHookThrowServer', version: '1.0.0', tools: authEchoTools });
+      const hookSpy = vi.fn();
+      // Spy the real transport.handleRequest to prove it is never reached when the hook throws.
+      const handleRequestSpy = vi.spyOn(StreamableHTTPServerTransport.prototype, 'handleRequest');
+
+      authHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${currentPort}`);
+        await authServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: { sessionIdGenerator: undefined },
+          setRequestAuth: () => {
+            hookSpy(); // marker: hook ran
+            throw new Error('auth failed');
+          },
+        });
+      });
+      currentPort = await listenOnEphemeralPort(authHttpServer);
+
+      // Raw POST initialize request; hook throws -> startHTTP's catch returns 500.
+      const res = await fetch(`http://localhost:${currentPort}/http`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 't', version: '1' } },
+        }),
+      });
+
+      expect(hookSpy).toHaveBeenCalledTimes(1);
+      expect(handleRequestSpy).not.toHaveBeenCalled();
+      expect(res.status).toBe(500);
+      handleRequestSpy.mockRestore();
+    });
+
+    it('is a no-op when no hook is provided (authInfo stays undefined)', async () => {
+      authServer = new MCPServer({ name: 'NoAuthHookServer', version: '1.0.0', tools: authEchoTools });
+
+      authHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${currentPort}`);
+        await authServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: { sessionIdGenerator: undefined },
+          // no setRequestAuth
+        });
+      });
+      currentPort = await listenOnEphemeralPort(authHttpServer);
+
+      const client = new InternalMastraMCPClient({
+        name: 'no-auth-hook-client',
+        server: { url: new URL(`http://localhost:${currentPort}/http`) },
+      });
+      await client.connect();
+      const tools = await client.tools();
+      const result = await tools['whoami'].execute!({});
+      await client.disconnect();
+
+      const payload = JSON.parse((result.content as any)[0].text);
+      expect(payload.authInfo).toBeNull();
+    });
+
+    it('runs the hook on the stateful initialize request (new session path)', async () => {
+      // Track which JSON-RPC method each hook invocation corresponds to, so we can
+      // assert the hook fired on the initialize request that creates the session.
+      const methodsSeenByHook: Array<string | undefined> = [];
+      authServer = new MCPServer({ name: 'AuthHookInitServer', version: '1.0.0', tools: authEchoTools });
+
+      authHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${currentPort}`);
+        await authServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // Stateful: default sessionIdGenerator (sessions enabled)
+          setRequestAuth: r => {
+            methodsSeenByHook.push(r.method); // HTTP method (POST/GET) proves hook ran per request
+            (r as any).auth = { token: 'tkn', clientId: 'cid' };
+          },
+        });
+      });
+      currentPort = await listenOnEphemeralPort(authHttpServer);
+
+      const client = new InternalMastraMCPClient({
+        name: 'auth-init-client',
+        server: { url: new URL(`http://localhost:${currentPort}/http`) },
+      });
+      // connect() performs the initialize handshake, exercising the new-session path.
+      await client.connect();
+      const tools = await client.tools();
+      expect(tools).toBeDefined();
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+      await client.disconnect();
+
+      // The initialize POST must have run the hook at least once.
+      expect(methodsSeenByHook.length).toBeGreaterThan(0);
+      expect(methodsSeenByHook.every(m => m !== undefined)).toBe(true);
+    });
+
+    it('runs the hook on existing-session requests and flows authInfo to tools', async () => {
+      let hookCalls = 0;
+      authServer = new MCPServer({ name: 'AuthHookSessionServer', version: '1.0.0', tools: authEchoTools });
+
+      authHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${currentPort}`);
+        await authServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // Stateful: sessions enabled, so tool calls reuse the existing session/transport.
+          setRequestAuth: r => {
+            hookCalls += 1;
+            (r as any).auth = { token: 'tkn', clientId: 'cid', scopes: ['read'] };
+          },
+        });
+      });
+      currentPort = await listenOnEphemeralPort(authHttpServer);
+
+      const client = new InternalMastraMCPClient({
+        name: 'auth-session-client',
+        server: { url: new URL(`http://localhost:${currentPort}/http`) },
+      });
+      await client.connect(); // initialize (new session)
+      const callsAfterConnect = hookCalls;
+      const tools = await client.tools();
+      // Tool call reuses the established session, exercising the existing-session path.
+      const result = await tools['whoami'].execute!({});
+      await client.disconnect();
+
+      // The hook ran again for the post-initialize (existing-session) request(s).
+      expect(hookCalls).toBeGreaterThan(callsAfterConnect);
+      const payload = JSON.parse((result.content as any)[0].text);
+      expect(payload.authInfo).toEqual({ token: 'tkn', clientId: 'cid', scopes: ['read'] });
     });
   });
 
