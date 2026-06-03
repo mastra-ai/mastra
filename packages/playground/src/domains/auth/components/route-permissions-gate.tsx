@@ -1,7 +1,7 @@
 import { Spinner } from '@mastra/playground-ui';
 
 import { usePermissionPatterns } from '../hooks/use-permission-patterns';
-import { collectRouteLiterals, ROUTE_PERMISSIONS } from '../route-permissions';
+import { ALL_SIDEBAR_PERMISSIONS } from '../route-permissions';
 
 /**
  * Async replacement for the old static `P()` validator.
