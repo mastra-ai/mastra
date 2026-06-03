@@ -225,6 +225,23 @@ describe('customProviders parsing/persistence', () => {
     });
   });
 
+  it('does not clobber experimental GitHub signals from a stale settings object', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings(), filePath);
+      const staleSettings = loadSettings(filePath);
+
+      const currentSettings = loadSettings(filePath);
+      currentSettings.signals.experimentalGithubSignals = true;
+      saveSettings(currentSettings, filePath);
+
+      staleSettings.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(staleSettings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+    });
+  });
+
   it('defaults new installs to quiet mode with the preference selected', () => {
     withTempSettingsFile(filePath => {
       const settings = loadSettings(filePath);
