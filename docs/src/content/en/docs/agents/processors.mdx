@@ -433,6 +433,44 @@ Add `ProviderHistoryCompat` explicitly when you need provider history compatibil
 
 See the [`ProviderHistoryCompat` reference](/reference/processors/provider-history-compat) for setup, built-in rules, and custom rule options.
 
+### `ModelSwapperProcessor`
+
+Routes each request to a model based on the latest user message. The processor uses a lightweight classifier model in `processInput()`, stores the matched route in processor state, and applies the selected model during the first `processInputStep()`.
+
+```typescript {8-29}
+import { Agent } from '@mastra/core/agent'
+import { ModelSwapperProcessor } from '@mastra/core/processors'
+
+export const supportAgent = new Agent({
+  name: 'Support Agent',
+  instructions: 'Answer user questions and escalate complex work to stronger models.',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  inputProcessors: [
+    new ModelSwapperProcessor({
+      model: '__GATEWAY_OPENAI_MODEL_NANO__',
+      defaultModel: '__GATEWAY_OPENAI_MODEL_BASE__',
+      rules: [
+        {
+          name: 'quick-answer',
+          description: 'Short factual questions and basic troubleshooting',
+          model: '__GATEWAY_OPENAI_MODEL_MINI__',
+        },
+        {
+          name: 'deep-reasoning',
+          description: 'Planning, debugging, architecture, or multi-step analysis',
+          model: '__GATEWAY_OPENAI_MODEL__',
+          threshold: 0.8,
+        },
+      ],
+    }),
+  ],
+})
+```
+
+Use `defaultModel` or `fallbackModel` when unmatched requests should still use a known model. Omit both to leave the agent's configured model unchanged when no rule matches.
+
+See the [`ModelSwapperProcessor` reference](/reference/processors/model-swapper) for routing rules, thresholds, and behavior notes.
+
 ## Response caching
 
 :::experimental
