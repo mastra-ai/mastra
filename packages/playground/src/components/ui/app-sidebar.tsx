@@ -62,7 +62,11 @@ export function AppSidebar() {
   const filterItem = (item: NavItem) => {
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
-    if (rbacEnabled && isPermissionsAuthenticated && (isPermissionsLoading || isPatternsLoading)) return true;
+    // While RBAC gating data is still loading, hide the link. Being permissive
+    // here would briefly show links the user may not be allowed to see; we only
+    // reveal a link once the user's permissions and the authoritative
+    // permission patterns have resolved and confirm access.
+    if (rbacEnabled && isPermissionsAuthenticated && (isPermissionsLoading || isPatternsLoading)) return false;
     const requiredPermission = getPermissionForRoute(item.url);
     if (!hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission)) {
       return false;

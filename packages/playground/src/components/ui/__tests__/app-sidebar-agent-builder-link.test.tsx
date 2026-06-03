@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { BuilderSettingsResponse } from '@mastra/client-js';
+import type { BuilderSettingsResponse, PermissionPatternsResponse } from '@mastra/client-js';
 import { MainSidebarProvider, TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -95,6 +95,27 @@ function systemPackagesHandler() {
   return http.get(`${BASE_URL}/api/system/packages`, () =>
     HttpResponse.json({ packages: [], cmsEnabled: false, observabilityEnabled: false }),
   );
+}
+
+const allPermissionPatterns: PermissionPatternsResponse = {
+  patterns: [
+    'agents:read',
+    'workflows:read',
+    'observability:read',
+    'logs:read',
+    'scores:read',
+    'datasets:read',
+    'tools:read',
+    'mcp:read',
+    'processors:read',
+    'stored-prompt-blocks:read',
+    'workspaces:read',
+    '*',
+  ],
+};
+
+function permissionPatternsHandler(response: PermissionPatternsResponse = allPermissionPatterns) {
+  return http.get(`${BASE_URL}/api/auth/permission-patterns`, () => HttpResponse.json(response));
 }
 
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
@@ -296,5 +317,63 @@ describe('AppSidebar — Agent Builder admin link', () => {
 
     const link = await screen.findByRole('link', { name: /agent builder/i });
     expect(link.getAttribute('href')).toBe('/agent-builder');
+  });
+});
+
+describe('AppSidebar — RBAC link gating while permission data loads', () => {
+  const wildcardCapabilities = {
+    enabled: true,
+    login: { type: 'credentials' as const },
+    user: { id: 'superuser-1', email: 'superuser@example.com' },
+    capabilities: { user: true, session: true, sso: false, rbac: true, acl: false },
+    access: { roles: ['superuser'], permissions: ['*'] },
+  } satisfies AuthCapabilities;
+
+  it('hides permission-gated links until permission patterns finish loading, then reveals them', async () => {
+    // Gate the permission-patterns response so the patterns query stays in its
+    // loading state. While loading under RBAC, no permission-gated link should
+    // render — being permissive here would briefly leak unauthorized routes.
+    let resolvePatterns: () => void = () => {};
+    const patternsGate = new Promise<void>(resolve => {
+      resolvePatterns = resolve;
+    });
+
+    server.use(
+      authHandler(wildcardCapabilities),
+      builderHandler(builderDisabled),
+      systemPackagesHandler(),
+      http.get(`${BASE_URL}/api/auth/permission-patterns`, async () => {
+        await patternsGate;
+        return HttpResponse.json(allPermissionPatterns);
+      }),
+    );
+
+    renderSidebar();
+
+    // The Agents link requires `agents:read`; the wildcard user clears it, but
+    // it must stay hidden while permission patterns are still loading.
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: /agents/i })).toBeNull();
+    });
+
+    resolvePatterns();
+
+    // Once the patterns resolve, the gated link is allowed to appear.
+    const agentsLink = await screen.findByRole('link', { name: /agents/i });
+    expect(agentsLink.getAttribute('href')).toBe('/agents');
+  });
+
+  it('shows permission-gated links the user is allowed once patterns are loaded', async () => {
+    server.use(
+      authHandler(wildcardCapabilities),
+      builderHandler(builderDisabled),
+      systemPackagesHandler(),
+      permissionPatternsHandler(),
+    );
+
+    renderSidebar();
+
+    const agentsLink = await screen.findByRole('link', { name: /agents/i });
+    expect(agentsLink.getAttribute('href')).toBe('/agents');
   });
 });
