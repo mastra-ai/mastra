@@ -360,12 +360,18 @@ function setGithubMetadata(
 ): Record<string, unknown> {
   const existing = threadMetadata ?? {};
   const mastra = isPlainObject(existing.mastra) ? existing.mastra : {};
+  const existingGithubSignals = isPlainObject(mastra[GITHUB_SIGNALS_METADATA_KEY])
+    ? mastra[GITHUB_SIGNALS_METADATA_KEY]
+    : {};
 
   return {
     ...existing,
     mastra: {
       ...mastra,
-      [GITHUB_SIGNALS_METADATA_KEY]: githubSignals,
+      [GITHUB_SIGNALS_METADATA_KEY]: {
+        ...existingGithubSignals,
+        ...githubSignals,
+      },
     },
   };
 }
@@ -1437,6 +1443,10 @@ export class GithubSignals implements Processor<'github-signals'> {
         ? { lastObservedGithubUpdatedAt: existing.lastObservedGithubUpdatedAt }
         : {}),
       ...(existing?.lastObservedContentHash ? { lastObservedContentHash: existing.lastObservedContentHash } : {}),
+      ...(existing?.lastObservedThreadContentHash
+        ? { lastObservedThreadContentHash: existing.lastObservedThreadContentHash }
+        : {}),
+      ...(existing?.lastObservedHeadSha ? { lastObservedHeadSha: existing.lastObservedHeadSha } : {}),
       ...(existing?.lastObservedState ? { lastObservedState: existing.lastObservedState } : {}),
       ...(existing?.lastObservedMergeableState
         ? { lastObservedMergeableState: existing.lastObservedMergeableState }

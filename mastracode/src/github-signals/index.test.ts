@@ -575,6 +575,59 @@ describe('GithubSignals', () => {
     );
   });
 
+  it('preserves one-time hint state and granular cursors when resubscribing', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-resubscribe',
+      resourceId: 'resource-resubscribe',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptionHintShown: true,
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'aggregate-hash',
+                lastObservedThreadContentHash: 'thread-hash',
+                lastObservedHeadSha: 'head-sha',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const signal = createSignal(
+      GithubSignals.signals.subscribeToPR({ owner: 'mastra-ai', repo: 'mastra', number: 123 }),
+    );
+    const messageList = new MessageList({ threadId: thread.id, resourceId: thread.resourceId });
+    messageList.add([signal.toDBMessage({ threadId: thread.id, resourceId: thread.resourceId })], 'input');
+
+    await runGithubSignalsProcessor({
+      processor: new GithubSignals({ threadStore, syncOnSubscribe: false }),
+      messageList,
+      requestContext: createRequestContext(thread),
+    });
+
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const savedGithubMetadata = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY];
+    expect(savedGithubMetadata.subscriptionHintShown).toBe(true);
+    expect(savedGithubMetadata.subscriptions[0]).toMatchObject({
+      lastSubscribeSignalId: signal.id,
+      lastObservedContentHash: 'aggregate-hash',
+      lastObservedThreadContentHash: 'thread-hash',
+      lastObservedHeadSha: 'head-sha',
+      lastSyncStatus: 'skipped',
+    });
+  });
+
   it('emits an initial PR baseline notification on subscribe', async () => {
     const thread: StorageThreadType = {
       id: 'thread-baseline',
@@ -827,6 +880,7 @@ describe('GithubSignals', () => {
       metadata: {
         mastra: {
           [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptionHintShown: true,
             subscriptions: [
               {
                 owner: 'mastra-ai',
@@ -872,7 +926,9 @@ describe('GithubSignals', () => {
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123 }),
     );
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
-    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    const savedGithubMetadata = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY];
+    expect(savedGithubMetadata.subscriptionHintShown).toBe(true);
+    const [subscription] = savedGithubMetadata.subscriptions;
     expect(subscription).toMatchObject({
       lastSyncStatus: 'success',
       lastObservedGithubUpdatedAt: '2026-01-01T00:05:00.000Z',
