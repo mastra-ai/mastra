@@ -11,6 +11,8 @@ import {
   reconcileChatBoundarySpacers,
 } from '../chat-boundary-reconciliation.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { NotificationSummaryComponent } from '../components/notification-summary.js';
+import { NotificationComponent } from '../components/notification.js';
 import { ReactiveSignalComponent } from '../components/reactive-signal.js';
 import { StateSignalComponent } from '../components/state-signal.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
@@ -76,13 +78,31 @@ type StreamedReactiveSignalPart = {
   message?: string;
 };
 
+type StreamedNotificationSummaryPart = {
+  type: 'notification_summary';
+  message: string;
+  pending: number;
+  bySource: Record<string, number>;
+};
+
+type StreamedNotificationPart = {
+  type: 'notification';
+  message: string;
+  source?: string;
+  kind?: string;
+  priority?: string;
+  status?: string;
+};
+
 function isInlineBoundary(part: HarnessMessageContent): boolean {
   return (
     part.type === 'tool_call' ||
     part.type === 'tool_result' ||
     (part as { type?: string }).type === 'system_reminder' ||
     (part as { type?: string }).type === 'state_signal' ||
-    (part as { type?: string }).type === 'reactive_signal'
+    (part as { type?: string }).type === 'reactive_signal' ||
+    (part as { type?: string }).type === 'notification_summary' ||
+    (part as { type?: string }).type === 'notification'
   );
 }
 
@@ -96,6 +116,14 @@ function isStateSignalPart(part: HarnessMessageContent): boolean {
 
 function isReactiveSignalPart(part: HarnessMessageContent): boolean {
   return (part as { type?: string }).type === 'reactive_signal';
+}
+
+function isNotificationSummaryPart(part: HarnessMessageContent): boolean {
+  return (part as { type?: string }).type === 'notification_summary';
+}
+
+function isNotificationPart(part: HarnessMessageContent): boolean {
+  return (part as { type?: string }).type === 'notification';
 }
 
 function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSystemReminderPart | undefined {
@@ -144,6 +172,34 @@ function toStreamedReactiveSignalPart(part: HarnessMessageContent): StreamedReac
   };
 }
 
+function toStreamedNotificationSummaryPart(part: HarnessMessageContent): StreamedNotificationSummaryPart | undefined {
+  if (!isNotificationSummaryPart(part)) return undefined;
+  const summary = part as unknown as Partial<StreamedNotificationSummaryPart>;
+  if (typeof summary.message !== 'string' || typeof summary.pending !== 'number') return undefined;
+
+  return {
+    type: 'notification_summary',
+    message: summary.message,
+    pending: summary.pending,
+    bySource: summary.bySource && typeof summary.bySource === 'object' ? summary.bySource : {},
+  };
+}
+
+function toStreamedNotificationPart(part: HarnessMessageContent): StreamedNotificationPart | undefined {
+  if (!isNotificationPart(part)) return undefined;
+  const notification = part as unknown as Partial<StreamedNotificationPart>;
+  if (typeof notification.message !== 'string') return undefined;
+
+  return {
+    type: 'notification',
+    message: notification.message,
+    source: typeof notification.source === 'string' ? notification.source : undefined,
+    kind: typeof notification.kind === 'string' ? notification.kind : undefined,
+    priority: typeof notification.priority === 'string' ? notification.priority : undefined,
+    status: typeof notification.status === 'string' ? notification.status : undefined,
+  };
+}
+
 function createReminderComponent(reminder: StreamedSystemReminderPart): SystemReminderComponent | TemporalGapComponent {
   if (reminder.reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
@@ -177,6 +233,28 @@ function addInlineReactiveSignal(ctx: EventHandlerContext, reactiveSignal: Strea
     message: reactiveSignal.message,
   });
   ctx.addChildBeforeFollowUps(component);
+}
+
+function addInlineNotificationSummary(ctx: EventHandlerContext, summary: StreamedNotificationSummaryPart): void {
+  ctx.addChildBeforeFollowUps(
+    new NotificationSummaryComponent({
+      message: summary.message,
+      pending: summary.pending,
+      bySource: summary.bySource,
+    }),
+  );
+}
+
+function addInlineNotification(ctx: EventHandlerContext, notification: StreamedNotificationPart): void {
+  ctx.addChildBeforeFollowUps(
+    new NotificationComponent({
+      message: notification.message,
+      source: notification.source,
+      kind: notification.kind,
+      priority: notification.priority,
+      status: notification.status,
+    }),
+  );
 }
 
 function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemReminderPart): void {
@@ -269,6 +347,12 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   const reactiveSignalParts = message.content
     .map(toStreamedReactiveSignalPart)
     .filter((part): part is StreamedReactiveSignalPart => part !== undefined);
+  const notificationSummaryParts = message.content
+    .map(toStreamedNotificationSummaryPart)
+    .filter((part): part is StreamedNotificationSummaryPart => part !== undefined);
+  const notificationParts = message.content
+    .map(toStreamedNotificationPart)
+    .filter((part): part is StreamedNotificationPart => part !== undefined);
 
   for (const stateSignal of stateSignalParts) {
     const stateSignalKey = `state:${message.id}:${stateSignal.cacheKey ?? ''}:${stateSignal.stateId}:${stateSignal.mode}:${stateSignal.version ?? ''}:${stateSignal.message ?? ''}`;
@@ -296,11 +380,33 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     }
   }
 
+  for (const summary of notificationSummaryParts) {
+    const summaryKey = `${message.id}:notification-summary:${summary.pending}:${summary.message}`;
+    if (!state.currentRunSystemReminderKeys.has(summaryKey)) {
+      state.currentRunSystemReminderKeys.add(summaryKey);
+      addInlineNotificationSummary(ctx, summary);
+    }
+  }
+
+  for (const notification of notificationParts) {
+    const notificationKey = `${message.id}:notification:${notification.source ?? ''}:${notification.kind ?? ''}:${notification.message}`;
+    if (!state.currentRunSystemReminderKeys.has(notificationKey)) {
+      state.currentRunSystemReminderKeys.add(notificationKey);
+      addInlineNotification(ctx, notification);
+    }
+  }
+
   if (!state.streamingComponent) {
     const trailingParts = getTrailingContentParts(message);
     const hasToolCalls = message.content.some(content => content.type === 'tool_call');
     if (trailingParts.length === 0 && !hasToolCalls) {
-      if (systemReminderParts.length > 0 || stateSignalParts.length > 0 || reactiveSignalParts.length > 0) {
+      if (
+        systemReminderParts.length > 0 ||
+        stateSignalParts.length > 0 ||
+        reactiveSignalParts.length > 0 ||
+        notificationSummaryParts.length > 0 ||
+        notificationParts.length > 0
+      ) {
         state.ui.requestRender();
       }
       return;

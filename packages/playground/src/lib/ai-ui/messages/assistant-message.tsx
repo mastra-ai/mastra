@@ -5,6 +5,7 @@ import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-reac
 import { ToolFallback } from '../tools/tool-fallback';
 import { ErrorAwareText } from './error-aware-text';
 import { Reasoning } from './reasoning';
+import { SignalDataPart } from './signal-badge';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
 
 /**
@@ -47,6 +48,7 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
             Text: ErrorAwareText,
             tools: { Fallback: ToolFallback },
             Reasoning: Reasoning,
+            data: { by_name: { signal: SignalDataPart } },
           }}
         />
       </div>

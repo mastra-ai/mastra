@@ -28,6 +28,7 @@ vi.mock('@mariozechner/pi-tui', () => ({
       autocompleteProviders.push({ commands });
     }
   },
+  Container: class {},
   Spacer: class {},
   Text: class {},
 }));
@@ -126,6 +127,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
     expect(commandNames).toContain('judge');
+    expect(commandNames).not.toContain('notify');
     const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as
       | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
       | undefined;
