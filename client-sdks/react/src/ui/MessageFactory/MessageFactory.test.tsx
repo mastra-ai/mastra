@@ -1,0 +1,267 @@
+// @vitest-environment jsdom
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AccumulatorPart } from '../../lib/mastra-db';
+import { MessageFactory } from './MessageFactory';
+import type { DynamicToolPart, MessageRenderers, MessageRoleRenderers } from './types';
+
+afterEach(() => {
+  cleanup();
+});
+
+const makeMessage = (parts: AccumulatorPart[], role: MastraDBMessage['role'] = 'assistant'): MastraDBMessage => ({
+  id: 'm-1',
+  role,
+  createdAt: new Date(0),
+  content: {
+    format: 2,
+    parts: parts as MastraDBMessage['content']['parts'],
+  },
+});
+
+/**
+ * Build the full set of renderers as spies so each test can assert which
+ * renderer fired (and, crucially, which ones did NOT).
+ */
+const makeSpyRenderers = () => {
+  const calls = {
+    Text: vi.fn(),
+    Reasoning: vi.fn(),
+    File: vi.fn(),
+    StepStart: vi.fn(),
+    ToolInvocation: vi.fn(),
+    SourceUrl: vi.fn(),
+    SourceDocument: vi.fn(),
+    Data: vi.fn(),
+    DynamicTool: vi.fn(),
+  };
+
+  const renderers: MessageRenderers = {
+    Text: part => {
+      calls.Text(part);
+      return <div data-testid="text">{part.text}</div>;
+    },
+    Reasoning: part => {
+      calls.Reasoning(part);
+      return <div data-testid="reasoning">{part.reasoning}</div>;
+    },
+    File: part => {
+      calls.File(part);
+      return <div data-testid="file">{part.mimeType}</div>;
+    },
+    StepStart: part => {
+      calls.StepStart(part);
+      return <div data-testid="step-start">{part.type}</div>;
+    },
+    ToolInvocation: part => {
+      calls.ToolInvocation(part);
+      return <div data-testid="tool-invocation">{part.toolInvocation.toolName}</div>;
+    },
+    SourceUrl: part => {
+      calls.SourceUrl(part);
+      return <div data-testid="source">{part.type}</div>;
+    },
+    SourceDocument: part => {
+      calls.SourceDocument(part);
+      return <div data-testid="source-document">{part.title}</div>;
+    },
+    Data: part => {
+      calls.Data(part);
+      return <div data-testid="data">{part.type}</div>;
+    },
+    DynamicTool: part => {
+      calls.DynamicTool(part);
+      return <div data-testid="dynamic-tool">{part.toolName}</div>;
+    },
+  };
+
+  return { calls, renderers };
+};
+
+// A part as it appears at runtime via the boundary cast in the accumulator.
+const asPart = (part: unknown): AccumulatorPart => part as AccumulatorPart;
+
+const textPart = (text: string, textId?: string): AccumulatorPart => ({ type: 'text', text, textId });
+const reasoningPart = (reasoning: string): AccumulatorPart => asPart({ type: 'reasoning', reasoning });
+const filePart = (): AccumulatorPart => asPart({ type: 'file', mimeType: 'image/png', data: 'AAAA' });
+const stepStartPart = (): AccumulatorPart => asPart({ type: 'step-start' });
+const toolInvocationPart = (toolCallId: string, toolName: string): AccumulatorPart =>
+  asPart({
+    type: 'tool-invocation',
+    toolInvocation: { state: 'result', toolCallId, toolName, args: {}, result: {} },
+  });
+const sourcePart = (): AccumulatorPart =>
+  asPart({ type: 'source', source: { sourceType: 'url', id: 's-1', url: 'https://x' } });
+const sourceDocumentPart = (): AccumulatorPart =>
+  asPart({ type: 'source-document', sourceId: 's-1', mediaType: 'text/plain', title: 'Doc' });
+const dataPart = (type: `data-${string}`): AccumulatorPart => asPart({ type, data: { ok: true } });
+const dynamicToolPart = (toolName: string, toolCallId: string): AccumulatorPart =>
+  asPart({ type: 'dynamic-tool', toolName, toolCallId, state: 'output-available', input: {}, output: {} });
+const v5ToolPart = (toolName: `tool-${string}`, toolCallId: string): AccumulatorPart =>
+  asPart({ type: toolName, toolName, toolCallId, state: 'output-available' });
+
+describe('MessageFactory', () => {
+  it('renders text via the Text renderer and fires no other renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([textPart('hello')])} {...renderers} />);
+
+    expect(screen.getByTestId('text').textContent).toBe('hello');
+    expect(calls.Text).toHaveBeenCalledTimes(1);
+    expect(calls.Reasoning).not.toHaveBeenCalled();
+    expect(calls.DynamicTool).not.toHaveBeenCalled();
+    expect(calls.Data).not.toHaveBeenCalled();
+  });
+
+  it('renders reasoning only via the Reasoning renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([reasoningPart('thinking')])} {...renderers} />);
+
+    expect(screen.getByTestId('reasoning').textContent).toBe('thinking');
+    expect(calls.Reasoning).toHaveBeenCalledTimes(1);
+    expect(calls.Text).not.toHaveBeenCalled();
+  });
+
+  it('renders file only via the File renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([filePart()])} {...renderers} />);
+
+    expect(screen.getByTestId('file').textContent).toBe('image/png');
+    expect(calls.File).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders step-start only via the StepStart renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([stepStartPart()])} {...renderers} />);
+
+    expect(screen.getByTestId('step-start')).toBeTruthy();
+    expect(calls.StepStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders tool-invocation via ToolInvocation, never DynamicTool', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([toolInvocationPart('c-1', 'weather')])} {...renderers} />);
+
+    expect(screen.getByTestId('tool-invocation').textContent).toBe('weather');
+    expect(calls.ToolInvocation).toHaveBeenCalledTimes(1);
+    expect(calls.DynamicTool).not.toHaveBeenCalled();
+  });
+
+  it('renders source only via the SourceUrl renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([sourcePart()])} {...renderers} />);
+
+    expect(screen.getByTestId('source')).toBeTruthy();
+    expect(calls.SourceUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders source-document only via the SourceDocument renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([sourceDocumentPart()])} {...renderers} />);
+
+    expect(screen.getByTestId('source-document').textContent).toBe('Doc');
+    expect(calls.SourceDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders data-${string} via the Data renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([dataPart('data-foo')])} {...renderers} />);
+
+    expect(screen.getByTestId('data').textContent).toBe('data-foo');
+    expect(calls.Data).toHaveBeenCalledTimes(1);
+    expect(calls.DynamicTool).not.toHaveBeenCalled();
+  });
+
+  it('routes data-signal and data-om-observation to the Data renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(
+      <MessageFactory
+        message={makeMessage([dataPart('data-signal'), dataPart('data-om-observation')])}
+        {...renderers}
+      />,
+    );
+
+    expect(calls.Data).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders runtime-only dynamic-tool via DynamicTool, never ToolInvocation', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([dynamicToolPart('weather', 'c-9')])} {...renderers} />);
+
+    expect(screen.getByTestId('dynamic-tool').textContent).toBe('weather');
+    expect(calls.DynamicTool).toHaveBeenCalledTimes(1);
+    expect(calls.ToolInvocation).not.toHaveBeenCalled();
+    const arg = calls.DynamicTool.mock.calls[0][0] as DynamicToolPart;
+    expect(arg.toolName).toBe('weather');
+    expect(arg.state).toBe('output-available');
+  });
+
+  it('renders AI SDK v5 tool-${string} via DynamicTool', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([v5ToolPart('tool-weather', 'c-10')])} {...renderers} />);
+
+    expect(screen.getByTestId('dynamic-tool')).toBeTruthy();
+    expect(calls.DynamicTool).toHaveBeenCalledTimes(1);
+    expect(calls.Data).not.toHaveBeenCalled();
+  });
+
+  it('renders a mixed message preserving part order', () => {
+    const { renderers } = makeSpyRenderers();
+    const { container } = render(
+      <MessageFactory
+        message={makeMessage([
+          textPart('a'),
+          reasoningPart('b'),
+          toolInvocationPart('c-1', 'weather'),
+          dynamicToolPart('search', 'c-2'),
+          dataPart('data-foo'),
+        ])}
+        {...renderers}
+      />,
+    );
+
+    const ids = Array.from(container.querySelectorAll('[data-testid]')).map(el => el.getAttribute('data-testid'));
+    expect(ids).toEqual(['text', 'reasoning', 'tool-invocation', 'dynamic-tool', 'data']);
+  });
+
+  it('falls back when a renderer is omitted, without throwing', () => {
+    const fallback = vi.fn((part: { type: string }) => <div data-testid="fallback">{part.type}</div>);
+    render(<MessageFactory message={makeMessage([textPart('hi')])} fallback={fallback} />);
+
+    expect(screen.getByTestId('fallback').textContent).toBe('text');
+    expect(fallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders null (no throw) when neither renderer nor fallback is provided', () => {
+    expect(() =>
+      render(<MessageFactory message={makeMessage([textPart('hi'), dynamicToolPart('x', 'c-1')])} />),
+    ).not.toThrow();
+  });
+
+  it('routes an unrecognized runtime-only part to fallback without throwing', () => {
+    const fallback = vi.fn((part: { type: string }) => <div data-testid="fallback">{part.type}</div>);
+    render(<MessageFactory message={makeMessage([asPart({ type: 'mystery-runtime-part' })])} fallback={fallback} />);
+
+    expect(screen.getByTestId('fallback').textContent).toBe('mystery-runtime-part');
+  });
+
+  it('wraps parts with the role-specific wrapper for a signal message', () => {
+    const { renderers } = makeSpyRenderers();
+    const roles: MessageRoleRenderers = {
+      Signal: ({ children }) => <section data-testid="signal-wrapper">{children}</section>,
+    };
+    render(<MessageFactory message={makeMessage([textPart('sig')], 'signal')} roles={roles} {...renderers} />);
+
+    const wrapper = screen.getByTestId('signal-wrapper');
+    expect(wrapper).toBeTruthy();
+    expect(wrapper.querySelector('[data-testid="text"]')?.textContent).toBe('sig');
+  });
+
+  it('renders parts unwrapped (fragment) when no role wrapper matches', () => {
+    const { renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([textPart('plain')], 'assistant')} {...renderers} />);
+
+    expect(screen.queryByTestId('signal-wrapper')).toBeNull();
+    expect(screen.getByTestId('text').textContent).toBe('plain');
+  });
+});
