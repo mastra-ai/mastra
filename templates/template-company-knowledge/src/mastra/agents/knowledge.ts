@@ -12,14 +12,16 @@ import { mcpClient } from '../mcp';
  *
  * Tool names are namespaced: linear_<tool> and notion_<tool>.
  */
-let mcpTools = {};
-try {
-  mcpTools = await mcpClient.listTools();
-} catch (error) {
-  console.warn(
-    'Failed to load Linear/Notion MCP tools. The agent will start with indexed search and web search only.',
-    error,
-  );
+async function getMcpTools() {
+  try {
+    return await mcpClient.listTools();
+  } catch (error) {
+    console.warn(
+      'Failed to load Linear/Notion MCP tools. The agent will continue with indexed search and web search only.',
+      error,
+    );
+    return {};
+  }
 }
 
 export const knowledgeAgent = new Agent({
@@ -80,9 +82,9 @@ Follow this order strictly — it saves API calls and gives faster answers:
       detectionTypes: ['email', 'phone', 'credit-card', 'ssn', 'api-key'],
     }),
   ],
-  tools: {
+  tools: async () => ({
     searchKnowledge,
-    ...mcpTools,
+    ...(await getMcpTools()),
     web_search: openai.tools.webSearch({}),
-  },
+  }),
 });

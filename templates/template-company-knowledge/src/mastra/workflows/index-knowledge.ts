@@ -6,6 +6,14 @@ import { GATEWAY_EMBEDDING_MODEL, KNOWLEDGE_INDEX } from '../tools/knowledge-sea
 
 const EMBEDDING_DIM = 1536;
 
+async function responseText(res: Response) {
+  try {
+    return await res.text();
+  } catch {
+    return '';
+  }
+}
+
 const docSchema = z.object({
   id: z.string(),
   source: z.string(),
@@ -48,7 +56,10 @@ const fetchStep = createStep({
         }),
       });
       if (!res.ok) {
-        console.warn(`Linear fetch failed while indexing company knowledge: ${res.status} ${res.statusText}`);
+        const body = await responseText(res);
+        console.warn(
+          `Linear fetch failed while indexing company knowledge: ${res.status} ${res.statusText} ${body}`.trim(),
+        );
       } else {
         const json = (await res.json()) as any;
         for (const issue of json?.data?.issues?.nodes ?? []) {
@@ -79,8 +90,9 @@ const fetchStep = createStep({
         }),
       });
       if (!searchRes.ok) {
+        const body = await responseText(searchRes);
         console.warn(
-          `Notion search failed while indexing company knowledge: ${searchRes.status} ${searchRes.statusText}`,
+          `Notion search failed while indexing company knowledge: ${searchRes.status} ${searchRes.statusText} ${body}`.trim(),
         );
       } else {
         const searchJson = (await searchRes.json()) as any;
