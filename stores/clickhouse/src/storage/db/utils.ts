@@ -70,6 +70,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   mastra_background_tasks: `ReplacingMergeTree()`,
   [TABLE_SCHEDULES]: `ReplacingMergeTree()`,
   [TABLE_SCHEDULE_TRIGGERS]: `MergeTree()`,
+  [TABLE_NOTIFICATIONS]: `ReplacingMergeTree()`,
   mastra_channel_installations: `ReplacingMergeTree()`,
   mastra_channel_config: `ReplacingMergeTree()`,
   [TABLE_NOTIFICATIONS]: `ReplacingMergeTree()`,

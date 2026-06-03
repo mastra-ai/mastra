@@ -155,6 +155,10 @@ The model receives the signal as context like this:
 
 Use XML-safe `tagName` and attribute names. They can contain letters, numbers, underscores, periods, and hyphens. They must start with a letter or underscore.
 
+### Storage support
+
+Notification inbox storage is available in the storage adapters that support richer memory and signal workflows: [libSQL](/reference/storage/libsql), [PostgreSQL](/reference/storage/postgresql), and [MongoDB](/reference/storage/mongodb). These adapters expose notification records through `getStore('notifications')`.
+
 ## Send processor context
 
 Processors can send reactive signals during a run. A processor should inspect the chat history, react to a specific trigger, and avoid sending the same context more than once.
