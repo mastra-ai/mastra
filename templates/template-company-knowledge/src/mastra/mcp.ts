@@ -1,4 +1,8 @@
 import { MCPClient } from '@mastra/mcp';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const notionMcpServerPath = require.resolve('@notionhq/notion-mcp-server/bin/cli.mjs');
 
 /**
  * MCP clients for Linear and Notion.
@@ -28,7 +32,7 @@ export const mcpClient = new MCPClient({
       ? {
           notion: {
             command: 'node',
-            args: ['./node_modules/@notionhq/notion-mcp-server/bin/cli.mjs'],
+            args: [notionMcpServerPath],
             env: {
               OPENAPI_MCP_HEADERS: JSON.stringify({
                 Authorization: `Bearer ${process.env.NOTION_API_KEY}`,

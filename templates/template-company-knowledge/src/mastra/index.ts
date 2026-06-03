@@ -10,7 +10,7 @@ if (!connectionString) {
   throw new Error('DATABASE_URL is not set. Point it at a Neon (or other Postgres) database with pgvector enabled.');
 }
 
-export const storage = new PostgresStore({ connectionString });
+export const storage = new PostgresStore({ id: 'company-knowledge-storage', connectionString });
 export const vector = new PgVector({ id: 'company-knowledge-vector', connectionString });
 
 export const mastra = new Mastra({
