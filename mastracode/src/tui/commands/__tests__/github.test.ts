@@ -22,6 +22,14 @@ vi.mock('../../modal-question.js', () => ({
 function createContext() {
   const sendSignal = vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
   const syncThreadNow = vi.fn(async () => 1);
+  const subscribeThreadToPR = vi.fn(async () => ({ owner: 'mastra-ai', repo: 'mastra', number: 17447 }));
+  const unsubscribeThreadFromPR = vi.fn(async () => ({
+    owner: 'mastra-ai',
+    repo: 'mastra',
+    number: 17447,
+    removed: true,
+    remainingSubscriptions: 0,
+  }));
   const ctx = {
     state: {
       ui: { requestRender: vi.fn() },
@@ -31,6 +39,8 @@ function createContext() {
           isPollingThread: vi.fn(() => false),
           getPollIntervalMs: vi.fn(() => 300_000),
           syncThreadNow,
+          subscribeThreadToPR,
+          unsubscribeThreadFromPR,
         },
       },
     },
@@ -43,7 +53,7 @@ function createContext() {
     showInfo: vi.fn(),
     showError: vi.fn(),
   } as unknown as SlashCommandContext;
-  return { ctx, sendSignal, syncThreadNow };
+  return { ctx, sendSignal, syncThreadNow, subscribeThreadToPR, unsubscribeThreadFromPR };
 }
 
 describe('handleGithubCommand', () => {
@@ -57,59 +67,48 @@ describe('handleGithubCommand', () => {
     });
   });
 
-  it('sends a GitHub subscribe signal for an inline PR number', async () => {
-    const { ctx, sendSignal } = createContext();
+  it('subscribes the current thread to an inline PR number', async () => {
+    const { ctx, sendSignal, subscribeThreadToPR } = createContext();
 
     await handleGithubCommand(ctx, ['17447']);
 
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'reactive',
-        tagName: 'github-subscribe-pr',
-        attributes: { number: 17447 },
-      }),
-    );
-    expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed to GitHub PR #17447.');
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(subscribeThreadToPR).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1', pr: 17447 });
+    expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed to mastra-ai/mastra#17447.');
   });
 
   it('sends owner and repo when provided inline', async () => {
-    const { ctx, sendSignal } = createContext();
+    const { ctx, subscribeThreadToPR } = createContext();
 
     await handleGithubCommand(ctx, ['mastra-ai/mastra#17447']);
 
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attributes: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
-      }),
-    );
+    expect(subscribeThreadToPR).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+    });
   });
 
   it('supports the explicit subscribe subcommand', async () => {
-    const { ctx, sendSignal } = createContext();
+    const { ctx, subscribeThreadToPR } = createContext();
 
     await handleGithubCommand(ctx, ['subscribe', '17447']);
 
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tagName: 'github-subscribe-pr',
-        attributes: { number: 17447 },
-      }),
-    );
+    expect(subscribeThreadToPR).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1', pr: 17447 });
   });
 
-  it('sends an unsubscribe signal for /github unsubscribe', async () => {
-    const { ctx, sendSignal } = createContext();
+  it('unsubscribes the current thread from an inline PR', async () => {
+    const { ctx, sendSignal, unsubscribeThreadFromPR } = createContext();
 
     await handleGithubCommand(ctx, ['unsubscribe', 'mastra-ai/mastra#17447']);
 
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'reactive',
-        tagName: 'github-unsubscribe-pr',
-        attributes: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
-      }),
-    );
-    expect(ctx.showInfo).toHaveBeenCalledWith('Unsubscribed from GitHub PR #17447.');
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(unsubscribeThreadFromPR).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+    });
+    expect(ctx.showInfo).toHaveBeenCalledWith('Unsubscribed from mastra-ai/mastra#17447.');
   });
 
   it('does not send a signal when experimental GitHub signals are disabled', async () => {
@@ -125,21 +124,21 @@ describe('handleGithubCommand', () => {
   });
 
   it('asks for a PR reference when no inline args are provided', async () => {
-    const { ctx, sendSignal } = createContext();
+    const { ctx, subscribeThreadToPR } = createContext();
     askModalQuestionMock.mockResolvedValue('https://github.com/mastra-ai/mastra/pull/17447');
 
     await handleGithubCommand(ctx, []);
 
     expect(askModalQuestionMock).toHaveBeenCalled();
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attributes: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
-      }),
-    );
+    expect(subscribeThreadToPR).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+    });
   });
 
   it('prefills the prompt from gh pr view when possible', async () => {
-    const { ctx, sendSignal } = createContext();
+    const { ctx, subscribeThreadToPR } = createContext();
     execFileMock.mockImplementation((_command, _args, _options, callback) => {
       callback(null, 'https://github.com/mastra-ai/mastra/pull/17447\n', '');
     });
@@ -157,7 +156,37 @@ describe('handleGithubCommand', () => {
       ctx.state.ui,
       expect.objectContaining({ defaultValue: 'https://github.com/mastra-ai/mastra/pull/17447' }),
     );
-    expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'github-subscribe-pr' }));
+    expect(subscribeThreadToPR).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+    });
+  });
+
+  it('unsubscribes the only current subscription without prompting', async () => {
+    const { ctx, unsubscribeThreadFromPR } = createContext();
+    vi.mocked((ctx.harness as any).listThreads).mockResolvedValue([
+      {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        metadata: {
+          mastra: {
+            githubSignals: {
+              subscriptions: [{ owner: 'mastra-ai', repo: 'mastra', number: 17447 }],
+            },
+          },
+        },
+      },
+    ]);
+
+    await handleGithubCommand(ctx, ['unsubscribe']);
+
+    expect(askModalQuestionMock).not.toHaveBeenCalled();
+    expect(unsubscribeThreadFromPR).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 17447 },
+    });
   });
 
   it('syncs GitHub subscriptions for the current thread', async () => {

@@ -908,6 +908,28 @@ export class GithubSignals implements Processor<'github-signals'> {
     return this.#pollThread(input, { includeComments: true });
   }
 
+  async subscribeThreadToPR(input: GithubPollingThread & { pr: GithubPRSignalInput }): Promise<GithubOperationResult> {
+    const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
+    return this.#subscribe({
+      id: `github-command-subscribe-${randomUUID()}`,
+      ...pr,
+      threadId: input.threadId,
+      resourceId: input.resourceId,
+    });
+  }
+
+  async unsubscribeThreadFromPR(
+    input: GithubPollingThread & { pr: GithubPRSignalInput },
+  ): Promise<GithubOperationResult> {
+    const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
+    return this.#unsubscribe({
+      id: `github-command-unsubscribe-${randomUUID()}`,
+      ...pr,
+      threadId: input.threadId,
+      resourceId: input.resourceId,
+    });
+  }
+
   async startPollingForThread(
     input: GithubPollingThread,
     options: { pollImmediately?: boolean } = {},
@@ -1486,9 +1508,7 @@ export class GithubSignals implements Processor<'github-signals'> {
       subscription.lastSyncStatus = 'skipped';
     }
 
-    const subscriptions = [...githubMetadata.subscriptions];
-    if (existingIndex >= 0) subscriptions[existingIndex] = subscription;
-    else subscriptions.push(subscription);
+    const subscriptions = [subscription];
 
     await threadStore.saveThread({
       thread: {

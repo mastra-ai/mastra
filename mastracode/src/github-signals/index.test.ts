@@ -855,11 +855,27 @@ describe('GithubSignals', () => {
     });
 
     await expect(
-      tools.github_unsubscribe_pr.execute(
-        { owner: 'mastra-ai', repo: 'mastra', number: 123 },
+      tools.github_subscribe_pr.execute(
+        { owner: 'mastra-ai', repo: 'mastra', number: 456 },
         { agent: { agentId: 'code-agent', threadId: thread.id, resourceId: thread.resourceId } },
       ),
-    ).resolves.toMatchObject({ unsubscribed: true, owner: 'mastra-ai', repo: 'mastra', number: 123 });
+    ).resolves.toMatchObject({ subscribed: true, owner: 'mastra-ai', repo: 'mastra', number: 456 });
+    savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
+    expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([
+      expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 456, lastSyncStatus: 'skipped' }),
+    ]);
+    expect(onSubscriptionsChanged).toHaveBeenLastCalledWith({
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      subscriptions: [expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 456 })],
+    });
+
+    await expect(
+      tools.github_unsubscribe_pr.execute(
+        { owner: 'mastra-ai', repo: 'mastra', number: 456 },
+        { agent: { agentId: 'code-agent', threadId: thread.id, resourceId: thread.resourceId } },
+      ),
+    ).resolves.toMatchObject({ unsubscribed: true, owner: 'mastra-ai', repo: 'mastra', number: 456 });
     savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
     expect(onSubscriptionsChanged).toHaveBeenLastCalledWith({

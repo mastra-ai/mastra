@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 
-import { GITHUB_SIGNALS_METADATA_KEY, GithubSignals } from '../../github-signals/index.js';
+import { GITHUB_SIGNALS_METADATA_KEY } from '../../github-signals/index.js';
 import type { GithubPRSignalInput } from '../../github-signals/index.js';
 import { loadSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
@@ -58,6 +58,26 @@ async function getCurrentGithubThread(ctx: SlashCommandContext): Promise<{
 
   const thread = (await harness.listThreads?.({ allResources: true }))?.find(item => item.id === threadId);
   return { threadId, resourceId: thread?.resourceId ?? harness.getResourceId?.(), metadata: thread?.metadata };
+}
+
+function getGithubSubscriptionsFromThreadMetadata(metadata: Record<string, unknown> | undefined): Array<{
+  owner?: string;
+  repo?: string;
+  number: number;
+}> {
+  const mastra = isPlainObject(metadata?.mastra) ? metadata.mastra : {};
+  const githubSignals = isPlainObject(mastra[GITHUB_SIGNALS_METADATA_KEY]) ? mastra[GITHUB_SIGNALS_METADATA_KEY] : {};
+  const subscriptions = Array.isArray(githubSignals.subscriptions) ? githubSignals.subscriptions : [];
+  return subscriptions.flatMap(subscription => {
+    if (!isPlainObject(subscription) || typeof subscription.number !== 'number') return [];
+    return [
+      {
+        ...(typeof subscription.owner === 'string' ? { owner: subscription.owner } : {}),
+        ...(typeof subscription.repo === 'string' ? { repo: subscription.repo } : {}),
+        number: subscription.number,
+      },
+    ];
+  });
 }
 
 async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<string> {
@@ -157,31 +177,49 @@ export async function handleGithubCommand(ctx: SlashCommandContext, args: string
   const action = maybeAction === 'unsubscribe' || maybeAction === 'unsub' ? 'unsubscribe' : 'subscribe';
   const referenceArgs = action === 'unsubscribe' || explicitSubscribe ? restArgs : args;
   const inlineReference = referenceArgs.join(' ').trim();
+  const currentThread = await getCurrentGithubThread(ctx);
+  const existingSubscriptions = getGithubSubscriptionsFromThreadMetadata(currentThread.metadata);
   const reference = inlineReference
     ? inlineReference
-    : await askModalQuestion(ctx.state.ui, {
-        question: `GitHub PR to ${action} ${action === 'subscribe' ? 'to' : 'from'}`,
-        defaultValue: await detectCurrentPullRequest(ctx),
-      });
+    : action === 'unsubscribe' && existingSubscriptions.length === 1
+      ? existingSubscriptions[0]!
+      : await askModalQuestion(ctx.state.ui, {
+          question: `GitHub PR to ${action} ${action === 'subscribe' ? 'to' : 'from'}`,
+          defaultValue: await detectCurrentPullRequest(ctx),
+        });
   if (reference === null) return;
 
-  const parsed = parseGithubPRReference(reference);
+  const parsed = typeof reference === 'string' ? parseGithubPRReference(reference) : reference;
   if (!parsed) {
     ctx.showError(
       'Usage: /github 123, /github owner/repo#123, /github unsubscribe 123, /github sync, /github debug, or /github https://github.com/owner/repo/pull/123',
     );
     return;
   }
+  if (!currentThread.threadId || !currentThread.resourceId) {
+    ctx.showError(`GitHub ${action} requires a current thread.`);
+    return;
+  }
+
+  const githubSignalsProcessor = ctx.state.options?.githubSignals;
+  const runOperation =
+    action === 'unsubscribe'
+      ? githubSignalsProcessor?.unsubscribeThreadFromPR
+      : githubSignalsProcessor?.subscribeThreadToPR;
+  if (!runOperation) {
+    ctx.showError('GitHub signals are not available. Enable them in /settings and restart MastraCode.');
+    return;
+  }
 
   try {
-    const inputSignal =
-      action === 'unsubscribe'
-        ? GithubSignals.signals.unsubscribeFromPR(parsed)
-        : GithubSignals.signals.subscribeToPR(parsed);
-    const signal = ctx.harness.sendSignal({ ...inputSignal, type: 'reactive' });
-    await signal.accepted;
-    const number = typeof parsed === 'number' ? parsed : parsed.number;
-    ctx.showInfo(`${action === 'unsubscribe' ? 'Unsubscribed from' : 'Subscribed to'} GitHub PR #${number}.`);
+    const result = await runOperation.call(githubSignalsProcessor, {
+      threadId: currentThread.threadId,
+      resourceId: currentThread.resourceId,
+      pr: parsed,
+    });
+    const prefix =
+      action === 'unsubscribe' ? (result.removed ? 'Unsubscribed from' : 'No subscription found for') : 'Subscribed to';
+    ctx.showInfo(`${prefix} ${result.owner}/${result.repo}#${result.number}.`);
   } catch (error) {
     ctx.showError(`Failed to ${action} GitHub PR: ${error instanceof Error ? error.message : String(error)}`);
   }
