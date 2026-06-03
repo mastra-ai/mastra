@@ -103,7 +103,7 @@ Returns: `DurableAgent`
 
 ## `createEventedAgent(options)`
 
-Wraps an `Agent` with fire-and-forget durable execution on the built-in workflow engine. Use this when you want to start a run and stream its events without holding the call open.
+Wraps an `Agent` with fire-and-forget durable execution on the built-in workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the underlying workflow runs non-blocking (via `startAsync`) instead of running to completion before the stream is wired up. Use it when you want the run to progress independently of the caller. It does not accept `id` or `name` overrides.
 
 ```typescript
 import { createEventedAgent } from '@mastra/core/agent/durable'
@@ -273,9 +273,10 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
   },
   {
     name: 'instructions',
-    type: 'string',
+    type: "AgentExecutionOptions['instructions']",
     isOptional: true,
-    description: "Overrides the agent's default instructions for this run.",
+    description:
+      "Overrides the agent's default instructions for this run. Accepts a static string or the same dynamic instructions value the agent supports.",
   },
   {
     name: 'context',
@@ -288,6 +289,12 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
     type: 'object',
     isOptional: true,
     description: 'Memory configuration for conversation persistence and retrieval.',
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    isOptional: true,
+    description: 'Request context carrying dynamic configuration and state for this run.',
   },
   {
     name: 'maxSteps',
@@ -309,9 +316,21 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
   },
   {
     name: 'toolChoice',
-    type: 'string | object',
+    type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
     isOptional: true,
     description: 'Tool selection strategy.',
+  },
+  {
+    name: 'activeTools',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Restricts execution to the named subset of the agent\u2019s tools.',
+  },
+  {
+    name: 'modelSettings',
+    type: 'object',
+    isOptional: true,
+    description: 'Model-specific settings such as temperature.',
   },
   {
     name: 'requireToolApproval',
@@ -320,16 +339,40 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
     description: 'Require approval for all tool calls, which suspends the run until resumed.',
   },
   {
+    name: 'autoResumeSuspendedTools',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Automatically resume tools that suspended, instead of waiting for an external `resume()` call.',
+  },
+  {
     name: 'toolCallConcurrency',
     type: 'number',
     isOptional: true,
     description: 'Maximum number of tool calls to execute concurrently.',
   },
   {
+    name: 'includeRawChunks',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Include raw provider chunks in the stream output.',
+  },
+  {
+    name: 'maxProcessorRetries',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum number of processor retries per generation.',
+  },
+  {
     name: 'structuredOutput',
     type: 'object',
     isOptional: true,
     description: 'Structured output configuration.',
+  },
+  {
+    name: 'versions',
+    type: 'object',
+    isOptional: true,
+    description: 'Version overrides for sub-agent delegation.',
   },
   {
     name: 'onChunk',
