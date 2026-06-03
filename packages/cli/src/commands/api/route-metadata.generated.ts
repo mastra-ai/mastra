@@ -3230,6 +3230,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /stored/agents/:storedAgentId/dependents": {
+    "method": "GET",
+    "path": "/stored/agents/:storedAgentId/dependents",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "dependents"
+    }
+  },
   "POST /stored/agents/:storedAgentId/export": {
     "method": "POST",
     "path": "/stored/agents/:storedAgentId/export",

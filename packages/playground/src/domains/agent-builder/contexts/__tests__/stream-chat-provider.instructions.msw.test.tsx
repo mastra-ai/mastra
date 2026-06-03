@@ -40,10 +40,14 @@ const Providers = ({ children }: { children: ReactNode }) => {
 
 describe('StreamChatProvider — modelSettings.instructions on the wire', () => {
   beforeEach(() => {
+    // These tests model the legacy `stream-until-idle` route. Opt out of thread
+    // signals so the hook drives that endpoint instead of the signal path.
+    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
   });
 
   afterEach(() => {
+    delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
     cleanup();
   });
 

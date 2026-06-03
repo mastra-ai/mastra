@@ -607,6 +607,59 @@ describe('Agent signal routes', () => {
     expect(continuationCall[0].streamOptions?.memory).toEqual({ thread: 'thread-123', resource: 'resource-123' });
   });
 
+  it('preserves assistant non-user messages for stateless client-tool continuations', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const assistantMessages = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'myTool', args: { x: 'hi' } }],
+      },
+    ];
+    const chunks = [
+      {
+        type: 'tool-call',
+        runId: 'run-stateless',
+        payload: { toolCallId: 'call-1', toolName: 'myTool', args: { x: 'hi' } },
+      },
+      {
+        type: 'finish',
+        runId: 'run-stateless',
+        payload: { stepResult: { reason: 'tool-calls' }, messages: { nonUser: assistantMessages } },
+      },
+    ];
+    const streamUntilIdleSpy = vi.spyOn(agent, 'streamUntilIdle');
+    const sendToolApprovalSpy = vi
+      .spyOn(agent, 'sendToolApproval')
+      .mockResolvedValue({ accepted: true, runId: 'continuation-run' } as never);
+    const clientTools = {
+      myTool: {
+        id: 'myTool',
+        description: 'tool',
+        inputSchema: z.object({ x: z.string() }),
+        execute: vi.fn(async () => ({ ok: true })),
+      },
+    };
+
+    await mockSignalAndSubscriptionRequests(agent, 'run-stateless', chunks, {
+      signal: { type: 'user-message', contents: 'hello' },
+      ifIdle: { streamOptions: { clientTools } },
+    } as SendAgentSignalParams);
+
+    const subscribed = await agent.subscribeToThread({} as SubscribeAgentThreadParams);
+    await subscribed.processDataStream({ onChunk: async () => {} });
+
+    expect(streamUntilIdleSpy).not.toHaveBeenCalled();
+    const [continuation] = sendToolApprovalSpy.mock.calls.at(-1) as [any];
+    expect(continuation.messages).toEqual([
+      ...assistantMessages,
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'myTool', result: { ok: true } }],
+      },
+    ]);
+    expect(continuation.streamOptions?.memory).toBeUndefined();
+  });
+
   it('executes multiple client tools after one tool-calls finish', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const assistantMessages = [
