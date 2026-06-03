@@ -31,6 +31,7 @@ import {
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_TOOL_PROVIDER_CONNECTIONS,
+  TABLE_NOTIFICATIONS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -71,6 +72,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_SCHEDULE_TRIGGERS]: `MergeTree()`,
   mastra_channel_installations: `ReplacingMergeTree()`,
   mastra_channel_config: `ReplacingMergeTree()`,
+  [TABLE_NOTIFICATIONS]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
