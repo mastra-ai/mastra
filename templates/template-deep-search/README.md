@@ -29,9 +29,11 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 
 ## Quickstart 🚀
 
-1. **Add your API keys**
+1. **Clone the template**
+   - Run `npx create-mastra@latest --template deep-search` to scaffold the project locally.
+2. **Add your API keys**
    - Copy `.env.example` to `.env` and fill in your keys.
-2. **Start the dev server**
+3. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
 ## Making it yours
@@ -42,6 +44,6 @@ Swap in a different search provider, add your own evaluation criteria, or wire t
 
 ## About Mastra templates
 
-[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
 Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-deep-search/CONTRIBUTING.md).

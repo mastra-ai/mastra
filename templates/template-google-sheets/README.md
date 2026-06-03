@@ -33,6 +33,8 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 ## Quick start
 
+1. **Clone the template**
+   - Run `npx create-mastra@latest --template google-sheets` to scaffold the project locally.
 1. **Add your API key**
    - Copy `.env.example` to `.env` and fill in all values.
 1. **Start the dev server**
@@ -44,6 +46,6 @@ Start conversing with the agent by saying "Hello". It'll tell you to create a ne
 
 ## About Mastra templates
 
-[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
 Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-google-sheets/CONTRIBUTING.md).
