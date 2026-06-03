@@ -113,7 +113,14 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
       if (input.action === 'search') {
         if (!input.query) throw new Error('notification-inbox search requires query');
         return {
-          notifications: await storage.listNotifications({ threadId, search: input.query, limit: input.limit }),
+          notifications: await storage.listNotifications({
+            threadId,
+            search: input.query,
+            status: input.status,
+            priority: input.priority,
+            source: input.source,
+            limit: input.limit,
+          }),
         };
       }
 

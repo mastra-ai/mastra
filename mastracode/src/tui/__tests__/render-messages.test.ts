@@ -102,6 +102,26 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('reactive-signal-1')).toBeInstanceOf(ReactiveSignalComponent);
   });
 
+  it('does not render GitHub subscribe operation signals from history', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'github-subscribe-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'reactive_signal',
+          tagName: 'github-subscribe-pr',
+          message: 'Subscribe to GitHub PR #17241',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('github-subscribe-signal-1')).toBe(false);
+  });
+
   it('renders notification summaries as inline notification components', () => {
     const state = createState();
 

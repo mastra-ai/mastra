@@ -102,6 +102,7 @@ async function tuiMain(pipedInput?: string | null) {
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    githubSignals: result.githubSignals,
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
   tui.run().catch(error => {

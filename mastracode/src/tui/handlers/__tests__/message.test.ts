@@ -121,6 +121,21 @@ describe('handleMessageUpdate system reminders', () => {
     expect(rendered).toContain('Build is still running');
   });
 
+  it('does not render streamed GitHub subscribe operation signals', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'reactive_signal',
+          tagName: 'github-subscribe-pr',
+          message: 'Subscribe to GitHub PR #17241',
+        } as never,
+      ]),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(0);
+  });
+
   it('keeps spacing when a streamed reminder is inserted before pending assistant text', () => {
     addUserMessage(state, {
       id: 'user-1',
@@ -189,9 +204,42 @@ describe('handleMessageUpdate system reminders', () => {
     expect(state.chatContainer.children).toHaveLength(1);
     const component = state.chatContainer.children[0];
     expect(component).toBeInstanceOf(NotificationComponent);
-    const rendered = stripAnsi((component as NotificationComponent).render(80).join('\n'));
-    expect(rendered).toContain('Notification: github: ci-status');
+    const rendered = stripAnsi((component as NotificationComponent).render(100).join('\n'));
+    expect(rendered).toContain('notification from github');
+    expect(rendered).toContain('╭');
+    expect(rendered).toContain('╰');
+    expect(rendered).toContain('high · ci-status · delivered');
     expect(rendered).toContain('CI failed on main');
+  });
+
+  it('wraps long streamed full notifications within the terminal width', () => {
+    const originalColumns = process.stdout.columns;
+    process.stdout.columns = 80;
+
+    try {
+      handleMessageUpdate(
+        ctx,
+        createAssistantMessage([
+          {
+            type: 'notification',
+            message:
+              'mastra-ai/mastra#17449: feat(storage): add notification storage adapters was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
+            source: 'github',
+            kind: 'pull-request-merged',
+            priority: 'high',
+            status: 'delivered',
+          } as never,
+        ]),
+      );
+    } finally {
+      process.stdout.columns = originalColumns;
+    }
+
+    const component = state.chatContainer.children[0];
+    expect(component).toBeInstanceOf(NotificationComponent);
+    const renderedLines = stripAnsi((component as NotificationComponent).render(80).join('\n')).split('\n');
+    expect(renderedLines.some(line => line.includes('automatically unsubscribed'))).toBe(true);
+    expect(Math.max(...renderedLines.map(line => line.length))).toBeLessThanOrEqual(80);
   });
 
   it('deduplicates repeated streamed reminders within the same assistant run', () => {
