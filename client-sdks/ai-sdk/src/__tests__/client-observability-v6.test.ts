@@ -8,11 +8,11 @@
  *   Agent must forward payload to ClientObservabilityProxy.receive and strip metadata.
  */
 import type { UIMessage } from '@internal/ai-v6';
+import { convertArrayToReadableStream, MockLanguageModelV3 } from '@internal/ai-v6/test';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { ChunkFrom } from '@mastra/core/stream';
 import { createTool } from '@mastra/core/tools';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -117,7 +117,7 @@ describe('handleChatStream v6 client observability', () => {
     };
 
     let callCount = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV3({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -179,6 +179,10 @@ describe('handleChatStream v6 client observability', () => {
     const mastra = new Mastra({
       logger: false,
       observability: {
+        getDefaultInstance: () => undefined,
+        getSelectedInstance: () => undefined,
+        setLogger: () => undefined,
+        setMastraContext: () => undefined,
         getClientObservabilityProxy: () => ({
           inject: () => carrier,
           receive,
@@ -226,12 +230,13 @@ describe('handleChatStream v6 client observability', () => {
       },
     ];
 
-    await handleChatStream({
+    const stream2 = await handleChatStream({
       mastra,
       agentId: 'test-agent',
       version: 'v6',
       params: { messages: continuationMessages },
     });
+    await collectStreamChunks(stream2);
 
     expect(receive).toHaveBeenCalledTimes(1);
     expect(receive).toHaveBeenCalledWith(payload, carrier);

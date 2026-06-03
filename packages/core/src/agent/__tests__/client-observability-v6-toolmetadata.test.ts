@@ -18,6 +18,10 @@ describe('Agent client observability extraction (v6 toolMetadata)', () => {
     const mastra = new Mastra({
       logger: false,
       observability: {
+        getDefaultInstance: () => undefined,
+        getSelectedInstance: () => undefined,
+        setLogger: () => undefined,
+        setMastraContext: () => undefined,
         getClientObservabilityProxy: () => proxy,
       } as any,
       agents: {
