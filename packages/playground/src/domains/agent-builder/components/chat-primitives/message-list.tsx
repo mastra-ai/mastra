@@ -42,7 +42,10 @@ interface MessageListProps {
  */
 const hasStreamingPart = (message: MastraDBMessage | undefined) => {
   if (!message) return false;
-  return (message.content.parts as MessageFactoryPart[]).some(part => {
+  // `MastraMessagePart[]` widens into `MessageFactoryPart[]`, surfacing the
+  // runtime `dynamic-tool` / `tool-${string}` parts, so no cast is needed.
+  const parts: MessageFactoryPart[] = message.content.parts;
+  return parts.some(part => {
     if (part.type === 'reasoning' || part.type === 'text') {
       return 'state' in part && part.state === 'streaming';
     }
