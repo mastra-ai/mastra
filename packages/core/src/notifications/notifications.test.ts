@@ -662,6 +662,7 @@ describe('notification inbox', () => {
     try {
       const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
       expect(workflow.id).toBe('__mastra_notification_dispatcher');
+      expect(mastra.listWorkflows()).not.toHaveProperty('__mastra_notification_dispatcher');
       expect(workflow.getScheduleConfigs()).toMatchObject([
         {
           id: 'dispatch',

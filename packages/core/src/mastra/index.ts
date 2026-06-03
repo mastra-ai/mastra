@@ -541,6 +541,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -1143,6 +1144,7 @@ export class Mastra<
     if (this.#notificationDispatchConfig?.enabled !== false) {
       const workflow = createNotificationDispatchWorkflow(this.#notificationDispatchConfig);
       this.addWorkflow(workflow, workflow.id);
+      this.#hiddenWorkflowKeys.add(workflow.id);
     }
 
     if (config?.workflows) {
@@ -3203,15 +3205,19 @@ export class Mastra<
    * ```
    */
   public listWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+    const workflows = Object.fromEntries(
+      Object.entries(this.#workflows).filter(([key]) => !this.#hiddenWorkflowKeys.has(key)),
+    ) as Record<string, Workflow>;
+
     if (props.serialized) {
-      return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
+      return Object.entries(workflows).reduce((acc, [k, v]) => {
         return {
           ...acc,
           [k]: { name: v.name },
         };
       }, {});
     }
-    return this.#workflows;
+    return workflows;
   }
 
   /**
