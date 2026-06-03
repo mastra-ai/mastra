@@ -147,9 +147,8 @@ export function stableWorkingMemoryCacheKey(input: {
  * Returns undefined when:
  * - there's no prior state to diff against
  * - the prior state isn't a plain string (multimodal signal)
- * - the rendered patch would be at least as large as the next snapshot
  *
- * In any of these cases the caller falls back to emitting a full snapshot.
+ * In either case the caller falls back to emitting a full snapshot.
  */
 function buildMarkdownDelta(args: {
   lastSnapshot?: ProcessorActiveStateSignal;
@@ -170,7 +169,6 @@ function buildMarkdownDelta(args: {
   if (!prior) return;
 
   const patch = renderHunksOnly(prior, nextContents);
-  if (patch.length >= nextContents.length) return;
 
   return { contents: patch };
 }
@@ -189,8 +187,8 @@ function readSignalValue(signal: ProcessorActiveStateSignal | undefined): unknow
  * that `createPatch` emits and the `\ No newline at end of file` trailer.
  * The preamble exists for tooling like `patch -p1` to know which file to
  * apply to; we only ever diff a single working-memory blob. The newline
- * trailer is semantically meaningless to the model and adds ~30 bytes of
- * noise that can flip the snapshot-vs-delta size guard against the delta.
+ * trailer is semantically meaningless to the model and adds noise to the
+ * state signal.
  */
 function renderHunksOnly(prior: string, next: string): string {
   const { hunks } = structuredPatch('', '', prior, next, '', '', { context: 0 });

@@ -307,7 +307,7 @@ describe('WorkingMemoryStateProcessor', () => {
       expect(result?.contents).toBe(next.trim());
     });
 
-    it('falls back to a snapshot when the unified-diff payload would not be smaller than the next snapshot', async () => {
+    it('emits a delta even when the unified-diff payload is not smaller than the next snapshot', async () => {
       const template: WorkingMemoryTemplate = { format: 'markdown', content: '# tpl' };
       const prior = 'a';
       const next = 'b';
@@ -321,8 +321,10 @@ describe('WorkingMemoryStateProcessor', () => {
         }),
       );
 
-      expect(result?.mode).toBe('snapshot');
-      expect(result?.contents).toBe('b');
+      expect(result?.mode).toBe('delta');
+      expect(result?.contents).toContain('-a');
+      expect(result?.contents).toContain('+b');
+      expect(result?.value).toBe('b');
     });
 
     it('never emits a delta in schema mode (always snapshot)', async () => {
