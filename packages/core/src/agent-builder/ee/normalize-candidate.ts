@@ -1,4 +1,4 @@
-import { getRegisteredProviders, parseModelString } from '../../llm/model/provider-registry.js';
+import { getRegisteredProvidersStatic, parseModelString } from '../../llm/model/provider-registry.static.js';
 import type { MastraModelConfig } from '../../llm/model/shared.types.js';
 import type { StorageConditionalField, StorageConditionalVariant, StorageModelConfig } from '../../storage/types.js';
 
@@ -51,7 +51,7 @@ export type ModelCandidateInput =
  * is found in the registry.
  */
 function splitRuntimeModelString(input: string): { provider: string; modelId: string } | undefined {
-  const providers = getRegisteredProviders().sort((a, b) => b.length - a.length);
+  const providers = getRegisteredProvidersStatic().sort((a, b) => b.length - a.length);
   for (const providerId of providers) {
     const prefix = `${providerId}/`;
     if (input.startsWith(prefix)) {

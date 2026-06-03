@@ -1,8 +1,12 @@
-import { isProviderRegistered } from '../../llm/model/provider-registry.js';
+import { isProviderRegisteredStatic } from '../../llm/model/provider-registry.static.js';
 import { ModelNotAllowedError } from './errors.js';
 import { toModelCandidates } from './normalize-candidate.js';
 import type { ModelCandidate, ModelCandidateInput } from './normalize-candidate.js';
 import type { ProviderModelEntry } from './types.js';
+
+// Re-export the error surface so this browser-safe subpath is self-sufficient
+// (the Playground consumes `MODEL_NOT_ALLOWED_CODE` from here).
+export { ModelNotAllowedError, MODEL_NOT_ALLOWED_CODE, isModelNotAllowedError } from './errors.js';
 
 /**
  * Candidate model to check against the allowlist.
@@ -45,7 +49,7 @@ export function isModelAllowed(allowed: ProviderModelEntry[] | undefined, candid
 
   const activeEntries = allowed.filter(entry => {
     if ('kind' in entry && entry.kind === 'custom') return true;
-    return isProviderRegistered(entry.provider);
+    return isProviderRegisteredStatic(entry.provider);
   });
 
   if (activeEntries.length === 0) return false;

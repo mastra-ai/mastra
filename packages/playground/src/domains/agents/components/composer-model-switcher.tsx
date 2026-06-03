@@ -1,5 +1,5 @@
 import type { UpdateModelParams } from '@mastra/client-js';
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
+import { isModelAllowed } from '@mastra/core/agent-builder/ee/allowlist';
 import { cn } from '@mastra/playground-ui';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { useState, useEffect } from 'react';

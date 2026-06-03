@@ -111,6 +111,16 @@
         "default": "./dist/agent-builder/ee/index.cjs"
       }
     },
+    "./agent-builder/ee/allowlist": {
+      "import": {
+        "types": "./dist/agent-builder/ee/allowlist.d.ts",
+        "default": "./dist/agent-builder/ee/allowlist.js"
+      },
+      "require": {
+        "types": "./dist/agent-builder/ee/allowlist.d.ts",
+        "default": "./dist/agent-builder/ee/allowlist.cjs"
+      }
+    },
     "./background-tasks": {
       "import": {
         "types": "./dist/background-tasks/index.d.ts",

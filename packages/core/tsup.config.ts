@@ -68,6 +68,7 @@ export default defineConfig({
     'src/auth/ee/index.ts',
     'src/auth/ee/permissions.ts',
     'src/agent-builder/ee/index.ts',
+    'src/agent-builder/ee/allowlist.ts',
     'src/storage/domains/agents/index.ts',
     'src/storage/domains/mcp-clients/index.ts',
     'src/storage/domains/mcp-servers/index.ts',

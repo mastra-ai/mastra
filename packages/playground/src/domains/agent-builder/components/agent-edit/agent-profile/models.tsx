@@ -1,4 +1,4 @@
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
+import { isModelAllowed } from '@mastra/core/agent-builder/ee/allowlist';
 import { Checkbox, Skeleton, Txt, cn } from '@mastra/playground-ui';
 import { LockIcon, TriangleAlertIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';

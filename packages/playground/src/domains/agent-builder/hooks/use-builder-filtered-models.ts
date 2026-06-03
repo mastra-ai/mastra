@@ -1,5 +1,5 @@
 import type { BuilderModelPolicy, Provider } from '@mastra/client-js';
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
+import { isModelAllowed } from '@mastra/core/agent-builder/ee/allowlist';
 import { useMemo } from 'react';
 import type { ModelInfo } from '../../llm/hooks/use-filtered-models';
 
