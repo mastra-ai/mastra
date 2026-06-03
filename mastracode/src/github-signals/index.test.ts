@@ -903,12 +903,22 @@ describe('GithubSignals', () => {
         contentHash: 'sync-now-hash',
       })),
     };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
     const processor = new GithubSignals({ threadStore, syncClient });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
 
     await expect(processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(1);
 
     expect(syncClient.syncPullRequest).toHaveBeenCalledWith(
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123 }),
+    );
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'github',
+        kind: 'pull-request-activity',
+        summary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
+      }),
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions[0]).toMatchObject({
