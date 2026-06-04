@@ -1054,8 +1054,8 @@ export class AgentThreadStreamRuntime {
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
     pubsub?: PubSub,
-  ): SendAgentMessageResult {
-    return this.sendSignal(agent, createMessageSignal(message, { acceptedAt: new Date() }), target, pubsub);
+  ): SendAgentMessageResult<OUTPUT> {
+    return this.sendSignal<OUTPUT>(agent, createMessageSignal(message, { acceptedAt: new Date() }), target, pubsub);
   }
 
   queueMessage<OUTPUT = unknown>(
@@ -1063,7 +1063,7 @@ export class AgentThreadStreamRuntime {
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
     pubsub?: PubSub,
-  ): QueueAgentMessageResult {
+  ): QueueAgentMessageResult<OUTPUT> {
     const state = this.#getState(pubsub);
     const signal = createMessageSignal(message, { acceptedAt: new Date() });
     let key: string | undefined;
@@ -1106,7 +1106,7 @@ export class AgentThreadStreamRuntime {
       return { accepted: true, runId: queuedRunId, signal };
     }
 
-    return this.sendSignal(
+    return this.sendSignal<OUTPUT>(
       agent,
       signal,
       { ...target, runId, resourceId, threadId, ifIdle: { ...target.ifIdle, behavior: 'wake' } },
@@ -1119,7 +1119,7 @@ export class AgentThreadStreamRuntime {
     stateInput: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
     pubsub?: PubSub,
-  ): Promise<SendAgentStateSignalResult> {
+  ): Promise<SendAgentStateSignalResult<OUTPUT>> {
     if (!target.resourceId || !target.threadId) {
       throw new Error('resourceId and threadId are required to send a state signal');
     }
@@ -1161,7 +1161,7 @@ export class AgentThreadStreamRuntime {
       return { accepted: true, skipped: true, reason: 'unchanged' };
     }
 
-    return this.sendSignal(agent, applied.signal, target, pubsub);
+    return this.sendSignal<OUTPUT>(agent, applied.signal, target, pubsub);
   }
 
   /**
@@ -1181,7 +1181,7 @@ export class AgentThreadStreamRuntime {
     signalInput: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
     pubsub?: PubSub,
-  ): SendAgentSignalResult {
+  ): SendAgentSignalResult<OUTPUT> {
     const state = this.#getState(pubsub);
     let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
@@ -1320,21 +1320,26 @@ export class AgentThreadStreamRuntime {
     // the idle stream so concurrent callers do not launch duplicate runs.
     state.activeThreadRunIds.set(key, runId);
     state.threadKeysByRunId.set(runId, key);
-    void agent
+    const ownerStream = agent
       .stream(signal, {
         ...(target.ifIdle?.streamOptions as any),
         runId,
         memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
       })
-      .catch(() => {
+      .catch(error => {
         state.threadKeysByRunId.delete(runId);
         this.#cleanupPreparedRun(state, runId);
         if (state.activeThreadRunIds.get(key) === runId) {
           state.activeThreadRunIds.delete(key);
         }
+        throw error;
       });
+    // Always attach a no-op catch to the promise we keep internally so an unawaited
+    // ownerStream cannot surface as an unhandled rejection. Callers that opt in to
+    // `ownerStream` will see the rejection via their own await/catch.
+    void ownerStream.catch(() => {});
 
-    return { accepted: true, runId, signal };
+    return { accepted: true, runId, signal, ownerStream: ownerStream as Promise<MastraModelOutput<OUTPUT>> };
   }
 }
 

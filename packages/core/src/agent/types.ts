@@ -152,12 +152,24 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface SendAgentSignalResult {
+export interface SendAgentSignalResult<OUTPUT = unknown> {
   accepted: true;
   runId: string;
   signal: CreatedAgentSignal;
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
+  /**
+   * Present only when this call woke a new run (idle → wake path). The promise resolves
+   * with the `MastraModelOutput` for the newly-started run so the caller can drive it to
+   * completion. In serverless environments, awaiting this keeps the function alive long
+   * enough for the run (and any stream processors attached to it) to finish.
+   *
+   * When the signal is delivered to an already-running stream, joins a remote run, is
+   * persisted, queued, or otherwise does not start a new stream, this field is `undefined`.
+   *
+   * @experimental
+   */
+  ownerStream?: Promise<MastraModelOutput<OUTPUT>>;
 }
 
 /**
@@ -168,7 +180,7 @@ export type SendAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<O
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export type SendAgentMessageResult = SendAgentSignalResult;
+export type SendAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
@@ -178,7 +190,7 @@ export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export type QueueAgentMessageResult = SendAgentSignalResult;
+export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
 /**
  * @experimental Agent state signal APIs are experimental and may change in a future release.
@@ -188,8 +200,8 @@ export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptio
 /**
  * @experimental Agent state signal APIs are experimental and may change in a future release.
  */
-export type SendAgentStateSignalResult =
-  | (SendAgentSignalResult & { skipped?: false })
+export type SendAgentStateSignalResult<OUTPUT = unknown> =
+  | (SendAgentSignalResult<OUTPUT> & { skipped?: false })
   | { accepted: true; skipped: true; reason: 'unchanged'; runId?: string; signal?: undefined };
 
 /**
@@ -215,13 +227,20 @@ export type AgentNotificationConfig = {
 /**
  * @experimental Agent notification signal APIs are experimental and may change in a future release.
  */
-export type SendAgentNotificationSignalResult = {
+export type SendAgentNotificationSignalResult<OUTPUT = unknown> = {
   accepted: boolean;
   record: NotificationRecord;
   decision: NotificationDeliveryDecision;
   runId?: string;
   signal?: CreatedAgentSignal;
   persisted?: Promise<void>;
+  /**
+   * Present only when the notification's underlying signal woke a new run.
+   * See {@link SendAgentSignalResult.ownerStream}.
+   *
+   * @experimental
+   */
+  ownerStream?: Promise<MastraModelOutput<OUTPUT>>;
 };
 
 export interface AgentThreadRun<OUTPUT = unknown> {
