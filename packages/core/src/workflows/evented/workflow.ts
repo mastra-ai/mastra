@@ -68,7 +68,7 @@ import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
-import { Workflow, Run, __registerEventedCreateWorkflow } from '../workflow';
+import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
@@ -1537,13 +1537,6 @@ export function createWorkflow<
     executionEngine,
   });
 }
-
-// Register this factory with the default `createWorkflow` so that workflows
-// declared with the default factory are auto-promoted to evented when they
-// declare a `schedule`. Done at module-load time; the registration slot is
-// initialized as `undefined` in `../workflow.ts` and is read lazily on user
-// call, so module evaluation order doesn't matter.
-__registerEventedCreateWorkflow(createWorkflow as Parameters<typeof __registerEventedCreateWorkflow>[0]);
 
 export class EventedWorkflow<
   TEngineType = EventedEngineType,

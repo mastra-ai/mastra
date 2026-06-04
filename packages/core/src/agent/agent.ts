@@ -41,6 +41,7 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig 
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
+import { Mastra as MastraClass } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -92,11 +93,12 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
+import { createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult, WorkflowRunState } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
-import { createWorkflow, createStep, isProcessor } from '../workflows/workflow';
+import { createStep, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
@@ -5840,10 +5842,6 @@ export class Agent<
     if (this.#ephemeralMastra) {
       return this.#ephemeralMastra;
     }
-    // Imported lazily: a static import of `../mastra` would pull the evented
-    // workflow engine into this module's init-time graph and form an ESM cycle
-    // with the base `Workflow` class. See `createEventedWorkflow`.
-    const { Mastra: MastraClass } = await import('../mastra');
     const ephemeral = new MastraClass({
       logger: false,
       storage: new InMemoryStore(),
@@ -6152,13 +6150,6 @@ export class Agent<
       normalizeToolPayloadTransformPolicy(
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
-
-    // The prepare-stream workflow runs on the evented engine, whose factory is
-    // registered when the evented module loads. Load it dynamically — a static
-    // import would form an init-time cycle with the base `Workflow` class (see
-    // `createEventedWorkflow`). `import()` is cached, and this module is already
-    // loaded whenever a `Mastra` exists.
-    await import('../workflows/evented/workflow');
 
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({

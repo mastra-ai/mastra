@@ -6,7 +6,8 @@ import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../../loop/tes
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
-import { createStep, createWorkflow } from '../../workflows/workflow';
+import { createWorkflow } from '../../workflows/create';
+import { createStep } from '../../workflows/workflow';
 import { Agent } from '../agent';
 
 function createWorkflowCallingModel(toolName: string) {

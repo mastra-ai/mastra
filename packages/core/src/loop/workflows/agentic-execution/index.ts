@@ -1,6 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
-import { createEventedWorkflow as createWorkflow } from '../../../workflows/workflow';
+import { createEventedWorkflow as createWorkflow } from '../../../workflows/create';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
