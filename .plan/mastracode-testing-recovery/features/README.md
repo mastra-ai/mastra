@@ -37,6 +37,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Area | Feature | Origin | State owner | Tests | Risk | Page |
 | --- | --- | --- | --- | --- | --- | --- |
 | Setup | Installation and launch | #13294 | package metadata + startup runtime | Missing | Medium | [page](./setup/installation-and-launch.md) |
+| Settings | Onboarding and global settings | #13421, #13431 | settings.json + thread settings | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | TUI | Interactive chat | #13218, #13350, #13413 | TUI + harness session | Partial | High | [page](./tui/interactive-chat.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376 | Harness request context + instruction files | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345 | TUI transient queue state | Partial | High | [page](./chat/queued-followups.md) |

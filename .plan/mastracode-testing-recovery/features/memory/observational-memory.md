@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — dynamic memory configuration, configurable thresholds, observational memory support.
-- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards.
+- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added setup/global settings OM pack defaults.
 
 ## User-visible behavior
 
@@ -13,8 +13,8 @@
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `/om` opens observer/reflector model and threshold settings.
-- Automatic triggers: memory factory attaches observational memory to agent runs; OM events render progress/output.
+- Commands / shortcuts / flags: `/om` opens observer/reflector model and threshold settings; `/setup` chooses the default OM pack.
+- Automatic triggers: memory factory attaches observational memory to agent runs; startup resolves global OM settings; OM events render progress/output.
 
 ## TUI states
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Observations/reflections | Memory storage + vector store when present | Agent memory retrieval |
-| Observer/reflector models | Harness state + thread settings + settings | OM model functions, `/om`, `om_model_changed` subscribers |
+| Observer/reflector models | Harness state + thread settings + settings | OM model functions, `/setup`, `/om`, `om_model_changed` subscribers |
 | Thresholds | Harness state + thread settings + settings | Memory factory, `/om` |
 | OM UI progress | Harness display state + transient TUI components | Chat/status rendering |
 | OM scope | Project/resource settings via `getOmScope()` | Memory factory |
@@ -65,6 +65,7 @@
 
 - [Interactive TUI chat](../tui/interactive-chat.md) — OM markers render around chat streaming.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — OM uses separate observer/reflector models.
+- [Onboarding and global settings](../settings/onboarding-and-global-settings.md) — first-run setup selects default OM pack/model.
 - [Persistent conversations](../threads/persistent-conversations.md) — OM scope/reload depends on resource/thread context.
 
 ## Existing tests

@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13376 (row 40) have been processed, with #13037, #13251, #13252, #13257, and #13260 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13421 (`27644fbf25`, interactive onboarding/global settings), then #13431 (`bb82abe5e9`, Codex default model change).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13431 (row 42) have been processed, with #13037, #13251, #13252, #13257, and #13260 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13422 (`d1abce8a51`, ASCII art banner), then #13428 (`6f927b2103`, read_file view rendering).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 41: PR #13421 (interactive onboarding/global settings), then row 42: PR #13431 (Codex default model change).
+1. Continue at `_pr-queue.md` row 43: PR #13422 (ASCII art banner), then row 44: PR #13428 (read_file view rendering).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -95,3 +95,5 @@ None known.
 - `gh pr view 13385 --json number,title,body,author,mergedAt,url,files,commits`, current `packages/core/src/workspace/lsp/language.ts`, `manager.ts`, `tools/lsp-inspect.ts`, and legacy `mastracode/src/lsp/language.ts` verified TS/JS LSP language IDs are mapped, not raw extensions. Updated the tools card.
 - `gh pr view 13384 --json number,title,body,author,mergedAt,url,files,commits`, original `file-view.ts` / `file-editor.ts` diff, current core `list-files.ts`, `tree-formatter.ts`, and `list-files.test.ts` verified hidden files are excluded by default and shown only with `showHidden`. Updated the tools card.
 - `gh pr view 13376 --json number,title,body,author,mergedAt,url,files,commits`, current `instructions.ts`, `prompts/index.ts`, `prompts/base.ts`, and prompt/model-state tests verified model-aware `Co-Authored-By` guidance. Created the commit-attribution feature card.
+- `gh pr view 13421 --json number,title,body,author,mergedAt,url,files,commits`, current onboarding/settings/model-pack source, and onboarding/model-pack tests verified first-run setup, settings persistence, and pack resolution. Created the onboarding/global settings feature card.
+- `gh pr view 13431 --json number,title,body,author,mergedAt,url,files,commits`, current `auth/storage.ts`, `onboarding/packs.ts`, and `packs.test.ts` verified the Codex default change has since drifted; current OpenAI pack/login default is `openai/gpt-5.5`.

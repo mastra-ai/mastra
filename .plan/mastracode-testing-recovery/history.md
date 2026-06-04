@@ -434,3 +434,19 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13384 done, #13376 done, #13421 current, #13431 next.
 
 Next queue checkpoint: PR #13421 (interactive onboarding/global settings), then PR #13431 (Codex default model change).
+
+
+### Feature map PR #13421 and #13431
+
+Processed PR [#13421](https://github.com/mastra-ai/mastra/pull/13421), `27644fbf25` (`feat(mastracode): add interactive onboarding flow and global settings (#13421)`). Verified current source adds first-run `/setup` onboarding through `OnboardingInlineComponent`, provider-filtered mode/OM packs, global `settings.json`, `/models` pack switching/import/edit/share helpers, startup `resolveModelDefaults()` / `resolveOmRoleModel()` plumbing, and live `applyOnboardingResult()` writes to harness state, thread settings, subagent model IDs, and saved settings.
+
+Processed PR [#13431](https://github.com/mastra-ai/mastra/pull/13431), `bb82abe5e9` (`fix(mastracode): default codex model from 5.3 to 5.2 (#13431)`). Verified current source no longer matches that temporary default: `PROVIDER_DEFAULT_MODELS['openai-codex']` and `getAvailableModePacks()` now use `openai/gpt-5.5` for OpenAI plan/build, and `packs.test.ts` asserts the current value.
+
+Documentation actions:
+
+- Created `features/settings/onboarding-and-global-settings.md` for first-run setup, persisted settings, mode packs, OM packs, and YOLO/quiet preference state ownership.
+- Updated `features/models/model-auth-and-modes.md` with #13421 pack/settings ownership and #13431 current-default drift.
+- Updated `features/memory/observational-memory.md` with #13421 OM pack defaults.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13421 done, #13431 done, #13422 current, #13428 next.
+
+Next queue checkpoint: PR #13422 (ASCII art banner), then PR #13428 (read_file view rendering).
