@@ -1,4 +1,4 @@
-import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
+import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { ZodError } from 'zod/v4';
@@ -8,6 +8,7 @@ import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
+import type { AuthenticateTokenFn } from './request-types';
 
 type RouteFGAConfig = FGARouteConfig;
 
@@ -67,7 +68,7 @@ export type MastraAuthConfig<TUser = unknown> = {
   /**
    * Public paths for the server
    */
-  authenticateToken?: (token: string, request: HonoRequest) => Promise<TUser>;
+  authenticateToken?: AuthenticateTokenFn<TUser, Promise<TUser>>;
 
   /**
    * Maps the authenticated user to a resource ID for memory/thread scoping.

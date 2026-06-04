@@ -171,11 +171,9 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       throw new Error(`Mode not found: ${modeId}`);
     }
 
-    if (!this.#session) {
-      throw new Error('No active session to switch mode');
+    if (this.#session) {
+      this.#session.setMode(mode);
     }
-
-    this.#session.setMode(mode);
 
     await super.switchMode({ modeId });
   }

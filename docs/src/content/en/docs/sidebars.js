@@ -174,14 +174,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/response-caching',
-          label: 'Response Caching',
-          customProps: {
-            tags: ['alpha'],
-          },
-        },
-        {
-          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
           customProps: {

@@ -1,12 +1,12 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { createContext, useContext } from 'react';
-import type { ChatMessage } from '../components/chat-primitives/messages';
 
 export interface RunningContextValue {
   isRunning: boolean;
 }
 
 export interface MessagesContextValue {
-  messages: ChatMessage[];
+  messages: MastraDBMessage[];
 }
 
 export interface SendContextValue {
@@ -27,7 +27,7 @@ export const StreamApprovalContext = createContext<ApprovalContextValue>({
 });
 
 export const useStreamRunning = (): boolean => useContext(StreamRunningContext).isRunning;
-export const useStreamMessages = (): ChatMessage[] => useContext(StreamMessagesContext).messages;
+export const useStreamMessages = (): MastraDBMessage[] => useContext(StreamMessagesContext).messages;
 export const useStreamSend = (): ((message: string) => void) => useContext(StreamSendContext).send;
 export const useStreamApproval = (): ApprovalContextValue => useContext(StreamApprovalContext);
 
@@ -45,8 +45,7 @@ export const useStreamRetry = (): (() => void) | null => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role !== 'user') continue;
-      const parts = 'content' in message ? message.content.parts : message.parts;
-      const textPart = parts.find(part => part.type === 'text');
+      const textPart = message.content.parts.find(part => part.type === 'text');
       if (textPart && 'text' in textPart && textPart.text) return textPart.text;
     }
     return null;

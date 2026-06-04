@@ -108,6 +108,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
@@ -146,6 +147,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
@@ -241,8 +243,10 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "approved",
       "format",
+      "messages",
       "requestContext",
       "resourceId",
+      "streamOptions",
       "threadId",
       "toolCallId"
     ],
@@ -3069,6 +3073,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
@@ -3226,6 +3231,21 @@ export const API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "GET /stored/agents/:storedAgentId/dependents": {
+    "method": "GET",
+    "path": "/stored/agents/:storedAgentId/dependents",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "dependents"
     }
   },
   "POST /stored/agents/:storedAgentId/export": {

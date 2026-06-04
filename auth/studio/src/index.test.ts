@@ -6,21 +6,12 @@ import type { StudioUser } from './index';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Creates a mock request object that supports both the standard `Request` API
- * (used by getCurrentUser, getLogoutUrl, getSessionIdFromRequest) and the
- * Hono-style `.header(name)` API (used by authenticateToken).
- */
-function mockRequest(opts: { cookie?: string; authorization?: string } = {}): any {
+function mockRequest(opts: { cookie?: string; authorization?: string } = {}) {
   const headers = new Headers();
   if (opts.cookie) headers.set('Cookie', opts.cookie);
   if (opts.authorization) headers.set('Authorization', opts.authorization);
 
-  const req = new Request('http://localhost/test', { headers });
-  // Hono's HonoRequest exposes .header(name) — the actual request object
-  // passed to authenticateToken is a Hono request, not a plain Request.
-  (req as any).header = (name: string) => headers.get(name);
-  return req;
+  return new Request('http://localhost/test', { headers });
 }
 
 const SHARED_API = 'http://localhost:3010/v1';
