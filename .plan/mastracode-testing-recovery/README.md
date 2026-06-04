@@ -13,6 +13,7 @@ Use this branch as the planning base. Keep the plan files here so the work stays
 For implementation work:
 - Branch off this planning branch for each focused workstream or PR.
 - Make small stacked PRs where possible.
+- Commit and push in small, coherent chunks so progress is recoverable and reviewable.
 - When a PR is ready to merge, change its base to `main` and rebase/cherry-pick only the implementation commits onto `main`.
 - Leave planning-only commits behind on this branch unless the plan docs themselves are the PR.
 - Keep appending progress to [`history.md`](./history.md) so later agents can pick up context quickly.

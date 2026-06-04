@@ -30,9 +30,9 @@ We also checked a pre-Harness v1 baseline in a detached worktree at:
 Result: the existing test suite did not catch a convincing Harness v1 regression. The scariest headless abort timeout already failed before Harness v1, and several other failures were test/env noise.
 
 Comparison docs:
-- `.architecture-review/test-audits/mastracode-test-failures-HEAD.md`
-- `.architecture-review/test-audits/mastracode-test-failures-pre-harness-v1.md`
-- `.architecture-review/test-audits/mastracode-test-failures-pre-harness-v1-vs-HEAD.md`
+- `explorations/mastracode-testing-recovery/architecture-review/test-audits/mastracode-test-failures-HEAD.md`
+- `explorations/mastracode-testing-recovery/architecture-review/test-audits/mastracode-test-failures-pre-harness-v1.md`
+- `explorations/mastracode-testing-recovery/architecture-review/test-audits/mastracode-test-failures-pre-harness-v1-vs-HEAD.md`
 
 ### Decisions
 
@@ -56,3 +56,13 @@ Implementation should happen on branches off this branch, preferably as focused 
 1. Agree on the detailed approach for workstream 1: stabilizing the existing test baseline.
 2. Create the first branch page only after that approach is agreed.
 3. Then branch from this planning branch for the first implementation PR.
+
+## 2026-06-04
+
+### AIMock exploration
+
+Researched `@copilotkit/aimock@1.28.0` as a candidate mocked-model endpoint for workstream 4. Wrote findings to:
+
+- `explorations/mastracode-testing-recovery/aimock-exploration.md`
+
+Bottom line: AIMock looks promising for a first real MC harness spike if we route MC through an OpenAI-compatible/custom-provider path. It should not be treated as proven for Claude Max/Codex OAuth paths until a spike verifies base URL routing.

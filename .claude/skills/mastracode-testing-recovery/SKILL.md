@@ -38,6 +38,7 @@ Treat `handoff.md` as the pickup point, not as truth. It should tell you what is
 - Planning/doc updates can be committed directly here.
 - For implementation work, create a focused branch from this planning branch.
 - Stack related PRs when useful, but keep each PR independently reviewable.
+- Commit and push in small, coherent chunks so progress is recoverable and reviewable.
 - When an implementation PR is ready to merge, change its base to `main` and rebase/cherry-pick only the implementation commits onto `main`.
 - Do not drag planning-only commits or `.plan/` churn into product/code PRs unless the PR is specifically for planning docs.
 - Record the branch/PR state in `handoff.md` before signing off.

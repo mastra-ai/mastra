@@ -106,13 +106,13 @@ Raw log:
 Current HEAD audit file:
 
 ```text
-.architecture-review/test-audits/mastracode-test-failures-HEAD.md
+explorations/mastracode-testing-recovery/architecture-review/test-audits/mastracode-test-failures-HEAD.md
 ```
 
 Pre-Harness baseline:
 
 ```text
-.architecture-review/test-audits/mastracode-test-failures-pre-harness-v1.md
+explorations/mastracode-testing-recovery/architecture-review/test-audits/mastracode-test-failures-pre-harness-v1.md
 ```
 
 Key comparison:

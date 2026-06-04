@@ -8,8 +8,8 @@ The failures that look most Harness-adjacent are either pre-existing (`headless-
 
 ## Sources
 
-- Pre-Harness v1 audit: `.architecture-review/test-audits/mastracode-test-failures-pre-harness-v1.md`
-- HEAD audit: `.architecture-review/test-audits/mastracode-test-failures-HEAD.md`
+- Pre-Harness v1 audit: `explorations/mastracode-testing-recovery/architecture-review/test-audits/mastracode-test-failures-pre-harness-v1.md`
+- HEAD audit: `explorations/mastracode-testing-recovery/architecture-review/test-audits/mastracode-test-failures-HEAD.md`
 - Pre-Harness raw log: `/tmp/mastracode-vitest-pre-harness.log`
 - HEAD raw log: `/tmp/mastracode-vitest-postbuild.log`
 

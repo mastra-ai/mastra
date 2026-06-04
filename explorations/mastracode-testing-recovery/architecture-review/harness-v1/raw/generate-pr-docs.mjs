@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const root = '.architecture-review/harness-v1';
+const root = 'explorations/mastracode-testing-recovery/architecture-review/harness-v1';
 const raw = path.join(root, 'raw');
 const out = path.join(root, 'prs');
 fs.mkdirSync(out, { recursive: true });
