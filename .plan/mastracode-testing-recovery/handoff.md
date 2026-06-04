@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13328 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13335 (`7f317fc5e4`, `fix(tui): preserve assistant message text across todo_write tool calls (#13335)`), then #13307 (`12e4819fe2`, `fix(mastracode): reload auth storage before resolving OpenAI Codex model (#13307)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13307 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13334 (`24b80af87d`, `feat(harness): add optional threadLock config for concurrent thread access protection (#13334)`), then #13339 (`b322502d4a`, `feat(mastracode): add subagent parallel-only and verification guidance (#13339)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 19: PR #13335 (preserve assistant text across task tool calls), then row 20: PR #13307 (reload auth storage for OpenAI Codex model resolution).
+1. Continue at `_pr-queue.md` row 21: PR #13334 (optional thread lock config), then row 22: PR #13339 (subagent parallel-only and verification guidance).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -67,4 +67,6 @@ None known.
 - `gh pr view 13330 --json number,title,body,author,mergedAt,url,files,commits`, current `/om` callbacks, and core harness OM event tests verified streamed OM lifecycle/model-change event behavior. Updated the memory card.
 - `gh pr view 13331 --json number,title,body,author,mergedAt,url,files,commits`, current `audit-tests.ts`, `index.ts`, and prompt guidance verified intended audit-tests behavior plus current registration gap. Created the audit-tests card.
 - `gh pr view 13328 --json number,title,body,author,mergedAt,url,files,commits`, current core harness display-state code/tests, TUI tool handlers, and history renderer verified streaming tool arguments. Created the streaming-tool-arguments card.
+- `gh pr view 13335 --json number,title,body,author,mergedAt,url,files,commits` plus current `mastracode/src/tui/handlers/tool.ts` verified task-tool input streaming preserves pre-tool assistant text. Updated the streaming-tool-arguments card.
+- `gh pr view 13307 --json number,title,body,author,mergedAt,url,files,commits` plus current `mastracode/src/agents/model.ts` and `model.test.ts` verified AuthStorage reload before model resolution. Updated the model auth card.
 - Current batch is doc-only; no product tests were run.

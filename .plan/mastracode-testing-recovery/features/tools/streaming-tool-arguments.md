@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments incrementally across tool renderers.
-- Later changes: Unknown — continue PR queue verification.
+- Later changes: [#13335](https://github.com/mastra-ai/mastra/pull/13335) — preserved assistant message text before task/todo tool calls by splitting the streaming assistant component.
 
 ## User-visible behavior
 
 - What the user sees: tool boxes can appear before the final tool call is available, then fill in argument previews as the model streams JSON.
-- Special cases: `ask_user`, `submit_plan`, and `task_write` update their dedicated inline/pinned components from partial args.
-- Must preserve: no duplicate tool boxes, final args replace partial args, history reload renders stable final args only.
+- Special cases: `ask_user`, `submit_plan`, and task mutation tools update dedicated inline/pinned components from partial args.
+- Must preserve: no duplicate tool boxes, final args replace partial args, pre-tool assistant text stays visible, history reload renders stable final args only.
 
 ## Entry points / commands
 
@@ -45,6 +45,7 @@
 | Parsed partial args | TUI `handleToolInputDelta()` | Tool/ask/plan/task components |
 | Final args | `tool_start` / stored `tool_call.args` | TUI live and history renderers |
 | Pending tool components | TUI state `pendingTools` | Tool handlers/renderers |
+| Assistant message split | TUI `streamingComponent` | Preserves text before and after tool calls |
 
 ## Key files
 
@@ -54,6 +55,7 @@
 - `mastracode/src/tui/handlers/tool.ts` — creates early components and parses partial JSON.
 - `mastracode/src/tui/components/tool-execution-enhanced.ts` — renders and updates argument previews.
 - `mastracode/src/tui/render-messages.ts` — reload/history rendering from final tool calls.
+- `mastracode/src/tui/components/task-progress.ts` — pinned task progress projection for task mutation tools.
 
 ## Dependencies / related features
 
@@ -66,11 +68,13 @@
 - `packages/core/src/harness/display-state.test.ts` covers `tool_input_start/delta/end` buffers and streaming-input status.
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` covers preview updates from partial args.
 - `mastracode/src/tui/components/__tests__/ask-question-inline-long-labels.test.ts` covers streaming inline question args.
+- `mastracode/src/tui/components/__tests__/task-progress.test.ts` covers pinned task progress rendering.
 
 ## Missing tests
 
 - TUI handler test for `handleToolInputDelta()` parsing partial JSON into `pendingTools`.
 - End-to-end TUI test covering live partial args then final `tool_start` replacement.
+- Regression test for pre-tool assistant text surviving task mutation tool input streaming.
 - History reload test proving partial args are not replayed and final args render correctly.
 
 ## Known risks / regressions

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — OAuth/API-key providers, model selection, and Build/Plan/Fast modes.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — runtime model selection from request context and gateway heartbeat sync; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved mode/model runtime ownership onto core Harness sessions.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — runtime model selection from request context and gateway heartbeat sync; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved mode/model runtime ownership onto core Harness sessions; [#13307](https://github.com/mastra-ai/mastra/pull/13307) — reloads AuthStorage before model resolution to avoid stale OpenAI Codex credentials.
 
 ## User-visible behavior
 
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | Current model ID | Harness session + persisted thread/session metadata | Runtime, footer, prompt context |
 | Current mode ID | Harness session | Runtime, footer, prompt mode section |
-| Provider credentials | AuthStorage/settings/env | Model resolver, auth prompts |
+| Provider credentials | AuthStorage/settings/env, reloaded by `resolveModel()` | Model resolver, auth prompts |
 | Model packs | Settings + thread active pack metadata | `/models`, session defaults |
 | Thinking level | Harness/settings | Model provider options, prompt context |
 
@@ -62,7 +62,7 @@
 
 ## Existing tests
 
-- `mastracode/src/agents/__tests__/model.test.ts` — provider/model resolution.
+- `mastracode/src/agents/__tests__/model.test.ts` — provider/model resolution and generic `authStorage.reload()` assertion.
 - `mastracode/src/__tests__/codex-model-routing.test.ts` — Codex routing.
 - `mastracode/src/tui/commands/__tests__/models-pack.test.ts` — model packs.
 - `mastracode/src/tui/commands/__tests__/mode.test.ts` — mode switching.
@@ -73,6 +73,7 @@
 - Select model pack → restart TUI → footer/runtime/prompt model agree.
 - Thread switch preserves per-thread model without overwriting defaults.
 - Headless `--model` precedence over `--mode` after Harness v1 migration.
+- OpenAI Codex-specific stale credential regression test after login/auth file update.
 
 ## Known risks / regressions
 

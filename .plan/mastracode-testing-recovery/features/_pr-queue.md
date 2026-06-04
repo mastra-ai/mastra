@@ -38,10 +38,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 16 | 2026-02-20 | #13330 | `608e156def` | review | done | fix: restore OM status updates and model change events in harness (#13330) | 1 |
 | 17 | 2026-02-20 | #13331 | `3ea22d7703` | review | done | feat(mastracode): add audit-tests subagent (#13331) | 3 |
 | 18 | 2026-02-20 | #13328 | `45bb78b70b` | review | done | feat: stream tool arguments incrementally across all tool renderers (#13328) | 3 |
-| 19 | 2026-02-20 | #13335 | `7f317fc5e4` | review | current | fix(tui): preserve assistant message text across todo_write tool calls (#13335) | 1 |
-| 20 | 2026-02-20 | #13307 | `12e4819fe2` | review | next | fix(mastracode): reload auth storage before resolving OpenAI Codex model (#13307) | 1 |
-| 21 | 2026-02-20 | #13334 | `24b80af87d` | review | | feat(harness): add optional threadLock config for concurrent thread access protection (#13334) | 1 |
-| 22 | 2026-02-20 | #13339 | `b322502d4a` | review | | feat(mastracode): add subagent parallel-only and verification guidance (#13339) | 2 |
+| 19 | 2026-02-20 | #13335 | `7f317fc5e4` | review | done | fix(tui): preserve assistant message text across todo_write tool calls (#13335) | 1 |
+| 20 | 2026-02-20 | #13307 | `12e4819fe2` | review | done | fix(mastracode): reload auth storage before resolving OpenAI Codex model (#13307) | 1 |
+| 21 | 2026-02-20 | #13334 | `24b80af87d` | review | current | feat(harness): add optional threadLock config for concurrent thread access protection (#13334) | 1 |
+| 22 | 2026-02-20 | #13339 | `b322502d4a` | review | next | feat(mastracode): add subagent parallel-only and verification guidance (#13339) | 2 |
 | 23 | 2026-02-20 | #13343 | `2b2e157a09` | review | | fix: scope thread auto resume to current directory to make worktrees easier to use (#13343) | 1 |
 | 24 | 2026-02-20 | #13344 | `c204b632d1` | review | | refactor: move todo tools to @mastra/core/harness and rename to task (#13344) | 18 |
 | 25 | 2026-02-20 | #13345 | `7aedfb7ff9` | review | | feat(tui): resolve autocomplete and queue slash commands on Ctrl+F (#13345) | 2 |
