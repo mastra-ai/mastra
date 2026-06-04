@@ -924,3 +924,24 @@ Verification:
 - Focused MC tests passed: `pnpm --filter ./mastracode exec vitest run src/tools/__tests__/get-allowed-paths.test.ts src/agents/__tests__/build-skill-paths.test.ts src/agents/__tests__/workspace-skill-activation.test.ts --reporter=dot --bail 1` (3 files / 17 tests).
 
 Next queue checkpoint: PR #13713 (dynamic extraTools functions), then PR #13712 (Ctrl+V clipboard paste).
+
+
+### Feature map batch: dynamic extraTools functions and clipboard paste
+
+Processed PR [#13713](https://github.com/mastra-ai/mastra/pull/13713), `d7ed2bb64e` (`feat(mastracode): support dynamic extraTools functions`). Verified current `createDynamicTools()` accepts either a static extra-tools record or a function that receives `{ requestContext }`, resolves the tools per request, then applies the existing no-overwrite guard plus disabled/denied filtering.
+
+Processed PR [#13712](https://github.com/mastra-ai/mastra/pull/13712), `d365d2926b` (`feat(cli): Add clipboard image and text paste support via Ctrl+V`). Verified `CustomEditor` maps Ctrl+V / Alt+V to explicit clipboard paste: image clipboard data calls `onImagePaste` when present; text clipboard data is wrapped in bracketed-paste markers and sent through the existing paste pipeline. Also verified bracketed paste still handles empty image pastes, local image paths/file URLs, and remote image URLs. Current source did not show a production `onImagePaste` assignment, so the feature map records that as an integration gap.
+
+Documentation actions:
+
+- Created `features/tui/clipboard-paste.md` for editor clipboard text/image paste behavior and platform helper risks.
+- Updated `features/tools/coding-tools-permissions.md` with request-context-aware extraTools function behavior.
+- Updated `features/tui/interactive-chat.md`, `features/tui/help-and-shortcuts.md`, and `features/chat/file-attachments.md` with Ctrl+V/Alt+V and attachment-pipeline links.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13713 done, #13712 done, #13716 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/agents/tools.ts`, `mastracode/src/agents/extra-tools.test.ts`, `mastracode/src/clipboard/index.ts`, `mastracode/src/clipboard/__tests__/index.test.ts`, `mastracode/src/tui/components/custom-editor.ts`, `mastracode/src/tui/components/__tests__/custom-editor.test.ts`, and related feature-map pages.
+- Focused MC tests passed: `pnpm --filter ./mastracode exec vitest run src/agents/extra-tools.test.ts src/clipboard/__tests__/index.test.ts src/tui/components/__tests__/custom-editor.test.ts --reporter=dot --bail 1` (3 files / 38 tests).
+
+Next queue checkpoint: PR #13716 (export `resolveModel`), then PR #13603 (auto-update prompt on session start).

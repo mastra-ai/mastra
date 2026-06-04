@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — initial TUI chat, streaming render, keyboard input, tool render, harness event dispatch.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior; [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added the responsive startup banner above the chat layout; [#13426](https://github.com/mastra-ai/mastra/pull/13426) — simplified the startup command hint and `/help` reference; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added core `HarnessDisplayState` and centralized status-line refresh through `display_state_changed`; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes and abbreviates Git branch status in the footer; [#13460](https://github.com/mastra-ai/mastra/pull/13460) — wires `fd`/`fdfind` into editor file autocomplete; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — runs prompt-submit and stop hooks in the TUI lifecycle; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — applies terminal theme detection and contrast-aware colors across the TUI; [#13556](https://github.com/mastra-ai/mastra/pull/13556) — adds Quiet mode projection for compact output; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — preserves existing assistant text when tool-result-only chunks produce an empty trailing segment; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — keeps console warn/error noise out of the TUI unless `MASTRA_DEBUG` is enabled.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior; [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added the responsive startup banner above the chat layout; [#13426](https://github.com/mastra-ai/mastra/pull/13426) — simplified the startup command hint and `/help` reference; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added core `HarnessDisplayState` and centralized status-line refresh through `display_state_changed`; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes and abbreviates Git branch status in the footer; [#13460](https://github.com/mastra-ai/mastra/pull/13460) — wires `fd`/`fdfind` into editor file autocomplete; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — runs prompt-submit and stop hooks in the TUI lifecycle; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — applies terminal theme detection and contrast-aware colors across the TUI; [#13556](https://github.com/mastra-ai/mastra/pull/13556) — adds Quiet mode projection for compact output; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — preserves existing assistant text when tool-result-only chunks produce an empty trailing segment; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — keeps console warn/error noise out of the TUI unless `MASTRA_DEBUG` is enabled; [#13712](https://github.com/mastra-ai/mastra/pull/13712) — adds explicit Ctrl+V / Alt+V clipboard paste handling in the editor.
 
 ## User-visible behavior
 
@@ -13,7 +13,7 @@
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `mastracode`, Enter, Ctrl+C/Escape, Ctrl+F, Ctrl+T, Ctrl+E.
+- Commands / shortcuts / flags: `mastracode`, Enter, Ctrl+C/Escape, Ctrl+F, Ctrl+T, Ctrl+E, Ctrl+V / Alt+V paste.
 - Public import path for consumers: `import { MastraTUI, createTUIState, type TUIState } from 'mastracode/tui'`.
 - Automatic triggers: startup render, harness event subscription, existing-message render.
 
@@ -47,6 +47,7 @@
 | Streaming components | TUI transient projection; trailing content after inline boundaries | Chat container |
 | Mutable TUI state | `TUIState` object from `createTUIState()` | Commands, extracted handlers, tests, TUI class |
 | Autocomplete provider | `setupAutocomplete()` | Editor slash, skill, custom command, and `@` file suggestions |
+| Clipboard paste projection | `CustomEditor` + OS clipboard helpers | Editor text insertion and image-paste callback |
 | Hook lifecycle | `HookManager` + TUI run/event loop | Prompt submit, stop/session hook execution |
 | Event routing | `event-dispatch.ts` + focused handlers | Tool/message/OM/thread/status renderers |
 | Abort state | Harness terminal event after TUI request | TUI cleanup |
@@ -72,6 +73,7 @@
 - [Startup banner](./startup-banner.md) — static header in the same TUI layout.
 - [Terminal theme and contrast](./terminal-theme.md) — global TUI color palette and detection.
 - [File autocomplete](./file-autocomplete.md) — editor `@` file suggestions share the autocomplete setup path.
+- [Clipboard paste](./clipboard-paste.md) — Ctrl+V / Alt+V and bracketed-paste handling live in the same editor.
 - [Help and shortcuts](./help-and-shortcuts.md) — compact startup hint and `/help` reference.
 - [Harness display state](../integrations/harness-display-state.md) — canonical active-display projection for status/tasks/tools/OM.
 - [Lifecycle hooks](../integrations/lifecycle-hooks.md) — prompt-submit and stop hooks run through this TUI loop.

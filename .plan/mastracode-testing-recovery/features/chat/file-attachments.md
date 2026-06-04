@@ -3,6 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13574](https://github.com/mastra-ai/mastra/pull/13574) — added Harness file attachment support with filename preservation and text-file handling.
+- Later changes: [#13712](https://github.com/mastra-ai/mastra/pull/13712) — added editor-level clipboard image/text paste helpers that feed the attachment pipeline when `onImagePaste` is wired.
 
 ## User-visible behavior
 
@@ -56,6 +57,7 @@
 ## Dependencies / related features
 
 - [Interactive chat](../tui/interactive-chat.md) — TUI submit path can attach pending files/images.
+- [Clipboard paste](../tui/clipboard-paste.md) — editor-level image paste can become pending image attachments.
 - [Prompt context and project instructions](./prompt-context.md) — attachments are part of per-run model input, not static prompt instructions.
 - [Observational memory](../memory/observational-memory.md) — observer input must avoid losing or duplicating attachment context.
 
@@ -70,6 +72,7 @@
 
 - Direct Harness test for `sendMessage({ content, files })` proving text files become fenced text and binary files retain `filename`/`mediaType` through the signal.
 - TUI attachment submit test proving pending images/files are cleared only after successful send and are preserved in history.
+- Integration test proving `CustomEditor.onImagePaste` is wired to pending attachments in the real TUI.
 - Loaded-history display test for user messages with attached files/images.
 
 ## Known risks / regressions

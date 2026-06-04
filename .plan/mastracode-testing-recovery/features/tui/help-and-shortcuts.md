@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13426](https://github.com/mastra-ai/mastra/pull/13426) — replaced the old verbose `/help` output with a compact command/shortcut reference.
-- Later changes: [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added `/theme` to the command surface/help list; [#13605](https://github.com/mastra-ai/mastra/pull/13605) — added `/report-issue` to the command surface/help list; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — added `/custom-providers` to the command surface/help list; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — lists `/resource` as resource switching help.
+- Later changes: [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added `/theme` to the command surface/help list; [#13605](https://github.com/mastra-ai/mastra/pull/13605) — added `/report-issue` to the command surface/help list; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — added `/custom-providers` to the command surface/help list; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — lists `/resource` as resource switching help; [#13712](https://github.com/mastra-ai/mastra/pull/13712) — adds Ctrl+V / Alt+V clipboard paste to the editor shortcut surface.
 
 ## User-visible behavior
 
@@ -13,7 +13,7 @@
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `/help`; startup hint line shows `/help info & shortcuts`.
+- Commands / shortcuts / flags: `/help`; startup hint line shows `/help info & shortcuts`; editor shortcuts include Ctrl+V / Alt+V paste in source even if help text does not currently enumerate it.
 - Automatic triggers: none; help text is built on demand from current harness modes, custom slash commands, and shell passthrough settings.
 
 ## TUI states
@@ -61,6 +61,7 @@
 - [Custom OpenAI-compatible providers](../models/custom-providers.md) — `/custom-providers` command is listed here.
 - [Resource ID switching](../threads/resource-id-switching.md) — `/resource` command is listed here.
 - [MCP server configuration](../integrations/mcp-server-configuration.md) — `/mcp` command is listed here.
+- [Clipboard paste](./clipboard-paste.md) — Ctrl+V / Alt+V behavior is part of the editor shortcut surface.
 - [Queued follow-ups and slash commands](../chat/queued-followups.md) — slash command dispatch executes `/help`.
 
 ## Existing tests

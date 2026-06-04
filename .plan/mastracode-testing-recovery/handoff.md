@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13710 (row 90) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13713 (`d7ed2bb64e`, dynamic extraTools functions), then #13712 (`d365d2926b`, Ctrl+V clipboard paste).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13712 (row 92) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13716 (`ee8de2adcf`, export `resolveModel`), then #13603 (`548da794ec`, auto-update prompt on session start).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 91: PR #13713 (dynamic extraTools functions), then row 92: PR #13712 (Ctrl+V clipboard paste).
+1. Continue at `_pr-queue.md` row 93: PR #13716 (export `resolveModel`), then row 94: PR #13603 (auto-update prompt on session start).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

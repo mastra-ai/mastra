@@ -110,9 +110,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 88 | 2026-03-03 | #13693 | `6e1b940177` | review | done | feat(mc): set workspace (#13693) | 1 |
 | 89 | 2026-03-03 | #13700 | `1c4221cf60` | review | done | fix: forward requestContext and skill paths to subagents (#13700) | 5 |
 | 90 | 2026-03-03 | #13710 | `bc2665ebf3` | review | done | chore(templates): README follow-ups (#13710) | 1 |
-| 91 | 2026-03-03 | #13713 | `d7ed2bb64e` | review | current | feat(mastracode): support dynamic extraTools functions (#13713) | 3 |
-| 92 | 2026-03-03 | #13712 | `d365d2926b` | review | | feat(cli): Add clipboard image and text paste support via Ctrl+V (#13712) | 2 |
-| 93 | 2026-03-03 | #13716 | `ee8de2adcf` | review | | feat(mastracode): export resolveModel from createMastraCode (#13716) | 1 |
+| 91 | 2026-03-03 | #13713 | `d7ed2bb64e` | review | done | feat(mastracode): support dynamic extraTools functions (#13713) | 3 |
+| 92 | 2026-03-03 | #13712 | `d365d2926b` | review | done | feat(cli): Add clipboard image and text paste support via Ctrl+V (#13712) | 2 |
+| 93 | 2026-03-03 | #13716 | `ee8de2adcf` | review | current | feat(mastracode): export resolveModel from createMastraCode (#13716) | 1 |
 | 94 | 2026-03-03 | #13603 | `548da794ec` | review | | feat(mastracode): auto-update prompt on session start (#13603) | 4 |
 | 95 | 2026-03-03 | #13696 | `6f2946f240` | review | | fix(mastracode): queue parallel interactive tool calls to prevent input corruption (#13696) | 4 |
 | 96 | 2026-03-03 | #13724 | `77b4a254e5` | review | | feat(workspace): gitignore support, lower tree depth, fix tool guidance (#13724) | 1 |
