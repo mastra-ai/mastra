@@ -39,6 +39,12 @@ export const GITHUB_UNSUBSCRIBE_PR_TAG = 'github-unsubscribe-pr';
 export const GITHUB_SYNC_STATUS_TAG = 'github-sync-status';
 export const GITHUB_SIGNALS_METADATA_KEY = 'githubSignals';
 
+export type GithubPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
+const DEFAULT_AUTHORIZED_PERMISSIONS: GithubPermission[] = ['admin', 'maintain', 'write'];
+
+/** Notification kinds driven by comment/review activity that should be gated by author permission. */
+const AUTHOR_GATED_NOTIFICATION_KINDS = new Set(['pull-request-activity', 'pull-request-review-activity']);
+
 export type GithubPRSubscription = {
   owner: string;
   repo: string;
@@ -142,6 +148,10 @@ export type GithubSignalsThreadStore = {
   saveThread(input: { thread: StorageThreadType }): Promise<StorageThreadType>;
 };
 
+export type GithubPermissionResolver = {
+  getPermission(owner: string, repo: string, user: string): Promise<GithubPermission | undefined>;
+};
+
 export type GithubSignalsOptions = {
   owner?: string;
   repo?: string;
@@ -154,6 +164,12 @@ export type GithubSignalsOptions = {
   repositoryResolver?: GithubRepositoryResolver;
   threadStore?: GithubSignalsThreadStore;
   getNotificationStreamOptions?: GithubSignalAgentOptions['getNotificationStreamOptions'];
+  /** Permissions that authorize a human commenter to trigger notifications (default: admin, maintain, write). */
+  authorizedPermissions?: GithubPermission[];
+  /** Bot logins whose comments should be ignored and NOT trigger notifications. */
+  ignoredBots?: string[];
+  /** Custom resolver for looking up collaborator permissions (default: gh api). */
+  permissionResolver?: GithubPermissionResolver;
 };
 
 export type GithubSubscriptionsChangedEvent = {
@@ -896,6 +912,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly #syncClient: GithubSignalsSyncClient;
   readonly #repositoryResolver: GithubRepositoryResolver;
   readonly #polling = new Map<string, GithubPollingState>();
+  readonly #permissionCache = new Map<string, GithubPermission | undefined>();
   #agent?: GithubSignalAgent;
   #agentOptions: GithubSignalAgentOptions = {};
   #subscriptionsChangedHandler?: GithubSubscriptionsChangedHandler;
@@ -1456,6 +1473,47 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     });
   }
 
+  async #isAuthorizedAuthor(owner: string, repo: string, user: string | undefined): Promise<boolean> {
+    if (!user) return false;
+    const isBot = user.toLowerCase().endsWith('[bot]');
+    if (isBot) {
+      const ignoredBots = this.#options.ignoredBots ?? [];
+      return !ignoredBots.some(bot => bot.toLowerCase() === user.toLowerCase());
+    }
+    const permission = await this.#loadAuthorPermission(owner, repo, user);
+    const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
+    return !!permission && authorizedPermissions.includes(permission);
+  }
+
+  async #loadAuthorPermission(owner: string, repo: string, user: string): Promise<GithubPermission | undefined> {
+    const cacheKey = `${owner}/${repo}:${user.toLowerCase()}`;
+    if (this.#permissionCache.has(cacheKey)) return this.#permissionCache.get(cacheKey);
+    try {
+      let permission: GithubPermission | undefined;
+      if (this.#options.permissionResolver) {
+        permission = await this.#options.permissionResolver.getPermission(owner, repo, user);
+      } else {
+        const { stdout } = await execFileAsync('gh', [
+          'api',
+          `repos/${owner}/${repo}/collaborators/${user}/permission`,
+          '--jq',
+          '.permission',
+        ]);
+        const raw = stdout.trim();
+        permission = (['admin', 'maintain', 'write', 'triage', 'read', 'none'] as const).includes(
+          raw as GithubPermission,
+        )
+          ? (raw as GithubPermission)
+          : undefined;
+      }
+      this.#permissionCache.set(cacheKey, permission);
+      return permission;
+    } catch {
+      this.#permissionCache.set(cacheKey, undefined);
+      return undefined;
+    }
+  }
+
   async #sendActivityNotification(input: {
     polling: GithubPollingThread;
     subscription: GithubPRSubscription;
@@ -1470,6 +1528,14 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       snapshot: input.snapshot,
     });
     if (!notification) return undefined;
+    if (AUTHOR_GATED_NOTIFICATION_KINDS.has(notification.kind)) {
+      const authorized = await this.#isAuthorizedAuthor(
+        input.subscription.owner,
+        input.subscription.repo,
+        input.snapshot.latestCommentAuthor,
+      );
+      if (!authorized) return undefined;
+    }
     await this.#sendGithubNotification({
       agent,
       subscription: input.subscription,
