@@ -24,6 +24,7 @@ vi.mock('@mastra/core/agent', () => ({
       agentConstructorMock(config);
     }
   },
+  SignalProvider: class {},
 }));
 
 const agentConstructorMock = vi.fn();
