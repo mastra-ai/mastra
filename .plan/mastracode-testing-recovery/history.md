@@ -328,3 +328,18 @@ Documentation actions:
 - Focused verification passed: `pnpm --filter ./mastracode test --run src/tui/__tests__/mastra-tui-queueing.test.ts src/tui/components/__tests__/custom-editor.test.ts src/tui/__tests__/command-dispatch.test.ts --reporter=dot --bail 1` (66 tests).
 
 Next queue checkpoint: PR #13346 (AGENTS.md instruction loading), then PR #13347 (MCP manager factory refactor).
+
+### Feature map PR #13346 and #13347
+
+Processed PR [#13346](https://github.com/mastra-ai/mastra/pull/13346), `e399dcba4f` (`fix(mastracode): load AGENTS.md instruction files, drop deprecated AGENT.md (#13346)`). Verified current `mastracode/src/agents/prompts/agent-instructions.ts`: static instruction discovery checks `AGENTS.md` before `CLAUDE.md`, no longer checks singular `AGENT.md`, scans global/project/config-dir locations, and feeds ignored static paths into `AgentsMDInjector` through `mastracode/src/index.ts`.
+
+Processed PR [#13347](https://github.com/mastra-ai/mastra/pull/13347), `48d19d89e0` (`refactor: replace MCPManager class with factory function (#13347)`). Verified current `mastracode/src/mcp/manager.ts`: `createMcpManager()` returns the `McpManager` interface with closure-owned config/tools/status/log state; `mastracode/src/agents/tools.ts`, `index.ts`, `main.ts`, and `/mcp` still consume the same manager instance for tools/status/reload/cleanup.
+
+Documentation actions:
+
+- Updated `features/chat/prompt-context.md` with #13346 `AGENTS.md` static instruction loading and missing precedence tests.
+- Updated `features/integrations/mcp-status-command.md` and `features/tools/coding-tools-permissions.md` with #13347 manager factory/interface behavior.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13346 done, #13347 done, #13348 current, #13349 next.
+- Focused verification passed: `pnpm --filter ./mastracode test --run src/agents/__tests__/prompts.test.ts src/agents/prompts/index.test.ts src/mcp/__tests__/manager.test.ts --reporter=dot --bail 1` (52 tests).
+
+Next queue checkpoint: PR #13348 (tool result token limits), then PR #13349 (OM buffer activation threshold).

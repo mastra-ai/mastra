@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wire `mcpManager` into the TUI so `/mcp` can show status and reload servers.
-- Later changes: none known.
+- Later changes: [#13347](https://github.com/mastra-ai/mastra/pull/13347) — replaced the `MCPManager` class with `createMcpManager()` + `McpManager` interface while preserving status/reload/tool behavior.
 
 ## User-visible behavior
 
@@ -40,9 +40,9 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| MCP manager instance | `createMastraCode()` result / `TUIState.mcpManager` | `/mcp`, dynamic tools, cleanup |
-| Server statuses | `McpManager` | selector, text status, reload/reconnect UI |
-| Config paths/skipped servers | `McpManager` config loader | `/mcp` setup instructions/status |
+| MCP manager interface | `createMcpManager()` result / `TUIState.mcpManager` | `/mcp`, dynamic tools, cleanup |
+| Server statuses | `McpManager` closure state | selector, text status, reload/reconnect UI |
+| Config paths/skipped servers | MCP config loader + manager closure state | `/mcp` setup instructions/status |
 
 ## Key files
 
@@ -50,8 +50,8 @@
 - `mastracode/src/tui/state.ts` — stores `mcpManager` in options/state.
 - `mastracode/src/tui/mastra-tui.ts` — includes `mcpManager` in slash-command context.
 - `mastracode/src/tui/commands/mcp.ts` — `/mcp` status/reload/selector behavior.
-- `mastracode/src/mcp/manager.ts` — server status, reload, reconnect, logs.
-- `mastracode/src/agents/tools.ts` — merges MCP tools into runtime tool set.
+- `mastracode/src/mcp/manager.ts` — `createMcpManager()` factory, server status, reload, reconnect, logs.
+- `mastracode/src/agents/tools.ts` — merges MCP tools from the manager interface into runtime tool set.
 
 ## Dependencies / related features
 
@@ -60,7 +60,7 @@
 
 ## Existing tests
 
-- `mastracode/src/mcp/__tests__/manager.test.ts` — manager status/skipped/reload/reconnect behavior.
+- `mastracode/src/mcp/__tests__/manager.test.ts` — `createMcpManager()` status/skipped/reload/reconnect/tool collection behavior.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — routes `/mcp` to `handleMcpCommand` via command dispatcher.
 
 ## Missing tests
@@ -71,6 +71,7 @@
 ## Known risks / regressions
 
 - Command status can drift from actual tool availability if TUI context and `createDynamicTools()` receive different manager instances.
+- Closure-state refactors must preserve reload/reconnect lifecycle: config, tools, statuses, skipped servers, and stderr logs.
 - No focused command test covers the exact regression from #13311.
 
 ## Verification checklist

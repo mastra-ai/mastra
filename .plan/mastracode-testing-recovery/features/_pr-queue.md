@@ -46,10 +46,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 24 | 2026-02-20 | #13344 | `c204b632d1` | review | done | refactor: move todo tools to @mastra/core/harness and rename to task (#13344) | 18 |
 | 25 | 2026-02-20 | #13345 | `7aedfb7ff9` | review | done | feat(tui): resolve autocomplete and queue slash commands on Ctrl+F (#13345) | 2 |
 | 26 | 2026-02-20 | #13311 | `d1b596fb05` | review | done | fix(mastracode): wire mcpManager to TUI so /mcp command works (#13311) | 2 |
-| 27 | 2026-02-20 | #13346 | `e399dcba4f` | review | current | fix(mastracode): load AGENTS.md instruction files, drop deprecated AGENT.md (#13346) | 4 |
-| 28 | 2026-02-20 | #13347 | `48d19d89e0` | review | next | refactor: replace MCPManager class with factory function (#13347) | 5 |
-| 29 | 2026-02-20 | #13348 | `4137924b3f` | review | | fix: limit tool result token sizes for view, grep, and web tools (#13348) | 3 |
-| 30 | 2026-02-20 | #13349 | `5f1f0fa8a3` | review | | fix: raise memory buffer activation threshold to prevent aggressive window shrinking (#13349) | 1 |
+| 27 | 2026-02-20 | #13346 | `e399dcba4f` | review | done | fix(mastracode): load AGENTS.md instruction files, drop deprecated AGENT.md (#13346) | 4 |
+| 28 | 2026-02-20 | #13347 | `48d19d89e0` | review | done | refactor: replace MCPManager class with factory function (#13347) | 5 |
+| 29 | 2026-02-20 | #13348 | `4137924b3f` | review | current | fix: limit tool result token sizes for view, grep, and web tools (#13348) | 3 |
+| 30 | 2026-02-20 | #13349 | `5f1f0fa8a3` | review | next | fix: raise memory buffer activation threshold to prevent aggressive window shrinking (#13349) | 1 |
 | 31 | 2026-02-20 | #13350 | `e65ec08031` | review | | refactor: extract TUI state into dedicated TUIState interface and factory (#13350) | 3 |
 | 32 | 2026-02-20 | #13355 | `89b1a4aead` | review | | fix(mastracode): allow view_range for directory listings (#13355) | 2 |
 | 33 | 2026-02-20 | #13354 | `78d1c808ad` | review | | fix(memory): improve OM continuity at low activation (#13354) | 3 |

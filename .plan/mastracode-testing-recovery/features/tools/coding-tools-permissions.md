@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — coding tools, approvals, permissions, YOLO, hooks, MCP tool merge.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior.
 
 ## User-visible behavior
 
@@ -40,7 +40,7 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Tool definitions | Workspace + `createDynamicTools()` + MCP manager | Runtime, prompt guidance |
+| Tool definitions | Workspace + `createDynamicTools()` + `McpManager` interface | Runtime, prompt guidance |
 | Permission policies | Harness state / permission rules | Approval engine, `/permissions` |
 | YOLO | Harness state | Approval engine, status/commands |
 | Session grants | Harness session | Approval engine only |
@@ -49,6 +49,7 @@
 ## Key files
 
 - `mastracode/src/agents/tools.ts` — dynamic tools, web search, MCP merge, hooks.
+- `mastracode/src/mcp/manager.ts` — MCP manager factory/interface that supplies tools to `createDynamicTools()`.
 - `mastracode/src/tui/commands/mcp.ts` — MCP status/reload command that reads the same manager.
 - `mastracode/src/agents/workspace.ts` — filesystem/shell/LSP tools and sandbox paths.
 - `mastracode/src/tools/request-sandbox-access.ts` — Mastra Code-owned custom tool schema.

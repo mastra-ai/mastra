@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13311 (row 26) have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13346 (`e399dcba4f`, `fix(mastracode): load AGENTS.md instruction files, drop deprecated AGENT.md (#13346)`), then #13347 (`48d19d89e0`, `refactor: replace MCPManager class with factory function (#13347)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13347 (row 28) have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13348 (`4137924b3f`, `fix: limit tool result token sizes for view, grep, and web tools (#13348)`), then #13349 (`5f1f0fa8a3`, `fix: raise memory buffer activation threshold to prevent aggressive window shrinking (#13349)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 27: PR #13346 (AGENTS.md instruction loading), then row 28: PR #13347 (MCP manager factory refactor).
+1. Continue at `_pr-queue.md` row 29: PR #13348 (tool result token limits), then row 30: PR #13349 (OM buffer activation threshold).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -76,3 +76,6 @@ None known.
 - `gh pr view 13345 --json number,title,body,author,mergedAt,body,files,commits`, current `custom-editor.ts`, `setup.ts`, `mastra-tui.ts`, `agent-lifecycle.ts`, and queueing/editor tests verified Ctrl+F autocomplete + queued slash-command behavior. Created the queued-followups card.
 - `gh pr view 13311 --json number,title,body,author,mergedAt,body,files,commits`, current `main.ts`, `state.ts`, `mastra-tui.ts`, `commands/mcp.ts`, MCP manager tests, and command-dispatch tests verified `/mcp` manager wiring. Created the MCP status command card.
 - Focused verification passed: `pnpm --filter ./mastracode test --run src/tui/__tests__/mastra-tui-queueing.test.ts src/tui/components/__tests__/custom-editor.test.ts src/tui/__tests__/command-dispatch.test.ts --reporter=dot --bail 1` (66 tests).
+- `gh pr view 13346 --json number,title,body,author,mergedAt,url,files,commits`, `git show e399dcba4f -- mastracode`, current `agent-instructions.ts`, `prompts/index.ts`, `index.ts`, and prompt/headless tests verified plural `AGENTS.md` static instruction loading. Updated the prompt-context card.
+- `gh pr view 13347 --json number,title,body,author,mergedAt,url,files,commits`, `git show 48d19d89e0 -- mastracode`, current `mcp/manager.ts`, `mcp/index.ts`, `agents/tools.ts`, `index.ts`, and MCP manager tests verified `createMcpManager()` factory refactor preserves manager/tool/status behavior. Updated MCP and tools cards.
+- Focused verification passed: `pnpm --filter ./mastracode test --run src/agents/__tests__/prompts.test.ts src/agents/prompts/index.test.ts src/mcp/__tests__/manager.test.ts --reporter=dot --bail 1` (52 tests).
