@@ -519,6 +519,15 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Signals',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
+        { type: 'doc', id: 'signals/webhook-signal-provider', label: 'WebhookSignalProvider' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Storage',
       collapsed: true,
       items: [

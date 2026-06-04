@@ -9,6 +9,7 @@ export default defineConfig({
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['**/node_modules/**', '**/dist/**'],
+          setupFiles: ['src/__tests__/vitest-setup.ts'],
           maxConcurrency: 1,
           fileParallelism: false,
           isolate: true,

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from '../cache/inmemory';
 import { CachingPubSub, withCaching } from './caching-pubsub';
 import { EventEmitterPubSub } from './event-emitter';
+import { PubSub } from './pubsub';
 import type { Event } from './types';
 
 describe('CachingPubSub', () => {
@@ -169,6 +170,44 @@ describe('CachingPubSub', () => {
         expect.any(Function),
         expect.any(Function),
       );
+    });
+
+    it('forwards options (including batch) verbatim to the inner PubSub', async () => {
+      const subscribeSpy = vi.fn(async () => {});
+      class StubInner extends PubSub {
+        get supportsNativeBatching() {
+          return true;
+        }
+        async publish() {}
+        subscribe = subscribeSpy;
+        async unsubscribe() {}
+        async flush() {}
+      }
+      const wrapped = new CachingPubSub(new StubInner(), cache);
+      const cb = () => {};
+      const options = { batch: { maxSize: 2, maxWaitMs: 50 } };
+      await wrapped.subscribe('t', cb, options);
+      expect(subscribeSpy).toHaveBeenCalledWith('t', cb, options);
+    });
+
+    it('reports supportsNativeBatching by delegating to the inner PubSub', () => {
+      class NativeInner extends PubSub {
+        get supportsNativeBatching() {
+          return true;
+        }
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      class NonNativeInner extends PubSub {
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      expect(new CachingPubSub(new NativeInner(), cache).supportsNativeBatching).toBe(true);
+      expect(new CachingPubSub(new NonNativeInner(), cache).supportsNativeBatching).toBe(false);
     });
   });
 
