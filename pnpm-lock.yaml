@@ -6534,7 +6534,7 @@ importers:
   stores/spanner:
     dependencies:
       '@google-cloud/spanner':
-        specifier: ^8.6.0
+        specifier: ^8.7.1
         version: 8.7.1(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
@@ -6957,7 +6957,7 @@ importers:
         specifier: ^6.7.1
         version: 6.7.1(encoding@0.1.13)
       '@google-cloud/text-to-speech':
-        specifier: ^6.4.0
+        specifier: ^6.4.1
         version: 6.4.1
       zod:
         specifier: ^3.25.0 || ^4.0.0
@@ -7003,7 +7003,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/schema-compat
       google-auth-library:
-        specifier: ^10.6.1
+        specifier: ^10.6.2
         version: 10.6.2
       ws:
         specifier: ^8.20.0
