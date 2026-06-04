@@ -41,7 +41,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/sdk-trace-base": "^2.7.0",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
