@@ -4300,6 +4300,12 @@ export class Agent<
 
               const subAgentPromptCreatedAt = new Date();
 
+              // Forward the parent's abortSignal so aborting the supervisor stream/generate cancels
+              // in-flight sub-agents. The signal reaches this delegation tool via the tool-execution
+              // context; without forwarding it the sub-agent would run with a detached, never-aborted
+              // signal and keep looping after the parent is cancelled. See issue #14820.
+              const subAgentAbortOptions = context?.abortSignal ? { abortSignal: context.abortSignal } : {};
+
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
@@ -4321,6 +4327,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
@@ -4338,6 +4345,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     });
 
@@ -4422,6 +4430,7 @@ export class Agent<
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
+                  ...subAgentAbortOptions,
                 });
                 result = {
                   text: generateResult.text,
@@ -4450,6 +4459,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
@@ -4469,6 +4479,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     });
 
@@ -4587,6 +4598,7 @@ export class Agent<
                 const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
+                  ...subAgentAbortOptions,
                 });
 
                 let fullText = '';

@@ -4140,3 +4140,178 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
     }
   });
 });
+
+/**
+ * AbortSignal forwarding in supervisor pattern.
+ * Regression test for #14820: the parent's abortSignal must be forwarded to delegated
+ * sub-agents so that aborting the supervisor stream/generate cancels in-flight sub-agents.
+ * Before the fix, the delegation tool dropped context.abortSignal and the sub-agent ran
+ * with a detached, never-aborted signal.
+ */
+describe('Supervisor Pattern - AbortSignal forwarding', () => {
+  // Sub-agent stream model that calls a tool once, then stops.
+  function makeSubAgentStreamModelWithTool(toolName: string, toolArgs: Record<string, any>) {
+    let callCount = 0;
+    return new MockLanguageModelV2({
+      doStream: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'tool-call', toolCallId: 'sub-call-1', toolName, input: JSON.stringify(toolArgs) },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Task completed.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+          ]),
+        };
+      },
+    });
+  }
+
+  // Supervisor stream model that delegates to a sub-agent tool once, then stops.
+  function makeSupervisorStreamModel(agentKey: string, prompt: string) {
+    let callCount = 0;
+    return new MockLanguageModelV2({
+      doStream: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: `agent-${agentKey}`,
+                input: JSON.stringify({ prompt }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+  }
+
+  it('should forward the parent abortSignal to a delegated sub-agent (stream)', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const probe = createTool({
+      id: 'probe',
+      description: 'Records the abortSignal it receives from the execution context.',
+      inputSchema: z.object({}),
+      execute: async (_input: unknown, ctx: any) => {
+        capturedSignal = ctx?.abortSignal;
+        return { ok: true };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'abort-child',
+      name: 'abort-child',
+      description: 'Calls the probe tool.',
+      instructions: 'Call the probe tool.',
+      model: makeSubAgentStreamModelWithTool('probe', {}),
+      tools: { probe },
+    });
+
+    const supervisor = new Agent({
+      id: 'abort-supervisor',
+      name: 'abort-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorStreamModel('abortChild', 'do work'),
+      agents: { abortChild: subAgent },
+      memory: new MockMemory(),
+    });
+
+    const controller = new AbortController();
+    const stream = await supervisor.stream('go', { abortSignal: controller.signal, maxSteps: 5 });
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    // The sub-agent's tool must have received a signal linked to the parent controller.
+    expect(capturedSignal).toBeDefined();
+    expect(capturedSignal!.aborted).toBe(false);
+
+    // Aborting the parent must propagate to the forwarded signal observed by the sub-agent.
+    controller.abort();
+    expect(capturedSignal!.aborted).toBe(true);
+  });
+
+  it('should forward the parent abortSignal to a delegated sub-agent (generate)', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const probe = createTool({
+      id: 'probe',
+      description: 'Records the abortSignal it receives from the execution context.',
+      inputSchema: z.object({}),
+      execute: async (_input: unknown, ctx: any) => {
+        capturedSignal = ctx?.abortSignal;
+        return { ok: true };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'abort-child-gen',
+      name: 'abort-child-gen',
+      description: 'Calls the probe tool.',
+      instructions: 'Call the probe tool.',
+      model: makeSubAgentModelWithTool('probe', {}),
+      tools: { probe },
+    });
+
+    const supervisor = new Agent({
+      id: 'abort-supervisor-gen',
+      name: 'abort-supervisor-gen',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('abortChildGen', 'do work'),
+      agents: { abortChildGen: subAgent },
+      memory: new MockMemory(),
+    });
+
+    const controller = new AbortController();
+    await supervisor.generate('go', { abortSignal: controller.signal, maxSteps: 5 });
+
+    expect(capturedSignal).toBeDefined();
+    expect(capturedSignal!.aborted).toBe(false);
+
+    controller.abort();
+    expect(capturedSignal!.aborted).toBe(true);
+  });
+});
