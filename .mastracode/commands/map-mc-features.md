@@ -8,14 +8,6 @@ goal: true
 
 Build out the Mastra Code feature map by walking the real PR history oldest-to-newest.
 
-Optional scope or hint from the user:
-
-```text
-$ARGUMENTS
-```
-
-If a scope is provided, filter the PR queue to that area first. If no scope is provided, process all Mastra Code PRs that touch `mastracode/`.
-
 ## Setup
 
 1. Use the `mastracode-testing-recovery` skill as the operating protocol.
