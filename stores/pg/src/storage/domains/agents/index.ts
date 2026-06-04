@@ -104,7 +104,15 @@ export class AgentsPG extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS],
-      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat', 'browser'],
+      ifNotExists: [
+        'mcpClients',
+        'requestContextSchema',
+        'workspace',
+        'skills',
+        'skillsFormat',
+        'browser',
+        'toolProviders',
+      ],
     });
 
     // Migrate tools field from string[] to JSONB format
@@ -177,9 +185,9 @@ export class AgentsPG extends AgentsStorage {
       await this.#db.client.none(
         `INSERT INTO ${fullVersionsTableName}
          (id, "agentId", "versionNumber", name, description, instructions, model, tools,
-          "defaultOptions", workflows, agents, "integrationTools", "inputProcessors",
+          "defaultOptions", workflows, agents, "integrationTools", "toolProviders", "inputProcessors",
           "outputProcessors", memory, scorers, "changedFields", "changeMessage", "createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
          ON CONFLICT (id) DO NOTHING`,
         [
           versionId,
@@ -194,6 +202,7 @@ export class AgentsPG extends AgentsStorage {
           row.workflows ? JSON.stringify(row.workflows) : null,
           row.agents ? JSON.stringify(row.agents) : null,
           row.integrationTools ? JSON.stringify(row.integrationTools) : null,
+          row.toolProviders ? JSON.stringify(row.toolProviders) : null,
           row.inputProcessors ? JSON.stringify(row.inputProcessors) : null,
           row.outputProcessors ? JSON.stringify(row.outputProcessors) : null,
           row.memory ? JSON.stringify(row.memory) : null,
@@ -750,13 +759,13 @@ export class AgentsPG extends AgentsStorage {
         `INSERT INTO ${tableName} (
           id, "agentId", "versionNumber",
           name, description, instructions, model, tools,
-          "defaultOptions", workflows, agents, "integrationTools",
+          "defaultOptions", workflows, agents, "integrationTools", "toolProviders",
           "inputProcessors", "outputProcessors", memory, scorers,
           "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
           browser,
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
         [
           input.id,
           input.agentId,
@@ -770,6 +779,7 @@ export class AgentsPG extends AgentsStorage {
           input.workflows ? JSON.stringify(input.workflows) : null,
           input.agents ? JSON.stringify(input.agents) : null,
           input.integrationTools ? JSON.stringify(input.integrationTools) : null,
+          input.toolProviders ? JSON.stringify(input.toolProviders) : null,
           input.inputProcessors ? JSON.stringify(input.inputProcessors) : null,
           input.outputProcessors ? JSON.stringify(input.outputProcessors) : null,
           input.memory ? JSON.stringify(input.memory) : null,
@@ -1049,6 +1059,7 @@ export class AgentsPG extends AgentsStorage {
       workflows: parseJsonResilient(row.workflows, 'workflows'),
       agents: parseJsonResilient(row.agents, 'agents'),
       integrationTools: parseJsonResilient(row.integrationTools, 'integrationTools'),
+      toolProviders: parseJsonResilient(row.toolProviders, 'toolProviders'),
       inputProcessors: parseJsonResilient(row.inputProcessors, 'inputProcessors'),
       outputProcessors: parseJsonResilient(row.outputProcessors, 'outputProcessors'),
       memory: parseJsonResilient(row.memory, 'memory'),

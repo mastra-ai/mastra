@@ -23,7 +23,8 @@ import type {
   ListSkillVersionsInput,
   ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
@@ -59,15 +60,43 @@ export class SkillsPG extends SkillsStorage {
     this.#indexes = indexes?.filter(idx => (SkillsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: 'idx_skill_versions_skill_version',
+        name: `${schemaPrefix}idx_skill_versions_skill_version`,
         table: TABLE_SKILL_VERSIONS,
         columns: ['skillId', 'versionNumber'],
         unique: true,
       },
     ];
+  }
+
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    for (const tableName of SkillsPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    for (const idx of SkillsPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return SkillsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   async createDefaultIndexes(): Promise<void> {
