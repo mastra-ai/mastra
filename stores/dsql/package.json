@@ -28,7 +28,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/types": "^3.731.0",
+    "@aws-sdk/types": "^3.973.9",
     "@aws/aurora-dsql-node-postgres-connector": "^0.1.9",
     "pg": "^8.14.0"
   },

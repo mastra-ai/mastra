@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.22.2-alpha.0",
+  "version": "0.22.2",
   "description": "",
   "type": "module",
   "files": [
@@ -64,6 +64,7 @@
     "@mariozechner/pi-tui": "^0.73.1",
     "@mastra/agent-browser": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/github-signals": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
     "@mastra/libsql": "workspace:*",
