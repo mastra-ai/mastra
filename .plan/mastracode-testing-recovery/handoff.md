@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13692 (row 86) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13701 (`33f289c616`, separate TUI debug env var), then #13693 (`6e1b940177`, set workspace).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13693 (row 88) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13700 (`1c4221cf60`, forward requestContext/skill paths to subagents), then #13710 (`bc2665ebf3`, README follow-ups).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 87: PR #13701 (separate TUI debug env var), then row 88: PR #13693 (set workspace).
+1. Continue at `_pr-queue.md` row 89: PR #13700 (forward requestContext/skill paths to subagents), then row 90: PR #13710 (README follow-ups).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

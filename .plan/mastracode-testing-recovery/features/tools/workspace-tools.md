@@ -3,18 +3,18 @@
 ## Origin PR / commit
 
 - PR: [#13437](https://github.com/mastra-ai/mastra/pull/13437) — switched Mastra Code from MC-local file/edit/shell tools to core Workspace tools with TUI streaming support.
-- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map; [#13687](https://github.com/mastra-ai/mastra/pull/13687) — added core Workspace `name` remapping so the exposed tool dictionary and tool IDs use Mastra Code's stable names.
+- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map; [#13687](https://github.com/mastra-ai/mastra/pull/13687) — added core Workspace `name` remapping so the exposed tool dictionary and tool IDs use Mastra Code's stable names; [#13693](https://github.com/mastra-ai/mastra/pull/13693) — lets `createMastraCode({ workspace })` provide a custom workspace instead of the default dynamic local workspace.
 
 ## User-visible behavior
 
-- What the user can do: use standard coding tools (`view`, `search_content`, `find_files`, `write_file`, `string_replace_lsp`, `ast_smart_edit`, `execute_command`, process tools, LSP inspect) through the core Workspace abstraction.
-- Success looks like: workspace tools obey project-root containment, allowed external paths, plan-mode write-tool disabling, LSP diagnostics, write locks, read-before-write policy, and TUI streaming/rendering.
-- Must preserve: user-facing Mastra Code tool names stay stable even though runtime implementations come from `@mastra/core/workspace`, and old `mastra_workspace_*` IDs must not remain callable after remapping.
+- What the user can do: use standard coding tools (`view`, `search_content`, `find_files`, `write_file`, `string_replace_lsp`, `ast_smart_edit`, `execute_command`, process tools, LSP inspect) through the core Workspace abstraction; embedders can pass a custom workspace into `createMastraCode()`.
+- Success looks like: workspace tools obey project-root containment, allowed external paths, plan-mode write-tool disabling, LSP diagnostics, write locks, read-before-write policy, TUI streaming/rendering, and explicit workspace overrides.
+- Must preserve: user-facing Mastra Code tool names stay stable even though runtime implementations come from `@mastra/core/workspace`, old `mastra_workspace_*` IDs must not remain callable after remapping, and the default local workspace remains the fallback when no override is supplied.
 
 ## Entry points / commands
 
 - Commands / shortcuts / flags: agent tool calls; `/permissions` and permission policy still affect tool calls.
-- Automatic triggers: `createMastraCode()` supplies `workspace: getDynamicWorkspace`; Harness resolves/caches the workspace in request context.
+- Automatic triggers: `createMastraCode()` supplies `config.workspace ?? getDynamicWorkspace`; Harness resolves/caches the workspace in request context.
 
 ## TUI states
 
@@ -40,8 +40,8 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Workspace instance | Core Harness workspace resolver/cache | Agent runtime, workspace tools, skills |
-| Workspace ID | `mastra-code-workspace-${projectPath}` | Mastra workspace registry reuse |
+| Workspace instance | `createMastraCode({ workspace })` override or default `getDynamicWorkspace` + Core Harness resolver/cache | Agent runtime, workspace tools, skills |
+| Workspace ID | Custom workspace ID or `mastra-code-workspace-${projectPath}` for the default dynamic workspace | Mastra workspace registry reuse |
 | Filesystem root | `LocalFilesystem.basePath = projectPath` | read/list/search/edit/write tools |
 | Extra allowed paths | skill paths + temp dirs + `sandboxAllowedPaths` | filesystem containment/access requests |
 | Sandbox process env | `getDynamicWorkspace()` / `LocalSandbox` | `execute_command`, process manager |
@@ -51,6 +51,7 @@
 
 ## Key files
 
+- `mastracode/src/index.ts` — public `MastraCodeConfig.workspace` override and fallback to `getDynamicWorkspace` for both Harness generations.
 - `mastracode/src/agents/workspace.ts` — dynamic workspace construction, skill/allowed path assembly, plan-mode write-tool disabling, LSP config, sandbox env.
 - `mastracode/src/agents/tools.ts` — MC dynamic tool map after file/edit/shell tools moved to Workspace.
 - `mastracode/src/tool-names.ts` — stable Mastra Code tool-name overrides for core workspace tools.
@@ -82,6 +83,7 @@
 - Plan-mode integration test proving workspace write/edit/AST tools are hidden or disabled while read/search tools remain available.
 - Loaded-history test proving workspace tool results render identically after reload for representative read/list/edit/shell outputs.
 - Direct test that `getDynamicWorkspace()` reuses the registered workspace while updating allowed paths/tool config across mode changes.
+- Mastra Code config-level test proving `createMastraCode({ workspace })` passes the custom workspace through to both Harness v1 and HarnessCompat instead of the default factory.
 
 ## Known risks / regressions
 

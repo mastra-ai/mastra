@@ -881,3 +881,24 @@ Verification:
 - Focused MC tests passed with provider env vars unset: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY pnpm --filter ./mastracode exec vitest run src/agents/__tests__/model.test.ts src/tui/__tests__/command-dispatch.test.ts --reporter=dot --bail 1` (2 files / 56 tests). The first run without env isolation hit the known local `OPENAI_API_KEY` routing mismatch in `model.test.ts`.
 
 Next queue checkpoint: PR #13701 (separate TUI debug env var), then PR #13693 (set workspace).
+
+
+### Feature map batch: TUI debug env split and custom workspace config
+
+Processed PR [#13701](https://github.com/mastra-ai/mastra/pull/13701), `33f289c616` (`use separate tui debug env var`). Verified `mastracode/src/tui/components/assistant-message.ts` now gates assistant-message component trace output behind `MASTRA_TUI_DEBUG` while global console warning/error capture remains controlled by `MASTRA_DEBUG` in `utils/debug-log.ts`.
+
+Processed PR [#13693](https://github.com/mastra-ai/mastra/pull/13693), `6e1b940177` (`feat(mc): set workspace`). Verified `MastraCodeConfig.workspace` and current `createMastraCode()` choose `config?.workspace ?? getDynamicWorkspace`, then pass that same workspace into both `HarnessV1` and `HarnessCompat`. Default dynamic workspace behavior remains unchanged when no override is provided.
+
+Documentation actions:
+
+- Updated `features/tui/debug-logging.md` with `MASTRA_TUI_DEBUG`, `tui-debug.log`, and the separation from app-data `debug.log`.
+- Updated `features/tools/workspace-tools.md` with the public `createMastraCode({ workspace })` override, fallback behavior, state ownership, and missing config-level tests.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13701 done, #13693 done, #13700 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/tui/components/assistant-message.ts`, `mastracode/src/utils/debug-log.ts`, `mastracode/src/index.ts`, `mastracode/src/agents/workspace.ts`, `packages/core/src/harness/workspace-resolution.test.ts`, and related feature-map pages.
+- Focused MC tests passed: `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/debug-log.test.ts src/index.test.ts src/agents/__tests__/workspace-env.test.ts src/agents/__tests__/build-skill-paths.test.ts src/agents/__tests__/workspace-skill-activation.test.ts --reporter=dot --bail 1` (5 files / 20 tests).
+- Focused core test passed: `pnpm --filter ./packages/core exec vitest run src/harness/workspace-resolution.test.ts --reporter=dot --bail 1` (1 file / 12 tests, no type errors).
+
+Next queue checkpoint: PR #13700 (forward requestContext and skill paths to subagents), then PR #13710 (README follow-ups).
