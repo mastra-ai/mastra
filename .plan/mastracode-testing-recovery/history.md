@@ -498,3 +498,19 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13435 done, #13405 skipped, #13456 current.
 
 Next queue checkpoint: PR #13456 (refresh git branch on thread resume), then PR #13457 (cache dynamic workspace on harness).
+
+
+### Feature map PR #13456 and #13457
+
+Processed PR [#13456](https://github.com/mastra-ai/mastra/pull/13456), `babdfb23c2` (`feat(mastracode): refresh git branch on thread resume & abbreviate long branch names (#13456)`). Verified current source refreshes the Git branch in `getDynamicInstructions()`, on `thread_changed`, and on agent start/end so resumed threads and branch-changing tool calls do not leave the prompt or TUI footer stale. `status-line.ts` now falls back from full path+branch to branch-only, abbreviated branch, then no directory.
+
+Processed PR [#13457](https://github.com/mastra-ai/mastra/pull/13457), `00f43e8e97` (`fix: cache dynamic workspace on harness after resolution (#13457)`). Verified current core Harness caches dynamic workspace factory results in `buildRequestContext()` and exposes `resolveWorkspace()` for eager command usage. `/skills` and `/skill/<name>` call `resolveWorkspace()` when `getResolvedWorkspace()` has not been populated yet, so skills can be listed before the first message.
+
+Documentation actions:
+
+- Created `features/git/branch-context.md` for live branch prompt/status behavior and missing branch-refresh tests.
+- Created `features/integrations/skills-command.md` for `/skills`, `/skill/<name>`, and Harness dynamic workspace resolution.
+- Updated `features/chat/prompt-context.md`, `features/tui/interactive-chat.md`, and `features/integrations/harness-api.md` with #13456/#13457 relationships.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13456 done, #13457 done, #13460 current.
+
+Next queue checkpoint: PR #13460 (fdPath file autocomplete), then PR #13442 (Stop/UserPromptSubmit hooks).

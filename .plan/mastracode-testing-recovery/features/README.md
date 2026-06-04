@@ -41,8 +41,9 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | Help and shortcuts | #13426 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
 | Settings | Onboarding and global settings | #13421, #13431 | settings.json + thread settings | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435 | env/settings + storage factory | Partial | High | [page](./settings/storage-backend.md) |
-| TUI | Interactive chat | #13218, #13350, #13413, #13427 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
-| Chat | Prompt context and project instructions | #13234, #13346, #13376 | Harness request context + instruction files | Partial | High | [page](./chat/prompt-context.md) |
+| TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
+| Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
+| Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345 | TUI transient queue state | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Models | Model auth, selection, modes | #13218, #13307 | Settings + harness session | Partial | High | [page](./models/model-auth-and-modes.md) |
@@ -50,8 +51,9 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |
-| Integrations | Core Harness API and reference docs | #13353 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
+| Integrations | Core Harness API and reference docs | #13353, #13457 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
 | Integrations | Harness display state | #13427 | Core Harness display projection | Partial | High | [page](./integrations/harness-display-state.md) |
+| Integrations | Skills command and workspace resolution | #13457 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
 | Git | Commit attribution | #13376 | Prompt context + harness model state | Missing | Medium | [page](./git/commit-attribution.md) |
 | Goals | Plan approval and build handoff | #13416 | Core Harness plan resolver + TUI plan card | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13234](https://github.com/mastra-ai/mastra/pull/13234) — moved prompt building into agent prompt modules and added runtime instruction assembly.
-- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; [#13416](https://github.com/mastra-ai/mastra/pull/13416) — split mode-aware tool guidance into `tool-guidance.ts` and made Plan mode explicitly require `submit_plan`; [#13376](https://github.com/mastra-ai/mastra/pull/13376) — passed current model ID into Git Safety commit attribution guidance; task-list injection, model-specific prompt sections, goal-mode prompt guidance, and dynamic AGENTS.md injection changed this behavior later.
+- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; [#13416](https://github.com/mastra-ai/mastra/pull/13416) — split mode-aware tool guidance into `tool-guidance.ts` and made Plan mode explicitly require `submit_plan`; [#13376](https://github.com/mastra-ai/mastra/pull/13376) — passed current model ID into Git Safety commit attribution guidance; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes current Git branch during dynamic instruction assembly; task-list injection, model-specific prompt sections, goal-mode prompt guidance, and dynamic AGENTS.md injection changed this behavior later.
 
 ## User-visible behavior
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Mode/model | Harness session | Prompt mode/model sections, runtime model selection, commit attribution |
-| Project metadata | Project detection + git utilities | Environment section |
+| Project metadata and branch | Project detection + live git branch refresh | Environment section |
 | Task list | Harness state | `<current-task-list>` prompt section |
 | Active plan | Harness state | Base/mode prompt guidance |
 | Permission denies | Harness state permission rules | Tool guidance filtering |
@@ -49,7 +49,7 @@
 
 ## Key files
 
-- `mastracode/src/agents/instructions.ts` — builds prompt context from harness request context.
+- `mastracode/src/agents/instructions.ts` — builds prompt context from harness request context and refreshes current Git branch.
 - `mastracode/src/agents/prompts/index.ts` — assembles base, tasks, instructions, model, and mode sections.
 - `mastracode/src/agents/prompts/base.ts` — shared environment and behavior prompt.
 - `mastracode/src/agents/prompts/agent-instructions.ts` — loads `AGENTS.md`/`CLAUDE.md` instruction files from global and project locations.
@@ -62,6 +62,7 @@
 - [Coding tools and approval permissions](../tools/coding-tools-permissions.md) — denied tools alter tool guidance.
 - [Plan approval and build handoff](../goals/plan-approval.md) — Plan-mode prompt/tool guidance must route plans through `submit_plan`.
 - [Git commit attribution](../git/commit-attribution.md) — commit message guidance uses prompt-time model state.
+- [Git branch context and status](../git/branch-context.md) — prompt branch is refreshed from the working tree.
 - [Observational memory](../memory/observational-memory.md) — task prompt injection protects task state after memory truncation.
 
 ## Existing tests

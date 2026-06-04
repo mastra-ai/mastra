@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13353](https://github.com/mastra-ai/mastra/pull/13353) — changed public `Harness` methods to object-parameter calls and added the first Harness class reference page.
-- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering; [#13457](https://github.com/mastra-ai/mastra/pull/13457) — added/corrected workspace lifecycle methods and dynamic workspace caching.
 
 ## User-visible behavior
 
-- What the user can do: Mastra Code and external Harness consumers call stable, named-parameter methods such as `switchMode({ modeId })`, `sendMessage({ content })`, `switchThread({ threadId })`, and `respondToQuestion({ questionId, answer })`.
-- Success looks like: TUI/headless behavior is unchanged, while call sites are easier to read and safer to extend; UI consumers can subscribe to display-state snapshots instead of raw-event state machines.
+- What the user can do: Mastra Code and external Harness consumers call stable, named-parameter methods such as `switchMode({ modeId })`, `sendMessage({ content })`, `switchThread({ threadId })`, `respondToQuestion({ questionId, answer })`, and `resolveWorkspace()`.
+- Success looks like: TUI/headless behavior is unchanged, while call sites are easier to read and safer to extend; UI consumers can subscribe to display-state snapshots instead of raw-event state machines; workspace consumers can eagerly resolve dynamic workspaces.
 - Must preserve: method names, parameter object shapes, docs examples, TUI/headless call-site parity, display-state contract, and thread/model/mode behavior.
 
 ## Entry points / commands
@@ -44,11 +44,12 @@
 | Prompt/tool/plan resolver state | Core Harness pending resolver maps | TUI prompt/tool handlers, headless auto-resolvers |
 | Public API docs | `docs/src/content/en/reference/harness/harness-class.mdx` | External Harness consumers |
 | Display projection | `HarnessDisplayState` | TUI and external UI consumers |
+| Workspace instance/cache | Core Harness workspace fields/factory | Slash commands, agents, workspace tools, external consumers |
 
 ## Key files
 
-- `packages/core/src/harness/harness.ts` — current object-param public method implementation.
-- `packages/core/src/harness/types.ts` — request context, display state, and Harness types exposed to built-in tools/consumers.
+- `packages/core/src/harness/harness.ts` — current object-param public method implementation, display state, and workspace cache methods.
+- `packages/core/src/harness/types.ts` — request context, display state, workspace config, and Harness types exposed to built-in tools/consumers.
 - `packages/core/src/harness/display-state-scheduler.ts` — coalesced display-state subscriber snapshots.
 - `packages/core/src/harness/tools.ts` — built-in tool callers using object-param Harness methods.
 - `mastracode/src/tui/setup.ts` — keyboard/mode/thread call sites.
@@ -60,6 +61,7 @@
 ## Dependencies / related features
 
 - [Harness display state](./harness-display-state.md) — UI-agnostic display-state API added after the object-param refactor.
+- [Skills command and workspace resolution](./skills-command.md) — `/skills` relies on dynamic workspace resolution and caching.
 - [Interactive TUI chat](../tui/interactive-chat.md) — live event projection depends on Harness methods.
 - [Persistent conversations](../threads/persistent-conversations.md) — thread APIs are part of this surface.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — mode/model APIs are part of this surface.
@@ -69,6 +71,7 @@
 
 - `packages/core/src/harness/thread-locking.test.ts` — verifies object-param `createThread({ ... })` / `switchThread({ threadId })` behavior while preserving locking semantics.
 - `packages/core/src/harness/display-state.test.ts` — verifies `HarnessDisplayState`, `display_state_changed`, and `subscribeDisplayState()` behavior.
+- `packages/core/src/harness/workspace-resolution.test.ts` — verifies `getWorkspace()`, `resolveWorkspace()`, `hasWorkspace()`, and dynamic workspace caching.
 - `packages/core/src/harness/v1/mode.test.ts` — verifies current `listModes()` behavior in the v1 Harness surface.
 - `mastracode/src/tui/__tests__/*`, `mastracode/src/tui/handlers/__tests__/*`, and command tests indirectly compile/run the migrated TUI call sites.
 - `mastracode/src/headless.test.ts` indirectly covers migrated non-TUI call sites.
