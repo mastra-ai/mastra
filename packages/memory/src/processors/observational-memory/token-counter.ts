@@ -1758,6 +1758,12 @@ export class TokenCounter {
 
         return { tokens, overheadDelta, toolResultDelta };
       }
+      if (invocation.state === 'output-denied') {
+        toolResultDelta++;
+        const reason = (invocation as any).approval?.reason ?? 'Tool call was not approved by the user';
+        tokens += this.readOrPersistPartEstimate(part, 'tool-result-denied', reason);
+        return { tokens, overheadDelta, toolResultDelta };
+      }
 
       throw new Error(
         `Unhandled tool-invocation state '${(part as any).toolInvocation?.state}' in token counting for part type '${part.type}'`,
