@@ -512,7 +512,7 @@ export class CustomEditor extends Editor {
       return;
     }
 
-    if (matchesKey(data, 'ctrl+v') || matchesKey(data, 'alt+v')) {
+    if (matchesKey(data, 'ctrl+v') || matchesKey(data, 'alt+v') || matchesKey(data, 'super+v')) {
       this.handleExplicitPaste();
       return;
     }
@@ -580,6 +580,14 @@ export class CustomEditor extends Editor {
         handler();
         return;
       }
+    }
+
+    // Shift+Enter inserts a newline — must be checked before plain Enter.
+    // matchesKey covers Kitty/modifyOtherKeys; the `\n` fallback covers
+    // legacy terminals that send \n for Shift+Enter (\r for Enter).
+    if (matchesKey(data, 'shift+enter') || data === '\n') {
+      super.handleInput(data);
+      return;
     }
 
     if (matchesKey(data, 'enter')) {
