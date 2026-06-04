@@ -187,3 +187,59 @@ describe('aiV5UIMessagesToAIV5ModelMessages — assistant file providerMetadata'
     expect(fileParts[1].providerOptions).toEqual({ google: { thoughtSignature: 'sig-2' } });
   });
 });
+
+describe('aiV5UIMessagesToAIV5ModelMessages — MCP content tool result output', () => {
+  it('does not override tool outputs that already differ from the raw stored result', () => {
+    const rawOutput = {
+      content: [
+        { type: 'text', text: 'raw text' },
+        { type: 'image', data: 'base64data', mimeType: 'image/png' },
+      ],
+    };
+
+    const messages: AIV5Type.UIMessage[] = [
+      {
+        id: 'msg-tool-ui',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-screenshot',
+            toolCallId: 'call-mcp-image',
+            state: 'output-available',
+            input: {},
+            output: { type: 'text', value: 'Explicit summary wins' },
+          } as any,
+        ],
+      },
+    ];
+
+    const dbMessages = [
+      {
+        id: 'msg-tool-db',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-mcp-image',
+                toolName: 'screenshot',
+                state: 'result',
+                args: {},
+                result: rawOutput,
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const result = aiV5UIMessagesToAIV5ModelMessages(messages, dbMessages as any);
+    const toolMessage = result.find(message => message.role === 'tool');
+    const toolResult = (toolMessage!.content as any[]).find(part => part.type === 'tool-result');
+
+    expect(toolResult.output).toEqual({ type: 'text', value: 'Explicit summary wins' });
+  });
+});

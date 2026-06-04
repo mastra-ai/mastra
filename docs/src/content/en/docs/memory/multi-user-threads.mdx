@@ -1,0 +1,219 @@
+---
+title: "Multi-user threads | Memory"
+description: "Share one Mastra thread between multiple users by carrying speaker identity in the message body."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# Multi-user threads
+
+A single Mastra thread can be shared by multiple users, each with their own name and functional role. You carry speaker identity in the message body so the agent can tell users apart while reading from a single shared thread.
+
+## When to use multi-user threads
+
+Use multi-user threads when several people collaborate on the same subject through one agent:
+
+- Collaborative documents with editors, reviewers, and approvers
+- Group chats where one assistant serves many participants
+- Multi-stakeholder reviews where different roles have different authority
+
+## Share one `resourceId` across all participants
+
+A thread belongs to exactly one `resourceId`, so all participants on a shared thread need to pass the same value. Instead of using a user id (the default for single-user apps), key `resourceId` on the conversation itself — for example `doc_${docId}` for a shared document, or `room_${roomId}` for a group chat. With everyone pointing at the same `resourceId`, they read and write the same history.
+
+## Tag each user message with the speaker's identity
+
+The model needs to know who's talking on every turn. Since the message body is the one place that survives into history and back into context, wrap each user message in a small `<turn>` tag with the speaker's id, name, and role. The tag stays attached to the message, so when prior turns are recalled the model still sees who said what.
+
+Build the tag with a small helper. The example below is one way to do it — copy it into your project and adapt it to your shape of user data:
+
+```typescript title="src/mastra/identity.ts"
+export type Speaker = {
+  id: string
+  name: string
+  role: string
+}
+
+function escapeAttr(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+export function asUserTurn(speaker: Speaker, text: string) {
+  const id = escapeAttr(speaker.id)
+  const name = escapeAttr(speaker.name)
+  const role = escapeAttr(speaker.role)
+  return {
+    role: 'user' as const,
+    content: `<turn author_id="${id}" author_name="${name}" functional_role="${role}">
+${text}
+</turn>`,
+  }
+}
+```
+
+Teach the agent how to read the `<turn>` tag in its instructions. The agent must have `memory` configured so it can be called with a `thread` and `resource`:
+
+```typescript title="src/mastra/agents/collab.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:./collab.db' }),
+  options: {
+    lastMessages: 20,
+  },
+})
+
+export const collabAgent = new Agent({
+  id: 'collab',
+  name: 'CollabAgent',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  memory,
+  instructions: `
+You are a collaborative document assistant. Multiple users talk to you in the SAME thread.
+
+Every user message is wrapped in a <turn> tag carrying the user's identity:
+
+  <turn author_id="u_alice" author_name="Alice" functional_role="editor">
+  ...message text...
+  </turn>
+
+Rules:
+1. Address users by their author_name.
+2. Respect functional_role: editors propose changes, reviewers approve.
+3. When attributing past statements, read author_name from the surrounding <turn> tag.
+4. Do not echo the <turn> tags back at users.
+  `.trim(),
+})
+```
+
+Call the agent with the wrapped message. Every participant shares the same `thread` and `resource`:
+
+```typescript title="src/mastra/call.ts"
+import { asUserTurn } from './identity'
+
+const docResourceId = 'doc_42'
+const docThreadId = 'doc_42'
+
+const alice = { id: 'u_alice', name: 'Alice', role: 'editor' }
+const bob = { id: 'u_bob', name: 'Bob', role: 'reviewer' }
+
+await collabAgent.generate([asUserTurn(alice, 'My favorite color is teal.')], {
+  memory: { thread: docThreadId, resource: docResourceId },
+})
+
+await collabAgent.generate([asUserTurn(bob, 'I want QA sign-off before publish.')], {
+  memory: { thread: docThreadId, resource: docResourceId },
+})
+```
+
+The `<turn>` tag persists in the message body, so when history is recalled on later turns the model still sees who said what.
+
+## Combining with memory layers
+
+The user-tagging pattern composes with every memory layer. Pick the layer based on how long the conversation needs to remember per-user facts:
+
+- **Short conversations** (a single session, or a thread small enough to fit in `lastMessages`), or when you need a verbatim record of who said what: use [message history alone](#message-history-alone). The user tags in history are enough; no extra memory layer needed.
+- **Long-running threads** (conversations that outgrow `lastMessages`, where you need per-user facts to survive history eviction): use [observational memory](#with-observational-memory-recommended).
+- **Need a structured participants list, or your storage adapter doesn't support OM** (OM requires LibSQL, PG, or MongoDB): use [working memory](#with-working-memory).
+
+We recommend using observational memory or working memory, not both — they cover overlapping needs, and running both at once adds latency and token cost without much benefit.
+
+### Message history alone
+
+For short conversations, or when you need a verbatim record of who said what, the user tags in history are enough. `lastMessages` brings prior turns back into context with their attribution intact:
+
+```typescript title="src/mastra/agents/collab-basic.ts"
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:./collab.db' }),
+  options: {
+    lastMessages: 20,
+  },
+})
+```
+
+The model reads identity from the `<turn>` tag on the current message and from prior tagged messages brought back through `lastMessages`.
+
+### With Observational Memory (recommended)
+
+[Observational Memory](../memory/observational-memory) (OM) extracts per-user facts into a background log without burning the agent's tool budget. The default Observer model reads `<turn>` tags natively and produces named attribution like `Alice stated her favorite color is teal.` and `Bob asked for QA sign-off before publish.`
+
+Prefer OM over working memory for multi-user threads when your storage supports it. OM extracts facts automatically, scales to any number of participants, and doesn't need template upkeep. Enable it with no overrides:
+
+```typescript title="src/mastra/agents/collab-om.ts"
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:./collab.db' }),
+  options: {
+    lastMessages: 20,
+    observationalMemory: true,
+  },
+})
+```
+
+OM requires a storage adapter that supports it: `@mastra/libsql`, `@mastra/pg`, or `@mastra/mongodb`.
+
+:::note
+
+If you switch the Observer to a weaker model and see facts collapse to a generic `User`, use [`observation.instruction`](/reference/memory/observational-memory) to teach the Observer how to read the `<turn>` tag.
+
+:::
+
+### With working memory
+
+Use working memory when OM isn't an option — for example, when your storage adapter doesn't support OM, or when you need a structured, deterministic participants list the agent can read and write on every turn.
+
+The default [working memory](../memory/working-memory) template assumes one user per thread ("First Name", "Last Name", etc.). For multi-user threads, provide a template with a participants list:
+
+```typescript title="src/mastra/agents/collab-wm.ts"
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:./collab.db' }),
+  options: {
+    lastMessages: 20,
+    workingMemory: {
+      enabled: true,
+      scope: 'thread',
+      template: `# Document Collaboration State
+
+## Participants
+<!-- One entry per known collaborator. Use author_id as the stable key. -->
+<!-- - **<author_name>** (<author_id>, <functional_role>): <their position> -->
+
+## Open Questions
+
+## Decisions
+`,
+    },
+  },
+})
+```
+
+Set `scope: 'thread'` so the participants list belongs to the document, not to any individual user. Add one instruction telling the agent to append new participants to the list whenever a new `author_id` shows up in a `<turn>`.
+
+For more on templates, see [Custom templates](../memory/working-memory#custom-templates).
+
+## Security
+
+Set the `speaker` from your authenticated request context, never from the request body. If a client can choose its own `author_id`, one user can impersonate another. Use [Request Context](/docs/server/request-context) to read the verified user from your auth layer and build the `<turn>` tag on the server before calling the agent.
+
+## Related
+
+- [Working memory](../memory/working-memory)
+- [Observational memory](../memory/observational-memory)
+- [Share memory between agents](../memory/overview#share-memory-between-agents)
+- [`Memory` reference](/reference/memory/memory-class)

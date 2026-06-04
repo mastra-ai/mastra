@@ -723,4 +723,17 @@ describe('ensureAllPropertiesRequired', () => {
     expect(result.required).toContain('required');
     expect(result.required).not.toContain('optional');
   });
+
+  describe.runIf(isZodV4)('transforms (io: input)', () => {
+    it('describes the pre-transform input shape for transformed fields', () => {
+      const schema = z.object({
+        additionalData: z.string().transform(val => JSON.parse(val)),
+      });
+
+      const result = zodToJsonSchema(schema);
+      const additionalData = (result.properties as any).additionalData;
+
+      expect(additionalData.type).toBe('string');
+    });
+  });
 });

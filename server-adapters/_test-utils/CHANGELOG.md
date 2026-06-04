@@ -1,5 +1,21 @@
 # @internal/server-adapter-test-utils
 
+## 0.0.23
+
+### Patch Changes
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0
+  - @mastra/server@1.40.0
+
+## 0.0.22
+
+### Patch Changes
+
+- Updated dependencies [[`21db1a4`](https://github.com/mastra-ai/mastra/commit/21db1a4b8ac058d5a4fbe38b516cc1b81e526915)]:
+  - @mastra/core@1.37.1
+  - @mastra/server@1.37.1
+
 ## 0.0.21
 
 ### Patch Changes

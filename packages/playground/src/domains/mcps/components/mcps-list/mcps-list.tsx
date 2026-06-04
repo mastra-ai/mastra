@@ -1,7 +1,7 @@
 import type { McpServerListResponse } from '@mastra/client-js';
 import {
-  EntityList,
-  EntityListSkeleton,
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
   ToolsIcon,
   WorkflowIcon,
   AgentIcon,

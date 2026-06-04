@@ -7,4 +7,5 @@
 export * from './auth';
 export * from './reset-storage';
 export * from './seed-datasets';
+export * from './seed-dataset-items';
 export * from './select-fixture';

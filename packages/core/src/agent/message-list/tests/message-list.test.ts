@@ -4281,10 +4281,10 @@ describe('MessageList', () => {
   });
 
   describe('replaceAllSystemMessages', () => {
-    it('should replace all system messages with new ones', () => {
+    it('should replace untagged system messages and preserve tagged ones', () => {
       const list = new MessageList();
       list.addSystem('Original instruction 1');
-      list.addSystem('Original instruction 2', 'memory');
+      list.addSystem('Memory context', 'memory');
 
       const newSystemMessages: AIV4Type.CoreSystemMessage[] = [
         { role: 'system', content: 'New instruction 1' },
@@ -4293,13 +4293,11 @@ describe('MessageList', () => {
 
       list.replaceAllSystemMessages(newSystemMessages);
 
-      const systemMessages = list.getAllSystemMessages();
-      expect(systemMessages).toHaveLength(2);
-      expect(systemMessages[0].content).toBe('New instruction 1');
-      expect(systemMessages[1].content).toBe('New instruction 2');
+      expect(list.getSystemMessages().map(m => m.content)).toEqual(['New instruction 1', 'New instruction 2']);
+      expect(list.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context']);
     });
 
-    it('should clear all existing system messages including tagged ones', () => {
+    it('should preserve tagged system messages when called with an empty array', () => {
       const list = new MessageList();
       list.addSystem('Instruction');
       list.addSystem('Memory context', 'memory');
@@ -4307,8 +4305,9 @@ describe('MessageList', () => {
 
       list.replaceAllSystemMessages([]);
 
-      const systemMessages = list.getAllSystemMessages();
-      expect(systemMessages).toHaveLength(0);
+      expect(list.getSystemMessages()).toHaveLength(0);
+      expect(list.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context']);
+      expect(list.getSystemMessages('user-provided').map(m => m.content)).toEqual(['User provided']);
     });
 
     it('should not affect non-system messages', () => {

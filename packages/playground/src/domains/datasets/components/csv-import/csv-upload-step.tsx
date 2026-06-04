@@ -103,7 +103,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
       >
         {isParsing ? (
           <>
-            <Spinner size="lg" />
+            <Spinner />
             <span className="text-sm text-neutral4">Parsing CSV...</span>
           </>
         ) : (

@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS span_events (
   -- Event metadata
   eventType VARCHAR NOT NULL,
   timestamp TIMESTAMP NOT NULL,
-  cursorId BIGINT DEFAULT nextval('span_events_cursor_id_seq'),
+  cursorId BIGINT,
 
   -- IDs
   traceId VARCHAR NOT NULL,
@@ -86,7 +86,7 @@ export const METRIC_EVENTS_DDL = `
 CREATE TABLE IF NOT EXISTS metric_events (
   -- Event metadata
   timestamp TIMESTAMP NOT NULL,
-  cursorId BIGINT DEFAULT nextval('metric_events_cursor_id_seq'),
+  cursorId BIGINT,
 
   -- IDs
   metricId VARCHAR NOT NULL PRIMARY KEY,
@@ -141,7 +141,7 @@ export const LOG_EVENTS_DDL = `
 CREATE TABLE IF NOT EXISTS log_events (
   -- Event metadata
   timestamp TIMESTAMP NOT NULL,
-  cursorId BIGINT DEFAULT nextval('log_events_cursor_id_seq'),
+  cursorId BIGINT,
 
   -- IDs
   logId VARCHAR NOT NULL PRIMARY KEY,
@@ -191,7 +191,7 @@ export const SCORE_EVENTS_DDL = `
 CREATE TABLE IF NOT EXISTS score_events (
   -- Event metadata
   timestamp TIMESTAMP NOT NULL,
-  cursorId BIGINT DEFAULT nextval('score_events_cursor_id_seq'),
+  cursorId BIGINT,
 
   -- IDs
   scoreId VARCHAR NOT NULL PRIMARY KEY,
@@ -245,7 +245,7 @@ export const FEEDBACK_EVENTS_DDL = `
 CREATE TABLE IF NOT EXISTS feedback_events (
   -- Event metadata
   timestamp TIMESTAMP NOT NULL,
-  cursorId BIGINT DEFAULT nextval('feedback_events_cursor_id_seq'),
+  cursorId BIGINT,
 
   -- IDs
   feedbackId VARCHAR NOT NULL PRIMARY KEY,
@@ -317,15 +317,17 @@ export const ALL_MIGRATIONS = [
   `CREATE SEQUENCE IF NOT EXISTS score_events_cursor_id_seq START 1`,
   `CREATE SEQUENCE IF NOT EXISTS feedback_events_cursor_id_seq START 1`,
 
-  // Span events. Existing rows intentionally keep NULL cursorId values; delta
-  // polling only applies to rows written after this migration path is in place.
+  // Existing rows intentionally keep NULL cursorId values; delta polling only
+  // applies to rows written by insert paths that explicitly call nextval().
+  // Databases upgraded from a prior version may still carry a
+  // `DEFAULT nextval(...)` on cursorId, which breaks DuckDB WAL replay; that
+  // remediation lives in `dropLegacyCursorIdDefaults` and only runs when the
+  // bad default is detected in information_schema.
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE span_events ALTER COLUMN cursorId SET DEFAULT nextval('span_events_cursor_id_seq')`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE metric_events ALTER COLUMN cursorId SET DEFAULT nextval('metric_events_cursor_id_seq')`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
@@ -352,7 +354,6 @@ export const ALL_MIGRATIONS = [
 
   // Logs. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE log_events ALTER COLUMN cursorId SET DEFAULT nextval('log_events_cursor_id_seq')`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
@@ -379,7 +380,6 @@ export const ALL_MIGRATIONS = [
 
   // Scores. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE score_events ALTER COLUMN cursorId SET DEFAULT nextval('score_events_cursor_id_seq')`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
@@ -410,7 +410,6 @@ export const ALL_MIGRATIONS = [
 
   // Feedback. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
-  `ALTER TABLE feedback_events ALTER COLUMN cursorId SET DEFAULT nextval('feedback_events_cursor_id_seq')`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,

@@ -1,5 +1,3 @@
-import { Slot } from '@radix-ui/react-slot';
-import { CircleAlertIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
@@ -16,7 +14,6 @@ export type NavLink = {
   isActive?: boolean;
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
-  isExperimental?: boolean;
   /** @deprecated Sidebar nav items now render flush; this option is accepted but ignored. */
   indent?: boolean;
 };
@@ -41,7 +38,7 @@ export const navItemClasses = ({ isActive, isCollapsed, isFeatured }: ItemStyleO
     'hover:bg-sidebar-nav-hover hover:text-neutral6 [&:hover_svg]:text-neutral5',
     'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
     !isCollapsed && 'w-full gap-2.5 py-1 px-3 justify-start',
-    isCollapsed && 'w-9 mx-auto p-0 justify-center',
+    isCollapsed && 'w-full p-0 justify-center',
     isActive &&
       'text-neutral6 bg-sidebar-nav-active hover:bg-sidebar-nav-active hover:text-neutral6 [&_svg]:text-neutral6 [&:hover_svg]:text-neutral6',
     isCollapsed && !isActive && '[&_svg]:text-neutral3',
@@ -60,11 +57,16 @@ export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'chil
   /** Override the Provider-level LinkComponent for this row. Defaults to `<a>` when neither is set. */
   LinkComponent?: LinkComponent;
   /**
-   * When true, render `children` as the interactive element (Radix Slot pattern).
+   * When true, render `children` as the interactive element.
    * Use for `<button>` items or custom router Links. Item classes are forwarded
-   * to the slotted element. `link` and `LinkComponent` are ignored.
+   * to the slotted element. `link.url` and `LinkComponent` are ignored; other
+   * `link` presentation fields still apply when supplied.
    */
   asChild?: boolean;
+};
+
+type SlottedNavChildProps = {
+  className?: string;
 };
 
 export function MainSidebarNavLink({
@@ -96,22 +98,21 @@ export function MainSidebarNavLink({
   let interactiveEl: React.ReactNode = null;
 
   if (asChild) {
-    // Slot merges itemClassName onto the consumer-provided element (button, a, custom).
-    interactiveEl = <Slot className={itemClassName}>{children}</Slot>;
+    if (!React.isValidElement<SlottedNavChildProps>(children)) {
+      throw new Error(
+        'MainSidebarNavLink requires a valid React element child when `asChild` is true so it can apply `SlottedNavChildProps` and merge `itemClassName`.',
+      );
+    }
+
+    interactiveEl = React.cloneElement(children, {
+      className: cn(itemClassName, children.props.className),
+    });
   } else if (link) {
     interactiveEl = (
       <Link href={link.url} {...linkParams} className={itemClassName}>
         {link.icon}
         <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
         {children}
-        {link.isExperimental && !isCollapsed && !needsTooltip && (
-          <Tooltip>
-            <TooltipTrigger render={<CircleAlertIcon className="ml-auto stroke-accent5" />} />
-            <TooltipContent side="right" align="center" sideOffset={16}>
-              Experimental Feature
-            </TooltipContent>
-          </Tooltip>
-        )}
       </Link>
     );
   }

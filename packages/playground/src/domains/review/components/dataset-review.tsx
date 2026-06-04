@@ -2,10 +2,8 @@ import {
   Badge,
   Button,
   Checkbox,
-  Columns,
-  Column,
+  DataList,
   DropdownMenu,
-  EntityList,
   Label,
   Spinner,
   Textarea,
@@ -20,7 +18,6 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
-import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
 import {
   CheckCircle,
   ChevronDown,
@@ -33,7 +30,6 @@ import {
   XIcon,
 } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import type { ComponentPropsWithoutRef } from 'react';
 import { useDatasetReviewItems, useDatasetCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
 import type { ReviewItem } from './review-item-card';
@@ -53,36 +49,44 @@ function truncateInput(value: unknown, max: number): string {
   }
 }
 
-const subContentClass = cn(
-  'bg-surface5 backdrop-blur-xl z-50 min-w-32 overflow-auto rounded-lg p-2 shadow-md',
-  'data-[state=open]:animate-in data-[state=closed]:animate-out',
-  'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
-  'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-);
-
-function PortalSubContent({ className, children, ...props }: ComponentPropsWithoutRef<typeof DropdownMenuSubContent>) {
-  return (
-    <DropdownMenuPortal>
-      <DropdownMenuSubContent className={cn(subContentClass, className)} {...props}>
-        {children}
-      </DropdownMenuSubContent>
-    </DropdownMenuPortal>
-  );
-}
-
 export interface DatasetReviewProps {
   datasetId: string;
+  /** When set, scopes the review (and completed) lists to items produced by this experiment. */
+  experimentId?: string;
+  /**
+   * Optional request from the parent to auto-feature this item. Whenever this prop changes
+   * to a non-null value, the matching review row is selected. Internal interactions still
+   * own the featured state afterwards; pass a fresh value on each request (e.g. clear it
+   * to `null` when navigating away so a re-open of the same id retriggers selection).
+   */
+  featuredItemId?: string | null;
 }
 
-export function DatasetReview({ datasetId }: DatasetReviewProps) {
+export function DatasetReview({ datasetId, experimentId, featuredItemId: featuredItemIdRequest }: DatasetReviewProps) {
   const client = useMastraClient();
   const { data: dataset } = useDataset(datasetId);
-  const { data: reviewItems, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
-  const { data: completedItems, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
+  const { data: reviewItemsRaw, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
+  const { data: completedItemsRaw, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
+  const reviewItems = useMemo(
+    () => (experimentId ? (reviewItemsRaw ?? []).filter(i => i.experimentId === experimentId) : reviewItemsRaw),
+    [reviewItemsRaw, experimentId],
+  );
+  const completedItems = useMemo(
+    () => (experimentId ? (completedItemsRaw ?? []).filter(i => i.experimentId === experimentId) : completedItemsRaw),
+    [completedItemsRaw, experimentId],
+  );
   const { updateExperimentResult } = useDatasetMutations();
 
   // Local state
-  const [featuredItemId, setFeaturedItemId] = useState<string | null>(null);
+  const [featuredItemId, setFeaturedItemId] = useState<string | null>(featuredItemIdRequest ?? null);
+
+  // Respond to external "feature this item" requests from the parent (e.g. clicking
+  // a "Review" button on an experiment result). The parent passes the same id again
+  // by clearing to null in between so a repeat request still re-fires this effect.
+  useEffect(() => {
+    if (featuredItemIdRequest !== undefined) setFeaturedItemId(featuredItemIdRequest);
+  }, [featuredItemIdRequest]);
+
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [showCompleted, setShowCompleted] = useState(false);
@@ -102,14 +106,21 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
 
   // Items in local state — null means "not hydrated yet", [] means "user cleared all"
   const [localItems, setLocalItems] = useState<ReviewItem[] | null>(null);
-  const items = localItems ?? reviewItems ?? [];
+  const items = useMemo(() => localItems ?? reviewItems ?? [], [localItems, reviewItems]);
 
-  // Sync server data to local on initial load
+  // Reset the local cache when the scope changes (different experiment or dataset)
+  // so it re-hydrates from the new queue below, instead of keeping the previous
+  // experiment's rows and running mutations against the wrong results.
+  useEffect(() => {
+    setLocalItems(null);
+  }, [datasetId, experimentId]);
+
+  // Sync server data to local on initial load (and after a scope reset above)
   useEffect(() => {
     if (reviewItems && localItems === null) {
       setLocalItems(reviewItems);
     }
-  }, [reviewItems]);
+  }, [reviewItems, localItems]);
 
   // Tag vocabulary from dataset + existing item tags
   const datasetTagVocabulary = useMemo(() => {
@@ -412,21 +423,15 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
     return displayItems.find(i => i.id === featuredItemId) ?? null;
   }, [featuredItemId, displayItems]);
 
-  // Navigation
-  const toNextItem = useCallback(() => {
-    if (!featuredItemId || displayItems.length === 0) return;
-    const idx = displayItems.findIndex(i => i.id === featuredItemId);
-    if (idx < displayItems.length - 1) setFeaturedItemId(displayItems[idx + 1].id);
-  }, [featuredItemId, displayItems]);
+  // Navigation — undefined at the edges so the prev/next buttons disable.
+  const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
+  const toPreviousItem = featuredIndex > 0 ? () => setFeaturedItemId(displayItems[featuredIndex - 1].id) : undefined;
+  const toNextItem =
+    featuredIndex >= 0 && featuredIndex < displayItems.length - 1
+      ? () => setFeaturedItemId(displayItems[featuredIndex + 1].id)
+      : undefined;
 
-  const toPreviousItem = useCallback(() => {
-    if (!featuredItemId || displayItems.length === 0) return;
-    const idx = displayItems.findIndex(i => i.id === featuredItemId);
-    if (idx > 0) setFeaturedItemId(displayItems[idx - 1].id);
-  }, [featuredItemId, displayItems]);
-
-  // Grid columns for EntityList
-  const gridColumns = featuredItem ? '2rem 1fr 10rem 8rem' : '2rem 1fr 10rem 8rem 6rem 6rem';
+  const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
 
   if (isLoadingReview) {
     return (
@@ -555,10 +560,12 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: toolbar + EntityList + Detail Panel */}
-      <Columns className={featuredItem ? 'grid-cols-[1fr_1fr]' : ''}>
-        <Column>
-          <Column.Toolbar>
+      {/* Main layout: toolbar + List + Detail Panel */}
+      <div
+        className={cn('grid w-full h-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}
+      >
+        <div className="grid gap-8 content-start w-full overflow-y-auto">
+          <div className="flex items-center justify-between w-full flex-wrap gap-4 gap-x-6">
             {/* Filters (left) */}
             <div className="flex items-center gap-3">
               <DropdownMenu>
@@ -584,7 +591,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                       Status
                       {showCompleted && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                     </DropdownMenu.SubTrigger>
-                    <PortalSubContent>
+                    <DropdownMenu.SubContent>
                       <DropdownMenu.CheckboxItem
                         checked={!showCompleted}
                         onCheckedChange={() => {
@@ -605,7 +612,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                       >
                         Completed
                       </DropdownMenu.CheckboxItem>
-                    </PortalSubContent>
+                    </DropdownMenu.SubContent>
                   </DropdownMenu.Sub>
 
                   {/* Tags */}
@@ -614,7 +621,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                       Tags
                       {activeTagFilter && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                     </DropdownMenu.SubTrigger>
-                    <PortalSubContent>
+                    <DropdownMenu.SubContent>
                       <DropdownMenu.CheckboxItem
                         checked={!activeTagFilter}
                         onCheckedChange={() => setActiveTagFilter(null)}
@@ -644,7 +651,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                           {tag}
                         </DropdownMenu.CheckboxItem>
                       ))}
-                    </PortalSubContent>
+                    </DropdownMenu.SubContent>
                   </DropdownMenu.Sub>
 
                   {/* Clear all */}
@@ -730,7 +737,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                 </DropdownMenu>
               </div>
             )}
-          </Column.Toolbar>
+          </div>
 
           {isLoadingDisplay ? (
             <div className="flex-1 flex items-center justify-center">
@@ -750,127 +757,135 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
               </div>
             </div>
           ) : (
-            <EntityList columns={gridColumns}>
-              <EntityList.Top>
-                {!showCompleted && (
-                  <EntityList.TopCell>
-                    <Checkbox
-                      checked={isAllSelected ? true : isSomeSelected ? 'indeterminate' : false}
-                      onCheckedChange={() => toggleSelectAll()}
-                      aria-label="Select all"
-                    />
-                  </EntityList.TopCell>
+            <DataList columns={gridColumns} className="min-w-0">
+              <DataList.Top hasLeadingCell>
+                {!showCompleted ? (
+                  <DataList.TopSelectCell
+                    checked={isAllSelected ? true : isSomeSelected ? 'indeterminate' : false}
+                    onToggle={() => toggleSelectAll()}
+                    aria-label="Select all"
+                  />
+                ) : (
+                  <DataList.TopCell>&nbsp;</DataList.TopCell>
                 )}
-                {showCompleted && <EntityList.TopCell>&nbsp;</EntityList.TopCell>}
-                <EntityList.TopCell>Input</EntityList.TopCell>
-                <EntityList.TopCell>Comment</EntityList.TopCell>
-                <EntityList.TopCell>Tags</EntityList.TopCell>
-                {!featuredItem && <EntityList.TopCell>Rating</EntityList.TopCell>}
-                {!featuredItem && <EntityList.TopCell>Scores</EntityList.TopCell>}
-              </EntityList.Top>
+                <DataList.TopCells colStart={2}>
+                  <DataList.TopCell>Input</DataList.TopCell>
+                  <DataList.TopCell>Comment</DataList.TopCell>
+                  <DataList.TopCell>Tags</DataList.TopCell>
+                  <DataList.TopCell>Rating</DataList.TopCell>
+                  <DataList.TopCell>Scores</DataList.TopCell>
+                </DataList.TopCells>
+              </DataList.Top>
 
-              <EntityList.Rows>
-                {displayItems.map(item => {
-                  const scoreEntries = item.scores ? Object.entries(item.scores) : [];
-                  return (
-                    <EntityList.Row
-                      key={item.id}
+              {displayItems.map(item => {
+                const scoreEntries = item.scores ? Object.entries(item.scores) : [];
+                const isFeatured = featuredItemId === item.id;
+
+                const rowCells = (
+                  <>
+                    {/* Input preview */}
+                    <DataList.Cell height="compact" className="min-w-0 text-neutral4">
+                      <span className="block truncate">{truncateInput(item.input, 200)}</span>
+                    </DataList.Cell>
+
+                    {/* Comment preview */}
+                    <DataList.Cell height="compact" className="min-w-0">
+                      {item.comment ? (
+                        <Txt variant="ui-xs" className="text-neutral3 truncate">
+                          {item.comment}
+                        </Txt>
+                      ) : (
+                        <Txt variant="ui-xs" className="text-neutral2">
+                          —
+                        </Txt>
+                      )}
+                    </DataList.Cell>
+
+                    {/* Tags */}
+                    <DataList.Cell height="compact" className="min-w-0">
+                      {item.tags.length > 0 ? (
+                        <Txt variant="ui-xs" className="text-neutral4 truncate">
+                          {item.tags.join(', ')}
+                        </Txt>
+                      ) : (
+                        <Txt variant="ui-xs" className="text-neutral2">
+                          —
+                        </Txt>
+                      )}
+                    </DataList.Cell>
+
+                    {/* Rating */}
+                    <DataList.Cell height="compact">
+                      {item.rating === 'positive' && (
+                        <Icon size="sm" className="text-positive1">
+                          <ThumbsUp />
+                        </Icon>
+                      )}
+                      {item.rating === 'negative' && (
+                        <Icon size="sm" className="text-negative1">
+                          <ThumbsDown />
+                        </Icon>
+                      )}
+                      {!item.rating && (
+                        <Txt variant="ui-xs" className="text-neutral2">
+                          —
+                        </Txt>
+                      )}
+                    </DataList.Cell>
+
+                    {/* Scores */}
+                    <DataList.Cell height="compact">
+                      {scoreEntries.length > 0 ? (
+                        <div className="flex items-center gap-1">
+                          <Icon size="sm" className="text-neutral3">
+                            <GaugeIcon />
+                          </Icon>
+                          <Txt variant="ui-xs" className="text-neutral4 font-mono">
+                            {scoreEntries[0][1].toFixed(2)}
+                          </Txt>
+                          {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
+                        </div>
+                      ) : (
+                        <Txt variant="ui-xs" className="text-neutral2">
+                          —
+                        </Txt>
+                      )}
+                    </DataList.Cell>
+                  </>
+                );
+
+                return (
+                  <DataList.RowWrapper key={item.id}>
+                    {!showCompleted ? (
+                      <DataList.SelectCell
+                        checked={selectedItemIds.has(item.id)}
+                        onToggle={() => toggleSelect(item.id)}
+                        aria-label={`Select item ${item.id}`}
+                      />
+                    ) : (
+                      <DataList.Cell height="compact" className="justify-items-center px-4">
+                        <div
+                          role="img"
+                          aria-label={item.error ? 'Error' : 'Success'}
+                          title={item.error ? 'Error' : 'Success'}
+                          className={cn('w-2 h-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
+                        />
+                      </DataList.Cell>
+                    )}
+                    <DataList.RowButton
+                      flushLeft
+                      colStart={2}
+                      featured={isFeatured}
                       onClick={() => handleRowClick(item.id)}
-                      selected={featuredItemId === item.id}
                     >
-                      {/* Checkbox / Error indicator */}
-                      <EntityList.Cell>
-                        {!showCompleted ? (
-                          <Checkbox
-                            checked={selectedItemIds.has(item.id)}
-                            onCheckedChange={() => toggleSelect(item.id)}
-                            onClick={e => e.stopPropagation()}
-                            aria-label={`Select item ${item.id}`}
-                          />
-                        ) : item.error ? (
-                          <div className="w-2 h-2 rounded-full bg-red-700" title="Error" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-green-600" title="Success" />
-                        )}
-                      </EntityList.Cell>
-
-                      {/* Input preview */}
-                      <EntityList.NameCell>{truncateInput(item.input, 80)}</EntityList.NameCell>
-
-                      {/* Comment preview */}
-                      <EntityList.Cell>
-                        {item.comment ? (
-                          <Txt variant="ui-xs" className="text-neutral3 truncate">
-                            {item.comment}
-                          </Txt>
-                        ) : (
-                          <Txt variant="ui-xs" className="text-neutral2">
-                            —
-                          </Txt>
-                        )}
-                      </EntityList.Cell>
-
-                      {/* Tags */}
-                      <EntityList.Cell>
-                        {item.tags.length > 0 ? (
-                          <Txt variant="ui-xs" className="text-neutral4 truncate">
-                            {item.tags.join(', ')}
-                          </Txt>
-                        ) : (
-                          <Txt variant="ui-xs" className="text-neutral2">
-                            —
-                          </Txt>
-                        )}
-                      </EntityList.Cell>
-
-                      {/* Rating (hidden when detail panel open) */}
-                      {!featuredItem && (
-                        <EntityList.Cell>
-                          {item.rating === 'positive' && (
-                            <Icon size="sm" className="text-positive1">
-                              <ThumbsUp />
-                            </Icon>
-                          )}
-                          {item.rating === 'negative' && (
-                            <Icon size="sm" className="text-negative1">
-                              <ThumbsDown />
-                            </Icon>
-                          )}
-                          {!item.rating && (
-                            <Txt variant="ui-xs" className="text-neutral2">
-                              —
-                            </Txt>
-                          )}
-                        </EntityList.Cell>
-                      )}
-
-                      {/* Scores (hidden when detail panel open) */}
-                      {!featuredItem && (
-                        <EntityList.Cell>
-                          {scoreEntries.length > 0 ? (
-                            <div className="flex items-center gap-1">
-                              <Icon size="sm" className="text-neutral3">
-                                <GaugeIcon />
-                              </Icon>
-                              <Txt variant="ui-xs" className="text-neutral4 font-mono">
-                                {scoreEntries[0][1].toFixed(2)}
-                              </Txt>
-                              {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
-                            </div>
-                          ) : (
-                            <Txt variant="ui-xs" className="text-neutral2">
-                              —
-                            </Txt>
-                          )}
-                        </EntityList.Cell>
-                      )}
-                    </EntityList.Row>
-                  );
-                })}
-              </EntityList.Rows>
-            </EntityList>
+                      {rowCells}
+                    </DataList.RowButton>
+                  </DataList.RowWrapper>
+                );
+              })}
+            </DataList>
           )}
-        </Column>
+        </div>
 
         {featuredItem && (
           <ReviewItemPanel
@@ -894,7 +909,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
             onClose={() => setFeaturedItemId(null)}
           />
         )}
-      </Columns>
+      </div>
     </div>
   );
 }

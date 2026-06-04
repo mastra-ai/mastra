@@ -1,16 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mockGoogle = vi.fn();
-const mockClose = vi.fn().mockResolvedValue(undefined);
+const fetchMock = vi.fn();
 
-vi.mock('@brightdata/sdk', () => ({
-  bdclient: vi.fn(function () {
-    return {
-      search: { google: mockGoogle, bing: vi.fn(), yandex: vi.fn() },
-      scrapeUrl: vi.fn(),
-      close: mockClose,
-    };
-  }),
+vi.mock('@mastra/core/tools', () => ({
+  createTool: vi.fn(config => config),
 }));
 
 import { createBrightDataSearchTool } from '../search.js';
@@ -18,21 +11,28 @@ import { createBrightDataSearchTool } from '../search.js';
 describe('createBrightDataSearchTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGoogle.mockResolvedValue({
-      organic: [
-        {
-          link: 'https://example.com/a',
-          title: 'Example A',
-          description: 'A description',
-        },
-        {
-          link: 'https://example.com/b',
-          title: 'Example B',
-          description: 'B description',
-        },
-      ],
-      current_page: 2,
-    });
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockResolvedValue(
+      Response.json({
+        organic: [
+          {
+            link: 'https://example.com/a',
+            title: 'Example A',
+            description: 'A description',
+          },
+          {
+            link: 'https://example.com/b',
+            title: 'Example B',
+            description: 'B description',
+          },
+        ],
+        current_page: 2,
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('should create a tool with id brightdata-search', () => {
@@ -52,14 +52,22 @@ describe('createBrightDataSearchTool', () => {
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
 
     const result = await tool.execute!(
-      { query: 'pizza restaurants', country: 'us', start: 10 },
+      { query: 'pizza restaurants', country: 'us', language: 'es', start: 10 },
       {} as any,
     );
 
-    expect(mockGoogle).toHaveBeenCalledWith('pizza restaurants', {
-      country: 'us',
-      start: 10,
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+
+    expect(requestBody).toMatchObject({
+      format: 'json',
+      method: 'GET',
+      zone: 'sdk_serp',
     });
+    expect(requestBody.url).toContain('https://www.google.com/search');
+    expect(requestBody.url).toContain('q=pizza+restaurants');
+    expect(requestBody.url).toContain('gl=us');
+    expect(requestBody.url).toContain('hl=es');
+    expect(requestBody.url).toContain('start=10');
 
     expect(result).toEqual({
       query: 'pizza restaurants',
@@ -76,14 +84,16 @@ describe('createBrightDataSearchTool', () => {
 
     await tool.execute!({ query: 'simple search' }, {} as any);
 
-    expect(mockGoogle).toHaveBeenCalledWith('simple search', {
-      country: undefined,
-      start: undefined,
-    });
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+
+    expect(requestBody.url).toContain('q=simple+search');
+    expect(requestBody.url).toContain('hl=en');
+    expect(requestBody.url).not.toContain('gl=');
+    expect(requestBody.url).not.toContain('start=');
   });
 
   it('should default to empty results when organic is missing', async () => {
-    mockGoogle.mockResolvedValue({});
+    fetchMock.mockResolvedValue(Response.json({}));
 
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
     const result = (await tool.execute!({ query: 'test' }, {} as any)) as any;
@@ -93,7 +103,7 @@ describe('createBrightDataSearchTool', () => {
   });
 
   it('should default currentPage to 1 when current_page is missing or non-positive', async () => {
-    mockGoogle.mockResolvedValue({ organic: [], current_page: 0 });
+    fetchMock.mockResolvedValue(Response.json({ organic: [], current_page: 0 }));
 
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
     const result = (await tool.execute!({ query: 'test' }, {} as any)) as any;
@@ -102,15 +112,17 @@ describe('createBrightDataSearchTool', () => {
   });
 
   it('should filter out organic entries missing link or title', async () => {
-    mockGoogle.mockResolvedValue({
-      organic: [
-        { link: 'https://ok.example', title: 'Has both', description: 'ok' },
-        { link: '', title: 'Missing link', description: 'x' },
-        { link: 'https://nope.example', title: '', description: 'x' },
-        null,
-      ],
-      current_page: 1,
-    });
+    fetchMock.mockResolvedValue(
+      Response.json({
+        organic: [
+          { link: 'https://ok.example', title: 'Has both', description: 'ok' },
+          { link: '', title: 'Missing link', description: 'x' },
+          { link: 'https://nope.example', title: '', description: 'x' },
+          null,
+        ],
+        current_page: 1,
+      }),
+    );
 
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
     const result = (await tool.execute!({ query: 'test' }, {} as any)) as any;
@@ -121,7 +133,7 @@ describe('createBrightDataSearchTool', () => {
   });
 
   it('should let errors propagate', async () => {
-    mockGoogle.mockRejectedValue(new Error('API rate limit exceeded'));
+    fetchMock.mockRejectedValue(new Error('API rate limit exceeded'));
 
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
 
@@ -131,8 +143,8 @@ describe('createBrightDataSearchTool', () => {
   });
 
   it('should parse string responses (SDK returns JSON-encoded text)', async () => {
-    mockGoogle.mockResolvedValue(
-      JSON.stringify({
+    fetchMock.mockResolvedValue(
+      Response.json({
         organic: [
           { link: 'https://from.string', title: 'Stringified', description: 'ok' },
         ],
@@ -149,20 +161,18 @@ describe('createBrightDataSearchTool', () => {
     expect(result.currentPage).toBe(3);
   });
 
-  it('should close the client after a successful execute', async () => {
+  it('should make one Bright Data request after a successful execute', async () => {
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
 
     await tool.execute!({ query: 'test' }, {} as any);
 
-    expect(mockClose).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('should close the client even when execute throws', async () => {
-    mockGoogle.mockRejectedValue(new Error('boom'));
+  it('should preserve the primary error when execute throws', async () => {
+    fetchMock.mockRejectedValue(new Error('boom'));
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
 
     await expect(tool.execute!({ query: 'test' }, {} as any)).rejects.toThrow('boom');
-
-    expect(mockClose).toHaveBeenCalledTimes(1);
   });
 });
