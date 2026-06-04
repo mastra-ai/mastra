@@ -510,6 +510,14 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
 
+  /**
+   * When true, partial assistant output already streamed to the caller is
+   * persisted to memory even if the request was aborted (e.g. user clicked
+   * "stop"). Only saves when non-empty text was generated. Defaults to false
+   * to preserve existing behavior (skip memory on abort).
+   */
+  persistPartialOnAbort?: boolean;
+
   /** Input processors to use for this execution (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this execution (overrides agent's default) */

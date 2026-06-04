@@ -299,21 +299,61 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'aborted') {
-            agentSpan?.end({
-              output: {
-                status: 'aborted',
-                reason: 'abort',
-              },
-            });
+            // Optionally persist partial output if the caller opted in and
+            // non-empty text was already streamed to the client.
+            // When persisting, let executeOnFinish own the span end so it can
+            // record the output correctly. Only end the span early when skipping.
+            if (options.persistPartialOnAbort && payload.text) {
+              try {
+                const outputText = payload.text;
+                await capabilities.executeOnFinish({
+                  result: payload,
+                  outputText,
+                  thread: result.thread,
+                  threadId: result.threadId,
+                  readOnlyMemory: memoryConfig?.readOnly,
+                  resourceId,
+                  memoryConfig,
+                  requestContext,
+                  agentSpan,
+                  runId,
+                  messageList,
+                  threadExists: memoryData.threadExists,
+                  structuredOutput: !!options.structuredOutput?.schema,
+                  overrideScorers: options.scorers,
+                });
+              } catch (e) {
+                capabilities.logger.error('Error saving partial memory on abort', {
+                  error: e,
+                  runId,
+                });
+                agentSpan?.end({
+                  output: {
+                    status: 'aborted',
+                    reason: 'abort',
+                  },
+                });
+              }
+            } else {
+              agentSpan?.end({
+                output: {
+                  status: 'aborted',
+                  reason: 'abort',
+                },
+              });
+            }
             return;
           }
 
-          // Skip memory persistence when the abort signal has fired.
+          // Skip memory persistence when the abort signal has fired unless
+          // the caller explicitly opted in via persistPartialOnAbort.
           // The LLM response may have continued after the caller disconnected,
-          // and we should not persist a partial or full response for an aborted request.
+          // and by default we do not persist a partial or full response for an
+          // aborted request.
           const aborted = options.abortSignal?.aborted;
+          const shouldPersist = !aborted || (options.persistPartialOnAbort && !!payload.text);
 
-          if (!aborted) {
+          if (shouldPersist) {
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null
@@ -358,6 +398,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
               agentSpan?.error({ error: spanError, endSpan: true });
             }
           } else {
+            // Aborted and persistPartialOnAbort not set (or no text) — skip memory, just end span.
             agentSpan?.end();
           }
 
