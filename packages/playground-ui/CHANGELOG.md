@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 32.0.2
+
+### Patch Changes
+
+- Fixed dropdown, combobox, select, and popover popups silently failing to render when opened outside a side panel (most visibly the model and provider pickers in the chat composer). The shared portal-container resolver now always falls back to the document body instead of leaking an unrenderable value. ([#17560](https://github.com/mastra-ai/mastra/pull/17560))
+
+- Fixed combobox popups so model picker dropdowns open correctly outside side dialogs. ([#17556](https://github.com/mastra-ai/mastra/pull/17556))
+
+- Updated dependencies [[`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9), [`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/client-js@1.23.2
+  - @mastra/react@0.5.2
+  - @mastra/core@1.41.0
+
 ## 32.0.2-alpha.1
 
 ### Patch Changes
