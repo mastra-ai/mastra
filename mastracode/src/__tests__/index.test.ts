@@ -531,7 +531,7 @@ describe('createMastraCode', () => {
     });
     harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
     harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
-    const { GithubSignals } = await import('../github-signals/index.js');
+    const { GithubSignals } = await import('@mastra/github-signals');
     const startPollingForThread = vi.spyOn(GithubSignals.prototype, 'startPollingForThread').mockResolvedValue(true);
     const { createMastraCode } = await import('../index.js');
 
