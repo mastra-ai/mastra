@@ -466,10 +466,11 @@ export async function createHonoServer(
       const studioPort = serverOptions?.studioPort ?? port;
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
+      const platformProjectId = process.env.MASTRA_PLATFORM_PROJECT_ID || '';
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
       const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
-      const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
+      const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
@@ -495,6 +496,7 @@ export async function createHonoServer(
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
+        platformProjectId: `'${platformProjectId}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
         templates: `'${templatesEnabled}'`,
         telemetryDisabled: `'${process.env.MASTRA_TELEMETRY_DISABLED ?? ''}'`,

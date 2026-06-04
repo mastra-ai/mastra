@@ -211,7 +211,8 @@ const MinimalRootLayout = () => {
 };
 
 // Determine platform status at module level for route configuration
-const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
+const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT;
+const isMastraPlatform = Boolean(cloudApiEndpoint && !cloudApiEndpoint.startsWith('%%'));
 const isExperimentalFeatures = coreFeatures.has('datasets');
 
 const agentCmsChildRoutes = [

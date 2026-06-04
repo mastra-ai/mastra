@@ -8,9 +8,14 @@ declare global {
 /**
  * Not a hook per se, but will become when we add more features to the platform.
  */
+const sanitize = (value?: string) => {
+  if (!value || value.startsWith('%%')) return undefined;
+  return value;
+};
+
 export const useMastraPlatform = () => {
-  const mastraPlatformEndpoint = window.MASTRA_CLOUD_API_ENDPOINT;
-  const mastraPlatformProjectId = window.MASTRA_PLATFORM_PROJECT_ID;
+  const mastraPlatformEndpoint = sanitize(window.MASTRA_CLOUD_API_ENDPOINT);
+  const mastraPlatformProjectId = sanitize(window.MASTRA_PLATFORM_PROJECT_ID);
   const isMastraPlatform = Boolean(mastraPlatformEndpoint);
 
   return {
