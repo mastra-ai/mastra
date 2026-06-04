@@ -884,7 +884,12 @@ export function getStructuredOutputSchema<OUTPUT>(
     return undefined;
   }
 
-  return standardSchemaToJSONSchema(toStandardSchema(structuredOutput.schema)) as Record<string, unknown>;
+  return {
+    type: 'json_schema',
+    name: 'mastra_output',
+    strict: false,
+    schema: standardSchemaToJSONSchema(toStandardSchema(structuredOutput.schema)) as Record<string, unknown>,
+  };
 }
 
 export async function getStructuredOutput<OUTPUT>(

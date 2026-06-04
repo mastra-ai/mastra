@@ -352,9 +352,13 @@ describe('OpenAISDKAgent', () => {
     expect(runMock).toHaveBeenCalledWith(
       expect.objectContaining({
         outputType: expect.objectContaining({
-          type: 'object',
-          properties: expect.objectContaining({
-            answer: expect.objectContaining({ type: 'string' }),
+          type: 'json_schema',
+          name: 'mastra_output',
+          schema: expect.objectContaining({
+            type: 'object',
+            properties: expect.objectContaining({
+              answer: expect.objectContaining({ type: 'string' }),
+            }),
           }),
         }),
       }),
