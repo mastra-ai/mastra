@@ -90,12 +90,12 @@ export class GitHubSourceStorageProvider implements SourceStorageProvider {
   }
 
   private sourcePath(path: string): string {
-    const normalizedPath = path.replace(/^\/+/, '');
+    const normalizedPath = stripLeadingSlashes(path);
     return this.pathPrefix ? `${this.pathPrefix}/${normalizedPath}` : normalizedPath;
   }
 
   private unsourcePath(path: string): string {
-    const normalizedPath = path.replace(/^\/+/, '');
+    const normalizedPath = stripLeadingSlashes(path);
     const prefix = this.pathPrefix ? `${this.pathPrefix}/` : '';
     return prefix && normalizedPath.startsWith(prefix) ? normalizedPath.slice(prefix.length) : normalizedPath;
   }
@@ -145,9 +145,23 @@ export function createGitHubSourceStorageProviderFromEnv(
 }
 
 function normalizeApiEndpoint(endpoint: string): string {
-  return endpoint.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+  const trimmed = stripTrailingSlashes(endpoint);
+  const withoutV1 = trimmed.endsWith('/v1') ? trimmed.slice(0, -3) : trimmed;
+  return stripTrailingSlashes(withoutV1);
 }
 
 function normalizePathPrefix(pathPrefix: string): string {
-  return pathPrefix.replace(/^\/+|\/+$/g, '');
+  return stripTrailingSlashes(stripLeadingSlashes(pathPrefix));
+}
+
+function stripLeadingSlashes(value: string): string {
+  let start = 0;
+  while (start < value.length && value[start] === '/') start += 1;
+  return value.slice(start);
+}
+
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end -= 1;
+  return value.slice(0, end);
 }

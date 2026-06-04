@@ -193,9 +193,15 @@ export class SourceAgentsStorage extends AgentsStorage {
   }
 
   async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    await this.hydrateAgent(input.agent.id);
+    const existing = await this.memory.getById(input.agent.id);
+    if (existing) {
+      throw new Error(`Agent with id ${input.agent.id} already exists`);
+    }
+
+    await this.persistSnapshot(input.agent.id, { ...input.agent }, 'Initial version');
     const created = await this.memory.create(input);
     this.knownAgentIds.add(input.agent.id);
-    await this.persistSnapshot(input.agent.id, { ...input.agent }, 'Initial version');
     return created;
   }
 
@@ -225,8 +231,18 @@ export class SourceAgentsStorage extends AgentsStorage {
 
   async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
     await this.hydrateAgent(input.agentId);
+    const existingVersion = await this.memory.getVersion(input.id);
+    if (existingVersion) {
+      throw new Error(`Version with id ${input.id} already exists`);
+    }
+    const existingVersionNumber = await this.memory.getVersionByNumber(input.agentId, input.versionNumber);
+    if (existingVersionNumber) {
+      throw new Error(`Version number ${input.versionNumber} already exists for agent ${input.agentId}`);
+    }
+
+    const snapshot = snapshotFromVersion({ ...input, createdAt: new Date() } as AgentVersion);
+    const result = await this.persistSnapshot(input.agentId, snapshot, input.changeMessage);
     const version = await this.memory.createVersion(input);
-    const result = await this.persistSnapshot(input.agentId, snapshotFromVersion(version), input.changeMessage);
     this.rememberProviderVersion(input.agentId, version, result);
     return version;
   }
@@ -318,7 +334,6 @@ export class SourceAgentsStorage extends AgentsStorage {
 
   private async discoverProviderAgentIds(): Promise<void> {
     if (this.providerAgentIdsDiscovered || !this.provider.listFiles) return;
-    this.providerAgentIdsDiscovered = true;
 
     const files = await this.provider.listFiles({ path: SOURCE_STORAGE_AGENTS_DIR });
     for (const file of files) {
@@ -327,19 +342,26 @@ export class SourceAgentsStorage extends AgentsStorage {
         this.knownAgentIds.add(agentId);
       }
     }
+    this.providerAgentIdsDiscovered = true;
   }
 
   private async hydrateAgent(agentId: string): Promise<void> {
     if (this.hydratedAgents.has(agentId)) return;
-    this.hydratedAgents.add(agentId);
 
     const file = await this.provider.readFile({ path: getSourceAgentFilePath(agentId) });
-    if (!file) return;
+    if (!file) {
+      this.hydratedAgents.add(agentId);
+      return;
+    }
 
     const snapshot = parseJsonObject(file.content);
-    if (!snapshot) return;
+    if (!snapshot) {
+      this.hydratedAgents.add(agentId);
+      return;
+    }
 
     this.knownAgentIds.add(agentId);
+    this.hydratedAgents.add(agentId);
     const now = new Date();
     const versionId = `hydrated-${agentId}-v1`;
     this.db.agents.set(agentId, {
@@ -390,13 +412,16 @@ export class SourceAgentsStorage extends AgentsStorage {
 
   private async loadHistory(agentId: string): Promise<void> {
     if (this.loadedHistory.has(agentId)) return;
-    this.loadedHistory.add(agentId);
 
     const capabilities = await this.provider.getCapabilities();
-    if (!capabilities.canListHistory) return;
+    if (!capabilities.canListHistory) {
+      this.loadedHistory.add(agentId);
+      return;
+    }
 
     const entries = await this.provider.listFileHistory({ path: getSourceAgentFilePath(agentId) });
     const orderedEntries = [...entries].reverse();
+    const versions = new Map<string, AgentVersion>();
     let versionNumber = 0;
     for (const entry of orderedEntries) {
       const file = await this.provider.readFile({ path: getSourceAgentFilePath(agentId), ref: entry.ref ?? entry.id });
@@ -405,8 +430,12 @@ export class SourceAgentsStorage extends AgentsStorage {
       if (!snapshot) continue;
       versionNumber += 1;
       const version = this.versionFromHistoryEntry(agentId, entry, versionNumber, snapshot);
-      this.providerVersions.set(version.id, version);
+      versions.set(version.id, version);
     }
+    for (const [versionId, version] of versions) {
+      this.providerVersions.set(versionId, version);
+    }
+    this.loadedHistory.add(agentId);
   }
 
   private rememberProviderVersion(agentId: string, version: AgentVersion, result: SourceWriteResult): void {

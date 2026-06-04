@@ -178,11 +178,13 @@ export class MastraEditor implements IMastraEditor {
         const sourceAgentsStore = new SourceAgentsStorage({
           provider: this.__sourceStorageProvider,
         });
+        const filesystemStore = new FilesystemStore({ dir: this.__codePath });
 
         mastra.setStorage(
           new MastraCompositeStore({
             id: `${existingStorage?.id ?? 'mastra'}-with-editor-source-provider`,
             ...(existingStorage ? { default: existingStorage } : {}),
+            editor: filesystemStore,
             domains: { agents: sourceAgentsStore },
           }),
         );

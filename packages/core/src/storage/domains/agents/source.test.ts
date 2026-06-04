@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   SourceFile,
   SourceFileHistoryEntry,
@@ -229,7 +229,7 @@ describe('SourceAgentsStorage', () => {
     expect(versions.versions.map(version => version.instructions)).toEqual(['First', 'Second']);
   });
 
-  it('rejects writes when the source provider cannot write', async () => {
+  it('rejects writes when the source provider cannot write without mutating memory', async () => {
     const provider = new MockSourceProvider();
     provider.capabilities = {
       canRead: true,
@@ -250,6 +250,90 @@ describe('SourceAgentsStorage', () => {
         },
       }),
     ).rejects.toThrow('missing-permissions');
+    await expect(storage.getById('weather-agent')).resolves.toBeNull();
+  });
+
+  it('does not create an in-memory version when source persistence fails', async () => {
+    const provider = new MockSourceProvider();
+    const storage = new SourceAgentsStorage({ provider });
+    await storage.create({
+      agent: {
+        id: 'weather-agent',
+        name: 'Weather Agent',
+        instructions: 'Use weather data.',
+        model,
+      },
+    });
+
+    provider.writeFile = vi.fn().mockRejectedValue(new Error('provider-write-failed'));
+
+    await expect(
+      storage.createVersion({
+        id: 'version-2',
+        agentId: 'weather-agent',
+        versionNumber: 2,
+        name: 'Weather Agent',
+        instructions: 'Updated instructions',
+        model,
+        changedFields: ['instructions'],
+      }),
+    ).rejects.toThrow('provider-write-failed');
+    await expect(storage.getVersion('version-2')).resolves.toBeNull();
+  });
+
+  it('retries provider discovery after transient failures', async () => {
+    const provider = new MockSourceProvider();
+    provider.files.set(
+      getSourceAgentFilePath('retry-agent'),
+      JSON.stringify({ name: 'Retry Agent', instructions: 'Loaded after retry.' }),
+    );
+    const listFiles = vi
+      .spyOn(provider, 'listFiles')
+      .mockRejectedValueOnce(new Error('temporary-list-failure'))
+      .mockImplementation(input => MockSourceProvider.prototype.listFiles.call(provider, input));
+    const storage = new SourceAgentsStorage({ provider });
+
+    await expect(storage.listResolved()).rejects.toThrow('temporary-list-failure');
+    const list = await storage.listResolved();
+
+    expect(listFiles).toHaveBeenCalledTimes(2);
+    expect(list.agents[0]).toMatchObject({ id: 'retry-agent', instructions: 'Loaded after retry.' });
+  });
+
+  it('retries provider hydration after transient failures', async () => {
+    const provider = new MockSourceProvider();
+    provider.files.set(getSourceAgentFilePath('retry-agent'), JSON.stringify({ instructions: 'Loaded after retry.' }));
+    const readFile = vi
+      .spyOn(provider, 'readFile')
+      .mockRejectedValueOnce(new Error('temporary-read-failure'))
+      .mockImplementation(input => MockSourceProvider.prototype.readFile.call(provider, input));
+    const storage = new SourceAgentsStorage({ provider });
+
+    await expect(storage.getByIdResolved('retry-agent')).rejects.toThrow('temporary-read-failure');
+    const agent = await storage.getByIdResolved('retry-agent');
+
+    expect(readFile).toHaveBeenCalledTimes(2);
+    expect(agent).toMatchObject({ id: 'retry-agent', instructions: 'Loaded after retry.' });
+  });
+
+  it('retries provider history loading after transient failures', async () => {
+    const provider = new MockSourceProvider();
+    const ref = new Map<string, string>();
+    ref.set(getSourceAgentFilePath('weather-agent'), JSON.stringify({ instructions: 'From history' }));
+    provider.refs.set('sha-1', ref);
+    provider.history = [{ id: 'sha-1', ref: 'sha-1', message: 'History save', createdAt: '2026-06-01T01:00:00.000Z' }];
+    const listFileHistory = vi
+      .spyOn(provider, 'listFileHistory')
+      .mockRejectedValueOnce(new Error('temporary-history-failure'))
+      .mockImplementation(input => MockSourceProvider.prototype.listFileHistory.call(provider, input));
+    const storage = new SourceAgentsStorage({ provider });
+
+    await expect(storage.listVersions({ agentId: 'weather-agent' })).rejects.toThrow('temporary-history-failure');
+    const versions = await storage.listVersions({ agentId: 'weather-agent' });
+
+    expect(listFileHistory).toHaveBeenCalledTimes(2);
+    expect(versions.versions).toHaveLength(1);
+    expect(versions.versions[0]).toMatchObject({ instructions: 'From history' });
   });
 
   it('checks provider capabilities during init', async () => {

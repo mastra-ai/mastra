@@ -94,6 +94,19 @@ describe('code source storage', () => {
     ]);
   });
 
+  it('keeps filesystem-backed editor domains when agents use a source provider', async () => {
+    const provider = createMockSourceProvider();
+    const editor = new MastraEditor({ source: 'code', sourceStorageProvider: provider });
+    const defaultStorage = new InMemoryStore();
+
+    const mastra = new Mastra({ storage: defaultStorage, editor, agents: {} });
+    const storage = mastra.getStorage();
+
+    await expect(storage?.getStore('agents')).resolves.not.toBe(defaultStorage.stores.agents);
+    await expect(storage?.getStore('promptBlocks')).resolves.not.toBe(defaultStorage.stores.promptBlocks);
+    await expect(storage?.getStore('workflows')).resolves.toBe(defaultStorage.stores.workflows);
+  });
+
   it('returns the existing code-defined agent when creating a stored override', async () => {
     const provider = createMockSourceProvider();
     const editor = new MastraEditor({ source: 'code', sourceStorageProvider: provider });
