@@ -76,6 +76,7 @@ import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
+import type { SignalProvider } from '../signals/signal-provider';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
@@ -361,6 +362,7 @@ export class Agent<
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
   #notifications?: AgentNotificationConfig;
+  #signals?: SignalProvider[];
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #editorConfig?: AgentEditorConfig;
   /**
@@ -572,6 +574,78 @@ export class Agent<
 
     if (config.notifications) {
       this.#notifications = config.notifications;
+    }
+
+    if (config.signals && config.signals.length > 0) {
+      this.#signals = config.signals;
+
+      // Collect processors and tools from signal providers that opt in
+      const signalInputProcessors: InputProcessorOrWorkflow[] = [];
+      const signalOutputProcessors: OutputProcessorOrWorkflow[] = [];
+      let signalTools: Record<string, unknown> = {};
+
+      for (const provider of config.signals) {
+        // Propagate Mastra instance before lifecycle so providers have storage access
+        if (this.#mastra) {
+          provider.__registerMastra(this.#mastra);
+        }
+
+        // Skip re-wiring providers that are already connected (e.g. via __fork())
+        if (!provider.isConnected) {
+          provider.connect(this as Agent<any, any, any, any>);
+          provider.startPolling();
+          void provider.start?.();
+        }
+
+        if (provider.getInputProcessors) {
+          signalInputProcessors.push(...provider.getInputProcessors());
+        }
+        if (provider.getOutputProcessors) {
+          signalOutputProcessors.push(...provider.getOutputProcessors());
+        }
+        if (provider.getTools) {
+          signalTools = { ...signalTools, ...provider.getTools() };
+        }
+      }
+
+      // Merge signal provider tools into the agent's tool set
+      if (Object.keys(signalTools).length > 0) {
+        if (typeof this.#tools === 'function') {
+          const existingToolsFn = this.#tools;
+          this.#tools = ((ctx: any) => {
+            const result = existingToolsFn(ctx);
+            return resolveMaybePromise(result, (tools: any) => ({ ...signalTools, ...tools }));
+          }) as any;
+        } else {
+          this.#tools = { ...signalTools, ...this.#tools } as TTools;
+        }
+      }
+
+      // Register collected input processors
+      if (signalInputProcessors.length > 0) {
+        const existingInput = this.#inputProcessors;
+        this.#inputProcessors = existingInput
+          ? typeof existingInput === 'function'
+            ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
+                const resolved = await existingInput(ctx);
+                return [...signalInputProcessors, ...resolved];
+              }
+            : [...signalInputProcessors, ...existingInput]
+          : signalInputProcessors;
+      }
+
+      // Register collected output processors
+      if (signalOutputProcessors.length > 0) {
+        const existingOutput = this.#outputProcessors;
+        this.#outputProcessors = existingOutput
+          ? typeof existingOutput === 'function'
+            ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
+                const resolved = await existingOutput(ctx);
+                return [...resolved, ...signalOutputProcessors];
+              }
+            : [...existingOutput, ...signalOutputProcessors]
+          : signalOutputProcessors;
+      }
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -2618,6 +2692,13 @@ export class Agent<
         // Always register the configuration with agent context
         mastra.addProcessorConfiguration(processor, this.id, 'output');
       });
+    }
+
+    // Propagate Mastra instance to signal providers
+    if (this.#signals) {
+      for (const provider of this.#signals) {
+        provider.__registerMastra(mastra);
+      }
     }
   }
 
