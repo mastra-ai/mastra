@@ -1,9 +1,11 @@
 import { describe, expectTypeOf, it } from 'vitest';
+import type { RequestContext } from '../request-context';
 import type { CompositeFilesystem, MountMapEntry } from './filesystem/composite-filesystem';
 import type { WorkspaceFilesystem } from './filesystem/filesystem';
 import { LocalFilesystem } from './filesystem/local-filesystem';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import type { WorkspaceSandbox } from './sandbox/sandbox';
+import type { WorkspaceSandboxResolver } from './workspace';
 import { Workspace } from './workspace';
 
 /**
@@ -27,6 +29,20 @@ describe('Workspace generic type inference', () => {
     });
 
     expectTypeOf(workspace.sandbox).toEqualTypeOf<LocalSandbox>();
+  });
+
+  it('should accept a sandbox resolver function', () => {
+    const resolver: WorkspaceSandboxResolver = ({ requestContext }) => {
+      expectTypeOf(requestContext).toEqualTypeOf<RequestContext>();
+      return new LocalSandbox({ workingDirectory: './data' });
+    };
+    const workspace = new Workspace({ sandbox: resolver });
+
+    expectTypeOf(workspace.sandbox).toEqualTypeOf<WorkspaceSandbox | undefined>();
+    expectTypeOf(workspace.resolveSandbox).toEqualTypeOf<
+      (options: { requestContext: RequestContext }) => Promise<WorkspaceSandbox | undefined>
+    >();
+    expectTypeOf(workspace.clearSandboxCache).toEqualTypeOf<(cacheKey?: string) => void>();
   });
 
   it('should infer both filesystem and sandbox types', () => {

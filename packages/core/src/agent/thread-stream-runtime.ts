@@ -9,6 +9,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import type { MessageListInput } from './message-list';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
@@ -63,6 +64,15 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   streamOptions?: AgentExecutionOptions<OUTPUT>;
 };
 
+type PendingContinuation<OUTPUT = unknown> = {
+  agent: Agent<any, any, any, any>;
+  messages: MessageListInput;
+  runId: string;
+  resourceId: string;
+  threadId: string;
+  streamOptions?: AgentExecutionOptions<OUTPUT>;
+};
+
 type AgentThreadRuntimeState = {
   threadRunsById: Map<string, AgentThreadRunRecord<any>>;
   threadKeysByRunId: Map<string, string>;
@@ -74,6 +84,7 @@ type AgentThreadRuntimeState = {
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
   preRunSignalsByThread: Map<string, CreatedAgentSignal[]>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
+  pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
   watchedThreadRunIds: Set<string>;
   preparedRunsById: Map<string, PreparedThreadRun>;
   abortedRunIds: Set<string>;
@@ -100,6 +111,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingSignalsByThread: new Map(),
     preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
+    pendingContinuationsByThread: new Map(),
     watchedThreadRunIds: new Set(),
     preparedRunsById: new Map(),
     abortedRunIds: new Set(),
@@ -383,6 +395,7 @@ export class AgentThreadStreamRuntime {
     state.pendingSignalsByThread.clear();
     state.preRunSignalsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
+    state.pendingContinuationsByThread.clear();
     state.watchedThreadRunIds.clear();
     state.preparedRunsById.clear();
     state.abortedRunIds.clear();
@@ -599,7 +612,99 @@ export class AgentThreadStreamRuntime {
       return;
     }
 
+    if (await this.#drainPendingContinuations(state, pubsub, key)) {
+      return;
+    }
+
     await this.#drainPendingIdleSignals(state, pubsub, key);
+  }
+
+  async #drainPendingContinuations(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string) {
+    if (state.activeThreadRunIds.has(key)) {
+      return false;
+    }
+
+    const queue = state.pendingContinuationsByThread.get(key);
+    const pending = queue?.shift();
+    if (!pending || !queue) {
+      return false;
+    }
+    if (queue.length === 0) {
+      state.pendingContinuationsByThread.delete(key);
+    }
+
+    this.#startContinuation(state, pubsub, key, pending);
+    return true;
+  }
+
+  #startContinuation(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    pending: PendingContinuation<any>,
+  ) {
+    state.activeThreadRunIds.set(key, pending.runId);
+    state.threadKeysByRunId.set(pending.runId, key);
+    void pending.agent
+      .stream(pending.messages, {
+        ...(pending.streamOptions as any),
+        runId: pending.runId,
+        memory: withThreadMemory(pending.streamOptions?.memory, pending.resourceId, pending.threadId),
+      })
+      .then(output => {
+        if ((state.pendingContinuationsByThread.get(key)?.length ?? 0) > 0) {
+          const nextRecord = state.threadRunsById.get(output.runId);
+          if (nextRecord) {
+            this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
+          }
+        }
+      })
+      .catch(() => {
+        state.threadKeysByRunId.delete(pending.runId);
+        this.#cleanupPreparedRun(state, pending.runId);
+        if (state.activeThreadRunIds.get(key) === pending.runId) {
+          state.activeThreadRunIds.delete(key);
+        }
+        void this.#drainPendingContinuations(state, pubsub, key).then(started => {
+          if (!started) {
+            void this.#drainPendingIdleSignals(state, pubsub, key);
+          }
+        });
+      });
+  }
+
+  continueWithMessages<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    messages: MessageListInput,
+    target: { resourceId: string; threadId: string; streamOptions?: AgentExecutionOptions<OUTPUT>; runId?: string },
+    pubsub?: PubSub,
+  ): { accepted: true; runId: string } {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(target.resourceId, target.threadId);
+    const runId = target.runId ?? randomUUID();
+    const pending: PendingContinuation<OUTPUT> = {
+      agent,
+      messages,
+      runId,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      streamOptions: target.streamOptions,
+    };
+
+    const activeRunId = state.activeThreadRunIds.get(key);
+    const activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
+    if (state.activeThreadRunIds.has(key)) {
+      const queue = state.pendingContinuationsByThread.get(key) ?? [];
+      queue.push(pending);
+      state.pendingContinuationsByThread.set(key, queue);
+      if (activeRecord) {
+        this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      }
+      return { accepted: true, runId };
+    }
+
+    this.#startContinuation(state, pubsub, key, pending);
+    return { accepted: true, runId };
   }
 
   async #drainPendingIdleSignals(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string) {
