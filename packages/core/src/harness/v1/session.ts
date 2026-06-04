@@ -170,12 +170,7 @@ export class Session<TState = {}> {
     return this.#pending.map(item => ({ ...item }));
   }
 
-  async spawnSubagentSession(opts: {
-    agentType: string;
-    prompt: string;
-    modelId?: string;
-    forked?: boolean;
-  }): Promise<
+  async spawnSubagentSession(opts: { agentType: string; prompt: string; modelId?: string; forked?: boolean }): Promise<
     | {
         isError: false;
         subagentSessionId: string;
