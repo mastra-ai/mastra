@@ -1,5 +1,15 @@
 # mastra
 
+## 1.12.2
+
+### Patch Changes
+
+- Fixed duplicate `mastra dev` runs in the same directory. ([#17200](https://github.com/mastra-ai/mastra/pull/17200))
+  Improved startup checks to stop a second dev server early and show a clear message with next steps, instead of surfacing confusing lock errors.
+- Updated dependencies [[`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/core@1.41.0
+  - @mastra/deployer@1.41.0
+
 ## 1.12.2-alpha.1
 
 ### Patch Changes
