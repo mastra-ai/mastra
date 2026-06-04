@@ -9,6 +9,7 @@ import type {
   CustomAvailableModel,
   HeartbeatHandler,
   HarnessConfig,
+  HarnessEvent,
   HarnessMode,
   HarnessSubagent,
   HarnessRequestContext,
@@ -410,7 +411,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const efficiencyScorer = createEfficiencyScorer();
 
   // Agent
-  const githubSignals = globalSettings.signals?.experimentalGithubSignals
+  const githubSignals: GithubSignals | undefined = globalSettings.signals?.experimentalGithubSignals
     ? new GithubSignals({
         cwd: project.rootPath,
         getNotificationStreamOptions: ({ resourceId, threadId }) => {
@@ -441,7 +442,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
       })
     : undefined;
-  const codeAgent = new Agent({
+  const codeAgent: Agent = new Agent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
     instructions: getDynamicInstructions,
@@ -582,7 +583,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (!defaultModeId) {
     throw new Error('MastraCode requires at least one mode');
   }
-  const modes = modesV1.map(mode => v1ModeToLegacy(mode, codeAgent));
+  const modes: HarnessMode<MastraCodeState>[] = modesV1.map(mode => v1ModeToLegacy(mode, codeAgent));
 
   // Map subagent types to mode models: explore→fast, plan→plan, execute→build
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
@@ -688,7 +689,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   });
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const harness = new HarnessCompat<MastraCodeState>(
+  const harness: HarnessCompat<MastraCodeState> = new HarnessCompat<MastraCodeState>(
     {
       id: 'mastra-code',
       resourceId: project.resourceId,
@@ -816,7 +817,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {
-    harness.subscribe(event => {
+    harness.subscribe((event: HarnessEvent) => {
       if (event.type === 'thread_changed') {
         hookManager.setSessionId(event.threadId);
       } else if (event.type === 'thread_created') {
@@ -831,7 +832,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       githubSignals.stopAllPolling();
       try {
         const threads = await harness.listThreads({ allResources: true });
-        const thread = threads.find(item => item.id === threadId);
+        const thread = threads.find((item: { id: string }) => item.id === threadId);
         await githubSignals.startPollingForThread(
           {
             threadId,
@@ -844,7 +845,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }
     };
 
-    harness.subscribe(event => {
+    harness.subscribe((event: HarnessEvent) => {
       if (event.type === 'thread_changed') void startGithubPollingForCurrentThread(event.threadId);
       else if (event.type === 'thread_created') void startGithubPollingForCurrentThread(event.thread.id);
     });
