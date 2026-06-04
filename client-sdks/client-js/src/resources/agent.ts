@@ -769,6 +769,19 @@ export class Agent extends BaseResource {
             return;
           }
 
+          const continuationStreamOptions = {
+            ...activeRuntimeOptions,
+            requestContext: processedRequestContext,
+            memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+            clientTools: processedClientTools,
+          } as StreamParamsBaseWithoutMessages<any>;
+
+          agent.setSignalRuntimeOptions({
+            resourceId,
+            threadId,
+            streamOptions: continuationStreamOptions,
+          });
+
           try {
             await agent.sendToolApproval({
               resourceId: resourceId || agent.agentId,
@@ -779,14 +792,10 @@ export class Agent extends BaseResource {
               messages: (threadId
                 ? toolResultMessages
                 : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]) as MessageListInput,
-              streamOptions: {
-                ...activeRuntimeOptions,
-                requestContext: processedRequestContext,
-                memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
-                clientTools: processedClientTools,
-              } as StreamParamsBaseWithoutMessages<any>,
+              streamOptions: continuationStreamOptions,
             });
           } catch (error) {
+            agent.deleteLatestSignalRuntimeOptions({ resourceId, threadId });
             console.error('Error running client-tool continuation:', error);
           } finally {
             agent.deleteSignalRuntimeOptions(runId);
