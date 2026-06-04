@@ -104,17 +104,30 @@ async function ensurePendingCloseLabel() {
   }
 }
 
+type PublishedVersion = {
+  name: string;
+  version: string;
+  path: string;
+};
+
 async function stableReleased() {
   const issues = await listIssuesWithLabel(PENDING_RELEASE_LABEL, 'all');
   console.log(`Found ${issues.length} issue(s) with ${PENDING_RELEASE_LABEL} label`);
 
   await ensurePendingCloseLabel();
 
+  const publishedVersions = parsePublishedVersions();
+
   for (const issue of issues) {
-    await upsertReleaseComment(
-      issue.number,
-      `This issue has been resolved and is available in the **latest stable** release.`,
-    );
+    const versions = await getVersionsForIssue(issue.number, publishedVersions);
+
+    let message = `This issue has been resolved and is available in the **latest stable** release.`;
+    if (versions.length > 0) {
+      message += `\n\n**Published packages:**\n`;
+      message += versions.map(v => `- \`${v.name}@${v.version}\``).join('\n');
+    }
+
+    await upsertReleaseComment(issue.number, message);
     await removeLabelIfPresent(issue.number, PENDING_RELEASE_LABEL);
 
     // If the issue is still open, add pending-close label for manual triage
@@ -125,6 +138,135 @@ async function stableReleased() {
       console.log(`Updated comment and removed pending-release label from closed issue #${issue.number}`);
     }
   }
+}
+
+function parsePublishedVersions(): PublishedVersion[] {
+  const raw = process.env.PUBLISHED_VERSIONS;
+  if (!raw) {
+    console.log('PUBLISHED_VERSIONS not set, skipping version detection');
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as PublishedVersion[];
+    if (!Array.isArray(parsed)) {
+      console.log('PUBLISHED_VERSIONS is not an array, skipping');
+      return [];
+    }
+    return parsed.filter(v => v.name && v.version);
+  } catch (e) {
+    console.log('Failed to parse PUBLISHED_VERSIONS, skipping version detection');
+    return [];
+  }
+}
+
+async function getVersionsForIssue(
+  issueNumber: number,
+  publishedVersions: PublishedVersion[],
+): Promise<PublishedVersion[]> {
+  if (publishedVersions.length === 0) return [];
+
+  const prs = await getClosingPRsForIssue(issueNumber);
+  if (prs.length === 0) return [];
+
+  const changedPaths = new Set<string>();
+  for (const prNumber of prs) {
+    const files = await octokit.paginate(octokit.rest.pulls.listFiles, {
+      owner: OWNER,
+      repo: REPO,
+      pull_number: prNumber,
+      per_page: 100,
+    });
+    for (const file of Array.from(files as Array<{ filename?: string }>)) {
+      if (file.filename) {
+        changedPaths.add(file.filename);
+      }
+    }
+  }
+
+  if (changedPaths.size === 0) return [];
+
+  // Normalize published package paths to relative paths for matching
+  const workspaceRoot = process.env.GITHUB_WORKSPACE ?? '';
+  const normalizedPackages = publishedVersions.map(pv => {
+    let relativePath = pv.path;
+    if (workspaceRoot && relativePath.startsWith(workspaceRoot)) {
+      relativePath = relativePath.slice(workspaceRoot.length).replace(/^\/+/, '');
+    }
+    return { ...pv, relativePath };
+  });
+
+  const matched = new Map<string, PublishedVersion>();
+  for (const file of Array.from(changedPaths)) {
+    for (const pkg of normalizedPackages) {
+      // Match if the changed file is inside the package directory
+      // e.g. packages/core/src/foo.ts matches package at packages/core
+      const pkgDir = pkg.relativePath.replace(/\/+$/, '');
+      if (file === pkgDir || file.startsWith(pkgDir + '/')) {
+        matched.set(pkg.name, { name: pkg.name, version: pkg.version, path: pkg.path });
+      }
+    }
+  }
+
+  return Array.from(matched.values());
+}
+
+async function getClosingPRsForIssue(issueNumber: number): Promise<number[]> {
+  const result = await octokit.graphql<{
+    repository: {
+      issue: {
+        timelineItems: {
+          nodes: Array<{
+            source: {
+              __typename: string;
+              number: number;
+            } | null;
+          }>;
+        };
+      } | null;
+    } | null;
+  }>(
+    `query($owner: String!, $repo: String!, $number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        issue(number: $number) {
+          timelineItems(first: 100, itemTypes: [CLOSED_EVENT, CROSS_REFERENCED_EVENT]) {
+            nodes {
+              ... on ClosedEvent {
+                closer {
+                  __typename
+                  ... on PullRequest {
+                    number
+                  }
+                }
+              }
+              ... on CrossReferencedEvent {
+                source {
+                  __typename
+                  ... on PullRequest {
+                    number
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }`,
+    { owner: OWNER, repo: REPO, number: issueNumber },
+  );
+
+  const prs = new Set<number>();
+  const nodes = result.repository?.issue?.timelineItems.nodes ?? [];
+  for (const node of nodes) {
+    if (node.source && node.source.__typename === 'PullRequest') {
+      prs.add(node.source.number);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const closer = (node as any).closer;
+    if (closer && closer.__typename === 'PullRequest') {
+      prs.add(closer.number as number);
+    }
+  }
+  return Array.from(prs);
 }
 
 async function getLinkedIssues(prNumber: number): Promise<LinkedIssue[]> {

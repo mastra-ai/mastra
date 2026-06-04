@@ -290,6 +290,19 @@ jobs:
           pnpm changeset-cli tag
           git push origin --tags
 
+      - name: Capture published package versions
+        if: ${{ !inputs.dry_run }}
+        id: published-versions
+        run: |
+          node -e "
+            const { execSync } = require('child_process');
+            const out = execSync('pnpm list -r --json --depth=0', { encoding: 'utf8' });
+            const pkgs = JSON.parse(out).filter(p => p.name && p.version && !p.private);
+            const map = pkgs.map(p => ({ name: p.name, version: p.version, path: p.path }));
+            const fs = require('fs');
+            fs.writeFileSync(process.env.GITHUB_OUTPUT, 'versions=' + JSON.stringify(map) + '\n');
+          "
+
       - name: Notify linked issues (stable released)
         if: ${{ !inputs.dry_run }}
         run: |
@@ -301,6 +314,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
+          PUBLISHED_VERSIONS: ${{ steps.published-versions.outputs.versions }}
 
   enter_prerelease:
     needs: stable
