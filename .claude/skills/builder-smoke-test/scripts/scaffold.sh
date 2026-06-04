@@ -153,6 +153,10 @@ render "${TEMPLATE_DIR}/src/mastra/workflows/index.ts" "${PROJECT_DIR}/src/mastr
     echo "WORKOS_ORGANIZATION_ID=${WORKOS_ORG_ID}"
     echo "WORKOS_REDIRECT_URI=http://localhost:4111/api/auth/callback"
     echo "WORKOS_COOKIE_PASSWORD=${cookie_password}"
+    # Enable the smoke-test cookie leak route. The route is opt-in and only
+    # mounted when this is set at `mastra dev` boot time. Required by
+    # references/auth.md step 0 (cookie extraction for curl).
+    echo "SMOKE_TEST_COOKIE_LEAK=1"
   fi
 } > "${PROJECT_DIR}/.env"
 chmod 600 "${PROJECT_DIR}/.env"

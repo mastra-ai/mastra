@@ -547,7 +547,7 @@ describe('MCPServer', () => {
     let notificationTestServer: MCPServer;
     let notificationTestInternalClient: InternalMastraMCPClient;
     let notificationHttpServer: http.Server;
-    const NOTIFICATION_PORT = 9400 + Math.floor(Math.random() * 1000);
+    let notificationPort: number;
 
     const mockInitialResources: Resource[] = [
       {
@@ -599,7 +599,7 @@ describe('MCPServer', () => {
       notificationTestServer = new MCPServer(serverOptions);
 
       notificationHttpServer = http.createServer(async (req, res) => {
-        const url = new URL(req.url || '', `http://localhost:${NOTIFICATION_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${notificationPort}`);
         await notificationTestServer.startSSE({
           url,
           ssePath: '/sse',
@@ -608,12 +608,22 @@ describe('MCPServer', () => {
           res,
         });
       });
-      await new Promise<void>(resolve => notificationHttpServer.listen(NOTIFICATION_PORT, resolve));
+      notificationPort = await new Promise<number>((resolve, reject) => {
+        notificationHttpServer.once('error', reject);
+        notificationHttpServer.listen(0, () => {
+          const address = notificationHttpServer.address();
+          if (address && typeof address === 'object') {
+            resolve(address.port);
+            return;
+          }
+          reject(new Error('Failed to obtain notification test port'));
+        });
+      });
 
       notificationTestInternalClient = new InternalMastraMCPClient({
         name: 'notification-internal-client',
         server: {
-          url: new URL(`http://localhost:${NOTIFICATION_PORT}/sse`),
+          url: new URL(`http://localhost:${notificationPort}/sse`),
           logger: logMessage =>
             console.log(
               `[${logMessage.serverName} - ${logMessage.level.toUpperCase()}]: ${logMessage.message}`,
@@ -625,7 +635,7 @@ describe('MCPServer', () => {
     });
 
     afterAll(async () => {
-      await notificationTestInternalClient.disconnect();
+      await notificationTestInternalClient?.disconnect();
       if (notificationHttpServer) {
         await new Promise<void>((resolve, reject) =>
           notificationHttpServer.close(err => {
@@ -634,7 +644,7 @@ describe('MCPServer', () => {
           }),
         );
       }
-      await notificationTestServer.close();
+      await notificationTestServer?.close();
     });
 
     beforeEach(() => {

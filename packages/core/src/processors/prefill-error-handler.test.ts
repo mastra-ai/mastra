@@ -132,7 +132,8 @@ describe('PrefillErrorHandler', () => {
     expect(lastMessage.content.metadata).toEqual(
       expect.objectContaining({
         signal: expect.objectContaining({
-          type: 'system-reminder',
+          type: 'reactive',
+          tagName: 'system-reminder',
           attributes: expect.objectContaining({ type: 'anthropic-prefill-processor-retry' }),
           metadata: expect.objectContaining({ message: 'Continuing after prefill error' }),
         }),

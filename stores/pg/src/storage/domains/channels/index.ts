@@ -116,10 +116,11 @@ export class ChannelsPG extends ChannelsStorage {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
     const now = new Date().toISOString();
+    const createdAt = installation.createdAt?.toISOString() ?? now;
 
     await this.#db.client.none(
-      `INSERT INTO ${tableName} ("id", "platform", "agentId", "status", "webhookId", "data", "configHash", "error", "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10)
+      `INSERT INTO ${tableName} ("id", "platform", "agentId", "status", "webhookId", "data", "configHash", "error", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12)
        ON CONFLICT ("id") DO UPDATE SET
          "platform" = EXCLUDED."platform",
          "agentId" = EXCLUDED."agentId",
@@ -128,7 +129,8 @@ export class ChannelsPG extends ChannelsStorage {
          "data" = EXCLUDED."data",
          "configHash" = EXCLUDED."configHash",
          "error" = EXCLUDED."error",
-         "updatedAt" = EXCLUDED."updatedAt"`,
+         "updatedAt" = EXCLUDED."updatedAt",
+         "updatedAtZ" = EXCLUDED."updatedAtZ"`,
       [
         installation.id,
         installation.platform,
@@ -138,7 +140,9 @@ export class ChannelsPG extends ChannelsStorage {
         JSON.stringify(installation.data),
         installation.configHash ?? null,
         installation.error ?? null,
-        installation.createdAt?.toISOString() ?? now,
+        createdAt,
+        createdAt,
+        now,
         now,
       ],
     );
@@ -187,14 +191,16 @@ export class ChannelsPG extends ChannelsStorage {
   async saveConfig(config: ChannelConfig): Promise<void> {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_CHANNEL_CONFIG, schemaName });
+    const now = config.updatedAt.toISOString();
 
     await this.#db.client.none(
-      `INSERT INTO ${tableName} ("platform", "data", "updatedAt")
-       VALUES ($1, $2::jsonb, $3)
+      `INSERT INTO ${tableName} ("platform", "data", "updatedAt", "updatedAtZ")
+       VALUES ($1, $2::jsonb, $3, $4)
        ON CONFLICT ("platform") DO UPDATE SET
          "data" = EXCLUDED."data",
-         "updatedAt" = EXCLUDED."updatedAt"`,
-      [config.platform, JSON.stringify(config.data), config.updatedAt.toISOString()],
+         "updatedAt" = EXCLUDED."updatedAt",
+         "updatedAtZ" = EXCLUDED."updatedAtZ"`,
+      [config.platform, JSON.stringify(config.data), now, now],
     );
   }
 
@@ -206,7 +212,7 @@ export class ChannelsPG extends ChannelsStorage {
     return {
       platform: row.platform as string,
       data: typeof row.data === 'string' ? JSON.parse(row.data) : (row.data as Record<string, unknown>),
-      updatedAt: new Date(row.updatedAt as string),
+      updatedAt: new Date((row.updatedAtZ as string) || (row.updatedAt as string)),
     };
   }
 
@@ -226,8 +232,8 @@ export class ChannelsPG extends ChannelsStorage {
       data: typeof row.data === 'string' ? JSON.parse(row.data) : (row.data as Record<string, unknown>),
       configHash: (row.configHash as string) || undefined,
       error: (row.error as string) || undefined,
-      createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt as string),
-      updatedAt: row.updatedAt instanceof Date ? row.updatedAt : new Date(row.updatedAt as string),
+      createdAt: new Date((row.createdAtZ as string) || (row.createdAt as string)),
+      updatedAt: new Date((row.updatedAtZ as string) || (row.updatedAt as string)),
     };
   }
 }

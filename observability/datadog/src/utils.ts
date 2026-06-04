@@ -11,6 +11,19 @@ import { isModelInferenceEnabled } from './features';
  */
 export type DatadogSpanKind = 'llm' | 'agent' | 'workflow' | 'tool' | 'task' | 'retrieval' | 'embedding';
 
+type DatadogToolCall = {
+  name?: string;
+  arguments?: Record<string, any>;
+  toolId?: string;
+  type?: string;
+};
+
+type DatadogMessage = {
+  role: string;
+  content: string;
+  toolCalls?: DatadogToolCall[];
+};
+
 /**
  * Maps Mastra SpanTypes to Datadog LLMObs span kinds for the legacy hierarchy
  * (no `model-inference-span` feature). MODEL_STEP is the actual API call here
@@ -129,7 +142,7 @@ export function toDate(value: Date | string | number): Date {
  */
 export function safeStringify(data: unknown): string {
   try {
-    return JSON.stringify(data);
+    return JSON.stringify(data) ?? '';
   } catch {
     if (typeof data === 'object' && data !== null) {
       return `[Non-serializable ${data.constructor?.name || 'Object'}]`;
@@ -141,8 +154,14 @@ export function safeStringify(data: unknown): string {
 /**
  * Checks if data is already in message array format ({role, content}[]).
  */
-function isMessageArray(data: any): data is Array<{ role: string; content: any }> {
-  return Array.isArray(data) && data.every(m => m?.role && m?.content !== undefined);
+function isMessageArray(data: any): data is Array<{ role: string; content: any; toolCalls?: DatadogToolCall[] }> {
+  return Array.isArray(data) && data.every(m => m?.role && (m?.content !== undefined || Array.isArray(m.toolCalls)));
+}
+
+function isModelDataSpan(spanType: SpanType): boolean {
+  return (
+    spanType === SpanType.MODEL_GENERATION || spanType === SpanType.MODEL_STEP || spanType === SpanType.MODEL_INFERENCE
+  );
 }
 
 /**
@@ -152,14 +171,55 @@ function isGeminiContentArray(data: any): data is Array<{ role: string; parts: a
   return Array.isArray(data) && data.every(m => m?.role && Array.isArray(m?.parts));
 }
 
+function toMessageContent(content: any): string {
+  return typeof content === 'string' ? content : safeStringify(content);
+}
+
 /**
  * Maps a {role, content}[] message array into the Datadog message shape,
  * stringifying any non-string content (e.g. multimodal part arrays).
  */
-function toDatadogMessages(messages: Array<{ role: string; content: any }>): Array<{ role: string; content: string }> {
-  return messages.map(m => ({
-    role: m.role,
-    content: typeof m.content === 'string' ? m.content : safeStringify(m.content),
+function toDatadogMessages(
+  messages: Array<{ role: string; content: any; toolCalls?: DatadogToolCall[] }>,
+): DatadogMessage[] {
+  return messages
+    .map(m => {
+      const message: DatadogMessage = {
+        role: m.role,
+        content: m.content == null ? '' : toMessageContent(m.content),
+      };
+      if (m.toolCalls) {
+        message.toolCalls = m.toolCalls;
+      }
+      return message;
+    })
+    .filter(m => !(m.role === 'user' && m.content.trim().length === 0));
+}
+
+function parseToolArguments(args: unknown): Record<string, any> | undefined {
+  if (args == null) return undefined;
+  if (typeof args === 'string') {
+    try {
+      const parsed = JSON.parse(args);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // Datadog's tool-call schema expects an object. Preserve opaque strings
+      // under a stable key instead of dropping the argument payload.
+    }
+    return { value: args };
+  }
+  if (typeof args === 'object' && !Array.isArray(args)) return args as Record<string, any>;
+  return { value: args };
+}
+
+function toDatadogToolCalls(toolCalls: any[]): DatadogToolCall[] {
+  return toolCalls.map(c => ({
+    name: c?.toolName ?? c?.name ?? c?.function?.name ?? 'unknown',
+    arguments: parseToolArguments(c?.args ?? c?.input ?? c?.function?.arguments),
+    toolId: c?.toolCallId ?? c?.toolId ?? c?.id,
+    type: c?.type === 'function' ? c.type : 'function',
   }));
 }
 
@@ -182,18 +242,18 @@ function geminiContentToMessage(item: { role: string; parts: any[] }): { role: s
 
 /**
  * Formats input data for Datadog annotations.
- * LLM spans use message array format; others use raw or stringified data.
+ * Model spans use message array format; others use raw or stringified data.
  */
 export function formatInput(input: any, spanType: SpanType): any {
-  // LLM spans expect {role, content}[] format
-  if (spanType === SpanType.MODEL_GENERATION || spanType === SpanType.MODEL_STEP) {
+  // Model spans expect {role, content}[] format
+  if (isModelDataSpan(spanType)) {
     // Already in message format
     if (isMessageArray(input)) {
       return toDatadogMessages(input);
     }
     // Gemini format: {role, parts} → normalize to {role, content}
     if (isGeminiContentArray(input)) {
-      return input.map(geminiContentToMessage);
+      return toDatadogMessages(input.map(geminiContentToMessage));
     }
     // Mastra wraps MODEL_GENERATION input as { messages, schema? } and Gemini
     // request bodies use { contents }. Unwrap so we don't bury the message array
@@ -203,32 +263,32 @@ export function formatInput(input: any, spanType: SpanType): any {
         return toDatadogMessages((input as any).messages);
       }
       if (isGeminiContentArray((input as any).messages)) {
-        return (input as any).messages.map(geminiContentToMessage);
+        return toDatadogMessages((input as any).messages.map(geminiContentToMessage));
       }
       if (isGeminiContentArray((input as any).contents)) {
-        return (input as any).contents.map(geminiContentToMessage);
+        return toDatadogMessages((input as any).contents.map(geminiContentToMessage));
       }
     }
     // String input becomes user message
     if (typeof input === 'string') {
-      return [{ role: 'user', content: input }];
+      return toDatadogMessages([{ role: 'user', content: input }]);
     }
     // Object input gets stringified as user message
-    return [{ role: 'user', content: safeStringify(input) }];
+    return toDatadogMessages([{ role: 'user', content: safeStringify(input) }]);
   }
 
-  // Non-LLM spans: pass through strings/arrays, stringify objects
+  // Non-model spans: pass through strings/arrays, stringify objects
   if (typeof input === 'string' || Array.isArray(input)) return input;
   return safeStringify(input);
 }
 
 /**
  * Formats output data for Datadog annotations.
- * LLM spans use message array format; others use raw or stringified data.
+ * Model spans use message array format; others use raw or stringified data.
  */
 export function formatOutput(output: any, spanType: SpanType): any {
-  // LLM spans expect {role, content}[] format
-  if (spanType === SpanType.MODEL_GENERATION || spanType === SpanType.MODEL_STEP) {
+  // Model spans expect {role, content}[] format
+  if (isModelDataSpan(spanType)) {
     // Already in message format
     if (isMessageArray(output)) {
       return toDatadogMessages(output);
@@ -238,25 +298,30 @@ export function formatOutput(output: any, spanType: SpanType): any {
       return [{ role: 'assistant', content: output }];
     }
     // AI SDK shape: { text, object, reasoning, toolCalls, ... }.
-    // Prefer text, then object, then a structured tool-call summary so we don't
-    // bury the whole object as escaped JSON inside a single assistant content.
+    // Prefer structured tool-call messages when present so Datadog renders
+    // them as tool-call blocks instead of escaped JSON or text summaries.
     if (output && typeof output === 'object') {
+      if (Array.isArray(output.toolCalls) && output.toolCalls.length > 0) {
+        return [
+          {
+            role: 'assistant',
+            content: typeof output.text === 'string' ? output.text : '',
+            toolCalls: toDatadogToolCalls(output.toolCalls),
+          },
+        ];
+      }
       if (typeof output.text === 'string' && output.text.length > 0) {
         return [{ role: 'assistant', content: output.text }];
       }
       if (output.object !== undefined) {
         return [{ role: 'assistant', content: safeStringify(output.object) }];
       }
-      if (Array.isArray(output.toolCalls) && output.toolCalls.length > 0) {
-        const summary = output.toolCalls.map((c: any) => `[tool: ${c?.toolName ?? c?.name ?? 'unknown'}]`).join('');
-        return [{ role: 'assistant', content: summary }];
-      }
     }
     // Other objects get stringified as assistant message
     return [{ role: 'assistant', content: safeStringify(output) }];
   }
 
-  // Non-LLM spans: pass through strings, stringify objects
+  // Non-model spans: pass through strings, stringify objects
   if (typeof output === 'string') return output;
   return safeStringify(output);
 }

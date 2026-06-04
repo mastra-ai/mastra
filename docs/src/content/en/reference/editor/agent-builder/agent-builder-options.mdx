@@ -1,0 +1,183 @@
+---
+title: "Reference: AgentBuilderOptions | Editor"
+description: "Reference for AgentBuilderOptions, the configuration object passed to MastraEditor.builder."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# AgentBuilderOptions
+
+`AgentBuilderOptions` configures the Agent Builder. Pass it as `MastraEditor.builder` to enable the Builder UI, toggle visible surfaces, pin admin defaults, and opt into skill registries.
+
+See the [Configuration](/docs/agent-builder/configuration) page for concepts and worked examples.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    features: {
+      agent: { browser: false },
+    },
+    configuration: {
+      agent: {
+        memory: { observationalMemory: true },
+        models: {
+          allowed: [
+            { provider: 'openai', modelId: 'gpt-5.4-mini' },
+            { provider: 'openai', modelId: 'gpt-5.4' },
+            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+          ],
+        },
+      },
+    },
+    registries: {
+      skillsSh: { enabled: true },
+    },
+  },
+})
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'enabled',
+    type: 'boolean',
+    description:
+      'Master switch. When false, the Builder UI is disabled and `MastraEditor.resolveBuilder()` returns undefined.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'features',
+    type: '{ agent?: AgentFeatures }',
+    description: 'UI toggles. Each key on `features.agent` defaults to true when omitted.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'AgentFeatures',
+        parameters: [
+          {
+            name: 'agent.tools',
+            type: 'boolean',
+            description: 'Show the tools tab in the agent editor.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
+            name: 'agent.agents',
+            type: 'boolean',
+            description: 'Show the sub-agents picker in the agent editor.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
+            name: 'agent.workflows',
+            type: 'boolean',
+            description: 'Show the workflows picker in the agent editor.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
+            name: 'agent.skills',
+            type: 'boolean',
+            description: 'Show the skills tab and library for the agent.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
+            name: 'agent.memory',
+            type: 'boolean',
+            description: 'Show the memory configuration in the agent editor.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
+            name: 'agent.model',
+            type: 'boolean',
+            description:
+              'Show the model picker in the agent editor. When false, the admin-pinned default model applies.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
+            name: 'agent.browser',
+            type: 'boolean',
+            description:
+              'Show the browser tab. Resolves to true only when a valid browser provider is registered on `MastraEditor.browsers`; otherwise it is downgraded to false and a warning is logged.',
+            isOptional: true,
+            defaultValue: 'true (conditional)',
+          },
+          {
+            name: 'agent.avatarUpload',
+            type: 'boolean',
+            description: 'Allow end users to upload an avatar for stored agents.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
+            name: 'agent.favorites',
+            type: 'boolean',
+            description: 'Show favorite agents and skills with per-user state and aggregate counts.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'configuration',
+    type: '{ agent?: BuilderAgentDefaults }',
+    description:
+      'Admin-pinned defaults applied to every Builder-created agent. End users cannot override these values. See the BuilderAgentDefaults reference for the full schema.',
+    isOptional: true,
+  },
+  {
+    name: 'registries',
+    type: '{ skillsSh?: { enabled: boolean } }',
+    description:
+      'Opt-in third-party skill registries. When no registry is enabled, the Builder hides registry browse UI.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ skillsSh?: { enabled: boolean } }',
+        parameters: [
+          {
+            name: 'skillsSh',
+            type: '{ enabled: boolean }',
+            description:
+              'Enable the skills.sh registry. When enabled, the Builder shows registry browse UI for skills.sh skills.',
+            isOptional: true,
+            properties: [
+              {
+                type: '{ enabled: boolean }',
+                parameters: [
+                  {
+                    name: 'enabled',
+                    type: 'boolean',
+                    description: 'Set to `true` to opt in. Defaults to `false`.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Related
+
+- [Configuration](/docs/agent-builder/configuration) — concept and worked examples.
+- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — full schema for `configuration.agent`.
+- [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) — model allowlist and default model.
+- [MastraEditor class](/reference/editor/mastra-editor) — the parent surface that hosts `builder`.

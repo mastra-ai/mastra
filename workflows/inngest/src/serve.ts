@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { Inngest, InngestFunction, RegisterOptions } from 'inngest';
 import { serve as inngestServeHono } from 'inngest/hono';
-import { InngestWorkflow } from './workflow';
+import { collectInngestFunctions } from './functions';
 
 /**
  * Options for serve functions
@@ -28,27 +28,12 @@ export type InngestServeAdapter<THandler> = (options: {
 
 /**
  * Collects workflow functions from Mastra and prepares serve options for inngest.
- * This is the shared logic used by all serve functions.
  */
 function prepareServeOptions({ mastra, inngest, functions: userFunctions = [], registerOptions }: MastraServeOptions) {
-  const wfs = mastra.listWorkflows();
-
-  const workflowFunctions = Array.from(
-    new Set(
-      Object.values(wfs).flatMap(wf => {
-        if (wf instanceof InngestWorkflow) {
-          wf.__registerMastra(mastra);
-          return wf.getFunctions();
-        }
-        return [];
-      }),
-    ),
-  );
-
   return {
     ...registerOptions,
     client: inngest,
-    functions: [...workflowFunctions, ...userFunctions],
+    functions: collectInngestFunctions({ mastra, functions: userFunctions }),
   };
 }
 

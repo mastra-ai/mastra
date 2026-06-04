@@ -113,6 +113,9 @@ The storage implementation handles collection creation and management automatica
 - `mastra_traces`: Stores telemetry and tracing data
 - `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
+- `mastra_notifications`: Stores notification inbox records and delivery metadata
+
+`MongoDBStore` exposes notification storage through `getStore('notifications')`.
 
 ### Initialization
 
@@ -224,7 +227,7 @@ export const mongodbAgent = new Agent({
   name: 'mongodb-agent',
   instructions:
     'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new MongoDBStore({
       uri: process.env.MONGODB_URI!,

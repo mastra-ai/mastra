@@ -2,11 +2,13 @@ import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
-import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
+import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
+import type { ApplyStateSignalResult } from '../agent/state-signals';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
@@ -64,6 +66,15 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
    */
   sendSignal?: (signal: AgentSignalInput) => Promise<CreatedAgentSignal>;
   /**
+   * Add a named state signal to the message list, stream it when possible, and update
+   * thread-level state tracking metadata.
+   *
+   * @experimental Agent state signals are experimental and may change in a future release.
+   */
+  sendStateSignal?: (
+    signal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
+  ) => Promise<CreatedAgentSignal | ApplyStateSignalResult>;
+  /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
    */
@@ -93,7 +104,8 @@ export interface ProcessorMessageContext<TTripwireMetadata = unknown> extends Pr
 }
 
 /**
- * Return type for processInput that includes modified system messages
+ * Return type for processInput that includes modified untagged system messages.
+ * Tagged system messages owned by other processors are preserved.
  */
 export interface ProcessInputResultWithSystemMessages {
   messages: MastraDBMessage[];
@@ -116,7 +128,7 @@ export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputR
  * Arguments for processInput method
  */
 export interface ProcessInputArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
-  /** All system messages (agent instructions, user-provided, memory) for read/modify access */
+  /** Untagged system messages for read/modify access. Tagged processor-owned messages remain on messageList. */
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
@@ -165,7 +177,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   /** Mark the current assistant response message ID as complete and rotate to a fresh one, when supported by the caller */
   rotateResponseMessageId?: () => string;
 
-  /** All system messages (agent instructions, user-provided, memory) for read/modify access */
+  /** Untagged system messages for read/modify access. Tagged processor-owned messages remain on messageList. */
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
@@ -201,6 +213,9 @@ export type RunProcessInputStepArgs = Omit<
   messageId?: string;
   rotateResponseMessageId?: () => string;
   retryCount?: number;
+  memory?: MastraMemory;
+  resourceId?: string;
+  threadId?: string;
 };
 
 /**
@@ -220,7 +235,10 @@ export type ProcessInputStepResult = {
 
   messages?: MastraDBMessage[];
   messageList?: MessageList;
-  /** Replace all system messages with these */
+  /**
+   * Replace untagged system messages with these while preserving tagged system messages
+   * owned by other processors.
+   */
   systemMessages?: CoreMessageV4[];
   providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
@@ -248,6 +266,73 @@ export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & 
  * tool-result formats, etc. can be rewritten transiently without losing data
  * in memory, UI, or future model swaps.
  */
+export type ProcessorStateSignal = Omit<AgentStateSignalInput, 'id'> & {
+  id?: string;
+};
+
+export type ProcessorActiveStateSignal = CreatedAgentSignal & {
+  type: 'state';
+  metadata?: Record<string, unknown> & {
+    state?: {
+      id?: string;
+      threadId?: string;
+      cacheKey?: string;
+      version?: number;
+      mode?: 'snapshot' | 'delta';
+    };
+  };
+};
+
+/**
+ * Arguments for computeStateSignal method.
+ *
+ * Called once per model input step after normal per-step input processing and
+ * before the LLM request is finalized. State signals require memory-backed
+ * threads so the runtime can track versions on thread metadata.
+ */
+export interface ComputeStateSignalArgs<
+  TTripwireMetadata = unknown,
+> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The current step number (0-indexed) */
+  stepNumber: number;
+  /** All completed steps so far. */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+  /** Memory resource id for the active thread. */
+  resourceId: string;
+  /** Memory thread id that scopes this processor's state signal identity. */
+  threadId: string;
+  /** Active state signal copies for this processor/thread currently known to the runtime. */
+  activeStateSignals: ProcessorActiveStateSignal[];
+  /** Facts derived from the active message context window for this processor/thread. */
+  contextWindow: {
+    /** Whether the active message window already contains a snapshot for this processor/thread. */
+    hasSnapshot: boolean;
+  };
+  /** Latest snapshot signal for this processor/thread, resolved from message history when needed. */
+  lastSnapshot?: ProcessorActiveStateSignal;
+  /** Delta signals accepted after the latest snapshot for this processor/thread. */
+  deltasSinceSnapshot: ProcessorActiveStateSignal[];
+  /** Last persisted tracking metadata for this processor/thread. */
+  tracking?: ProcessorStateSignalTracking;
+}
+
+/**
+ * Thread metadata stored under metadata.mastra.stateSignals[stateId].
+ */
+export type ProcessorStateSignalTracking = {
+  currentCacheKey?: string;
+  currentMode?: 'snapshot' | 'delta';
+  version?: number;
+  lastSignalId?: string;
+  lastSnapshotSignalId?: string;
+  updatedAt?: string;
+  activeCopies?: Array<{ id: string; cacheKey?: string; mode?: 'snapshot' | 'delta'; version?: number }>;
+};
+
+export type ComputeStateSignalResult = ProcessorStateSignal | undefined | void;
+
 export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
   /** The LLM request prompt that will be sent to the provider on this call. Processors may return a modified copy. */
   prompt: LanguageModelV2Prompt;
@@ -405,7 +490,7 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   text?: string;
   /** Token usage for the current step (input tokens, output tokens, etc.) */
   usage: LanguageModelUsage;
-  /** All system messages */
+  /** Untagged system messages. Tagged processor-owned messages remain on messageList. */
   systemMessages: CoreMessageV4[];
   /** All completed steps so far (including the current step) */
   steps: Array<StepResult<any>>;
@@ -529,6 +614,26 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
     | MastraDBMessage[]
     | void
     | undefined;
+
+  /**
+   * State lane id used for `computeStateSignal` history and tracking. Defaults to the processor id.
+   *
+   * @experimental Agent state signals are experimental and may change in a future release.
+   */
+  stateId?: string;
+
+  /**
+   * Compute this processor's thread-scoped state signal for the current model input step.
+   *
+   * Called after this processor's `processInputStep` hook and before the model request is finalized.
+   * The runtime persists version/cache-key tracking on memory thread metadata keyed by state id.
+   * Returning `undefined` means the state has not changed for this step.
+   *
+   * @experimental Agent state signals are experimental and may change in a future release.
+   */
+  computeStateSignal?(
+    args: ComputeStateSignalArgs<TTripwireMetadata>,
+  ): Promise<ComputeStateSignalResult> | ComputeStateSignalResult;
 
   /**
    * Process the LLM-shaped prompt after `MessageList` has been converted to
@@ -656,10 +761,12 @@ export abstract class BaseProcessor<TId extends string = string, TTripwireMetada
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
 
-// InputProcessor requires processInput, processInputStep, processLLMRequest, or processLLMResponse (or any combination)
+// InputProcessor requires processInput, processInputStep, computeStateSignal, processLLMRequest, or processLLMResponse (or any combination)
 export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInput'> & Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInputStep'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'computeStateSignal'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMRequest'> &
       Processor<string, TTripwireMetadata>)
@@ -691,7 +798,10 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
  * A Workflow that can be used as a processor.
  * The workflow must accept ProcessorStepInput and return ProcessorStepOutput.
  */
-export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any>;
+export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any> & {
+  /** @internal Processors in a combined workflow that compute state signals after input-step execution. */
+  __stateSignalProcessors?: Processor[];
+};
 
 /**
  * Input processor config: can be a Processor or a Workflow.
@@ -748,7 +858,7 @@ export {
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
-export { ProcessorState, ProcessorRunner } from './runner';
+export { ProcessorState, ProcessorRunner, createProcessorSendSignal } from './runner';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

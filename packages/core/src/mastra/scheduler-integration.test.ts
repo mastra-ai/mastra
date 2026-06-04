@@ -31,6 +31,8 @@ async function flushAsyncInit(): Promise<void> {
   for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
 }
 
+const withoutNotificationDispatch = { notifications: { dispatch: { enabled: false } } } as const;
+
 describe('Mastra — workflow scheduler integration', () => {
   it('auto-instantiates the scheduler when a workflow declares a schedule', async () => {
     const wf = createEventedWorkflow({
@@ -50,11 +52,13 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       workflows: { wf } as any,
     });
 
-    // Allow the async scheduler init to complete.
+    // Start workers — the SchedulerWorker initializes and starts the tick loop.
+    await mastra.startWorkers();
     await waitForScheduler(mastra);
 
     const scheduler = mastra.scheduler;
@@ -75,9 +79,11 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage,
     });
 
+    await mastra.startWorkers();
     await flushAsyncInit();
 
     expect(mastra.scheduler).toBeUndefined();
@@ -107,10 +113,12 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage,
       workflows: { wf } as any,
     });
 
+    await mastra.startWorkers();
     await flushAsyncInit();
 
     expect(mastra.scheduler).toBeUndefined();
@@ -122,10 +130,12 @@ describe('Mastra — workflow scheduler integration', () => {
   it('instantiates the scheduler when explicitly enabled even without declarative schedules', async () => {
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       scheduler: { enabled: true },
     });
 
+    await mastra.startWorkers();
     await waitForScheduler(mastra);
     expect(mastra.scheduler).toBeDefined();
     expect(mastra.scheduler!.isRunning).toBe(true);
@@ -146,11 +156,12 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       workflows: { wf: wf as any },
     });
 
-    // The scheduler picks the workflow up because it's evented now and has a schedule.
+    await mastra.startWorkers();
     await waitForScheduler(mastra);
     expect(mastra.scheduler).toBeDefined();
     const schedulesStore = await mastra.getStorage()!.getStore('schedules');
@@ -163,10 +174,12 @@ describe('Mastra — workflow scheduler integration', () => {
   it('starts the scheduler when scheduler.enabled is true even with no scheduled workflows', async () => {
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       scheduler: { enabled: true },
     });
 
+    await mastra.startWorkers();
     await waitForScheduler(mastra);
     expect(mastra.scheduler).toBeDefined();
     expect(mastra.scheduler!.isRunning).toBe(true);
@@ -202,9 +215,11 @@ describe('Mastra — workflow scheduler integration', () => {
     const boot = async (storage: InstanceType<typeof MockStore>, wf: ReturnType<typeof buildScheduledWorkflow>) => {
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         workflows: { wf } as any,
       });
+      await mastra.startWorkers();
       await waitForScheduler(mastra);
       return mastra;
     };
@@ -302,9 +317,11 @@ describe('Mastra — workflow scheduler integration', () => {
     ) => {
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         workflows: { wf } as any,
       });
+      await mastra.startWorkers();
       await waitForScheduler(mastra);
       return mastra;
     };
@@ -373,7 +390,13 @@ describe('Mastra — workflow scheduler integration', () => {
           }) as any,
         )
         .commit();
-      const first = new Mastra({ logger: false, storage, workflows: { wfSingle } as any });
+      const first = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        workflows: { wfSingle } as any,
+      });
+      await first.startWorkers();
       await waitForScheduler(first);
       const schedulesStore = (await storage.getStore('schedules'))!;
       expect((await schedulesStore.listSchedules()).map(r => r.id)).toEqual(['wf_multi-wf']);
@@ -444,6 +467,90 @@ describe('Mastra — workflow scheduler integration', () => {
       const ids = (await schedulesStore.listSchedules()).map(r => r.id).sort();
       expect(ids).toContain('user-created-schedule');
       await second.shutdown();
+    });
+  });
+
+  describe('ghost-workflow cleanup (end-to-end)', () => {
+    it('deletes a due schedule after N ticks when its target workflow is not registered', async () => {
+      const storage = new MockStore();
+
+      // Boot Mastra with scheduler enabled (no workflows). Declarative
+      // reconciliation runs on boot and won't touch schedules we insert
+      // afterwards — this exercises the tick-based ghost-workflow cleanup
+      // wired end-to-end through SchedulerWorker → isWorkflowRegistered
+      // → mastra.getWorkflowById.
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete: 2 },
+      });
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      // Insert a ghost schedule AFTER boot so declarative reconciliation
+      // doesn't clean it up — only the tick loop's existence check can.
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const past = Date.now() - 5_000;
+      await schedulesStore.createSchedule({
+        id: 'ghost-sched',
+        target: { type: 'workflow', workflowId: 'does-not-exist' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: past,
+        createdAt: past,
+        updatedAt: past,
+      });
+
+      // Tick 1: schedule is due, workflow missing → miss count = 1.
+      await mastra.scheduler!.tick();
+      const afterTick1 = await schedulesStore.getSchedule('ghost-sched');
+      expect(afterTick1).not.toBeNull(); // Still alive — within grace window.
+
+      // Tick 2: miss count reaches limit (2) → schedule deleted.
+      await mastra.scheduler!.tick();
+      const afterTick2 = await schedulesStore.getSchedule('ghost-sched');
+      expect(afterTick2).toBeNull();
+
+      await mastra.shutdown();
+    });
+
+    it('does not delete a ghost schedule that is not yet due', async () => {
+      const storage = new MockStore();
+
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete: 1 },
+      });
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      // Insert a ghost schedule with nextFireAt far in the future.
+      // The tick loop should never pick it up (not due) so the miss
+      // counter never fires.
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const future = Date.now() + 3_600_000;
+      await schedulesStore.createSchedule({
+        id: 'future-ghost',
+        target: { type: 'workflow', workflowId: 'does-not-exist' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: future,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      // Multiple ticks — schedule is never due, so it stays untouched.
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+
+      const afterTicks = await schedulesStore.getSchedule('future-ghost');
+      expect(afterTicks).not.toBeNull();
+
+      await mastra.shutdown();
     });
   });
 });

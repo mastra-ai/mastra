@@ -107,7 +107,9 @@ function executeStep(pubsub: any, initData: any, input?: any) {
 }
 
 afterEach(() => {
-  globalRunRegistry.delete(RUN_ID);
+  if (globalRunRegistry.has(RUN_ID)) {
+    globalRunRegistry.delete(RUN_ID);
+  }
   vi.clearAllMocks();
 });
 
@@ -435,5 +437,37 @@ describe('durable tool-call background task dispatch', () => {
     const callArgs = vi.mocked(createBackgroundTask).mock.calls[0]![1]!;
     expect(callArgs.threadId).toBe('thread-1');
     expect(callArgs.resourceId).toBe('user-1');
+  });
+});
+
+describe('durable tool-call activeTools enforcement', () => {
+  it('rejects Mastra-resolved tools outside activeTools when the run registry is unavailable', async () => {
+    const pubsub = mockPubsub();
+    const hiddenExecute = vi.fn().mockResolvedValue('hidden');
+    vi.mocked(_resolveTool).mockReturnValue({
+      execute: hiddenExecute,
+    } as any);
+
+    const result = await executeStep(
+      pubsub,
+      makeInitData({
+        options: {
+          requireToolApproval: false,
+          activeTools: ['allowedTool'],
+        },
+      }),
+      {
+        ...baseInput(),
+        toolName: 'hiddenTool',
+      },
+    );
+
+    expect(result.error).toEqual(
+      expect.objectContaining({
+        name: 'ToolNotFoundError',
+        message: expect.stringContaining('Available tools: allowedTool'),
+      }),
+    );
+    expect(hiddenExecute).not.toHaveBeenCalled();
   });
 });

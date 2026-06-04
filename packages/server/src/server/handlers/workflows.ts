@@ -671,6 +671,65 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   },
 });
 
+/**
+ * Fire-and-forget resume: dispatches the resume and returns immediately with the runId,
+ * without waiting for the workflow to complete. For Inngest-backed workflows this avoids
+ * the `getRunOutput()` polling race that the awaiting `resume-async` route can hit.
+ *
+ * TODO(v2): in Mastra v2 this fire-and-forget behavior should become the behavior of the
+ * `resume-async` route (and `Run.resumeAsync()`), and this route should be removed. It is
+ * kept separate in v1 to avoid a breaking change to the existing `resume-async` response
+ * contract (which returns the full workflow result).
+ */
+export const RESUME_NO_WAIT_WORKFLOW_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workflows/:workflowId/resume-no-wait',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: resumeBodySchema,
+  responseSchema: createWorkflowRunResponseSchema,
+  summary: 'Resume workflow without waiting',
+  description:
+    'Resumes a suspended workflow execution without waiting (fire-and-forget) and returns immediately with the runId. The workflow continues executing in the background.',
+  tags: ['Workflows'],
+  requiresAuth: true,
+  handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
+    try {
+      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      if (!runId) {
+        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      const run = await workflow.getWorkflowRunById(runId);
+
+      if (!run) {
+        throw new HTTPException(404, { message: 'Workflow run not found' });
+      }
+
+      await validateRunOwnership(run, effectiveResourceId);
+
+      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const result = await _run.resumeAsync({ ...params, requestContext });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error resuming workflow step');
+    }
+  },
+});
+
 export const RESUME_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/workflows/:workflowId/resume',

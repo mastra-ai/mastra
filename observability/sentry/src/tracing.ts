@@ -57,6 +57,7 @@ const ATTRIBUTE_KEYS = {
   GEN_AI_RESPONSE_STREAMING: 'gen_ai.response.streaming',
   GEN_AI_RESPONSE_TOOL_CALLS: 'gen_ai.response.tool_calls',
   GEN_AI_RESPONSE_TEXT: 'gen_ai.response.text',
+  GEN_AI_CONVERSATION_ID: 'gen_ai.conversation.id',
   GEN_AI_COMPLETION_START_TIME: 'gen_ai.completion_start_time',
   GEN_AI_TOOL_CALL_ID: 'gen_ai.tool.call.id',
   TOOL_SUCCESS: 'tool.success',
@@ -353,6 +354,7 @@ export class SentryExporter extends BaseExporter {
     }
 
     this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.TAGS, span.tags?.join(','));
+    this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.GEN_AI_CONVERSATION_ID, span.metadata?.threadId);
 
     this.addInputOutputAttributes(attributes, span);
 

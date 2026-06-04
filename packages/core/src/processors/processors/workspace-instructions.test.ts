@@ -156,4 +156,29 @@ describe('WorkspaceInstructionsProcessor', () => {
 
     expect(workspace.getInstructions).toHaveBeenCalledWith({ requestContext: undefined });
   });
+
+  it('should use async workspace instructions when available', async () => {
+    const ctx = new RequestContext([['role', 'admin']]);
+    const workspace = {
+      getInstructions: vi.fn().mockReturnValue('sync instructions'),
+      getInstructionsAsync: vi.fn().mockResolvedValue('async instructions'),
+    } as unknown as Workspace;
+    const processor = new WorkspaceInstructionsProcessor({ workspace });
+
+    const messageList = createMockMessageList();
+    await processor.processInputStep({
+      messageList: messageList as any,
+      stepNumber: 0,
+      steps: [],
+      systemMessages: [],
+      state: {},
+      model: {} as any,
+      tools: {},
+      requestContext: ctx,
+    } as any);
+
+    expect(workspace.getInstructionsAsync).toHaveBeenCalledWith({ requestContext: ctx });
+    expect(workspace.getInstructions).not.toHaveBeenCalled();
+    expect(messageList.addSystem).toHaveBeenCalledWith({ role: 'system', content: 'async instructions' });
+  });
 });

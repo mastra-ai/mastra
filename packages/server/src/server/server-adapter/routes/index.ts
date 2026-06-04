@@ -7,7 +7,7 @@ import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
-import type { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
@@ -15,6 +15,7 @@ import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
+import { EDITOR_BUILDER_ROUTES } from './editor-builder';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -119,6 +120,7 @@ export type ServerRoute<
   path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream', defaults to 'stream'
+  sseFlushOnConnect?: boolean;
   // Method signature is bivariant in params, allowing heterogeneous route arrays
   // while still preserving specific param types on individual routes.
   handler(params: TParams & ServerContext): ReturnType<ServerRouteHandler<TParams, TResponse, TResponseType>>;
@@ -184,6 +186,8 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
+  ...EDITOR_BUILDER_ROUTES,
+  ...AGENT_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
 ];
@@ -220,6 +224,7 @@ export type ServerRoutes = readonly [
   ...typeof PROCESSOR_PROVIDER_ROUTES,
   ...typeof SYSTEM_ROUTES,
   ...typeof DATASETS_ROUTES,
+  ...typeof EDITOR_BUILDER_ROUTES,
   ...typeof CHANNELS_ROUTES,
 ];
 

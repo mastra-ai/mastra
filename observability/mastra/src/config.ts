@@ -35,6 +35,10 @@ export enum SamplingStrategyType {
   CUSTOM = 'custom',
 }
 
+const functionSchema = z.custom<(...args: any[]) => unknown>(value => typeof value === 'function', {
+  message: 'Expected function',
+});
+
 /**
  * Options passed when using a custom sampler strategy
  */
@@ -190,7 +194,7 @@ export const samplingStrategySchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal(SamplingStrategyType.CUSTOM),
-    sampler: z.function({ input: z.tuple([z.any().optional()]), output: z.boolean() }),
+    sampler: functionSchema,
   }),
 ]);
 
@@ -222,12 +226,7 @@ const loggingConfigSchema = z
   })
   .optional();
 
-const spanFilterSchema = z
-  .function({
-    input: z.tuple([z.any()]),
-    output: z.boolean(),
-  })
-  .optional();
+const spanFilterSchema = functionSchema.optional();
 
 const observabilityInstanceConfigFields = {
   serviceName: z.string().min(1, 'Service name is required'),
@@ -305,7 +304,7 @@ export const observabilityRegistryConfigSchema = z
       .optional()
       .nullable(),
     configs: z.union([z.record(z.string(), z.any()), z.array(z.any()), z.null()]).optional(),
-    configSelector: z.function().optional(),
+    configSelector: functionSchema.optional(),
     sensitiveDataFilter: z.union([z.boolean(), sensitiveDataFilterOptionsSchema]).optional(),
   })
   .passthrough() // Allow additional properties
