@@ -4,7 +4,7 @@ import { mkdir, rm, stat, access, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import [ ZipArchive } from 'archiver';
+import { ZipArchive } from 'archiver';
 import { config } from 'dotenv';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
