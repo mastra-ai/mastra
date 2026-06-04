@@ -1,5 +1,11 @@
 # mastracode
 
+## 0.22.2-alpha.1
+
+### Patch Changes
+
+- Fixed thread isolation bug where /new command did not abort the running stream, causing events from the old thread (subagent results, tool approvals, task updates) to leak into the new conversation. ([#17565](https://github.com/mastra-ai/mastra/pull/17565))
+
 ## 0.22.2-alpha.0
 
 ### Patch Changes
