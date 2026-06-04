@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { AgentSignalInput, Agent } from '@mastra/core/agent';
-import { SignalProvider } from '@mastra/core/agent';
+import { SignalProvider } from '@mastra/core/signals';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';

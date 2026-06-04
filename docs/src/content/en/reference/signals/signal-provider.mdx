@@ -109,6 +109,17 @@ class MySignals extends SignalProvider<'my-signals'> {
 }
 ```
 
+#### `__registerMastra(mastra)`
+
+Called when the provider's agent is registered with a Mastra instance. Override to access storage or other Mastra services. Always call `super.__registerMastra(mastra)`.
+
+```typescript prettier:false
+override __registerMastra(mastra) {
+  super.__registerMastra(mastra)
+  // this.mastra is now available
+}
+```
+
 ### Processor and tool integration
 
 #### `getInputProcessors()`
@@ -264,6 +275,18 @@ const removed = this.unsubscribeAll({
 ```
 
 Returns: `number` — count of removed subscriptions.
+
+#### `subscriptionCount`
+
+Total number of active subscriptions for this provider.
+
+```typescript prettier:false
+if (this.subscriptionCount === 0) {
+  // nothing to poll
+}
+```
+
+Returns: `number`
 
 ### Polling
 

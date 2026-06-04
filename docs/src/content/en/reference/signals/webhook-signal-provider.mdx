@@ -89,7 +89,7 @@ const result = await webhookProvider.handleWebhook({
 
 ### Subscription management
 
-#### `subscribeThread(target, externalResourceId)`
+#### `subscribeThread(target, externalResourceId, metadata?)`
 
 Subscribe a thread to receive webhook events for a specific external resource.
 
@@ -97,6 +97,7 @@ Subscribe a thread to receive webhook events for a specific external resource.
 webhookProvider.subscribeThread(
   { threadId: 'thread-1', resourceId: 'user-1' },
   'mastra-ai/mastra',
+  { watchType: 'push' },
 )
 ```
 
@@ -113,6 +114,12 @@ Returns: `SignalSubscription`
     name: 'externalResourceId',
     type: 'string',
     description: 'The external resource to monitor (for example, a repository full name).',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Additional data to store with the subscription.',
+    isOptional: true,
   },
 ]}
 />

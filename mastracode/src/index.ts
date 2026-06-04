@@ -410,7 +410,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const outcomeScorer = createOutcomeScorer();
   const efficiencyScorer = createEfficiencyScorer();
 
-  // Agent
+  // Agent — githubSignals is created before `harness` but the closure below
+  // captures `harness` by reference; it is only invoked at notification time,
+  // well after harness is constructed (line ~692). Explicit type annotations
+  // on githubSignals, codeAgent, modes, and harness break the circular
+  // inference chain this forward reference would otherwise create.
   const githubSignals: GithubSignals | undefined = globalSettings.signals?.experimentalGithubSignals
     ? new GithubSignals({
         cwd: project.rootPath,

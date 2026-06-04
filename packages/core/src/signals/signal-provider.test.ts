@@ -393,5 +393,182 @@ describe('SignalProvider', () => {
 
       expect(registerSpy).toHaveBeenCalledWith(fakeMastra);
     });
+
+    it('connects provider to agent via signals config', () => {
+      const p = new TestSignalProvider();
+      expect(p.doGetAgent()).toBeUndefined();
+
+      new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
+        signals: [p],
+      });
+
+      expect(p.doGetAgent()).toBeDefined();
+      expect(p.isConnected).toBe(true);
+    });
+
+    it('does not re-wire already-connected providers (fork safety)', () => {
+      const p = new TestSignalProvider();
+      const startFn = vi.fn();
+      p.start = startFn;
+
+      new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
+        signals: [p],
+      });
+
+      expect(startFn).toHaveBeenCalledTimes(1);
+      const firstAgent = p.doGetAgent();
+
+      // Simulate a fork by constructing another Agent with the same provider
+      new Agent({
+        name: 'forked-agent',
+        instructions: 'test',
+        model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
+        signals: [p],
+      });
+
+      // Provider should still point to original agent, start() not called again
+      expect(startFn).toHaveBeenCalledTimes(1);
+      expect(p.doGetAgent()).toBe(firstAgent);
+    });
+
+    it('registers input and output processors from providers', () => {
+      const fakeInputProcessor = { id: 'fake-input', processInputStep: vi.fn() };
+      const fakeOutputProcessor = { id: 'fake-output', processOutputStep: vi.fn() };
+
+      class ProcessorProvider extends SignalProvider<'proc-provider'> {
+        readonly id = 'proc-provider' as const;
+        getInputProcessors() {
+          return [fakeInputProcessor as any];
+        }
+        getOutputProcessors() {
+          return [fakeOutputProcessor as any];
+        }
+      }
+
+      const p = new ProcessorProvider();
+      new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
+        signals: [p],
+      });
+
+      // Processors are registered internally; we verify the provider was wired
+      expect(p.isConnected).toBe(true);
+    });
+
+    it('wires multiple providers independently', () => {
+      class ProviderA extends SignalProvider<'provider-a'> {
+        readonly id = 'provider-a' as const;
+        getTools() {
+          return { toolA: { id: 'toolA' } };
+        }
+      }
+
+      class ProviderB extends SignalProvider<'provider-b'> {
+        readonly id = 'provider-b' as const;
+        getTools() {
+          return { toolB: { id: 'toolB' } };
+        }
+      }
+
+      const a = new ProviderA();
+      const b = new ProviderB();
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
+        signals: [a, b],
+      });
+
+      const tools = agent.listTools() as Record<string, unknown>;
+      expect(tools).toHaveProperty('toolA');
+      expect(tools).toHaveProperty('toolB');
+      expect(a.isConnected).toBe(true);
+      expect(b.isConnected).toBe(true);
+    });
+  });
+
+  describe('full lifecycle integration', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('subscribe → poll → notify round-trip', async () => {
+      const mockSendNotification = vi.fn().mockResolvedValue(undefined);
+
+      // Provider that auto-notifies on poll for each subscription
+      class NotifyingProvider extends SignalProvider<'notifying'> {
+        readonly id = 'notifying' as const;
+        readonly pollInterval = 1000;
+
+        async poll(subscriptions: SignalSubscription[]) {
+          for (const sub of subscriptions) {
+            await this.notify(
+              { source: 'test', kind: 'update', summary: `Update for ${sub.externalResourceId}` },
+              { threadId: sub.threadId, resourceId: sub.resourceId },
+            );
+          }
+        }
+
+        // Expose subscribe for testing
+        addSubscription(target: SignalProviderTarget, externalResourceId: string) {
+          return this.subscribe(target, externalResourceId);
+        }
+      }
+
+      const provider = new NotifyingProvider();
+      const mockAgent = { sendNotificationSignal: mockSendNotification } as any;
+      provider.connect(mockAgent);
+
+      // Subscribe two targets to the same resource
+      provider.addSubscription(target1, 'slack:general');
+      provider.addSubscription(target2, 'slack:general');
+
+      // Start polling
+      provider.startPolling();
+
+      // Advance past one poll cycle
+      await vi.advanceTimersByTimeAsync(1500);
+
+      // Both targets should have been notified
+      expect(mockSendNotification).toHaveBeenCalledTimes(2);
+      expect(mockSendNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'test', kind: 'update', summary: 'Update for slack:general' }),
+        { resourceId: 'user-1', threadId: 'thread-1' },
+      );
+      expect(mockSendNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'test', kind: 'update', summary: 'Update for slack:general' }),
+        { resourceId: 'user-1', threadId: 'thread-2' },
+      );
+
+      // Unsubscribe one and verify next poll only notifies the remaining target
+      mockSendNotification.mockClear();
+      provider.addSubscription(target1, 'slack:general'); // re-get it; unsubscribe via protected
+      // We need the protected unsubscribe; use the test helper pattern
+      const testProvider = provider as any;
+      testProvider.unsubscribe(target1, 'slack:general');
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(mockSendNotification).toHaveBeenCalledTimes(1);
+      expect(mockSendNotification).toHaveBeenCalledWith(expect.anything(), {
+        resourceId: 'user-1',
+        threadId: 'thread-2',
+      });
+
+      provider.stop();
+    });
   });
 });
