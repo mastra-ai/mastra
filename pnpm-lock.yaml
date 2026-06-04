@@ -437,7 +437,7 @@ importers:
   auth/better-auth:
     dependencies:
       better-auth:
-        specifier: ^1.4.18
+        specifier: ^1.5.5
         version: 1.6.11(@cloudflare/workers-types@4.20260511.1)(@opentelemetry/api@1.9.1)(mongodb@7.2.0(@aws-sdk/credential-providers@3.1006.0)(socks@2.8.7))(mysql2@3.22.4(@types/node@22.19.15))(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.8)
     devDependencies:
       '@internal/auth':
@@ -516,6 +516,9 @@ importers:
       '@mastra/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.18
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -627,6 +630,9 @@ importers:
       '@okta/okta-sdk-nodejs':
         specifier: ^8.0.0
         version: 8.1.0(encoding@0.1.13)
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.18
       jose:
         specifier: ^6.2.1
         version: 6.2.3
@@ -3017,7 +3023,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 'catalog:'
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@27.4.0(@noble/hashes@2.0.1)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.9.0))
       zod:
         specifier: 'catalog:'
         version: 4.4.3
