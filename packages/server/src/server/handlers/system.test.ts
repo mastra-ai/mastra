@@ -51,6 +51,7 @@ describe('System Handlers', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     process.env = originalEnv;
     try {
       unlinkSync(tempFilePath);
@@ -237,6 +238,61 @@ describe('System Handlers', () => {
           provider: { id: 'mock-source', displayName: 'Mock Source' },
           canSave: true,
           canOpenChangeRequest: true,
+        },
+      });
+    });
+
+    it('should return unavailable capabilities when source-provider probing fails', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra({
+          getSource: () => 'code',
+          getSourceStorageProvider: () => ({
+            id: 'mock-source',
+            displayName: 'Mock Source',
+            getCapabilities: async () => {
+              throw new Error('provider unavailable');
+            },
+          }),
+        }),
+      } as any);
+
+      expect(result).toMatchObject({
+        editorSourceCapabilities: {
+          source: 'code',
+          storage: 'source-provider',
+          provider: { id: 'mock-source', displayName: 'Mock Source' },
+          canSave: false,
+          canOpenChangeRequest: false,
+          unavailableReason: 'Unable to load source provider capabilities.',
+        },
+      });
+    });
+
+    it('should time out stalled source-provider capability probes', async () => {
+      vi.useFakeTimers();
+
+      const resultPromise = GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra({
+          getSource: () => 'code',
+          getSourceStorageProvider: () => ({
+            id: 'mock-source',
+            displayName: 'Mock Source',
+            getCapabilities: () => new Promise<never>(() => {}),
+          }),
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(3000);
+      const result = await resultPromise;
+
+      expect(result).toMatchObject({
+        editorSourceCapabilities: {
+          source: 'code',
+          storage: 'source-provider',
+          provider: { id: 'mock-source', displayName: 'Mock Source' },
+          canSave: false,
+          canOpenChangeRequest: false,
+          unavailableReason: 'Unable to load source provider capabilities.',
         },
       });
     });

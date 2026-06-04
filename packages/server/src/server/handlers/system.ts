@@ -5,6 +5,31 @@ import { apiSchemaManifestResponseSchema, systemPackagesResponseSchema } from '.
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
+const SOURCE_PROVIDER_CAPABILITIES_TIMEOUT_MS = 3000;
+
+async function getSourceProviderCapabilities(
+  getCapabilities: () => Promise<{
+    canWrite: boolean;
+    canOpenChangeRequest: boolean;
+    reason?: string;
+  }>,
+) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      getCapabilities(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Source provider capabilities timed out')),
+          SOURCE_PROVIDER_CAPABILITIES_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 async function getEditorSourceCapabilities(editor: {
   getSource?: () => 'code' | 'db' | undefined;
   getSourceStorageProvider?: () =>
@@ -33,18 +58,30 @@ async function getEditorSourceCapabilities(editor: {
 
   const configuredProvider = editor.getSourceStorageProvider?.();
   if (configuredProvider) {
-    const capabilities = await configuredProvider.getCapabilities();
-    return {
-      source: editorSource,
-      storage: 'source-provider' as const,
-      provider: {
-        id: configuredProvider.id,
-        displayName: configuredProvider.displayName,
-      },
-      canSave: capabilities.canWrite,
-      canOpenChangeRequest: capabilities.canOpenChangeRequest,
-      unavailableReason: capabilities.canWrite ? undefined : capabilities.reason,
+    const provider = {
+      id: configuredProvider.id,
+      displayName: configuredProvider.displayName,
     };
+    try {
+      const capabilities = await getSourceProviderCapabilities(configuredProvider.getCapabilities);
+      return {
+        source: editorSource,
+        storage: 'source-provider' as const,
+        provider,
+        canSave: capabilities.canWrite,
+        canOpenChangeRequest: capabilities.canOpenChangeRequest,
+        unavailableReason: capabilities.canWrite ? undefined : capabilities.reason,
+      };
+    } catch {
+      return {
+        source: editorSource,
+        storage: 'source-provider' as const,
+        provider,
+        canSave: false,
+        canOpenChangeRequest: false,
+        unavailableReason: 'Unable to load source provider capabilities.',
+      };
+    }
   }
 
   const sourceProvider = process.env.MASTRA_SOURCE_PROVIDER;

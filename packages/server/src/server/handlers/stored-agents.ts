@@ -752,7 +752,9 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       if (codeAgentForUpdate?.source === 'code') {
         const ownership = getCodeAgentOwnership(codeAgentForUpdate.__getEditorConfig?.());
         if (ownership.ownsInstructions) {
-          assertOwnedInstructionsNotEmpty(instructions);
+          if (instructions !== undefined) {
+            assertOwnedInstructionsNotEmpty(instructions);
+          }
         } else {
           instructions = undefined;
         }

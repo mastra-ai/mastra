@@ -974,6 +974,40 @@ describe('Stored Agents Handlers', () => {
       }
     });
 
+    it('should allow non-instruction updates for a code agent that owns instructions', async () => {
+      mockAgentsData.set('code-agent', {
+        id: 'code-agent',
+        name: 'Code Agent',
+        instructions: 'Existing instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-code-agent-1',
+      });
+      const mastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'code-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ instructions: true, tools: true }),
+          },
+        },
+      });
+
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        storedAgentId: 'code-agent',
+        name: 'Renamed Code Agent',
+      });
+
+      expect(mockAgentsStore.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'code-agent',
+          name: 'Renamed Code Agent',
+          instructions: undefined,
+        }),
+      );
+    });
+
     it('should allow empty instructions when updating a code agent that does not own instructions', async () => {
       mockAgentsData.set('description-only-agent', {
         id: 'description-only-agent',
