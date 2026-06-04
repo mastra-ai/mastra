@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13566 (row 72) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13598 (`e37c95493f`, rejected-plan visibility), then #13600 (`43187ad783`, Anthropic API-key fallback).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13600 (row 74) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13556 (`c6c5376cb2`, Quiet mode), then #13609 (`ebab49855b`, assistant text preservation + web search fallback).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 73: PR #13598 (rejected-plan visibility), then row 74: PR #13600 (Anthropic API-key fallback).
+1. Continue at `_pr-queue.md` row 75: PR #13556 (Quiet mode), then row 76: PR #13609 (assistant text preservation + web-search fallback).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -131,3 +131,6 @@ None known.
 - `gh pr view 13564 --json number,title,body,author,mergedAt,url,files,commits`, current `createDynamicTools()`, tool guidance, and extra-tools tests verified extraTools merge and denied-tool filtering. Updated tools card.
 - `gh pr view 13566 --json number,title,body,author,mergedAt,url,files,commits`, current provider-registry startup/setup/model-pack source verified all-provider API-key access detection. Updated model/settings cards.
 - Focused verification for #13564/#13566 passed: extra-tools, onboarding packs, and models-pack tests (3 files / 39 tests).
+- `gh pr view 13598 --json number,title,body,author,mergedAt,url,files,commits`, current `PlanApprovalInlineComponent`, and plan approval inline tests verified request-changes mode keeps the plan visible while collecting feedback. Updated plan-approval card.
+- `gh pr view 13600 --json number,title,body,author,mergedAt,url,files,commits`, current `resolveModel()`, `getAnthropicApiKey()`, Claude Max provider source, README docs, and model tests verified Anthropic OAuth priority with API-key fallback. Updated model-auth card.
+- Focused verification for #13598/#13600 passed with env API keys unset: plan-approval-inline and model tests (2 files / 41 tests).

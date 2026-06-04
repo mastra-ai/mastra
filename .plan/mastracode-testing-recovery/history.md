@@ -733,3 +733,24 @@ Verification:
 - Focused tests passed: `pnpm --filter ./mastracode exec vitest run src/agents/extra-tools.test.ts src/onboarding/__tests__/packs.test.ts src/tui/commands/__tests__/models-pack.test.ts --reporter=dot --bail 1` (3 files / 39 tests).
 
 Next queue checkpoint: PR #13598 (rejected-plan visibility), then PR #13600 (Anthropic API-key fallback).
+
+
+### Feature map PR #13598 and #13600
+
+Processed PR [#13598](https://github.com/mastra-ai/mastra/pull/13598), `e37c95493f` (`fix: keep submitted plan visible when requesting changes (#13598)`). Verified `PlanApprovalInlineComponent.switchToFeedbackMode()` now clears and rebuilds the inline card with the plan header and plan content before showing the feedback input, so users can reference the submitted plan while requesting changes.
+
+Processed PR [#13600](https://github.com/mastra-ai/mastra/pull/13600), `43187ad783` (`feat(mastracode): support Anthropic API key as fallback auth for model resolution (#13600)`). Verified current `resolveModel()` prefers explicit Anthropic OAuth, then stored/env Anthropic API key, then falls back to the OAuth provider prompt path; docs now describe OAuth as primary and API keys as fallback.
+
+Documentation actions:
+
+- Updated `features/goals/plan-approval.md` with #13598 feedback-mode plan retention, state ownership, tests, and mode-rebuild risk.
+- Updated `features/models/model-auth-and-modes.md` with #13600 Anthropic auth priority, API-key fallback ownership, tests, and priority-drift risk.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13598 done, #13600 done, #13556 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/tui/components/plan-approval-inline.ts`, `mastracode/src/tui/components/__tests__/plan-approval-inline.test.ts`, `mastracode/src/agents/model.ts`, `mastracode/src/agents/__tests__/model.test.ts`, `mastracode/src/providers/claude-max.ts`, and `mastracode/README.md`.
+- PR metadata checked with `gh pr view 13598 --json number,title,body,author,mergedAt,url,files,commits` and `gh pr view 13600 --json number,title,body,author,mergedAt,url,files,commits`.
+- Focused tests passed with env API keys unset: `env -u MASTRA_GATEWAY_API_KEY -u ANTHROPIC_API_KEY -u OPENAI_API_KEY pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/plan-approval-inline.test.ts src/agents/__tests__/model.test.ts --reporter=dot --bail 1` (2 files / 41 tests).
+
+Next queue checkpoint: PR #13556 (Quiet mode), then PR #13609 (assistant text preservation + web-search fallback).

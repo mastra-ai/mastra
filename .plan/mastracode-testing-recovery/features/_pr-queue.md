@@ -92,9 +92,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 70 | 2026-02-26 | #13563 | `9311c17d7a` | review | done | fix: make Codex models work with OM and mastracode streams (#13563) | 4 |
 | 71 | 2026-02-27 | #13564 | `675a6d717f` | review | done | fix(mastracode): wire extraTools into tool builder and filter denied tools (#13564) | 5 |
 | 72 | 2026-02-27 | #13566 | `dd32e1e7a2` | review | done | fix(mastracode): detect API keys for all registry providers in setup flow (#13566) | 5 |
-| 73 | 2026-02-27 | #13598 | `e37c95493f` | review | current | fix: keep submitted plan visible when requesting changes (#13598) | 1 |
-| 74 | 2026-02-27 | #13600 | `43187ad783` | review | | feat(mastracode): support Anthropic API key as fallback auth for model resolution (#13600) | 4 |
-| 75 | 2026-02-27 | #13556 | `c6c5376cb2` | review | | feat: add Quiet mode setting for subagent output collapse (#13556) | 9 |
+| 73 | 2026-02-27 | #13598 | `e37c95493f` | review | done | fix: keep submitted plan visible when requesting changes (#13598) | 1 |
+| 74 | 2026-02-27 | #13600 | `43187ad783` | review | done | feat(mastracode): support Anthropic API key as fallback auth for model resolution (#13600) | 4 |
+| 75 | 2026-02-27 | #13556 | `c6c5376cb2` | review | current | feat: add Quiet mode setting for subagent output collapse (#13556) | 9 |
 | 76 | 2026-02-28 | #13609 | `ebab49855b` | review | | fix: preserve assistant text after tool updates and add openai web_search fallback (#13609) | 2 |
 | 77 | 2026-02-28 | #13574 | `276246e0b9` | review | | feat(harness): file attachment support with filename preservation and text file handling (#13574) | 1 |
 | 78 | 2026-03-01 | #13605 | `829a09641d` | review | | feat(mastracode): add /fix-issue and /report-issue commands (#13605) | 5 |

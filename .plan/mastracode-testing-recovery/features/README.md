@@ -48,7 +48,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345, #13493 | TUI transient queue state + command template processor | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
-| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566 | Settings + harness session + thread pack metadata + provider registry | Partial | High | [page](./models/model-auth-and-modes.md) |
+| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600 | Settings + harness session + thread pack metadata + provider registry | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Models | Thinking and reasoning effort | #13490, #13563 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
 | Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526, #13564 | Harness state + permission policy + workspace filesystem + extraTools | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
@@ -59,7 +59,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Integrations | Skills command and workspace resolution | #13457 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
 | Integrations | Lifecycle hooks | #13442 | hook config + TUI lifecycle + tool wrapper | Partial | High | [page](./integrations/lifecycle-hooks.md) |
 | Git | Commit attribution | #13376 | Prompt context + harness model state | Missing | Medium | [page](./git/commit-attribution.md) |
-| Goals | Plan approval and build handoff | #13416, #13557 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
+| Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
 | Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13563 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |
