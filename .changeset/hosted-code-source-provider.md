@@ -1,11 +1,8 @@
 ---
-'@mastra/core': minor
-'@mastra/server': minor
-'@mastra/client-js': minor
 '@mastra/deployer': minor
 'mastra': minor
 ---
 
-Added hosted source storage support for code-mode agent overrides.
+Added hosted source-provider context to Studio deployments.
 
-Mastra can now connect code-source agent editing to a hosted source provider, including GitHub-backed file reads, writes, commit history, and server-side change request creation. Studio can open a pull request for an agent override without calling Platform directly, and hosted deployments can inject the Platform project and user context needed for that flow.
+Hosted Studio builds can now receive the Platform API endpoint, project ID, and user name through injected HTML config. Studio uses the server-reported source capabilities to show source-provider-aware save actions and version history for code-mode agent overrides.
