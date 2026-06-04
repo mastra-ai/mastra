@@ -373,3 +373,18 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13350 done, #13355 done, #13354 current, #13353 next.
 
 Next queue checkpoint: PR #13354 (OM continuity at low activation), then PR #13353 (Harness object-parameter refactor/reference docs).
+
+
+### Feature map PR #13354 and #13353
+
+Processed PR [#13354](https://github.com/mastra-ai/mastra/pull/13354), `78d1c808ad` (`fix(memory): improve OM continuity at low activation (#13354)`). Verified current OM code preserves continuation hints (`currentTask`, `suggestedContinuation`) through observer output, async buffered chunks, activation results, and thread OM metadata. Current degenerate-output handling lives in `packages/memory/src/processors/observational-memory/observer-runner.ts`: retry once, then fail if still degenerate.
+
+Processed PR [#13353](https://github.com/mastra-ai/mastra/pull/13353), `59d30b5d0c` (`refactor(harness): use object parameters for all Harness methods + add reference docs (#13353)`). Verified current `packages/core/src/harness/harness.ts` object-param methods and current Mastra Code call sites in TUI/headless handlers. Also verified `docs/src/content/en/reference/harness/harness-class.mdx` documents object-param examples.
+
+Documentation actions:
+
+- Updated `features/memory/observational-memory.md` with #13354 continuation-hint behavior, state ownership, key files, tests, and stale-hint risk.
+- Created `features/integrations/harness-api.md` for #13353's external Harness API/reference-doc surface.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13354 done, #13353 done, #13260 current, #13416 next.
+
+Next queue checkpoint: PR #13260 (likely version-package skip), then PR #13416 (plan mode agent calls `submit_plan`).

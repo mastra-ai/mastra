@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13355 (row 32) have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13354 (`78d1c808ad`, `fix(memory): improve OM continuity at low activation (#13354)`), then #13353 (`59d30b5d0c`, `refactor(harness): use object parameters for all Harness methods + add reference docs (#13353)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13353 (row 34) have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13260 (`e610573a4c`, likely version-package skip), then #13416 (`9a3d857436`, `fix(mastracode): plan mode agent now calls submit_plan tool (#13416)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 33: PR #13354 (OM continuity at low activation), then row 34: PR #13353 (Harness object-parameter refactor/reference docs).
+1. Continue at `_pr-queue.md` row 35: PR #13260 (likely version-package skip), then row 36: PR #13416 (plan mode agent calls `submit_plan`).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -85,3 +85,6 @@ None known.
 
 - `gh pr view 13350 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/tui/state.ts`, `tui/index.ts`, and TUI tests verified `TUIState` / `createTUIState()` extraction and public export. Updated the interactive TUI card.
 - `gh pr view 13355 --json number,title,body,author,mergedAt,url,files,commits`, the old `file-view.ts` patch, current core `read-file.ts` / `list-files.ts`, and workspace tool tests verified that literal `view_range` directory pagination was replaced by split core tools. Updated the tools card with current behavior and risk.
+
+- `gh pr view 13354 --json number,title,body,author,mergedAt,url,files,commits`, current OM strategy/observer/storage files, and OM tests verified continuation hints and degenerate-output handling. Updated the OM card.
+- `gh pr view 13353 --json number,title,body,author,mergedAt,url,files,commits`, current core Harness API, Mastra Code call sites, Harness docs, and harness tests verified object-param public API behavior. Created the Harness API feature card.
