@@ -161,3 +161,13 @@ Documentation actions:
 - Marked the rest of #13234 as structural cleanup after source verification.
 
 Next queue checkpoint: PR #13239.
+
+### Feature map PR #13239
+
+Processed PR [#13239](https://github.com/mastra-ai/mastra/pull/13239), `9bbf08e3c2` (`fix(core): use structural typing for ZodLikeSchema to prevent tsc OOM (#13239)`). Verified PR body, commit diff, current core schema references, and representative Mastra Code tool diffs.
+
+Documentation action: skipped feature-page creation. This PR was type/build stability work for `ZodLikeSchema` and caused broad Mastra Code formatting/type churn, but no new or changed user-visible Mastra Code behavior was identified.
+
+Risk/test note: keep Mastra Code tool typechecking/build coverage in mind for workstream 1/CI because this PR existed to prevent TypeScript OOM around `createTool` schema inference.
+
+Next queue checkpoint: PR #13245.

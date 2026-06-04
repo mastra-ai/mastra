@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13234 have been processed. Next PR in queue: #13239 (`9bbf08e3c2`, `fix(core): use structural typing for ZodLikeSchema to prevent tsc OOM (#13239)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13239 have been processed. Next PR in queue: #13245 (`6fdd3d451a`, `Harness primitive (#13245)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 5: PR #13239.
+1. Continue at `_pr-queue.md` row 6: PR #13245.
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -52,4 +52,5 @@ None known.
 - Read current `mastracode/src/agents/memory.ts`, `tui/commands/om.ts`, `tui/handlers/om.ts`, `agents/tools.ts`, and OM/gateway tests before creating the memory card.
 - `gh pr view 13234 --json number,title,body,author,mergedAt,url,files,commits` verified PR #13234 metadata; commit diff showed mostly structural/type/build cleanup.
 - Read current `mastracode/src/agents/instructions.ts`, `agents/prompts/*`, `src/index.ts`, `src/main.ts`, and prompt/index tests before creating the prompt-context card.
+- `gh pr view 13239 --json number,title,body,author,mergedAt,url,files,commits` verified PR #13239; representative diffs and current schema/tool references showed type/build stability only, so no feature page was created.
 - Current batch is doc-only; no product tests were run.
