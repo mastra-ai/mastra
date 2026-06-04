@@ -10,6 +10,7 @@
     "declarationMap": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "ignoreDeprecations": "6.0",
     "isolatedModules": true,
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "module": "ES2022",

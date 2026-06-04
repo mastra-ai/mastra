@@ -5,6 +5,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "target": "es2022",
+    "ignoreDeprecations": "6.0",
     "allowJs": true,
     "resolveJsonModule": true,
     "moduleDetection": "force",
