@@ -6,6 +6,25 @@ Make Mastra Code safe to refactor and release by turning today’s manual valida
 
 This plan should become the coordination base for the testing recovery effort: we plan here, branch from here, and then ship focused implementation PRs from stacked branches.
 
+## How to resume this work
+
+Use the `mastracode-testing-recovery` skill for the overall operating protocol: verify everything, read the handoff, follow branch flow, and update history/handoff.
+
+For feature-map documentation, start a goal from the project command:
+
+```text
+/goal/map-mc-features [optional scope]
+```
+
+Examples:
+
+```text
+/goal/map-mc-features
+/goal/map-mc-features threads
+```
+
+The command lives at `.mastracode/commands/map-mc-features.md`. It first lists the Mastra Code PR queue from squash-merged commit history, then processes PRs oldest-to-newest. For each PR it reviews the originating PR, verifies current code/tests, creates pages for new user-visible features, and updates existing pages when later PRs modify earlier documented behavior.
+
 ## Overall approach
 
 Use this branch as the planning base. Keep the plan files here so the work stays coherent, but do not ship plan-file churn in every implementation PR.
@@ -49,15 +68,13 @@ Status: not yet planned.
 Purpose: document all intended Mastra Code behavior in a structure agents and humans can navigate.
 
 Initial shape:
-- Feature
-- How it works
-- Architecture/state ownership
-- Dependencies on other features
-- Current tests
-- Missing tests
-- Known regressions or risks
+- Organize by user-visible feature area, not implementation layer.
+- Put concrete behavior pages under `.plan/mastracode-testing-recovery/features/`.
+- Use [`features/_template.md`](./features/_template.md) for required sections.
+- Link related features with normal relative Markdown links.
+- Include the origin PR/commit near the top of each feature page.
 
-Status: not yet planned.
+Status: initial structure recorded in [`features/README.md`](./features/README.md).
 
 ### 4. Design a real Mastra Code test harness
 

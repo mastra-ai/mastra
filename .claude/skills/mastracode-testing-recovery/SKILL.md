@@ -1,7 +1,6 @@
 ---
 name: mastracode-testing-recovery
 description: Coordinate Mastra Code testing recovery work from the shared planning docs. Use when planning, continuing, or handing off work on MC test stabilization, CI coverage, feature mapping, or TUI test harness design.
-goal: true
 ---
 
 # Mastra Code Testing Recovery
@@ -31,6 +30,14 @@ Treat `handoff.md` as the pickup point, not as truth. It should tell you what is
 
 - Keep changes focused on the current workstream.
 - Append meaningful decisions or verified progress to `.plan/mastracode-testing-recovery/history.md`.
+
+## Feature map work
+
+- Use `.plan/mastracode-testing-recovery/features/README.md` as the feature-map index.
+- Copy `.plan/mastracode-testing-recovery/features/_template.md` for each feature page.
+- Organize by user-visible feature area, not implementation layer.
+- Include the origin PR/commit near the top of each feature page.
+- Use normal relative Markdown links for related features.
 
 ## Branch and PR flow
 

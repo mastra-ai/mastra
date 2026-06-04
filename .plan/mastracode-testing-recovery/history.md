@@ -66,3 +66,28 @@ Researched `@copilotkit/aimock@1.28.0` as a candidate mocked-model endpoint for 
 - `explorations/mastracode-testing-recovery/aimock-exploration.md`
 
 Bottom line: AIMock looks promising for a first real MC harness spike if we route MC through an OpenAI-compatible/custom-provider path. It should not be treated as proven for Claude Max/Codex OAuth paths until a spike verifies base URL routing.
+
+### Feature map structure
+
+Agreed that the feature map should be hierarchical Markdown organized by user-visible feature area, not implementation layer. Each concrete feature page should copy `.plan/mastracode-testing-recovery/features/_template.md`, include an origin PR/commit near the top, and use normal relative Markdown links for related features.
+
+Created:
+
+- `.plan/mastracode-testing-recovery/features/README.md`
+- `.plan/mastracode-testing-recovery/features/_template.md`
+
+### Skill and feature-map command split
+
+Kept `mastracode-testing-recovery` as a normal skill for the shared operating protocol. Created a goal-enabled custom command for the concrete feature-map job instead of relying on goal-skill loading.
+
+Use:
+
+```text
+/goal/map-mc-features [optional scope]
+```
+
+Command file:
+
+- `.mastracode/commands/map-mc-features.md`
+
+The command should first list the PR queue from squash-merged `mastracode/` commit history, then process PRs oldest-to-newest. For each PR it reviews the actual originating PR, verifies current source/tests, creates feature pages for new user-visible behavior, and updates earlier pages when later PRs modify documented features.
