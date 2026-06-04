@@ -1049,7 +1049,7 @@ export class AgentChannels {
     // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
     const signalContents: AgentSignalContents = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
 
-    this.agent.sendMessage(
+    const result = this.agent.sendMessage(
       {
         contents: signalContents,
         attributes,
@@ -1073,6 +1073,20 @@ export class AgentChannels {
         },
       },
     );
+
+    // When this call wakes a new run, drive it to completion before returning.
+    // Without this, serverless runtimes (Vercel, Lambda, etc.) terminate the
+    // invocation as soon as the webhook handler returns and kill the run
+    // mid-flight. `consumeStream()` is idempotent and safe to call alongside
+    // the existing per-thread subscription consumer.
+    if (result.ownerStream) {
+      try {
+        const ownerStream = await result.ownerStream;
+        await ownerStream.consumeStream();
+      } catch (err) {
+        this.log('debug', 'ownerStream consume failed', err);
+      }
+    }
   }
 
   /**
