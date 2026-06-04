@@ -4,16 +4,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import type { AgentSignalInput } from '@mastra/core/agent';
+import type { AgentSignalInput, Agent } from '@mastra/core/agent';
+import { SignalProvider } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
-import type {
-  Processor,
-  ProcessInputStepArgs,
-  ProcessInputStepResult,
-  ProcessOutputStepArgs,
-} from '@mastra/core/processors';
+import type { ProcessInputStepArgs, ProcessInputStepResult, ProcessOutputStepArgs } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
@@ -843,10 +839,10 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
   }
 }
 
-export class GithubSignals implements Processor<'github-signals'> {
+export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly id = 'github-signals' as const;
-  readonly name = 'GitHub Signals';
-  protected mastra?: GithubSignalsMastra;
+  override readonly name = 'GitHub Signals';
+  protected override mastra?: GithubSignalsMastra;
 
   static signals = {
     subscribeToPR(input: GithubSubscribePRSignalInput): AgentSignalInput {
@@ -898,21 +894,36 @@ export class GithubSignals implements Processor<'github-signals'> {
   #subscriptionsChangedHandler?: GithubSubscriptionsChangedHandler;
 
   constructor(options: GithubSignalsOptions = {}) {
+    super();
     this.#options = options;
     this.#syncClient = options.syncClient ?? new GitcrawlSyncClient({ command: options.gitcrawlCommand });
     this.#repositoryResolver = options.repositoryResolver ?? new GitRemoteRepositoryResolver();
   }
 
+  /**
+   * @deprecated Use `Agent({ signals: [githubSignals] })` instead.
+   * Kept for backward compatibility.
+   */
   addAgent(agent: GithubSignalAgent, options: GithubSignalAgentOptions = {}): void {
     this.#agent = agent;
     this.#agentOptions = options;
+  }
+
+  /**
+   * Called by the Agent constructor when this provider is passed via `signals: [...]`.
+   * Sets the bidirectional link so the provider can send signals back to the agent.
+   */
+  override connect(agent: Agent<any, any, any, any>): void {
+    super.connect(agent);
+    this.#agent = agent as unknown as GithubSignalAgent;
   }
 
   onSubscriptionsChanged(handler: GithubSubscriptionsChangedHandler): void {
     this.#subscriptionsChangedHandler = handler;
   }
 
-  __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+  override __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+    super.__registerMastra(mastra);
     this.mastra = mastra as unknown as GithubSignalsMastra;
   }
 

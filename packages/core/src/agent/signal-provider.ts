@@ -1,4 +1,5 @@
-import { BaseProcessor } from '../processors';
+import type { Mastra } from '../mastra';
+import type { Processor } from '../processors';
 import type { Agent } from './agent';
 
 /**
@@ -89,7 +90,22 @@ export type SignalProviderWebhookRequest = {
  *
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export abstract class SignalProvider<TId extends string = string> extends BaseProcessor<TId> {
+export abstract class SignalProvider<TId extends string = string> implements Processor<TId> {
+  abstract readonly id: TId;
+  readonly name?: string;
+
+  /**
+   * The Mastra instance this provider is registered with.
+   * Available after the provider is registered via __registerMastra.
+   */
+  protected mastra?: Mastra<any, any, any, any, any, any, any, any, any, any>;
+
+  /**
+   * @internal Called when the processor is registered with a Mastra instance.
+   */
+  __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+    this.mastra = mastra;
+  }
   /**
    * The agent this provider is connected to.
    * Set automatically when passed to `Agent({ signals: [...] })`.
