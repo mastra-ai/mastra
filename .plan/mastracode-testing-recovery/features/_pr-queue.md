@@ -58,10 +58,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 36 | 2026-02-23 | #13416 | `9a3d857436` | review | done | fix(mastracode): plan mode agent now calls submit_plan tool (#13416) | 5 |
 | 37 | 2026-02-23 | #13413 | `f08b0bb00b` | review | done | refactor: modularize TUI into focused modules (#13413) | 41 |
 | 38 | 2026-02-23 | #13385 | `18553c3541` | review | done | fix(mastracode): use correct LSP language identifier for TS/JS files (#13385) | 1 |
-| 39 | 2026-02-23 | #13384 | `8af03582df` | review | current | fix(mastracode): exclude hidden files from directory listings (#13384) | 2 |
-| 40 | 2026-02-24 | #13376 | `7429026f6c` | review | next | feat(mastracode): include model name in Co-Authored-By commit message (#13376) | 3 |
-| 41 | 2026-02-23 | #13421 | `27644fbf25` | review | | feat(mastracode): add interactive onboarding flow and global settings (#13421) | 20 |
-| 42 | 2026-02-23 | #13431 | `bb82abe5e9` | review | | fix(mastracode): default codex model from 5.3 to 5.2 (#13431) | 2 |
+| 39 | 2026-02-23 | #13384 | `8af03582df` | review | done | fix(mastracode): exclude hidden files from directory listings (#13384) | 2 |
+| 40 | 2026-02-24 | #13376 | `7429026f6c` | review | done | feat(mastracode): include model name in Co-Authored-By commit message (#13376) | 3 |
+| 41 | 2026-02-23 | #13421 | `27644fbf25` | review | current | feat(mastracode): add interactive onboarding flow and global settings (#13421) | 20 |
+| 42 | 2026-02-23 | #13431 | `bb82abe5e9` | review | next | fix(mastracode): default codex model from 5.3 to 5.2 (#13431) | 2 |
 | 43 | 2026-02-23 | #13422 | `d1abce8a51` | review | | feat(mastracode): Add ASCII art banner header with purple gradient (#13422) | 4 |
 | 44 | 2026-02-23 | #13428 | `6f927b2103` | review | | fix(tui): fix view tool rendering for workspace read_file output (#13428) | 2 |
 | 45 | 2026-02-23 | #13426 | `5839d227b4` | review | | feat(mastracode): simplify suggested help commands (#13426) | 4 |

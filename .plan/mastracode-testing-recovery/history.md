@@ -418,3 +418,19 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13413 done, #13385 done, #13384 current, #13376 next.
 
 Next queue checkpoint: PR #13384 (hidden-file directory listings), then PR #13376 (model name in Co-Authored-By commit message).
+
+
+### Feature map PR #13384 and #13376
+
+Processed PR [#13384](https://github.com/mastra-ai/mastra/pull/13384), `8af03582df` (`fix(mastracode): exclude hidden files from directory listings (#13384)`). Verified the original fix corrected an over-escaped shell `find` pattern in the old MC-owned `file-view.ts` / `file-editor.ts` tools. Current source has migrated directory listing to core workspace: `packages/core/src/workspace/tools/list-files.ts` exposes `showHidden` defaulting false, and `tree-formatter.ts` filters entries whose names start with `.` unless `showHidden` is true. `list-files.test.ts` directly covers default dotfile exclusion and opt-in visibility.
+
+Processed PR [#13376](https://github.com/mastra-ai/mastra/pull/13376), `7429026f6c` (`feat(mastracode): include model name in Co-Authored-By commit message (#13376)`). Verified current prompt path copies `state.currentModelId` into `PromptContext.modelId`, passes it through `buildFullPrompt()`, and formats the Git Safety line as `Co-Authored-By: Mastra Code (<model-id>) <noreply@mastra.ai>` when present, with the old model-less fallback when absent.
+
+Documentation actions:
+
+- Updated `features/tools/coding-tools-permissions.md` with #13384 hidden-file listing behavior, current core ownership, tests, and provider-consistency risk.
+- Created `features/git/commit-attribution.md` for #13376 commit attribution behavior and missing direct prompt/commit tests.
+- Updated `features/chat/prompt-context.md` with #13376's model-aware commit guidance dependency.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13384 done, #13376 done, #13421 current, #13431 next.
+
+Next queue checkpoint: PR #13421 (interactive onboarding/global settings), then PR #13431 (Codex default model change).
