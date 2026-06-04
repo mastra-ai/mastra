@@ -53,6 +53,19 @@ Every feature page must include:
 - Known risks / regressions
 - Verification checklist
 
+## Mapped pages
+
+Initial baseline pages:
+
+- [Interactive TUI chat](./tui/interactive-chat.md)
+- [Persistent conversations and thread switching](./threads/persistent-conversations.md)
+- [Model authentication, selection, and modes](./models/model-auth-and-modes.md)
+- [Coding tools and approval permissions](./tools/coding-tools-permissions.md)
+
+Working queue:
+
+- [`_pr-queue.md`](./_pr-queue.md) — generated oldest-to-newest PR queue from squash-merged `mastracode/` history.
+
 ## Rules for agents
 
 - Treat existing pages as leads, not truth.

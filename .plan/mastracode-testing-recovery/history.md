@@ -91,3 +91,22 @@ Command file:
 - `.mastracode/commands/map-mc-features.md`
 
 The command should first list the PR queue from squash-merged `mastracode/` commit history, then process PRs oldest-to-newest. For each PR it reviews the actual originating PR, verifies current source/tests, creates feature pages for new user-visible behavior, and updates earlier pages when later PRs modify documented features.
+
+### Feature map batch 1
+
+Generated `.plan/mastracode-testing-recovery/features/_pr-queue.md` from `git log --reverse --date=short --name-only --pretty=format:'...' -- mastracode`.
+
+Queue summary:
+
+- 493 commits touch `mastracode/`.
+- 358 commits have squash-merge PR numbers.
+- 251 were initially flagged as likely user-visible or test-relevant and still need verification.
+
+Processed PR [#13218](https://github.com/mastra-ai/mastra/pull/13218), `0e64154f1b` (`MastraCode initial port (#13218)`) as a foundation batch. Wrote initial pages:
+
+- `.plan/mastracode-testing-recovery/features/tui/interactive-chat.md`
+- `.plan/mastracode-testing-recovery/features/threads/persistent-conversations.md`
+- `.plan/mastracode-testing-recovery/features/models/model-auth-and-modes.md`
+- `.plan/mastracode-testing-recovery/features/tools/coding-tools-permissions.md`
+
+These pages are intentionally broad baselines from the initial port. Later PR passes should update them in place when behavior changed, especially for thread reload, model/mode preservation, tool/task rendering, permissions, and streaming-vs-history behavior.
