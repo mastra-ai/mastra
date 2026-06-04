@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13613 (row 82) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13691 (`978a63d71e`, debug log env/size), then #13687 (`85664e9fd8`, workspace tool name remapping).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13687 (row 84) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13569 (`b8963791c6`, clone Observational Memory when forking threads), then #13692 (`87ab58f1c5`, cross-test contamination/temp gitignore).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 83: PR #13691 (debug.log env/size), then row 84: PR #13687 (workspace tool name remapping).
+1. Continue at `_pr-queue.md` row 85: PR #13569 (OM clone on fork), then row 86: PR #13692 (test contamination/temp gitignore).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13437](https://github.com/mastra-ai/mastra/pull/13437) — switched Mastra Code from MC-local file/edit/shell tools to core Workspace tools with TUI streaming support.
-- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map.
+- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map; [#13687](https://github.com/mastra-ai/mastra/pull/13687) — added core Workspace `name` remapping so the exposed tool dictionary and tool IDs use Mastra Code's stable names.
 
 ## User-visible behavior
 
 - What the user can do: use standard coding tools (`view`, `search_content`, `find_files`, `write_file`, `string_replace_lsp`, `ast_smart_edit`, `execute_command`, process tools, LSP inspect) through the core Workspace abstraction.
 - Success looks like: workspace tools obey project-root containment, allowed external paths, plan-mode write-tool disabling, LSP diagnostics, write locks, read-before-write policy, and TUI streaming/rendering.
-- Must preserve: user-facing Mastra Code tool names stay stable even though runtime implementations come from `@mastra/core/workspace`.
+- Must preserve: user-facing Mastra Code tool names stay stable even though runtime implementations come from `@mastra/core/workspace`, and old `mastra_workspace_*` IDs must not remain callable after remapping.
 
 ## Entry points / commands
 
@@ -45,7 +45,7 @@
 | Filesystem root | `LocalFilesystem.basePath = projectPath` | read/list/search/edit/write tools |
 | Extra allowed paths | skill paths + temp dirs + `sandboxAllowedPaths` | filesystem containment/access requests |
 | Sandbox process env | `getDynamicWorkspace()` / `LocalSandbox` | `execute_command`, process manager |
-| Tool name mapping | `TOOL_NAME_OVERRIDES` | model-visible tool names and TUI components |
+| Tool name mapping | Core `WorkspaceToolsConfig.name` + MC `TOOL_NAME_OVERRIDES` | model-visible tool dictionary keys, tool IDs, permissions, TUI components |
 | Plan-mode write disable | `getDynamicWorkspace()` tools config | Plan mode tool visibility |
 | LSP config | `settings.json` lsp + detected package runner + MC module search path | `lsp_inspect`, edit diagnostics |
 
@@ -55,6 +55,7 @@
 - `mastracode/src/agents/tools.ts` — MC dynamic tool map after file/edit/shell tools moved to Workspace.
 - `mastracode/src/tool-names.ts` — stable Mastra Code tool-name overrides for core workspace tools.
 - `packages/core/src/harness/harness.ts` — workspace resolution/cache and request-context wiring.
+- `packages/core/src/workspace/tools/tools.ts` and `types.ts` — core workspace tool factory and `WorkspaceToolConfig.name` remapping support.
 - `packages/core/src/workspace/tools/*` — core read/list/search/edit/write/LSP/shell/process tool implementations.
 - `mastracode/src/tui/components/tool-execution-enhanced.ts` — TUI summaries for workspace tool output, LSP diagnostics, tree summaries, quiet previews.
 
@@ -67,6 +68,7 @@
 
 ## Existing tests
 
+- `packages/core/src/workspace/tools/__tests__/tool-creation.test.ts` — workspace tool availability plus remapped exposed names/IDs, duplicate-name failures, sandbox tool remapping.
 - `packages/core/src/workspace/tools/__tests__/*.test.ts` — read/list/search/edit/write/LSP/execute/process tool behavior, read tracking, write locks, output helpers.
 - `packages/core/src/harness/workspace-resolution.test.ts` — static/dynamic workspace resolution and caching.
 - `packages/core/src/harness/subagent-workspace-integration.test.ts` — subagent workspace-tool visibility/allowlists.
@@ -76,7 +78,7 @@
 
 ## Missing tests
 
-- End-to-end Mastra Code run proving the model sees renamed workspace tools and not the old MC-local file/edit/shell tool implementations.
+- End-to-end Mastra Code run proving the model sees renamed workspace tools and cannot call old `mastra_workspace_*` names by fallback ID.
 - Plan-mode integration test proving workspace write/edit/AST tools are hidden or disabled while read/search tools remain available.
 - Loaded-history test proving workspace tool results render identically after reload for representative read/list/edit/shell outputs.
 - Direct test that `getDynamicWorkspace()` reuses the registered workspace while updating allowed paths/tool config across mode changes.

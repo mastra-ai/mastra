@@ -45,6 +45,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566 | settings.json + thread settings + provider registry | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435 | env/settings + storage factory | Partial | High | [page](./settings/storage-backend.md) |
 | TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
+| TUI | Debug logging | #13691 | env var + app-data debug.log | Partial | Medium | [page](./tui/debug-logging.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | File attachments in chat input | #13574 | Harness signal content + message-list adapters | Partial | High | [page](./chat/file-attachments.md) |
 | Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
@@ -54,8 +55,8 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600 | Settings + harness session + thread pack metadata + provider registry | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Models | Custom OpenAI-compatible providers | #13682 | settings customProviders + Harness custom catalog | Partial | High | [page](./models/custom-providers.md) |
 | Models | Thinking and reasoning effort | #13490, #13563 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
-| Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526, #13564, #13609 | Harness state + permission policy + workspace filesystem + extraTools | Partial | High | [page](./tools/coding-tools-permissions.md) |
-| Tools | Workspace-backed coding tools | #13437, #13526 | core Workspace + LocalFilesystem/LocalSandbox + tool-name overrides | Partial | High | [page](./tools/workspace-tools.md) |
+| Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526, #13564, #13609, #13687 | Harness state + permission policy + workspace filesystem + extraTools | Partial | High | [page](./tools/coding-tools-permissions.md) |
+| Tools | Workspace-backed coding tools | #13437, #13526, #13687 | core Workspace + LocalFilesystem/LocalSandbox + tool-name overrides | Partial | High | [page](./tools/workspace-tools.md) |
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |

@@ -844,3 +844,20 @@ Verification:
 - Focused core tests passed: `pnpm --filter ./packages/core exec vitest run src/harness/resource-id.test.ts --reporter=dot --bail 1` (1 file / 6 tests).
 
 Next queue checkpoint: PR #13691 (debug.log env/size), then PR #13687 (workspace tool name remapping).
+
+
+### Feature map batch: debug logging and workspace tool remapping
+
+Processed PR [#13691](https://github.com/mastra-ai/mastra/pull/13691), `978a63d71e` (`fix(mastracode): gate debug.log behind MASTRA_DEBUG env var and cap file size`):
+
+- Verified `mastracode/src/utils/debug-log.ts`: `setupDebugLogging()` only writes `getAppDataDir()/debug.log` when `MASTRA_DEBUG` is `true` or `1`; otherwise `console.error`/`console.warn` become no-ops to avoid corrupting the TUI.
+- Verified `truncateLogFile()` caps existing logs over 5 MB by retaining roughly the last 4 MB and trimming to a newline boundary.
+- Verified tests in `mastracode/src/utils/__tests__/debug-log.test.ts` cover default/false suppression, true/1 file logging, stack trace formatting, missing files, and size truncation.
+- Created `.plan/mastracode-testing-recovery/features/tui/debug-logging.md` and cross-linked launch/TUI cards.
+
+Processed PR [#13687](https://github.com/mastra-ai/mastra/pull/13687), `85664e9fd8` (`feat(workspace): support tool name remapping in workspace tools config`):
+
+- Verified `WorkspaceToolConfig.name` in `packages/core/src/workspace/tools/types.ts` and `createWorkspaceTools()` in `tools.ts`: remapped tools register under the custom exposed dictionary key, update `tool.id`, and throw on duplicate exposed names.
+- Verified `packages/core/src/workspace/tools/__tests__/tool-creation.test.ts` coverage for remapped filesystem/sandbox tools, preserved config options, ID updates, default-name preservation, and duplicate-name errors.
+- Verified Mastra Code `TOOL_NAME_OVERRIDES` / `MC_TOOLS` usage across permissions, prompt guidance, subagent allowlists, validation errors, and `ToolExecutionComponentEnhanced` special cases.
+- Updated workspace tools, coding tool permissions, README index, queue, and handoff. Queue now points at row 85 (#13569) as current.

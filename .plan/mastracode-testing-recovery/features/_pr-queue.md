@@ -102,9 +102,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 80 | 2026-03-02 | #13682 | `ee9c8df644` | review | done | feat(mastracode): add /custom-providers command for custom OpenAI-compatible providers (#13682) | 15 |
 | 81 | 2026-03-02 | #13690 | `f77cd94c44` | review | done | fix: implement Harness resource ID methods and improve /resource command (#13690) | 2 |
 | 82 | 2026-03-03 | #13613 | `bf7ee23532` | review | done | feat(mastracode): support HTTP MCP servers in config (#13613) | 8 |
-| 83 | 2026-03-02 | #13691 | `978a63d71e` | review | current | fix(mastracode): gate debug.log behind MASTRA_DEBUG env var and cap file size (#13691) | 4 |
-| 84 | 2026-03-02 | #13687 | `85664e9fd8` | review | | feat(workspace): support tool name remapping in workspace tools config (#13687) | 11 |
-| 85 | 2026-03-02 | #13569 | `b8963791c6` | review | | feat(memory): clone Observational Memory when forking threads (#13569) | 8 |
+| 83 | 2026-03-02 | #13691 | `978a63d71e` | review | done | fix(mastracode): gate debug.log behind MASTRA_DEBUG env var and cap file size (#13691) | 4 |
+| 84 | 2026-03-02 | #13687 | `85664e9fd8` | review | done | feat(workspace): support tool name remapping in workspace tools config (#13687) | 11 |
+| 85 | 2026-03-02 | #13569 | `b8963791c6` | review | current | feat(memory): clone Observational Memory when forking threads (#13569) | 8 |
 | 86 | 2026-03-02 | #13692 | `87ab58f1c5` | review | | fix(mastracode): fix test failures from cross-test contamination and add temp dir gitignore (#13692) | 4 |
 | 87 | 2026-03-02 | #13701 | `33f289c616` | review | | use separate tui debug env var (#13701) | 1 |
 | 88 | 2026-03-03 | #13693 | `6e1b940177` | review | | feat(mc): set workspace (#13693) | 1 |

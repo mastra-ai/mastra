@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13294](https://github.com/mastra-ai/mastra/pull/13294) — installation/startup README guidance for Mastra Code.
-- Later changes: [#13560](https://github.com/mastra-ai/mastra/pull/13560) — treats `ERR_STREAM_DESTROYED` as a non-fatal global exception/rejection during CLI runtime.
+- Later changes: [#13560](https://github.com/mastra-ai/mastra/pull/13560) — treats `ERR_STREAM_DESTROYED` as a non-fatal global exception/rejection during CLI runtime; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — makes debug logging opt-in via `MASTRA_DEBUG` and caps app-data `debug.log`.
 
 ## User-visible behavior
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Package entry point | `mastracode/package.json` bin/exports | npm/npx/global install |
-| Startup runtime | `mastracode/src/main.ts` + `error-classification.ts` | TUI/headless entry, global error handlers |
+| Startup runtime | `mastracode/src/main.ts` + `error-classification.ts` + `utils/debug-log.ts` | TUI/headless entry, global error handlers, debug logging |
 | Onboarding state | settings/auth storage | First-run setup |
 | Install instructions | `mastracode/README.md` | Users and docs readers |
 
@@ -52,10 +52,12 @@
 - `mastracode/src/main.ts` — CLI/TUI startup path and global uncaught exception / rejection handlers.
 - `mastracode/src/error-classification.ts` — classifies `ERR_STREAM_DESTROYED` through causes/AggregateError while leaving real fatal errors to `handleFatalError()`.
 - `mastracode/src/headless.ts` — non-TUI prompt mode.
+- `mastracode/src/utils/debug-log.ts` — startup console warning/error suppression or debug-file redirection.
 
 ## Dependencies / related features
 
 - [Interactive TUI chat](../tui/interactive-chat.md) — default launched runtime.
+- [Debug logging](../tui/debug-logging.md) — startup debug-file behavior for TUI and headless runs.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — onboarding configures providers/models.
 - [Observational memory](../memory/observational-memory.md) — onboarding configures OM.
 
