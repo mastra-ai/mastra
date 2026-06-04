@@ -186,3 +186,16 @@ Documentation actions:
 No separate Harness feature page was created because the feature map is organized by user-visible behavior, not runtime layer.
 
 Next queue checkpoint: PR #13250.
+
+### Feature map PR #13037 and #13250
+
+Processed PR [#13037](https://github.com/mastra-ai/mastra/pull/13037), `a0b5df263a` (`chore: version packages (alpha) (#13037)`). Verified it was a Changesets alpha version-package PR touching `mastracode/CHANGELOG.md` and `mastracode/package.json`; skipped feature-page creation because it did not introduce or change user-visible Mastra Code behavior.
+
+Processed PR [#13250](https://github.com/mastra-ai/mastra/pull/13250), `4f2e364945` (`fix(mastracode): ESM module resolution error on startup (#13250)`). Verified PR body, commit diff, and current `mastracode/src/lsp/client.ts` imports from `vscode-jsonrpc/node.js`.
+
+Documentation actions:
+
+- Updated `.plan/mastracode-testing-recovery/features/tools/coding-tools-permissions.md` because this fix preserves LSP-backed tool availability and packaged startup.
+- Added a missing-test note for packaged startup/import smoke coverage.
+
+Next queue checkpoint: PR #13251, likely version packaging; next review PR after that is #13253.

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — coding tools, approvals, permissions, YOLO, hooks, MCP tool merge.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools.
 
 ## User-visible behavior
 
@@ -50,6 +50,7 @@
 
 - `mastracode/src/agents/tools.ts` — dynamic tools, web search, MCP merge, hooks.
 - `mastracode/src/agents/workspace.ts` — filesystem/shell/LSP tools and sandbox paths.
+- `mastracode/src/lsp/client.ts` — JSON-RPC client used by LSP-backed tools.
 - `mastracode/src/permissions.ts` — category mapping and approval rules.
 - `mastracode/src/tui/commands/permissions.ts` — `/permissions`.
 - `mastracode/src/tui/commands/yolo.ts` — `/yolo`.
@@ -76,12 +77,14 @@
 - Interrupted approval is dismissed and not restored pending after reload.
 - Plan-mode runtime tools and prompt guidance both hide write tools.
 - Headless non-interactive permission behavior.
+- Packaged `mastracode` startup/import smoke test that catches ESM subpath regressions like `vscode-jsonrpc/node` vs `vscode-jsonrpc/node.js`.
 
 ## Known risks / regressions
 
 - Harness v1 risk: permission state, visible tools, prompt guidance, and runtime tools can drift.
 - Denied non-workspace tools are filtered in `createDynamicTools()`; workspace tool visibility must be verified separately.
 - Task-state Slack regression is adjacent because task tools also need rendered/prompt/runtime state sync.
+- LSP-backed tools can break at package startup if ESM-only subpath imports are not built/imported exactly as Node expects.
 
 ## Verification checklist
 
