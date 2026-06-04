@@ -606,6 +606,13 @@ export class Mastra<
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
   #internalMastraWorkflows: Record<string, Workflow> = {};
+  // Tracks registration timestamps for run-scoped internal workflows so a lazy
+  // TTL sweep can evict entries from abandoned suspended runs that were never
+  // resumed. Unscoped (singleton) entries are not tracked — they live forever.
+  #runScopedWorkflowTimestamps: Map<string, number> = new Map();
+  // Run-scoped internal workflows older than this TTL (ms) are evicted during
+  // the lazy sweep that runs on each new registration.
+  static readonly INTERNAL_WORKFLOW_TTL_MS = 30 * 60 * 1000; // 30 minutes
   // Per-run tracing context for evented workflow runs. `currentSpan` is a
   // non-serializable AISpan, so it cannot ride the engine's pubsub events —
   // the event processor reads it from here, keyed by runId, instead.
@@ -2320,7 +2327,10 @@ export class Mastra<
       logger: this.getLogger(),
     });
     if (runId) {
-      this.#internalMastraWorkflows[`${workflow.id}:${runId}`] = workflow;
+      const key = `${workflow.id}:${runId}`;
+      this.#internalMastraWorkflows[key] = workflow;
+      this.#runScopedWorkflowTimestamps.set(key, Date.now());
+      this.#sweepStaleRunScopedWorkflows();
     } else {
       this.#internalMastraWorkflows[workflow.id] = workflow;
     }
@@ -2331,7 +2341,9 @@ export class Mastra<
    * so single-instance callers (background tasks, score-traces) continue to resolve.
    */
   __unregisterInternalWorkflow(id: string, runId: string) {
-    delete this.#internalMastraWorkflows[`${id}:${runId}`];
+    const key = `${id}:${runId}`;
+    delete this.#internalMastraWorkflows[key];
+    this.#runScopedWorkflowTimestamps.delete(key);
   }
 
   __hasInternalWorkflow(id: string, runId?: string): boolean {
@@ -2381,6 +2393,22 @@ export class Mastra<
   /** @internal Clears the tracing context once an evented workflow run finishes. */
   __unregisterRunTracingContext(runId: string) {
     this.#runTracingContexts.delete(runId);
+  }
+
+  /**
+   * Lazily evict run-scoped internal workflow entries that have exceeded
+   * {@link Mastra.INTERNAL_WORKFLOW_TTL_MS}. Called on every new run-scoped
+   * registration so cleanup is proportional to activity — zero overhead when
+   * the system is idle.
+   */
+  #sweepStaleRunScopedWorkflows() {
+    const now = Date.now();
+    for (const [key, registeredAt] of this.#runScopedWorkflowTimestamps) {
+      if (now - registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
+        delete this.#internalMastraWorkflows[key];
+        this.#runScopedWorkflowTimestamps.delete(key);
+      }
+    }
   }
 
   /**
