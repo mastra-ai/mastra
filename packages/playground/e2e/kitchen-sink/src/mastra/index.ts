@@ -48,6 +48,8 @@ export const mastra = new Mastra({
       registerApiRoute('/e2e/reset-storage', {
         method: 'POST',
         handler: async c => {
+          await storage.init();
+
           const clearTasks: Promise<void>[] = [];
 
           const workflowStore = await storage.getStore('workflows');

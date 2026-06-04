@@ -788,7 +788,11 @@ export class Agent<
     if (!workspace) return [];
 
     // Skip if workspace has no filesystem or sandbox (nothing to describe)
-    if (!workspace.filesystem && !workspace.sandbox) return [];
+    const hasFilesystemConfig =
+      typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
+    const hasSandboxConfig =
+      typeof workspace.hasSandboxConfig === 'function' ? workspace.hasSandboxConfig() : !!workspace.sandbox;
+    if (!hasFilesystemConfig && !hasSandboxConfig) return [];
 
     // Check for existing processor to avoid duplicates
     const hasProcessor = configuredProcessors.some(
@@ -6814,6 +6818,23 @@ export class Agent<
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
 
+    // Delegate to the idle-loop wrapper when `untilIdle` is set (from
+    // per-call options OR defaultOptions). Strip `untilIdle` before passing
+    // to the wrapper so its internal agent.stream() call doesn't recurse.
+    if (mergedOptions.untilIdle) {
+      const { untilIdle, ...rest } = mergedOptions ?? {};
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      return runStreamUntilIdle<OUTPUT>(
+        this,
+        messages,
+        { ...rest, maxIdleMs },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
+
     await this.#requireAgentExecutionFGA(mergedOptions);
 
     const llm = await this.getLLM({
@@ -6910,6 +6931,8 @@ export class Agent<
   }
 
   /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   *
    * Streams the agent's response and keeps the stream open until all
    * background tasks dispatched during this turn (and any triggered by
    * follow-up turns) complete. When a background task finishes, its tool
@@ -6987,6 +7010,8 @@ export class Agent<
   }
 
   /**
+   * @deprecated Use `resumeStream(resumeData, { untilIdle: true, ... })` instead.
+   *
    * Resume-flavored counterpart to {@link streamUntilIdle}. Resumes a
    * previously suspended stream identified by `streamOptions.runId`, then
    * keeps the outer stream open across any continuations that background
@@ -7103,6 +7128,23 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+
+    // Delegate to the idle-loop wrapper when `untilIdle` is set (from
+    // per-call options OR defaultOptions). Strip `untilIdle` before passing
+    // to the wrapper so its internal agent.stream() call doesn't recurse.
+    if (mergedStreamOptions.untilIdle) {
+      const { untilIdle, ...rest } = mergedStreamOptions ?? {};
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      return runResumeStreamUntilIdle<OUTPUT>(
+        this,
+        resumeData,
+        { ...rest, maxIdleMs },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
 
     const runId = streamOptions?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
