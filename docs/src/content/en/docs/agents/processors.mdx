@@ -451,15 +451,12 @@ export const supportAgent = new Agent({
       defaultModel: '__GATEWAY_OPENAI_MODEL_BASE__',
       rules: [
         {
-          name: 'quick-answer',
           description: 'Short factual questions and basic troubleshooting',
           model: '__GATEWAY_OPENAI_MODEL_MINI__',
         },
         {
-          name: 'deep-reasoning',
           description: 'Planning, debugging, architecture, or multi-step analysis',
           model: '__GATEWAY_OPENAI_MODEL__',
-          threshold: 0.8,
         },
       ],
     }),
@@ -467,9 +464,9 @@ export const supportAgent = new Agent({
 })
 ```
 
-Use `defaultModel` or `fallbackModel` when unmatched requests should still use a known model. Omit both to leave the agent's configured model unchanged when no rule matches.
+Use `defaultModel` when unmatched requests should still use a known model. Omit it to leave the agent's configured model unchanged when no rule matches.
 
-See the [`ModelSwapperProcessor` reference](/reference/processors/model-swapper) for routing rules, thresholds, and behavior notes.
+See the [`ModelSwapperProcessor` reference](/reference/processors/model-swapper) for routing rules and behavior notes.
 
 ## Response caching
 

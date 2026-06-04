@@ -27,18 +27,14 @@ export const supportAgent = new Agent({
     new ModelSwapperProcessor({
       model: '__GATEWAY_OPENAI_MODEL_NANO__',
       defaultModel: '__GATEWAY_OPENAI_MODEL_BASE__',
-      threshold: 0.7,
       rules: [
         {
-          name: 'quick-answer',
           description: 'Short factual questions, summaries, and routine support requests',
           model: '__GATEWAY_OPENAI_MODEL_MINI__',
         },
         {
-          name: 'deep-reasoning',
           description: 'Architecture, debugging, planning, or multi-step analysis',
           model: '__GATEWAY_OPENAI_MODEL__',
-          threshold: 0.8,
         },
       ],
     }),
@@ -68,20 +64,14 @@ export const supportAgent = new Agent({
           {
             name: 'rules',
             type: 'ModelSwapRule[]',
-            description: 'Routing rules that map request categories to models.',
+            description:
+              'Ordered routing rules. The classifier returns 1 for the first rule, 2 for the second rule, and 0 for no match.',
             isOptional: false,
           },
           {
             name: 'defaultModel',
             type: 'MastraModelConfig',
-            description: 'Model to use when no rule matches or the selected rule is below its confidence threshold.',
-            isOptional: true,
-            default: 'undefined',
-          },
-          {
-            name: 'fallbackModel',
-            type: 'MastraModelConfig',
-            description: 'Alias for defaultModel. Used when no rule matches and defaultModel is not set.',
+            description: 'Model to use when the classifier returns 0 or an invalid rule number.',
             isOptional: true,
             default: 'undefined',
           },
@@ -91,13 +81,6 @@ export const supportAgent = new Agent({
             description: 'Custom instructions for the internal classification agent.',
             isOptional: true,
             default: 'undefined',
-          },
-          {
-            name: 'threshold',
-            type: 'number',
-            description: 'Minimum classifier confidence from 0 to 1 required before a matched rule swaps models.',
-            isOptional: true,
-            default: '0.7',
           },
           {
             name: 'lastMessageOnly',
@@ -129,7 +112,7 @@ export const supportAgent = new Agent({
 
 ## Routing rules
 
-Each `ModelSwapRule` describes when a request should use a specific model.
+Each `ModelSwapRule` describes when a request should use a specific model. Rules are ordered. The classifier returns the rule number, where `1` maps to `rules[0]`, `2` maps to `rules[1]`, and `0` means no match.
 
 <PropertiesTable
   content={[
@@ -142,46 +125,16 @@ Each `ModelSwapRule` describes when a request should use a specific model.
         type: 'ModelSwapRule',
         parameters: [
           {
-            name: 'name',
+            name: 'description',
             type: 'string',
-            description: 'Unique rule name. The classifier must return this exact value when the rule matches.',
+            description: 'Natural language routing criteria for requests that should use this model.',
             isOptional: false,
           },
           {
             name: 'model',
             type: 'MastraModelConfig',
-            description: 'Model to use when the rule matches above the required threshold.',
+            description: 'Model to use when the rule matches.',
             isOptional: false,
-          },
-          {
-            name: 'description',
-            type: 'string',
-            description: 'Natural language description of requests that should use this route.',
-            isOptional: true,
-          },
-          {
-            name: 'pattern',
-            type: 'string',
-            description: 'Pattern or natural language matching criteria for this route.',
-            isOptional: true,
-          },
-          {
-            name: 'categories',
-            type: 'string[]',
-            description: 'Optional categories that belong to this route.',
-            isOptional: true,
-          },
-          {
-            name: 'match',
-            type: 'string',
-            description: 'Additional matching guidance for the classifier.',
-            isOptional: true,
-          },
-          {
-            name: 'threshold',
-            type: 'number',
-            description: 'Rule-specific confidence threshold. Overrides the processor threshold for this rule.',
-            isOptional: true,
           },
         ],
       },
@@ -196,20 +149,17 @@ The processor stores the classification result in its request-scoped state. The 
 
 ```typescript
 type ModelSwapperResult = {
-  ruleName: string | null
-  category?: string | null
-  confidence: number
+  rule: number
   selectedModel?: MastraModelConfig
-  reason: string | null
 }
 ```
 
-`selectedModel` is set when a rule matches above threshold, or when `defaultModel` or `fallbackModel` is configured for unmatched or low-confidence requests.
+`selectedModel` is set when a valid rule number matches, or when `defaultModel` is configured for unmatched requests.
 
 ## Behavior notes
 
 - Classification uses the latest message by default. Set `lastMessageOnly: false` to classify all selected input messages.
 - The selected model is applied only on step `0`. Tool-continuation steps keep the current model unless another processor changes it.
-- If no rule matches and no fallback is configured, the processor returns `{}` from `processInputStep()` and the agent's configured model stays unchanged.
-- If the classifier fails, the processor fails open and leaves the model unchanged unless fallback behavior is resolved from a successful classification.
+- If the classifier returns `0` and no `defaultModel` is configured, the processor returns `{}` from `processInputStep()` and the agent's configured model stays unchanged.
+- If the classifier fails, the processor fails open and leaves the model unchanged.
 - Message content is passed through unchanged.

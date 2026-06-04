@@ -15,48 +15,28 @@ import type { LastMessageOnlyOption } from './message-selection';
 type ModelSwapperRouteModel = NonNullable<ProcessInputStepResult['model']>;
 
 export interface ModelSwapRule {
-  /** Unique name the classifier must return when this route matches. */
-  name: string;
-  /** Description of requests that should use this route. */
-  description?: string;
-  /** Pattern or natural-language match criteria for this route. */
-  pattern?: string;
+  /** Description of requests that should use this route. Used as classifier guidance. */
+  description: string;
   /** Model to use when this route matches. */
   model: ModelSwapperRouteModel;
-  /** Optional categories that belong to this route. */
-  categories?: string[];
-  /** Optional extra matching guidance for the classifier. */
-  match?: string;
-  /** Route-specific confidence threshold. Falls back to the processor threshold. */
-  threshold?: number;
 }
 
 export interface ModelSwapperResult {
-  /** Matched rule name, or null when no route matched. */
-  ruleName: string | null;
-  /** Matched category, if the classifier selected one. */
-  category?: string | null;
-  /** Classifier confidence from 0 to 1. */
-  confidence: number;
-  /** Model selected by the matched rule or configured fallback/default. */
+  /** Matched rule index. 0 means no match, 1 means the first rule, 2 means the second rule, and so on. */
+  rule: number;
+  /** Model selected by the matched rule or configured default. */
   selectedModel?: ModelSwapperRouteModel;
-  /** Human-readable classifier reason. */
-  reason: string | null;
 }
 
 export interface ModelSwapperOptions extends LastMessageOnlyOption {
   /** Model configuration for the internal classification agent. */
   model: MastraModelConfig;
-  /** Routing rules that map request categories to models. */
+  /** Routing rules that map request descriptions to models. */
   rules: ModelSwapRule[];
   /** Model to use when no rule matches. */
   defaultModel?: ModelSwapperRouteModel;
-  /** Alias for defaultModel. Used when no rule matches. */
-  fallbackModel?: ModelSwapperRouteModel;
   /** Custom classifier instructions. */
   instructions?: string;
-  /** Minimum confidence required before a matched rule swaps models. Defaults to 0.7. */
-  threshold?: number;
   /** Structured output options used for the classification agent. */
   structuredOutputOptions?: {
     /** Use prompt-based JSON coercion when native structured output is unavailable. */
@@ -70,15 +50,12 @@ type ModelSwapperState = {
   result?: ModelSwapperResult;
 };
 
-const NO_MATCH = 'NO_MATCH';
-
 export class ModelSwapperProcessor implements Processor<'model-swapper'> {
   readonly id = 'model-swapper';
   readonly name = 'Model Swapper';
 
   private classificationAgent: Agent;
   private rules: [ModelSwapRule, ...ModelSwapRule[]];
-  private threshold: number;
   private lastMessageOnly: boolean;
   private defaultModel?: ModelSwapperRouteModel;
   private structuredOutputOptions?: ModelSwapperOptions['structuredOutputOptions'];
@@ -90,9 +67,8 @@ export class ModelSwapperProcessor implements Processor<'model-swapper'> {
     }
 
     this.rules = options.rules as [ModelSwapRule, ...ModelSwapRule[]];
-    this.threshold = options.threshold ?? 0.7;
     this.lastMessageOnly = options.lastMessageOnly ?? true;
-    this.defaultModel = options.defaultModel ?? options.fallbackModel;
+    this.defaultModel = options.defaultModel;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
 
@@ -147,12 +123,8 @@ export class ModelSwapperProcessor implements Processor<'model-swapper'> {
   }
 
   private async classify(content: string, observabilityContext?: ObservabilityContext): Promise<ModelSwapperResult> {
-    const ruleNames = [this.rules[0].name, ...this.rules.slice(1).map(rule => rule.name), NO_MATCH];
     const schema = z.object({
-      ruleName: z.enum(ruleNames).describe('The exact matching rule name, or NO_MATCH'),
-      category: z.string().nullable().describe('The matched category, if any'),
-      confidence: z.number().min(0).max(1).describe('Confidence level between 0 and 1'),
-      reason: z.string().nullable().describe('Brief reason for the selected route'),
+      rule: z.number().int().min(0).max(this.rules.length).describe('Selected rule number. Return 0 for no match.'),
     });
 
     try {
@@ -195,36 +167,23 @@ export class ModelSwapperProcessor implements Processor<'model-swapper'> {
     } catch (error) {
       console.warn('[ModelSwapperProcessor] Classification agent failed, leaving model unchanged:', error);
       return {
-        ruleName: null,
-        category: null,
-        confidence: 0,
-        reason: null,
+        rule: 0,
       };
     }
   }
 
   private resolveResult(result: ModelSwapperResult): ModelSwapperResult {
-    if (!result.ruleName || result.ruleName === NO_MATCH) {
+    if (result.rule === 0) {
       return {
         ...result,
-        ruleName: null,
         selectedModel: this.defaultModel,
       };
     }
 
-    const rule = this.rules.find(candidate => candidate.name === result.ruleName);
+    const rule = this.rules[result.rule - 1];
     if (!rule) {
       return {
-        ...result,
-        ruleName: null,
-        selectedModel: this.defaultModel,
-      };
-    }
-
-    const threshold = rule.threshold ?? this.threshold;
-    if (result.confidence < threshold) {
-      return {
-        ...result,
+        rule: 0,
         selectedModel: this.defaultModel,
       };
     }
@@ -236,26 +195,13 @@ export class ModelSwapperProcessor implements Processor<'model-swapper'> {
   }
 
   private createDefaultInstructions(): string {
-    return `You classify user requests for dynamic model routing. Select exactly one configured rule when the request clearly matches that route. Return ${NO_MATCH} when no rule matches or confidence is low. Use the exact rule name provided in the prompt.`;
+    return 'Classify user requests for model routing. Return only the matching rule number. Return 0 when no rule matches or when uncertain.';
   }
 
   private createClassificationPrompt(content: string): string {
-    const rules = this.rules
-      .map(rule => {
-        const details = [
-          `name: ${rule.name}`,
-          rule.description ? `description: ${rule.description}` : null,
-          rule.pattern ? `pattern: ${rule.pattern}` : null,
-          rule.match ? `match: ${rule.match}` : null,
-          rule.categories?.length ? `categories: ${rule.categories.join(', ')}` : null,
-          `threshold: ${rule.threshold ?? this.threshold}`,
-        ].filter(Boolean);
+    const rules = this.rules.map((rule, index) => `${index + 1}: ${rule.description}`).join('\n');
 
-        return `- ${details.join('\n  ')}`;
-      })
-      .join('\n');
-
-    return `Classify the user request against these model routing rules.\n\nRules:\n${rules}\n\nReturn ${NO_MATCH} if none apply.\n\nUser request:\n${content}`;
+    return `Return only one rule number.\n0: no match\n${rules}\n\nRequest:\n${content}`;
   }
 
   private extractTextContent(message: MastraDBMessage): string {
