@@ -38,10 +38,11 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Setup | Installation and launch | #13294 | package metadata + startup runtime | Missing | Medium | [page](./setup/installation-and-launch.md) |
 | TUI | Interactive chat | #13218 | TUI + harness session | Partial | High | [page](./tui/interactive-chat.md) |
 | Chat | Prompt context and project instructions | #13234 | Harness request context + instruction files | Partial | High | [page](./chat/prompt-context.md) |
-| Threads | Persistent conversations / switching | #13218, #13334 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
+| Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Models | Model auth, selection, modes | #13218, #13307 | Settings + harness session | Partial | High | [page](./models/model-auth-and-modes.md) |
-| Tools | Coding tools and approval permissions | #13218 | Harness state + permission policy | Partial | High | [page](./tools/coding-tools-permissions.md) |
+| Tools | Coding tools and approval permissions | #13218, #13344 | Harness state + permission policy | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
+| Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
 | Memory | Observational memory | #13231, #13305, #13330 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |

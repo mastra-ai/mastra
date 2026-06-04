@@ -3,18 +3,18 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — project-scoped persistent conversations and thread switching.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config; [#13343](https://github.com/mastra-ai/mastra/pull/13343) — scoped startup auto-resume to current working directory/worktree via `projectPath` metadata.
 
 ## User-visible behavior
 
-- What the user can do: resume, create, switch, and clone conversations per project/resource.
-- Success looks like: messages and thread metadata reload without leaking another thread’s ephemeral state.
-- Must preserve: history, title/resource, mode/model metadata, goals, thread lock ownership, and related status projections.
+- What the user can do: resume, create, switch, and clone conversations per project/resource/worktree.
+- Success looks like: startup resumes only threads from the current directory, then messages and metadata reload without leaking another thread’s ephemeral state.
+- Must preserve: history, title/resource, mode/model metadata, goals, project path tagging, thread lock ownership, and related status projections.
 
 ## Entry points / commands
 
 - Commands / shortcuts / flags: `/new`, `/threads`, headless `--continue`, `--thread`, `--title`, `--clone-thread`, `--resource-id`.
-- Automatic triggers: startup thread selection, `thread_created`, `thread_changed`.
+- Automatic triggers: startup thread selection filters by `metadata.projectPath`; `thread_created`, `thread_changed`.
 
 ## TUI states
 
@@ -43,6 +43,7 @@
 | Thread history | Harness memory/storage | TUI history renderer, headless |
 | Current thread/resource | Harness session | TUI status, commands |
 | Thread title/metadata | Thread metadata/session records | TUI footer, goals, GitHub badges |
+| Project path scope | Thread `metadata.projectPath` + legacy directory birthtime fallback | Startup auto-resume filtering |
 | Ephemeral tasks/plan/sandbox | Harness state for active thread | Prompt context, TUI projection |
 | Thread lock ownership | Core Harness `threadLock` + MC filesystem lock files | Thread create/switch/select and TUI lock prompt |
 
@@ -51,6 +52,7 @@
 - `mastracode/src/tui/commands/new.ts` — new conversation preparation.
 - `mastracode/src/tui/commands/threads.ts` — selector, switch, clone, lock conflicts.
 - `mastracode/src/tui/event-dispatch.ts` — thread event cleanup/reload.
+- `mastracode/src/tui/setup.ts` — startup auto-resume filtering by `projectPath` and legacy birthtime fallback.
 - `mastracode/src/tui/mastra-tui.ts` — startup thread sync.
 - `mastracode/src/headless.ts` — non-TUI thread flags.
 - `mastracode/src/index.ts` — session prefill from existing threads and threadLock wiring.
@@ -61,6 +63,7 @@
 
 - [Interactive TUI chat](../tui/interactive-chat.md) — history render is thread-scoped.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — model/mode reload depends on thread/session metadata.
+- [Task tracking tools and TUI progress](../tools/task-tracking.md) — task state is thread-local and must reset/reload correctly.
 
 ## Existing tests
 
@@ -76,12 +79,14 @@
 - Thread switch resets ephemeral tasks/plan/sandbox but reloads persisted metadata.
 - Headless `--continue` / `--thread title` after Harness v1 session prefill.
 - MC-level test that core thread lock conflicts reach the TUI lock prompt across real process-style locks.
+- Startup auto-resume test for same-resource worktrees: strict `projectPath`, legacy birthtime fallback, and retroactive tagging.
 
 ## Known risks / regressions
 
 - Slack reported new-session creation broken on alpha; needs current repro/verification.
 - Model/mode reload bug belongs partly here because thread/session metadata is the reload path.
 - Harness v1 session prefill is high risk for stale/incomplete thread records.
+- Worktrees share resource IDs; missing/incorrect `projectPath` metadata can resume the wrong directory’s thread.
 
 ## Verification checklist
 

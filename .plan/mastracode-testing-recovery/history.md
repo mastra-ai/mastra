@@ -297,3 +297,18 @@ Documentation actions:
 - Updated `_pr-queue.md` status markers: #13334 done, #13339 done, #13343 current, #13344 next.
 
 Next queue checkpoint: PR #13343 (scope thread auto-resume to current directory), then PR #13344 (todo tools moved to core and renamed to task).
+
+### Feature map PR #13343 and #13344
+
+Processed PR [#13343](https://github.com/mastra-ai/mastra/pull/13343), `2b2e157a09` (`fix: scope thread auto resume to current directory to make worktrees easier to use (#13343)`). Verified current `mastracode/src/tui/setup.ts`: startup thread selection filters by `thread.metadata.projectPath`, falls back to directory birthtime for legacy untagged threads, and retroactively tags resumed untagged threads with the current path.
+
+Processed PR [#13344](https://github.com/mastra-ai/mastra/pull/13344), `c204b632d1` (`refactor: move todo tools to @mastra/core/harness and rename to task (#13344)`). Verified current core task tools in `packages/core/src/harness/tools.ts`, TUI task progress rendering, `task_updated` event handling, prompt `<current-task-list>` injection, permissions, and subagent restrictions.
+
+Documentation actions:
+
+- Updated `features/threads/persistent-conversations.md` with #13343 worktree/current-directory auto-resume behavior and missing startup filtering tests.
+- Created `features/tools/task-tracking.md` for the task tool/TUI progress feature.
+- Updated `features/tools/coding-tools-permissions.md` and `features/tools/streaming-tool-arguments.md` with #13344 later-change references and links to task tracking.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13343 done, #13344 done, #13345 current, #13311 next.
+
+Next queue checkpoint: PR #13345 (Ctrl+F autocomplete/queued slash commands), then PR #13311 (`/mcp` manager wiring).

@@ -42,10 +42,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 20 | 2026-02-20 | #13307 | `12e4819fe2` | review | done | fix(mastracode): reload auth storage before resolving OpenAI Codex model (#13307) | 1 |
 | 21 | 2026-02-20 | #13334 | `24b80af87d` | review | done | feat(harness): add optional threadLock config for concurrent thread access protection (#13334) | 1 |
 | 22 | 2026-02-20 | #13339 | `b322502d4a` | review | done | feat(mastracode): add subagent parallel-only and verification guidance (#13339) | 2 |
-| 23 | 2026-02-20 | #13343 | `2b2e157a09` | review | current | fix: scope thread auto resume to current directory to make worktrees easier to use (#13343) | 1 |
-| 24 | 2026-02-20 | #13344 | `c204b632d1` | review | next | refactor: move todo tools to @mastra/core/harness and rename to task (#13344) | 18 |
-| 25 | 2026-02-20 | #13345 | `7aedfb7ff9` | review | | feat(tui): resolve autocomplete and queue slash commands on Ctrl+F (#13345) | 2 |
-| 26 | 2026-02-20 | #13311 | `d1b596fb05` | review | | fix(mastracode): wire mcpManager to TUI so /mcp command works (#13311) | 2 |
+| 23 | 2026-02-20 | #13343 | `2b2e157a09` | review | done | fix: scope thread auto resume to current directory to make worktrees easier to use (#13343) | 1 |
+| 24 | 2026-02-20 | #13344 | `c204b632d1` | review | done | refactor: move todo tools to @mastra/core/harness and rename to task (#13344) | 18 |
+| 25 | 2026-02-20 | #13345 | `7aedfb7ff9` | review | current | feat(tui): resolve autocomplete and queue slash commands on Ctrl+F (#13345) | 2 |
+| 26 | 2026-02-20 | #13311 | `d1b596fb05` | review | next | fix(mastracode): wire mcpManager to TUI so /mcp command works (#13311) | 2 |
 | 27 | 2026-02-20 | #13346 | `e399dcba4f` | review | | fix(mastracode): load AGENTS.md instruction files, drop deprecated AGENT.md (#13346) | 4 |
 | 28 | 2026-02-20 | #13347 | `48d19d89e0` | review | | refactor: replace MCPManager class with factory function (#13347) | 5 |
 | 29 | 2026-02-20 | #13348 | `4137924b3f` | review | | fix: limit tool result token sizes for view, grep, and web tools (#13348) | 3 |
