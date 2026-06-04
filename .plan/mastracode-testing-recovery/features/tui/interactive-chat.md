@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — initial TUI chat, streaming render, keyboard input, tool render, harness event dispatch.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()` so commands, handlers, tests, and public TUI consumers use the same state shape.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior.
 
 ## User-visible behavior
 
@@ -44,16 +44,19 @@
 | Chat history | Harness / memory storage | TUI renderer, headless output |
 | Active run | Harness runtime | TUI keyboard/status handlers |
 | Streaming components | TUI transient projection | Chat container |
-| Mutable TUI state | `TUIState` object from `createTUIState()` | Commands, handlers, tests, TUI class |
+| Mutable TUI state | `TUIState` object from `createTUIState()` | Commands, extracted handlers, tests, TUI class |
+| Event routing | `event-dispatch.ts` + focused handlers | Tool/message/OM/thread/status renderers |
 | Abort state | Harness terminal event after TUI request | TUI cleanup |
 
 ## Key files
 
-- `mastracode/src/tui/mastra-tui.ts` — startup, subscription, event handling.
+- `mastracode/src/tui/mastra-tui.ts` — thin lifecycle wrapper after #13413 modularization.
 - `mastracode/src/tui/state.ts` — shared `TUIState`, `MastraTUIOptions`, and state factory defaults.
 - `mastracode/src/tui/setup.ts` — keyboard shortcuts and submit behavior.
 - `mastracode/src/tui/event-dispatch.ts` — event-to-handler routing.
+- `mastracode/src/tui/handlers/*` — focused message, tool, OM, prompt, and subagent handlers.
 - `mastracode/src/tui/render-messages.ts` — history reconstruction.
+- `mastracode/src/tui/status-line.ts`, `shell.ts` — extracted status and shell rendering helpers.
 - `mastracode/src/tui/index.ts` — public TUI export barrel.
 - `mastracode/package.json` and `mastracode/tsup.config.ts` — `mastracode/tui` export and build entry.
 - `mastracode/src/headless.ts` — non-TUI run path.
@@ -70,6 +73,7 @@
 - `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` — active-run queue/signal behavior.
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — shortcut behavior.
 - `mastracode/src/tui/event-dispatch.test.ts`, `render-messages.test.ts` — event/history rendering.
+- `mastracode/src/tui/handlers/*.test.ts` — focused handler coverage after #13413 extraction.
 - `mastracode/src/headless.test.ts` — non-TUI path.
 - `mastracode/src/tui/__tests__/*` imports `TUIState` in handler/queue/goal tests, but most tests still hand-build partial state objects.
 - No dedicated package-export smoke test found for `mastracode/tui`.
@@ -89,6 +93,7 @@
 - Headless abort timeout existed pre-Harness v1; treat as baseline noise until reverified.
 - Public export can drift if `package.json` export targets, `tsup` entry names, or generated type paths stop matching.
 - `TUIState` is now the shared mutable projection for many features; adding fields without factory defaults can break handlers only at runtime.
+- TUI modularization lowered file size but increased routing seams: a missing handler import or mismatched context field can silently break one event family while the main TUI still starts.
 
 ## Verification checklist
 

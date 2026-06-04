@@ -403,3 +403,18 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13260 skipped, #13416 done, #13413 current, #13385 next.
 
 Next queue checkpoint: PR #13413 (TUI modularization), then PR #13385 (TS/JS LSP language identifier fix).
+
+
+### Feature map PR #13413 and #13385
+
+Processed PR [#13413](https://github.com/mastra-ai/mastra/pull/13413), `f08b0bb00b` (`refactor: modularize TUI into focused modules (#13413)`). Verified current source keeps `mastracode/src/tui/mastra-tui.ts` as a thin lifecycle wrapper and routes events through extracted modules: `event-dispatch.ts`, `handlers/*`, `setup.ts`, `render-messages.ts`, `status-line.ts`, and `shell.ts`. No new user-visible feature page needed; this is a structural refactor of the existing interactive chat surface.
+
+Processed PR [#13385](https://github.com/mastra-ai/mastra/pull/13385), `18553c3541` (`fix(mastracode): use correct LSP language identifier for TS/JS files (#13385)`). Verified current core workspace LSP path maps extensions via `getLanguageId()` (`.ts` → `typescript`, `.tsx` → `typescriptreact`, `.js` → `javascript`, `.jsx` → `javascriptreact`) before `notifyOpen()`. The original MC-owned `string-replace-lsp.ts` path no longer exists at HEAD; current active behavior lives in `packages/core/src/workspace/lsp/*` and `tools/lsp-inspect.ts`, with a legacy MC-local language map still present.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-chat.md` with #13413 modularized handler/event/status/shell ownership and routing risk.
+- Updated `features/tools/coding-tools-permissions.md` with #13385 LSP language-ID behavior, current core LSP ownership, tests, and missing direct language-mapping coverage.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13413 done, #13385 done, #13384 current, #13376 next.
+
+Next queue checkpoint: PR #13384 (hidden-file directory listings), then PR #13376 (model name in Co-Authored-By commit message).

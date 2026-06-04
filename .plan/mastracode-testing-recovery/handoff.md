@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13416 (row 36) have been processed, with #13037, #13251, #13252, #13257, and #13260 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13413 (`f08b0bb00b`, TUI modularization), then #13385 (`18553c3541`, TS/JS LSP language identifier fix).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13385 (row 38) have been processed, with #13037, #13251, #13252, #13257, and #13260 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13384 (`8af03582df`, hidden-file directory listing), then #13376 (`7429026f6c`, commit Co-Authored-By model name).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 37: PR #13413 (TUI modularization), then row 38: PR #13385 (TS/JS LSP language identifier fix).
+1. Continue at `_pr-queue.md` row 39: PR #13384 (hidden-file directory listing), then row 40: PR #13376 (model name in Co-Authored-By commit message).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -91,3 +91,5 @@ None known.
 
 - `gh pr view 13260 --json number,title,body,author,mergedAt,url,files,commits` and `git show e610573a4c -- mastracode .changeset` verified #13260 as alpha package version/CHANGELOG/changelog-only churn; skipped.
 - `gh pr view 13416 --json number,title,body,author,mergedAt,url,files,commits`, current Plan-mode prompt/tool-guidance files, core `submit_plan` tool, TUI plan handlers, history renderer, and tests verified plan approval/build handoff behavior. Created the plan approval feature card.
+- `gh pr view 13413 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/tui/mastra-tui.ts`, `event-dispatch.ts`, `handlers/*`, `render-messages.ts`, `setup.ts`, and handler/event tests verified TUI modularization as an internal refactor. Updated the interactive TUI card.
+- `gh pr view 13385 --json number,title,body,author,mergedAt,url,files,commits`, current `packages/core/src/workspace/lsp/language.ts`, `manager.ts`, `tools/lsp-inspect.ts`, and legacy `mastracode/src/lsp/language.ts` verified TS/JS LSP language IDs are mapped, not raw extensions. Updated the tools card.
