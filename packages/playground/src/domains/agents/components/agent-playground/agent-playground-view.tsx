@@ -30,7 +30,7 @@ interface AgentPlaygroundViewProps {
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
-  onOpenPr?: () => Promise<void>;
+  onOpenPr?: (changeMessage?: string) => Promise<{ url: string } | void>;
   isViewingPreviousVersion?: boolean;
 }
 
@@ -78,7 +78,7 @@ function LeftPanel({
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
-  onOpenPr?: () => Promise<void>;
+  onOpenPr?: (changeMessage?: string) => Promise<{ url: string } | void>;
   isViewingPreviousVersion?: boolean;
 }) {
   const { versionSelector, actionBar } = AgentPlaygroundVersionBar({

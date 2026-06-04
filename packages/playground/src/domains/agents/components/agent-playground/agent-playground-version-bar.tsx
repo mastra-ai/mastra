@@ -21,7 +21,17 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui';
-import { Check, ChevronDown, Clock, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  Clock,
+  Download,
+  ExternalLink,
+  GitPullRequest,
+  Info,
+  MessageSquare,
+  Save,
+} from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
@@ -46,7 +56,7 @@ interface AgentPlaygroundVersionBarProps {
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
-  onOpenPr?: () => Promise<void>;
+  onOpenPr?: (changeMessage?: string) => Promise<{ url: string } | void>;
   /** Whether the user is viewing a previous (non-latest) version that can be published */
   isViewingPreviousVersion?: boolean;
 }
@@ -87,6 +97,10 @@ export function AgentPlaygroundVersionBar({
 }: AgentPlaygroundVersionBarProps) {
   const [showMessageDialog, setShowMessageDialog] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
+  const [showProposeDialog, setShowProposeDialog] = useState(false);
+  const [proposeMessage, setProposeMessage] = useState('');
+  const [isProposingChange, setIsProposingChange] = useState(false);
+  const [proposedChangeUrl, setProposedChangeUrl] = useState<string | undefined>();
 
   const codeSourceSaveUnavailable = isCodeSourceAgent && !!sourceUnavailableReason;
   const codeSourceSaveLabel = codeSourceStorage === 'source-provider' ? 'Save to source' : 'Save to filesystem';
@@ -144,6 +158,23 @@ export function AgentPlaygroundVersionBar({
     setShowMessageDialog(false);
     setChangeMessage('');
   }, [changeMessage, onSaveDraft, isSavingDraft]);
+
+  const handleProposeChange = useCallback(async () => {
+    if (isProposingChange) return;
+    setIsProposingChange(true);
+    try {
+      const result = await onOpenPr?.(proposeMessage.trim() || undefined);
+      if (result?.url) setProposedChangeUrl(result.url);
+      setShowProposeDialog(false);
+      setProposeMessage('');
+    } finally {
+      setIsProposingChange(false);
+    }
+  }, [isProposingChange, onOpenPr, proposeMessage]);
+
+  const handleInspectChange = useCallback(() => {
+    if (proposedChangeUrl) window.open(proposedChangeUrl, '_blank', 'noopener,noreferrer');
+  }, [proposedChangeUrl]);
 
   return {
     versionSelector: (
@@ -205,12 +236,49 @@ export function AgentPlaygroundVersionBar({
               Download JSON
             </Button>
             {canOpenPr ? (
-              <Button variant="primary" size="md" onClick={() => void onOpenPr?.()} title={openPrTitle}>
-                <Icon size="sm">
-                  <GitPullRequest />
-                </Icon>
-                Open PR
-              </Button>
+              <ButtonsGroup spacing="close">
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => setShowProposeDialog(true)}
+                  disabled={isProposingChange}
+                  title={openPrTitle}
+                >
+                  {isProposingChange ? (
+                    <>
+                      <Spinner className="size-3.5" />
+                      Proposing&hellip;
+                    </>
+                  ) : (
+                    <>
+                      <Icon size="sm">
+                        <GitPullRequest />
+                      </Icon>
+                      Propose change
+                    </>
+                  )}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenu.Trigger asChild>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      disabled={isProposingChange}
+                      aria-label="More source change options"
+                    >
+                      <ChevronDown className="size-3.5" />
+                    </Button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content align="end">
+                    <DropdownMenu.Item disabled={!proposedChangeUrl} onSelect={handleInspectChange}>
+                      <Icon size="sm">
+                        <ExternalLink />
+                      </Icon>
+                      Inspect change
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu>
+              </ButtonsGroup>
             ) : (
               <Button
                 variant="primary"
@@ -337,6 +405,54 @@ export function AgentPlaygroundVersionBar({
                   <Save />
                 </Icon>
                 Save Version
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showProposeDialog} onOpenChange={setShowProposeDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Propose Change</DialogTitle>
+              <DialogDescription>Add an optional commit message for the source change proposal.</DialogDescription>
+            </DialogHeader>
+            <DialogBody className="py-1">
+              <div className="grid gap-2">
+                <Label htmlFor="propose-message">Commit message</Label>
+                <Input
+                  id="propose-message"
+                  placeholder="Describe what changed..."
+                  value={proposeMessage}
+                  className="focus:ring-white/50"
+                  onChange={e => setProposeMessage(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      void handleProposeChange();
+                    }
+                  }}
+                  disabled={isProposingChange}
+                  autoFocus
+                />
+              </div>
+            </DialogBody>
+            <DialogFooter className="px-6">
+              <Button variant="default" size="sm" onClick={() => setShowProposeDialog(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleProposeChange} disabled={isProposingChange}>
+                {isProposingChange ? (
+                  <>
+                    <Spinner className="size-3.5" />
+                    Proposing&hellip;
+                  </>
+                ) : (
+                  <>
+                    <Icon size="sm">
+                      <GitPullRequest />
+                    </Icon>
+                    Propose Change
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

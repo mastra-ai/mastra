@@ -2,7 +2,7 @@
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -85,5 +85,26 @@ describe('AgentPlaygroundVersionBar source capabilities', () => {
     const saveButton = screen.getByRole('button', { name: /Save to filesystem/i });
     expect(saveButton.hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Code-source editing requires a configured source provider.')).not.toBeNull();
+  });
+
+  it('proposes source changes with a custom message before enabling inspection', async () => {
+    server.use(...agentVersionHandlers());
+    const openChangeRequest = vi.fn(async () => ({ url: 'https://github.com/acme/repo/pull/123' }));
+    const openWindow = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    renderVersionBar({ canOpenPr: true, onOpenPr: openChangeRequest });
+
+    expect(await screen.findByText('No filesystem saves yet')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Propose change/i }));
+    fireEvent.change(screen.getByLabelText(/Commit message/i), { target: { value: 'Tune weather instructions' } });
+    const proposeButtons = screen.getAllByRole('button', { name: /Propose Change/i });
+    fireEvent.click(proposeButtons[proposeButtons.length - 1]);
+
+    await waitFor(() => expect(openChangeRequest).toHaveBeenCalledWith('Tune weather instructions'));
+
+    fireEvent.click(screen.getByRole('button', { name: /More source change options/i }));
+    fireEvent.click(await screen.findByText(/Inspect change/i));
+
+    expect(openWindow).toHaveBeenCalledWith('https://github.com/acme/repo/pull/123', '_blank', 'noopener,noreferrer');
   });
 });
