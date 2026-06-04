@@ -152,5 +152,12 @@
     "@mastra/s3": "0.5.1",
     "@mastra/vercel": "0.2.0"
   },
-  "changesets": []
+  "changesets": [
+    "chubby-suits-yawn",
+    "free-doors-laugh",
+    "giant-adults-behave",
+    "green-birds-knock",
+    "sixty-signs-run",
+    "small-snakes-read"
+  ]
 }
