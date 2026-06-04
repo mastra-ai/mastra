@@ -35,7 +35,8 @@ import { WorkflowsStorage } from './base';
  * internal slots were never initialized). Null-prototype dictionaries keep
  * their null prototype.
  */
-function cloneRunData<T>(value: T): T {
+/** @internal Exported for testing only. */
+export function cloneRunData<T>(value: T): T {
   return deepCloneForRun(value, new WeakMap()) as T;
 }
 
