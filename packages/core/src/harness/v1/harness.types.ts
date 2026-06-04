@@ -1,16 +1,11 @@
 import type { Agent } from '../../agent';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
-import type { PublicSchema } from '../../schema';
 import type { HarnessStorage } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
-import type { Workspace, WorkspaceConfig } from '../../workspace';
-import type { Skill } from '../../workspace/skills/types';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategory, ToolCategoryResolver } from './permissions.types';
-import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
-export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
+export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
   /**
    * Operator-managed compatibility token for the configured runtime surface:
    * agents and prompts/tools, mode-to-agent bindings, model aliases, MCP
@@ -30,66 +25,6 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
    * a generated UUID when omitted.
    */
   ownerId?: string;
-
-  /**
-   * Optional schema used to validate harness state updates.
-   */
-  stateSchema?: PublicSchema<TState>;
-
-  /**
-   * Initial harness state. Merged over schema defaults when provided.
-   */
-  initialState?: Partial<TState>;
-
-  /**
-   * Workspace instance, dynamic workspace factory, or workspace configuration.
-   */
-  workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
-
-  /**
-   * Subagent type registry. When `types` is non-empty and {@link resolveModel}
-   * is also configured, the harness exposes a built-in `subagent` tool to the
-   * session agent. The tool's `agentType` enum is drawn from the keys of this
-   * map. Validated at construction.
-   */
-  subagents?: SubagentRegistryConfig;
-
-  /**
-   * Resolves a model id string to a `LanguageModel`. Required when the
-   * built-in `subagent` tool is exposed (i.e. when {@link subagents} is set)
-   * so that fresh subagent runs can instantiate their model.
-   */
-  resolveModel?: ModelResolver;
-
-  /**
-   * Explicitly configured skills. These must use the canonical workspace
-   * `Skill` shape, including path, source, references, scripts, and assets.
-   * Configured skills win when a workspace-discovered skill shares the same
-   * name.
-   */
-  skills?: Skill[];
-
-  /**
-   * Default permission policy applied when a tool's resolved category has no
-   * rule and no per-tool override. Set to `'allow'` to opt out of the gate
-   * entirely; `'deny'` for a strict allow-list posture. Defaults to `'ask'`.
-   */
-  defaultPermissionPolicy?: PermissionPolicy;
-
-  /**
-   * Resolves a tool name to its category for permission-gate evaluation.
-   * Returning `null` leaves the tool uncategorised — only per-tool rules
-   * apply, and `defaultPermissionPolicy` is the floor. The function form
-   * wins when both `toolCategoryResolver` and `toolCategories` are set.
-   */
-  toolCategoryResolver?: ToolCategoryResolver;
-
-  /**
-   * Static `toolName -> ToolCategory` map. Equivalent to passing a resolver
-   * of `(name) => toolCategories[name] ?? null`. Ignored when
-   * `toolCategoryResolver` is also set.
-   */
-  toolCategories?: Record<string, ToolCategory>;
 
   /**
    * Operating modes. Each mode pins a backing agent and may override or
@@ -244,11 +179,13 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   // models?: ModelInfo[];
 
   // /**
-  //  * Explicitly configured canonical workspace skills. These must use the
-  //  * same shape as WorkspaceSkills entries, including path/source/references/
-  //  * scripts/assets.
+  //  * Static, code-registered skills. These are merged ahead of the session's
+  //  * workspace-discovered skills for `session.skills.list/get/use`.
+  //  *
+  //  * Each `name` must be unique within this array. When a workspace skill has
+  //  * the same `name`, this code-registered descriptor wins.
   //  */
-  // skills?: Skill[];
+  // skills?: HarnessSkill[];
 
   // /**
   //  * Resolves a catalog model id to its current auth status. Called by
@@ -300,7 +237,7 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   // [key: string]: unknown;
 }
 
-export type HarnessConfig<MODES extends HarnessMode[], TState = {}> = HarnessConfigCommon<TState, MODES> &
+export type HarnessConfig<MODES extends HarnessMode[]> = HarnessConfigCommon<MODES> &
   (
     | {
         /**

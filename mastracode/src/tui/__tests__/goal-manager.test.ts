@@ -339,7 +339,7 @@ describe('GoalManager', () => {
       expect.stringContaining('Latest assistant message'),
       expect.objectContaining({
         memory: { thread: expectedThreadId, resource: 'resource-1' },
-        structuredOutput: { schema: expect.any(Object) },
+        structuredOutput: expect.objectContaining({ schema: expect.any(Object) }),
       }),
     );
     expect(mocks.stream).toHaveBeenCalledWith(expect.stringContaining('Latest user message'), expect.any(Object));
