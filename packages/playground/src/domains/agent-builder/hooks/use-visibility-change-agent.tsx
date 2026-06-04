@@ -4,7 +4,7 @@ import { AgentImpactWarnings } from '../components/agent-edit/agent-impact-warni
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { useVisibilityChangeDialog } from './use-visibility-change-dialog';
 import type { UseVisibilityChangeDialogResult, VisibilityCopy } from './use-visibility-change-dialog';
-import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredAgentDependents, useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 
 type Visibility = NonNullable<AgentBuilderEditFormValues['visibility']>;
 
@@ -28,6 +28,7 @@ export type UseVisibilityChange = UseVisibilityChangeDialogResult<Visibility>;
 export function useVisibilityChange(agentId: string): UseVisibilityChange {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { isLoading: isDependentsLoading } = useStoredAgentDependents(agentId);
 
   return useVisibilityChangeDialog<Visibility>({
     copy: COPY,
@@ -43,5 +44,6 @@ export function useVisibilityChange(agentId: string): UseVisibilityChange {
     },
     renderExtraContent: pending =>
       pending === 'private' ? <AgentImpactWarnings agentId={agentId} variant="make-private" /> : null,
+    confirmDisabled: pending => pending === 'private' && isDependentsLoading,
   });
 }

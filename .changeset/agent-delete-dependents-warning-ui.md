@@ -1,8 +1,8 @@
 ---
-'@mastra/playground': minor
+'@internal/playground': minor
 ---
 
-Warn when deleting or unsharing a referenced agent in Mastra Studio.
+Added warnings when deleting or unsharing a referenced agent in Mastra Studio.
 
 The agent-builder now uses the stored-agent dependents lookup endpoint to warn users
 in two confirm dialogs:

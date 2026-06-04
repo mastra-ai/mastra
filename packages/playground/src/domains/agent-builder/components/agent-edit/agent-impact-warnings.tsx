@@ -45,7 +45,7 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
   return (
     <div
       data-testid="agent-impact-warnings"
-      className="mt-3 rounded-md border border-yellow-500/40 bg-yellow-500/5 p-3 text-sm"
+      className="mt-3 rounded-md border border-warning/30 bg-warning/5 p-3 text-sm"
     >
       {dependents.length > 0 && (
         <div data-testid="agent-impact-dependents-warning">
