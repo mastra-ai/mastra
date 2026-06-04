@@ -4,30 +4,37 @@
 
 Added SignalProvider abstraction for building notification signal providers. Enables declarative signal wiring in Agent config with built-in subscription tracking, polling lifecycle, and webhook support. Includes WebhookSignalProvider as a proof-of-concept.
 
-**Basic usage:**
+**Writing a signal provider:**
+
+```ts
+import { SignalProvider } from '@mastra/core/signals';
+import type { SignalSubscription } from '@mastra/core/signals';
+
+class SlackSignalProvider extends SignalProvider<'slack-signals'> {
+  readonly id = 'slack-signals' as const;
+  readonly pollInterval = 30_000; // poll every 30s
+
+  async poll(subscriptions: SignalSubscription[]) {
+    for (const sub of subscriptions) {
+      const messages = await fetchNewMessages(sub.externalResourceId);
+      if (messages.length > 0) {
+        await this.notify(
+          { source: 'slack', kind: 'new-message', summary: `${messages.length} new messages` },
+          { threadId: sub.threadId, resourceId: sub.resourceId },
+        );
+      }
+    }
+  }
+}
+```
+
+**Declarative wiring:**
 
 ```ts
 import { Agent } from '@mastra/core/agent';
-import { WebhookSignalProvider } from '@mastra/core/signals';
-
-const webhookProvider = new WebhookSignalProvider({
-  extractResourceId: (payload) => payload.repository,
-});
 
 const agent = new Agent({
-  signals: [webhookProvider],
+  signals: [new SlackSignalProvider()],
   // ... other config
-});
-
-// Subscribe a thread to an external resource
-webhookProvider.subscribeThread(
-  { threadId: 'thread-1', resourceId: 'user-1' },
-  'my-org/my-repo'
-);
-
-// Handle incoming webhooks
-await webhookProvider.handleWebhook({
-  body: { repository: 'my-org/my-repo', status: 'completed' },
-  headers: {},
 });
 ```
