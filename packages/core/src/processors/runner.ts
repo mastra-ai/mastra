@@ -20,6 +20,7 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage } from '../stream/types';
+import { isProcessorWorkflow } from './is-processor-workflow';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -30,7 +31,6 @@ import {
 import type { ProcessorStepOutput } from './step-schema';
 import { REPROCESS_PART_KEY } from './stream-reprocess';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
-import { isProcessorWorkflow } from './index';
 import type {
   CachedLLMStepChunk,
   CachedLLMStepResponse,

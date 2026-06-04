@@ -2,17 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
-import { Agent } from '../../agent/agent';
+import type { Agent } from '../../agent/agent';
 import { MessageList, messagesAreEqual } from '../../agent/message-list';
 import type { MastraDBMessage, MessageInput } from '../../agent/message-list';
 import { isAgentCompatible } from '../../agent/subagent';
 import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
 import { isSupportedLanguageModel } from '../../agent/utils';
+import type { MastraBase } from '../../base';
 import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
+import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import {
   EntityType,
@@ -138,13 +140,23 @@ function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> 
   return input instanceof Tool;
 }
 
+/**
+ * Check if something is an Agent without importing the Agent class
+ * (which would create an ESM init-time cycle with agent.ts).
+ * Uses the `component` discriminator from MastraBase instead of instanceof.
+ */
+function isAgent(input: unknown): boolean {
+  const base = input as MastraBase;
+  return !!base && base.component === RegisteredLogger.AGENT;
+}
+
 function isStepParams(input: unknown): input is StepParams<any, any, any, any, any, any> {
   return (
     input !== null &&
     typeof input === 'object' &&
     'id' in input &&
     'execute' in input &&
-    !(input instanceof Agent) &&
+    !isAgent(input) &&
     !(input instanceof Tool)
   );
 }
@@ -159,7 +171,7 @@ function isProcessor(obj: unknown): obj is Processor {
     typeof obj === 'object' &&
     'id' in obj &&
     typeof (obj as any).id === 'string' &&
-    !(obj instanceof Agent) &&
+    !isAgent(obj) &&
     !(obj instanceof Tool) &&
     (typeof (obj as any).processInput === 'function' ||
       typeof (obj as any).processInputStep === 'function' ||

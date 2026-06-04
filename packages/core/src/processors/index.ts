@@ -823,30 +823,7 @@ export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
  */
 export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcessor<TTripwireMetadata>;
 
-/**
- * Type guard to check if an object is a Workflow that can be used as a processor.
- * A ProcessorWorkflow must have 'id', 'inputSchema', 'outputSchema', and 'execute' properties.
- */
-export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    'id' in obj &&
-    typeof (obj as any).id === 'string' &&
-    'inputSchema' in obj &&
-    'outputSchema' in obj &&
-    'execute' in obj &&
-    typeof (obj as any).execute === 'function' &&
-    // Must NOT have processor-specific methods (to distinguish from Processor)
-    !('processInput' in obj) &&
-    !('processInputStep' in obj) &&
-    !('processOutputStream' in obj) &&
-    !('processOutputResult' in obj) &&
-    !('processOutputStep' in obj) &&
-    !('processLLMRequest' in obj) &&
-    !('processAPIError' in obj)
-  );
-}
+export { isProcessorWorkflow } from './is-processor-workflow';
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';

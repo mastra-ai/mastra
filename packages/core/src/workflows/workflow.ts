@@ -31,8 +31,8 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
+import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors/runner';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
