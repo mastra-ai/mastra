@@ -1,0 +1,84 @@
+# Help and shortcuts
+
+## Origin PR / commit
+
+- PR: [#13426](https://github.com/mastra-ai/mastra/pull/13426) — replaced the old verbose `/help` output with a compact command/shortcut reference.
+- Later changes: none mapped yet.
+
+## User-visible behavior
+
+- What the user can do: run `/help` to see core slash commands, custom `//commands`, shell passthrough, and keyboard shortcuts.
+- Success looks like: help is short enough to scan, hides `/mode` / `⇧+Tab` when only one mode exists, and shows custom commands with `//` prefixes.
+- Must preserve: startup header hint points users to `/help` for details instead of dumping command lists in the banner.
+
+## Entry points / commands
+
+- Commands / shortcuts / flags: `/help`; startup hint line shows `/help info & shortcuts`.
+- Automatic triggers: none; help text is built on demand from current harness modes, custom slash commands, and shell passthrough settings.
+
+## TUI states
+
+- Idle: `/help` renders via `ctx.showInfo()`.
+- Active / modal / error: slash-command execution path decides whether `/help` can run; this card covers the rendered text only.
+
+## Headless / non-TUI behavior
+
+- Supported: no dedicated headless help renderer verified.
+- Not supported / unknown: parity between `/help` in TUI and any non-interactive command-list output.
+
+## Streaming / loading / interrupted states
+
+- Streaming / loading: help output is static command text, not model-streamed content.
+- Abort / retry / resume: no persisted runtime state.
+
+## Streaming vs loaded-from-history behavior
+
+- While actively streaming: no active streaming projection.
+- After reload / history reconstruction: previous `/help` output can exist as chat history, but current command availability is recomputed when `/help` is run again.
+
+## State ownership
+
+| State | Owner / source of truth | Consumers |
+| --- | --- | --- |
+| Help command list | `buildHelpText()` hardcoded entries + `ctx.harness.listModes()` | `/help` command |
+| Custom commands | `SlashCommandContext.customSlashCommands` | Help text custom section |
+| Shell passthrough label | Global settings + shell resolver | Help text shell section |
+| Startup hint | `buildLayout()` | TUI startup header |
+
+## Key files
+
+- `mastracode/src/tui/commands/help.ts` — `/help` handler and shell/mode context wiring.
+- `mastracode/src/tui/components/help-overlay.ts` — compact help text builder.
+- `mastracode/src/tui/components/__tests__/help-overlay.test.ts` — help-text assertions.
+- `mastracode/src/tui/setup.ts` — startup hint changed to `⇧+Tab cycle modes` + `/help info & shortcuts`.
+
+## Dependencies / related features
+
+- [Interactive TUI chat](./interactive-chat.md) — `/help` renders inside chat.
+- [Startup banner](./startup-banner.md) — banner/header now delegates command details to `/help`.
+- [Queued follow-ups and slash commands](../chat/queued-followups.md) — slash command dispatch executes `/help`.
+
+## Existing tests
+
+- `mastracode/src/tui/components/__tests__/help-overlay.test.ts` — command list, shell section, shortcuts, mode-gated `/mode`/`⇧+Tab`, and custom `//command` rendering.
+
+## Missing tests
+
+- End-to-end command dispatch test proving `/help` renders through `ctx.showInfo()` with real `SlashCommandContext` data.
+- Startup layout snapshot proving the compact hint remains visible with/without multiple modes.
+- Test for shell passthrough label variations from settings.
+
+## Known risks / regressions
+
+- Command list is manually maintained and can drift from registered commands.
+- Custom slash commands are listed, but command namespace collisions or hidden commands are not modeled by the help builder.
+- Headless/non-TUI help parity is unverified.
+
+## Verification checklist
+
+- [x] Code paths checked.
+- [x] Existing tests identified.
+- [x] Missing tests listed.
+- [x] State ownership verified.
+- [x] TUI/headless behavior considered.
+- [x] Streaming versus loaded-from-history behavior considered.

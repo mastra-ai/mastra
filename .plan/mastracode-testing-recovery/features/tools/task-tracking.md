@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved todo tools into core Harness and renamed them to task tools.
-- Later changes: Unknown — continue PR queue verification.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — moved current/previous task snapshots into `HarnessDisplayState` for UI rendering and history reconciliation.
 
 ## User-visible behavior
 
@@ -41,6 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Task list/mutations | Core Harness state + task tools | Runtime, prompt, TUI, headless |
+| Task display snapshots | `HarnessDisplayState.tasks` / `previousTasks` | TUI progress + history reconciliation |
 | Pinned/inline projection | TUI `TaskProgressComponent` + `taskToolInsertIndex` | Interactive chat |
 | Prompt snapshot | `buildFullPrompt()` from Harness state | Model context |
 
@@ -54,6 +55,7 @@
 ## Dependencies / related features
 
 - [Streaming tool arguments](./streaming-tool-arguments.md) — task tools are the main special-case renderer.
+- [Harness display state](../integrations/harness-display-state.md) — owns task snapshots for UI display.
 - [Coding tools and approval permissions](./coding-tools-permissions.md) — task tools bypass approval.
 - [Persistent conversations / switching](../threads/persistent-conversations.md) — task state is thread-local.
 - [Subagent delegation](../subagents/delegation.md) — non-forked execute subagents must not mutate parent tasks.

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments incrementally across tool renderers.
-- Later changes: [#13335](https://github.com/mastra-ai/mastra/pull/13335) — preserved assistant message text before task/todo tool calls by splitting the streaming assistant component; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — renamed todo streaming paths to task tools and moved tool ownership into core Harness.
+- Later changes: [#13335](https://github.com/mastra-ai/mastra/pull/13335) — preserved assistant message text before task/todo tool calls by splitting the streaming assistant component; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — renamed todo streaming paths to task tools and moved tool ownership into core Harness; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — folded active tool and tool-input buffers into canonical `HarnessDisplayState`.
 
 ## User-visible behavior
 
@@ -62,6 +62,7 @@
 - [Coding tools and approval permissions](./coding-tools-permissions.md) — tool execution surface.
 - [Task tracking tools and TUI progress](./task-tracking.md) — task tools are the main special-case renderer.
 - [Interactive TUI chat](../tui/interactive-chat.md) — streaming chat renderer.
+- [Harness display state](../integrations/harness-display-state.md) — canonical active tool/input-buffer projection.
 - [Persistent conversations / switching](../threads/persistent-conversations.md) — history reconstruction path.
 
 ## Existing tests

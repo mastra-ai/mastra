@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added responsive ASCII-art header for the TUI startup screen.
-- Later changes: none known.
+- Later changes: [#13426](https://github.com/mastra-ai/mastra/pull/13426) — simplified the adjacent startup hint to `⇧+Tab cycle modes` and `/help info & shortcuts`.
 
 ## User-visible behavior
 
@@ -43,6 +43,7 @@
 | Banner text/style | `renderBanner(version, appName)` | `buildLayout()` |
 | Terminal width decision | `process.stdout.columns` | `renderBanner()` |
 | App/version display | `TUIState.options` | TUI startup header |
+| Startup hint | `buildLayout()` + mode count | TUI startup header |
 
 ## Key files
 
@@ -53,6 +54,7 @@
 ## Dependencies / related features
 
 - [Interactive TUI chat](./interactive-chat.md) — banner is part of the TUI layout around chat.
+- [Help and shortcuts](./help-and-shortcuts.md) — `/help` owns the detailed command/shortcut reference hinted by the header.
 - [Installation and launch](../setup/installation-and-launch.md) — startup path that users see before chatting.
 
 ## Existing tests

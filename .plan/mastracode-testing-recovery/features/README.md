@@ -38,8 +38,9 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | --- | --- | --- | --- | --- | --- | --- |
 | Setup | Installation and launch | #13294 | package metadata + startup runtime | Missing | Medium | [page](./setup/installation-and-launch.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
+| TUI | Help and shortcuts | #13426 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
 | Settings | Onboarding and global settings | #13421, #13431 | settings.json + thread settings | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
-| TUI | Interactive chat | #13218, #13350, #13413 | TUI + harness session | Partial | High | [page](./tui/interactive-chat.md) |
+| TUI | Interactive chat | #13218, #13350, #13413, #13427 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376 | Harness request context + instruction files | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345 | TUI transient queue state | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
@@ -49,6 +50,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |
 | Integrations | Core Harness API and reference docs | #13353 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
+| Integrations | Harness display state | #13427 | Core Harness display projection | Partial | High | [page](./integrations/harness-display-state.md) |
 | Git | Commit attribution | #13376 | Prompt context + harness model state | Missing | Medium | [page](./git/commit-attribution.md) |
 | Goals | Plan approval and build handoff | #13416 | Core Harness plan resolver + TUI plan card | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |

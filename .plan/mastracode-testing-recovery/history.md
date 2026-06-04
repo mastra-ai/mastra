@@ -466,3 +466,19 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13422 done, #13428 done, #13426 current, #13427 next.
 
 Next queue checkpoint: PR #13426 (simplified help commands), then PR #13427 (HarnessDisplayState).
+
+
+### Feature map PR #13426 and #13427
+
+Processed PR [#13426](https://github.com/mastra-ai/mastra/pull/13426), `5839d227b4` (`feat(mastracode): simplify suggested help commands (#13426)`). Verified current source routes `/help` through `handleHelpCommand()` and `buildHelpText()`, producing compact command, custom command, shell, and keyboard-shortcut sections. Startup layout now points users to `⇧+Tab cycle modes` and `/help info & shortcuts` instead of showing the older long suggested-command list.
+
+Processed PR [#13427](https://github.com/mastra-ai/mastra/pull/13427), `d4701f7e24` (`feat(core): add HarnessDisplayState for UI-agnostic display state (#13427)`). Verified current core Harness owns `HarnessDisplayState`, updates it inside `applyDisplayStateUpdate()` for lifecycle/message/tool/prompt/subagent/OM/task events, emits `display_state_changed` after raw events, and offers coalesced/cloned `subscribeDisplayState()` snapshots through `DisplayStateScheduler`. Mastra Code currently uses this projection for status-line refresh and task/history reconciliation while still handling many raw events directly.
+
+Documentation actions:
+
+- Created `features/tui/help-and-shortcuts.md` for #13426 compact `/help` and startup hint behavior.
+- Created `features/integrations/harness-display-state.md` for #13427 display-state API behavior.
+- Updated `features/tui/interactive-chat.md`, `features/tui/startup-banner.md`, `features/integrations/harness-api.md`, `features/tools/streaming-tool-arguments.md`, `features/tools/task-tracking.md`, and `features/memory/observational-memory.md` with display-state/help relationships.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13426 done, #13427 done, #13435 current.
+
+Next queue checkpoint: PR #13435 (PostgreSQL opt-in storage backend + libsql settings UI), then PR #13405 (likely version skip).
