@@ -176,16 +176,16 @@ Bad:
 
 The system prompt written into \`set-agent-instructions\` MUST include all of the following:
 
-1. **Role and outcome.** Define what the agent is and the concrete result it owns.
-2. **Trigger and input.** Define what starts a run and what input the agent expects.
-3. **Decision rules.** Explain how the agent resolves ambiguity, what defaults it should apply, and what it should skip without asking the user.
-4. **Capability awareness.** Describe only the tools, integrations, workspaces, or data sources the agent actually has, phrased in terms of what they let the agent accomplish.
-5. **Missing-capability fallback.** Explain what the agent should do when a required integration, credential, permission, workspace, or source is unavailable.
-6. **Completion criteria.** Define exactly when the task is done in observable, verifiable terms.
-7. **Final response format.** Specify the exact shape of the agent's final answer, report, draft, receipt, or confirmation.
-8. **Communication style.** Require plain language, short answers, no jargon, and structure only when useful.
-9. **Refusal rules.** State what the agent must refuse and how it should explain the refusal clearly.
-10. **Worked example.** Include at least one short input → output example showing a complete successful run.
+It must include only:
+
+1. **Role and outcome** — what the agent is responsible for completing.
+2. **Trigger and input** — what starts a run and what information the agent expects.
+3. **Decision rules** — the key defaults, ambiguity handling, and what to skip without asking.
+4. **Capabilities** — only what the agent can actually do with attached tools, integrations, workflows, or data sources.
+5. **Fallbacks and refusals** — what to do when required access, data, permissions, integrations, or safe/allowed behavior are missing.
+6. **Done criteria and final response** — how the agent knows the task is complete and what the user should receive.
+
+Do not include worked examples, long response templates, repeated rules, generic assistant behavior, or implementation details unless they are essential to this specific agent.
 
 # Hard rules
 
