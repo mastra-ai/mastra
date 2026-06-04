@@ -236,7 +236,7 @@ describe('DatadogBridge', () => {
 
       expect(mockStartSpan).toHaveBeenCalledWith('my-agent', expect.any(Object));
       expect(result).toEqual({
-        spanId: '1',
+        spanId: '0000000000000001',
         traceId: '00000000000000000000000000000001',
         parentSpanId: undefined,
       });
@@ -658,9 +658,11 @@ describe('DatadogBridge', () => {
       );
     });
 
-    it('forwards score events directly with bridge-created dd-trace ids', async () => {
+    it('forwards score events directly with Datadog decimal span ids', async () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
       const spanResult = bridge.createSpan(createMockSpanOptions())!;
+
+      const datadogSpanId = BigInt(`0x${spanResult.spanId}`).toString(10);
 
       await bridge.onScoreEvent(
         createScoreEvent({
@@ -674,7 +676,7 @@ describe('DatadogBridge', () => {
       expect(mockSubmitEvaluation).toHaveBeenCalledWith(
         {
           traceId: spanResult.traceId,
-          spanId: spanResult.spanId,
+          spanId: datadogSpanId,
         },
         {
           label: 'Quality scorer',
@@ -694,12 +696,12 @@ describe('DatadogBridge', () => {
       await bridge.onScoreEvent(
         createScoreEvent({
           traceId: 'remote-trace-id',
-          spanId: '123456789',
+          spanId: '000000000000000f',
         }),
       );
 
       expect(mockSubmitEvaluation).toHaveBeenCalledWith(
-        { traceId: 'remote-trace-id', spanId: '123456789' },
+        { traceId: 'remote-trace-id', spanId: '15' },
         expect.objectContaining({
           label: 'Quality scorer',
           value: 0.75,

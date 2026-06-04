@@ -260,12 +260,12 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
             toTraceId?: (hex?: boolean) => string;
           }
         | undefined;
-      const spanId = ddContext?.toSpanId?.() ?? generateSpanId();
+      const spanId = ddContext?.toSpanId?.(true) ?? generateSpanId();
       const traceId =
         ddContext?.toTraceId?.(true) ??
         (externalParentId ? (options.parent?.traceId ?? generateTraceId()) : generateTraceId());
       const parentContext = apmParentDdSpan?.context?.() as { toSpanId?: (hex?: boolean) => string } | undefined;
-      const parentSpanId = parentContext?.toSpanId?.() ?? externalParentId;
+      const parentSpanId = parentContext?.toSpanId?.(true) ?? externalParentId;
 
       this.captureTraceContext(traceId, options);
       this.openSpanCounts.set(traceId, (this.openSpanCounts.get(traceId) ?? 0) + 1);
@@ -312,7 +312,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
 
     try {
       tracer.llmobs.submitEvaluation(
-        { traceId: score.traceId, spanId: score.spanId },
+        { traceId: score.traceId, spanId: toDatadogSpanId(score.spanId) },
         {
           label: score.scorerName ?? score.scorerId,
           value: score.score,
@@ -704,11 +704,17 @@ function fillRandomBytes(bytes: Uint8Array): void {
   }
 }
 
+function toDatadogSpanId(spanId: string): string {
+  if (/^[0-9a-f]{16}$/i.test(spanId)) {
+    return BigInt(`0x${spanId}`).toString(10);
+  }
+  return spanId;
+}
+
 function generateSpanId(): string {
   const bytes = new Uint8Array(8);
   fillRandomBytes(bytes);
-  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
-  return BigInt(`0x${hex}`).toString(10);
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function generateTraceId(): string {
