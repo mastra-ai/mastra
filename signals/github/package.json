@@ -1,6 +1,7 @@
 {
   "name": "@mastra/github-signals",
   "version": "0.1.0",
+  "private": true,
   "description": "GitHub PR notification signal provider for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",
