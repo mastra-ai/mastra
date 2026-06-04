@@ -375,6 +375,9 @@ export const agentExecutionBodySchema = z
         fallbackValue: z.any().optional(),
       })
       .optional(),
+
+    // Idle-loop streaming (collapses streamUntilIdle into stream)
+    untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
   })
   .passthrough(); // Allow additional fields for forward compatibility
 
@@ -390,6 +393,7 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
   maxIdleMs: z.number().int().positive().optional(),
+  untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
 });
 
 export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
