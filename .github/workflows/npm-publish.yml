@@ -138,6 +138,7 @@ jobs:
 
       - name: Notify linked issues (alpha available)
         if: ${{ !inputs.dry_run }}
+        continue-on-error: true
         run: |
           pnpm install --ignore-workspace --ignore-scripts
           npx tsx index.ts
@@ -292,6 +293,7 @@ jobs:
 
       - name: Notify linked issues (stable released)
         if: ${{ !inputs.dry_run }}
+        continue-on-error: true
         run: |
           pnpm install --ignore-workspace --ignore-scripts
           npx tsx index.ts
