@@ -261,7 +261,12 @@ export class AgentChannels {
         adapters: this.adapters,
         state: this.stateAdapter,
         userName: this.userName,
-        concurrency: { strategy: 'queue' },
+        // Dispatch every incoming message immediately. Concurrency and queueing
+        // for the same thread are handled by the agent signals layer
+        // (ifActive/ifIdle behaviors), so chat-sdk's own lock-based queue would
+        // be redundant — and in serverless runtimes a stale lock from a frozen
+        // Lambda can cause subsequent messages to be queued forever.
+        concurrency: { strategy: 'concurrent' },
         ...this.chatOptions,
       });
 
