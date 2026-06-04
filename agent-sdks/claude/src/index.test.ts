@@ -31,7 +31,7 @@ function createStreamEvent(text: string): SDKMessage {
   } as SDKMessage;
 }
 
-function createResultMessage(result: string): SDKMessage {
+function createResultMessage(result: string, structuredOutput?: unknown): SDKMessage {
   return {
     type: 'result',
     subtype: 'success',
@@ -61,6 +61,7 @@ function createResultMessage(result: string): SDKMessage {
       },
     },
     permission_denials: [],
+    structured_output: structuredOutput,
     uuid: 'message-uuid',
     session_id: 'session-id',
   } as SDKMessage;
@@ -151,6 +152,9 @@ describe('ClaudeSDKAgent', () => {
       runId: 'mastra-run',
       abortSignal: abortController.signal,
       maxSteps: 1,
+      sdkOptions: {
+        resume: 'session-id',
+      },
     });
 
     expect(result.text).toBe('generated text');
@@ -190,6 +194,7 @@ describe('ClaudeSDKAgent', () => {
           CLAUDE_AGENT_SDK_CLIENT_APP: 'mastra-test',
         },
         pathToClaudeCodeExecutable: '/usr/local/bin/claude',
+        resume: 'session-id',
         abortController: expect.any(AbortController),
       }),
     });
@@ -265,5 +270,105 @@ describe('ClaudeSDKAgent', () => {
       'step-finish',
       'finish',
     ]);
+  });
+
+  it('uses Claude native structured output and exposes the validated object', async () => {
+    queryMock.mockImplementationOnce(() => createQuery([createResultMessage('', { answer: 'yes' })]));
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      sdkOptions: {
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      },
+    });
+
+    const result = await agent.generate<{ answer: string }>('Return a JSON answer', {
+      structuredOutput: {
+        schema: {
+          type: 'object',
+          properties: {
+            answer: { type: 'string' },
+          },
+          required: ['answer'],
+        },
+      },
+    });
+
+    expect(result.object).toEqual({ answer: 'yes' });
+    expect(queryMock).toHaveBeenCalledWith({
+      prompt: 'Return a JSON answer',
+      options: expect.objectContaining({
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        outputFormat: {
+          type: 'json_schema',
+          schema: expect.objectContaining({
+            type: 'object',
+            properties: expect.objectContaining({
+              answer: expect.objectContaining({ type: 'string' }),
+            }),
+          }),
+        },
+      }),
+    });
+  });
+
+  it('resumeGenerate maps resumeData to Claude session resume options', async () => {
+    queryMock.mockImplementationOnce(() => createQuery([createResultMessage('continued text')]));
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      sdkOptions: {
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      },
+    });
+
+    const result = await agent.resumeGenerate(
+      {
+        message: 'Continue prompt',
+        sessionId: 'session-id',
+        forkSession: true,
+        resumeSessionAt: 'assistant-message-id',
+      },
+      { runId: 'resume-run' },
+    );
+
+    expect(result.text).toBe('continued text');
+    expect(result.runId).toBe('resume-run');
+    expect(queryMock).toHaveBeenCalledWith({
+      prompt: 'Continue prompt',
+      options: expect.objectContaining({
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        resume: 'session-id',
+        forkSession: true,
+        resumeSessionAt: 'assistant-message-id',
+      }),
+    });
+  });
+
+  it('resumeStream maps resumeData to Claude latest-session continuation', async () => {
+    queryMock.mockImplementationOnce(() =>
+      createQuery([createStreamEvent('continued '), createStreamEvent('text'), createResultMessage('continued text')]),
+    );
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      sdkOptions: {
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      },
+    });
+
+    const stream = await agent.resumeStream({ message: 'Continue prompt', continue: true }, { runId: 'resume-run' });
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    expect(await stream.text).toBe('continued text');
+    expect(queryMock).toHaveBeenCalledWith({
+      prompt: 'Continue prompt',
+      options: expect.objectContaining({
+        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        continue: true,
+      }),
+    });
   });
 });

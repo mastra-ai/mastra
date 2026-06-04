@@ -13,12 +13,24 @@ vi.mock('@openai/agents', () => {
     instructions?: unknown;
     model?: unknown;
     tools?: unknown[];
+    outputType?: unknown;
 
-    constructor(options: { name: string; instructions?: unknown; model?: unknown; tools?: unknown[] }) {
+    constructor(options: { name: string; instructions?: unknown; model?: unknown; tools?: unknown[]; outputType?: unknown }) {
       this.name = options.name;
       this.instructions = options.instructions;
       this.model = options.model;
       this.tools = options.tools;
+      this.outputType = options.outputType;
+    }
+
+    clone(options: { outputType?: unknown }) {
+      return new Agent({
+        name: this.name,
+        instructions: this.instructions,
+        model: this.model,
+        tools: this.tools,
+        outputType: options.outputType ?? this.outputType,
+      });
     }
   }
 
@@ -311,5 +323,143 @@ describe('OpenAISDKAgent', () => {
         itemCount: 2,
       },
     });
+  });
+
+  it('uses OpenAI native structured output and exposes the validated object', async () => {
+    runMock.mockResolvedValueOnce(createRunResult({ finalOutput: { answer: 'yes' } }));
+    const agent = new OpenAISDKAgent({
+      id: 'openai-agent',
+      description: 'OpenAI',
+      sdkOptions: {
+        name: 'SDK Agent',
+        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+      },
+    });
+
+    const result = await agent.generate<{ answer: string }>('Return a JSON answer', {
+      structuredOutput: {
+        schema: {
+          type: 'object',
+          properties: {
+            answer: { type: 'string' },
+          },
+          required: ['answer'],
+        },
+      },
+    });
+
+    expect(result.object).toEqual({ answer: 'yes' });
+    expect(runMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outputType: expect.objectContaining({
+          type: 'object',
+          properties: expect.objectContaining({
+            answer: expect.objectContaining({ type: 'string' }),
+          }),
+        }),
+      }),
+      'Return a JSON answer',
+      expect.objectContaining({
+        stream: false,
+      }),
+    );
+  });
+
+  it('passes provider-native continuation options through to run()', async () => {
+    runMock.mockResolvedValueOnce(createRunResult({ finalOutput: 'continued text' }));
+    const session = { id: 'session-id' };
+    const agent = new OpenAISDKAgent({
+      id: 'openai-agent',
+      description: 'OpenAI',
+      sdkOptions: {
+        name: 'SDK Agent',
+        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+      },
+    });
+
+    await agent.generate('Continue prompt', {
+      conversationId: 'conversation-id',
+      previousResponseId: 'response-previous',
+      session,
+    });
+
+    expect(runMock).toHaveBeenCalledWith(
+      expect.any(OpenAIAgent),
+      'Continue prompt',
+      expect.objectContaining({
+        conversationId: 'conversation-id',
+        previousResponseId: 'response-previous',
+        session,
+      }),
+    );
+  });
+
+  it('resumeGenerate maps resumeData to OpenAI continuation options', async () => {
+    runMock.mockResolvedValueOnce(createRunResult({ finalOutput: 'continued text' }));
+    const session = { id: 'session-id' };
+    const agent = new OpenAISDKAgent({
+      id: 'openai-agent',
+      description: 'OpenAI',
+      sdkOptions: {
+        name: 'SDK Agent',
+        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+      },
+    });
+
+    const result = await agent.resumeGenerate(
+      {
+        message: 'Continue prompt',
+        conversationId: 'conversation-id',
+        previousResponseId: 'response-previous',
+        session,
+      },
+      { runId: 'resume-run' },
+    );
+
+    expect(result.text).toBe('continued text');
+    expect(result.runId).toBe('resume-run');
+    expect(runMock).toHaveBeenCalledWith(
+      expect.any(OpenAIAgent),
+      'Continue prompt',
+      expect.objectContaining({
+        stream: false,
+        conversationId: 'conversation-id',
+        previousResponseId: 'response-previous',
+        session,
+      }),
+    );
+  });
+
+  it('resumeStream maps resumeData to OpenAI continuation options', async () => {
+    runMock.mockResolvedValueOnce(createStreamedRunResult({ finalOutput: 'continued text' }));
+    const agent = new OpenAISDKAgent({
+      id: 'openai-agent',
+      description: 'OpenAI',
+      sdkOptions: {
+        name: 'SDK Agent',
+        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+      },
+    });
+
+    const stream = await agent.resumeStream(
+      {
+        message: 'Continue prompt',
+        previousResponseId: 'response-previous',
+      },
+      { runId: 'resume-run' },
+    );
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    expect(await stream.text).toBe('hello world');
+    expect(runMock).toHaveBeenCalledWith(
+      expect.any(OpenAIAgent),
+      'Continue prompt',
+      expect.objectContaining({
+        stream: true,
+        previousResponseId: 'response-previous',
+      }),
+    );
   });
 });
