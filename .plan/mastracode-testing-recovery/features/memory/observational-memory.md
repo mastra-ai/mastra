@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — dynamic memory configuration, configurable thresholds, observational memory support.
-- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events.
+- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated.
 
 ## User-visible behavior
 
 - What the user can do: use persistent observational memory across Mastra Code conversations/resources.
 - Success looks like: observations/reflections happen in the background without polluting chat or forgetting important context.
-- Must preserve: observer/reflector model settings, thresholds, scope, attachment behavior, activation retention behavior, and loaded memory after restart.
+- Must preserve: observer/reflector model settings, thresholds, scope, attachment behavior, activation/window-retention behavior, and loaded memory after restart.
 
 ## Entry points / commands
 
@@ -48,7 +48,7 @@
 
 ## Key files
 
-- `mastracode/src/agents/memory.ts` — dynamic OM memory factory and Mastra Code defaults.
+- `mastracode/src/agents/memory.ts` — dynamic OM memory factory and Mastra Code defaults; current source sets observation `bufferActivation` to `2000` for thread scope.
 - `packages/memory/src/processors/observational-memory/thresholds.ts` — activation retention floor and chunk-boundary safeguards.
 - `packages/memory/src/processors/observational-memory/observational-memory.ts` — core OM runtime.
 - `packages/core/src/harness/harness.ts` — OM stream chunk handling and observer/reflector model switch events.
@@ -85,7 +85,7 @@
 - Memory factory cache key must include every setting that changes behavior.
 - State is split across harness state, settings, thread settings, storage, and display state.
 - Dynamic AGENTS.md reminders must not be observed into memory.
-- Core OM activation defaults can drift from Mastra Code defaults; PR #13305 intended `bufferActivation: 1000` / `blockAfter: 1.2`, while current Mastra Code wiring is `bufferActivation: 2000` / `blockAfter: 2`.
+- Core OM activation defaults can drift from Mastra Code defaults; PR #13305 intended `bufferActivation: 1000` / `blockAfter: 1.2`, PR #13349 temporarily raised observation `bufferActivation` to `4000`, and current Mastra Code wiring is `bufferActivation: 2000` / `blockAfter: 2` after later precision/scope changes.
 
 ## Verification checklist
 

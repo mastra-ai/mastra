@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13347 (row 28) have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13348 (`4137924b3f`, `fix: limit tool result token sizes for view, grep, and web tools (#13348)`), then #13349 (`5f1f0fa8a3`, `fix: raise memory buffer activation threshold to prevent aggressive window shrinking (#13349)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13349 (row 30) have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13350 (`e65ec08031`, `refactor: extract TUI state into dedicated TUIState interface and factory (#13350)`), then #13355 (`89b1a4aead`, `fix(mastracode): allow view_range for directory listings (#13355)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 29: PR #13348 (tool result token limits), then row 30: PR #13349 (OM buffer activation threshold).
+1. Continue at `_pr-queue.md` row 31: PR #13350 (TUIState extraction), then row 32: PR #13355 (`view_range` for directory listings).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -79,3 +79,6 @@ None known.
 - `gh pr view 13346 --json number,title,body,author,mergedAt,url,files,commits`, `git show e399dcba4f -- mastracode`, current `agent-instructions.ts`, `prompts/index.ts`, `index.ts`, and prompt/headless tests verified plural `AGENTS.md` static instruction loading. Updated the prompt-context card.
 - `gh pr view 13347 --json number,title,body,author,mergedAt,url,files,commits`, `git show 48d19d89e0 -- mastracode`, current `mcp/manager.ts`, `mcp/index.ts`, `agents/tools.ts`, `index.ts`, and MCP manager tests verified `createMcpManager()` factory refactor preserves manager/tool/status behavior. Updated MCP and tools cards.
 - Focused verification passed: `pnpm --filter ./mastracode test --run src/agents/__tests__/prompts.test.ts src/agents/prompts/index.test.ts src/mcp/__tests__/manager.test.ts --reporter=dot --bail 1` (52 tests).
+
+- `gh pr view 13348 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/tools/web-search.ts`, `packages/core/src/workspace/tools/output-helpers.ts`, and core output-helper tests verified 2k token result limits. Updated the tools card.
+- `gh pr view 13349 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/agents/memory.ts`, and `git blame` verified #13349's 4000-token threshold was temporary; current source is back to 2000 after later precision/scope work. Updated the OM card.

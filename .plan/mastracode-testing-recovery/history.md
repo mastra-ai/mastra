@@ -343,3 +343,18 @@ Documentation actions:
 - Focused verification passed: `pnpm --filter ./mastracode test --run src/agents/__tests__/prompts.test.ts src/agents/prompts/index.test.ts src/mcp/__tests__/manager.test.ts --reporter=dot --bail 1` (52 tests).
 
 Next queue checkpoint: PR #13348 (tool result token limits), then PR #13349 (OM buffer activation threshold).
+
+
+### Feature map PR #13348 and #13349
+
+Processed PR [#13348](https://github.com/mastra-ai/mastra/pull/13348), `4137924b3f` (`fix: limit tool result token sizes for view, grep, and web tools (#13348)`). Verified current `mastracode/src/tools/web-search.ts` caps web-search and web-extract output at 2k estimated tokens, while file/search/shell-style workspace output limits now live in `packages/core/src/workspace/tools/output-helpers.ts` with `DEFAULT_MAX_OUTPUT_TOKENS = 2_000`.
+
+Processed PR [#13349](https://github.com/mastra-ai/mastra/pull/13349), `5f1f0fa8a3` (`fix: raise memory buffer activation threshold to prevent aggressive window shrinking (#13349)`). Verified the PR temporarily raised observation `bufferActivation` from 2000 to 4000, but current `mastracode/src/agents/memory.ts` is back to `bufferActivation: 2000` for thread scope; `git blame` shows later OM precision/scope work changed the current defaults.
+
+Documentation actions:
+
+- Updated `features/tools/coding-tools-permissions.md` with #13348 tool-output budget ownership, key files, and missing web-tool truncation test.
+- Updated `features/memory/observational-memory.md` with #13349's temporary threshold change and current-default drift risk.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13348 done, #13349 done, #13350 current, #13355 next.
+
+Next queue checkpoint: PR #13350 (TUIState extraction), then PR #13355 (`view_range` directory listing fix).

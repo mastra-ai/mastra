@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — coding tools, approvals, permissions, YOLO, hooks, MCP tool merge.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior; [#13348](https://github.com/mastra-ai/mastra/pull/13348) — capped file/search/web tool result output around 2k tokens so large tool results do not consume the whole model context.
 
 ## User-visible behavior
 
 - What the user can do: let the agent read/search/edit files, run shell, inspect symbols, use web/MCP tools, and request path access.
 - Success looks like: risky tools ask unless policy/session grants/YOLO allow them.
-- Must preserve: visible tool list, runtime tool availability, prompt guidance, and approval UI stay aligned.
+- Must preserve: visible tool list, runtime tool availability, prompt guidance, approval UI, and bounded tool output stay aligned.
 
 ## Entry points / commands
 
@@ -45,6 +45,7 @@
 | YOLO | Harness state | Approval engine, status/commands |
 | Session grants | Harness session | Approval engine only |
 | Tool rendering | Harness events/history | TUI projections |
+| Tool output budget | Core workspace output helpers + MC web-tool wrappers | Model context, TUI/history renderers |
 
 ## Key files
 
@@ -55,6 +56,8 @@
 - `mastracode/src/tools/request-sandbox-access.ts` — Mastra Code-owned custom tool schema.
 - `mastracode/src/lsp/client.ts` — JSON-RPC client used by LSP-backed tools.
 - `packages/schema-compat/src/zod-to-json.ts` — Zod v3/v4 tool-schema conversion.
+- `mastracode/src/tools/web-search.ts` — MC web-search/web-extract string formatting and 2k token truncation.
+- `packages/core/src/workspace/tools/output-helpers.ts` — core workspace output truncation default (`DEFAULT_MAX_OUTPUT_TOKENS = 2_000`).
 - `mastracode/src/permissions.ts` — category mapping and approval rules.
 - `mastracode/src/tui/commands/permissions.ts` — `/permissions`.
 - `mastracode/src/tui/commands/yolo.ts` — `/yolo`.
@@ -87,6 +90,7 @@
 - Headless non-interactive permission behavior.
 - Packaged `mastracode` startup/import smoke test that catches ESM subpath regressions like `vscode-jsonrpc/node` vs `vscode-jsonrpc/node.js`.
 - End-to-end tool-call schema serialization test for source checkout and global install Zod resolution.
+- MC web-search/web-extract truncation test proving Tavily results are serialized to bounded text.
 
 ## Known risks / regressions
 
@@ -96,6 +100,7 @@
 - Task tools are core built-ins and always-allowed; MC prompt/runtime/TUI restrictions must stay aligned after future core changes.
 - LSP-backed tools can break at package startup if ESM-only subpath imports are not built/imported exactly as Node expects.
 - Tool schemas can be routed through the wrong Zod converter when source and global installs resolve different Zod versions.
+- Token limits now live in both core workspace helpers and MC-owned web-tool wrappers; future moves can silently uncap one path if tests only cover the other.
 
 ## Verification checklist
 
