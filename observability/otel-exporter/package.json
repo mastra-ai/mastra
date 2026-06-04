@@ -42,7 +42,7 @@
     "@opentelemetry/semantic-conventions": "^1.40.0"
   },
   "optionalDependencies": {
-    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/grpc-js": "^1.14.4",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.218.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.218.0",
     "@opentelemetry/exporter-logs-otlp-proto": "^0.218.0",
