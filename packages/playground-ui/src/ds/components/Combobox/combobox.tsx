@@ -61,7 +61,7 @@ export function Combobox({
   // Default to the nearest SideDialog/Drawer popup so the list stays
   // interactive inside a modal drawer; an explicit `container` still wins.
   const portalContainer = usePortalContainer();
-  const resolvedContainer = container ?? portalContainer;
+  const resolvedContainer = container ?? portalContainer ?? undefined;
 
   const handleSelect = (item: ComboboxOption | null) => {
     if (item) {
@@ -98,7 +98,7 @@ export function Combobox({
           <ChevronsUpDown className={comboboxStyles.chevron} />
         </BaseCombobox.Trigger>
 
-        <BaseCombobox.Portal container={resolvedContainer}>
+        <BaseCombobox.Portal container={resolvedContainer} keepMounted>
           <BaseCombobox.Positioner align="start" sideOffset={4} className={comboboxStyles.positioner}>
             <BaseCombobox.Popup className={comboboxStyles.popup}>
               <div className={comboboxStyles.searchContainer}>
