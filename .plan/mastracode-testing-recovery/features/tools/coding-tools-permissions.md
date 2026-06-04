@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — coding tools, approvals, permissions, YOLO, hooks, MCP tool merge.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas.
 
 ## User-visible behavior
 
@@ -50,7 +50,9 @@
 
 - `mastracode/src/agents/tools.ts` — dynamic tools, web search, MCP merge, hooks.
 - `mastracode/src/agents/workspace.ts` — filesystem/shell/LSP tools and sandbox paths.
+- `mastracode/src/tools/request-sandbox-access.ts` — Mastra Code-owned custom tool schema.
 - `mastracode/src/lsp/client.ts` — JSON-RPC client used by LSP-backed tools.
+- `packages/schema-compat/src/zod-to-json.ts` — Zod v3/v4 tool-schema conversion.
 - `mastracode/src/permissions.ts` — category mapping and approval rules.
 - `mastracode/src/tui/commands/permissions.ts` — `/permissions`.
 - `mastracode/src/tui/commands/yolo.ts` — `/yolo`.
@@ -69,6 +71,7 @@
 - `mastracode/src/lsp/__tests__/string-replace-lsp.test.ts` — LSP replacement.
 - `mastracode/src/__tests__/tool-approval-libsql.test.ts` — persisted approval flow.
 - `mastracode/src/agents/tools.test.ts`, `extra-tools.test.ts` — dynamic tools.
+- `packages/schema-compat/src/zod-to-json.test.ts` — Zod schema conversion coverage.
 - `mastracode/src/tui/handlers/tool.test.ts`, `commands/__tests__/permissions.test.ts` — rendering/commands.
 
 ## Missing tests
@@ -78,6 +81,7 @@
 - Plan-mode runtime tools and prompt guidance both hide write tools.
 - Headless non-interactive permission behavior.
 - Packaged `mastracode` startup/import smoke test that catches ESM subpath regressions like `vscode-jsonrpc/node` vs `vscode-jsonrpc/node.js`.
+- End-to-end tool-call schema serialization test for source checkout and global install Zod resolution.
 
 ## Known risks / regressions
 
@@ -85,6 +89,7 @@
 - Denied non-workspace tools are filtered in `createDynamicTools()`; workspace tool visibility must be verified separately.
 - Task-state Slack regression is adjacent because task tools also need rendered/prompt/runtime state sync.
 - LSP-backed tools can break at package startup if ESM-only subpath imports are not built/imported exactly as Node expects.
+- Tool schemas can be routed through the wrong Zod converter when source and global installs resolve different Zod versions.
 
 ## Verification checklist
 

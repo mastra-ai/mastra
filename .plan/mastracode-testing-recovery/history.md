@@ -199,3 +199,16 @@ Documentation actions:
 - Added a missing-test note for packaged startup/import smoke coverage.
 
 Next queue checkpoint: PR #13251, likely version packaging; next review PR after that is #13253.
+
+### Feature map PR #13251 and #13253
+
+Processed PR [#13251](https://github.com/mastra-ai/mastra/pull/13251), `a20fbeff59` (`chore: version packages (alpha) (#13251)`). Verified it was a Changesets alpha version-package PR for the #13250 patch; skipped feature-page creation because it did not introduce or change user-visible behavior beyond the already-mapped #13250 fix.
+
+Processed PR [#13253](https://github.com/mastra-ai/mastra/pull/13253), `1415bcd894` (`fix(schema-compat): fix zodToJsonSchema routing for v3/v4 schemas (#13253)`). Verified PR body, touched Mastra Code tool schema imports, current remaining custom tools, and `packages/schema-compat/src/zod-to-json.ts` / `zod-to-json.test.ts`.
+
+Documentation actions:
+
+- Updated `.plan/mastracode-testing-recovery/features/tools/coding-tools-permissions.md` because this preserves tool-call schema compatibility between source checkout and global install environments.
+- Added schema-compat tests and missing end-to-end packaged/source tool schema coverage to the card.
+
+Next queue checkpoint: PR #13252, likely version packaging; next review PR after that is #13255.

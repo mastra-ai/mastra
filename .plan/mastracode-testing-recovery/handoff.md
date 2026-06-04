@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13250 have been processed, with #13037 recorded as a version-package skip. Next checkpoint: #13251 is likely version packaging; next review PR after that is #13253 (`1415bcd894`, `fix(schema-compat): fix zodToJsonSchema routing for v3/v4 schemas (#13253)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13253 have been processed, with #13037 and #13251 recorded as version-package skips. Next checkpoint: #13252 is likely version packaging; next review PR after that is #13255 (`d715911c91`, `feat(mastracode): add separate export path for MastraTUI (#13255)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 9: PR #13251, likely version packaging. If confirmed, record as skipped and continue to row 10: PR #13253.
+1. Continue at `_pr-queue.md` row 11: PR #13252, likely version packaging. If confirmed, record as skipped and continue to row 12: PR #13255.
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -56,4 +56,6 @@ None known.
 - `gh pr view 13245 --json number,title,body,author,mergedAt,url,files,commits` plus current `HarnessCompat`, `index.ts`, TUI dispatch/prompt handlers, and approval tests verified PR #13245. Existing TUI/thread/model/tool cards were updated; no runtime-layer Harness page was created.
 - `gh pr view 13037` and `git show a0b5df263a -- mastracode` verified #13037 as Changesets alpha packaging only; skipped.
 - `gh pr view 13250 --json number,title,body,author,mergedAt,url,files,commits` plus current `mastracode/src/lsp/client.ts` verified the ESM LSP import fix. Updated the tools card and missing packaged-startup test note.
+- `gh pr view 13251` and `git show a20fbeff59 -- mastracode` verified #13251 as Changesets alpha packaging only; skipped.
+- `gh pr view 13253 --json number,title,body,author,mergedAt,url,files,commits` plus current `mastracode/src/tools/*` and `packages/schema-compat/src/zod-to-json.ts` verified the Zod v3/v4 tool-schema compatibility fix. Updated the tools card and missing packaged/source schema test note.
 - Current batch is doc-only; no product tests were run.
