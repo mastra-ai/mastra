@@ -240,26 +240,6 @@ vi.mock('./providers/github-copilot.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
-vi.mock('@mastra/github-signals', () => ({
-  GithubSignals: class GithubSignals {
-    id = 'github-signals';
-    name = 'GitHub Signals';
-    addAgent() {}
-    connect() {}
-    startPolling() {}
-    stopAllPolling() {}
-    startPollingForThread() {
-      return Promise.resolve(true);
-    }
-    getInputProcessors() {
-      return [{ id: 'github-signals', processInput: vi.fn() }];
-    }
-    getOutputProcessors() {
-      return [];
-    }
-  },
-}));
-
 vi.mock('./tools/index.js', () => ({
   defaultTools: {},
 }));

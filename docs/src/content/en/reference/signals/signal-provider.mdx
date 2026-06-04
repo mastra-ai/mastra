@@ -113,7 +113,7 @@ class MySignals extends SignalProvider<'my-signals'> {
 
 #### `getInputProcessors()`
 
-Return input processors this provider needs registered with the agent. Override when your provider intercepts agent input steps (for example, injecting context hints or detecting tool calls).
+Return input processors this provider needs to be registered with the agent. Override when your provider intercepts agent input steps (for example, injecting context hints or detecting tool calls).
 
 ```typescript prettier:false
 getInputProcessors() {
@@ -125,7 +125,7 @@ Returns: `InputProcessorOrWorkflow[]`
 
 #### `getOutputProcessors()`
 
-Return output processors this provider needs registered with the agent. Override when your provider intercepts agent output steps.
+Return output processors this provider needs to be registered with the agent. Override when your provider intercepts agent output steps.
 
 ```typescript prettier:false
 getOutputProcessors() {

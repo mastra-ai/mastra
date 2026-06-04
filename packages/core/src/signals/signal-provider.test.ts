@@ -353,7 +353,7 @@ describe('SignalProvider', () => {
       expect(startFn).toHaveBeenCalledTimes(1);
     });
 
-    it('collects getTools() from providers', () => {
+    it('collects getTools() from providers and merges into agent tools', () => {
       const getToolsSpy = vi.fn(() => ({ myTool: { id: 'myTool' } }));
 
       class ToolProvider extends SignalProvider<'tool-provider'> {
@@ -364,7 +364,7 @@ describe('SignalProvider', () => {
       }
 
       const p = new ToolProvider();
-      new Agent({
+      const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
         model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
@@ -372,6 +372,8 @@ describe('SignalProvider', () => {
       });
 
       expect(getToolsSpy).toHaveBeenCalledTimes(1);
+      const tools = agent.listTools() as Record<string, unknown>;
+      expect(tools).toHaveProperty('myTool');
     });
 
     it('propagates __registerMastra to signal providers', () => {

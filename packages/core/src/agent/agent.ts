@@ -585,6 +585,11 @@ export class Agent<
       let signalTools: Record<string, unknown> = {};
 
       for (const provider of config.signals) {
+        // Propagate Mastra instance before lifecycle so providers have storage access
+        if (this.#mastra) {
+          provider.__registerMastra(this.#mastra);
+        }
+
         // Skip re-wiring providers that are already connected (e.g. via __fork())
         if (!provider.isConnected) {
           provider.connect(this as Agent<any, any, any, any>);

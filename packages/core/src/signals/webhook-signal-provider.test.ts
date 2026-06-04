@@ -240,10 +240,11 @@ describe('WebhookSignalProvider', () => {
 
   describe('lifecycle', () => {
     it('stop() clears all subscriptions', () => {
-      provider.subscribeThread(target1, 'res-a');
+      const first = provider.subscribeThread(target1, 'res-a');
       provider.subscribeThread(target2, 'res-b');
       provider.stop();
-      expect(provider.subscribeThread(target1, 'res-a').id).toBeDefined();
+      const recreated = provider.subscribeThread(target1, 'res-a');
+      expect(recreated.id).not.toBe(first.id);
     });
   });
 });

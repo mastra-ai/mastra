@@ -49,14 +49,6 @@ vi.mock('./agents/subagents/plan.js', () => ({ planSubagent: {} }));
 vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn() }));
 vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn() }));
 
-vi.mock('@mastra/github-signals', () => ({
-  GithubSignals: class {
-    addAgent() {}
-    stopAllPolling() {}
-    startPollingForThread() {}
-  },
-}));
-
 vi.mock('./auth/storage.js', () => ({
   AuthStorage: class {
     get() {

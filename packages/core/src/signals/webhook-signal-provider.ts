@@ -148,7 +148,7 @@ export class WebhookSignalProvider extends SignalProvider<string> {
    */
   async handleWebhook(request: SignalProviderWebhookRequest): Promise<{ status?: number; body?: unknown }> {
     const payload = request.body;
-    const resourceIds = this.#extractResourceIds(payload);
+    const resourceIds = [...new Set(this.#extractResourceIds(payload))];
 
     if (resourceIds.length === 0) {
       return { status: 200, body: { matched: 0 } };
