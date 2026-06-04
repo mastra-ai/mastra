@@ -149,3 +149,15 @@ Documentation actions:
 - Added #13231 as a later change on model and tools cards.
 
 Next queue checkpoint: PR #13234.
+
+### Feature map PR #13234
+
+Processed PR [#13234](https://github.com/mastra-ai/mastra/pull/13234), `4e28562012` (`MC fixes (#13234)`). PR body was blank; verified via commit diff and current source/tests. Most changes were structural/type/build cleanup, but the durable user-visible behavior is dynamic prompt context and project instruction assembly.
+
+Documentation actions:
+
+- Created `.plan/mastracode-testing-recovery/features/chat/prompt-context.md`.
+- Added the prompt-context row to the source-of-truth table in `features/README.md`.
+- Marked the rest of #13234 as structural cleanup after source verification.
+
+Next queue checkpoint: PR #13239.
