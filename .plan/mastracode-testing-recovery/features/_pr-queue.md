@@ -76,9 +76,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 54 | 2026-02-25 | #13494 | `5c6bf27b79` | review | done | fix(mastracode): Update documentation link for supported providers (#13494) | 1 |
 | 55 | 2026-02-25 | #13493 | `434ad50157` | review | done | fix(mastracode): append unused arguments to slash command output (#13493) | 1 |
 | 56 | 2026-02-25 | #13500 | `47cb0a8962` | review | done | fix(mastracode): allow onboarding to proceed with API keys only (#13500) | 2 |
-| 57 | 2026-02-25 | #13503 | `cc26bff512` | review | current | fix(mastracode): remove individual theme function exports to fix startup crash (#13503) | 30 |
-| 58 | 2026-02-25 | #13505 | `11def4789e` | review | | feat(mastracode): add Claude Max OAuth ToS warning (#13505) | 6 |
-| 59 | 2026-02-25 | #13476 | `cb9f921320` | review | | fix: observational memory buffering precision (#13476) | 1 |
+| 57 | 2026-02-25 | #13503 | `cc26bff512` | review | done | fix(mastracode): remove individual theme function exports to fix startup crash (#13503) | 30 |
+| 58 | 2026-02-25 | #13505 | `11def4789e` | review | done | feat(mastracode): add Claude Max OAuth ToS warning (#13505) | 6 |
+| 59 | 2026-02-25 | #13476 | `cb9f921320` | review | current | fix: observational memory buffering precision (#13476) | 1 |
 | 60 | 2026-02-25 | #13490 | `d7ad237020` | review | | feat(mastracode): wire reasoning effort for OpenAI Codex models (#13490) | 11 |
 | 61 | 2026-02-25 | #13508 | `b69a0046cb` | review | | fix(mastracode): strengthen Claude Max OAuth risk warning (#13508) | 1 |
 | 62 | 2026-02-25 | #13455 | `6302b3ae7c` | likely skip | | chore: version packages (alpha) (#13455) | 2 |

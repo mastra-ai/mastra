@@ -571,3 +571,18 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13493 done, #13500 done, #13503 current.
 
 Next queue checkpoint: PR #13503 (theme export startup crash), then PR #13505 (Claude Max OAuth ToS warning).
+
+
+### Feature map PR #13503 and #13505
+
+Processed PR [#13503](https://github.com/mastra-ai/mastra/pull/13503), `cc26bff512` (`fix(mastracode): remove individual theme function exports to fix startup crash (#13503)`). Verified current `theme.ts` keeps `fg`, `bg`, `bold`, `italic`, `dim`, `getTheme`, and `setTheme` as internal helpers exposed through the exported `theme` object. `tui/index.ts` exports `theme` and mode/palette helpers, but not the direct styling functions that caused the original startup crash.
+
+Processed PR [#13505](https://github.com/mastra-ai/mastra/pull/13505), `11def4789e` (`feat(mastracode): add Claude Max OAuth ToS warning (#13505)`). Verified the original warning flow no longer exists in current source: no `claude-max-warning` files remain, `/login` and onboarding go straight through auth-mode selection + login dialog, and `CHANGELOG.md` records later #14605 removing the Anthropic OAuth warning prompt/settings.
+
+Documentation actions:
+
+- Updated `features/tui/terminal-theme.md` for the verified single `theme` object helper API and startup-crash regression risk.
+- Updated `features/settings/onboarding-and-global-settings.md` and `features/models/model-auth-and-modes.md` to record the historical Claude Max OAuth warning and current removal.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13503 done, #13505 done, #13476 current.
+
+Next queue checkpoint: PR #13476 (OM buffering precision), then PR #13490 (Codex reasoning effort).
