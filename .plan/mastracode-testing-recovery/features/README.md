@@ -2,41 +2,62 @@
 
 ## Purpose
 
-Map Mastra Code by user-visible feature so agents can understand intended behavior, architecture, state ownership, and test coverage before changing code.
+Map Mastra Code by **user-visible behavior** so future test work can quickly answer:
 
-This is not an implementation-layer index. Start from what the user can do, then document the TUI/headless/runtime pieces that make that behavior work.
+- What can the user do?
+- Where does the state live?
+- What tests already cover it?
+- What is risky or missing?
 
-## Structure
+Keep this as an index, not a dumping ground. Feature pages should be short cards.
 
-Use feature-area folders with pages for concrete user behaviors:
+## Folder shape
+
+Organize by workflow area, not implementation layer:
 
 ```txt
 features/
+  chat/
   threads/
-    README.md
-    create-thread.md
-    switch-thread.md
-    clone-thread.md
-    restore-thread-state.md
   models/
-    README.md
-    select-model.md
-    model-packs.md
-    reload-preserves-model.md
+  tools/
+  memory/
+  subagents/
   goals/
-    README.md
-    start-goal.md
-    judge-loop.md
-    pause-resume-clear.md
+  integrations/
+  headless/
+  settings/
 ```
 
-Prefer one page per behavior. Use normal relative Markdown links for related features.
+Use one page per concrete user behavior. Update an existing page when a later PR changes the same behavior.
 
-## Required page sections
+## Source-of-truth index
 
-Copy [`_template.md`](./_template.md) for every feature page.
+| Area | Feature | Origin | State owner | Tests | Risk | Page |
+| --- | --- | --- | --- | --- | --- | --- |
+| TUI | Interactive chat | #13218 | TUI + harness session | Partial | High | [page](./tui/interactive-chat.md) |
+| Threads | Persistent conversations / switching | #13218 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
+| Models | Model auth, selection, modes | #13218 | Settings + harness session | Partial | High | [page](./models/model-auth-and-modes.md) |
+| Tools | Coding tools and approval permissions | #13218 | Harness state + permission policy | Partial | High | [page](./tools/coding-tools-permissions.md) |
+| Subagents | Delegation to Explore / Plan / Execute | #13227 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |
+| Memory | Observational memory | #13231 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |
 
-Every feature page must include:
+Use terse values:
+
+- **State owner:** source of truth, not every consumer.
+- **Tests:** `Yes`, `Partial`, `Missing`, or `Unknown`.
+- **Risk:** `High`, `Medium`, or `Low`; only mark low when verified.
+
+## Page format
+
+Copy [`_template.md`](./_template.md). Keep pages compact:
+
+- Aim for bullets, not prose.
+- Prefer 1–3 bullets per section.
+- Put details in linked code references, not long explanations.
+- Use `Unknown — needs verification` instead of guessing.
+
+Required sections remain:
 
 - Origin PR / commit
 - User-visible behavior
@@ -53,23 +74,13 @@ Every feature page must include:
 - Known risks / regressions
 - Verification checklist
 
-## Mapped pages
+## Working queue
 
-Initial baseline pages:
-
-- [Interactive TUI chat](./tui/interactive-chat.md)
-- [Persistent conversations and thread switching](./threads/persistent-conversations.md)
-- [Model authentication, selection, and modes](./models/model-auth-and-modes.md)
-- [Coding tools and approval permissions](./tools/coding-tools-permissions.md)
-
-Working queue:
-
-- [`_pr-queue.md`](./_pr-queue.md) — generated oldest-to-newest PR queue from squash-merged `mastracode/` history.
+- [`_pr-queue.md`](./_pr-queue.md) — oldest-to-newest queue from squash-merged `mastracode/` history.
 
 ## Rules for agents
 
 - Treat existing pages as leads, not truth.
 - Verify claims against code, git history, tests, and current runtime behavior.
-- Link sideways to related feature pages instead of duplicating large sections.
-- If a section is unknown, write `Unknown — needs verification`, not a guess.
-- Keep pages focused on behavior; implementation details belong only where they explain that behavior.
+- Do not create duplicate pages for later PRs; update the existing feature card.
+- Stop and adjust structure before adding more content if pages start getting long.

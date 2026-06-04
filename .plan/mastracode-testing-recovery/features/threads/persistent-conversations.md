@@ -2,82 +2,81 @@
 
 ## Origin PR / commit
 
-- PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — introduced project-scoped persistent threads as part of the initial Mastra Code port.
-- Commit: `0e64154f1b` — `MastraCode initial port (#13218)`.
+- PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — project-scoped persistent conversations and thread switching.
+- Later changes: Unknown — continue PR queue verification.
 
 ## User-visible behavior
 
-Mastra Code saves conversations per project/resource. Users can resume existing work, create a fresh conversation, switch threads, and see prior messages reconstructed in the TUI. Thread state is expected to preserve conversation history, title, resource association, mode/model metadata, goal metadata, and selected per-thread projections without leaking ephemeral state from another thread.
+- What the user can do: resume, create, switch, and clone conversations per project/resource.
+- Success looks like: messages and thread metadata reload without leaking another thread’s ephemeral state.
+- Must preserve: history, title/resource, mode/model metadata, goals, and related status projections.
 
 ## Entry points / commands
 
-- Startup prompts for thread selection before the UI begins (`mastracode/src/tui/mastra-tui.ts:520`).
-- `/new` clears the visible chat and marks the next message as a new thread (`mastracode/src/tui/commands/new.ts:3`).
-- `/threads` lists all resources, opens a selector, switches thread/resource, and renders existing messages (`mastracode/src/tui/commands/threads.ts:53`).
-- Headless defaults to a new thread, with `--continue`, `--thread`, `--title`, `--clone-thread`, and `--resource-id` options (`mastracode/src/headless.ts:37`, `mastracode/src/headless.ts:159`).
+- Commands / shortcuts / flags: `/new`, `/threads`, headless `--continue`, `--thread`, `--title`, `--clone-thread`, `--resource-id`.
+- Automatic triggers: startup thread selection, `thread_created`, `thread_changed`.
 
 ## TUI states
 
-- Startup: `promptForThreadSelection()` runs before harness event subscription, so `syncInitialThreadState()` later reloads title/GitHub/goal metadata for the active thread (`mastracode/src/tui/mastra-tui.ts:556`).
-- New-thread pending state: `/new` sets `state.pendingNewThread = true`, clears visible components, clears modified-file display state, and resets per-thread ephemeral harness state (`mastracode/src/tui/commands/new.ts:6`).
-- Thread selection modal: `/threads` opens `ThreadSelectorComponent`, caches previews, and can switch, clone, cancel, or handle lock conflicts (`mastracode/src/tui/commands/threads.ts:80`).
-- Thread changed event: clears tasks/active plan/sandbox paths, renders existing messages, loads OM progress, refreshes git branch, updates title/subscriptions/goal metadata (`mastracode/src/tui/event-dispatch.ts:144`).
+- Idle: active thread shown in status; `/threads` can open selector.
+- Active / modal / error: thread lock conflicts should be mediated; switching resets thread-local projections.
 
 ## Headless / non-TUI behavior
 
-Headless has explicit thread controls. By default it creates a new thread for each prompt; `--continue` resumes most recent, `--thread` resolves by ID/title, `--clone-thread` forks before running, and `--resource-id` overrides project resource scoping (`mastracode/src/headless.ts:140`). It outputs messages without thread selector UI.
+- Supported: explicit thread flags in `headless.ts`; default is new thread per prompt.
+- Not supported / unknown: no interactive selector; title/ID resolution must be deterministic.
 
 ## Streaming / loading / interrupted states
 
-- Switching threads during active agent work should be blocked or mediated by harness/thread-lock behavior; the `/threads` command catches `ThreadLockError` and offers switch/new/clone/exit choices (`mastracode/src/tui/commands/threads.ts:8`).
-- Thread events (`thread_created`, `thread_changed`) drive TUI cleanup and metadata loading (`mastracode/src/tui/event-dispatch.ts:176`).
-- New-thread creation is often deferred until the next message: `/new` prepares UI state, and harness creation happens when a message is sent.
+- Streaming / loading: current live thread owns active stream and pending tool/task projections.
+- Abort / retry / resume: switching during active work depends on harness/thread-lock behavior.
 
 ## Streaming vs loaded-from-history behavior
 
-During streaming, the current thread has live component maps, pending tools, task insertion state, and possibly an active message stream. Loaded-from-history behavior starts from persisted thread messages and metadata: `renderExistingMessages()` rebuilds chat UI, while `syncInitialThreadState()` and `thread_changed` reload status metadata. Ephemeral per-thread state (`tasks`, `activePlan`, `sandboxAllowedPaths`) is explicitly reset on switch/new to avoid bleed-through, so features that need persistence must use thread metadata or message history rather than TUI-only fields.
+- While actively streaming: TUI holds transient component maps, pending tools, and task insertion state.
+- After reload / history reconstruction: messages come from storage; metadata is reloaded by startup/thread-change sync.
 
 ## State ownership
 
-- Thread list/history: memory/storage is authoritative; TUI selector and preview cache are projections.
-- Current thread ID/resource: harness session is authoritative; TUI uses it for status and commands.
-- Thread title: persisted thread metadata/storage is authoritative; TUI caches `currentThreadTitle`.
-- Per-thread metadata (goal, GitHub subscriptions, current mode/model): persisted thread metadata/session is authoritative; TUI/harness state are projections.
-- Ephemeral per-thread state (`tasks`, `activePlan`, `sandboxAllowedPaths`): harness state during active thread; intentionally reset on thread switch/new.
-- Thread locks: harness/thread-lock utility owns concurrency; TUI only prompts after lock error.
+| State | Owner / source of truth | Consumers |
+| --- | --- | --- |
+| Thread history | Harness memory/storage | TUI history renderer, headless |
+| Current thread/resource | Harness session | TUI status, commands |
+| Thread title/metadata | Thread metadata/session records | TUI footer, goals, GitHub badges |
+| Ephemeral tasks/plan/sandbox | Harness state for active thread | Prompt context, TUI projection |
 
 ## Key files
 
-- `mastracode/src/tui/commands/new.ts` — prepares a fresh conversation.
-- `mastracode/src/tui/commands/threads.ts` — thread selector, switch, clone, lock conflict prompt.
-- `mastracode/src/tui/event-dispatch.ts` — thread_created/thread_changed cleanup and metadata projection.
-- `mastracode/src/tui/mastra-tui.ts` — startup thread selection and initial metadata sync.
-- `mastracode/src/headless.ts` — non-TUI thread flags and behavior.
-- `mastracode/src/index.ts` — seeds sessions from existing threads and thread metadata (`mastracode/src/index.ts:647`).
+- `mastracode/src/tui/commands/new.ts` — new conversation preparation.
+- `mastracode/src/tui/commands/threads.ts` — selector, switch, clone, lock conflicts.
+- `mastracode/src/tui/event-dispatch.ts` — thread event cleanup/reload.
+- `mastracode/src/tui/mastra-tui.ts` — startup thread sync.
+- `mastracode/src/headless.ts` — non-TUI thread flags.
+- `mastracode/src/index.ts` — session prefill from existing threads.
 
 ## Dependencies / related features
 
-- [Interactive TUI chat](../tui/interactive-chat.md) — chat render/reload is scoped to the selected thread.
-- [Model auth and modes](../models/model-auth-and-modes.md) — current model/mode metadata must survive thread reload.
+- [Interactive TUI chat](../tui/interactive-chat.md) — history render is thread-scoped.
+- [Model auth, selection, and modes](../models/model-auth-and-modes.md) — model/mode reload depends on thread/session metadata.
 
 ## Existing tests
 
 - `mastracode/src/tui/commands/__tests__/threads.test.ts` — thread command behavior.
 - `mastracode/src/tui/commands/__tests__/thread.test.ts` — direct thread command behavior.
-- `mastracode/src/headless.test.ts` — headless thread flags and resolution.
-- `mastracode/src/HarnessCompat.test.ts` — v1 session/thread state composition and model preservation across switches.
+- `mastracode/src/headless.test.ts` — headless thread flags.
+- `mastracode/src/HarnessCompat.test.ts` — v1 session/thread composition.
 
 ## Missing tests
 
-- End-to-end TUI restart test: create thread, stream messages/tools/tasks, quit, reload, and verify reconstructed UI/status metadata.
-- Thread switch test proving tasks/plan/sandbox state reset while persisted goal/model metadata reloads correctly.
-- Headless `--continue` / `--thread title` regression test after Harness v1 session prefill.
+- Restart TUI after streamed messages/tools/tasks and verify reconstructed UI/status.
+- Thread switch resets ephemeral tasks/plan/sandbox but reloads persisted metadata.
+- Headless `--continue` / `--thread title` after Harness v1 session prefill.
 
 ## Known risks / regressions
 
-- Slack-reported “new session creation broken on alpha” points at this feature family; verify against current branch before treating as fixed.
-- Slack-reported model/mode loss on reload after model pack use depends on thread/session metadata and belongs to this feature plus model auth/modes.
-- Harness v1 session prefill (`mastracode/src/index.ts:657`) is a critical migration path: stale or incomplete session records can make existing threads appear broken.
+- Slack reported new-session creation broken on alpha; needs current repro/verification.
+- Model/mode reload bug belongs partly here because thread/session metadata is the reload path.
+- Harness v1 session prefill is high risk for stale/incomplete thread records.
 
 ## Verification checklist
 

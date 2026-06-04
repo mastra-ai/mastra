@@ -2,36 +2,45 @@
 
 ## Origin PR / commit
 
-- PR: [#00000](https://github.com/mastra-ai/mastra/pull/00000) — what it introduced.
-- Commit: `0000000000` — use when no PR is known.
+- PR: [#00000](https://github.com/mastra-ai/mastra/pull/00000) — short intent.
+- Later changes: none known.
 
 ## User-visible behavior
 
-What the user can do, what success looks like, and what should be preserved.
+- What the user can do:
+- Success looks like:
+- Must preserve:
 
 ## Entry points / commands
 
-Slash commands, keyboard shortcuts, CLI flags, tool calls, UI affordances, or automatic triggers.
+- Commands / shortcuts / flags:
+- Automatic triggers:
 
 ## TUI states
 
-Idle, active, modal/dialog, footer/status, rendering, selection, error, and recovery states relevant to this feature.
+- Idle:
+- Active / modal / error:
 
 ## Headless / non-TUI behavior
 
-How this behaves outside the interactive TUI, including `--prompt`, `--continue`, `--thread`, background flows, or absence of support.
+- Supported:
+- Not supported / unknown:
 
 ## Streaming / loading / interrupted states
 
-What happens while work is running, loading, streaming, cancelled, aborted, retried, or resumed.
+- Streaming / loading:
+- Abort / retry / resume:
 
 ## Streaming vs loaded-from-history behavior
 
-How the feature behaves while it is actively streaming versus after it is reconstructed from persisted thread/history state. Include differences in rendered UI, state restoration, metadata, tool/goal/task components, and reload behavior.
+- While actively streaming:
+- After reload / history reconstruction:
 
 ## State ownership
 
-List each important state field and its source of truth. Note persisted storage, thread metadata, session state, TUI projection, prompt context, and tool/runtime access when relevant.
+| State | Owner / source of truth | Consumers |
+| --- | --- | --- |
+| `field` | Unknown — needs verification | Unknown |
 
 ## Key files
 
@@ -47,11 +56,11 @@ List each important state field and its source of truth. Note persisted storage,
 
 ## Missing tests
 
-- Behavior or regression not currently covered.
+- Behavior not covered:
 
 ## Known risks / regressions
 
-- Verified risk, bug, Slack report, or suspected migration hazard. Mark unverified items clearly.
+- Verified or suspected risk:
 
 ## Verification checklist
 

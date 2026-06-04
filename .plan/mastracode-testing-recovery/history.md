@@ -110,3 +110,42 @@ Processed PR [#13218](https://github.com/mastra-ai/mastra/pull/13218), `0e64154f
 - `.plan/mastracode-testing-recovery/features/tools/coding-tools-permissions.md`
 
 These pages are intentionally broad baselines from the initial port. Later PR passes should update them in place when behavior changed, especially for thread reload, model/mode preservation, tool/task rendering, permissions, and streaming-vs-history behavior.
+
+### Feature map structure correction
+
+User feedback: the first 4 feature pages were too long. Stop writing more feature-page content until the index/page shape is tightened.
+
+Updated `.plan/mastracode-testing-recovery/features/README.md` to make the index table the source of truth and updated `_template.md` into a concise card format.
+
+Shrank the 4 existing baseline pages to the concise card format before processing more PRs:
+
+- `.plan/mastracode-testing-recovery/features/tui/interactive-chat.md`
+- `.plan/mastracode-testing-recovery/features/threads/persistent-conversations.md`
+- `.plan/mastracode-testing-recovery/features/models/model-auth-and-modes.md`
+- `.plan/mastracode-testing-recovery/features/tools/coding-tools-permissions.md`
+
+Next queue checkpoint remains PR #13227.
+
+### Feature map PR #13227
+
+Processed PR [#13227](https://github.com/mastra-ai/mastra/pull/13227), `5013f35869` (`MC follow up 1 (#13227)`). Verified current subagent definitions, dynamic workspace behavior, `/subagents` command, and subagent render tests.
+
+Documentation actions:
+
+- Created `.plan/mastracode-testing-recovery/features/subagents/delegation.md`.
+- Added the subagents row to the source-of-truth table in `features/README.md`.
+- Linked subagents from `features/tools/coding-tools-permissions.md`.
+
+Next queue checkpoint: PR #13231.
+
+### Feature map PR #13231
+
+Processed PR [#13231](https://github.com/mastra-ai/mastra/pull/13231), `6515d301d4` (`More cleanup (#13231)`). Verified current dynamic memory factory, `/om` command wiring, OM handlers/tests, context-aware tools, and gateway heartbeat sync.
+
+Documentation actions:
+
+- Created `.plan/mastracode-testing-recovery/features/memory/observational-memory.md`.
+- Added the memory row to the source-of-truth table in `features/README.md`.
+- Added #13231 as a later change on model and tools cards.
+
+Next queue checkpoint: PR #13234.

@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map workstream is in progress. Next PR in queue: #13227 (`5013f35869`, `MC follow up 1 (#13227)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13231 have been processed. Next PR in queue: #13234 (`4e28562012`, `MC fixes (#13234)`).
 
 ## Blockers
 
@@ -26,11 +26,11 @@ None known.
 
 ## Next steps
 
-1. Continue at `.plan/mastracode-testing-recovery/features/_pr-queue.md` row 2: PR #13227.
+1. Continue at `_pr-queue.md` row 4: PR #13234.
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
-3. Update existing pages in place when later PRs modify behavior from #13218.
-4. Commit/push in reviewable chunks after each meaningful batch.
-5. Review the AIMock exploration before designing workstream 4.
+3. Update existing cards in place when later PRs modify behavior from #13218.
+4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
+5. Commit/push in reviewable chunks after each meaningful batch.
 
 ## Files to read first
 
@@ -46,4 +46,8 @@ None known.
 
 - `git log --reverse --date=short --name-only --pretty=format:'...' -- mastracode` generated `_pr-queue.md`.
 - `gh pr view 13218 --json number,title,body,author,mergedAt,baseRefName,headRefName,url` verified the initial port PR summary.
+- `gh pr view 13227 --json number,title,body,author,mergedAt,url,files` verified PR #13227 intent/files.
+- Read current `mastracode/src/agents/subagents/*.ts`, `agents/workspace.ts`, `tui/commands/subagents.ts`, and subagent tests before creating the subagents card.
+- `gh pr view 13231 --json number,title,body,author,mergedAt,url,files` verified PR #13231 intent/files.
+- Read current `mastracode/src/agents/memory.ts`, `tui/commands/om.ts`, `tui/handlers/om.ts`, `agents/tools.ts`, and OM/gateway tests before creating the memory card.
 - Current batch is doc-only; no product tests were run.
