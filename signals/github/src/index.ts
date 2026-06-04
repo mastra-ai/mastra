@@ -153,6 +153,7 @@ export type GithubSignalsOptions = {
   syncClient?: GithubSignalsSyncClient;
   repositoryResolver?: GithubRepositoryResolver;
   threadStore?: GithubSignalsThreadStore;
+  getNotificationStreamOptions?: GithubSignalAgentOptions['getNotificationStreamOptions'];
 };
 
 export type GithubSubscriptionsChangedEvent = {
@@ -904,6 +905,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     this.#options = options;
     this.#syncClient = options.syncClient ?? new GitcrawlSyncClient({ command: options.gitcrawlCommand });
     this.#repositoryResolver = options.repositoryResolver ?? new GitRemoteRepositoryResolver();
+    if (options.getNotificationStreamOptions) {
+      this.#agentOptions = { getNotificationStreamOptions: options.getNotificationStreamOptions };
+    }
   }
 
   /**

@@ -20,10 +20,10 @@ import { WebhookSignalProvider } from '@mastra/core/signals'
 
 const webhookProvider = new WebhookSignalProvider({
   extractResourceId: payload => `${payload.repository?.full_name}`,
-  buildNotification: (payload, resourceId) => ({
+  buildNotification: (payload, subscription) => ({
     source: 'github-webhook',
     kind: payload.action ?? 'event',
-    summary: `${payload.action} on ${resourceId}`,
+    summary: `${payload.action} on ${subscription.externalResourceId}`,
     payload,
   }),
 })
@@ -54,18 +54,33 @@ const result = await webhookProvider.handleWebhook({
 <PropertiesTable
   content={[
   {
-    name: 'extractResourceId',
-    type: '(payload: unknown) => string | undefined',
-    description: 'Extract the external resource ID from a webhook payload. Return `undefined` to skip the event.',
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for the provider instance.',
     isOptional: true,
-    defaultValue: 'Returns `payload.resourceId` if present',
+    defaultValue: "'webhook-signals'",
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable name.',
+    isOptional: true,
+    defaultValue: "'Webhook Signals'",
+  },
+  {
+    name: 'extractResourceId',
+    type: '(payload: unknown) => string | string[] | undefined',
+    description:
+      'Extract the external resource ID from a webhook payload. Return `undefined` to skip the event. Can return an array to match multiple resources.',
+    isOptional: true,
+    defaultValue: 'Returns `payload.resource` or `payload.externalResourceId` if present',
   },
   {
     name: 'buildNotification',
-    type: '(payload: unknown, resourceId: string) => object',
-    description: 'Build the notification object from a webhook payload and matched resource ID.',
+    type: '(payload: unknown, subscription: SignalSubscription) => SendNotificationSignalInput',
+    description: 'Build the notification object from a webhook payload and the matched subscription.',
     isOptional: true,
-    defaultValue: "Returns `{ source: 'webhook', kind: 'event', summary, payload }`",
+    defaultValue: "Returns `{ source: id, kind: 'webhook-event', summary, payload }`",
   },
 ]}
 />
@@ -153,31 +168,6 @@ Returns `{ status: 200, body: { matched: N } }` where `N` is the number of subsc
   },
 ]}
 />
-
-### Monitoring
-
-#### `isMonitoringResource(externalResourceId)`
-
-Check whether any thread is subscribed to a specific external resource.
-
-```typescript prettier:false
-if (webhookProvider.isMonitoringResource('mastra-ai/mastra')) {
-  // at least one thread is watching this repo
-}
-```
-
-Returns: `boolean`
-
-#### `getMonitoredResources()`
-
-Return all external resource IDs with active subscriptions.
-
-```typescript prettier:false
-const resources = webhookProvider.getMonitoredResources()
-// ['mastra-ai/mastra', 'mastra-ai/mastra-docs']
-```
-
-Returns: `string[]`
 
 ### Static signal factories
 

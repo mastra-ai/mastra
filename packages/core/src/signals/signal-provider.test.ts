@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Agent } from '../agent/agent';
 import { SignalProvider, isSignalProvider } from './signal-provider';
 import type { SignalProviderTarget, SignalSubscription } from './signal-provider';
 
@@ -333,6 +334,62 @@ describe('SignalProvider', () => {
     it('returns false for null/undefined', () => {
       expect(isSignalProvider(null)).toBe(false);
       expect(isSignalProvider(undefined)).toBe(false);
+    });
+  });
+
+  describe('Agent wiring', () => {
+    it('calls start() on providers during Agent construction', () => {
+      const startFn = vi.fn();
+      const p = new TestSignalProvider();
+      p.start = startFn;
+
+      new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
+        signals: [p],
+      });
+
+      expect(startFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('collects getTools() from providers', () => {
+      const getToolsSpy = vi.fn(() => ({ myTool: { id: 'myTool' } }));
+
+      class ToolProvider extends SignalProvider<'tool-provider'> {
+        readonly id = 'tool-provider' as const;
+        readonly name = 'Tool Provider';
+        async poll() {}
+        getTools = getToolsSpy;
+      }
+
+      const p = new ToolProvider();
+      new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
+        signals: [p],
+      });
+
+      expect(getToolsSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('propagates __registerMastra to signal providers', () => {
+      const registerSpy = vi.fn();
+      const p = new TestSignalProvider();
+      p.__registerMastra = registerSpy;
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'test',
+        model: { provider: 'test', name: 'test', toolChoice: 'auto' } as any,
+        signals: [p],
+      });
+
+      const fakeMastra = { getStorage: vi.fn() } as any;
+      agent.__registerMastra(fakeMastra);
+
+      expect(registerSpy).toHaveBeenCalledWith(fakeMastra);
     });
   });
 });
