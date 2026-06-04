@@ -474,15 +474,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Signals',
-      collapsed: true,
-      items: [
-        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
-        { type: 'doc', id: 'signals/webhook-signal-provider', label: 'WebhookSignalProvider' },
-      ],
-    },
-    {
-      type: 'category',
       label: 'PubSub',
       collapsed: true,
       items: [
@@ -524,6 +515,15 @@ const sidebars = {
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Signals',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
+        { type: 'doc', id: 'signals/webhook-signal-provider', label: 'WebhookSignalProvider' },
       ],
     },
     {

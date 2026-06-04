@@ -9,7 +9,7 @@ packages:
 
 Concrete signal provider for push-based event delivery. Routes incoming webhook payloads to subscribed agent threads by matching the payload against a configurable resource ID extractor.
 
-Extends [SignalProvider](/reference/signals/signal-provider) with public subscription management and a `handleWebhook()` implementation.
+Extends [`SignalProvider`](/reference/signals/signal-provider) with public subscription management and a built-in `handleWebhook()` implementation.
 
 ## Usage example
 
@@ -38,10 +38,10 @@ const agent = new Agent({
   signals: [webhookProvider],
 })
 
-// Subscribe a thread to a specific repo
+// subscribe a thread to a specific repo
 webhookProvider.subscribeThread({ threadId: 'thread-1', resourceId: 'user-1' }, 'mastra-ai/mastra')
 
-// Handle an incoming webhook
+// handle an incoming webhook
 const result = await webhookProvider.handleWebhook({
   body: { repository: { full_name: 'mastra-ai/mastra' }, action: 'push' },
   headers: {},
@@ -76,16 +76,31 @@ const result = await webhookProvider.handleWebhook({
 
 #### `subscribeThread(target, externalResourceId)`
 
-Subscribe a thread to receive webhook events for a specific external resource. Public wrapper around the protected `subscribe()` method.
+Subscribe a thread to receive webhook events for a specific external resource.
 
 ```typescript prettier:false
 webhookProvider.subscribeThread(
-  { threadId: "thread-1", resourceId: "user-1" },
-  "mastra-ai/mastra",
-);
+  { threadId: 'thread-1', resourceId: 'user-1' },
+  'mastra-ai/mastra',
+)
 ```
 
 Returns: `SignalSubscription`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'target',
+    type: 'SignalProviderTarget',
+    description: 'The thread to subscribe. Must include `threadId` and `resourceId`.',
+  },
+  {
+    name: 'externalResourceId',
+    type: 'string',
+    description: 'The external resource to monitor (for example, a repository full name).',
+  },
+]}
+/>
 
 #### `unsubscribeThread(target, externalResourceId)`
 
@@ -93,9 +108,9 @@ Unsubscribe a thread from a specific external resource.
 
 ```typescript prettier:false
 const removed = webhookProvider.unsubscribeThread(
-  { threadId: "thread-1", resourceId: "user-1" },
-  "mastra-ai/mastra",
-);
+  { threadId: 'thread-1', resourceId: 'user-1' },
+  'mastra-ai/mastra',
+)
 ```
 
 Returns: `boolean`
@@ -108,23 +123,45 @@ Process an incoming webhook request. Extracts the resource ID from the payload, 
 
 ```typescript prettier:false
 const result = await webhookProvider.handleWebhook({
-  body: { repository: { full_name: "mastra-ai/mastra" }, action: "push" },
-  headers: { "x-github-event": "push" },
-});
+  body: { repository: { full_name: 'mastra-ai/mastra' }, action: 'push' },
+  headers: { 'x-github-event': 'push' },
+})
 ```
 
 Returns: `Promise<{ status: number; body: { matched: number } }>`
 
-The method returns `{ status: 200, body: { matched: N } }` where `N` is the number of subscriptions that were notified. Returns `matched: 0` when no resource ID could be extracted or no subscriptions match.
+Returns `{ status: 200, body: { matched: N } }` where `N` is the number of subscriptions that received notifications. Returns `matched: 0` when no resource ID could be extracted or no subscriptions match.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'request',
+    type: 'object',
+    description: 'The incoming webhook request.',
+    properties: [
+      {
+        name: 'body',
+        type: 'unknown',
+        description: 'The parsed webhook payload.',
+      },
+      {
+        name: 'headers',
+        type: 'Record<string, string>',
+        description: 'HTTP headers from the webhook request.',
+      },
+    ],
+  },
+]}
+/>
 
 ### Monitoring
 
 #### `isMonitoringResource(externalResourceId)`
 
-Check if any thread is subscribed to a specific external resource.
+Check whether any thread is subscribed to a specific external resource.
 
 ```typescript prettier:false
-if (webhookProvider.isMonitoringResource("mastra-ai/mastra")) {
+if (webhookProvider.isMonitoringResource('mastra-ai/mastra')) {
   // at least one thread is watching this repo
 }
 ```
@@ -133,11 +170,11 @@ Returns: `boolean`
 
 #### `getMonitoredResources()`
 
-Get all external resource IDs with active subscriptions.
+Return all external resource IDs with active subscriptions.
 
 ```typescript prettier:false
-const resources = webhookProvider.getMonitoredResources();
-// ["mastra-ai/mastra", "mastra-ai/mastra-docs"]
+const resources = webhookProvider.getMonitoredResources()
+// ['mastra-ai/mastra', 'mastra-ai/mastra-docs']
 ```
 
 Returns: `string[]`
@@ -149,17 +186,17 @@ Returns: `string[]`
 Create a reactive signal input that subscribes the current thread to an external resource.
 
 ```typescript prettier:false
-agent.sendSignal(WebhookSignalProvider.signals.subscribe("mastra-ai/mastra"));
+const signal = WebhookSignalProvider.signals.subscribe('mastra-ai/mastra')
 ```
 
-Returns: `AgentSignalInput`
+Returns: `{ type: 'reactive'; tagName: string; contents: string; attributes: { resource: string } }`
 
 #### `WebhookSignalProvider.signals.unsubscribe(externalResourceId)`
 
 Create a reactive signal input that unsubscribes the current thread from an external resource.
 
 ```typescript prettier:false
-agent.sendSignal(WebhookSignalProvider.signals.unsubscribe("mastra-ai/mastra"));
+const signal = WebhookSignalProvider.signals.unsubscribe('mastra-ai/mastra')
 ```
 
-Returns: `AgentSignalInput`
+Returns: `{ type: 'reactive'; tagName: string; contents: string; attributes: { resource: string } }`
