@@ -1021,6 +1021,7 @@ describe('Observability Registry', () => {
       // keeps Vitest's env restoration intact so the suite-level afterEach
       // can roll it back without leaking the test value into later tests.
       vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', '');
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
 
       const logger = new ConsoleLogger({ level: LogLevel.DEBUG });
 
@@ -1034,7 +1035,7 @@ describe('Observability Registry', () => {
       // Verify debug message was logged with exporter name
       expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining(
-          'mastra-platform-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
+          'mastra-platform-exporter disabled: MASTRA_PLATFORM_ACCESS_TOKEN environment variable not set',
         ),
       );
 

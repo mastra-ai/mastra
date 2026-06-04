@@ -9,7 +9,7 @@ import type {
   ScoreEvent,
   FeedbackEvent,
 } from '@mastra/core/observability';
-import { fetchWithRetry } from '@mastra/core/utils';
+import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 
@@ -221,6 +221,7 @@ export class MastraPlatformExporter extends BaseExporter {
   name = 'mastra-platform-exporter';
 
   private readonly platformConfig: Readonly<ResolvedPlatformConfig>;
+  private readonly authFailureCooldown: AuthFailureCooldown;
   private buffer: MastraPlatformBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
@@ -232,7 +233,8 @@ export class MastraPlatformExporter extends BaseExporter {
       throw createInvalidProjectIdError(config.projectId);
     }
 
-    const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+    const accessToken =
+      config.accessToken || process.env.MASTRA_PLATFORM_ACCESS_TOKEN || process.env.MASTRA_CLOUD_ACCESS_TOKEN;
     // Treat an empty MASTRA_PROJECT_ID as unset so deployments that always
     // export the variable (e.g. CI templates) don't have to special-case it.
     const envProjectId = process.env.MASTRA_PROJECT_ID === '' ? undefined : process.env.MASTRA_PROJECT_ID;
@@ -242,7 +244,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
     const projectId = rawProjectId;
     if (!accessToken) {
-      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.', 'debug');
+      this.setDisabled('MASTRA_PLATFORM_ACCESS_TOKEN environment variable not set.', 'debug');
     }
 
     const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;
@@ -285,6 +287,8 @@ export class MastraPlatformExporter extends BaseExporter {
       feedbackEndpoint: resolveConfiguredSignalEndpoint('feedback', config.feedbackEndpoint),
     };
 
+    this.authFailureCooldown = new AuthFailureCooldown('MastraPlatformExporter', () => this.logger);
+
     this.buffer = {
       spans: [],
       logs: [],
@@ -304,6 +308,10 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      return;
+    }
+
     this.addToBuffer(event);
 
     await this.handleBufferedEvent();
@@ -311,6 +319,10 @@ export class MastraPlatformExporter extends BaseExporter {
 
   async onLogEvent(event: LogEvent): Promise<void> {
     if (this.isDisabled) {
+      return;
+    }
+
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -323,6 +335,10 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      return;
+    }
+
     this.addMetricToBuffer(event);
     await this.handleBufferedEvent();
   }
@@ -332,12 +348,20 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+      return;
+    }
+
     this.addScoreToBuffer(event);
     await this.handleBufferedEvent();
   }
 
   async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
     if (this.isDisabled) {
+      return;
+    }
+
+    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -483,6 +507,11 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
+    if (this.authFailureCooldown.dropEventsIfCoolingDown(this.buffer.totalSize)) {
+      this.resetBuffer();
+      return;
+    }
+
     const startTime = Date.now();
     const spansCopy = [...this.buffer.spans];
     const logsCopy = [...this.buffer.logs];
@@ -503,16 +532,32 @@ export class MastraPlatformExporter extends BaseExporter {
     ]);
 
     const failedSignals = results.filter(result => !result.succeeded).map(result => result.signal);
+    const authFailure = results.find(result => result.authFailureStatus !== undefined);
 
     const elapsed = Date.now() - startTime;
 
     if (failedSignals.length === 0) {
-      this.logger.debug('Batch flushed successfully', {
+      const droppedEventsDuringAuthCooldown = this.authFailureCooldown.reset();
+      const logData: Record<string, number | string> = {
         batchSize,
         flushReason,
         durationMs: elapsed,
-      });
+      };
+
+      if (droppedEventsDuringAuthCooldown > 0) {
+        logData.droppedEventsDuringAuthCooldown = droppedEventsDuringAuthCooldown;
+      }
+
+      this.logger.debug('Batch flushed successfully', logData);
       return;
+    }
+
+    if (authFailure?.authFailureStatus !== undefined) {
+      this.authFailureCooldown.recordFailure({
+        status: authFailure.authFailureStatus,
+        failedSignals,
+        droppedBatchSize: batchSize,
+      });
     }
 
     this.logger.warn('Batch flush completed with dropped signal batches', {
@@ -546,13 +591,13 @@ export class MastraPlatformExporter extends BaseExporter {
       body: JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records }),
     };
 
-    await fetchWithRetry(endpointMap[signal], options, this.platformConfig.maxRetries);
+    await fetchWithAuthFailureHandling(endpointMap[signal], options, this.platformConfig.maxRetries);
   }
 
   private async flushSignalBatch<T>(
     signal: PlatformSignal,
     records: T[],
-  ): Promise<{ signal: PlatformSignal; succeeded: boolean }> {
+  ): Promise<{ signal: PlatformSignal; succeeded: boolean; authFailureStatus?: number }> {
     if (records.length === 0) {
       return { signal, succeeded: true };
     }
@@ -561,6 +606,10 @@ export class MastraPlatformExporter extends BaseExporter {
       await this.batchUpload(signal, records);
       return { signal, succeeded: true };
     } catch (error) {
+      if (isAuthFailureError(error)) {
+        return { signal, succeeded: false, authFailureStatus: error.status };
+      }
+
       const errorId = `MASTRA_PLATFORM_EXPORTER_FAILED_TO_BATCH_UPLOAD_${signal.toUpperCase()}` as Uppercase<string>;
       const mastraError = new MastraError(
         {

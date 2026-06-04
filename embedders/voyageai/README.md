@@ -75,22 +75,6 @@ const memory = new Memory({
 });
 ```
 
-### With ModelRouter (String-based Selection)
-
-```typescript
-import { ModelRouterEmbeddingModel } from '@mastra/core';
-
-// Use string format for model selection
-const embedder = new ModelRouterEmbeddingModel('voyage/voyage-3.5');
-const result = await embedder.doEmbed({ values: ['Hello'] });
-
-// Works with Memory too
-const memory = new Memory({
-  embedder: 'voyage/voyage-3-large',
-  // ...
-});
-```
-
 ### VoyageAI-Specific Options
 
 ```typescript

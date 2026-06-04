@@ -1,5 +1,3 @@
-import { createRequire } from 'node:module';
-
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
@@ -7,56 +5,28 @@ import type { EmbeddingModel } from '@internal/ai-sdk-v5';
 
 type EmbeddingModelV2<VALUE> = Exclude<EmbeddingModel<VALUE>, string>;
 
+import { MASTRA_USER_AGENT } from './gateways/constants.js';
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';
 
-// Create require function for ESM compatibility
-const esmRequire = createRequire(import.meta.url);
+const MASTRA_GATEWAY_ID = 'mastra';
 
-/**
- * Creates a VoyageAI embedding model wrapper that implements EmbeddingModelV2.
- * Uses the official VoyageAI SDK internally.
- */
-function createVoyageEmbeddingModel(modelId: string, apiKey: string): EmbeddingModelV2<string> {
-  let VoyageAIClient: any;
-  try {
-    VoyageAIClient = esmRequire('@mastra/voyageai').VoyageAIClient;
-  } catch {
-    try {
-      VoyageAIClient = esmRequire('voyageai').VoyageAIClient;
-    } catch {
-      throw new Error(
-        'VoyageAI SDK not found. Please install one of the following packages:\n' +
-          '  - npm install @mastra/voyageai (recommended, includes Mastra integrations)\n' +
-          '  - npm install voyageai (official VoyageAI SDK)\n' +
-          'Note: With pnpm or other strict package managers, ensure the package is explicitly listed in your dependencies.',
-      );
-    }
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
   }
+  return value.slice(0, end);
+}
 
-  const client = new VoyageAIClient({ apiKey });
+function getMastraGatewayBaseUrl(raw = process.env['MASTRA_GATEWAY_URL']): string {
+  const baseUrl = raw?.trim() || 'https://gateway-api.mastra.ai';
+  const withoutTrailingSlashes = trimTrailingSlashes(baseUrl);
+  const withoutVersion = withoutTrailingSlashes.endsWith('/v1')
+    ? withoutTrailingSlashes.slice(0, -'/v1'.length)
+    : withoutTrailingSlashes;
 
-  return {
-    specificationVersion: 'v2',
-    provider: 'voyage',
-    modelId,
-    maxEmbeddingsPerCall: 1000,
-    supportsParallelCalls: true,
-
-    async doEmbed({ values }: { values: string[] }): Promise<{ embeddings: number[][] }> {
-      const response = await client.embed({
-        input: values,
-        model: modelId,
-      });
-
-      const embeddings =
-        response.data
-          ?.sort((a: { index?: number }, b: { index?: number }) => (a.index ?? 0) - (b.index ?? 0))
-          .map((item: { embedding?: number[] }) => item.embedding ?? []) ?? [];
-
-      return { embeddings };
-    },
-  };
+  return `${withoutVersion}/v1`;
 }
 
 /**
@@ -105,71 +75,6 @@ export const EMBEDDING_MODELS: EmbeddingModelInfo[] = [
     maxInputTokens: 2048,
     description: 'Google gemini-embedding-001 model',
   },
-  // VoyageAI - voyage-4 series
-  {
-    id: 'voyage-4-large',
-    provider: 'voyage',
-    dimensions: 1024,
-    maxInputTokens: 120000,
-    description: 'VoyageAI voyage-4-large - best quality, 120k batch tokens',
-  },
-  {
-    id: 'voyage-4',
-    provider: 'voyage',
-    dimensions: 1024,
-    maxInputTokens: 320000,
-    description: 'VoyageAI voyage-4 - balanced quality and speed, 320k batch tokens',
-  },
-  {
-    id: 'voyage-4-lite',
-    provider: 'voyage',
-    dimensions: 1024,
-    maxInputTokens: 1000000,
-    description: 'VoyageAI voyage-4-lite - optimized for throughput, 1M batch tokens',
-  },
-  // VoyageAI - voyage-3 series
-  {
-    id: 'voyage-3-large',
-    provider: 'voyage',
-    dimensions: 1024,
-    maxInputTokens: 120000,
-    description: 'VoyageAI voyage-3-large - best quality general-purpose and multilingual',
-  },
-  {
-    id: 'voyage-3.5',
-    provider: 'voyage',
-    dimensions: 1024,
-    maxInputTokens: 320000,
-    description: 'VoyageAI voyage-3.5 - balanced quality and speed',
-  },
-  {
-    id: 'voyage-3.5-lite',
-    provider: 'voyage',
-    dimensions: 1024,
-    maxInputTokens: 1000000,
-    description: 'VoyageAI voyage-3.5-lite - optimized for latency and cost',
-  },
-  {
-    id: 'voyage-code-3',
-    provider: 'voyage',
-    dimensions: 1024,
-    maxInputTokens: 32000,
-    description: 'VoyageAI voyage-code-3 - optimized for code retrieval',
-  },
-  {
-    id: 'voyage-finance-2',
-    provider: 'voyage',
-    dimensions: 1024,
-    maxInputTokens: 32000,
-    description: 'VoyageAI voyage-finance-2 - optimized for financial domain',
-  },
-  {
-    id: 'voyage-law-2',
-    provider: 'voyage',
-    dimensions: 1024,
-    maxInputTokens: 32000,
-    description: 'VoyageAI voyage-law-2 - optimized for legal domain',
-  },
 ];
 
 /**
@@ -179,16 +84,7 @@ export type EmbeddingModelId =
   | 'openai/text-embedding-3-small'
   | 'openai/text-embedding-3-large'
   | 'openai/text-embedding-ada-002'
-  | 'google/gemini-embedding-001'
-  | 'voyage/voyage-4-large'
-  | 'voyage/voyage-4'
-  | 'voyage/voyage-4-lite'
-  | 'voyage/voyage-3-large'
-  | 'voyage/voyage-3.5'
-  | 'voyage/voyage-3.5-lite'
-  | 'voyage/voyage-code-3'
-  | 'voyage/voyage-finance-2'
-  | 'voyage/voyage-law-2';
+  | 'google/gemini-embedding-001';
 
 /**
  * Check if a model ID is a known embedding model
@@ -234,13 +130,20 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
     };
 
     if (typeof config === 'string') {
-      // Parse provider/model from string (e.g., "openai/text-embedding-3-small")
+      // Parse provider/model or gateway/provider/model from string.
       const parts = config.split('/');
-      if (parts.length !== 2) {
-        throw new Error(`Invalid model string format: "${config}". Expected format: "provider/model"`);
+      if (parts[0] === MASTRA_GATEWAY_ID) {
+        if (parts.length < 3) {
+          throw new Error(`Invalid model string format: "${config}". Expected format: "mastra/provider/model"`);
+        }
+        normalizedConfig = { providerId: MASTRA_GATEWAY_ID, modelId: parts.slice(1).join('/') };
+      } else {
+        if (parts.length !== 2) {
+          throw new Error(`Invalid model string format: "${config}". Expected format: "provider/model"`);
+        }
+        const [providerId, modelId] = parts as [string, string];
+        normalizedConfig = { providerId, modelId };
       }
-      const [providerId, modelId] = parts as [string, string];
-      normalizedConfig = { providerId, modelId };
     } else if ('providerId' in config && 'modelId' in config) {
       normalizedConfig = {
         providerId: config.providerId,
@@ -252,25 +155,53 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
     } else {
       // config has 'id' field
       const parts = config.id.split('/');
-      if (parts.length !== 2) {
-        throw new Error(`Invalid model string format: "${config.id}". Expected format: "provider/model"`);
+      if (parts[0] === MASTRA_GATEWAY_ID) {
+        if (parts.length < 3) {
+          throw new Error(`Invalid model string format: "${config.id}". Expected format: "mastra/provider/model"`);
+        }
+        normalizedConfig = {
+          providerId: MASTRA_GATEWAY_ID,
+          modelId: parts.slice(1).join('/'),
+          url: config.url,
+          apiKey: config.apiKey,
+          headers: config.headers,
+        };
+      } else {
+        if (parts.length !== 2) {
+          throw new Error(`Invalid model string format: "${config.id}". Expected format: "provider/model"`);
+        }
+        const [providerId, modelId] = parts as [string, string];
+        normalizedConfig = {
+          providerId,
+          modelId,
+          url: config.url,
+          apiKey: config.apiKey,
+          headers: config.headers,
+        };
       }
-      const [providerId, modelId] = parts as [string, string];
-      normalizedConfig = {
-        providerId,
-        modelId,
-        url: config.url,
-        apiKey: config.apiKey,
-        headers: config.headers,
-      };
     }
 
     this.provider = normalizedConfig.providerId;
     this.modelId = normalizedConfig.modelId;
 
-    // If custom URL is provided, skip provider registry validation
-    // and use the provided API key (or empty string if not provided)
-    if (normalizedConfig.url) {
+    if (normalizedConfig.providerId === MASTRA_GATEWAY_ID) {
+      const apiKey = normalizedConfig.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
+      if (!apiKey) {
+        throw new Error('API key not found for provider mastra. Set MASTRA_GATEWAY_API_KEY');
+      }
+
+      this.providerModel = createOpenAICompatible({
+        name: MASTRA_GATEWAY_ID,
+        apiKey,
+        baseURL: getMastraGatewayBaseUrl(normalizedConfig.url),
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+          ...normalizedConfig.headers,
+        },
+      }).textEmbeddingModel(normalizedConfig.modelId) as EmbeddingModelV2<VALUE>;
+    } else if (normalizedConfig.url) {
+      // If custom URL is provided, skip provider registry validation
+      // and use the provided API key (or empty string if not provided)
       const apiKey = normalizedConfig.apiKey || '';
       this.providerModel = createOpenAICompatible({
         name: normalizedConfig.providerId,
@@ -318,8 +249,6 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
         this.providerModel = createGoogleGenerativeAI({ apiKey }).textEmbedding(
           normalizedConfig.modelId,
         ) as EmbeddingModelV2<VALUE>;
-      } else if (normalizedConfig.providerId === 'voyage') {
-        this.providerModel = createVoyageEmbeddingModel(normalizedConfig.modelId, apiKey) as EmbeddingModelV2<VALUE>;
       } else {
         // Use OpenAI-compatible provider for other providers
         if (!providerConfig.url) {

@@ -64,7 +64,6 @@
 // Re-export all types
 export * from './types';
 
-// Re-export VoyageAIClient and TokenizeResult for use in @mastra/core embedding-router
 export { VoyageAIClient } from 'voyageai';
 export type { TokenizeResult } from 'voyageai';
 

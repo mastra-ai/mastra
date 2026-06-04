@@ -93,11 +93,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/processors',
+          label: 'Processors',
+        },
+        {
+          type: 'doc',
+          id: 'agents/guardrails',
+          label: 'Guardrails',
+        },
+        {
+          type: 'doc',
+          id: 'agents/agent-approval',
+          label: 'Agent Approval',
+        },
+        {
+          type: 'doc',
           id: 'agents/supervisor-agents',
           label: 'Supervisor Agents',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -109,23 +121,35 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/processors',
-          label: 'Processors',
+          id: 'agents/channels',
+          label: 'Channels',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
-          id: 'agents/guardrails',
-          label: 'Guardrails',
+          id: 'agents/a2a',
+          label: 'A2A',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
-          id: 'agents/response-caching',
-          label: 'Response caching',
+          id: 'agents/acp',
+          label: 'ACP',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
-          id: 'agents/agent-approval',
-          label: 'Agent Approval',
+          id: 'agents/sdk-agents',
+          label: 'SDK Agents',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
@@ -134,10 +158,18 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/channels',
-          label: 'Channels',
+          id: 'agents/code-mode',
+          label: 'Code Mode',
           customProps: {
-            tags: ['new'],
+            tags: ['alpha'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['alpha'],
           },
         },
         {
@@ -174,9 +206,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/observational-memory',
           label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -192,6 +221,11 @@ const sidebars = {
           type: 'doc',
           id: 'memory/memory-processors',
           label: 'Memory Processors',
+        },
+        {
+          type: 'doc',
+          id: 'memory/multi-user-threads',
+          label: 'Multi-user Threads',
         },
       ],
     },
@@ -254,9 +288,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Editor',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -272,6 +303,25 @@ const sidebars = {
           type: 'doc',
           id: 'editor/prompts',
           label: 'Prompts',
+        },
+        {
+          type: 'category',
+          label: 'Agent Builder',
+          customProps: {
+            tags: ['new'],
+          },
+          items: [
+            { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
+            { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
+            { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
+            { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
+            { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
+            { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
+            { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
+            { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+            { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
+            { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
+          ],
         },
       ],
     },
@@ -323,6 +373,9 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
+          customProps: {
+            tags: ['new'],
+          },
         },
       ],
     },
@@ -419,6 +472,11 @@ const sidebars = {
           type: 'doc',
           id: 'server/request-context',
           label: 'Request Context',
+        },
+        {
+          type: 'doc',
+          id: 'server/pubsub',
+          label: 'PubSub',
         },
         {
           type: 'doc',
@@ -592,7 +650,7 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/mastra-platform',
-                  label: 'Mastra Platform',
+                  label: 'Mastra platform',
                 },
                 {
                   type: 'doc',
@@ -668,6 +726,11 @@ const sidebars = {
               id: 'observability/metrics/overview',
               label: 'Overview',
             },
+            {
+              type: 'doc',
+              id: 'observability/metrics/querying',
+              label: 'Querying metrics',
+            },
           ],
         },
       ],
@@ -697,6 +760,11 @@ const sidebars = {
           label: 'Running in CI',
         },
         {
+          type: 'doc',
+          id: 'evals/evals-with-memory',
+          label: 'Evals with Memory',
+        },
+        {
           type: 'category',
           label: 'Datasets',
           items: [
@@ -716,7 +784,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Platform',
+      label: 'Mastra platform',
       customProps: {
         tags: ['new'],
       },
@@ -725,6 +793,21 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
         },
         {
           type: 'doc',

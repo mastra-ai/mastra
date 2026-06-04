@@ -74,6 +74,19 @@ async function initializePackageJson(pm: PackageManager): Promise<void> {
     node: '>=22.13.0',
   };
 
+  // pnpm v11+ writes devEngines.packageManager with a semver range (e.g.
+  // "^11.3.0"). Corepack ≤0.35.0 (bundled with Node 22) reads this field
+  // too and rejects ranges, so we must remove both the legacy packageManager
+  // field and devEngines.packageManager to avoid the error:
+  //   "Invalid package manager specification in package.json (pnpm@^11.3.0)"
+  delete packageJson.packageManager;
+  if (packageJson.devEngines?.packageManager) {
+    delete packageJson.devEngines.packageManager;
+    if (Object.keys(packageJson.devEngines).length === 0) {
+      delete packageJson.devEngines;
+    }
+  }
+
   await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
 }
 
@@ -162,7 +175,9 @@ export const createMastraProject = async ({
   llmApiKey,
   skills,
   mcpServer,
+  observability,
   needsInteractive,
+  onObservabilitySelected,
 }: {
   projectName?: string;
   createVersionTag?: string;
@@ -171,7 +186,14 @@ export const createMastraProject = async ({
   llmApiKey?: string;
   skills?: string[];
   mcpServer?: string;
+  observability?: boolean;
   needsInteractive?: boolean;
+  onObservabilitySelected?: (event: {
+    command?: 'create' | 'init';
+    enabled: boolean;
+    answer: 'yes' | 'no';
+    selection_method: 'interactive';
+  }) => void;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
 
@@ -199,12 +221,13 @@ export const createMastraProject = async ({
     const skipGitInit = await isGitInitialized({ cwd: process.cwd() });
 
     result = await interactivePrompt({
-      options: { showBanner: false },
+      options: { command: 'create', showBanner: false, onObservabilitySelected },
       skip: {
         llmProvider: llmProvider !== undefined,
         llmApiKey: llmApiKey !== undefined,
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
+        observability: observability !== undefined,
         directory: true,
         gitInit: skipGitInit,
       },
@@ -246,6 +269,22 @@ export const createMastraProject = async ({
     } catch (error) {
       throw new Error(
         `Failed to initialize project structure: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+
+    // Write pnpm workspace config for pnpm v11
+    if (pm === 'pnpm') {
+      await fs.writeFile(
+        'pnpm-workspace.yaml',
+        `packages:
+  - '.'
+allowBuilds:
+  esbuild: true
+  sharp: true
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+`,
       );
     }
 

@@ -30,7 +30,7 @@ describe('Hono auth middleware helper', () => {
     adapter.registerContextMiddleware();
 
     app.get('/custom/protected', createAuthMiddleware({ mastra }), c => {
-      const user = c.get('requestContext').get('user') as { id: string };
+      const user = c.get('requestContext').get('mastra__user') as { id: string };
       return c.json({ userId: user.id });
     });
 

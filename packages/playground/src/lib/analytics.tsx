@@ -1,17 +1,37 @@
 import { PostHogProvider as PHProvider } from '@posthog/react';
 import posthog from 'posthog-js';
+import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
-export function PostHogProvider({ children }: { children: React.ReactNode }) {
+const TRUTHY_DISABLED_VALUES = ['1', 'true', 'yes'];
+const POSTHOG_ALLOWED_HOSTNAME = /(?:^|\.)mastra\.cloud$/;
+
+function isTelemetryDisabled(): boolean {
+  const value = window.MASTRA_TELEMETRY_DISABLED;
+  if (!value) {
+    return false;
+  }
+  return TRUTHY_DISABLED_VALUES.includes(value.trim().toLowerCase());
+}
+
+function isPostHogAllowedHost(hostname: string): boolean {
+  return POSTHOG_ALLOWED_HOSTNAME.test(hostname.toLowerCase());
+}
+
+export function PostHogProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if ('brave' in navigator) {
       console.info('[Analytics]: Telemetry is disabled for browser constraints.');
       return;
     }
 
-    // @ts-expect-error - window is always defined in the browser and we don't want to type this out.
-    if (window.MASTRA_TELEMETRY_DISABLED) {
+    if (isTelemetryDisabled()) {
       console.info('[Analytics]: Telemetry is disabled.');
+      return;
+    }
+
+    if (!isPostHogAllowedHost(window.location.hostname)) {
+      console.info('[Analytics]: Telemetry is disabled for this host.');
       return;
     }
 

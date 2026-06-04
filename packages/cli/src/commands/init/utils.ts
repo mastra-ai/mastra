@@ -11,6 +11,8 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
+import { getToken, loadCredentials } from '../auth/credentials.js';
+import { resolveCurrentOrg } from '../auth/orgs.js';
 import {
   cursorGlobalMCPConfigPath,
   windsurfGlobalMCPConfigPath,
@@ -25,6 +27,73 @@ export const COMPONENTS = ['agents', 'workflows', 'tools', 'scorers'] as const;
 
 export type LLMProvider = (typeof LLMProvider)[number];
 export type Component = (typeof COMPONENTS)[number];
+
+export interface ObservabilityPromptResult {
+  enabled?: boolean;
+  token?: string;
+  orgId?: string;
+  orgName?: string;
+}
+
+interface ObservabilitySelectionEvent {
+  command?: 'create' | 'init';
+  enabled: boolean;
+  answer: 'yes' | 'no';
+  selection_method: 'interactive';
+}
+
+export async function promptForObservability(
+  command?: 'create' | 'init',
+  onObservabilitySelected?: (event: ObservabilitySelectionEvent) => void,
+): Promise<ObservabilityPromptResult> {
+  // Loop so that if the browser-based auth flow fails (user closed the browser
+  // tab, timed out, network error, …) we re-ask the same question instead of
+  // leaving the user stuck. Picking "No" is always a clean escape hatch.
+  while (true) {
+    const choice = await p.select({
+      message: 'Enable Mastra Observability? (will open auth flow)',
+      options: [
+        { value: 'yes', label: 'Yes' },
+        { value: 'no', label: 'No' },
+      ],
+      initialValue: 'yes',
+    });
+
+    if (p.isCancel(choice)) return {};
+
+    const answer = choice === 'yes' ? 'yes' : 'no';
+    const enabled = answer === 'yes';
+    onObservabilitySelected?.({
+      command,
+      enabled,
+      answer,
+      selection_method: 'interactive',
+    });
+
+    if (!enabled) return { enabled: false };
+
+    // Only surface the logged-in user when creds already existed before getToken().
+    // If they didn't, getToken() ran the browser login() flow which prints its own
+    // "Logged in as <email>" message — printing again here would duplicate it.
+    // Re-read creds after getToken() so the email reflects the actual logged-in
+    // account, even when stale creds forced a browser re-login as a different user.
+    const hadCachedCreds = (await loadCredentials()) !== null;
+    try {
+      const token = await getToken();
+      if (hadCachedCreds) {
+        const creds = await loadCredentials();
+        if (creds) p.log.info(`Logged in as ${creds.user.email}`);
+      }
+      const org = await resolveCurrentOrg(token, { forcePrompt: true });
+      return { enabled: true, token, orgId: org.orgId, orgName: org.orgName };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      p.log.warn(`Could not sign in to Mastra: ${message}`);
+      // Fall through and re-prompt the same question so the user can retry
+      // or pick "No" to continue without observability.
+    }
+  }
+}
 
 /**
  * Type-guard to check if a value is a valid LLMProvider
@@ -506,7 +575,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new MastraStorageExporter(), // Persists observability events to Mastra Storage
-          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -585,7 +654,7 @@ export const getAPIKey = async (provider: LLMProvider) => {
       key = 'GROQ_API_KEY';
       return key;
     case 'google':
-      key = 'GOOGLE_GENERATIVE_AI_API_KEY';
+      key = 'GOOGLE_API_KEY';
       return key;
     case 'cerebras':
       key = 'CEREBRAS_API_KEY';
@@ -608,6 +677,42 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
   const escapedKey = shellQuote.quote([key]);
   const escapedApiKey = shellQuote.quote([apiKey ? apiKey : 'your-api-key']);
   await exec(`echo ${escapedKey}=${escapedApiKey} >> ${envFileName}`);
+};
+
+/**
+ * Append Mastra Observability credentials to the project's `.env` file.
+ *
+ * The generated `src/mastra/index.ts` template already registers a
+ * `MastraPlatformExporter` which no-ops unless `MASTRA_PLATFORM_ACCESS_TOKEN`
+ * is set, so enabling Observability is a pure env-var concern from the
+ * scaffolder's side.
+ *
+ * When called with no token, writes empty placeholders so the user can paste
+ * a key minted manually from the dashboard.
+ */
+export const writeObservabilityEnv = async ({
+  token,
+  projectId,
+  endpoint,
+}: { token?: string; projectId?: string; endpoint?: string } = {}) => {
+  const envFilePath = path.join(process.cwd(), '.env');
+  const lines = [
+    '',
+    '# Mastra Observability — https://projects.mastra.ai',
+    '# Access token and project id wired up automatically when you ran',
+    '# `mastra init` / `create-mastra` with Observability enabled.',
+    `MASTRA_PLATFORM_ACCESS_TOKEN=${token ?? ''}`,
+    `MASTRA_PROJECT_ID=${projectId ?? ''}`,
+  ];
+  // Only emit the traces endpoint when caller provided one (e.g. local dev or
+  // staging). In production the MastraPlatformExporter falls back to its
+  // built-in https://observability.mastra.ai default and per-project URLs are
+  // derived from MASTRA_PROJECT_ID.
+  if (endpoint) {
+    lines.push(`MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=${endpoint}`);
+  }
+  lines.push('');
+  await fs.appendFile(envFilePath, lines.join('\n'));
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
@@ -652,7 +757,9 @@ export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }
 
 interface InteractivePromptArgs {
   options?: {
+    command?: 'create' | 'init';
     showBanner?: boolean;
+    onObservabilitySelected?: (event: ObservabilitySelectionEvent) => void;
   };
   skip?: {
     directory?: boolean;
@@ -661,11 +768,12 @@ interface InteractivePromptArgs {
     gitInit?: boolean;
     skills?: boolean;
     mcpServer?: boolean;
+    observability?: boolean;
   };
 }
 
 export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
-  const { skip = {}, options: { showBanner = true } = {} } = args;
+  const { skip = {}, options: { command, showBanner = true, onObservabilitySelected } = {} } = args;
 
   if (showBanner) {
     p.intro(color.inverse(' Mastra Init '));
@@ -711,6 +819,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           });
         }
         return undefined;
+      },
+      observability: async () => {
+        if (skip?.observability) return undefined;
+        return promptForObservability(command, onObservabilitySelected);
       },
       configureMastraToolingForAgents: async () => {
         if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };
@@ -905,10 +1017,14 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
     },
   );
 
-  // Flatten the configureMastraToolingForAgents return value
-  const { configureMastraToolingForAgents, ...rest } = mastraProject;
+  // Flatten grouped prompt return values
+  const { configureMastraToolingForAgents, observability, ...rest } = mastraProject;
   return {
     ...rest,
+    observability: observability?.enabled,
+    observabilityToken: observability?.token,
+    observabilityOrgId: observability?.orgId,
+    observabilityOrgName: observability?.orgName,
     skills: configureMastraToolingForAgents?.skills as string[] | undefined,
     mcpServer: configureMastraToolingForAgents?.mcpServer as Editor | undefined,
   };
@@ -935,6 +1051,20 @@ export const checkForPkgJson = async () => {
 };
 
 /**
+ * Read the `name` field from the project's `package.json`, returning `undefined`
+ * if the file is missing or unparseable.
+ */
+export const readPackageName = async (): Promise<string | undefined> => {
+  try {
+    const raw = await fs.readFile(path.join(process.cwd(), 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { name?: unknown };
+    return typeof parsed.name === 'string' && parsed.name.trim().length > 0 ? parsed.name : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
  * Generate content for AGENTS.md file
  */
 export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[]; mcpServer?: Editor }): string {
@@ -942,69 +1072,22 @@ export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[
   const hasMcp = !!mcpServer;
 
   let content = `# AGENTS.md
-
-You are a TypeScript developer experienced with the Mastra framework. You build AI agents, tools, workflows, and scorers. You follow strict TypeScript practices and always consult up-to-date Mastra documentation before making changes.
-
 `;
 
   // Add critical Mastra skill section if skills were installed
   if (hasSkills) {
     content += `
-## CRITICAL: Load \`mastra\` skill
+## CRITICAL: Load \`mastra\` skill first
 
-**BEFORE doing ANYTHING with Mastra, load the \`mastra\` skill FIRST.** Never rely on cached knowledge as Mastra's APIs change frequently between versions. Use the skill to read up-to-date documentation from \`node_modules\`.
+Load the \`mastra\` skill BEFORE any Mastra work. Never rely on cached knowledge — APIs change between versions.
 `;
   }
 
   content += `
-## Project Overview
+## Rules
 
-This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. The Node.js runtime is \`>=22.13.0\`.
-
-## Commands
-
-\`\`\`bash
-npm run dev # Start Mastra Studio at localhost:4111 (long-running, use a separate terminal)
-npm run build # Build a production-ready server
-\`\`\`
-
-## Project Structure
-
-| Folder                 | Description                                                                                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| \`src/mastra\`           | Entry point for all Mastra-related code and configuration.                                                                               |
-| \`src/mastra/agents\`    | Define and configure your agents - their behavior, goals, and tools.                                                                     |
-| \`src/mastra/workflows\` | Define multi-step workflows that orchestrate agents and tools together.                                                                  |
-| \`src/mastra/tools\`     | Create reusable tools that your agents can call                                                                                          |
-| \`src/mastra/mcp\`       | (Optional) Implement custom MCP servers to share your tools with external agents                                                         |
-| \`src/mastra/scorers\`   | (Optional) Define scorers for evaluating agent performance over time                                                                     |
-| \`src/mastra/public\`    | (Optional) Contents are copied into the \`.build/output\` directory during the build process, making them available for serving at runtime |
-
-### Top-level files
-
-Top-level files define how your Mastra project is configured, built, and connected to its environment.
-
-| File                  | Description                                                                                                       |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| \`src/mastra/index.ts\` | Central entry point where you configure and initialize Mastra.                                                    |
-| \`.env.example\`        | Template for environment variables - copy and rename to \`.env\` to add your secret [model provider](/models) keys. |
-| \`package.json\`        | Defines project metadata, dependencies, and available npm scripts.                                                |
-| \`tsconfig.json\`       | Configures TypeScript options such as path aliases, compiler settings, and build output.                          |
-
-## Boundaries
-
-### Always do
-
-- Load the \`mastra\` skill before any Mastra-related work
-- Register new agents, tools, workflows, and scorers in \`src/mastra/index.ts\`
-- Use schemas for tool inputs and outputs
-- Run \`npm run build\` to verify changes compile
-
-### Never do
-
-- Never commit \`.env\` files or secrets
-- Never modify \`node_modules\` or Mastra's database files directly
-- Never hardcode API keys (always use environment variables)
+- Register all agents, tools, workflows, and scorers in \`src/mastra/index.ts\`
+- Use the \`dev\` and \`build\` scripts from \`package.json\` instead of running \`mastra dev\` / \`mastra build\` directly
 `;
 
   // Add MCP section if MCP server was configured
@@ -1014,29 +1097,16 @@ Top-level files define how your Mastra project is configured, built, and connect
 
     content += `## MCP Docs Server
 
-This project has the Mastra MCP Docs Server configured for ${editorName}.
-
-### Using MCP Docs
-
-The MCP server provides embedded documentation access within your editor:
-
-1. The server was automatically configured during project creation
-2. Restart your editor to load the MCP server
-3. Use the Mastra docs tools in your editor to access:
-   - API references
-   - Code examples
-   - Integration guides
-
-Learn more in the [MCP Documentation](https://mastra.ai/docs/mcp/overview).
-
+Mastra MCP Docs Server is configured for ${editorName}. Restart your editor to load it.
 `;
   }
 
   // Add resources section
-  content += `## Resources
+  content += `
+## Resources
 
 - [Mastra Documentation](https://mastra.ai/llms.txt)
-- [Mastra .well-known skills discovery](https://mastra.ai/.well-known/skills/index.json)
+- [Skills Discovery](https://mastra.ai/.well-known/skills/index.json)
 `;
 
   return content;

@@ -27,8 +27,11 @@ import {
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
   TABLE_SKILL_BLOBS,
+  TABLE_FAVORITES,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
+  TABLE_TOOL_PROVIDER_CONNECTIONS,
+  TABLE_NOTIFICATIONS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -62,9 +65,12 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_SKILLS]: `ReplacingMergeTree()`,
   [TABLE_SKILL_VERSIONS]: `MergeTree()`,
   [TABLE_SKILL_BLOBS]: `ReplacingMergeTree()`,
+  [TABLE_FAVORITES]: `ReplacingMergeTree()`,
+  [TABLE_TOOL_PROVIDER_CONNECTIONS]: `ReplacingMergeTree()`,
   mastra_background_tasks: `ReplacingMergeTree()`,
   [TABLE_SCHEDULES]: `ReplacingMergeTree()`,
   [TABLE_SCHEDULE_TRIGGERS]: `MergeTree()`,
+  [TABLE_NOTIFICATIONS]: `ReplacingMergeTree()`,
   mastra_channel_installations: `ReplacingMergeTree()`,
   mastra_channel_config: `ReplacingMergeTree()`,
 };

@@ -22,7 +22,7 @@ function LinkLabel({ label, item }: { label: string; item: any }) {
       <span title={label} className={styles.linkLabel}>
         {label}
       </span>
-      {badgeType && <SidebarBadge type={badgeType as 'new' | 'beta' | 'advanced'} />}
+      {badgeType && <SidebarBadge type={badgeType} />}
     </>
   )
 }

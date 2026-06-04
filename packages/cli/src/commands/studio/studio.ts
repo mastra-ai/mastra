@@ -102,6 +102,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
   const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
   const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
   const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
+  const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
 
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
@@ -115,7 +116,8 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson))
-    .replaceAll('%%MASTRA_EXPERIMENTAL_UI%%', experimentalUI);
+    .replaceAll('%%MASTRA_EXPERIMENTAL_UI%%', experimentalUI)
+    .replaceAll('%%MASTRA_AGENT_SIGNALS%%', agentSignals);
 
   // Pre-compress the HTML shell since it's served for every non-asset request
   const compressedHtml = gzipSync(Buffer.from(html));

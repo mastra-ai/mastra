@@ -1,4 +1,3 @@
-import type { HonoRequest } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 import { MastraAuthProvider } from './auth';
 import { CompositeAuth } from './composite-auth';
@@ -23,23 +22,19 @@ class MockAuthProvider extends MastraAuthProvider {
     this._user = user;
   }
 
-  async authenticateToken(_token: string, _request: HonoRequest): Promise<any | null> {
+  async authenticateToken(_token: string, _request: Request): Promise<any | null> {
     if (this._shouldThrow) {
       throw new Error('Authentication failed');
     }
     return this._shouldAuthenticate ? this._user : null;
   }
 
-  async authorizeUser(_user: any, _request: HonoRequest): Promise<boolean> {
+  async authorizeUser(_user: any, _request: Request): Promise<boolean> {
     return this._shouldAuthorize;
   }
 }
 
-// Mock HonoRequest
-const mockRequest = {
-  url: 'http://localhost/test',
-  method: 'GET',
-} as HonoRequest;
+const mockRequest = new Request('http://localhost/test', { method: 'GET' });
 
 describe('Composite auth', () => {
   describe('CompositeAuth', () => {
@@ -329,6 +324,47 @@ describe('Composite auth', () => {
         // Authorization should fail since neither provider authorizes
         const authzResult = await compositeAuth.authorizeUser(user, mockRequest);
         expect(authzResult).toBe(false);
+      });
+    });
+
+    describe('duck-typing detection', () => {
+      it('should NOT advertise SSO when no inner provider has it', () => {
+        const compositeAuth = new CompositeAuth([new MockAuthProvider(true, true)]);
+        expect(typeof (compositeAuth as any).getLoginUrl).not.toBe('function');
+        expect(typeof (compositeAuth as any).handleCallback).not.toBe('function');
+      });
+
+      it('should NOT advertise sessions when no inner provider has it', () => {
+        const compositeAuth = new CompositeAuth([new MockAuthProvider(true, true)]);
+        expect(typeof (compositeAuth as any).createSession).not.toBe('function');
+        expect(typeof (compositeAuth as any).getSessionIdFromRequest).not.toBe('function');
+      });
+
+      it('should NOT advertise user provider when no inner provider has it', () => {
+        const compositeAuth = new CompositeAuth([new MockAuthProvider(true, true)]);
+        expect(typeof (compositeAuth as any).getCurrentUser).not.toBe('function');
+        expect(typeof (compositeAuth as any).getUser).not.toBe('function');
+      });
+
+      it('should advertise SSO when an inner provider supports it', () => {
+        const ssoProvider = new MockAuthProvider(true, true) as any;
+        ssoProvider.getLoginUrl = () => 'https://example.com/login';
+        ssoProvider.handleCallback = async () => ({ user: { id: '1' } });
+        ssoProvider.getLoginButtonConfig = () => ({ provider: 'test', text: 'Sign in' });
+
+        const compositeAuth = new CompositeAuth([ssoProvider]);
+        expect(typeof (compositeAuth as any).getLoginUrl).toBe('function');
+        expect(typeof (compositeAuth as any).handleCallback).toBe('function');
+      });
+
+      it('should advertise user provider when an inner provider supports it', () => {
+        const userProvider = new MockAuthProvider(true, true) as any;
+        userProvider.getCurrentUser = async () => ({ id: '1' });
+        userProvider.getUser = async () => ({ id: '1' });
+
+        const compositeAuth = new CompositeAuth([userProvider]);
+        expect(typeof (compositeAuth as any).getCurrentUser).toBe('function');
+        expect(typeof (compositeAuth as any).getUser).toBe('function');
       });
     });
   });

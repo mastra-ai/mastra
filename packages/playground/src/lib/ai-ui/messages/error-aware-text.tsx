@@ -1,18 +1,18 @@
-import { useAssistantState } from '@assistant-ui/react';
+import { useAuiState } from '@assistant-ui/react';
 import { Notice, Badge, Icon, cn } from '@mastra/playground-ui';
-import type { MastraUIMessageMetadata } from '@mastra/react';
 import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
 import { MarkdownText } from './markdown-text';
+import type { MessageMetadata } from './message-metadata';
 import { TripwireNotice } from './tripwire-notice';
 
 export const ErrorAwareText = () => {
-  const part = useAssistantState(({ part }) => part);
+  const part = useAuiState(({ part }) => part);
   const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
 
   // Get text from the part - it's a TextPart so it has a text property
   const text = (part as any).text || '';
-  const metadata = ((part as any).metadata || {}) as MastraUIMessageMetadata;
+  const metadata = ((part as any).metadata || {}) as MessageMetadata;
 
   // Handle tripwire status with specialized notice component
   if (metadata?.status === 'tripwire') {

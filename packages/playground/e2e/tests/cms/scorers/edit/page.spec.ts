@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { expectCurrentBreadcrumb } from '../../../__utils__/route-header';
 import { resetStorage } from '../../../__utils__/reset-storage';
 
 // Helper to generate unique scorer names
@@ -59,9 +60,9 @@ async function fillScorerFields(
 
   if (options.samplingType !== undefined) {
     if (options.samplingType === 'ratio') {
-      await page.getByLabel('Ratio').click();
+      await page.getByRole('radio', { name: 'Ratio' }).click();
     } else {
-      await page.getByLabel('None').click();
+      await page.getByRole('radio', { name: 'None' }).click();
     }
   }
 
@@ -138,7 +139,7 @@ test.describe('Page Structure & Initial State', () => {
     await goToEditPage(page, scorerId);
 
     await expect(page).toHaveTitle(/Mastra Studio/);
-    await expect(page.locator('h1')).toContainText(`Edit scorer: ${scorerName}`);
+    await expectCurrentBreadcrumb(page, scorerName);
   });
 
   test('displays Update scorer button', async ({ page }) => {
@@ -311,7 +312,7 @@ test.describe('Field-by-Field Update Verification', () => {
 
     await goToEditPage(page, scorerId);
     await expect(page.locator('#scorer-name')).toHaveValue(updatedName);
-    await expect(page.locator('h1')).toContainText(`Edit scorer: ${updatedName}`);
+    await expectCurrentBreadcrumb(page, updatedName);
   });
 
   test('updating description persists correctly', async ({ page }) => {

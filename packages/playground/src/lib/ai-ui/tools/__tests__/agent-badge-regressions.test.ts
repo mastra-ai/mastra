@@ -1,4 +1,3 @@
-import type * as MastraReact from '@mastra/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,14 +9,9 @@ vi.mock('@/hooks/use-agent-messages', () => ({
   useAgentMessages: mockUseAgentMessages,
 }));
 
-vi.mock('@mastra/react', async () => {
-  const actual = await vi.importActual<typeof MastraReact>('@mastra/react');
-
-  return {
-    ...actual,
-    resolveToChildMessages: mockResolveToChildMessages,
-  };
-});
+vi.mock('../badges/resolve-child-messages', () => ({
+  resolveToChildMessages: mockResolveToChildMessages,
+}));
 
 vi.mock('../badges/agent-badge', () => ({
   AgentBadge: mockAgentBadge,
@@ -62,7 +56,66 @@ describe('agent badge regressions', () => {
     expect(mockResolveToChildMessages).toHaveBeenCalledWith([]);
     expect(mockAgentBadge).toHaveBeenCalledWith(
       expect.objectContaining({
+        keepOpenForStreamingChildMessages: true,
         messages: fallbackMessages,
+      }),
+      undefined,
+    );
+  });
+
+  it('renders in-progress agent calls before a result is available', async () => {
+    mockResolveToChildMessages.mockReturnValue([]);
+
+    const { AgentBadgeWrapper } = await import('../badges/agent-badge-wrapper');
+
+    renderToStaticMarkup(
+      AgentBadgeWrapper({
+        agentId: 'agent-1',
+        result: undefined,
+        toolCallId: 'tool-call-1',
+        toolName: 'subagent-tool',
+        toolApprovalMetadata: undefined,
+        isNetwork: false,
+      }),
+    );
+
+    expect(mockResolveToChildMessages).toHaveBeenCalledWith([]);
+    expect(mockAgentBadge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keepOpenForStreamingChildMessages: false,
+        messages: [],
+      }),
+      undefined,
+    );
+  });
+
+  it('renders embedded agent text without fetching a subagent thread', async () => {
+    const { AgentBadgeWrapper } = await import('../badges/agent-badge-wrapper');
+
+    renderToStaticMarkup(
+      AgentBadgeWrapper({
+        agentId: 'agent-1',
+        result: {
+          text: 'remote A2A response',
+          subAgentThreadId: 'thread-that-may-not-exist-locally',
+          subAgentToolResults: [],
+        },
+        toolCallId: 'tool-call-1',
+        toolName: 'subagent-tool',
+        toolApprovalMetadata: undefined,
+        isNetwork: false,
+      }),
+    );
+
+    expect(mockUseAgentMessages).toHaveBeenCalledWith({
+      threadId: undefined,
+      agentId: 'agent-1',
+      memory: true,
+    });
+    expect(mockResolveToChildMessages).not.toHaveBeenCalled();
+    expect(mockAgentBadge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [{ type: 'text', content: 'remote A2A response' }],
       }),
       undefined,
     );

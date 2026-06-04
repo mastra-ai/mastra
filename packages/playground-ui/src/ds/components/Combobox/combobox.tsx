@@ -4,6 +4,7 @@ import * as React from 'react';
 import { comboboxStyles } from './combobox-styles';
 import { formElementSizes } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
+import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
 export type ComboboxOption = {
@@ -12,6 +13,14 @@ export type ComboboxOption = {
   description?: string;
   start?: React.ReactNode;
   end?: React.ReactNode;
+};
+
+export type ComboboxVariant = 'default' | 'ghost' | 'link';
+
+const triggerVariantStyles: Record<ComboboxVariant, string> = {
+  default: comboboxStyles.triggerDefault,
+  ghost: comboboxStyles.triggerGhost,
+  link: comboboxStyles.triggerLink,
 };
 
 export type ComboboxProps = {
@@ -23,8 +32,7 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  /** Kept for API compatibility; trigger styling is intrinsic to the Combobox now. */
-  variant?: 'default' | 'ghost' | 'link';
+  variant?: ComboboxVariant;
   size?: Exclude<FormElementSize, 'lg'>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -41,6 +49,7 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
+  variant = 'default',
   size = 'default',
   open,
   onOpenChange,
@@ -48,6 +57,10 @@ export function Combobox({
   error,
 }: ComboboxProps) {
   const selectedOption = options.find(option => option.value === value) ?? null;
+
+  // Default to the nearest SideDialog/Drawer popup so the list stays
+  // interactive inside a modal drawer; an explicit `container` still wins.
+  const resolvedContainer = usePortalContainer(container);
 
   const handleSelect = (item: ComboboxOption | null) => {
     if (item) {
@@ -68,6 +81,7 @@ export function Combobox({
         <BaseCombobox.Trigger
           className={cn(
             comboboxStyles.trigger,
+            triggerVariantStyles[variant],
             formElementSizes[size],
             error && comboboxStyles.triggerError,
             className,
@@ -83,7 +97,7 @@ export function Combobox({
           <ChevronsUpDown className={comboboxStyles.chevron} />
         </BaseCombobox.Trigger>
 
-        <BaseCombobox.Portal container={container}>
+        <BaseCombobox.Portal container={resolvedContainer}>
           <BaseCombobox.Positioner align="start" sideOffset={4} className={comboboxStyles.positioner}>
             <BaseCombobox.Popup className={comboboxStyles.popup}>
               <div className={comboboxStyles.searchContainer}>

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/laminar",
-  "version": "1.1.0-alpha.2",
+  "version": "1.2.1",
   "description": "Laminar observability provider for Mastra - tracing + scoring export",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
   "dependencies": {
     "@mastra/observability": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.215.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
     "@opentelemetry/resources": "^2.7.0",
     "@opentelemetry/sdk-trace-base": "^2.7.0",
     "@opentelemetry/semantic-conventions": "^1.40.0"

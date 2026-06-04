@@ -91,6 +91,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/auth/credentials/sign-in',
       '/auth/credentials/sign-up',
       '/auth/refresh',
+      // Requires an authenticated admin caller (MASTRA_USER_PERMISSIONS_KEY is a reserved
+      // request-context key set only by the auth middleware) and an RBAC provider with
+      // getPermissionsForRole. Per-status behavior is covered in
+      // packages/server/src/server/handlers/auth.test.ts.
+      '/auth/roles/:roleId/permissions',
     ];
     // Skip routes that require external dependencies (APIs)
     const routesRequiringExternalDeps = [
@@ -106,11 +111,46 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/memory/observational-memory/buffer-status',
       // skill publish requires blob storage not available in InMemoryStore
       '/stored/skills/:storedSkillId/publish',
+      // POST /stored/agents requires a builder-resolved model policy and a
+      // model-allowlist-compatible payload; the generic harness produces a
+      // payload that fails allowlist enforcement. Behavior is covered by
+      // packages/server/src/server/handlers/stored-agents.test.ts.
+      '/stored/agents',
+      // Favorites toggles require an existing stored entity AND an
+      // authenticated caller (callerId is read from the auth-middleware
+      // request context). Behavior is covered by stored-{agent,skill}-favorites
+      // unit tests; the generic harness can't satisfy both prereqs.
+      '/stored/agents/:storedAgentId/favorite',
+      '/stored/skills/:storedSkillId/favorite',
+      // Builder registry routes that require external API calls + builder config
+      '/editor/builder/registries',
+      '/editor/builder/registries/:registryId/search',
+      '/editor/builder/registries/:registryId/popular',
+      '/editor/builder/registries/:registryId/preview',
+      '/editor/builder/registries/:registryId/install',
       // Long-lived SSE streams: stay open until the client disconnects, so the
       // test harness's real-HTTP-server cleanup (server.close awaiting drain)
       // hangs. These routes' behavior is exercised in unit tests.
       '/background-tasks/stream',
       '/agents/:agentId/observe',
+      // Tool-provider connection routes that require a persisted connection
+      // row matching the supplied connectionId. The harness uses a generic
+      // 'test-connection-id' that isn't seeded, so the fail-closed ownership
+      // guard returns 403. Behavior is covered by
+      // packages/server/src/server/handlers/tool-providers.test.ts.
+      '/tool-providers/:providerId/connections/:connectionId',
+      '/tool-providers/:providerId/connections/:connectionId/usage',
+      // Tool-provider authorize + connection-status routes require a real
+      // OAuth provider config; the generic harness produces a payload the
+      // mock provider can't authorize. Covered by tool-providers.test.ts.
+      '/tool-providers/:providerId/authorize',
+      '/tool-providers/:providerId/connection-status',
+      // Tool-provider auth-status requires a live provider auth lookup that
+      // the mock provider doesn't implement. Covered by tool-providers.test.ts.
+      '/tool-providers/:providerId/auth-status/:authId',
+      // Tool-provider connections list relies on storage rows being seeded
+      // for the test author. Covered by tool-providers.test.ts.
+      '/tool-providers/:providerId/connections',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
     const excludedPrefixes = ['/datasets'];

@@ -1,4 +1,5 @@
 export * from './context/studio-config-context';
+export * from './context/studio-config-state';
 export * from './components/studio-config-form';
 export * from './components/mastra-version-footer';
 export * from './types';

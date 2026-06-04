@@ -11,64 +11,71 @@ The `Processor` interface defines the contract for all processors in Mastra. Pro
 
 ## When processor methods run
 
-The seven processor methods run at different points in the agent execution lifecycle:
+The eight processor methods run at different points in the agent execution lifecycle:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Agent Execution Flow                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  User Input                                                     │
-│      │                                                          │
-│      ▼                                                          │
-│  ┌─────────────────┐                                            │
-│  │  processInput   │  ← Runs ONCE at start                      │
-│  └────────┬────────┘                                            │
-│           │                                                     │
-│           ▼                                                     │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                   Agentic Loop                          │    │
-│  │  ┌─────────────────────┐                                │    │
-│  │  │  processInputStep   │  ← Runs at EACH step           │    │
-│  │  └──────────┬──────────┘                                │    │
-│  │             │                                           │    │
-│  │             ▼                                           │    │
-│  │  ┌─────────────────────┐                                │    │
-│  │  │  processLLMRequest   │  ← Runs before provider call   │    │
-│  │  └──────────┬──────────┘                                │    │
-│  │             │                                           │    │
-│  │             ▼                                           │    │
-│  │       LLM Execution ──── API Error? ──┐                │    │
-│  │             │                          │                │    │
-│  │             │              ┌───────────────────┐        │    │
-│  │             │              │  processAPIError  │        │    │
-│  │             │              └─────────┬─────────┘        │    │
-│  │             │                 retry? └── Loop back ──┐  │    │
-│  │             ▼                                        │  │    │
-│  │  ┌──────────────────────┐                            │  │    │
-│  │  │ processOutputStream  │  ← Runs on EACH stream chunk  │    │
-│  │  └──────────┬───────────┘                               │    │
-│  │             │                                           │    │
-│  │             ▼                                           │    │
-│  │  ┌──────────────────────┐                               │    │
-│  │  │  processOutputStep   │  ← Runs after EACH LLM step   │    │
-│  │  └──────────┬───────────┘                               │    │
-│  │             │                                           │    │
-│  │             ▼                                           │    │
-│  │     Tool Execution (if needed)                          │    │
-│  │             │                                           │    │
-│  │             └──────── Loop back if tools called ────────│    │
-│  └─────────────────────────────────────────────────────────┘    │
-│           │                                                     │
-│           ▼                                                     │
-│  ┌─────────────────────┐                                        │
-│  │ processOutputResult │  ← Runs ONCE after completion          │
-│  └─────────────────────┘                                        │
-│           │                                                     │
-│           ▼                                                     │
-│     Final Response                                              │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                        Agent Execution Flow                        │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  User Input                                                        │
+│      │                                                             │
+│      ▼                                                             │
+│  ┌────────────────────────┐                                        │
+│  │  processInput          │  ← Runs ONCE at start                  │
+│  └───────────┬────────────┘                                        │
+│              │                                                     │
+│              ▼                                                     │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                        Agentic Loop                          │  │
+│  │                                                              │  │
+│  │  ┌────────────────────────┐                                  │  │
+│  │  │  processInputStep      │  ← Runs at EACH step             │  │
+│  │  └───────────┬────────────┘                                  │  │
+│  │              │                                               │  │
+│  │              ▼                                               │  │
+│  │  ┌────────────────────────┐                                  │  │
+│  │  │  processLLMRequest     │  ← Before provider call          │  │
+│  │  └───────────┬────────────┘                                  │  │
+│  │              │                                               │  │
+│  │              ▼                                               │  │
+│  │        LLM Execution ──── API Error? ───┐                    │  │
+│  │              │                          │                    │  │
+│  │              │              ┌───────────┴──────────┐         │  │
+│  │              │              │  processAPIError     │         │  │
+│  │              │              └──────────────────────┘         │  │
+│  │              │                (retry loops back to LLM)      │  │
+│  │              ▼                                               │  │
+│  │  ┌────────────────────────┐                                  │  │
+│  │  │  processOutputStream   │  ← Runs on EACH stream chunk     │  │
+│  │  └───────────┬────────────┘                                  │  │
+│  │              │                                               │  │
+│  │              ▼                                               │  │
+│  │  ┌────────────────────────┐                                  │  │
+│  │  │  processLLMResponse    │  ← After stream completes        │  │
+│  │  └───────────┬────────────┘                                  │  │
+│  │              │                                               │  │
+│  │              ▼                                               │  │
+│  │  ┌────────────────────────┐                                  │  │
+│  │  │  processOutputStep     │  ← Runs after EACH LLM step      │  │
+│  │  └───────────┬────────────┘                                  │  │
+│  │              │                                               │  │
+│  │              ▼                                               │  │
+│  │        Tool Execution (if needed)                            │  │
+│  │              │                                               │  │
+│  │              └──────── Loop back if tools called ────────────│  │
+│  │                                                              │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│              │                                                     │
+│              ▼                                                     │
+│  ┌────────────────────────┐                                        │
+│  │  processOutputResult   │  ← Runs ONCE after completion          │
+│  └────────────────────────┘                                        │
+│              │                                                     │
+│              ▼                                                     │
+│        Final Response                                              │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 | Method | When it runs | Use case |
@@ -78,6 +85,7 @@ The seven processor methods run at different points in the agent execution lifec
 | `processLLMRequest` | After LLM request conversion, before the provider call | Rewrite the outbound `LanguageModelV2Prompt` for the current call without persisting changes |
 | `processAPIError` | When an LLM API call fails | Inspect API rejections, optionally mutate state/messages, and request a retry |
 | `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
+| `processLLMResponse` | After the LLM step completes and stream chunks are collected | Capture or cache the full response, run post-call side effects paired with `processLLMRequest` |
 | `processOutputStep` | After each LLM response, before tool execution | Validate output quality, implement guardrails with retry |
 | `processOutputResult` | Once after generation completes | Post-process final response, log results |
 
@@ -113,6 +121,10 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   processLLMRequest?(
     args: ProcessLLMRequestArgs<TTripwireMetadata>,
   ): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult
+
+  processLLMResponse?(
+    args: ProcessLLMResponseArgs<TTripwireMetadata>,
+  ): Promise<ProcessLLMResponseResult> | ProcessLLMResponseResult
 
   processAPIError?(
     args: ProcessAPIErrorArgs<TTripwireMetadata>,
@@ -344,6 +356,9 @@ processInputStep?<TTripwireMetadata = unknown>(
 1. `prepareStep` callback (runs as part of the processInputStep pipeline, after inputProcessors)
 1. `processLLMRequest` from inputProcessors (after prompt conversion, before the provider call)
 1. LLM execution
+1. `processOutputStream` from outputProcessors (on each streaming chunk)
+1. `processLLMResponse` from inputProcessors (after stream completes, pairs with `processLLMRequest`)
+1. `processOutputStep` from outputProcessors (after LLM response, before tool execution)
 1. Tool execution (if needed)
 1. Repeat from step 2 if tools were called
 
@@ -468,7 +483,7 @@ The object form can return any combination of these properties:
   {
     name: 'model',
     type: 'LanguageModelV2 | string',
-    description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-5.4'.",
+    description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-5.5'.",
     isOptional: true,
   },
   {
@@ -655,6 +670,130 @@ processLLMRequest?(
 - Removing or reshaping provider-specific prompt parts before a model call
 - Normalizing roles or content to match a provider's input requirements
 - Adapting tool result formats when switching providers mid-loop
+
+---
+
+### `processLLMResponse`
+
+Processes the LLM response after the step completes (or after a cached response is replayed) and after output processors have collected the response chunks. This hook pairs with `processLLMRequest`: use `processLLMRequest` to stash state (such as a cache key) before the provider call, and `processLLMResponse` to act on the completed response (such as writing it to a cache).
+
+The `state` object is the same instance passed to `processLLMRequest` for the same step, so processors can correlate pre- and post-call work.
+
+```typescript prettier:false
+processLLMResponse?(
+  args: ProcessLLMResponseArgs,
+): Promise<ProcessLLMResponseResult> | ProcessLLMResponseResult;
+```
+
+#### `ProcessLLMResponseArgs`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'chunks',
+    type: 'CachedLLMStepChunk[]',
+    description:
+      'Chunks produced by the LLM call (or replayed from cache) for this step, in stripped form (`{ type, payload }`).',
+    isOptional: false,
+  },
+  {
+    name: 'model',
+    type: 'MastraLanguageModel',
+    description: 'The model that produced (or would have produced) the response.',
+    isOptional: false,
+  },
+  {
+    name: 'stepNumber',
+    type: 'number',
+    description: 'Current step number (0-indexed).',
+    isOptional: false,
+  },
+  {
+    name: 'steps',
+    type: 'StepResult[]',
+    description: 'All completed steps so far, including this step.',
+    isOptional: false,
+  },
+  {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    description:
+      'Per-processor state shared with `processLLMRequest` for the same step. Use this to pass data between the two hooks (e.g. a cache key).',
+    isOptional: false,
+  },
+  {
+    name: 'fromCache',
+    type: 'boolean',
+    description:
+      'When `true`, the response was replayed from a cache via `processLLMRequest` returning `{ response }`. Processors that write to a cache should skip writes when this is `true`.',
+    isOptional: false,
+  },
+  {
+    name: 'warnings',
+    type: 'LanguageModelV2CallWarning[]',
+    description: 'Warnings reported by the language model call (e.g. unsupported settings).',
+    isOptional: true,
+  },
+  {
+    name: 'request',
+    type: 'unknown',
+    description: 'Provider request body, when available. Useful for tracing.',
+    isOptional: true,
+  },
+  {
+    name: 'rawResponse',
+    type: 'unknown',
+    description: 'Raw provider response, when available. Useful for tracing.',
+    isOptional: true,
+  },
+  {
+    name: 'abort',
+    type: '(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never',
+    description: 'Function to abort processing. Throws a TripWire error that stops execution.',
+    isOptional: false,
+  },
+  {
+    name: 'retryCount',
+    type: 'number',
+    description: 'Current retry attempt count. Starts at `0`; use to cap processor-triggered retries.',
+    isOptional: false,
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'Request-scoped context with execution metadata.',
+    isOptional: true,
+  },
+  {
+    name: 'tracingContext',
+    type: 'TracingContext',
+    description: 'Tracing context for observability.',
+    isOptional: true,
+  },
+  {
+    name: 'writer',
+    type: 'ProcessorStreamWriter',
+    description: 'Stream writer for emitting custom data chunks.',
+    isOptional: true,
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    description: 'Signal for cancelling the operation.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### Return value
+
+`processLLMResponse` returns `ProcessLLMResponseResult`, which is `undefined | void`. The return value is reserved for future extensibility.
+
+#### Use cases
+
+- Writing LLM responses to a cache after a live call (paired with cache-key derivation in `processLLMRequest`)
+- Logging or recording the full response for analytics
+- Triggering side effects based on the completed response
 
 ---
 
@@ -1098,8 +1237,14 @@ export class QualityGuardrail implements Processor {
 Mastra provides type aliases to ensure processors implement the required methods:
 
 ```typescript
-// Must implement processInput OR processInputStep (or both)
-type InputProcessor = Processor & ({ processInput: required } | { processInputStep: required })
+// Must implement processInput, processInputStep, processLLMRequest, or processLLMResponse (or any combination)
+type InputProcessor = Processor &
+  (
+    | { processInput: required }
+    | { processInputStep: required }
+    | { processLLMRequest: required }
+    | { processLLMResponse: required }
+  )
 
 // Must implement processOutputStream, processOutputStep, OR processOutputResult (or any combination)
 type OutputProcessor = Processor &
@@ -1166,12 +1311,12 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-5-mini' }
+      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
     }
 
     // Switch to powerful model after tool calls
     if (steps.length > 0 && steps[steps.length - 1].toolCalls?.length) {
-      return { model: 'openai/gpt-5.4' }
+      return { model: '__GATEWAY_OPENAI_MODEL__' }
     }
 
     // Disable tools after 5 steps to force completion
@@ -1283,11 +1428,11 @@ export class WordCounter implements Processor {
 
 ## State lifecycle
 
-Every processor receives a `state` object in `processOutputStream`, `processOutputStep`, `processOutputResult`, and `processAPIError`. State has three important properties:
+Every processor receives a `state` object in `processLLMRequest`, `processLLMResponse`, `processOutputStream`, `processOutputStep`, `processOutputResult`, and `processAPIError`. State has three important properties:
 
 - **Per-processor**: Each processor gets its own `state` object, keyed by the processor's `id`. Two processors with different ids cannot read or overwrite each other's state.
 - **Per-request**: A fresh state object is created at the start of every `agent.generate()` or `agent.stream()` call. State does not leak between requests or between users.
-- **Shared across methods**: Within one request, the same `state` object is passed to `processOutputStream` (for every chunk), `processOutputStep` (after every LLM step), `processOutputResult` (once at the end), and `processAPIError` (when an LLM call fails). Accumulate data in `processOutputStream` and read it in `processOutputResult` or `processAPIError`.
+- **Shared across methods**: Within one request, the same `state` object is passed to `processLLMRequest` (before the provider call), `processLLMResponse` (after the step completes), `processOutputStream` (for every chunk), `processOutputStep` (after every LLM step), `processOutputResult` (once at the end), and `processAPIError` (when an LLM call fails). For example, `processLLMRequest` can stash a cache key and `processLLMResponse` can read it back to write the response.
 
 Initialize fields defensively on first access, because `state` starts as an empty object:
 
@@ -1379,7 +1524,7 @@ import { PrefillErrorHandler } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'support-agent',
-  model: 'openai/gpt-5',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: '...',
   inputProcessors: [new ContentFilter(['secret'])],
   outputProcessors: [new WordCounter()],

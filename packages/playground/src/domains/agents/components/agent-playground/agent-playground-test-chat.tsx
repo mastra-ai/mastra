@@ -6,7 +6,8 @@ import { useFormState } from 'react-hook-form';
 
 import { AgentSettingsProvider } from '../../context/agent-context';
 import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { BrowserSessionProvider } from '../../context/browser-session-context';
+import { BrowserSessionProvider } from '../../context/browser-session-provider';
+import { useAgent } from '../../hooks/use-agent';
 import { AgentChat } from '../agent-chat';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
@@ -23,8 +24,14 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
   const { isDirty } = useFormState({ control: ctx.form.control });
   const handleSaveDraft = ctx.handleSaveDraft;
   const isSavingDraft = ctx.isSavingDraft ?? false;
+  const isCodeSource = ctx.isCodeSourceAgent ?? false;
 
   if (!isDirty) return null;
+
+  const saveLabel = isCodeSource ? 'Save to filesystem' : 'Save draft';
+  const message = isCodeSource
+    ? 'You have unsaved changes to the agent configuration. Save to filesystem to ensure the chat uses your latest changes.'
+    : 'You have unsaved changes to the agent configuration. Save your draft to ensure the chat uses your latest changes.';
 
   return (
     <Notice
@@ -35,15 +42,12 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
         handleSaveDraft && (
           <Button type="button" variant="default" size="sm" onClick={() => handleSaveDraft()} disabled={isSavingDraft}>
             <Save className="h-3.5 w-3.5" />
-            {isSavingDraft ? 'Saving...' : 'Save draft'}
+            {isSavingDraft ? 'Saving...' : saveLabel}
           </Button>
         )
       }
     >
-      <Notice.Message>
-        You have unsaved changes to the agent configuration. Save your draft to ensure the chat uses your latest
-        changes.
-      </Notice.Message>
+      <Notice.Message>{message}</Notice.Message>
     </Notice>
   );
 }
@@ -62,10 +66,11 @@ export function AgentPlaygroundTestChat({
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   const editFormCtx = useOptionalAgentEditFormContext();
+  const { data: agent } = useAgent(agentId);
 
   return (
     <AgentSettingsProvider agentId={agentId} defaultSettings={{ modelSettings: {} }}>
-      <BrowserSessionProvider agentId={agentId} threadId={testThreadId}>
+      <BrowserSessionProvider agentId={agentId} threadId={testThreadId} enabled={Boolean(agent?.browserTools?.length)}>
         <DatasetSaveProvider
           enabled
           threadId={testThreadId}

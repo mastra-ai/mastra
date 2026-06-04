@@ -1,11 +1,11 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import type { MastraUIMessage } from '@mastra/react';
-import { resolveToChildMessages } from '@mastra/react';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';
 import { LoadingBadge } from './loading-badge';
+import { resolveToChildMessages } from './resolve-child-messages';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 interface SubAgentToolResult {
   toolName: string;
@@ -16,14 +16,14 @@ interface SubAgentToolResult {
 
 interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   agentId: string;
-  result: {
+  result?: {
     childMessages?: AgentMessage[];
     subAgentResourceId?: string;
     subAgentThreadId?: string;
     subAgentToolResults?: SubAgentToolResult[];
     text?: string;
   };
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
@@ -41,8 +41,11 @@ export const AgentBadgeWrapper = ({
   toolCalled,
   isComplete,
 }: AgentBadgeWrapperProps) => {
+  const shouldFetchAgentMessages = Boolean(
+    result?.subAgentThreadId && !result.text && !result.subAgentToolResults?.length,
+  );
   const { data, isLoading } = useAgentMessages({
-    threadId: result?.subAgentThreadId,
+    threadId: shouldFetchAgentMessages ? result?.subAgentThreadId : undefined,
     agentId,
     memory: true,
   });
@@ -51,7 +54,7 @@ export const AgentBadgeWrapper = ({
     return <LoadingBadge />;
   }
 
-  const convertedMessages = data?.messages ? (toAISdkV5Messages(data.messages) as MastraUIMessage[]) : [];
+  const convertedMessages = data?.messages ? toAISdkV5Messages(data.messages) : [];
 
   // Build child messages from available sources:
   // 1. childMessages (built during live streaming by toUIMessageFromAgent)
@@ -73,14 +76,21 @@ export const AgentBadgeWrapper = ({
     childMessages = toolMessages;
   }
 
+  if (!childMessages && result?.text) {
+    childMessages = [{ type: 'text' as const, content: result.text }];
+  }
+
   if (!childMessages) {
     childMessages = resolveToChildMessages(convertedMessages) as AgentMessage[];
   }
+
+  const hasStreamingChildMessages = Boolean(result && Object.prototype.hasOwnProperty.call(result, 'childMessages'));
 
   return (
     <AgentBadge
       agentId={agentId}
       messages={childMessages ?? []}
+      keepOpenForStreamingChildMessages={hasStreamingChildMessages}
       metadata={metadata}
       toolCallId={toolCallId}
       toolApprovalMetadata={toolApprovalMetadata}

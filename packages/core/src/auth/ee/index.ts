@@ -22,11 +22,23 @@ export {
   isFeatureEnabled,
   isDevEnvironment,
   isEEEnabled,
+  clearLicenseCache,
   type LicenseInfo,
 } from './license';
 
 // FGA check utility
-export { checkFGA, FGADeniedError, type CheckFGAOptions } from './fga-check';
+export {
+  checkFGA,
+  requireFGA,
+  FGADeniedError,
+  getAgentFGAResourceId,
+  getWorkflowFGAResourceId,
+  getStandaloneToolFGAResourceId,
+  getAgentToolFGAResourceId,
+  getMCPToolFGAResourceId,
+  type CheckFGAOptions,
+  type RequireFGAOptions,
+} from './fga-check';
 
 // Default implementations
 export * from './defaults';

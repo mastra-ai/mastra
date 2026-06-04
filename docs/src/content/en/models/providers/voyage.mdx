@@ -70,16 +70,6 @@ const memory = new Memory({
 });
 ```
 
-### With ModelRouter
-
-```typescript
-import { ModelRouterEmbeddingModel } from '@mastra/core';
-
-// Use string format for model selection
-const embedder = new ModelRouterEmbeddingModel('voyage/voyage-3.5');
-const result = await embedder.doEmbed({ values: ['Hello'] });
-```
-
 ## Embedding Models
 
 | Model | Use Case | Dimensions | Batch Tokens |

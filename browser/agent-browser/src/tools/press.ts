@@ -8,7 +8,8 @@ import { BROWSER_TOOLS } from './constants';
 export function createPressTool(browser: AgentBrowser) {
   return createTool({
     id: BROWSER_TOOLS.PRESS,
-    description: 'Press a keyboard key (e.g., Enter, Tab, Escape, Control+a).',
+    description:
+      'Press a keyboard key (e.g., Enter, Tab, Escape, Control+a). Pass waitUntil when the keypress triggers navigation (e.g., Enter to submit a form) so the page settles before the next snapshot.',
     inputSchema: pressInputSchema,
     execute: async (input, { agent }) => {
       const threadId = agent?.threadId;

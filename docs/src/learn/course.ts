@@ -287,7 +287,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
     // Module 5: Production
     {
       slug: 'deploy-to-mastra-platform',
-      title: 'Deploy to Mastra Platform',
+      title: 'Deploy to Mastra platform',
       durationMin: 4,
       youtubeId: 'O1FnS_qrsPs',
       status: 'published',

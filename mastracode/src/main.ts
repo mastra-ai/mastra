@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs';
 
+import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, headlessMain } from './headless.js';
 import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
@@ -20,6 +21,8 @@ let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
+let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
+let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
@@ -34,30 +37,25 @@ process.on('unhandledRejection', reason => {
 });
 
 async function tuiMain(pipedInput?: string | null) {
-  // Load browser from settings (before creating harness)
   const settings = loadSettings();
-  const browser = await createBrowserFromSettings(settings.browser);
+  let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
+  const loadBrowser = () => {
+    browserPromise ??= createBrowserFromSettings(settings.browser);
+    return browserPromise;
+  };
 
-  const result = await createMastraCode({ browser });
+  const result = await createMastraCode({ unixSocketPubSub: true });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
-
-  // Track the initial browser settings in harness state for config drift detection
-  if (browser) {
-    harness.setState({ activeBrowserSettings: settings.browser } as any);
-  }
+  signalsPubSub = result.signalsPubSub;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
   }
   if (result.observabilityWarning) {
     console.info(`⚠ ${result.observabilityWarning}`);
-  }
-
-  if (browser) {
-    console.info(`Browser: ${settings.browser.provider} (${settings.browser.headless ? 'headless' : 'visible'})`);
   }
 
   // MCP connection is deferred to TUI.init() (after ui.start()) so that
@@ -86,25 +84,52 @@ async function tuiMain(pipedInput?: string | null) {
   }
   applyThemeMode(themeMode, detectedBgHex);
 
+  analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
+  analytics.capture('mastracode_session_started', {
+    mode: harness.getCurrentModeId(),
+    resourceId: harness.getResourceId(),
+    hasAuthStorage: Boolean(authStorage),
+    hasMcp: Boolean(mcpManager),
+    theme: themeMode,
+  });
+
   const tui = new MastraTUI({
     harness,
     hookManager,
+    analytics,
     authStorage,
     mcpManager,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    githubSignals: result.githubSignals,
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
-
   tui.run().catch(error => {
     handleFatalError(error);
   });
+
+  if (settings.browser.enabled) {
+    void loadBrowser()
+      .then(browser => {
+        if (!browser) return;
+        harness.setBrowser(browser);
+        void harness.setState({ activeBrowserSettings: settings.browser } as any).catch(() => {});
+      })
+      .catch(() => {});
+  }
 }
 
 const asyncCleanup = async () => {
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
+  const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+  await Promise.allSettled([
+    mcpManager?.disconnect(),
+    harness?.getMastra()?.stopWorkers(),
+    harness?.stopHeartbeats(),
+    closeSignalsPubSub?.(),
+    analytics?.shutdown(),
+  ]);
 };
 
 process.on('beforeExit', () => {
@@ -176,7 +201,8 @@ async function main() {
 
     // Always reopen a real TTY — even if the pipe was empty, the original
     // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
-    if (!reopenStdinFromTTY()) {
+    const reopenedStdin = reopenStdinFromTTY();
+    if (!reopenedStdin) {
       process.stderr.write('No TTY available — falling back to headless mode.\n');
       return headlessMain(pipedInput);
     }
