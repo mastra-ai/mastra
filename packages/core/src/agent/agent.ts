@@ -788,7 +788,11 @@ export class Agent<
     if (!workspace) return [];
 
     // Skip if workspace has no filesystem or sandbox (nothing to describe)
-    if (!workspace.filesystem && !workspace.sandbox) return [];
+    const hasFilesystemConfig =
+      typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
+    const hasSandboxConfig =
+      typeof workspace.hasSandboxConfig === 'function' ? workspace.hasSandboxConfig() : !!workspace.sandbox;
+    if (!hasFilesystemConfig && !hasSandboxConfig) return [];
 
     // Check for existing processor to avoid duplicates
     const hasProcessor = configuredProcessors.some(
@@ -7376,9 +7380,30 @@ export class Agent<
       resourceId: string;
       toolCallId?: string;
       approved: boolean;
+      messages?: MessageListInput;
+      streamOptions?: AgentExecutionOptions<OUTPUT>;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, approved, ...executionOptions } = options;
+    const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
+
+    if (messages && approved) {
+      const continuation = agentThreadStreamRuntime.continueWithMessages(
+        this as Agent<any, any, any, any>,
+        messages,
+        {
+          resourceId,
+          threadId,
+          runId: executionOptions.runId,
+          streamOptions: deepMerge(
+            (streamOptions ?? {}) as Record<string, unknown>,
+            executionOptions as Record<string, unknown>,
+          ) as unknown as AgentExecutionOptions<OUTPUT>,
+        },
+        this.getPubSub(),
+      );
+      return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
+    }
+
     const runId = this.getActiveThreadRunId({ threadId, resourceId });
     if (!runId) {
       throw new MastraError({

@@ -4,7 +4,14 @@ import { GITHUB_SIGNALS_METADATA_KEY } from '../../github-signals/index.js';
 import type { GithubPRSignalInput } from '../../github-signals/index.js';
 import { loadSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
+import type { TUIState } from '../state.js';
 import type { SlashCommandContext } from './types.js';
+
+/** Minimal context shared by both SlashCommandContext and EventHandlerContext. */
+interface GithubContext {
+  state: TUIState;
+  showInfo: (message: string) => void;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -41,12 +48,12 @@ function parseGithubPRReference(input: string): GithubPRSignalInput | undefined 
   return undefined;
 }
 
-async function getCurrentGithubThread(ctx: SlashCommandContext): Promise<{
+async function getCurrentGithubThread(ctx: GithubContext): Promise<{
   threadId?: string;
   resourceId?: string;
   metadata?: Record<string, unknown>;
 }> {
-  const harness = ctx.harness as unknown as {
+  const harness = ctx.state.harness as unknown as {
     getCurrentThreadId?: () => string | undefined;
     getResourceId?: () => string | undefined;
     listThreads?: (input?: {
@@ -145,7 +152,7 @@ async function syncGithubSubscriptions(ctx: SlashCommandContext): Promise<void> 
   }
 }
 
-async function detectCurrentPullRequest(ctx: SlashCommandContext): Promise<string> {
+async function detectCurrentPullRequest(ctx: GithubContext): Promise<string> {
   return new Promise(resolve => {
     execFile(
       'gh',
@@ -156,6 +163,33 @@ async function detectCurrentPullRequest(ctx: SlashCommandContext): Promise<strin
       },
     );
   });
+}
+
+/**
+ * Auto-subscribe the current thread to the PR for the current git branch.
+ * Checks whether GitHub Signals are enabled and detects the branch's open PR
+ * via `gh pr view`. Runs silently — errors are swallowed so the calling code
+ * is never disrupted.
+ */
+export async function tryAutoSubscribeToBranchPR(ctx: GithubContext): Promise<void> {
+  if (!loadSettings().signals.experimentalGithubSignals) return;
+
+  const githubSignalsProcessor = ctx.state.options?.githubSignals;
+  if (!githubSignalsProcessor?.subscribeThreadToPR) return;
+
+  const { threadId, resourceId } = await getCurrentGithubThread(ctx);
+  if (!threadId || !resourceId) return;
+
+  const currentPR = await detectCurrentPullRequest(ctx);
+  const pr = currentPR ? parseGithubPRReference(currentPR) : undefined;
+  if (!pr) return;
+
+  try {
+    const result = await githubSignalsProcessor.subscribeThreadToPR({ threadId, resourceId, pr });
+    ctx.showInfo(`Auto-subscribed to ${result.owner}/${result.repo}#${result.number} via GitHub Signals.`);
+  } catch {
+    // Silent — don't disrupt the calling command.
+  }
 }
 
 export async function handleGithubCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
