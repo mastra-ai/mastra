@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13512 (row 66) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13526 (`85b54c0a4f`, edit tool path resolution), then #13557 (`15f4da196c`, persisted approved plans).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13557 (row 68) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13560 (`3b56d782fa`, non-fatal ERR_STREAM_DESTROYED), then #13563 (`9311c17d7a`, Codex OM/stream compatibility).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 67: PR #13526 (edit tool path resolution), then row 68: PR #13557 (persist approved plans to disk).
+1. Continue at `_pr-queue.md` row 69: PR #13560 (non-fatal `ERR_STREAM_DESTROYED`), then row 70: PR #13563 (Codex OM/stream compatibility).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -121,3 +121,8 @@ None known.
 - `gh pr view 13455 --json number,title,body,author,mergedAt,url,files,commits` and `git show 6302b3ae7c -- mastracode` verified the version-package skip.
 - `gh pr view 13519 --json number,title,body,author,mergedAt,url,files,commits`, current core Harness/workflow source, and approval resume tests verified standalone/storage-backed tool approval resume. Updated Harness API and tools cards.
 - `gh pr view 13525 --json number,title,body,author,mergedAt,url,files,commits`, docs redirects, Harness reference sidebar, and `mastracode/README.md` verified the main-site docs move and Alpha badge. Updated Harness API docs card.
+- `gh pr view 13530 --json number,title,body,author,mergedAt,url,files,commits`, current `docs/src/mastra-code/`, and missing `mastracode/docs/` verified the docs-location follow-up. Updated model/settings docs only where #13512 changed behavior.
+- `gh pr view 13512 --json number,title,body,author,mergedAt,url,files,commits`, current `models-pack.ts`, settings/model selector source, and model-pack/settings tests verified unified `/models` pack flow. Updated model/settings cards.
+- `gh pr view 13526 --json number,title,body,author,mergedAt,url,files,commits`, current core workspace filesystem/tools source, and path-containment tests verified edit tool path resolution semantics. Updated tools card.
+- `gh pr view 13557 --json number,title,body,author,mergedAt,url,files,commits`, current plan approval handler, `utils/plans.ts`, README/docs, and save-plan tests verified best-effort approved-plan persistence. Updated plan-approval card.
+- Focused verification for #13526/#13557 passed: core local-filesystem/edit-file tests (2 files / 131 tests) and Mastra Code save-plan test (1 file / 6 tests). An accidental Mastra Code full-suite invocation reproduced the known 5-file baseline failures.

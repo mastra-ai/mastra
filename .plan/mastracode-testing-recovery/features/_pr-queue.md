@@ -86,9 +86,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 64 | 2026-02-26 | #13525 | `439dd1a1c9` | review | done | chore(docs): Move Mastra Code docs, add Alpha notice to Harness (#13525) | 6 |
 | 65 | 2026-02-26 | #13530 | `0533de8a34` | review | done | chore(docs): Move mastra-code docs (#13530) | 6 |
 | 66 | 2026-02-26 | #13512 | `191e5bd29b` | review | done | fix: unify /models pack flow and improve custom pack editing UX (#13512) | 17 |
-| 67 | 2026-02-26 | #13526 | `85b54c0a4f` | review | current | fix(mastracode): resolve edit tool paths like execute_command (#13526) | 7 |
-| 68 | 2026-02-26 | #13557 | `15f4da196c` | review | | feat(plans): persist approved plans to disk (#13401) (#13557) | 4 |
-| 69 | 2026-02-26 | #13560 | `3b56d782fa` | review | | fix: handle ERR_STREAM_DESTROYED as non-fatal in global error handlers (#13560) | 3 |
+| 67 | 2026-02-26 | #13526 | `85b54c0a4f` | review | done | fix(mastracode): resolve edit tool paths like execute_command (#13526) | 7 |
+| 68 | 2026-02-26 | #13557 | `15f4da196c` | review | done | feat(plans): persist approved plans to disk (#13401) (#13557) | 4 |
+| 69 | 2026-02-26 | #13560 | `3b56d782fa` | review | current | fix: handle ERR_STREAM_DESTROYED as non-fatal in global error handlers (#13560) | 3 |
 | 70 | 2026-02-26 | #13563 | `9311c17d7a` | review | | fix: make Codex models work with OM and mastracode streams (#13563) | 4 |
 | 71 | 2026-02-27 | #13564 | `675a6d717f` | review | | fix(mastracode): wire extraTools into tool builder and filter denied tools (#13564) | 5 |
 | 72 | 2026-02-27 | #13566 | `dd32e1e7a2` | review | | fix(mastracode): detect API keys for all registry providers in setup flow (#13566) | 5 |

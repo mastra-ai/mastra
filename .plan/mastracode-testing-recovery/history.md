@@ -668,3 +668,25 @@ Verification:
 - Current tests checked: `mastracode/src/tui/commands/__tests__/models-pack.test.ts` and `mastracode/src/onboarding/__tests__/settings.test.ts`.
 
 Next queue checkpoint: PR #13526 (edit tool path resolution), then PR #13557 (persist approved plans to disk).
+
+
+### Feature map PR #13526 and #13557
+
+Processed PR [#13526](https://github.com/mastra-ai/mastra/pull/13526), `85b54c0a4f` (`fix(mastracode): resolve edit tool paths like execute_command`). Verified the original Mastra Code-local edit tools were later replaced by core workspace tools, and current behavior is owned by `LocalFilesystem` / workspace tool wrappers: absolute paths inside the base path are allowed, absolute paths outside are blocked, and absolute-looking project paths such as `/src/app.ts` get a concrete relative-path hint only when that hint is safe.
+
+Processed PR [#13557](https://github.com/mastra-ai/mastra/pull/13557), `15f4da196c` (`feat(plans): persist approved plans to disk`). Verified `handlePlanApproval()` saves approved plans best-effort through `savePlanToDisk()` before resolving approval; files are written as timestamped Markdown under app data `plans/<resourceId>/` or `MASTRA_PLANS_DIR`, with slug fallback to `untitled`.
+
+Documentation actions:
+
+- Updated `features/tools/coding-tools-permissions.md` with #13526 path-resolution ownership, current core workspace key files/tests, and path-semantics risk.
+- Updated `features/goals/plan-approval.md` with #13557 approved-plan file persistence behavior, state ownership, key files, tests, and risk.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13526 done, #13557 done, #13560 current.
+
+Verification:
+
+- Current source checked: `packages/core/src/workspace/filesystem/local-filesystem.ts`, `packages/core/src/workspace/filesystem/local-filesystem.test.ts`, `packages/core/src/workspace/tools/edit-file.ts`, `packages/core/src/workspace/tools/ast-edit.ts`, `packages/core/src/workspace/tools/tools.ts`, `mastracode/src/tui/handlers/prompts.ts`, `mastracode/src/utils/plans.ts`, `mastracode/src/utils/__tests__/save-plan.test.ts`, and plan-persistence docs in `mastracode/README.md` / `docs/src/mastra-code`.
+- PR metadata checked with `gh pr view 13526 --json number,title,body,author,mergedAt,url,files,commits` and `gh pr view 13557 --json number,title,body,author,mergedAt,url,files,commits`.
+- Focused tests passed: `pnpm --filter ./packages/core test -- --run src/workspace/filesystem/local-filesystem.test.ts src/workspace/tools/__tests__/edit-file.test.ts --reporter=dot --bail 1` (2 files / 131 tests) and `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/save-plan.test.ts --reporter=dot --bail 1` (1 file / 6 tests).
+- Accidental `pnpm --filter ./mastracode test -- --run src/utils/__tests__/save-plan.test.ts --reporter=dot --bail 1` expanded to the full package suite and reproduced the known 5 failing files / 6 failing tests baseline.
+
+Next queue checkpoint: PR #13560 (non-fatal `ERR_STREAM_DESTROYED`), then PR #13563 (Codex OM/stream compatibility).

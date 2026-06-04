@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — coding tools, approvals, permissions, YOLO, hooks, MCP tool merge.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior; [#13348](https://github.com/mastra-ai/mastra/pull/13348) — capped file/search/web tool result output around 2k tokens; [#13355](https://github.com/mastra-ai/mastra/pull/13355) — allowed the old unified `view` tool's `view_range` to paginate directory listings; [#13385](https://github.com/mastra-ai/mastra/pull/13385) — fixed TS/JS LSP language IDs; [#13384](https://github.com/mastra-ai/mastra/pull/13384) — fixed hidden-file exclusion for the old directory-listing implementation; [#13428](https://github.com/mastra-ai/mastra/pull/13428) — fixed `view` rendering for core workspace `read_file` output; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — completed live TUI lifecycle hook wiring for `Stop` and `UserPromptSubmit`; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — fixed persisted approval resume for standalone/storage-backed agents; current core tools now own file/list/LSP behavior.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior; [#13348](https://github.com/mastra-ai/mastra/pull/13348) — capped file/search/web tool result output around 2k tokens; [#13355](https://github.com/mastra-ai/mastra/pull/13355) — allowed the old unified `view` tool's `view_range` to paginate directory listings; [#13385](https://github.com/mastra-ai/mastra/pull/13385) — fixed TS/JS LSP language IDs; [#13384](https://github.com/mastra-ai/mastra/pull/13384) — fixed hidden-file exclusion for the old directory-listing implementation; [#13428](https://github.com/mastra-ai/mastra/pull/13428) — fixed `view` rendering for core workspace `read_file` output; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — completed live TUI lifecycle hook wiring for `Stop` and `UserPromptSubmit`; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — fixed persisted approval resume for standalone/storage-backed agents; [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit-tool path resolution with command execution/project root semantics; current core tools now own file/list/LSP behavior.
 
 ## User-visible behavior
 
@@ -50,6 +50,7 @@
 | View output rendering | TUI `ToolExecutionComponentEnhanced` | Live tool UI and history-rendered tool calls |
 | Hidden-file visibility | `list_files.showHidden` + tree formatter filter | Directory listings |
 | LSP language IDs | Core workspace LSP `getLanguageId()` mapping | `lsp_inspect`, edit diagnostics |
+| Edit tool path resolution | Workspace filesystem rooted at project base path | `string_replace_lsp`, `ast_smart_edit`, read-before-write tracking |
 | Tool hooks | `HookManager` + dynamic tool wrapper | `PreToolUse` / `PostToolUse` execution boundaries |
 | Approval resume snapshots | Core Harness internal Mastra + workflow storage | `approveToolCall()` / `declineToolCall()` / resumed streams |
 
@@ -65,6 +66,8 @@
 - `mastracode/src/tools/web-search.ts` — MC web-search/web-extract string formatting and 2k token truncation.
 - `packages/core/src/workspace/tools/output-helpers.ts` — core workspace output truncation default (`DEFAULT_MAX_OUTPUT_TOKENS = 2_000`).
 - `packages/core/src/workspace/tools/read-file.ts` — current file read tool with `offset` / `limit` line ranges.
+- `packages/core/src/workspace/tools/edit-file.ts`, `ast-edit.ts` — current edit tools (`string_replace_lsp`, `ast_smart_edit`).
+- `packages/core/src/workspace/filesystem/local-filesystem.ts` — project-root path containment and helpful absolute-path hints.
 - `mastracode/src/tui/components/tool-execution-enhanced.ts` — strips line-number/header formats and renders `view` output.
 - `packages/core/src/workspace/tools/list-files.ts` — current directory listing tool and `showHidden` input.
 - `packages/core/src/workspace/tools/tree-formatter.ts` — filters dotfiles/dot-directories unless `showHidden` is true.
@@ -94,7 +97,9 @@
 ## Existing tests
 
 - `packages/core/src/workspace/tools/__tests__/edit-file.test.ts` — current exact-string edit behavior.
+- `packages/core/src/workspace/filesystem/local-filesystem.test.ts` — absolute-path containment and relative-path hint behavior for project-root resolution.
 - `packages/core/src/workspace/tools/__tests__/lsp-inspect.test.ts` — current LSP inspect tool wrapper.
+- `mastracode/src/tools/__tests__/project-root-resolution.test.ts` — original #13526 regression coverage before the later core workspace-tools migration.
 - `mastracode/src/tools/__tests__/file-editor.test.ts` and `mastracode/src/lsp/__tests__/string-replace-lsp.test.ts` — legacy MC-owned paths from before core workspace migration.
 - `mastracode/src/__tests__/tool-approval-libsql.test.ts` — persisted approval flow.
 - `packages/core/src/agent/__tests__/tool-approval-standalone-repro.test.ts` — standalone approval/suspend resume regressions, including input processors and dynamically loaded tools.
@@ -129,6 +134,7 @@
 - The old `view_range` directory pagination no longer exists literally in current source; current `list_files` has no offset/limit pagination, so large-directory ergonomics rely on tree options and token caps unless future work reintroduces pagination.
 - Hidden-file behavior moved from shell `find` globs in the old MC-owned tools to core filesystem filtering; future filesystem providers must keep dotfile semantics consistent.
 - LSP support has both legacy MC-local and current core workspace mapping files; stale imports or tests can verify the wrong path if the active tool owner changes again.
+- Path semantics can drift between shell commands and edit tools; absolute-looking project paths such as `/src/app.ts` need helpful correction without treating real system paths as workspace-relative.
 - Approval resume can silently fail if snapshot persistence sees unserializable request-context values or if standalone agents are not attached to a Mastra instance with storage.
 
 ## Verification checklist

@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13416](https://github.com/mastra-ai/mastra/pull/13416) — fixed Plan mode so the agent calls `submit_plan` instead of only writing plan text.
-- Later changes: current source also supports `Use as /goal` from the plan approval UI; exact later PR still needs mapping in queue order.
+- Later changes: [#13557](https://github.com/mastra-ai/mastra/pull/13557) — persists approved plans as Markdown files on disk; current source also supports `Use as /goal` from the plan approval UI; exact later PR still needs mapping in queue order.
 
 ## User-visible behavior
 
 - What the user can do: ask for a plan in Plan mode, receive an inline rendered plan approval card, then approve, start as a goal, reject, or request changes.
 - Success looks like: the plan appears in the approval UI; approval switches/hands off to Build-mode execution; rejection keeps the agent in Plan mode with feedback.
-- Must preserve: `submit_plan` tool call requirement, inline plan rendering, approval/rejection resolver semantics, and single handoff signal after approval.
+- Must preserve: `submit_plan` tool call requirement, inline plan rendering, approval/rejection resolver semantics, best-effort plan file persistence, and single handoff signal after approval.
 
 ## Entry points / commands
 
@@ -29,7 +29,7 @@
 ## Streaming / loading / interrupted states
 
 - Streaming / loading: `tool_input_start` for `submit_plan` creates a streaming `PlanApprovalInlineComponent`; `tool_input_delta` updates title/plan as args stream; `plan_approval_required` activates the same component in place.
-- Abort / retry / resume: approving calls `respondToPlanApproval({ planId, response: { action: 'approved' } })`, waits for the Plan-mode run to settle, then sends one structured system-reminder signal for Build-mode execution.
+- Abort / retry / resume: approving saves the plan best-effort, calls `respondToPlanApproval({ planId, response: { action: 'approved' } })`, waits for the Plan-mode run to settle, then sends one structured system-reminder signal for Build-mode execution.
 
 ## Streaming vs loaded-from-history behavior
 
@@ -44,6 +44,7 @@
 | Pending plan approval | Core Harness resolver map + `plan_approval_required` event | TUI handler, display state |
 | Active plan approval UI | `TUIState.activeInlinePlanApproval` / `lastSubmitPlanComponent` | Input focus, chat renderer |
 | Approval result | Core Harness `respondToPlanApproval()` | Suspended `submit_plan` tool, persisted tool result |
+| Approved plan files | `savePlanToDisk()` + app data / `MASTRA_PLANS_DIR` | User archive/reference outside chat history |
 | Build/goal handoff | TUI prompt handler + goal manager | Harness signal / `/goal` flow |
 
 ## Key files
@@ -53,6 +54,7 @@
 - `packages/core/src/harness/tools.ts:128` — built-in `submit_plan` tool emits approval event and waits for resolver response.
 - `mastracode/src/tui/handlers/tool.ts:199` and `:300` — `submit_plan` uses `PlanApprovalInlineComponent` instead of a generic tool box.
 - `mastracode/src/tui/handlers/prompts.ts:266` — `handlePlanApproval()` wires approve / goal / reject actions.
+- `mastracode/src/utils/plans.ts` — `savePlanToDisk()` writes timestamped Markdown under app data or `MASTRA_PLANS_DIR`.
 - `mastracode/src/tui/components/plan-approval-inline.ts` — inline plan approval and persisted plan-result components.
 - `mastracode/src/tui/render-messages.ts:828` — history reconstruction renders `submit_plan` results as resolved plan cards.
 
@@ -68,12 +70,13 @@
 - `mastracode/src/agents/__tests__/prompts.test.ts` — Plan mode prompt includes `submit_plan` and goal-ready plan guidance.
 - `mastracode/src/tui/handlers/__tests__/prompts.test.ts` — approval sends one build handoff signal; goal option delegates to `/goal`; streamed component activates in place.
 - `mastracode/src/tui/components/__tests__/plan-approval-inline.test.ts` — inline plan card renders, goal option exists, feedback/requested-changes display works.
+- `mastracode/src/utils/__tests__/save-plan.test.ts` — approved plan file names/content, resource subdirectories, special-character titles, and timestamp non-overwrite behavior.
 - `packages/core/src/harness/display-state.test.ts` — `pendingPlanApproval` display state is set/cleared by plan approval events.
 - `packages/core/src/harness/mode-model-persistence.test.ts` — `respondToPlanApproval()` resolves plan approvals without aborting the resolver signal prematurely.
 
 ## Missing tests
 
-- Full Plan-mode run where model streams `submit_plan` args, user approves, Build mode starts, and persisted history reloads as a resolved plan card.
+- Full Plan-mode run where model streams `submit_plan` args, user approves, Build mode starts, plan file is persisted, and persisted history reloads as a resolved plan card.
 - Headless/non-TUI behavior for `submit_plan` approval fallback and resolver absence.
 - Regression test that denied `submit_plan` removes Plan-mode tool guidance and prevents accidental text-only plan completion.
 - Mapping test for the later PR that added `Use as /goal` to plan approval UI.
@@ -84,6 +87,7 @@
 - Live plan card and loaded-from-history plan result use different components; status parsing from tool result text can drift.
 - Approval handoff must send exactly one system-reminder signal; duplicate `addUserMessage` / `fireMessage` paths previously risked duplicate execution triggers.
 - Goal handoff is current behavior but the exact origin PR is not mapped yet.
+- Plan-file persistence is best-effort by design; a write failure should be visible enough for debugging without blocking approval/build handoff.
 
 ## Verification checklist
 
