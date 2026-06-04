@@ -60,7 +60,10 @@ export class WorkspaceInstructionsProcessor implements Processor<'workspace-inst
   }
 
   async processInputStep({ messageList, requestContext }: ProcessInputStepArgs) {
-    const instructions = this._workspace.getInstructions({ requestContext });
+    const instructions =
+      typeof this._workspace.getInstructionsAsync === 'function'
+        ? await this._workspace.getInstructionsAsync({ requestContext })
+        : this._workspace.getInstructions({ requestContext });
     if (instructions) {
       messageList.addSystem({ role: 'system', content: instructions });
     }
