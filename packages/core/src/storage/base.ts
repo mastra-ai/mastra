@@ -239,6 +239,7 @@ export interface MastraCompositeStoreConfig {
  */
 export interface StorageMastraRef {
   getAgentById?: (id: string) => { source?: string; __getEditorConfig?: () => unknown } | undefined;
+  listAgents?: () => Record<string, { id: string; source?: string; __getEditorConfig?: () => unknown }> | undefined;
   getEditor?: () => { getSource?: () => 'code' | 'db' | undefined } | undefined;
 }
 
