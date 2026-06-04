@@ -63,6 +63,7 @@ export type GetAgents_Response = {
     provider?: string | undefined;
     modelId?: string | undefined;
     modelVersion?: string | undefined;
+    supportsMemory?: boolean | undefined;
     modelList?:
       | {
           model: {
@@ -269,6 +270,7 @@ export type GetAgentsAgentId_Response = {
   provider?: string | undefined;
   modelId?: string | undefined;
   modelVersion?: string | undefined;
+  supportsMemory?: boolean | undefined;
   modelList?:
     | {
         model: {

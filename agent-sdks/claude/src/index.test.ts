@@ -154,6 +154,10 @@ describe('ClaudeSDKAgent', () => {
     });
 
     expect(result.text).toBe('generated text');
+    expect(result.response.uiMessages[0]?.parts[0]).toMatchObject({
+      type: 'text',
+      text: 'generated text',
+    });
     expect(result.runId).toBe('mastra-run');
     expect(result.usage.inputTokens).toBe(15);
     expect(result.usage.outputTokens).toBe(4);

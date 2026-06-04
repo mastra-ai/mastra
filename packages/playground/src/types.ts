@@ -80,6 +80,7 @@ export interface ChatProps {
   agentName?: string;
   modelVersion?: string;
   agentVersionId?: string;
+  supportsMemory?: boolean;
   threadId: string;
   initialMessages?: MastraDBMessage[];
   refreshThreadList?: () => void;

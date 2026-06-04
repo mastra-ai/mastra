@@ -478,6 +478,7 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
+  supportsMemory?: boolean;
   modelList:
     | Array<{
         id: string;

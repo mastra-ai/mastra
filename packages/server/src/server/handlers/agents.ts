@@ -259,6 +259,7 @@ export interface SerializedAgent {
   provider?: string;
   modelId?: string;
   modelVersion?: string;
+  supportsMemory?: boolean;
   modelList?: Array<
     Omit<AgentModelManagerConfig, 'model'> & {
       model: {
@@ -662,6 +663,10 @@ async function formatAgentList({
   }
 
   const model = llm?.getModel();
+  const supportsMemory =
+    typeof (agent as Agent & { supportsMemory?: () => boolean }).supportsMemory === 'function'
+      ? (agent as Agent & { supportsMemory: () => boolean }).supportsMemory()
+      : true;
 
   let models: Awaited<ReturnType<Agent['getModelList']>> | undefined;
   try {
@@ -709,6 +714,7 @@ async function formatAgentList({
         : llm?.getProvider(),
     modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
+    supportsMemory,
     defaultOptions,
     modelList,
     defaultGenerateOptionsLegacy,
@@ -908,6 +914,10 @@ async function formatAgent({
   const defaultOptions = await agent.getDefaultOptions({ requestContext });
 
   const model = llm?.getModel();
+  const supportsMemory =
+    typeof (agent as Agent & { supportsMemory?: () => boolean }).supportsMemory === 'function'
+      ? (agent as Agent & { supportsMemory: () => boolean }).supportsMemory()
+      : true;
   const models = await agent.getModelList(requestContext);
   const modelList = models?.map(md => ({
     ...md,
@@ -978,6 +988,7 @@ async function formatAgent({
         : llm?.getProvider(),
     modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
+    supportsMemory,
     modelList,
     defaultOptions,
     defaultGenerateOptionsLegacy,
