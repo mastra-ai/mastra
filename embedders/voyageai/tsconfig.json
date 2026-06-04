@@ -3,6 +3,7 @@
   "include": ["src", "tsup.config.ts"],
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "types": ["node"]
   }
 }
