@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13227](https://github.com/mastra-ai/mastra/pull/13227) — extracted built-in Explore, Plan, and Execute subagents plus dynamic workspace support.
-- Later changes: [#13331](https://github.com/mastra-ai/mastra/pull/13331) added an intended `audit-tests` subagent; [#13339](https://github.com/mastra-ai/mastra/pull/13339) added parallel-only subagent guidance and an audit-tests exception; current registration/help-text gaps are tracked separately.
+- Later changes: [#13331](https://github.com/mastra-ai/mastra/pull/13331) added an intended `audit-tests` subagent; [#13339](https://github.com/mastra-ai/mastra/pull/13339) added parallel-only subagent guidance and an audit-tests exception; [#13556](https://github.com/mastra-ai/mastra/pull/13556) made completed subagent output quiet-mode-sensitive; current registration/help-text gaps are tracked separately.
 
 ## User-visible behavior
 
@@ -43,7 +43,7 @@
 | Subagent definitions | Harness config from `createMastraCode()` | `subagent` tool, `/subagents` |
 | Read/write boundaries | Subagent `allowedWorkspaceTools` / instructions | Runtime tool availability |
 | Subagent model override | Harness state + settings | `/subagents`, runtime context |
-| Rendered progress | Harness events/history | TUI subagent component |
+| Rendered progress | Harness events/history + `TUIState.quietMode` | TUI subagent component |
 | Usage guidance | Base prompt + tool guidance prompt section | Parent agent behavior |
 
 ## Key files
@@ -63,12 +63,13 @@
 - [Coding tools and approval permissions](../tools/coding-tools-permissions.md) — subagents depend on workspace tool boundaries.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — subagent model overrides use the model catalog/auth path.
 - [Interactive TUI chat](../tui/interactive-chat.md) — subagent progress renders inside chat.
+- [Quiet mode](../tui/quiet-mode.md) — completed subagent output is quiet-mode-sensitive.
 
 ## Existing tests
 
 - `mastracode/src/agents/subagents/execute.test.ts` — execute subagent does not expose parent task tools.
 - `mastracode/src/tui/commands/__tests__/subagents.test.ts` — built-in/custom subagent type picker.
-- `mastracode/src/tui/components/__tests__/subagent-execution.test.ts` — running/completed/error/fork rendering.
+- `mastracode/src/tui/components/__tests__/subagent-execution.test.ts` — running/completed/error/fork rendering and completion collapse/expand options.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — persisted subagent rendering cases.
 - `mastracode/src/agents/prompts/index.test.ts` / tool-guidance tests — partial prompt/guidance coverage.
 
@@ -84,6 +85,7 @@
 - Tool boundaries are split across instructions and runtime allowlists; both need verification.
 - Harness v1 migration risk: forked subagent sessions can leak into thread lists unless filtered.
 - Loaded-history subagent render depends on persisted tool metadata being complete.
+- Quiet-mode wording and current source can drift; current code passes `expandOnComplete: state.quietMode` rather than collapsing completed subagents.
 
 ## Verification checklist
 

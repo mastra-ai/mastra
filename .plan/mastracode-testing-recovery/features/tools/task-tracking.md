@@ -18,7 +18,7 @@
 
 ## TUI states
 
-- Active: incomplete tasks render pinned above the editor; quiet mode compacts the same state.
+- Active: incomplete tasks render pinned above the editor; quiet mode compacts completed task transitions from the same state.
 - Completed/cleared: inline transition renders at the recorded task-tool insertion point.
 
 ## Headless / non-TUI behavior
@@ -59,6 +59,7 @@
 - [Coding tools and approval permissions](./coding-tools-permissions.md) — task tools bypass approval.
 - [Persistent conversations / switching](../threads/persistent-conversations.md) — task state is thread-local.
 - [Subagent delegation](../subagents/delegation.md) — non-forked execute subagents must not mutate parent tasks.
+- [Quiet mode](../tui/quiet-mode.md) — completed task transitions can compact in quiet mode.
 
 ## Existing tests
 

@@ -3,11 +3,11 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — coding tools, approvals, permissions, YOLO, hooks, MCP tool merge.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior; [#13348](https://github.com/mastra-ai/mastra/pull/13348) — capped file/search/web tool result output around 2k tokens; [#13355](https://github.com/mastra-ai/mastra/pull/13355) — allowed the old unified `view` tool's `view_range` to paginate directory listings; [#13385](https://github.com/mastra-ai/mastra/pull/13385) — fixed TS/JS LSP language IDs; [#13384](https://github.com/mastra-ai/mastra/pull/13384) — fixed hidden-file exclusion for the old directory-listing implementation; [#13428](https://github.com/mastra-ai/mastra/pull/13428) — fixed `view` rendering for core workspace `read_file` output; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — completed live TUI lifecycle hook wiring for `Stop` and `UserPromptSubmit`; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — fixed persisted approval resume for standalone/storage-backed agents; [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit-tool path resolution with command execution/project root semantics; [#13564](https://github.com/mastra-ai/mastra/pull/13564) — wires config `extraTools` into the dynamic tool builder and keeps denied tools out of both runtime and prompt guidance; current core tools now own file/list/LSP behavior.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior; [#13348](https://github.com/mastra-ai/mastra/pull/13348) — capped file/search/web tool result output around 2k tokens; [#13355](https://github.com/mastra-ai/mastra/pull/13355) — allowed the old unified `view` tool's `view_range` to paginate directory listings; [#13385](https://github.com/mastra-ai/mastra/pull/13385) — fixed TS/JS LSP language IDs; [#13384](https://github.com/mastra-ai/mastra/pull/13384) — fixed hidden-file exclusion for the old directory-listing implementation; [#13428](https://github.com/mastra-ai/mastra/pull/13428) — fixed `view` rendering for core workspace `read_file` output; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — completed live TUI lifecycle hook wiring for `Stop` and `UserPromptSubmit`; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — fixed persisted approval resume for standalone/storage-backed agents; [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit-tool path resolution with command execution/project root semantics; [#13564](https://github.com/mastra-ai/mastra/pull/13564) — wires config `extraTools` into the dynamic tool builder and keeps denied tools out of both runtime and prompt guidance; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — adds OpenAI native `web_search` fallback when Tavily is absent; current core tools now own file/list/LSP behavior.
 
 ## User-visible behavior
 
-- What the user can do: let the agent read/search/edit/list files, run shell, inspect symbols, use web/MCP tools, and request path access.
+- What the user can do: let the agent read/search/edit/list files, run shell, inspect symbols, use web/MCP tools, and request path access. When Tavily is absent, Anthropic/OpenAI models can still expose native provider web search.
 - Success looks like: risky tools ask unless policy/session grants/YOLO allow them; configured extra tools appear when allowed and denied tools disappear everywhere.
 - Must preserve: visible tool list, runtime tool availability, prompt guidance, approval UI, and bounded tool output stay aligned.
 
@@ -40,7 +40,7 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Tool definitions | Workspace + `createDynamicTools()` + `McpManager` interface + config `extraTools` | Runtime, prompt guidance |
+| Tool definitions | Workspace + `createDynamicTools()` + `McpManager` interface + config `extraTools` + provider web-search fallback | Runtime, prompt guidance |
 | Permission policies | Harness state / permission rules | Approval engine, `/permissions`, dynamic tool filtering |
 | YOLO | Harness state | Approval engine, status/commands |
 | Session grants | Harness session | Approval engine only |
@@ -56,7 +56,7 @@
 
 ## Key files
 
-- `mastracode/src/agents/tools.ts` — dynamic tools, web search, MCP merge, config `extraTools`, denied-tool filtering, hooks.
+- `mastracode/src/agents/tools.ts` — dynamic tools, Tavily/native provider web search, MCP merge, config `extraTools`, denied-tool filtering, hooks.
 - `mastracode/src/mcp/manager.ts` — MCP manager factory/interface that supplies tools to `createDynamicTools()`.
 - `mastracode/src/tui/commands/mcp.ts` — MCP status/reload command that reads the same manager.
 - `mastracode/src/agents/workspace.ts` — workspace provisioning, plan-mode tool filtering, and sandbox paths.
@@ -119,6 +119,7 @@
 - Packaged `mastracode` startup/import smoke test that catches ESM subpath regressions like `vscode-jsonrpc/node` vs `vscode-jsonrpc/node.js`.
 - End-to-end tool-call schema serialization test for source checkout and global install Zod resolution.
 - MC web-search/web-extract truncation test proving Tavily results are serialized to bounded text.
+- Direct test that OpenAI models get native `web_search` when Tavily is absent, plus prompt guidance parity for the same condition.
 - Regression test for the old #13355 intent if directory-list pagination is still desired after the move from unified `view` to split `read_file` / `list_files` tools.
 - Direct LSP language-ID tests for `.ts`/`.tsx`/`.js`/`.jsx` so future mapping changes cannot regress to raw file extensions.
 
@@ -132,6 +133,7 @@
 - LSP-backed tools can break at package startup if ESM-only subpath imports are not built/imported exactly as Node expects.
 - Tool schemas can be routed through the wrong Zod converter when source and global installs resolve different Zod versions.
 - Token limits now live in both core workspace helpers and MC-owned web-tool wrappers; future moves can silently uncap one path if tests only cover the other.
+- Runtime web-search availability and prompt guidance can drift; current prompt guidance explicitly accounts for Tavily and Anthropic, while #13609 also exposes OpenAI native `web_search`.
 - The old `view_range` directory pagination no longer exists literally in current source; current `list_files` has no offset/limit pagination, so large-directory ergonomics rely on tree options and token caps unless future work reintroduces pagination.
 - Hidden-file behavior moved from shell `find` globs in the old MC-owned tools to core filesystem filtering; future filesystem providers must keep dotfile semantics consistent.
 - LSP support has both legacy MC-local and current core workspace mapping files; stale imports or tests can verify the wrong path if the active tool owner changes again.

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — initial TUI chat, streaming render, keyboard input, tool render, harness event dispatch.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior; [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added the responsive startup banner above the chat layout; [#13426](https://github.com/mastra-ai/mastra/pull/13426) — simplified the startup command hint and `/help` reference; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added core `HarnessDisplayState` and centralized status-line refresh through `display_state_changed`; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes and abbreviates Git branch status in the footer; [#13460](https://github.com/mastra-ai/mastra/pull/13460) — wires `fd`/`fdfind` into editor file autocomplete; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — runs prompt-submit and stop hooks in the TUI lifecycle; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — applies terminal theme detection and contrast-aware colors across the TUI.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior; [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added the responsive startup banner above the chat layout; [#13426](https://github.com/mastra-ai/mastra/pull/13426) — simplified the startup command hint and `/help` reference; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added core `HarnessDisplayState` and centralized status-line refresh through `display_state_changed`; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes and abbreviates Git branch status in the footer; [#13460](https://github.com/mastra-ai/mastra/pull/13460) — wires `fd`/`fdfind` into editor file autocomplete; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — runs prompt-submit and stop hooks in the TUI lifecycle; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — applies terminal theme detection and contrast-aware colors across the TUI; [#13556](https://github.com/mastra-ai/mastra/pull/13556) — adds Quiet mode projection for compact output; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — preserves existing assistant text when tool-result-only chunks produce an empty trailing segment.
 
 ## User-visible behavior
 
@@ -29,7 +29,7 @@
 
 ## Streaming / loading / interrupted states
 
-- Streaming / loading: live `message_*` and `tool_*` events update TUI projections.
+- Streaming / loading: live `message_*` and `tool_*` events update TUI projections; tool-result-only chunks must not blank already-rendered assistant text.
 - Abort / retry / resume: Ctrl+C/Escape calls `harness.abort()`; terminal cleanup comes from `agent_end`.
 
 ## Streaming vs loaded-from-history behavior
@@ -44,7 +44,7 @@
 | Chat history | Harness / memory storage | TUI renderer, headless output |
 | Active run | Harness runtime | TUI keyboard/status handlers |
 | Display projection | `HarnessDisplayState` | Status line, tasks, tools, OM, future UIs |
-| Streaming components | TUI transient projection | Chat container |
+| Streaming components | TUI transient projection; trailing content after inline boundaries | Chat container |
 | Mutable TUI state | `TUIState` object from `createTUIState()` | Commands, extracted handlers, tests, TUI class |
 | Autocomplete provider | `setupAutocomplete()` | Editor slash, skill, custom command, and `@` file suggestions |
 | Hook lifecycle | `HookManager` + TUI run/event loop | Prompt submit, stop/session hook execution |
@@ -59,7 +59,8 @@
 - `mastracode/src/tui/components/banner.ts` — static responsive header rendered before chat/frontmatter.
 - `mastracode/src/tui/event-dispatch.ts` — event-to-handler routing; `display_state_changed` refreshes the status line from Harness display state; `thread_changed` refreshes Git branch.
 - `packages/core/src/harness/types.ts` and `harness.ts` — `HarnessDisplayState` source for active tools/tasks/OM/current-message projection.
-- `mastracode/src/tui/handlers/*` — focused message, tool, OM, prompt, and subagent handlers.
+- `mastracode/src/tui/handlers/message.ts` — assistant streaming partitioning, inline signal rendering, and text-preservation guard after tool updates.
+- `mastracode/src/tui/handlers/*` — focused tool, OM, prompt, and subagent handlers.
 - `mastracode/src/tui/render-messages.ts` — history reconstruction.
 - `mastracode/src/tui/status-line.ts`, `shell.ts` — extracted status and shell rendering helpers.
 - `mastracode/src/tui/index.ts` — public TUI export barrel.
@@ -89,7 +90,7 @@
 - `mastracode/src/tui/components/__tests__/help-overlay.test.ts` — compact `/help` output.
 - `packages/core/src/harness/display-state.test.ts` — display-state projection used by status/tasks/tools/OM rendering.
 - `mastracode/src/tui/event-dispatch.test.ts`, `render-messages.test.ts` — event/history rendering.
-- `mastracode/src/tui/handlers/*.test.ts` — focused handler coverage after #13413 extraction.
+- `mastracode/src/tui/handlers/*.test.ts` — focused handler coverage after #13413 extraction, including spacing around quiet tool previews.
 - `mastracode/src/headless.test.ts` — non-TUI path.
 - `mastracode/src/tui/__tests__/*` imports `TUIState` in handler/queue/goal tests, but most tests still hand-build partial state objects.
 - No dedicated package-export smoke test found for `mastracode/tui`.
@@ -101,6 +102,7 @@
 - Enter-as-signal vs Ctrl+F queued follow-up after reload.
 - Built-package import smoke for `mastracode/tui` covering ESM, CJS, and generated `.d.ts` paths.
 - Direct `createTUIState()` default-shape test so queue/tool/goal fields do not silently lose defaults during TUI refactors.
+- Regression test for #13609: assistant text before a tool remains visible after a tool-result-only update and final chunk with no trailing text.
 - Full startup layout snapshot covering banner, frontmatter, instructions, chat, task progress, editor, and footer.
 
 ## Known risks / regressions
@@ -111,6 +113,7 @@
 - Public export can drift if `package.json` export targets, `tsup` entry names, or generated type paths stop matching.
 - `TUIState` is now the shared mutable projection for many features; adding fields without factory defaults can break handlers only at runtime.
 - TUI modularization lowered file size but increased routing seams: a missing handler import or mismatched context field can silently break one event family while the main TUI still starts.
+- Streaming text preservation depends on `getTrailingContentParts()` treating tool/results/signals as inline boundaries; adding a new boundary type without updating it can blank or duplicate text.
 - Startup banner is static but width/theme assumptions can affect first-run layout in narrow or non-standard terminals.
 
 ## Verification checklist

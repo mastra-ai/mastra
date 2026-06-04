@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13600 (row 74) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13556 (`c6c5376cb2`, Quiet mode), then #13609 (`ebab49855b`, assistant text preservation + web search fallback).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13609 (row 76) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13574 (`276246e0b9`, file attachments), then #13605 (`dc1c33ba3c`, GitHub issue commands).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 75: PR #13556 (Quiet mode), then row 76: PR #13609 (assistant text preservation + web-search fallback).
+1. Continue at `_pr-queue.md` row 77: PR #13574 (file attachments), then row 78: PR #13605 (`/fix-issue` and `/report-issue`).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -134,3 +134,6 @@ None known.
 - `gh pr view 13598 --json number,title,body,author,mergedAt,url,files,commits`, current `PlanApprovalInlineComponent`, and plan approval inline tests verified request-changes mode keeps the plan visible while collecting feedback. Updated plan-approval card.
 - `gh pr view 13600 --json number,title,body,author,mergedAt,url,files,commits`, current `resolveModel()`, `getAnthropicApiKey()`, Claude Max provider source, README docs, and model tests verified Anthropic OAuth priority with API-key fallback. Updated model-auth card.
 - Focused verification for #13598/#13600 passed with env API keys unset: plan-approval-inline and model tests (2 files / 41 tests).
+- `gh pr view 13556 --json number,title,body,author,mergedAt,url,files,commits`, current quiet-mode settings/source, subagent component, tool renderer, and tests verified quiet mode state. Added `features/tui/quiet-mode.md`; noted current source appears later-polished/superseded versus the original collapse wording.
+- `gh pr view 13609 --json number,title,body,author,mergedAt,url,files,commits`, current message handler and dynamic tools verified assistant text preservation after tool-only chunks plus OpenAI native `web_search` fallback. Updated interactive-chat and coding-tools cards; noted prompt-guidance parity risk.
+- Focused verification for #13556/#13609 passed: onboarding settings, subagent execution, tool execution enhanced, message handler, and dynamic tools tests (5 files / 120 tests).

@@ -754,3 +754,26 @@ Verification:
 - Focused tests passed with env API keys unset: `env -u MASTRA_GATEWAY_API_KEY -u ANTHROPIC_API_KEY -u OPENAI_API_KEY pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/plan-approval-inline.test.ts src/agents/__tests__/model.test.ts --reporter=dot --bail 1` (2 files / 41 tests).
 
 Next queue checkpoint: PR #13556 (Quiet mode), then PR #13609 (assistant text preservation + web-search fallback).
+
+
+### Feature map PR #13556 and #13609
+
+Processed PR [#13556](https://github.com/mastra-ai/mastra/pull/13556), `c6c5376cb2` (`feat: add Quiet mode setting for subagent output collapse (#13556)`). Verified current source has persisted `settings.preferences.quietMode`, `quietModeMaxToolPreviewLines`, and `onboarding.quietModePreferenceSelected`; startup copies those settings into `TUIState`; `/settings` exposes Quiet mode plus preview-line choices; live and loaded-history tool renderers apply compact quiet display. Current source appears later-polished versus the original #13556 wording: subagents receive `expandOnComplete: state.quietMode`, while the settings copy still mentions completed subagent collapse.
+
+Processed PR [#13609](https://github.com/mastra-ai/mastra/pull/13609), `ebab49855b` (`fix: preserve assistant text after tool updates and add openai web_search fallback (#13609)`). Verified `handleMessageUpdate()` and `handleMessageEnd()` only update the streaming assistant component when trailing post-boundary content exists (or final abort/error state needs rendering), avoiding blanking previous assistant text after tool-result-only chunks. Verified `createDynamicTools()` adds OpenAI native `web_search` via `createOpenAI({}).tools.webSearch()` when Tavily is absent and the current model starts with `openai/`.
+
+Documentation actions:
+
+- Added `features/tui/quiet-mode.md` covering Quiet mode settings, rollout state, compact tool/task/subagent rendering, tests, and current behavior risks.
+- Updated `features/tui/interactive-chat.md` with #13609 assistant streaming text preservation.
+- Updated `features/tools/coding-tools-permissions.md` with #13609 OpenAI native web-search fallback and prompt-guidance parity risk.
+- Updated `features/subagents/delegation.md`, `features/tools/task-tracking.md`, `features/settings/onboarding-and-global-settings.md`, `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13556 done, #13609 done, #13574 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/onboarding/settings.ts`, `mastracode/src/tui/components/settings.ts`, `mastracode/src/tui/mastra-tui.ts`, `mastracode/src/tui/state.ts`, `mastracode/src/tui/handlers/tool.ts`, `mastracode/src/tui/render-messages.ts`, `mastracode/src/tui/components/tool-execution-enhanced.ts`, `mastracode/src/tui/components/subagent-execution.ts`, `mastracode/src/tui/handlers/message.ts`, and `mastracode/src/agents/tools.ts`.
+- Tests identified/read: `mastracode/src/onboarding/__tests__/settings.test.ts`, `mastracode/src/tui/components/__tests__/subagent-execution.test.ts`, `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts`, `mastracode/src/tui/handlers/__tests__/message.test.ts`, and `mastracode/src/agents/tools.test.ts`.
+- PR metadata checked with `gh pr view 13556 --json number,title,body,author,mergedAt,url,files,commits` and `gh pr view 13609 --json number,title,body,author,mergedAt,url,files,commits`.
+- Focused tests passed: `pnpm --filter ./mastracode exec vitest run src/onboarding/__tests__/settings.test.ts src/tui/components/__tests__/subagent-execution.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts src/tui/handlers/__tests__/message.test.ts src/agents/tools.test.ts --reporter=dot --bail 1` (5 files / 120 tests).
+
+Next queue checkpoint: PR #13574 (file attachments), then PR #13605 (`/fix-issue` and `/report-issue`).

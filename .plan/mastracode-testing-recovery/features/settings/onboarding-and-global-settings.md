@@ -46,7 +46,7 @@
 | Custom model packs | `settings.json` `customModelPacks` plus thread active pack metadata | `/setup`, `/models` create/edit/import/share/delete, startup `resolveModelDefaults()` |
 | Provider access | AuthStorage + env/API-key detection + provider registry `apiKeyEnvVar` | Onboarding auth gate, pack filtering, model prompts |
 | OM pack/model | Harness state + global settings OM fields | OM memory factory, `/om`, setup wizard |
-| YOLO/quiet preferences | Harness state + global settings preferences | Permission prompts, tool/task rendering |
+| YOLO/quiet preferences | Harness state + global settings preferences + quiet rollout flag | Permission prompts, tool/task/subagent rendering, `/settings` |
 | Storage backend | Global settings + env overrides | Storage factory, memory/history persistence |
 | Theme preference | Global settings + `MASTRA_THEME` env override | Startup detection, `/theme`, TUI colors |
 
@@ -67,10 +67,11 @@
 - [Persistent conversations](../threads/persistent-conversations.md) — per-thread model-pack metadata overrides global defaults.
 - [Storage backend configuration](./storage-backend.md) — storage backend choice is persisted in the same global settings file.
 - [Terminal theme and contrast](../tui/terminal-theme.md) — theme preference is persisted in global settings.
+- [Quiet mode](../tui/quiet-mode.md) — quiet preferences and rollout state are persisted in global settings.
 
 ## Existing tests
 
-- `mastracode/src/onboarding/__tests__/settings.test.ts` — settings parsing, migrations, pack resolution, thread active pack inference.
+- `mastracode/src/onboarding/__tests__/settings.test.ts` — settings parsing, migrations, pack resolution, thread active pack inference, quiet-mode defaults/rollout, and preview-line normalization.
 - `mastracode/src/onboarding/__tests__/packs.test.ts` — provider-gated built-in packs, current OpenAI/GitHub defaults, and API-key/OAuth pack visibility inputs.
 - `mastracode/src/tui/commands/__tests__/models-pack.test.ts` — custom pack upsert/remove/rename/edit/share/import helpers.
 - `mastracode/src/__tests__/index.test.ts` — startup settings plumbing is partially mocked.
