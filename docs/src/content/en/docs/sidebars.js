@@ -145,21 +145,29 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/sdk-agents',
+          label: 'SDK Agents',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/adding-voice',
           label: 'Voice',
         },
         {
           type: 'doc',
-          id: 'agents/signals',
-          label: 'Signals',
+          id: 'agents/code-mode',
+          label: 'Code Mode',
           customProps: {
             tags: ['alpha'],
           },
         },
         {
           type: 'doc',
-          id: 'agents/response-caching',
-          label: 'Response Caching',
+          id: 'agents/signals',
+          label: 'Signals',
           customProps: {
             tags: ['alpha'],
           },
@@ -295,6 +303,25 @@ const sidebars = {
           type: 'doc',
           id: 'editor/prompts',
           label: 'Prompts',
+        },
+        {
+          type: 'category',
+          label: 'Agent Builder',
+          customProps: {
+            tags: ['new'],
+          },
+          items: [
+            { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
+            { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
+            { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
+            { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
+            { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
+            { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
+            { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
+            { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+            { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
+            { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
+          ],
         },
       ],
     },
@@ -445,6 +472,11 @@ const sidebars = {
           type: 'doc',
           id: 'server/request-context',
           label: 'Request Context',
+        },
+        {
+          type: 'doc',
+          id: 'server/pubsub',
+          label: 'PubSub',
         },
         {
           type: 'doc',
@@ -693,6 +725,11 @@ const sidebars = {
               type: 'doc',
               id: 'observability/metrics/overview',
               label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/metrics/querying',
+              label: 'Querying metrics',
             },
           ],
         },

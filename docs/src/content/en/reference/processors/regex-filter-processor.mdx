@@ -56,7 +56,7 @@ import { RegexFilterProcessor } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-5-nano',
+  model: '__GATEWAY_OPENAI_MODEL_NANO__',
   processors: {
     input: [
       new RegexFilterProcessor({

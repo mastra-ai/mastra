@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
@@ -17,6 +19,7 @@ import {
   isStudioClientTypeHeader,
 } from '../constants';
 import { formatZodError } from '../handlers/error';
+export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
@@ -98,6 +101,30 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+function isAbortSignalError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code, name } = error as { code?: string; name?: string };
+  return name === 'AbortError' || code === 'ABORT_ERR';
+}
+
+function isExpectedResponseCloseError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code } = error as { code?: string };
+  return (
+    code === 'ECONNRESET' ||
+    code === 'EPIPE' ||
+    code === 'ERR_STREAM_DESTROYED' ||
+    code === 'ERR_STREAM_WRITE_AFTER_END' ||
+    code === 'ERR_STREAM_PREMATURE_CLOSE'
+  );
+}
+
+function isResponseClosed(response: { writableEnded?: boolean; destroyed?: boolean }): boolean {
+  return Boolean(response.writableEnded || response.destroyed);
 }
 
 function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
@@ -468,6 +495,14 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       token = context.getQuery('apiKey') || null;
     }
 
+    const fallbackHeaders = new Headers();
+    for (const headerName of ['authorization', 'cookie']) {
+      const headerValue = context.getHeader(headerName);
+      if (headerValue) {
+        fallbackHeaders.set(headerName, headerValue);
+      }
+    }
+
     // Delegate to coreAuthMiddleware for all auth logic
     const result = await coreAuthMiddleware({
       path: context.path,
@@ -477,7 +512,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       authConfig,
       customRouteAuthConfig: this.customRouteAuthConfig,
       requestContext: context.requestContext,
-      rawRequest: context.request,
+      rawRequest:
+        context.request ??
+        new Request(`http://localhost${context.path}`, { method: context.method, headers: fallbackHeaders }),
       token,
       buildAuthorizeContext: context.buildAuthorizeContext ?? (() => null),
       requiresAuth: route.requiresAuth,
@@ -731,7 +768,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const serverOnError = this.mastra.getServer()?.onError;
     app.onError((err, c) => {
       if (serverOnError) {
-        return serverOnError(err, c);
+        return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
       return c.json({ error: 'Internal Server Error' }, 500);
     });
@@ -778,6 +815,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     headers: Record<string, string | string[] | undefined>,
     body: unknown,
     requestContext?: RequestContext,
+    signal?: AbortSignal,
   ): Promise<Response | null> {
     if (!this.customRouteHandler) return null;
 
@@ -790,7 +828,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         });
     }
 
-    const init: RequestInit = { method, headers: fetchHeaders };
+    const init: RequestInit = { method, headers: fetchHeaders, signal };
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && body !== undefined) {
       if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
@@ -824,7 +862,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       writeHead(status: number, headers: Record<string, string | string[]>): void;
       write(chunk: unknown): void;
       end(data?: string): void;
-    },
+      writableEnded?: boolean;
+      destroyed?: boolean;
+    } & NodeJS.WritableStream,
+    signal?: AbortSignal,
   ): Promise<void> {
     const headers: Record<string, string | string[]> = {};
     response.headers.forEach((value, key) => {
@@ -836,21 +877,45 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     if (setCookies && setCookies.length > 0) {
       headers['set-cookie'] = setCookies;
     }
+    if (isResponseClosed(nodeRes)) {
+      await response.body?.cancel();
+      return;
+    }
     nodeRes.writeHead(response.status, headers);
 
     if (response.body) {
-      const reader = response.body.getReader();
+      let responseBodyError: unknown;
+      let responseBodyErrorAfterResponseClosed = false;
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          nodeRes.write(value);
+        const responseStream = Readable.fromWeb(response.body as any);
+        // This listener must run before pipeline's cleanup so source errors are
+        // not mistaken for client disconnects after pipeline destroys nodeRes.
+        responseStream.once('error', error => {
+          responseBodyError = error;
+          responseBodyErrorAfterResponseClosed = isResponseClosed(nodeRes);
+        });
+        if (signal) {
+          await pipeline(responseStream, nodeRes, { signal });
+        } else {
+          await pipeline(responseStream, nodeRes);
         }
-      } finally {
-        nodeRes.end();
+      } catch (error) {
+        const expectedSignalAbort =
+          signal?.aborted && isAbortSignalError(error) && (!responseBodyError || responseBodyErrorAfterResponseClosed);
+        const expectedResponseClose =
+          (!responseBodyError || responseBodyErrorAfterResponseClosed) &&
+          isResponseClosed(nodeRes) &&
+          isExpectedResponseCloseError(error);
+        // Request cancellation is expected unless the response body already reported its own error.
+        if (!expectedSignalAbort && !expectedResponseClose) {
+          throw error;
+        }
       }
     } else {
-      nodeRes.end(await response.text());
+      const text = await response.text();
+      if (!isResponseClosed(nodeRes)) {
+        nodeRes.end(text);
+      }
     }
   }
 

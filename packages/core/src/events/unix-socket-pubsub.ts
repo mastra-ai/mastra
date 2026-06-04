@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, unlink } from 'node:fs/promises';
+import { mkdir, open, stat, unlink } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
 import { dirname } from 'node:path';
 
@@ -16,9 +17,15 @@ type ClientFrame =
 
 type ServerFrame = { type: 'event'; topic: string; event: Event } | { type: 'subscribed'; topic: string };
 
+type UnixSocketPubSubOptions = {
+  maxRemoteClientQueuedBytes?: number;
+};
+
 type BrokerClient = {
   socket: net.Socket;
   subscriptions: Set<string>;
+  writeChain: Promise<void>;
+  queuedBytes: number;
 };
 
 type SubscribeWaiter = {
@@ -26,28 +33,70 @@ type SubscribeWaiter = {
   reject: (error: Error) => void;
 };
 
-function writeFrame(socket: net.Socket, frame: ClientFrame | ServerFrame): Promise<void> {
+const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
+
+function serializeFrame(frame: ClientFrame | ServerFrame): string {
+  return `${JSON.stringify(frame)}\n`;
+}
+
+function writeSerializedFrame(socket: net.Socket, serializedFrame: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const onError = (error: Error) => {
-      socket.off('drain', onDrain);
-      reject(error);
-    };
-    const onDrain = () => {
+    let writeCompleted = false;
+    let drainCompleted = true;
+    let settled = false;
+
+    const cleanup = () => {
       socket.off('error', onError);
+      socket.off('close', onClose);
+      socket.off('drain', onDrain);
+    };
+    const settle = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) {
+        reject(error);
+        return;
+      }
       resolve();
+    };
+    const maybeResolve = () => {
+      if (writeCompleted && drainCompleted) {
+        settle();
+      }
+    };
+    const onError = (error: Error) => settle(error);
+    const onClose = () => settle(new Error('UnixSocketPubSub socket closed before write completed'));
+    const onDrain = () => {
+      drainCompleted = true;
+      maybeResolve();
     };
 
     socket.once('error', onError);
-    const drained = socket.write(`${JSON.stringify(frame)}\n`, () => {
-      if (drained) {
-        socket.off('error', onError);
-        resolve();
-      }
-    });
+    socket.once('close', onClose);
+    let drained: boolean;
+    try {
+      drained = socket.write(serializedFrame, error => {
+        if (error) {
+          settle(error);
+          return;
+        }
+        writeCompleted = true;
+        maybeResolve();
+      });
+    } catch (error) {
+      settle(error as Error);
+      return;
+    }
     if (!drained) {
+      drainCompleted = false;
       socket.once('drain', onDrain);
     }
   });
+}
+
+function writeFrame(socket: net.Socket, frame: ClientFrame | ServerFrame): Promise<void> {
+  return writeSerializedFrame(socket, serializeFrame(frame));
 }
 
 function nextTick(): Promise<void> {
@@ -84,11 +133,14 @@ export class UnixSocketPubSub extends PubSub {
   #callbacks = new Map<string, Set<EventCallback>>();
   #subscribeWaiters = new Map<string, SubscribeWaiter[]>();
   #brokerClients = new Map<net.Socket, BrokerClient>();
-  #pendingWrites: Promise<void>[] = [];
+  #pendingWrites = new Set<Promise<void>>();
+  #recovering?: Promise<void>;
+  #maxRemoteClientQueuedBytes: number;
 
-  constructor(socketPath: string) {
+  constructor(socketPath: string, options: UnixSocketPubSubOptions = {}) {
     super();
     this.socketPath = socketPath;
+    this.#maxRemoteClientQueuedBytes = options.maxRemoteClientQueuedBytes ?? DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES;
   }
 
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -97,6 +149,11 @@ export class UnixSocketPubSub extends PubSub {
 
   get isBroker(): boolean {
     return this.#isBroker;
+  }
+
+  /** Number of remote clients currently connected to this broker. Always 0 for non-broker instances. */
+  get remoteClientCount(): number {
+    return this.#isBroker ? this.#brokerClients.size : 0;
   }
 
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
@@ -153,8 +210,7 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async flush(): Promise<void> {
-    await Promise.allSettled(this.#pendingWrites);
-    this.#pendingWrites = [];
+    await Promise.allSettled([...this.#pendingWrites]);
   }
 
   async close(): Promise<void> {
@@ -165,10 +221,9 @@ export class UnixSocketPubSub extends PubSub {
     this.#clientSocket = undefined;
     this.#rejectSubscribeWaiters(new Error('UnixSocketPubSub is closed'));
 
-    for (const client of this.#brokerClients.values()) {
-      client.socket.destroy();
+    for (const client of [...this.#brokerClients.values()]) {
+      this.#removeBrokerClient(client);
     }
-    this.#brokerClients.clear();
 
     if (this.#server) {
       await new Promise<void>(resolve => this.#server?.close(() => resolve()));
@@ -233,11 +288,8 @@ export class UnixSocketPubSub extends PubSub {
       }
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ECONNREFUSED' || code === 'ENOENT' || code === 'ENOTSOCK') {
-        await unlink(this.socketPath).catch(() => {});
         this.#throwIfClosed();
-        await this.#listen();
-        this.#throwIfClosed();
-        this.#isBroker = true;
+        await this.#electBroker();
         return;
       }
       throw error;
@@ -281,14 +333,10 @@ export class UnixSocketPubSub extends PubSub {
         this.#clientSocket = socket;
         this.#isBroker = false;
         readFrames(socket, frame => this.#handleServerFrame(frame));
-        socket.on('close', () => {
-          if (this.#clientSocket === socket) this.#clientSocket = undefined;
-          this.#rejectSubscribeWaiters(new Error('UnixSocketPubSub broker connection closed'));
-        });
-        socket.on('error', error => {
-          if (this.#clientSocket === socket) this.#clientSocket = undefined;
-          this.#rejectSubscribeWaiters(error);
-        });
+        socket.on('close', () =>
+          this.#handleClientDisconnect(socket, new Error('UnixSocketPubSub broker connection closed')),
+        );
+        socket.on('error', error => this.#handleClientDisconnect(socket, error));
         void this.#resubscribeClient().then(resolve, reject);
       };
 
@@ -300,6 +348,93 @@ export class UnixSocketPubSub extends PubSub {
   async #resubscribeClient() {
     for (const topic of this.#callbacks.keys()) {
       await this.#sendSubscribeToBroker(topic);
+    }
+  }
+
+  #handleClientDisconnect(socket: net.Socket, error: Error) {
+    if (this.#clientSocket !== socket) return;
+    this.#clientSocket = undefined;
+    this.#rejectSubscribeWaiters(error);
+    if (!this.#closed) {
+      void this.#recoverClientConnection();
+    }
+  }
+
+  async #recoverClientConnection(): Promise<void> {
+    if (this.#recovering) return this.#recovering;
+    this.#recovering = this.#recoverClientConnectionLoop().finally(() => {
+      this.#recovering = undefined;
+    });
+    return this.#recovering;
+  }
+
+  async #recoverClientConnectionLoop(): Promise<void> {
+    while (!this.#closed && !this.#isBroker && !(this.#clientSocket && !this.#clientSocket.destroyed)) {
+      try {
+        await this.#ensureStarted(true);
+        return;
+      } catch {
+        if (this.#closed) return;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    }
+  }
+
+  /**
+   * Serializes broker election across processes using an exclusive lock file.
+   * Only the lock winner unlinks the stale socket and listens; losers wait
+   * then connect as clients to the newly elected broker.
+   */
+  async #electBroker(): Promise<void> {
+    const lockPath = this.socketPath + '.elect';
+    let lockFd: FileHandle | undefined;
+    try {
+      lockFd = await open(lockPath, 'wx');
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
+        if (await this.#isElectionLockStale(lockPath)) {
+          await unlink(lockPath).catch(() => {});
+          throw new Error('Stale broker election lock removed');
+        }
+        await new Promise(resolve => setTimeout(resolve, 150));
+        try {
+          await this.#connectClient();
+          this.#throwIfClosed();
+          return;
+        } catch {
+          throw new Error('Broker election in progress by another process');
+        }
+      }
+      throw e;
+    }
+
+    try {
+      // Re-check: a previous election round may have installed a broker
+      // between our initial connectClient() and acquiring this lock.
+      try {
+        await this.#connectClient();
+        this.#throwIfClosed();
+        return;
+      } catch {
+        // Still no live broker — proceed with election.
+      }
+      await unlink(this.socketPath).catch(() => {});
+      this.#throwIfClosed();
+      await this.#listen();
+      this.#throwIfClosed();
+      this.#isBroker = true;
+    } finally {
+      await lockFd.close().catch(() => {});
+      await unlink(lockPath).catch(() => {});
+    }
+  }
+
+  async #isElectionLockStale(lockPath: string): Promise<boolean> {
+    try {
+      const lockStat = await stat(lockPath);
+      return Date.now() - lockStat.mtimeMs > 2000;
+    } catch {
+      return true;
     }
   }
 
@@ -349,21 +484,67 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   #handleBrokerClient(socket: net.Socket) {
-    const client: BrokerClient = { socket, subscriptions: new Set() };
+    const client: BrokerClient = {
+      socket,
+      subscriptions: new Set(),
+      writeChain: Promise.resolve(),
+      queuedBytes: 0,
+    };
     this.#brokerClients.set(socket, client);
     readFrames(socket, frame => {
       const clientFrame = frame as ClientFrame;
       if (clientFrame.type === 'subscribe') {
         client.subscriptions.add(clientFrame.topic);
-        void writeFrame(socket, { type: 'subscribed', topic: clientFrame.topic }).catch(() => {});
+        this.#enqueueBrokerClientWrite(client, { type: 'subscribed', topic: clientFrame.topic });
       } else if (clientFrame.type === 'unsubscribe') {
         client.subscriptions.delete(clientFrame.topic);
       } else if (clientFrame.type === 'publish') {
         void this.#publishFromBroker(clientFrame.topic, clientFrame.event);
       }
     });
-    socket.on('close', () => this.#brokerClients.delete(socket));
-    socket.on('error', () => this.#brokerClients.delete(socket));
+    socket.on('close', () => this.#removeBrokerClient(client));
+    socket.on('error', () => this.#removeBrokerClient(client));
+  }
+
+  #enqueueBrokerClientWrite(client: BrokerClient, frame: ServerFrame) {
+    if (this.#brokerClients.get(client.socket) !== client || client.socket.destroyed) return;
+
+    const serializedFrame = serializeFrame(frame);
+    const queuedBytes = Buffer.byteLength(serializedFrame);
+    if (client.queuedBytes + queuedBytes > this.#maxRemoteClientQueuedBytes) {
+      this.#removeBrokerClient(client);
+      return;
+    }
+
+    client.queuedBytes += queuedBytes;
+
+    const write = client.writeChain
+      .catch(() => {})
+      .then(async () => {
+        if (this.#brokerClients.get(client.socket) !== client || client.socket.destroyed) return;
+        await writeSerializedFrame(client.socket, serializedFrame);
+      })
+      .catch(() => {
+        this.#removeBrokerClient(client);
+      })
+      .finally(() => {
+        client.queuedBytes = Math.max(0, client.queuedBytes - queuedBytes);
+      });
+
+    client.writeChain = write;
+    this.#pendingWrites.add(write);
+    void write.finally(() => this.#pendingWrites.delete(write));
+  }
+
+  #removeBrokerClient(client: BrokerClient) {
+    if (this.#brokerClients.get(client.socket) !== client) return;
+    this.#brokerClients.delete(client.socket);
+    client.subscriptions.clear();
+    client.queuedBytes = 0;
+    client.writeChain = Promise.resolve();
+    if (!client.socket.destroyed) {
+      client.socket.destroy();
+    }
   }
 
   #handleServerFrame(frame: ServerFrame) {
@@ -389,13 +570,16 @@ export class UnixSocketPubSub extends PubSub {
 
     this.#deliverLocal(topic, brokerEvent);
 
-    const frame: ServerFrame = { type: 'event', topic, event: brokerEvent };
+    // Skip serialization entirely when no remote clients could receive the event.
+    if (this.#brokerClients.size === 0) return;
+
+    let frame: ServerFrame | undefined;
     for (const client of this.#brokerClients.values()) {
       if (!client.subscriptions.has(topic) || client.socket.destroyed) continue;
-      const write = writeFrame(client.socket, frame).catch(() => {});
-      this.#pendingWrites.push(write);
+      // Lazily build the frame only when we know at least one client needs it.
+      frame ??= { type: 'event', topic, event: brokerEvent };
+      this.#enqueueBrokerClientWrite(client, frame);
     }
-    await this.flush();
   }
 
   #deliverLocal(topic: string, event: Event) {
@@ -418,14 +602,39 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async #sendToBroker(frame: ClientFrame) {
+    try {
+      await this.#sendToActiveBroker(frame);
+    } catch (error) {
+      if (this.#closed) throw error;
+      const failedSocket = this.#clientSocket;
+      this.#clientSocket = undefined;
+      failedSocket?.destroy();
+      await this.#ensureStarted(true);
+      await this.#sendToActiveBroker(frame);
+    }
+  }
+
+  async #sendToActiveBroker(frame: ClientFrame) {
     const socket = this.#clientSocket;
     if (!socket || socket.destroyed) {
       await this.#ensureStarted(true);
+    }
+    if (this.#isBroker) {
+      await this.#handlePromotedBrokerFrame(frame);
+      return;
     }
     const activeSocket = this.#clientSocket;
     if (!activeSocket || activeSocket.destroyed) {
       throw new Error('UnixSocketPubSub is not connected to a broker');
     }
     await writeFrame(activeSocket, frame);
+  }
+
+  async #handlePromotedBrokerFrame(frame: ClientFrame) {
+    if (frame.type === 'subscribe') {
+      this.#settleSubscribeWaiters(frame.topic);
+    } else if (frame.type === 'publish') {
+      await this.#publishFromBroker(frame.topic, frame.event);
+    }
   }
 }

@@ -1,0 +1,187 @@
+import type { AgentBuilderOptions, AgentFeatures, IAgentBuilder } from '@mastra/core/agent-builder/ee';
+import { isBuilderModelPolicyActive, isModelAllowed, resolveAgentFeatures } from '@mastra/core/agent-builder/ee';
+
+/**
+ * Concrete implementation of the Agent Builder EE feature.
+ * Instantiated by MastraEditor.resolveBuilder() when builder config is enabled.
+ *
+ * The constructor performs fail-fast validation of the admin's model policy
+ * (Phase 4) so misconfiguration is caught at boot, not at first request.
+ *
+ * Feature toggles use **default-on semantics**: omitted keys resolve to
+ * `true`. Admins opt out by setting a key to `false`. The resolved features
+ * are computed once in the constructor (after validation) and returned
+ * verbatim by {@link getFeatures} so all downstream consumers (server route,
+ * UI hooks, policy derivation) see the same effective values.
+ */
+export class EditorAgentBuilder implements IAgentBuilder {
+  private readonly options: AgentBuilderOptions;
+  private readonly modelPolicyWarnings: string[] = [];
+
+  /** Non-fatal warnings for browser config issues (surfaced alongside model policy warnings). */
+  private readonly browserConfigWarnings: string[] = [];
+
+  /**
+   * Resolved (default-on normalized) features. Computed once in the
+   * constructor; `undefined` only if the builder was constructed with
+   * `enabled: false` (we still allocate features for the OFF path so callers
+   * can introspect, but we keep the field optional to preserve the existing
+   * API contract where `getFeatures()` may legitimately return `undefined`
+   * if no `features` was provided AND no defaults could be applied).
+   *
+   * In practice this is always populated: `resolveAgentFeatures` returns a
+   * fully-populated object regardless of input.
+   */
+  private readonly resolvedFeatures: AgentBuilderOptions['features'];
+
+  constructor(options?: AgentBuilderOptions) {
+    // Shallow-clone the paths the validators mutate so we never leak side
+    // effects into the caller's `MastraEditorConfig.builder` object.
+    // `validateBrowserConfig` writes to `features.agent.browser`; nothing
+    // else is mutated, so `configuration` and `registries` stay aliased.
+    const source = options ?? {};
+    this.options = {
+      ...source,
+      features: source.features
+        ? {
+            ...source.features,
+            agent: source.features.agent ? { ...source.features.agent } : undefined,
+          }
+        : undefined,
+    };
+    this.validateModelPolicy();
+    this.validateBrowserConfig();
+    // Resolve features AFTER browser-config validation so that an explicit
+    // `browser: true` with bad config is already mutated to `false` on
+    // `this.options.features.agent.browser`. The resolver then sees the
+    // downgraded value and returns it as-is.
+    this.resolvedFeatures = {
+      agent: resolveAgentFeatures(this.options.features?.agent, {
+        hasBrowserConfig: this.hasValidBrowserConfig(),
+      }),
+    };
+  }
+
+  get enabled(): boolean {
+    return this.options.enabled !== false;
+  }
+
+  getFeatures(): AgentBuilderOptions['features'] {
+    return this.resolvedFeatures;
+  }
+
+  getConfiguration(): AgentBuilderOptions['configuration'] {
+    return this.options.configuration;
+  }
+
+  getRegistries(): AgentBuilderOptions['registries'] {
+    return this.options.registries;
+  }
+
+  getModelPolicyWarnings(): string[] {
+    return [...this.modelPolicyWarnings, ...this.browserConfigWarnings];
+  }
+
+  /**
+   * True when `configuration.agent.browser` declares a provider. The
+   * EditorAgentBuilder does NOT verify the provider is registered with the
+   * Mastra instance — that cross-validation lives in `MastraEditor.resolveBuilder`
+   * because only the editor knows the registered browser providers.
+   */
+  private hasValidBrowserConfig(): boolean {
+    const browserConfig = this.options.configuration?.agent?.browser;
+    return Boolean(browserConfig?.config?.provider);
+  }
+
+  /**
+   * Browser config validation only runs for **explicit** `browser: true`.
+   * With default-on semantics, an omitted `browser` no longer means "admin
+   * opted in" — it means "admin didn't opt out". The default-on path is
+   * resolved later by `resolveAgentFeatures`, which already gates `browser`
+   * on `hasValidBrowserConfig`. We don't want to spam every default-config
+   * deployment with warnings.
+   */
+  private validateBrowserConfig(): void {
+    const explicitBrowser = this.options.features?.agent?.browser;
+    if (explicitBrowser !== true) return;
+
+    const browserConfig = this.options.configuration?.agent?.browser;
+    if (!browserConfig) {
+      const warning =
+        'Agent Builder browser feature is enabled but no default browser config was provided. ' +
+        'Set `editor.builder.configuration.agent.browser` to a valid browser config ' +
+        '(e.g. `{ type: "inline", config: { provider: "stagehand" } }`). ' +
+        'The browser toggle will be hidden until a default is configured.';
+      this.browserConfigWarnings.push(warning);
+      // eslint-disable-next-line no-console
+      console.warn(`[mastra:editor:builder] ${warning}`);
+      // Downgrade so the resolved feature ends up `false`.
+      if (this.options.features?.agent) {
+        this.options.features.agent.browser = false;
+      }
+      return;
+    }
+
+    if (!browserConfig.config?.provider) {
+      const warning =
+        'Agent Builder browser config is missing a `provider` field. ' +
+        'Set `editor.builder.configuration.agent.browser.config.provider` ' +
+        '(e.g. `"stagehand"`). The browser toggle will be hidden until a provider is configured.';
+      this.browserConfigWarnings.push(warning);
+      // eslint-disable-next-line no-console
+      console.warn(`[mastra:editor:builder] ${warning}`);
+      if (this.options.features?.agent) {
+        this.options.features.agent.browser = false;
+      }
+    }
+  }
+
+  private validateModelPolicy(): void {
+    const enabled = this.options.enabled !== false;
+    // Locked-mode is only triggered by an explicit `model: false` from the
+    // admin. With default-on semantics, an omitted `model` resolves to
+    // `true` (picker visible), which is open mode and has no
+    // locked-mode-default invariant.
+    const explicitModel = this.options.features?.agent?.model;
+    const pickerVisible = explicitModel !== false;
+    const models = this.options.configuration?.agent?.models;
+    const allowed = models?.allowed;
+    const defaultModel = models?.default;
+
+    const active = isBuilderModelPolicyActive({
+      enabled,
+      pickerVisible,
+      allowed,
+      default: defaultModel,
+    });
+
+    if (!active) return;
+
+    // Locked mode (picker hidden) requires an admin-pinned default. Phase 3's
+    // create-path decision matrix relies on this invariant: a locked policy
+    // without a default is unreachable. Only fires when the admin has
+    // explicitly opted out of the picker.
+    if (explicitModel === false && defaultModel === undefined) {
+      throw new Error(
+        'Agent Builder model policy is active in locked mode but no default was set. ' +
+          'Set `editor.builder.configuration.agent.models.default`, or remove ' +
+          '`editor.builder.features.agent.model = false` to allow end-users to pick a model.',
+      );
+    }
+
+    // When an allowlist is set, the default (if any) must satisfy it. An
+    // empty `allowed: []` means "unrestricted" so we skip this check.
+    if (defaultModel !== undefined && allowed !== undefined && allowed.length > 0) {
+      if (!isModelAllowed(allowed, defaultModel)) {
+        throw new Error(
+          'Agent Builder default model is not in the allowlist. ' +
+            'Either add it to `editor.builder.configuration.agent.models.allowed` ' +
+            'or change `editor.builder.configuration.agent.models.default`.',
+        );
+      }
+    }
+  }
+}
+
+// AgentFeatures imported for documentation reference in this file's jsdoc.
+export type { AgentFeatures };

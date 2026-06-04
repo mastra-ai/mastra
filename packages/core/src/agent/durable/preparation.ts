@@ -164,13 +164,23 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       messageList.addSystem(instructions);
     }
   }
-
-  // Add workspace instructions (matches WorkspaceInstructionsProcessor behavior)
   const workspace = await typedAgent.getWorkspace({ requestContext });
-  if (workspace?.filesystem || workspace?.sandbox) {
-    const wsInstructions = workspace.getInstructions({ requestContext });
-    if (wsInstructions) {
-      messageList.addSystem({ role: 'system', content: wsInstructions });
+
+  // Durable preparation runs processInput processors below, but workspace
+  // instructions are a processInputStep concern in the non-durable path.
+  // Add them here once so durable runs get the same workspace context.
+  if (workspace) {
+    const hasFs =
+      typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
+    const hasSb = typeof workspace.hasSandboxConfig === 'function' ? workspace.hasSandboxConfig() : !!workspace.sandbox;
+    if (hasFs || hasSb) {
+      const wsInstructions =
+        typeof workspace.getInstructionsAsync === 'function'
+          ? await workspace.getInstructionsAsync({ requestContext })
+          : workspace.getInstructions({ requestContext });
+      if (wsInstructions) {
+        messageList.addSystem({ role: 'system', content: wsInstructions });
+      }
     }
   }
 
@@ -327,7 +337,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
       temperature: execOptions?.modelSettings?.temperature,
-      requireToolApproval: execOptions?.requireToolApproval,
+      // Durable runs serialize their options, so a function-valued global approval policy
+      // can't be persisted. Degrade safely by requiring approval for every tool call.
+      requireToolApproval:
+        typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,

@@ -83,8 +83,78 @@ export const mastra = new Mastra({
     isOptional: true,
     defaultValue: '{}',
   },
+  {
+    name: 'browsers',
+    type: 'Record<string, BrowserProvider>',
+    description:
+      'Browser providers for agent browser access (for example, Stagehand). No built-ins — required when `builder.features.agent.browser` is enabled. See the BrowserProvider reference for the provider interface.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'builder',
+    type: 'AgentBuilderOptions',
+    description:
+      'Agent Builder configuration. See the AgentBuilderOptions reference. Omit or set `enabled: false` to disable the Builder.',
+    isOptional: true,
+  },
+  {
+    name: 'source',
+    type: "'code' | 'db'",
+    description:
+      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files on disk (routed through a local FilesystemStore) and Studio shows filesystem actions. See the Editor overview for the difference.",
+    isOptional: true,
+    defaultValue: "'db'",
+  },
+  {
+    name: 'codePath',
+    type: 'string',
+    description: "Directory used by the 'code' source for per-agent JSON files. Ignored when source is not 'code'.",
+    isOptional: true,
+    defaultValue: "'./mastra/editor/'",
+  },
 ]}
 />
+
+### Provider interfaces
+
+Each provider field above takes a record keyed by provider id. See the per-provider reference pages for the implementation shape:
+
+- [ProcessorProvider](/reference/editor/processor-provider)
+- [FilesystemProvider](/reference/editor/filesystem-provider)
+- [SandboxProvider](/reference/editor/sandbox-provider)
+- [BlobStoreProvider](/reference/editor/blob-store-provider)
+- [BrowserProvider](/reference/editor/browser-provider)
+
+## Agent Builder
+
+The `builder` field enables the [Agent Builder](/docs/agent-builder/overview), a browser-based UI for creating and editing stored agents. See:
+
+- [Agent Builder overview](/docs/agent-builder/overview) — concepts and getting started.
+- [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options) — full options schema.
+- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — admin-pinned defaults for new agents.
+- [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) — model allowlist and default model.
+
+### Registering the Builder agent
+
+The Builder UI runs against an agent created by the `createBuilderAgent()` factory from `@mastra/editor/ee`. Import the factory, invoke it, and register the returned agent under `agents` on your Mastra instance:
+
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { createBuilderAgent } from '@mastra/editor/ee'
+
+export const mastra = new Mastra({
+  agents: { builderAgent: createBuilderAgent() },
+  editor: new MastraEditor({
+    builder: { enabled: true },
+  }),
+})
+```
+
+The key name (`builderAgent`) is conventional — any key works. The `@mastra/editor/ee` subpath is gated by the Mastra Enterprise Edition license at runtime.
+
+See the [Agent Builder overview](/docs/agent-builder/overview#prerequisites) for the full setup checklist.
 
 ## Namespaces
 
@@ -394,3 +464,15 @@ Returns all registered sandbox providers.
 #### `getBlobStoreProviders()`
 
 Returns all registered blob store providers.
+
+### Source
+
+#### `getSource()`
+
+Returns the configured source (`'code'` or `'db'`), or `undefined` when the editor was constructed without an explicit `source`.
+
+```typescript
+const source = mastra.getEditor()?.getSource()
+```
+
+Returns: `'code' | 'db' | undefined`

@@ -96,7 +96,9 @@ describe('createMastraClient credentials', () => {
       return null;
     }
 
-    renderToString(createElement(MastraClientProvider, { baseUrl: 'http://localhost:4000' }, createElement(Inspector)));
+    renderToString(
+      createElement(MastraClientProvider, { baseUrl: 'http://localhost:4000', children: createElement(Inspector) }),
+    );
 
     expect(capturedClient.options.credentials).toBe('include');
   });
@@ -112,11 +114,11 @@ describe('createMastraClient credentials', () => {
     }
 
     renderToString(
-      createElement(
-        MastraClientProvider,
-        { baseUrl: 'http://localhost:4000', credentials: 'same-origin' },
-        createElement(Inspector),
-      ),
+      createElement(MastraClientProvider, {
+        baseUrl: 'http://localhost:4000',
+        credentials: 'same-origin',
+        children: createElement(Inspector),
+      }),
     );
 
     expect(capturedClient.options.credentials).toBe('same-origin');
@@ -133,7 +135,7 @@ describe('createMastraClient credentials', () => {
     }
 
     renderToString(
-      createElement(MastraClientProvider, { baseUrl: 'https://api.example.com' }, createElement(Inspector)),
+      createElement(MastraClientProvider, { baseUrl: 'https://api.example.com', children: createElement(Inspector) }),
     );
 
     expect(capturedClient.options.credentials).toBe('include');

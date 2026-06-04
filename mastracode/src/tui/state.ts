@@ -10,6 +10,7 @@ import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { MastraCodeAnalytics } from '../analytics.js';
 import type { AuthStorage } from '../auth/storage.js';
+import type { GithubSignals } from '../github-signals/index.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
 import type { OnboardingInlineComponent } from '../onboarding/onboarding-inline.js';
@@ -40,6 +41,47 @@ import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 export interface PendingSignalMessage {
   component: Component;
   text: string;
+  isInterjection?: boolean;
+}
+
+export interface GithubPrSubscriptionBadge {
+  owner?: string;
+  repo?: string;
+  prNumber: number;
+  lastSyncStatus?: string;
+  lastNotificationKind?: string;
+  lastNotificationPriority?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function getGithubPrSubscriptionsFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): GithubPrSubscriptionBadge[] {
+  const mastraMetadata = isRecord(metadata?.mastra) ? metadata.mastra : undefined;
+  const githubSignals = isRecord(mastraMetadata?.githubSignals) ? mastraMetadata.githubSignals : undefined;
+  const subscriptions = Array.isArray(githubSignals?.subscriptions) ? githubSignals.subscriptions : [];
+  const result: GithubPrSubscriptionBadge[] = [];
+  for (const subscription of subscriptions) {
+    if (!isRecord(subscription)) continue;
+    const prNumber = typeof subscription.number === 'number' ? subscription.number : undefined;
+    if (!prNumber) continue;
+    result.push({
+      prNumber,
+      ...(typeof subscription.owner === 'string' ? { owner: subscription.owner } : {}),
+      ...(typeof subscription.repo === 'string' ? { repo: subscription.repo } : {}),
+      ...(typeof subscription.lastSyncStatus === 'string' ? { lastSyncStatus: subscription.lastSyncStatus } : {}),
+      ...(typeof subscription.lastNotificationKind === 'string'
+        ? { lastNotificationKind: subscription.lastNotificationKind }
+        : {}),
+      ...(typeof subscription.lastNotificationPriority === 'string'
+        ? { lastNotificationPriority: subscription.lastNotificationPriority }
+        : {}),
+    });
+  }
+  return result.sort((a, b) => a.prNumber - b.prNumber);
 }
 // =============================================================================
 // MastraTUIOptions
@@ -82,6 +124,9 @@ export interface MastraTUIOptions {
 
   /** Use inline questions instead of dialog overlays */
   inlineQuestions?: boolean;
+
+  /** GitHub PR signal processor used for status-line polling state. */
+  githubSignals?: GithubSignals;
 }
 
 // =============================================================================
@@ -149,6 +194,8 @@ export interface TUIState {
   pendingNewThread: boolean;
   /** Current thread title (for display in status line) */
   currentThreadTitle?: string;
+  /** GitHub PR subscriptions for the current thread. */
+  activeGithubPrSubscriptions: GithubPrSubscriptionBadge[];
   /** Cached thread previews for the current TUI session */
   threadPreviewCache: Map<string, { preview: string; updatedAt: number }>;
   /** Threads whose preview lookup already returned empty during this session */
@@ -178,6 +225,8 @@ export interface TUIState {
   pendingSignalMessageComponentsById: Map<string, PendingSignalMessage>;
   /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
+  /** Pending user-message component ids for queued slash commands */
+  pendingSlashCommandMessageIds: string[];
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
   pendingApprovalDismiss: (() => void) | null;
 
@@ -193,7 +242,6 @@ export interface TUIState {
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
   activeActivationData?: OMMarkerData;
-  activeActivationTTLMarker?: OMMarkerComponent;
   activeActivationProviderChangeMarker?: OMMarkerComponent;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
@@ -211,6 +259,11 @@ export interface TUIState {
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
+
+  // ── Dedup ────────────────────────────────────────────────────────────
+  /** Texts of queued messages that were locally rendered and fired — used to
+   *  suppress the subscription echo that would otherwise create a duplicate. */
+  firedQueuedMessageTexts?: Map<string, number>;
 
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;
@@ -284,6 +337,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Thread / conversation
     pendingNewThread: false,
     currentThreadTitle: undefined,
+    activeGithubPrSubscriptions: [],
     threadPreviewCache: new Map(),
     attemptedThreadPreviewIds: new Set(),
 
@@ -297,6 +351,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     followUpComponents: [],
     pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
+    pendingSlashCommandMessageIds: [],
     pendingApprovalDismiss: null,
 
     // Status line

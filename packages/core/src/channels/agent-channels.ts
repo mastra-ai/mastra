@@ -1,4 +1,4 @@
-import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import type { Chat, Adapter, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -11,334 +11,40 @@ import type { StorageThreadType } from '../memory/types';
 import type { InputProcessor, InputProcessorOrWorkflow } from '../processors';
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
-import type { ApiRoute, CorsOptions } from '../server/types';
+import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
+import { runStaticDriver } from './chat-driver-static';
+import { runStreamingDriver } from './chat-driver-streaming';
 import { getChatModule } from './chat-lazy';
+import { resolveSlackTopLevelThreadId } from './compat/slack';
 
+import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
 import {
-  formatArgsSummary,
-  formatResult,
-  formatToolApproval,
-  formatToolApproved,
-  formatToolDenied,
-  formatToolResult,
-  formatToolRunning,
-  stripToolPrefix,
-} from './formatting';
+  buildInlineMediaCheck,
+  extractUrls,
+  findInlineLinkRule,
+  headContentType,
+  normalizeInlineLinks,
+} from './inline-media';
+import type { InlineLinkRule } from './inline-media';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
-import type { ChannelContext, ThreadHistoryMessage } from './types';
-
-const DEFAULT_INLINE_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
-
-/** Message content that can be posted to a channel. */
-export type PostableMessage = string | CardElement;
-
-/** Per-adapter configuration. */
-export interface ChannelAdapterConfig {
-  adapter: Adapter;
-  /**
-   * CORS configuration for the generated webhook route for this adapter.
-   */
-  cors?: CorsOptions;
-  /**
-   * Start a persistent Gateway WebSocket listener for this adapter
-   * (default: `true`).
-   *
-   * Only relevant for adapters that support it (e.g. Discord).
-   * Required for receiving DMs, @mentions, and reactions. Set to `false` for
-   * serverless deployments that only need slash commands via HTTP Interactions.
-   */
-  gateway?: boolean;
-
-  /**
-   * Use rich card formatting for tool calls, approvals, and results.
-   * Set to `false` to use plain text formatting instead.
-   *
-   * Some platforms (e.g. Discord) may have rendering issues with cards.
-   * @default true
-   */
-  cards?: boolean;
-
-  /**
-   * Override how tool calls are rendered in the chat.
-   * Called once per tool invocation after the result is available.
-   * Return `null` to suppress the message entirely.
-   *
-   * @default - A Card showing the function-call signature and result.
-   */
-  formatToolCall?: (info: {
-    toolName: string;
-    args: Record<string, unknown>;
-    result: unknown;
-    isError?: boolean;
-  }) => PostableMessage | null;
-
-  /**
-   * Override how errors are rendered in the chat.
-   * Return a user-friendly message instead of exposing the raw error.
-   *
-   * @default `"❌ Error: <error.message>"`
-   */
-  formatError?: (error: Error) => PostableMessage;
-}
-
-/**
- * Handler function for channel events.
- * Receives the thread, message, and the default handler implementation.
- * Call `defaultHandler` to run the built-in behavior, or ignore it to fully replace.
- */
-export type ChannelHandler = (
-  thread: Thread,
-  message: Message,
-  defaultHandler: (thread: Thread, message: Message) => Promise<void>,
-) => Promise<void>;
-
-/**
- * Handler configuration for channel events.
- * - `undefined` or omitted → use default handler
- * - `false` → disable handler entirely
- * - function → custom handler (receives defaultHandler as 3rd arg to wrap/extend)
- */
-export type ChannelHandlerConfig = ChannelHandler | false | undefined;
-
-/** Handler overrides for built-in channel event handlers. */
-export interface ChannelHandlers {
-  /**
-   * Handler for direct messages to the bot.
-   * Default: Routes to agent.stream and posts the response.
-   */
-  onDirectMessage?: ChannelHandlerConfig;
-
-  /**
-   * Handler for @mentions of the bot in channels.
-   * Default: Routes to agent.stream and posts the response.
-   */
-  onMention?: ChannelHandlerConfig;
-
-  /**
-   * Handler for messages in subscribed threads.
-   * Default: Routes to agent.stream and posts the response.
-   */
-  onSubscribedMessage?: ChannelHandlerConfig;
-}
-
-/** Configuration for agent chat channels. */
-export interface ChannelConfig {
-  /** Platform adapters keyed by name (e.g. 'slack', 'discord'). */
-  adapters: Record<string, Adapter | ChannelAdapterConfig>;
-
-  /**
-   * Override built-in event handlers.
-   * Use this to customize how the agent responds to DMs, mentions, etc.
-   *
-   * @example
-   * ```ts
-   * handlers: {
-   *   // Wrap the default handler with logging
-   *   onDirectMessage: async (thread, message, defaultHandler) => {
-   *     console.log('Received DM:', message.text);
-   *     await defaultHandler(thread, message);
-   *   },
-   *   // Disable mention handling entirely
-   *   onMention: false,
-   * }
-   * ```
-   */
-  handlers?: ChannelHandlers;
-
-  /**
-   * Which media types to send inline to the model (as file parts).
-   * Everything else is described as text metadata so the agent knows about the
-   * file without crashing models that reject unsupported types.
-   *
-   * - **Array of globs** — e.g. `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']` (default), `['image/*', 'video/*']`
-   * - **Function** — `(mimeType: string) => boolean`
-   *
-   * @default `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`
-   *
-   * @example
-   * ```ts
-   * // Gemini supports video/audio natively
-   * inlineMedia: ['image/*', 'video/*', 'audio/*']
-   *
-   * // Send everything inline
-   * inlineMedia: () => true
-   * ```
-   */
-  inlineMedia?: string[] | ((mimeType: string) => boolean);
-
-  /**
-   * Promote URLs found in message text to file parts so the model can "see" linked
-   * content (images, videos, PDFs, etc.) instead of just the raw URL text.
-   *
-   * Each entry matches a domain. When a URL in the message matches, it's added as
-   * a `file` part alongside the text. Use a string for domains where a HEAD request
-   * determines the Content-Type, or an object to force a specific mime type (useful
-   * for sites like YouTube where HEAD returns `text/html` but the model treats the
-   * URL as video).
-   *
-   * - **String** — domain to match; HEAD determines the mime type
-   * - **Object** `{ match, mimeType }` — domain + forced mime type (skips HEAD)
-   * - `'*'` — match all URLs (HEAD each one)
-   * - `undefined` (default) — disabled, no URLs are promoted
-   *
-   * For string entries (or `'*'`), the resolved Content-Type is checked against
-   * `inlineMedia` — only matching types become file parts. For object entries with
-   * a forced `mimeType`, the file part is always added.
-   *
-   * @example
-   * ```ts
-   * // Gemini can process YouTube URLs natively as video
-   * inlineLinks: [
-   *   { match: 'youtube.com', mimeType: 'video/*' },
-   *   { match: 'youtu.be', mimeType: 'video/*' },
-   * ]
-   *
-   * // HEAD-check linked images from any domain
-   * inlineLinks: ['*']
-   *
-   * // Mix: force YouTube, HEAD-check everything else
-   * inlineLinks: [
-   *   { match: 'youtube.com', mimeType: 'video/*' },
-   *   'imgur.com',
-   *   'i.redd.it',
-   * ]
-   * ```
-   */
-  inlineLinks?: InlineLinkEntry[];
-
-  /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
-  state?: StateAdapter;
-
-  /** The bot's display name (default: agent's name, or `'Mastra'`). */
-  userName?: string;
-
-  /**
-   * Fetch recent thread messages from the platform to provide context when the agent
-   * is mentioned mid-conversation. Only fetches on the first mention in a thread —
-   * once subscribed, the agent has full history via Mastra's memory system.
-   *
-   * @example
-   * ```ts
-   * threadContext: { maxMessages: 15 } // Fetch more context
-   * threadContext: { maxMessages: 0 }  // Disable (opt-out)
-   * ```
-   */
-  threadContext?: {
-    /**
-     * Maximum number of recent platform messages to fetch (default: 10).
-     * Only applies to non-DM threads where the agent isn't already subscribed.
-     * Set to 0 to disable.
-     */
-    maxMessages?: number;
-  };
-
-  /**
-   * Whether to include channel tools (add_reaction, remove_reaction).
-   * Set to `false` for models that don't support function calling.
-   *
-   * @default true
-   */
-  tools?: boolean;
-
-  /**
-   * Additional options passed directly to the Chat SDK.
-   * Use this for advanced configuration not exposed by Mastra.
-   *
-   * @see https://github.com/vercel/chat
-   * @example
-   * ```ts
-   * chatOptions: {
-   *   dedupeTtlMs: 600000, // 10 minute deduplication window
-   *   fallbackStreamingPlaceholderText: '⏳',
-   * }
-   * ```
-   */
-  chatOptions?: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
-}
-
-/**
- * Build a predicate from the `inlineMedia` config option.
- * Supports glob patterns (e.g. `'image/*'`) and custom functions.
- * Default: see `DEFAULT_INLINE_MEDIA_TYPES`.
- */
-function buildInlineMediaCheck(config?: string[] | ((mimeType: string) => boolean)): (mimeType: string) => boolean {
-  if (typeof config === 'function') return config;
-  const patterns = config ?? DEFAULT_INLINE_MEDIA_TYPES;
-  return (mimeType: string) => {
-    return patterns.some(pattern => {
-      if (pattern === '*' || pattern === '*/*') return true;
-      if (pattern.endsWith('/*')) {
-        return mimeType.startsWith(pattern.slice(0, -1));
-      }
-      return mimeType === pattern;
-    });
-  };
-}
-
-/** A single entry in the `inlineLinks` config. */
-export type InlineLinkEntry =
-  | string // Domain pattern — HEAD determines mime type, checked against inlineMedia
-  | { match: string; mimeType: string }; // Domain + forced mime type (skips HEAD & inlineMedia)
-
-/** Resolved inline-link rule after normalisation. */
-interface InlineLinkRule {
-  match: string;
-  /** If set, skip HEAD and use this mime type directly. */
-  forcedMimeType?: string;
-}
-
-/**
- * Normalise the `inlineLinks` config into a list of rules.
- * Returns `undefined` if the feature is disabled.
- */
-function normalizeInlineLinks(config?: InlineLinkEntry[]): InlineLinkRule[] | undefined {
-  if (config == null || config.length === 0) return undefined;
-  return config.map(entry =>
-    typeof entry === 'string' ? { match: entry } : { match: entry.match, forcedMimeType: entry.mimeType },
-  );
-}
-
-/** Check if a URL's hostname matches a domain pattern. @internal */
-export function matchesDomain(url: string, pattern: string): boolean {
-  if (pattern === '*') return true;
-  try {
-    const hostname = new URL(url).hostname;
-    return hostname === pattern || hostname.endsWith(`.${pattern}`);
-  } catch {
-    return false;
-  }
-}
-
-/** Find the first matching inline-link rule for a URL. */
-function findInlineLinkRule(url: string, rules: InlineLinkRule[]): InlineLinkRule | undefined {
-  return rules.find(rule => matchesDomain(url, rule.match));
-}
-
-/** Extract URLs from plain text. @internal */
-const URL_REGEX = /https?:\/\/[^\s<>)"']+/gi;
-export function extractUrls(text: string): string[] {
-  return Array.from(text.matchAll(URL_REGEX), m => m[0]);
-}
-
-/**
- * HEAD a URL to determine its Content-Type.
- * Returns undefined if the request fails or has no Content-Type.
- */
-async function headContentType(url: string, logger?: IMastraLogger): Promise<string | undefined> {
-  try {
-    const res = await fetch(url, { method: 'HEAD', redirect: 'follow' });
-    if (!res.ok) return undefined;
-    const ct = res.headers.get('content-type');
-    // Strip parameters (e.g. 'image/png; charset=utf-8' → 'image/png')
-    return ct?.split(';')[0]?.trim() || undefined;
-  } catch (e) {
-    logger?.debug('[CHANNEL] HEAD request failed for link', { url, error: String(e) });
-    return undefined;
-  }
-}
+import type { PendingApprovalRecord } from './stream-helpers';
+import type {
+  ChannelAdapterConfig,
+  ChannelConfig,
+  ChannelContext,
+  ChannelHandlers,
+  PostableMessage,
+  ResolveResourceId,
+  StreamingConfig,
+  ThreadHistoryMessage,
+  ToolDisplay,
+  ToolDisplayFn,
+} from './types';
+import { defaultTypingStatus } from './typing-status';
+import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -372,6 +78,8 @@ export class AgentChannels {
   private inlineLinkRules: InlineLinkRule[] | undefined;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
+  /** Optional hook to resolve the memory resourceId (owner) for newly-created channel threads. */
+  private resolveResourceId: ResolveResourceId | undefined;
   /**
    * The original `ChannelConfig` passed to the constructor.
    *
@@ -400,7 +108,7 @@ export class AgentChannels {
    * thread on the first message we route through it, so any signals we send (and any signals
    * other callers send to the same thread) are rendered exactly once to the platform. The
    * subscription stays open until `close()` is called or the consumer errors out — we don't
-   * eagerly subscribe at startup because the per-thread chunk consumer needs the `sdkThread`
+   * eagerly subscribe at startup because the per-thread chunk consumer needs the `chatThread`
    * handle, which only exists after a platform event arrives.
    */
   private threadSubscriptions = new Map<
@@ -417,10 +125,14 @@ export class AgentChannels {
    * platform `messageId` (plus the tool's display metadata) here for the consumer to pick up
    * when it renders the result. Entries are removed as soon as the consumer consumes them.
    */
-  private pendingApprovalCards = new Map<
-    string,
-    { messageId?: string; displayName: string; argsSummary: string; startedAt: number }
-  >();
+  private pendingApprovalCards = new Map<string, PendingApprovalRecord>();
+
+  /**
+   * Platforms we've already warned about for misconfigured `toolDisplay` (e.g.
+   * `'timeline'` without `streaming: true`). Keeps log output to one warn per
+   * platform per AgentChannels instance.
+   */
+  private warnedToolDisplayFallback = new Set<string>();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -448,6 +160,7 @@ export class AgentChannels {
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
     this.toolsEnabled = config.tools !== false;
+    this.resolveResourceId = config.resolveResourceId;
     this.channelConfig = config;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
   }
@@ -553,8 +266,8 @@ export class AgentChannels {
       });
 
       // Default handler that routes messages to the agent
-      const defaultHandler = (sdkThread: Thread, message: Message) =>
-        this.handleChatMessage(sdkThread, message, mastra);
+      const defaultHandler = (chatThread: Thread, message: Message) =>
+        this.handleChatMessage(chatThread, message, mastra);
 
       // Register handlers with optional overrides
       const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
@@ -593,12 +306,13 @@ export class AgentChannels {
         try {
           const approved = actionId.startsWith('tool_approve:');
           const toolCallId = actionId.split(':')[1];
+          if (!toolCallId) {
+            this.log('info', `Missing toolCallId in action event actionId=${actionId}`);
+            return;
+          }
 
-          // In Slack DMs, event.thread points to the approval card message rather
-          // than the top-level conversation, which can cause sub-threading.
-          // This is a known Slack adapter limitation.
-          const sdkThread = event.thread as Thread | null;
-          if (!sdkThread) {
+          const chatThread = event.thread as Thread | null;
+          if (!chatThread) {
             this.log('info', `No thread in action event for toolCallId=${toolCallId}`);
             return;
           }
@@ -608,49 +322,59 @@ export class AgentChannels {
           const adapterConfig = this.adapterConfigs[platform];
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
-          // Look up the Mastra thread to find the runId and tool metadata from pending approvals
-          // Note: In Slack DMs, sdkThread.id may point to the card message, not the conversation.
-          // We use sdkThread.channelId as the stable identifier for DMs.
-          const externalThreadId = sdkThread.isDM ? sdkThread.channelId : sdkThread.id;
+          const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
           const mastraThread = await this.getOrCreateThread({
             externalThreadId,
-            channelId: sdkThread.channelId,
+            channelId: chatThread.channelId,
             platform,
             resourceId: `${platform}:${event.user.userId}`,
             mastra,
           });
 
-          // Find the runId from pendingToolApprovals in message history
-          const storage = mastra.getStorage();
-          const memoryStore = storage ? await storage.getStore('memory') : undefined;
-          if (!memoryStore) {
-            throw new Error('Storage is required for tool approval lookups');
-          }
-
-          const { messages } = await memoryStore.listMessages({
-            threadId: mastraThread.id,
-            perPage: 50,
-            orderBy: { field: 'createdAt', direction: 'DESC' },
-          });
-
-          // Search for the pendingToolApprovals metadata containing our toolCallId
+          // Look up the runId for this toolCallId. Prefer the in-memory
+          // `pendingApprovalCards` map (set when the approval card was posted)
+          // because it's keyed by toolCallId and survives parallel same-tool
+          // approvals. Fall back to the persisted `pendingToolApprovals`
+          // metadata for cases where the bot restarted between card post and
+          // click (the metadata path is lossy for parallel same-tool calls
+          // since core keys those by toolName — only the latest survives).
           let runId: string | undefined;
           let toolName: string | undefined;
           let toolArgs: Record<string, unknown> | undefined;
-          for (const msg of messages) {
-            const pending = msg.content?.metadata?.pendingToolApprovals as
-              | Record<string, { toolCallId: string; runId: string; toolName: string; args: Record<string, unknown> }>
-              | undefined;
-            if (pending) {
-              for (const toolData of Object.values(pending)) {
-                if (toolData.toolCallId === toolCallId) {
-                  runId = toolData.runId;
-                  toolName = toolData.toolName;
-                  toolArgs = toolData.args;
-                  break;
+
+          const stashed = this.pendingApprovalCards.get(toolCallId);
+          if (stashed?.runId) {
+            runId = stashed.runId;
+            toolName = stashed.toolName;
+            toolArgs = stashed.args;
+          } else {
+            const storage = mastra.getStorage();
+            const memoryStore = storage ? await storage.getStore('memory') : undefined;
+            if (!memoryStore) {
+              throw new Error('Storage is required for tool approval lookups');
+            }
+
+            const { messages } = await memoryStore.listMessages({
+              threadId: mastraThread.id,
+              perPage: 50,
+              orderBy: { field: 'createdAt', direction: 'DESC' },
+            });
+
+            for (const msg of messages) {
+              const pending = msg.content?.metadata?.pendingToolApprovals as
+                | Record<string, { toolCallId: string; runId: string; toolName: string; args: Record<string, unknown> }>
+                | undefined;
+              if (pending) {
+                for (const toolData of Object.values(pending)) {
+                  if (toolData.toolCallId === toolCallId) {
+                    runId = toolData.runId;
+                    toolName = toolData.toolName;
+                    toolArgs = toolData.args;
+                    break;
+                  }
                 }
+                if (runId) break;
               }
-              if (runId) break;
             }
           }
 
@@ -662,13 +386,23 @@ export class AgentChannels {
           // Build the card header with tool name and args
           const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
           const argsSummary = toolArgs ? formatArgsSummary(toolArgs) : '';
-          const useCards = adapterConfig?.cards !== false;
+          // Resolve the tool display mode so the approve/deny edit matches
+          // the original card's rendering (cards → Block Kit, text → plain).
+          // Streaming is irrelevant here — we're outside the agent loop.
+          const { resolved: toolDisplay } = this.resolveToolDisplay(
+            platform,
+            adapterConfig?.toolDisplay,
+            false,
+            adapterConfig?.cards,
+            adapterConfig?.formatToolCall,
+          );
+          const useCards = toolDisplay === 'cards';
 
           if (!approved) {
-            const byUser = sdkThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
+            const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
             try {
               await adapter.editMessage(
-                sdkThread.id,
+                chatThread.id,
                 messageId,
                 formatToolDenied(displayName, argsSummary, byUser, useCards),
               );
@@ -680,7 +414,7 @@ export class AgentChannels {
             // message (e.g. acknowledging the rejection). Without this, the run stays
             // suspended forever and the user gets no feedback from the model.
             const { channelContext } = this.buildEventContext({
-              sdkThread,
+              chatThread,
               platform,
               eventType: 'action',
               messageId,
@@ -692,7 +426,7 @@ export class AgentChannels {
             this.ensureThreadSubscription({
               mastraThreadId: mastraThread.id,
               resourceId: mastraThread.resourceId,
-              sdkThread,
+              chatThread,
               platform,
             });
 
@@ -716,20 +450,24 @@ export class AgentChannels {
               } else {
                 throw err;
               }
+            } finally {
+              // Stash entry is no longer needed; the resumed decline stream
+              // won't emit a tool-result for this call.
+              this.pendingApprovalCards.delete(toolCallId);
             }
             return;
           }
 
           // Immediately edit the card to show "Approved" and remove the buttons
           try {
-            await adapter.editMessage(sdkThread.id, messageId, formatToolApproved(displayName, argsSummary, useCards));
+            await adapter.editMessage(chatThread.id, messageId, formatToolApproved(displayName, argsSummary, useCards));
           } catch (err) {
             this.log('debug', 'Failed to edit approved card', err);
           }
 
           // Build request context for the resumed stream.
           const { channelContext } = this.buildEventContext({
-            sdkThread,
+            chatThread,
             platform,
             eventType: 'action',
             messageId,
@@ -746,7 +484,7 @@ export class AgentChannels {
           this.ensureThreadSubscription({
             mastraThreadId: mastraThread.id,
             resourceId: mastraThread.resourceId,
-            sdkThread,
+            chatThread,
             platform,
           });
           if (toolCallId) {
@@ -937,9 +675,12 @@ export class AgentChannels {
 
   /**
    * Returns channel input processors (e.g. system prompt injection).
-   * Skips if the user already added a processor with the same id.
+   *
+   * - Skipped entirely when `channels.threadContext.addSystemMessage` is `false`.
+   * - Skipped if the user already added a processor with the same id.
    */
   getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
+    if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
     if (hasProcessor) return [];
     return [new ChatChannelProcessor()];
@@ -998,16 +739,37 @@ export class AgentChannels {
    *
    *   - `channelContext` — goes on `requestContext` under the 'channel' key, consumed by
    *     `ChatChannelProcessor` and other input processors.
-   *   - `attributes` — serialized as XML on the signal element the LLM sees (e.g. on
-   *     `<user-message messageId=... authorId=... />`). Strings only.
+   *   - `attributes` — serialized as XML on the user message element the LLM sees (e.g. on
+   *     `<user messageId=... authorId=... />`). Strings only.
    *   - `providerOptions` — written to the stored message's `content.providerMetadata`
    *     under `mastra.channels.<platform>` so UI/query callers can read author/channel
    *     facts off the message (e.g. show a Slack icon + author name) without unpacking
    *     the signal envelope. The LLM ignores `providerOptions.mastra.*` since only
    *     provider-keyed entries (openai, anthropic, …) are forwarded to the model.
    */
+  /**
+   * Resolve the external thread id to use when looking up a Mastra thread for
+   * a tool-approval flow. Dispatches to per-platform compat shims that work
+   * around quirks in how adapters surface threading on inbound action events.
+   * Add new platform branches here as their compat shims land in `./compat/*`.
+   */
+  private resolveExternalThreadId(params: { platform: string; chatThread: Thread; messageId?: string }): string {
+    const { platform, chatThread, messageId } = params;
+    const adapter = this.adapters[platform];
+    if (!adapter) return chatThread.id;
+
+    switch (platform) {
+      case 'slack':
+        return (
+          resolveSlackTopLevelThreadId({ platform, adapter, chatThreadId: chatThread.id, messageId }) ?? chatThread.id
+        );
+      default:
+        return chatThread.id;
+    }
+  }
+
   private buildEventContext(params: {
-    sdkThread: Thread;
+    chatThread: Thread;
     platform: string;
     eventType: string;
     messageId: string | undefined;
@@ -1017,19 +779,19 @@ export class AgentChannels {
     attributes: Record<string, string | undefined>;
     providerOptions: MastraProviderMetadata;
   } {
-    const { sdkThread, platform, eventType, messageId, actor } = params;
+    const { chatThread, platform, eventType, messageId, actor } = params;
     const adapter = this.adapters[platform]!;
     const botUserId = adapter.botUserId;
-    const botMention = botUserId ? sdkThread.mentionUser(botUserId) : undefined;
+    const botMention = botUserId ? chatThread.mentionUser(botUserId) : undefined;
     const actorName = actor.fullName || actor.userName;
-    const actorMention = actor.userId ? sdkThread.mentionUser(actor.userId) : undefined;
+    const actorMention = actor.userId ? chatThread.mentionUser(actor.userId) : undefined;
 
     const channelContext: ChannelContext = {
       platform,
       eventType,
-      isDM: sdkThread.isDM,
-      threadId: sdkThread.id,
-      channelId: sdkThread.channelId,
+      isDM: chatThread.isDM,
+      threadId: chatThread.id,
+      channelId: chatThread.channelId,
       messageId,
       userId: actor.userId,
       userName: actorName,
@@ -1042,7 +804,7 @@ export class AgentChannels {
     // In DMs the author is stable for the whole conversation (already in the system message),
     // so we keep this minimal to avoid noise on every turn.
     const attributes: Record<string, string | undefined> = { messageId };
-    if (!sdkThread.isDM) {
+    if (!chatThread.isDM) {
       attributes.authorName = actorName;
       attributes.authorId = actor.userId;
       attributes.authorMention = actorMention;
@@ -1074,39 +836,46 @@ export class AgentChannels {
    * and onSubscribedMessage. Streams the Mastra agent response and
    * updates the channel message in real-time via edits.
    */
-  private async handleChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async handleChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
     try {
-      await this.processChatMessage(sdkThread, message, mastra);
+      await this.processChatMessage(chatThread, message, mastra);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      this.log('error', `[${sdkThread.adapter.name}] Error handling message`, {
+      this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
         messageId: message.id,
         authorId: message.author?.userId,
         error: String(err),
       });
       try {
-        const adapterConfig = this.adapterConfigs[sdkThread.adapter.name];
+        const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
         const errorMessage = adapterConfig?.formatError
           ? adapterConfig.formatError(error)
           : `❌ Error: ${error.message}`;
-        await sdkThread.post(errorMessage);
+        await chatThread.post(errorMessage);
       } catch (postErr) {
         this.log('debug', 'Failed to post error message to thread', postErr);
       }
     }
   }
 
-  private async processChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
-    const platform = sdkThread.adapter.name;
+  private async processChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+    const platform = chatThread.adapter.name;
 
-    // Map to a Mastra thread for memory/history
-    // In Slack DMs, sdkThread.id can vary (points to message threads), so use channelId as stable ID.
-    const externalThreadId = sdkThread.isDM ? sdkThread.channelId : sdkThread.id;
+    // Map to a Mastra thread for memory/history.
+    // chatThread.id encodes channel + threadTs, so it's stable per conversation:
+    // each Slack thread (including top-level DM, DM thread reply, channel mention, and
+    // channel thread reply) gets its own mastra thread.
+    const externalThreadId = chatThread.id;
+    const defaultResourceId = `${platform}:${message.author.userId}`;
     const mastraThread = await this.getOrCreateThread({
       externalThreadId,
-      channelId: sdkThread.channelId,
+      channelId: chatThread.channelId,
       platform,
-      resourceId: `${platform}:${message.author.userId}`,
+      // Lazily resolved: the hook only runs when we're actually creating a new
+      // thread, never when reusing an existing one (which keeps its stored owner).
+      resourceId: this.resolveResourceId
+        ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId })
+        : defaultResourceId,
       mastra,
     });
 
@@ -1122,16 +891,16 @@ export class AgentChannels {
     // to avoid consecutive user messages which some providers reject (e.g. DeepSeek).
     let historyBlock: string | undefined; // TODO: convert platform thread chat history into Mastra messages instead of one big text block
     const maxMessages = this.threadContext.maxMessages ?? 10;
-    if (maxMessages > 0 && !sdkThread.isDM) {
-      const alreadySubscribed = await sdkThread.isSubscribed();
+    if (maxMessages > 0 && !chatThread.isDM) {
+      const alreadySubscribed = await chatThread.isSubscribed();
       if (!alreadySubscribed) {
-        this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${sdkThread.id}`);
-        const history = await this.fetchThreadHistory(sdkThread, message.id, maxMessages);
+        this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${chatThread.id}`);
+        const history = await this.fetchThreadHistory(chatThread, message.id, maxMessages);
         this.logger?.debug?.(`Fetched ${history.length} messages from thread history`);
         if (history.length > 0) {
           const lines = ['[Thread context — messages in this thread before you joined]'];
           for (const msg of history) {
-            const mention = msg.userId ? sdkThread.mentionUser(msg.userId) : undefined;
+            const mention = msg.userId ? chatThread.mentionUser(msg.userId) : undefined;
             let prefix = mention ? (msg.author ? `${msg.author} (${mention})` : mention) : msg.author;
             if (msg.isBot) prefix += ' (bot)';
             lines.push(`[${prefix}] (msg:${msg.id}): ${msg.text}`);
@@ -1139,7 +908,7 @@ export class AgentChannels {
           historyBlock = lines.join('\n');
         }
       } else {
-        this.logger?.debug?.(`Skipping thread history fetch — already subscribed to ${sdkThread.id}`);
+        this.logger?.debug?.(`Skipping thread history fetch — already subscribed to ${chatThread.id}`);
       }
     }
 
@@ -1236,12 +1005,28 @@ export class AgentChannels {
     // message into an already-running agent loop or wakes the thread with an idle stream
     // using the same options we used to pass to agent.stream().
     const adapterConfig = this.adapterConfigs[platform];
-    const useCards = adapterConfig?.cards !== false;
+    // Auto-approve suspended tools when there's no way to render an
+    // approval card with buttons. Block Kit cards have buttons; plain
+    // `'text'` mode has only a "reply approve/deny" hint with no
+    // first-class affordance, so we auto-approve to avoid getting stuck.
+    const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
+      platform,
+      adapterConfig?.toolDisplay,
+      this.resolveStreaming(adapterConfig?.streaming).enabled,
+      adapterConfig?.cards,
+      adapterConfig?.formatToolCall,
+    );
+    const canRenderApprovalButtons =
+      toolDisplayFn !== undefined ||
+      toolDisplay === 'cards' ||
+      toolDisplay === 'timeline' ||
+      toolDisplay === 'grouped' ||
+      toolDisplay === 'hidden';
 
     const { channelContext, attributes, providerOptions } = this.buildEventContext({
-      sdkThread,
+      chatThread,
       platform,
-      eventType: sdkThread.isDM ? 'message' : 'mention',
+      eventType: chatThread.isDM ? 'message' : 'mention',
       messageId: message.id,
       actor: message.author,
     });
@@ -1252,31 +1037,20 @@ export class AgentChannels {
     this.ensureThreadSubscription({
       mastraThreadId: mastraThread.id,
       resourceId: threadResourceId,
-      sdkThread,
+      chatThread,
       platform,
     });
 
-    // Subscribe BEFORE sending the signal so the subscription metadata write
-    // happens before the agent run loads the thread snapshot. Otherwise the
-    // in-flight agent run can read the thread pre-subscribe and later
-    // overwrite the `channel_subscribed` field via its own thread persistence.
-    await sdkThread.subscribe();
-
-    // Refresh the thread snapshot so the agent run sees the post-subscribe
-    // metadata. Without this, `prepareMemoryStep`'s deepEqual would detect a
-    // metadata mismatch and overwrite the freshly-written `channel_subscribed`
-    // with the stale pre-subscribe value.
-    const memoryStore = await mastra.getStorage()?.getStore('memory');
-    const refreshedThread = memoryStore ? await memoryStore.getThreadById({ threadId: mastraThread.id }) : null;
-    const threadForRun = refreshedThread ?? mastraThread;
+    void chatThread.subscribe().catch(err => {
+      this.log('debug', 'chatThread.subscribe failed', err);
+    });
 
     // When the message is text-only, pass the bare string to the signal pipeline.
     // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
     const signalContents: AgentSignalContents = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
 
-    this.agent.sendSignal(
+    this.agent.sendMessage(
       {
-        type: 'user-message',
         contents: signalContents,
         attributes,
         providerOptions,
@@ -1289,11 +1063,12 @@ export class AgentChannels {
           streamOptions: {
             requestContext,
             memory: {
-              thread: threadForRun,
+              thread: mastraThread.id,
               resource: threadResourceId,
             },
-            // Without cards, we can't show approval buttons — auto-approve tools instead
-            autoResumeSuspendedTools: useCards ? undefined : true,
+            // Without approval-button rendering, auto-approve tools to
+            // avoid getting stuck waiting for input we can't ask for.
+            autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
           },
         },
       },
@@ -1306,15 +1081,15 @@ export class AgentChannels {
    * current triggering message.
    */
   private async fetchThreadHistory(
-    sdkThread: Thread,
+    chatThread: Thread,
     currentMessageId: string,
     maxMessages: number,
   ): Promise<ThreadHistoryMessage[]> {
     const messages: ThreadHistoryMessage[] = [];
 
     try {
-      // sdkThread.messages is an async iterator that yields newest-first
-      for await (const msg of sdkThread.messages) {
+      // chatThread.messages is an async iterator that yields newest-first
+      for await (const msg of chatThread.messages) {
         // Skip the current message that triggered this request
         if (msg.id === currentMessageId) continue;
 
@@ -1338,48 +1113,21 @@ export class AgentChannels {
   }
 
   /**
-   * Consume the agent stream and render all chunks to the chat platform.
-   *
-   * Iterates the outer `fullStream` to handle all chunk types:
-   * - `text-delta`: Accumulates text and posts when flushed.
-   * - `tool-call`: Posts a "Running…" card eagerly.
-   * - `tool-result`: Edits the "Running…" card with the result.
-   * - `tool-call-approval`: Edits the card to show Approve/Deny buttons.
-   * - `step-finish` / `finish`: Flushes accumulated text.
-   */
-  private async editOrPost(
-    adapter: Adapter,
-    sdkThread: Thread,
-    messageId: string | undefined,
-    content: PostableMessage,
-  ) {
-    if (messageId) {
-      try {
-        await adapter.editMessage(sdkThread.id, messageId, content);
-      } catch {
-        await sdkThread.post(content);
-      }
-    } else {
-      await sdkThread.post(content);
-    }
-  }
-
-  /**
    * Lazily open (and cache) an `agent.subscribeToThread()` for a Mastra thread, attaching a
    * background chunk consumer that renders run output to the originating chat platform. We
    * cache by `mastraThreadId` so multiple incoming messages on the same thread share one
    * subscription and run output is never rendered twice.
    *
-   * If the underlying consumer throws (e.g. the platform `sdkThread` becomes unusable), we
+   * If the underlying consumer throws (e.g. the platform `chatThread` becomes unusable), we
    * tear down the cache entry so the next message can reopen a fresh subscription.
    */
   private ensureThreadSubscription(params: {
     mastraThreadId: string;
     resourceId: string;
-    sdkThread: Thread;
+    chatThread: Thread;
     platform: string;
   }): AgentThreadSubscription<any> {
-    const { mastraThreadId, resourceId, sdkThread, platform } = params;
+    const { mastraThreadId, resourceId, chatThread, platform } = params;
     const existing = this.threadSubscriptions.get(mastraThreadId);
     if (existing) return existing.subscription;
 
@@ -1408,7 +1156,7 @@ export class AgentChannels {
       },
     };
 
-    const consumer = this.consumeAgentStream(stream, sdkThread, platform).catch(err => {
+    const consumer = this.consumeAgentStream(stream, chatThread, platform).catch(err => {
       this.log('error', `[${platform}] Thread subscription consumer failed`, { error: err });
       // Drop the cache entry so subsequent messages reopen a fresh subscription.
       const entry = this.threadSubscriptions.get(mastraThreadId);
@@ -1432,270 +1180,153 @@ export class AgentChannels {
 
   private async consumeAgentStream(
     stream: AsyncIterable<AgentChunkType<any>>,
-    sdkThread: Thread,
+    chatThread: Thread,
     platform: string,
     approvalContext?: { toolCallId: string; messageId: string },
   ): Promise<void> {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
-    const useCards = adapterConfig?.cards !== false;
+    const streaming = this.resolveStreaming(adapterConfig?.streaming);
+    const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
+      platform,
+      adapterConfig?.toolDisplay,
+      streaming.enabled,
+      adapterConfig?.cards,
+      adapterConfig?.formatToolCall,
+    );
 
-    interface TrackedTool {
-      displayName: string;
-      argsSummary: string;
-      startedAt: number;
-      messageId?: string; // platform message ID for editing
+    // Seed the approval-card stash on resumed runs so the driver can resolve
+    // `messageId` for the incoming `tool-result` even though it never saw the
+    // pre-suspension `tool-call`.
+    if (approvalContext) {
+      this.pendingApprovalCards.set(approvalContext.toolCallId, {
+        messageId: approvalContext.messageId,
+        displayName: '',
+        argsSummary: '',
+        startedAt: Date.now(),
+      });
     }
 
-    // Per-run rendering state. A single subscription stream can carry many runs back-to-back,
-    // so we reset on every run boundary (finish / error / abort) to avoid leaking tool cards
-    // or pending text from one run into the next.
-    let textBuffer = '';
-    let toolCalls = new Map<string, TrackedTool>();
+    // The streaming driver flips `typingGate.active = true` while a
+    // StreamingPlan post is in flight; the typing-status wrapper reads it
+    // and skips `startTyping` during that window.
+    const typingGate = { active: false };
+    const wrapped = this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate);
 
-    // Typing indicator: refresh on each generation chunk, debounced to avoid
-    // hammering the platform API. Slack/Discord auto-expire the indicator
-    // after ~5-10s, so when generation stops the indicator clears naturally.
-    let lastTypingAt = 0;
-    const refreshTyping = () => {
-      const now = Date.now();
-      if (now - lastTypingAt < 5_000) return;
-      lastTypingAt = now;
-      sdkThread.startTyping().catch(e => {
-        this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
+    const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
+      this.pendingApprovalCards.set(toolCallId, record);
+    };
+    const getPendingApproval = (id: string) => this.pendingApprovalCards.get(id);
+    const takePendingApproval = (id: string) => {
+      const r = this.pendingApprovalCards.get(id);
+      if (r) this.pendingApprovalCards.delete(id);
+      return r;
+    };
+
+    if (streaming.enabled) {
+      await runStreamingDriver({
+        stream: wrapped,
+        chatThread,
+        adapter,
+        toolDisplay: toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
+        toolDisplayFn,
+        streamingOptions: streaming.options,
+        channelToolNames: this.channelToolNames,
+        logger: this.logger,
+        onApprovalPosted,
+        getPendingApproval,
+        takePendingApproval,
+        typingGate,
+        formatError: adapterConfig?.formatError,
       });
-    };
+    } else {
+      await runStaticDriver({
+        stream: wrapped,
+        chatThread,
+        adapter,
+        toolDisplay: toolDisplay as 'cards' | 'text' | 'hidden',
+        toolDisplayFn,
+        channelToolNames: this.channelToolNames,
+        logger: this.logger,
+        onApprovalPosted,
+        getPendingApproval,
+        takePendingApproval,
+        formatError: adapterConfig?.formatError,
+      });
+    }
+  }
 
-    const seedApprovalContext = () => {
-      if (approvalContext) {
-        toolCalls.set(approvalContext.toolCallId, {
-          displayName: '',
-          argsSummary: '',
-          startedAt: Date.now(),
-          messageId: approvalContext.messageId,
-        });
-      }
-    };
-    seedApprovalContext();
+  /**
+   * Normalize the per-adapter `streaming` option (`boolean | { updateIntervalMs? }`)
+   * into a flat `{ enabled, options }` shape so call-sites don't have to
+   * re-derive both from the raw union.
+   */
+  private resolveStreaming(raw: StreamingConfig | undefined): {
+    enabled: boolean;
+    options?: { updateIntervalMs?: number };
+  } {
+    if (raw === undefined || raw === false) return { enabled: false };
+    if (raw === true) return { enabled: true, options: {} };
+    return { enabled: true, options: raw };
+  }
 
-    const flushText = async () => {
-      // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
-      const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
-      if (cleanedText) {
-        this.log('debug', `[${platform}] flushText posting`, {
-          sdkThreadId: sdkThread.id,
-          isDM: (sdkThread as any).isDM,
-          textLength: cleanedText.length,
-        });
-        await sdkThread.post(cleanedText);
-        textBuffer = '';
-      }
-    };
+  /**
+   * Pass-through async generator that yields chunks unchanged but emits
+   * typing-status updates (`startTyping`) along the way. Lives outside the
+   * drivers so both drivers benefit from the same dedup + gate logic.
+   *
+   * The streaming driver flips `typingGate.active = true` while a
+   * `StreamingPlan` post is in flight — Slack's `assistant.threads.setStatus`
+   * (what `startTyping` maps to) only auto-clears on `chat.postMessage`, not
+   * on `chat.stopStream`, so a status set during streaming would stick after
+   * the run ends. The static driver leaves the gate `false` so typing works
+   * normally in cards/hidden modes.
+   */
+  private async *withTypingStatus(
+    stream: AsyncIterable<AgentChunkType<any>>,
+    chatThread: Thread,
+    platform: string,
+    adapterConfig: ChannelAdapterConfig | undefined,
+    typingGate: { active: boolean },
+  ): AsyncGenerator<AgentChunkType<any>> {
+    const typingStatusOption = adapterConfig?.typingStatus;
+    const typingStatusFn: TypingStatusFn | null =
+      typingStatusOption === false
+        ? null
+        : typeof typingStatusOption === 'function'
+          ? typingStatusOption
+          : defaultTypingStatus;
 
-    const resetRunState = () => {
-      textBuffer = '';
-      toolCalls = new Map();
-      seedApprovalContext();
-      // Reset the debounce so the next run's first generation chunk fires
-      // startTyping() immediately rather than being suppressed.
-      lastTypingAt = 0;
-    };
+    let currentTypingStatus: string | undefined;
 
     for await (const chunk of stream) {
-      // --- Signal echo: subscription streams replay user-message / system-reminder /
-      // custom data parts that callers wrote via sendSignal(). The platform already
-      // rendered the user's message, so we drop the echo to avoid double-posting.
-      if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
-        continue;
-      }
-
-      // --- Text accumulation ---
-      if (chunk.type === 'text-delta') {
-        if (chunk.payload.text) {
-          refreshTyping();
-        }
-        textBuffer += chunk.payload.text;
-        continue;
-      }
-
-      if (chunk.type === 'reasoning-delta') {
-        refreshTyping();
-        continue;
-      }
-
-      // --- File (e.g. model-generated image): post as attachment ---
-      if (chunk.type === 'file') {
-        await flushText();
-        const { data, mimeType } = chunk.payload;
-        this.logger?.debug('[CHANNEL] Received file chunk', {
-          mimeType,
-          dataType: typeof data,
-          size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
-        });
-        const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
-        const filename = `generated.${ext}`;
-        const binary =
-          typeof data === 'string'
-            ? Buffer.from(data, 'base64')
-            : data instanceof Uint8Array
-              ? Buffer.from(data)
-              : data;
+      if (typingStatusFn && !typingGate.active) {
+        let result: ReturnType<TypingStatusFn>;
         try {
-          await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
+          const ctx: TypingStatusContext = {
+            platform,
+            threadId: chatThread.id,
+            currentStatus: currentTypingStatus,
+            channelTools: this.channelToolNames,
+          };
+          result = typingStatusFn(chunk, ctx);
         } catch (e) {
-          this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
+          this.logger?.debug('[CHANNEL] typingStatus function threw (continuing)', { error: e });
+          result = undefined;
         }
-        continue;
-      }
-
-      // --- Text flush triggers ---
-      if (chunk.type === 'step-finish') {
-        await flushText();
-        continue;
-      }
-
-      // --- Run boundary: a single subscription stream carries many runs back-to-back,
-      // so we flush whatever's pending and reset per-run state before the next run starts.
-      if (chunk.type === 'finish') {
-        await flushText();
-        resetRunState();
-        continue;
-      }
-
-      // --- Errors / aborts surface in-stream now that we no longer have access to a
-      // MastraModelOutput.error field. Post the failure to the channel and reset state
-      // so a follow-up run on the same subscription starts clean.
-      if (chunk.type === 'error') {
-        await flushText();
-        const errPayload = chunk.payload as { error?: unknown };
-        const rawError = errPayload.error;
-        const message =
-          rawError instanceof Error
-            ? rawError.message
-            : typeof rawError === 'string'
-              ? rawError
-              : rawError != null
-                ? String(rawError)
-                : 'Unknown error';
-        const display = message.length > 500 ? message.slice(0, 500) + '…' : message;
-        this.log('error', `[${platform}] Stream completed with error`, { error: display });
-        try {
-          await sdkThread.post(`❌ Error: ${display}`);
-        } catch (postErr) {
-          this.logger?.debug('[CHANNEL] Failed to post error message', { error: postErr });
-        }
-        resetRunState();
-        continue;
-      }
-
-      if (chunk.type === 'abort') {
-        await flushText();
-        resetRunState();
-        continue;
-      }
-
-      // --- Tool call: post eager "Running…" card ---
-      if (chunk.type === 'tool-call') {
-        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-        refreshTyping();
-        await flushText();
-
-        const displayName = stripToolPrefix(chunk.payload.toolName);
-        const rawArgs = (
-          typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
-        ) as Record<string, unknown>;
-        const argsSummary = formatArgsSummary(rawArgs);
-
-        let messageId: string | undefined;
-        if (!adapterConfig?.formatToolCall) {
-          const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
-          messageId = sentMessage?.id;
-        }
-
-        toolCalls.set(chunk.payload.toolCallId, {
-          displayName,
-          argsSummary,
-          startedAt: Date.now(),
-          messageId,
-        });
-        continue;
-      }
-
-      // --- Tool result: edit the "Running…" card with the outcome ---
-      if (chunk.type === 'tool-result') {
-        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-
-        // Look in the per-run tracked tools first; fall back to any approval card that was
-        // posted by the click handler (the resumed run's tool-result arrives via the thread
-        // subscription, which doesn't see the pre-suspension `tool-call` chunk).
-        let tracked = toolCalls.get(chunk.payload.toolCallId);
-        if (!tracked) {
-          const pending = this.pendingApprovalCards.get(chunk.payload.toolCallId);
-          if (pending) {
-            tracked = pending;
-            this.pendingApprovalCards.delete(chunk.payload.toolCallId);
-          }
-        }
-        const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
-        const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
-        const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-        const channelMsgId = tracked?.messageId;
-        const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
-
-        if (adapterConfig?.formatToolCall) {
-          const custom = adapterConfig.formatToolCall({
-            toolName: displayName,
-            args: (chunk.payload.args ?? {}) as Record<string, unknown>,
-            result: chunk.payload.result,
-            isError: chunk.payload.isError,
+        if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
+          currentTypingStatus = result;
+          chatThread.startTyping(result).catch(e => {
+            this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
           });
-          if (custom != null) {
-            await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
-          }
-        } else {
-          const resultMessage = formatToolResult(
-            displayName,
-            argsSummary,
-            resultText,
-            !!chunk.payload.isError,
-            durationMs,
-            useCards,
-          );
-          await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
         }
-        continue;
       }
-
-      // --- Tool approval: edit the "Running…" card to show Approve/Deny ---
-      if (chunk.type === 'tool-call-approval') {
-        const { toolCallId, toolName, args: toolArgs } = chunk.payload;
-        const tracked = toolCalls.get(toolCallId);
-        const displayName = tracked?.displayName || stripToolPrefix(toolName);
-        const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
-        const channelMsgId = tracked?.messageId;
-
-        const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
-
-        await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
-        continue;
+      // Reset the dedup state on run boundaries so the next run can re-emit
+      // its first status even if it matches the previous run's last status.
+      if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
+        currentTypingStatus = undefined;
       }
-
-      // --- Tripwire: a processor blocked the agent; surface the reason to the channel.
-      // Without this branch the chunk is skipped, stream.error stays unset, and the
-      // user sees silence (see #15344).
-      if (chunk.type === 'tripwire') {
-        // retry=true means the agent will retry internally with the tripwire reason as
-        // feedback and produce a new response on this same stream, so nothing to post yet.
-        if (chunk.payload.retry) continue;
-
-        await flushText();
-        const reason = chunk.payload.reason || 'Your message was blocked by a safety check.';
-        const display = chunk.payload.processorId
-          ? `🛡️ Blocked by ${chunk.payload.processorId}: ${reason}`
-          : `🛡️ ${reason}`;
-        await sdkThread.post(display);
-        continue;
-      }
+      yield chunk;
     }
   }
 
@@ -1712,7 +1343,12 @@ export class AgentChannels {
     externalThreadId: string;
     channelId: string;
     platform: string;
-    resourceId: string;
+    /**
+     * The owner for a newly-created thread. Pass a function to defer resolution
+     * until we know a new thread is actually needed; it is never called when an
+     * existing thread is reused.
+     */
+    resourceId: string | (() => string | Promise<string>);
     mastra: Mastra;
   }): Promise<StorageThreadType> {
     const storage = mastra.getStorage();
@@ -1742,11 +1378,13 @@ export class AgentChannels {
       return threads[0]!;
     }
 
+    const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
+
     return memoryStore.saveThread({
       thread: {
         id: crypto.randomUUID(),
         title: `${platform} conversation`,
-        resourceId,
+        resourceId: resolvedResourceId,
         createdAt: new Date(),
         updatedAt: new Date(),
         metadata,
@@ -1832,10 +1470,100 @@ export class AgentChannels {
     void reconnect();
   }
 
-  private log(level: 'info' | 'error' | 'debug', message: string, ...args: unknown[]): void {
+  /**
+   * Resolve the tool-display mode for a run.
+   *
+   *  - `'timeline'` / `'grouped'` push `task_update` chunks into a streaming
+   *    Plan widget, so they require `streaming: true`. Without streaming we
+   *    fall back to `'cards'`.
+   *  - `'cards'` posts discrete Block-Kit cards via `chatThread.post`/`edit`,
+   *    which the streaming driver doesn't render (everything inside a
+   *    `StreamingPlan` post is one message). With streaming enabled we fall
+   *    back to `'timeline'`.
+   *
+   * Both fallbacks log a one-time warning per platform so the misconfiguration
+   * is visible without spamming on every run.
+   */
+  private resolveToolDisplay(
+    platform: string,
+    requested: ToolDisplay | undefined,
+    streamingEnabled: boolean,
+    deprecatedCards?: boolean,
+    deprecatedFormatToolCall?: (info: {
+      toolName: string;
+      args: Record<string, unknown>;
+      result: unknown;
+      isError?: boolean;
+    }) => PostableMessage | null,
+  ): { resolved: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden'; fn?: ToolDisplayFn } {
+    // Function form: drivers call the fn directly. The resolved mode is
+    // the default `'cards'` — drivers use it only for any event the fn
+    // doesn't render (returns `undefined`).
+    let fn = typeof requested === 'function' ? requested : undefined;
+    const requestedMode = typeof requested === 'function' ? undefined : requested;
+    // Deprecated `cards: boolean` only applies when `toolDisplay` is not set
+    // (in any form — string mode or function): `cards: true` → `'cards'`,
+    // `cards: false` → `'text'`. The `@deprecated` JSDoc surfaces in IDEs so
+    // we don't bother with a runtime warning. The discriminated union also
+    // makes `cards` + `toolDisplay` a type error, but we still guard at
+    // runtime so casts/JS callers don't get surprising fallback behavior
+    // when the fn returns `undefined`.
+    const fromDeprecatedCards =
+      requested === undefined && deprecatedCards !== undefined ? (deprecatedCards ? 'cards' : 'text') : undefined;
+    // Deprecated `formatToolCall` is shimmed into a `ToolDisplayFn`. The old
+    // callback only fired on `tool-result`/`tool-error` and returned a
+    // message (or `null` to skip), so the shim mirrors that contract: emit
+    // `{ kind: 'post', message }` for those two events and `undefined` for
+    // everything else so the built-in renderer handles the `running` /
+    // `approval` events.
+    if (!fn && deprecatedFormatToolCall) {
+      fn = event => {
+        if (event.kind !== 'result' && event.kind !== 'error') return undefined;
+        const value = event.kind === 'result' ? event.result : event.error;
+        const message = deprecatedFormatToolCall({
+          toolName: event.toolName,
+          args: (event.args ?? {}) as Record<string, unknown>,
+          result: value,
+          isError: event.kind === 'error' ? true : event.isError,
+        });
+        if (message == null) return undefined;
+        return { kind: 'post', message };
+      };
+    }
+    // Default is always `'cards'`: `'timeline'`/`'grouped'` need
+    // `StreamingPlan` (not supported on every platform) so users opt in
+    // explicitly. `'cards'` works under both streaming and static modes
+    // — the streaming driver closes the session, posts the card, and
+    // reopens on the next chunk.
+    const toolDisplay = requestedMode ?? fromDeprecatedCards ?? 'cards';
+
+    // `'timeline'` and `'grouped'` push `task_update`/`plan_update` chunks
+    // that only render inside a chat-SDK `StreamingPlan`. Without streaming
+    // there's no Plan to push into, so warn and fall back to `'cards'`.
+    // `'cards'` and `'text'` work under both streaming and static modes:
+    // the streaming driver closes the session, posts the per-tool message,
+    // and reopens on the next chunk — same lifecycle as a `ToolDisplayFn`
+    // returning `{ kind: 'post' }`.
+    const isStreamingOnlyMode = toolDisplay === 'timeline' || toolDisplay === 'grouped';
+    if (isStreamingOnlyMode && !streamingEnabled) {
+      if (!this.warnedToolDisplayFallback.has(platform)) {
+        this.warnedToolDisplayFallback.add(platform);
+        this.log(
+          'warn',
+          `[${platform}] toolDisplay: '${toolDisplay}' requires streaming: true; falling back to 'cards'.`,
+        );
+      }
+      return { resolved: 'cards', fn };
+    }
+    return { resolved: toolDisplay, fn };
+  }
+
+  private log(level: 'info' | 'warn' | 'error' | 'debug', message: string, ...args: unknown[]): void {
     if (!this.logger) return;
     if (level === 'error') {
       this.logger.error(message, { args });
+    } else if (level === 'warn') {
+      this.logger.warn(message, { args });
     } else if (level === 'debug') {
       this.logger.debug(message, { args });
     } else {

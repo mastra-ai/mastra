@@ -1,9 +1,66 @@
 import { z } from 'zod';
-import { DEFAULT_OM_MODEL_ID } from './constants';
+import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants';
+
+export type PermissionPolicy = 'allow' | 'ask' | 'deny';
+
+export interface MastraCodeState {
+  [key: string]: unknown;
+  [key: `subagentModelId_${string}`]: string | undefined;
+  projectPath?: string;
+  projectName?: string;
+  configDir: string;
+  gitBranch?: string;
+  lastCommand?: string;
+  currentModelId: string;
+  subagentModelId?: string;
+  observerModelId: string;
+  reflectorModelId: string;
+  observationThreshold: number;
+  reflectionThreshold: number;
+  cavemanObservations: boolean;
+  observeAttachments: 'auto' | boolean;
+  omScope?: 'thread' | 'resource';
+  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  yolo: boolean;
+  permissionRules: {
+    categories: Record<string, PermissionPolicy>;
+    tools: Record<string, PermissionPolicy>;
+  };
+  smartEditing: boolean;
+  notifications: 'bell' | 'system' | 'both' | 'off';
+  tasks: Array<{
+    id?: string;
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    activeForm: string;
+  }>;
+  sandboxAllowedPaths: string[];
+  activePlan: {
+    title: string;
+    plan: string;
+    approvedAt: string;
+  } | null;
+  activeBrowserSettings?: {
+    enabled: boolean;
+    provider: 'stagehand' | 'agent-browser';
+    headless?: boolean;
+    viewport?: {
+      width: number;
+      height: number;
+    };
+    cdpUrl?: string;
+    stagehand?: {
+      env: 'LOCAL' | 'BROWSERBASE';
+      apiKey?: string;
+      projectId?: string;
+    };
+  };
+}
 
 export const stateSchema = z.object({
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
+  configDir: z.string().default(DEFAULT_CONFIG_DIR),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
   currentModelId: z.string().default(''),
@@ -20,10 +77,9 @@ export const stateSchema = z.object({
   // reflectors fall back to their built-in (prose) behavior unless enabled.
   cavemanObservations: z.boolean().default(false),
   // Whether OM forwards image/file attachment parts to the Observer LLM.
-  // On by default; turn off when using a text-only observer model that
-  // would error on multimodal input. Placeholder text lines for filtered
-  // attachments are kept either way.
-  observeAttachments: z.boolean().default(true),
+  // 'auto' (default) checks the provider capabilities registry to decide.
+  // true/false forces the setting regardless of model capabilities.
+  observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
   // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
   omScope: z.enum(['thread', 'resource']).optional(),
   // Thinking level for model reasoning effort

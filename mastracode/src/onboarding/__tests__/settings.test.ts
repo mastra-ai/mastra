@@ -65,6 +65,8 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       viewport: { width: 1280, height: 720 },
       stagehand: { env: 'LOCAL' },
     },
+    shellPassthrough: { mode: 'default' },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };
@@ -109,6 +111,55 @@ describe('customProviders parsing/persistence', () => {
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
       expect(settings.preferences.quietModeMaxToolPreviewLines).toBe(2);
+      expect(settings.shellPassthrough).toEqual({ mode: 'default' });
+    });
+  });
+
+  it('trims shell passthrough settings while preserving invalid values for runtime warnings', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          shellPassthrough: {
+            mode: ' profile ',
+            executable: ' /bin/zsh ',
+            family: ' zsh ',
+          },
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).shellPassthrough).toEqual({
+        mode: 'profile',
+        executable: '/bin/zsh',
+        family: 'zsh',
+      });
+    });
+  });
+
+  it('preserves omitted shell passthrough mode when an executable is configured', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          shellPassthrough: {
+            executable: ' /bin/zsh ',
+          },
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).shellPassthrough).toEqual({
+        executable: '/bin/zsh',
+      });
     });
   });
 
@@ -153,6 +204,41 @@ describe('customProviders parsing/persistence', () => {
       });
       expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
       vi.mocked(JSON.parse).mockRestore();
+    });
+  });
+
+  it('persists experimental GitHub signals enable and disable across reloads', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.signals.experimentalGithubSignals = true;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+
+      const reloaded = loadSettings(filePath);
+      reloaded.signals.experimentalGithubSignals = false;
+      saveSettings(reloaded, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(false);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(false);
+    });
+  });
+
+  it('does not clobber experimental GitHub signals from a stale settings object', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings(), filePath);
+      const staleSettings = loadSettings(filePath);
+
+      const currentSettings = loadSettings(filePath);
+      currentSettings.signals.experimentalGithubSignals = true;
+      saveSettings(currentSettings, filePath);
+
+      staleSettings.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(staleSettings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
     });
   });
 

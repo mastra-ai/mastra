@@ -23,7 +23,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory: new Memory({
     options: {
       // highlight-next-line
@@ -75,7 +75,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -133,6 +133,25 @@ const memory = new Memory({
 
 In this example, the top-level idle setting is disabled for observations, while reflections opt into idle and provider-change activation.
 
+### Buffer on idle
+
+Set `observation.bufferOnIdle` to `true` to run background observation buffering when an agent turn ends and the agent becomes idle. This is useful for apps that want short turns to be observed without waiting for the next turn or the `messageTokens` threshold.
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      observation: {
+        bufferOnIdle: true,
+      },
+    },
+  },
+})
+```
+
+`bufferOnIdle` is off by default. It is separate from `bufferTokens`: `bufferTokens` controls step-time async buffering, while `bufferOnIdle` controls end-of-turn buffering for idle turns.
+
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
 ## Benefits
@@ -166,7 +185,7 @@ If your Observer model is text-only or its API rejects multimodal input, set `ob
 new Agent({
   name: 'assistant',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -295,7 +314,7 @@ The Observer and Reflector run in the background. Any model that works with Mast
 
 Generally speaking, we recommend using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
-If you're unsure which model to use, start with the default `google/gemini-2.5-flash`. We've also successfully tested `openai/gpt-5-mini`, `anthropic/claude-haiku-4-5`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
+If you're unsure which model to use, start with the default `google/gemini-2.5-flash`. We've also successfully tested `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
 
 ```typescript
 const memory = new Memory({
@@ -335,7 +354,7 @@ const memory = new Memory({
             // Faster, cheaper models for smaller inputs; stronger models for larger contexts
             5_000: 'openrouter/mistralai/ministral-8b-2512',
             20_000: 'openrouter/mistralai/mistral-small-2603',
-            40_000: 'openai/gpt-5.4-mini',
+            40_000: '__GATEWAY_OPENAI_MODEL_MINI__',
             1_000_000: 'google/gemini-3.1-flash-lite-preview',
           },
         }),
@@ -343,7 +362,7 @@ const memory = new Memory({
       reflection: {
         model: new ModelByInputTokens({
           upTo: {
-            20_000: 'openai/gpt-5.4-mini',
+            20_000: '__GATEWAY_OPENAI_MODEL_MINI__',
             100_000: 'google/gemini-2.5-flash',
           },
         }),

@@ -1,6 +1,6 @@
 {
   "name": "@internal/types-builder",
-  "version": "0.0.72",
+  "version": "0.0.78",
   "description": "",
   "type": "module",
   "main": "src/index.js",
@@ -14,6 +14,12 @@
     "./embed-types": {
       "import": {
         "default": "./src/embed-types.js"
+      }
+    },
+    "./compile-zod": {
+      "import": {
+        "types": "./src/compile-zod.d.ts",
+        "default": "./src/compile-zod.js"
       }
     }
   },
@@ -31,6 +37,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:"
+    "@vitest/ui": "catalog:",
+    "zod": "catalog:"
   }
 }

@@ -152,7 +152,8 @@ function extractReminderPathFromMetadata(message: MastraDBMessage): string | und
 
 function getReminderMarkup(reminderText: string, instructionPath: string): string {
   return signalToXmlMarkup({
-    type: 'system-reminder',
+    type: 'reactive',
+    tagName: 'system-reminder',
     contents: reminderText,
     attributes: { type: REMINDER_TYPE, path: instructionPath },
   });
@@ -262,8 +263,8 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList } = args;
     const messages = messageList.get.all.db();
-    const currentStepResponseMessages = getCurrentStepResponseMessages(messageList);
-    const completedToolCalls = getCompletedToolCalls(currentStepResponseMessages);
+    const responseMessages = getCurrentStepResponseMessages(messageList);
+    const completedToolCalls = getCompletedToolCalls(responseMessages);
     const instructionPath = this.findReferencedInstructionPath(completedToolCalls);
 
     if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {
@@ -281,7 +282,8 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     }
 
     await args.sendSignal?.({
-      type: 'system-reminder',
+      type: 'reactive',
+      tagName: 'system-reminder',
       contents: reminderText,
       attributes: { type: REMINDER_TYPE, path: instructionPath },
       metadata: getReminderMetadata(instructionPath).systemReminder,

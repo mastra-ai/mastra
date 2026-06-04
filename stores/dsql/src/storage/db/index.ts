@@ -112,7 +112,12 @@ export function resolveDsqlConfig(config: DsqlDomainConfig): {
     host: config.host,
     database: config.database,
     user: config.user,
-    Client: AuroraDSQLClient,
+    // AuroraDSQLClient's constructor type doesn't match pg.PoolClient's,
+    // but it's compatible at runtime. The `as any` avoids a TS error in
+    // pnpm v11's stricter lockfile layout, where the connector's ESM-only
+    // type exports (`.d.mts`) aren't resolved by tsc when the consumer uses
+    // CommonJS module resolution.
+    Client: AuroraDSQLClient as any,
   });
   return {
     client: new PoolAdapter(pool),

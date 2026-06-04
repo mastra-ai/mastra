@@ -11,6 +11,22 @@ import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/a
 import { MastraAuthProvider } from '@mastra/core/server';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
+  if (request instanceof Request) {
+    return request.headers.get(name);
+  }
+
+  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
+}
+
 export interface StudioUser extends EEUser {
   id: string;
   email?: string;
@@ -105,11 +121,11 @@ export class MastraAuthStudio
    * Authenticate an incoming request by forwarding the sealed session cookie
    * to the shared API's /auth/me endpoint, or a Bearer token to /auth/verify.
    */
-  async authenticateToken(token: string, request: any): Promise<StudioUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<StudioUser | null> {
     let user: StudioUser | null = null;
 
     // Try sealed session cookie first (browser flow)
-    const cookieHeader = request?.headers?.get('Cookie');
+    const cookieHeader = getRequestHeader(request, 'Cookie');
     const sessionCookie = parseCookie(cookieHeader, COOKIE_NAME);
 
     if (sessionCookie) {

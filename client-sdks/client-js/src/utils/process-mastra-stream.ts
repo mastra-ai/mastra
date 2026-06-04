@@ -6,7 +6,7 @@ async function sharedProcessMastraStream({
   signal,
 }: {
   stream: globalThis.ReadableStream<Uint8Array>;
-  onChunk: (chunk: any) => Promise<void>;
+  onChunk: (chunk: any) => void | Promise<void>;
   signal?: AbortSignal;
 }) {
   const reader = stream.getReader();
@@ -61,7 +61,7 @@ export async function processMastraNetworkStream({
   signal,
 }: {
   stream: globalThis.ReadableStream<Uint8Array>;
-  onChunk: (chunk: NetworkChunkType) => Promise<void>;
+  onChunk: (chunk: NetworkChunkType) => void | Promise<void>;
   signal?: AbortSignal;
 }) {
   return sharedProcessMastraStream({
@@ -77,7 +77,7 @@ export async function processMastraStream({
   signal,
 }: {
   stream: globalThis.ReadableStream<Uint8Array>;
-  onChunk: (chunk: ChunkType) => Promise<void>;
+  onChunk: (chunk: ChunkType) => void | Promise<void>;
   signal?: AbortSignal;
 }) {
   return sharedProcessMastraStream({

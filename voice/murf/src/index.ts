@@ -1,8 +1,5 @@
 import { PassThrough } from 'node:stream';
-
-import { MastraVoice } from '@mastra/core/voice';
-import ky from 'ky';
-
+import { MastraVoice } from '@internal/voice';
 import { MURF_VOICES } from './voices';
 import type { MurfVoiceId } from './voices';
 
@@ -46,8 +43,13 @@ type SpeechCreateResponse = {
   }[];
 };
 
+const DEFAULT_RETRY_COUNT = 2;
+const RETRY_STATUS_CODES = new Set([408, 413, 429, 500, 502, 503, 504]);
+const RETRY_DELAY_MS = 300;
+
 export class MurfVoice extends MastraVoice {
-  private client: typeof ky;
+  private baseUrl = 'https://api.murf.ai';
+  private apiKey: string;
   private defaultVoice: MurfVoiceId;
   private properties: Omit<SpeechCreateParams, 'modelVersion' | 'voiceId' | 'text'>;
 
@@ -65,16 +67,11 @@ export class MurfVoice extends MastraVoice {
       throw new Error('MURF_API_KEY is not set');
     }
 
+    this.apiKey = apiKey;
+
     this.properties = {
       ...speechModel?.properties,
     };
-
-    this.client = ky.create({
-      prefixUrl: 'https://api.murf.ai',
-      headers: {
-        'api-key': apiKey,
-      },
-    });
 
     this.defaultVoice = (speaker as MurfVoiceId) ?? MURF_VOICES[0];
   }
@@ -97,17 +94,13 @@ export class MurfVoice extends MastraVoice {
   ): Promise<NodeJS.ReadableStream> {
     const text = typeof input === 'string' ? input : await this.streamToString(input);
 
-    const response = await this.client
-      .post('v1/speech/generate', {
-        json: {
-          voiceId: (options?.speaker || this.defaultVoice) as MurfVoiceId,
-          text,
-          modelVersion: this.speechModel?.name,
-          ...this.properties,
-          ...options?.properties,
-        },
-      })
-      .json<SpeechCreateResponse>();
+    const response = await this.makeRequest<SpeechCreateResponse>('/v1/speech/generate', {
+      voiceId: (options?.speaker || this.defaultVoice) as MurfVoiceId,
+      text,
+      modelVersion: this.speechModel?.name,
+      ...this.properties,
+      ...options?.properties,
+    });
 
     // Create a PassThrough stream for the audio
     const stream = new PassThrough();
@@ -154,6 +147,44 @@ export class MurfVoice extends MastraVoice {
     _options?: Record<string, unknown>,
   ): Promise<string | NodeJS.ReadableStream> {
     throw new Error('Murf does not support speech recognition');
+  }
+
+  private async makeRequest<T>(endpoint: string, payload: Record<string, unknown>): Promise<T> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= DEFAULT_RETRY_COUNT; attempt++) {
+      if (attempt > 0) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * 2 ** (attempt - 1)));
+      }
+
+      const res = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'api-key': this.apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        return (await res.json()) as T;
+      }
+
+      if (!RETRY_STATUS_CODES.has(res.status) || attempt === DEFAULT_RETRY_COUNT) {
+        let errorMessage: string;
+        try {
+          const error = (await res.json()) as { message?: string };
+          errorMessage = error.message || res.statusText;
+        } catch {
+          errorMessage = res.statusText;
+        }
+        throw new Error(`Murf API Error: ${errorMessage}`);
+      }
+
+      lastError = new Error(`Murf API Error: ${res.statusText}`);
+    }
+
+    throw lastError ?? new Error('Murf API Error: request failed');
   }
 
   async getSpeakers() {
