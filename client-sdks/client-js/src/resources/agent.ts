@@ -2574,6 +2574,9 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   */
   async streamUntilIdle<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
@@ -2953,6 +2956,8 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @deprecated Use `resumeStream(resumeData, { untilIdle: true, ... })` instead.
+   *
    * Resumes a suspended agent stream until idle with custom resume data.
    * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
    */
