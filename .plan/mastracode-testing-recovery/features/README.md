@@ -50,11 +50,11 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Models | Model auth, selection, modes | #13218, #13307, #13490 | Settings + harness session | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Models | Thinking and reasoning effort | #13490 | Harness state + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
-| Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442 | Harness state + permission policy | Partial | High | [page](./tools/coding-tools-permissions.md) |
+| Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519 | Harness state + permission policy + workflow snapshots | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |
-| Integrations | Core Harness API and reference docs | #13353, #13457 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
+| Integrations | Core Harness API and reference docs | #13353, #13457, #13519, #13525 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
 | Integrations | Harness display state | #13427 | Core Harness display projection | Partial | High | [page](./integrations/harness-display-state.md) |
 | Integrations | Skills command and workspace resolution | #13457 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
 | Integrations | Lifecycle hooks | #13442 | hook config + TUI lifecycle + tool wrapper | Partial | High | [page](./integrations/lifecycle-hooks.md) |

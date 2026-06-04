@@ -628,3 +628,23 @@ Verification:
 - `gh pr view 13455 --json number,title,body,author,mergedAt,url,files,commits` and `git show 6302b3ae7c -- mastracode` verified the version-only skip.
 
 Next queue checkpoint: PR #13519 (tool approval resume for standalone agents), then PR #13525 (Mastra Code docs move).
+
+
+### Feature map PR #13519 and #13525
+
+Processed PR [#13519](https://github.com/mastra-ai/mastra/pull/13519), `b03c0e0389` (`fix: tool approval resume failing for standalone agents`). Verified the current core fix has two parts: `Harness.init()` creates an internal Mastra instance with configured storage and adds standalone agents to it, and workflow snapshot persistence serializes request context through `serializeRequestContext()` so functions/circular runtime objects do not break JSON persistence.
+
+Processed PR [#13525](https://github.com/mastra-ai/mastra/pull/13525), `439dd1a1c9` (`chore(docs): Move Mastra Code docs, add Alpha notice to Harness`). Verified main-site Mastra Code docs were redirected to `https://code.mastra.ai/`, the Harness reference sidebar is Alpha-badged, and `mastracode/README.md` points users at the standalone Code docs site.
+
+Documentation actions:
+
+- Updated `features/integrations/harness-api.md` with #13519 internal Mastra/storage registration, request-context serialization, approval resume tests, #13525 docs redirects, and Alpha Harness docs status.
+- Updated `features/tools/coding-tools-permissions.md` with #13519 approval-resume snapshot ownership, tests, and risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13519 done, #13525 done, #13530 current.
+
+Verification:
+
+- Current source checked: `packages/core/src/harness/harness.ts`, `packages/core/src/workflows/default.test.ts`, `packages/core/src/agent/__tests__/tool-approval-standalone-repro.test.ts`, `docs/vercel.json`, and `mastracode/README.md`.
+- Focused tests planned for commit verification: core standalone approval resume, workflow request-context serialization, and MC LibSQL approval resume.
+
+Next queue checkpoint: PR #13530 (Mastra Code docs move follow-up), then PR #13512 (models pack UX).

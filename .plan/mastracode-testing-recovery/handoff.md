@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13455 (row 62) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13519 (`b03c0e0389`, tool approval resume for standalone agents), then #13525 (`439dd1a1c9`, Mastra Code docs move).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13525 (row 64) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13530 (`0533de8a34`, Mastra Code docs move follow-up), then #13512 (`191e5bd29b`, models pack UX).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 63: PR #13519 (tool approval resume for standalone agents), then row 64: PR #13525 (Mastra Code docs move).
+1. Continue at `_pr-queue.md` row 65: PR #13530 (Mastra Code docs move follow-up), then row 66: PR #13512 (models pack UX).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -117,3 +117,7 @@ None known.
 - `gh pr view 13505 --json number,title,body,author,mergedAt,url,files,commits`, current login/model source and changelog evidence verified the Claude Max OAuth warning was historical and later removed by #14605. Updated onboarding/model cards.
 - `gh pr view 13476 --json number,title,body,author,mergedAt,url,files,commits`, current memory runtime/storage implementations, thresholds, token counter, and OM tests verified buffering precision and retained-context safeguards. Updated the observational-memory card.
 - `gh pr view 13490 --json number,title,body,author,mergedAt,url,files,commits`, current Codex provider/model resolver, `/think` command, thinking settings, and model tests verified OpenAI Codex reasoning effort wiring. Created the thinking-and-reasoning feature card.
+- `gh pr view 13508 --json number,title,body,author,mergedAt,url,files,commits` plus current login/source search verified the strengthened Claude Max OAuth warning is historical and no longer active. Updated onboarding/model cards.
+- `gh pr view 13455 --json number,title,body,author,mergedAt,url,files,commits` and `git show 6302b3ae7c -- mastracode` verified the version-package skip.
+- `gh pr view 13519 --json number,title,body,author,mergedAt,url,files,commits`, current core Harness/workflow source, and approval resume tests verified standalone/storage-backed tool approval resume. Updated Harness API and tools cards.
+- `gh pr view 13525 --json number,title,body,author,mergedAt,url,files,commits`, docs redirects, Harness reference sidebar, and `mastracode/README.md` verified the main-site docs move and Alpha badge. Updated Harness API docs card.

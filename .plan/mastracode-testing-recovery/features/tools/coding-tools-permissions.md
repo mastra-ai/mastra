@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — coding tools, approvals, permissions, YOLO, hooks, MCP tool merge.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior; [#13348](https://github.com/mastra-ai/mastra/pull/13348) — capped file/search/web tool result output around 2k tokens; [#13355](https://github.com/mastra-ai/mastra/pull/13355) — allowed the old unified `view` tool's `view_range` to paginate directory listings; [#13385](https://github.com/mastra-ai/mastra/pull/13385) — fixed TS/JS LSP language IDs; [#13384](https://github.com/mastra-ai/mastra/pull/13384) — fixed hidden-file exclusion for the old directory-listing implementation; [#13428](https://github.com/mastra-ai/mastra/pull/13428) — fixed `view` rendering for core workspace `read_file` output; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — completed live TUI lifecycle hook wiring for `Stop` and `UserPromptSubmit`; current core tools now own file/list/LSP behavior.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior; [#13348](https://github.com/mastra-ai/mastra/pull/13348) — capped file/search/web tool result output around 2k tokens; [#13355](https://github.com/mastra-ai/mastra/pull/13355) — allowed the old unified `view` tool's `view_range` to paginate directory listings; [#13385](https://github.com/mastra-ai/mastra/pull/13385) — fixed TS/JS LSP language IDs; [#13384](https://github.com/mastra-ai/mastra/pull/13384) — fixed hidden-file exclusion for the old directory-listing implementation; [#13428](https://github.com/mastra-ai/mastra/pull/13428) — fixed `view` rendering for core workspace `read_file` output; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — completed live TUI lifecycle hook wiring for `Stop` and `UserPromptSubmit`; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — fixed persisted approval resume for standalone/storage-backed agents; current core tools now own file/list/LSP behavior.
 
 ## User-visible behavior
 
@@ -29,7 +29,7 @@
 ## Streaming / loading / interrupted states
 
 - Streaming / loading: tool args, shell output, and results can stream as separate events.
-- Abort / retry / resume: active approvals/questions should dismiss; in-flight tool state should not be restored as active after reload unless explicitly supported.
+- Abort / retry / resume: active approvals/questions should dismiss; approval resume for stored runs must reload workflow snapshots through Harness storage and continue the stream after approve/decline.
 
 ## Streaming vs loaded-from-history behavior
 
@@ -51,6 +51,7 @@
 | Hidden-file visibility | `list_files.showHidden` + tree formatter filter | Directory listings |
 | LSP language IDs | Core workspace LSP `getLanguageId()` mapping | `lsp_inspect`, edit diagnostics |
 | Tool hooks | `HookManager` + dynamic tool wrapper | `PreToolUse` / `PostToolUse` execution boundaries |
+| Approval resume snapshots | Core Harness internal Mastra + workflow storage | `approveToolCall()` / `declineToolCall()` / resumed streams |
 
 ## Key files
 
@@ -75,6 +76,8 @@
 - `mastracode/src/tui/event-dispatch.ts` — tool event routing.
 - `mastracode/src/tui/render-messages.ts` — reconstructs completed tool calls from history with the same tool component.
 - `mastracode/src/hooks/manager.ts` — hook lifecycle.
+- `packages/core/src/harness/harness.ts` — internal Mastra/storage registration for standalone approval resume.
+- `packages/core/src/workflows/entry.ts` and `packages/core/src/workflows/default.ts` — workflow snapshot persistence and JSON-safe request-context serialization.
 
 ## Dependencies / related features
 
@@ -85,6 +88,7 @@
 - [Lifecycle hooks](../integrations/lifecycle-hooks.md) — hook decisions can block tool execution before the runtime tool runs.
 - [Interactive TUI chat](../tui/interactive-chat.md) — tool components render in chat/history.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — plan mode and model family affect tools.
+- [Core Harness API and reference docs](../integrations/harness-api.md) — owns the approval API and internal storage registration used by resume.
 - [Subagent delegation](../subagents/delegation.md) — subagents rely on workspace tool boundaries.
 
 ## Existing tests
@@ -93,6 +97,7 @@
 - `packages/core/src/workspace/tools/__tests__/lsp-inspect.test.ts` — current LSP inspect tool wrapper.
 - `mastracode/src/tools/__tests__/file-editor.test.ts` and `mastracode/src/lsp/__tests__/string-replace-lsp.test.ts` — legacy MC-owned paths from before core workspace migration.
 - `mastracode/src/__tests__/tool-approval-libsql.test.ts` — persisted approval flow.
+- `packages/core/src/agent/__tests__/tool-approval-standalone-repro.test.ts` — standalone approval/suspend resume regressions, including input processors and dynamically loaded tools.
 - `mastracode/src/agents/tools.test.ts`, `extra-tools.test.ts` — dynamic tools, including pre/post tool hook wrapping.
 - `packages/schema-compat/src/zod-to-json.test.ts` — Zod schema conversion coverage.
 - `mastracode/src/tui/handlers/tool.test.ts`, `commands/__tests__/permissions.test.ts` — rendering/commands.
@@ -105,6 +110,7 @@
 - Interrupted approval is dismissed and not restored pending after reload.
 - Plan-mode runtime tools and prompt guidance both hide write tools.
 - Headless non-interactive permission behavior.
+- Reloaded approval resume path through the actual Mastra Code TUI/headless wrapper, not only direct core Agent/Harness tests.
 - Packaged `mastracode` startup/import smoke test that catches ESM subpath regressions like `vscode-jsonrpc/node` vs `vscode-jsonrpc/node.js`.
 - End-to-end tool-call schema serialization test for source checkout and global install Zod resolution.
 - MC web-search/web-extract truncation test proving Tavily results are serialized to bounded text.
@@ -123,6 +129,7 @@
 - The old `view_range` directory pagination no longer exists literally in current source; current `list_files` has no offset/limit pagination, so large-directory ergonomics rely on tree options and token caps unless future work reintroduces pagination.
 - Hidden-file behavior moved from shell `find` globs in the old MC-owned tools to core filesystem filtering; future filesystem providers must keep dotfile semantics consistent.
 - LSP support has both legacy MC-local and current core workspace mapping files; stale imports or tests can verify the wrong path if the active tool owner changes again.
+- Approval resume can silently fail if snapshot persistence sees unserializable request-context values or if standalone agents are not attached to a Mastra instance with storage.
 
 ## Verification checklist
 

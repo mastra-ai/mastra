@@ -82,9 +82,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 60 | 2026-02-25 | #13490 | `d7ad237020` | review | done | feat(mastracode): wire reasoning effort for OpenAI Codex models (#13490) | 11 |
 | 61 | 2026-02-25 | #13508 | `b69a0046cb` | review | done | fix(mastracode): strengthen Claude Max OAuth risk warning (#13508) | 1 |
 | 62 | 2026-02-25 | #13455 | `6302b3ae7c` | likely skip | skipped | chore: version packages (alpha) (#13455) | 2 |
-| 63 | 2026-02-25 | #13519 | `b03c0e0389` | review | current | fix: tool approval resume failing for standalone agents (#13519) | 2 |
-| 64 | 2026-02-26 | #13525 | `439dd1a1c9` | review | | chore(docs): Move Mastra Code docs, add Alpha notice to Harness (#13525) | 6 |
-| 65 | 2026-02-26 | #13530 | `0533de8a34` | review | | chore(docs): Move mastra-code docs (#13530) | 6 |
+| 63 | 2026-02-25 | #13519 | `b03c0e0389` | review | done | fix: tool approval resume failing for standalone agents (#13519) | 2 |
+| 64 | 2026-02-26 | #13525 | `439dd1a1c9` | review | done | chore(docs): Move Mastra Code docs, add Alpha notice to Harness (#13525) | 6 |
+| 65 | 2026-02-26 | #13530 | `0533de8a34` | review | current | chore(docs): Move mastra-code docs (#13530) | 6 |
 | 66 | 2026-02-26 | #13512 | `191e5bd29b` | review | | fix: unify /models pack flow and improve custom pack editing UX (#13512) | 17 |
 | 67 | 2026-02-26 | #13526 | `85b54c0a4f` | review | | fix(mastracode): resolve edit tool paths like execute_command (#13526) | 7 |
 | 68 | 2026-02-26 | #13557 | `15f4da196c` | review | | feat(plans): persist approved plans to disk (#13401) (#13557) | 4 |
