@@ -88,6 +88,7 @@ import {
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
 import { codeModeAgent } from './agents/code-mode-agent';
+import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -132,6 +133,9 @@ export const mastra = new Mastra({
     cryptoResearchAgent,
     slackDemoAgent,
     codeModeAgent,
+    clinicDirectAgent,
+    clinicSpecialistAgent,
+    clinicSupervisorAgent,
   },
   processors: {
     moderationProcessor,
@@ -173,11 +177,11 @@ export const mastra = new Mastra({
       baseUrl: process.env.MASTRA_BASE_URL,
     }),
   },
-  server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-    fga: fgaProvider,
-  },
+  // server: {
+  //   auth: mastraAuth,
+  //   rbac: rbacProvider,
+  //   fga: fgaProvider,
+  // },
   backgroundTasks: {
     enabled: true,
     globalConcurrency: 10,

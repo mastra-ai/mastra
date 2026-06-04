@@ -24,6 +24,7 @@ export interface EditDatasetDialogProps {
     description?: string;
     inputSchema?: Record<string, unknown> | null;
     groundTruthSchema?: Record<string, unknown> | null;
+    requestContextSchema?: Record<string, unknown> | null;
   };
   onSuccess?: () => void;
 }
@@ -35,6 +36,9 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
   const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(
     dataset.groundTruthSchema ?? null,
   );
+  const [requestContextSchema, setRequestContextSchema] = useState<Record<string, unknown> | null>(
+    dataset.requestContextSchema ?? null,
+  );
   const [validationError, setValidationError] = useState<string | null>(null);
   const { updateDataset } = useDatasetMutations();
 
@@ -45,6 +49,7 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
       setDescription(dataset.description ?? '');
       setInputSchema(dataset.inputSchema ?? null);
       setGroundTruthSchema(dataset.groundTruthSchema ?? null);
+      setRequestContextSchema(dataset.requestContextSchema ?? null);
       setValidationError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -53,9 +58,11 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
   const handleSchemaChange = (schemas: {
     inputSchema: Record<string, unknown> | null;
     outputSchema: Record<string, unknown> | null;
+    requestContextSchema: Record<string, unknown> | null;
   }) => {
     setInputSchema(schemas.inputSchema);
     setGroundTruthSchema(schemas.outputSchema);
+    setRequestContextSchema(schemas.requestContextSchema);
     // Clear validation error when user changes schema
     setValidationError(null);
   };
@@ -76,6 +83,7 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
         description: description.trim() || undefined,
         inputSchema,
         groundTruthSchema,
+        requestContextSchema,
       });
 
       toast.success('Dataset updated successfully');
@@ -101,6 +109,7 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
     setDescription(dataset.description ?? '');
     setInputSchema(dataset.inputSchema ?? null);
     setGroundTruthSchema(dataset.groundTruthSchema ?? null);
+    setRequestContextSchema(dataset.requestContextSchema ?? null);
     setValidationError(null);
     onOpenChange(false);
   };
@@ -137,9 +146,10 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
             <SchemaConfigSection
               inputSchema={inputSchema}
               outputSchema={groundTruthSchema}
+              requestContextSchema={requestContextSchema}
               onChange={handleSchemaChange}
               disabled={updateDataset.isPending}
-              defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema)}
+              defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema || dataset.requestContextSchema)}
             />
 
             {validationError && (

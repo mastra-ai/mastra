@@ -39,5 +39,15 @@
       "advancedTools": false,
       "analytics": false
     }
+  },
+  "clinic-a": {
+    "clinicId": "clinic-a",
+    "environment": "production",
+    "userId": "clinician-001"
+  },
+  "clinic-b": {
+    "clinicId": "clinic-b",
+    "environment": "production",
+    "userId": "clinician-002"
   }
 }

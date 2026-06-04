@@ -122,6 +122,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           datasetVersion: null,
           input: dataItem.input,
           groundTruth: dataItem.groundTruth,
+          requestContext: dataItem.requestContext,
           metadata: dataItem.metadata,
           resumeSteps: dataItem.resumeSteps,
           resumeData: dataItem.resumeData,

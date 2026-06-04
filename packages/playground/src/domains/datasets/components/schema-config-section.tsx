@@ -26,9 +26,11 @@ type ScorerTargetType = 'agent' | 'custom';
 interface SchemaConfigSectionProps {
   inputSchema: Record<string, unknown> | null | undefined;
   outputSchema: Record<string, unknown> | null | undefined;
+  requestContextSchema: Record<string, unknown> | null | undefined;
   onChange: (schemas: {
     inputSchema: Record<string, unknown> | null;
     outputSchema: Record<string, unknown> | null;
+    requestContextSchema: Record<string, unknown> | null;
   }) => void;
   disabled?: boolean;
   defaultOpen?: boolean;
@@ -41,6 +43,7 @@ interface SchemaConfigSectionProps {
 export function SchemaConfigSection({
   inputSchema,
   outputSchema,
+  requestContextSchema,
   onChange,
   disabled = false,
   defaultOpen = false,
@@ -137,17 +140,34 @@ export function SchemaConfigSection({
         outputSchema: shouldPopulateOutput
           ? (sourceSchemas.outputSchema as Record<string, unknown>)
           : (outputSchema ?? null),
+        requestContextSchema: requestContextSchema ?? null,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceType, selectedWorkflow, workflowSchema, scorerTargetType]);
 
   const handleInputSchemaChange = (schema: Record<string, unknown> | null) => {
-    onChange({ inputSchema: schema, outputSchema: outputSchema ?? null });
+    onChange({
+      inputSchema: schema,
+      outputSchema: outputSchema ?? null,
+      requestContextSchema: requestContextSchema ?? null,
+    });
   };
 
   const handleOutputSchemaChange = (schema: Record<string, unknown> | null) => {
-    onChange({ inputSchema: inputSchema ?? null, outputSchema: schema });
+    onChange({
+      inputSchema: inputSchema ?? null,
+      outputSchema: schema,
+      requestContextSchema: requestContextSchema ?? null,
+    });
+  };
+
+  const handleRequestContextSchemaChange = (schema: Record<string, unknown> | null) => {
+    onChange({
+      inputSchema: inputSchema ?? null,
+      outputSchema: outputSchema ?? null,
+      requestContextSchema: schema,
+    });
   };
 
   const handleSourceChange = (value: SourceType) => {
@@ -274,6 +294,14 @@ export function SchemaConfigSection({
           onChange={handleOutputSchemaChange}
           sourceSchema={isAutoPopulate ? sourceSchemas.outputSchema : undefined}
           autoPopulate={isAutoPopulate}
+        />
+
+        <SchemaField
+          label="Request Context Schema"
+          schemaType="requestContext"
+          value={requestContextSchema}
+          onChange={handleRequestContextSchemaChange}
+          autoPopulate={false}
         />
       </CollapsibleContent>
     </Collapsible>

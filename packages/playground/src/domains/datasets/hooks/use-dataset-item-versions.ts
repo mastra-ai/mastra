@@ -8,6 +8,7 @@ export interface DatasetItemVersion {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;

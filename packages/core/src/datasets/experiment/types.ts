@@ -17,6 +17,8 @@ export interface DataItem<I = unknown, E = unknown> {
   groundTruth?: E;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
+  /** Per-item request context merged over the global request context (item takes precedence) */
+  requestContext?: Record<string, unknown>;
   /**
    * Resume data for suspended workflow steps, keyed by step ID.
    * When a workflow suspends during experiment execution, the executor
