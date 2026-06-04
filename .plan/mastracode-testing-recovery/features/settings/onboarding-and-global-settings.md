@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13421](https://github.com/mastra-ai/mastra/pull/13421) — interactive first-run `/setup` flow, persisted global settings, built-in/custom model packs, OM packs, and YOLO preference.
-- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL.
+- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added persisted theme preference; [#13494](https://github.com/mastra-ai/mastra/pull/13494) — fixed the supported-providers documentation URL in onboarding.
 
 ## User-visible behavior
 
@@ -13,7 +13,7 @@
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `/setup`, `/models`, provider login prompts.
+- Commands / shortcuts / flags: `/setup`, `/models`, `/theme`, provider login prompts.
 - Automatic triggers: startup shows onboarding when settings have neither completed nor skipped the current onboarding version.
 
 ## TUI states
@@ -46,10 +46,11 @@
 | OM pack/model | Harness state + global settings OM fields | OM memory factory, `/om`, setup wizard |
 | YOLO/quiet preferences | Harness state + global settings preferences | Permission prompts, tool/task rendering |
 | Storage backend | Global settings + env overrides | Storage factory, memory/history persistence |
+| Theme preference | Global settings + `MASTRA_THEME` env override | Startup detection, `/theme`, TUI colors |
 
 ## Key files
 
-- `mastracode/src/onboarding/onboarding-inline.ts` — setup wizard UI and step flow.
+- `mastracode/src/onboarding/onboarding-inline.ts` — setup wizard UI, step flow, and supported-provider docs link.
 - `mastracode/src/onboarding/settings.ts` — `settings.json` schema, migrations, defaults, and pack resolution.
 - `mastracode/src/onboarding/packs.ts` — provider-filtered built-in mode/OM packs.
 - `mastracode/src/tui/mastra-tui.ts` — startup onboarding trigger and `applyOnboardingResult()` runtime persistence.
@@ -63,6 +64,7 @@
 - [Observational memory](../memory/observational-memory.md) — setup selects default OM model pack.
 - [Persistent conversations](../threads/persistent-conversations.md) — per-thread model-pack metadata overrides global defaults.
 - [Storage backend configuration](./storage-backend.md) — storage backend choice is persisted in the same global settings file.
+- [Terminal theme and contrast](../tui/terminal-theme.md) — theme preference is persisted in global settings.
 
 ## Existing tests
 

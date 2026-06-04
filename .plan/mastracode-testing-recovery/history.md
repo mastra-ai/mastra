@@ -537,3 +537,22 @@ Verification:
 - An accidental broad `pnpm --filter ./mastracode test -- --run ...` reproduced the existing 5 failed files / 6 failed tests baseline; no code changes were made in this batch.
 
 Next queue checkpoint: PR #13487 (terminal color theme), then PR #13494 (supported providers doc link).
+
+
+### Feature map PR #13487 and #13494
+
+Processed PR [#13487](https://github.com/mastra-ai/mastra/pull/13487), `9ef0b440ed` (`feat(mastracode): inherit terminal color theme for light/dark mode support (#13487)`). Verified current source resolves theme at startup from `MASTRA_THEME`, persisted `settings.preferences.theme`, OSC 11 terminal background detection, `COLORFGBG`, then dark fallback. `applyThemeMode()` switches dark/light palettes, computes contrast-adapted brand/surface colors, writes OSC 10 foreground color for unstyled text, and `restoreTerminalForeground()` resets it on exit.
+
+Processed PR [#13494](https://github.com/mastra-ai/mastra/pull/13494), `5c6bf27b79` (`fix(mastracode): Update documentation link for supported providers`). Verified current onboarding provider warning points to `https://mastra.ai/models` for supported providers/API key env vars.
+
+Documentation actions:
+
+- Created `features/tui/terminal-theme.md` for `/theme`, auto-detection, global theme state, contrast utilities, and terminal OSC side effects.
+- Updated `features/settings/onboarding-and-global-settings.md` with theme preference ownership and the supported-provider docs-link fix.
+- Updated `features/tui/interactive-chat.md`, `features/tui/help-and-shortcuts.md`, `features/README.md`, and `_pr-queue.md` status markers: #13487 done, #13494 done, #13493 current.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/theme-contrast.test.ts src/onboarding/__tests__/settings.test.ts src/onboarding/__tests__/packs.test.ts --reporter=dot` passed (3 files / 68 tests).
+
+Next queue checkpoint: PR #13493 (append unused slash-command args), then PR #13500 (allow onboarding with API keys only).

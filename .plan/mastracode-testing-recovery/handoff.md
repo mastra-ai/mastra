@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13442 (row 52) have been processed, with #13037, #13251, #13252, #13257, #13260, and #13405 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13487 (`9ef0b440ed`, terminal color theme), then #13494 (`5c6bf27b79`, supported providers doc link).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13494 (row 54) have been processed, with #13037, #13251, #13252, #13257, #13260, and #13405 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13493 (`434ad50157`, append slash-command args), then #13500 (`47cb0a8962`, onboarding API keys).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 53: PR #13487 (terminal color theme), then row 54: PR #13494 (supported providers documentation link).
+1. Continue at `_pr-queue.md` row 55: PR #13493 (append unused slash-command args), then row 56: PR #13500 (onboarding API-key-only flow).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -108,3 +108,6 @@ None known.
 - `gh pr view 13460 --json number,title,body,author,mergedAt,url,files,commits`, original setup diff, current `setup.ts`, README, and autocomplete tests verified `fd`/`fdfind` path detection for `@` file autocomplete. Created the file-autocomplete feature card.
 - `gh pr view 13442 --json number,title,body,author,mergedAt,url,files,commits`, current hook manager/executor/config, TUI hook wiring, dynamic tool wrapper, and hook tests verified `UserPromptSubmit` and `Stop` lifecycle behavior. Created the lifecycle-hooks feature card.
 - Focused verification for this batch: `src/agents/tools.test.ts` passed; `setup-keyboard-shortcuts.test.ts` still fails on the known stale `/github sync` autocomplete expectation; `mastra-tui-hooks.test.ts` is currently blocked by a test mock missing `execFile` after GitHub command imports.
+- `gh pr view 13487 --json number,title,body,author,mergedAt,url,files,commits`, current `theme.ts`, `detect-theme.ts`, `/theme` command, startup theme resolution, and theme contrast tests verified terminal theme detection/contrast behavior. Created the terminal-theme feature card.
+- `gh pr view 13494 --json number,title,body,author,mergedAt,url,files,commits` and current `onboarding-inline.ts` verified the supported-providers docs URL is now `https://mastra.ai/models`. Updated the onboarding/settings card.
+- Focused verification for #13487/#13494: theme contrast + onboarding settings/packs tests passed (3 files / 68 tests).
