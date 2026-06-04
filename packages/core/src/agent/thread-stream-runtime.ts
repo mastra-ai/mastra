@@ -930,6 +930,13 @@ export class AgentThreadStreamRuntime {
           while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
           remoteRuns.delete(data.runId);
         }
+        // When a run is aborted, cancel the current subscriber stream reader so
+        // the generator's inner loop unblocks and can yield the synthetic abort.
+        if (data.type === 'run-aborted' && activeReaderRunId === data.runId && currentReader) {
+          try {
+            void currentReader.cancel();
+          } catch {}
+        }
         // Allow the same runId to be re-enqueued when it resumes (e.g. after tool approval).
         seenRunIds.delete(data.runId);
         if (data.type !== 'run-suspended') {
@@ -947,10 +954,22 @@ export class AgentThreadStreamRuntime {
       enqueueRun(currentRecord);
     }
 
+    // Mutable ref to the subscriber stream reader currently being consumed by
+    // the generator. When a run-aborted event fires, we cancel this reader so
+    // the blocked `reader.read()` resolves immediately with {done: true}.
+    let currentReader: ReadableStreamDefaultReader<any> | null = null;
+    let activeReaderRunId: string | null = null;
+
     const unsubscribe = () => {
       if (done) return;
       done = true;
       void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
+      // Cancel current reader so the generator's inner loop breaks.
+      if (currentReader) {
+        try {
+          void currentReader.cancel();
+        } catch {}
+      }
       wake();
     };
 
@@ -971,6 +990,8 @@ export class AgentThreadStreamRuntime {
             // a locked fallback stream means a caller is sharing a non-multicast stream.
             const subscriberStream = run.createSubscriberStream?.() ?? run.output.fullStream;
             const reader = subscriberStream.getReader();
+            currentReader = reader as ReadableStreamDefaultReader<any>;
+            activeReaderRunId = run.runId;
             let readerReleased = false;
             try {
               while (true) {
@@ -1002,7 +1023,14 @@ export class AgentThreadStreamRuntime {
                   break;
                 }
               }
+              // If the stream closed without a terminal chunk (e.g. force-closed
+              // by abort), yield a synthetic abort so subscribers finalize the run.
+              if (!readerReleased && !done) {
+                yield { type: 'abort', runId: run.runId } as any;
+              }
             } finally {
+              currentReader = null;
+              activeReaderRunId = null;
               if (!readerReleased) {
                 reader.releaseLock();
               }

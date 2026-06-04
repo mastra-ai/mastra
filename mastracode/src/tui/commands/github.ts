@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-
 import { GITHUB_SIGNALS_METADATA_KEY } from '../../github-signals/index.js';
 import type { GithubPRSignalInput } from '../../github-signals/index.js';
 import { loadSettings } from '../../onboarding/settings.js';
@@ -153,6 +151,7 @@ async function syncGithubSubscriptions(ctx: SlashCommandContext): Promise<void> 
 }
 
 async function detectCurrentPullRequest(ctx: GithubContext): Promise<string> {
+  const { execFile } = await import('node:child_process');
   return new Promise(resolve => {
     execFile(
       'gh',
