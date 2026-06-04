@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13344 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13345 (`7aedfb7ff9`, `feat(tui): resolve autocomplete and queue slash commands on Ctrl+F (#13345)`), then #13311 (`d1b596fb05`, `fix(mastracode): wire mcpManager to TUI so /mcp command works (#13311)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13311 (row 26) have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13346 (`e399dcba4f`, `fix(mastracode): load AGENTS.md instruction files, drop deprecated AGENT.md (#13346)`), then #13347 (`48d19d89e0`, `refactor: replace MCPManager class with factory function (#13347)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 25: PR #13345 (Ctrl+F autocomplete/queued slash commands), then row 26: PR #13311 (`/mcp` manager wiring).
+1. Continue at `_pr-queue.md` row 27: PR #13346 (AGENTS.md instruction loading), then row 28: PR #13347 (MCP manager factory refactor).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -73,4 +73,6 @@ None known.
 - `gh pr view 13339 --json number,title,body,author,mergedAt,url,files,commits` plus current `base.ts` and `tool-guidance.ts` verified subagent parallel-only guidance and current audit-tests exception inconsistency. Updated subagent cards.
 - `gh pr view 13343 --json number,title,body,author,mergedAt,files,commits` plus current `mastracode/src/tui/setup.ts` verified worktree-aware startup auto-resume filtering by `metadata.projectPath` and legacy directory birthtime fallback. Updated the threads card.
 - `gh pr view 13344 --json number,title,body,author,mergedAt,files,commits` plus current core task tools, TUI task handlers, event dispatch, prompt injection, permissions, and task tests verified the todo→task/core-Harness move. Created the task-tracking card and updated tool cards.
-- Current batch is doc-only; no product tests were run.
+- `gh pr view 13345 --json number,title,body,author,mergedAt,body,files,commits`, current `custom-editor.ts`, `setup.ts`, `mastra-tui.ts`, `agent-lifecycle.ts`, and queueing/editor tests verified Ctrl+F autocomplete + queued slash-command behavior. Created the queued-followups card.
+- `gh pr view 13311 --json number,title,body,author,mergedAt,body,files,commits`, current `main.ts`, `state.ts`, `mastra-tui.ts`, `commands/mcp.ts`, MCP manager tests, and command-dispatch tests verified `/mcp` manager wiring. Created the MCP status command card.
+- Focused verification passed: `pnpm --filter ./mastracode test --run src/tui/__tests__/mastra-tui-queueing.test.ts src/tui/components/__tests__/custom-editor.test.ts src/tui/__tests__/command-dispatch.test.ts --reporter=dot --bail 1` (66 tests).

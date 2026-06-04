@@ -312,3 +312,19 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13343 done, #13344 done, #13345 current, #13311 next.
 
 Next queue checkpoint: PR #13345 (Ctrl+F autocomplete/queued slash commands), then PR #13311 (`/mcp` manager wiring).
+
+### Feature map PR #13345 and #13311
+
+Processed PR [#13345](https://github.com/mastra-ai/mastra/pull/13345), `7aedfb7ff9` (`feat(tui): resolve autocomplete and queue slash commands on Ctrl+F (#13345)`). Verified current Ctrl+F path across `mastracode/src/tui/components/custom-editor.ts`, `setup.ts`, `mastra-tui.ts`, and `handlers/agent-lifecycle.ts`: Ctrl+F accepts slash autocomplete, stores queued actions in FIFO TUI state, and drains queued slash commands through `handleSlashCommand()` after `agent_end`.
+
+Processed PR [#13311](https://github.com/mastra-ai/mastra/pull/13311), `d1b596fb05` (`fix(mastracode): wire mcpManager to TUI so /mcp command works (#13311)`). Verified `mastracode/src/main.ts` passes `mcpManager` into `MastraTUI`, `state.ts` stores it, `mastra-tui.ts` includes it in `SlashCommandContext`, and `commands/mcp.ts` reads `ctx.mcpManager` for status/reload/selector behavior.
+
+Documentation actions:
+
+- Created `features/chat/queued-followups.md` for Ctrl+F queued follow-up and slash-command behavior.
+- Created `features/integrations/mcp-status-command.md` for `/mcp` status/reload behavior.
+- Updated `features/tui/interactive-chat.md` and `features/tools/coding-tools-permissions.md` with later-change references and links.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13345 done, #13311 done, #13346 current, #13347 next.
+- Focused verification passed: `pnpm --filter ./mastracode test --run src/tui/__tests__/mastra-tui-queueing.test.ts src/tui/components/__tests__/custom-editor.test.ts src/tui/__tests__/command-dispatch.test.ts --reporter=dot --bail 1` (66 tests).
+
+Next queue checkpoint: PR #13346 (AGENTS.md instruction loading), then PR #13347 (MCP manager factory refactor).

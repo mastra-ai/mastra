@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — coding tools, approvals, permissions, YOLO, hooks, MCP tool merge.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager.
 
 ## User-visible behavior
 
@@ -49,6 +49,7 @@
 ## Key files
 
 - `mastracode/src/agents/tools.ts` — dynamic tools, web search, MCP merge, hooks.
+- `mastracode/src/tui/commands/mcp.ts` — MCP status/reload command that reads the same manager.
 - `mastracode/src/agents/workspace.ts` — filesystem/shell/LSP tools and sandbox paths.
 - `mastracode/src/tools/request-sandbox-access.ts` — Mastra Code-owned custom tool schema.
 - `mastracode/src/lsp/client.ts` — JSON-RPC client used by LSP-backed tools.
@@ -63,6 +64,7 @@
 
 - [Streaming tool arguments](./streaming-tool-arguments.md) — live partial tool input rendering.
 - [Task tracking tools and TUI progress](./task-tracking.md) — always-allowed task tools and pinned progress projection.
+- [MCP status and reload command](../integrations/mcp-status-command.md) — MCP manager status must match merged runtime tools.
 - [Interactive TUI chat](../tui/interactive-chat.md) — tool components render in chat/history.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — plan mode and model family affect tools.
 - [Subagent delegation](../subagents/delegation.md) — subagents rely on workspace tool boundaries.
