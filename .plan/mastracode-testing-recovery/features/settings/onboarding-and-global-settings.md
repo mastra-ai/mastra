@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13421](https://github.com/mastra-ai/mastra/pull/13421) — interactive first-run `/setup` flow, persisted global settings, built-in/custom model packs, OM packs, and YOLO preference.
-- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added persisted theme preference; [#13494](https://github.com/mastra-ai/mastra/pull/13494) — fixed the supported-providers documentation URL in onboarding; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — allows onboarding to proceed with API-key-only provider access instead of requiring OAuth/built-in packs; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and then strengthened an Anthropic OAuth warning, but current source has removed that flow via later #14605; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — made `/models` the single pack flow and hardened custom pack settings updates; [#13566](https://github.com/mastra-ai/mastra/pull/13566) — expands provider access detection to all registry provider API-key env vars.
+- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added persisted theme preference; [#13494](https://github.com/mastra-ai/mastra/pull/13494) — fixed the supported-providers documentation URL in onboarding; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — allows onboarding to proceed with API-key-only provider access instead of requiring OAuth/built-in packs; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and then strengthened an Anthropic OAuth warning, but current source has removed that flow via later #14605; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — made `/models` the single pack flow and hardened custom pack settings updates; [#13566](https://github.com/mastra-ai/mastra/pull/13566) — expands provider access detection to all registry provider API-key env vars; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — persists custom OpenAI-compatible providers in settings.
 
 ## User-visible behavior
 
@@ -45,6 +45,7 @@
 | Active model pack | Thread setting `activeModelPackId` + global settings fallback | `/models`, startup default resolution, footer/runtime model state |
 | Custom model packs | `settings.json` `customModelPacks` plus thread active pack metadata | `/setup`, `/models` create/edit/import/share/delete, startup `resolveModelDefaults()` |
 | Provider access | AuthStorage + env/API-key detection + provider registry `apiKeyEnvVar` | Onboarding auth gate, pack filtering, model prompts |
+| Custom providers | `settings.json` `customProviders` | `/custom-providers`, model resolver, custom catalog |
 | OM pack/model | Harness state + global settings OM fields | OM memory factory, `/om`, setup wizard |
 | YOLO/quiet preferences | Harness state + global settings preferences + quiet rollout flag | Permission prompts, tool/task/subagent rendering, `/settings` |
 | Storage backend | Global settings + env overrides | Storage factory, memory/history persistence |
@@ -53,7 +54,7 @@
 ## Key files
 
 - `mastracode/src/onboarding/onboarding-inline.ts` — setup wizard UI, API-key/OAuth copy, step flow, and supported-provider docs link.
-- `mastracode/src/onboarding/settings.ts` — `settings.json` schema, migrations, defaults, and pack resolution.
+- `mastracode/src/onboarding/settings.ts` — `settings.json` schema, migrations, defaults, pack resolution, and custom provider parsing.
 - `mastracode/src/onboarding/packs.ts` — provider-filtered built-in mode/OM packs plus always-available custom packs.
 - `mastracode/src/tui/mastra-tui.ts` — startup onboarding trigger, runtime provider access refresh, and `applyOnboardingResult()` runtime persistence.
 - `mastracode/src/tui/commands/models-pack.ts` — `/models` pack switch/custom/edit/share/import behavior.
@@ -63,6 +64,7 @@
 ## Dependencies / related features
 
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — mode model defaults and auth checks.
+- [Custom OpenAI-compatible providers](../models/custom-providers.md) — custom providers are persisted in the same global settings file.
 - [Observational memory](../memory/observational-memory.md) — setup selects default OM model pack.
 - [Persistent conversations](../threads/persistent-conversations.md) — per-thread model-pack metadata overrides global defaults.
 - [Storage backend configuration](./storage-backend.md) — storage backend choice is persisted in the same global settings file.

@@ -57,6 +57,7 @@
 - [Core Harness API](./harness-api.md) — workspace methods are part of the public Harness surface.
 - [Delegation](../subagents/delegation.md) — workspace/skills setup came from the same early organization work.
 - [Prompt context](../chat/prompt-context.md) — activated skill content becomes agent-visible instruction context.
+- [Workspace-backed coding tools](../tools/workspace-tools.md) — workspace owns skill paths used by the skills provider.
 - [File autocomplete](../tui/file-autocomplete.md) — file and skill suggestions share `setupAutocomplete()` provider rebuilds.
 
 ## Existing tests

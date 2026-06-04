@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13605 (row 78) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13437 (`e9476527fd`, workspace tools with TUI streaming), then #13682 (`ee9c8df644`, custom providers command).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13682 (row 80) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13690 (`f77cd94c44`, Harness resource ID methods), then #13613 (`bf7ee23532`, HTTP MCP servers).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 79: PR #13437 (workspace tools with TUI streaming), then row 80: PR #13682 (`/custom-providers`).
+1. Continue at `_pr-queue.md` row 81: PR #13690 (Harness resource ID methods and `/resource`), then row 82: PR #13613 (HTTP MCP servers).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -140,3 +140,6 @@ None known.
 - `gh pr view 13574 --json number,title,body,author,mergedAt,url,files,commits`, current Harness send/message-content paths, signal tests, and message-list adapter tests verified file attachment support. Added `features/chat/file-attachments.md`; noted missing direct Harness `sendMessage({ files })` test.
 - `gh pr view 13605 --json number,title,body,author,mergedAt,url,files,commits`, current command dispatch/setup/help/report command source verified `/report-issue`; `/fix-issue` is absent at HEAD despite the PR title. Added `features/integrations/github-issue-reporting.md`; noted missing direct command prompt test.
 - Focused verification for #13574/#13605 passed: core agent signals + AIV5 file adapter + attachment prompt tests (3 files / 94 tests), MC command-dispatch + help-overlay tests (2 files / 26 tests).
+- `gh pr view 13437 --json number,title,body,author,mergedAt,url,files,commits`, current `getDynamicWorkspace()`, core workspace resolver/tests, workspace tool tests, and TUI tool renderer verified workspace-backed coding tools. Added `features/tools/workspace-tools.md`; noted plan-mode/reload integration gaps.
+- `gh pr view 13682 --json number,title,body,author,mergedAt,url,files,commits`, current `/custom-providers` command, settings parser, model resolver, catalog provider, dispatch/help/setup wiring verified custom providers. Added `features/models/custom-providers.md`; noted modal-flow and Harness custom-catalog cache gaps.
+- Focused verification for #13437/#13682: core workspace/harness slice passed (7 files / 117 tests); MC custom-provider/settings/dispatch/workspace-env/tool-renderer slice passed (5 files / 112 tests). Including `model.test.ts` reproduced the known env-sensitive OpenAI auth failure (expected model-router, got openai-direct), so it was excluded from the passing rerun.

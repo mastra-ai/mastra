@@ -98,9 +98,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 76 | 2026-02-28 | #13609 | `ebab49855b` | review | done | fix: preserve assistant text after tool updates and add openai web_search fallback (#13609) | 2 |
 | 77 | 2026-02-28 | #13574 | `276246e0b9` | review | done | feat(harness): file attachment support with filename preservation and text file handling (#13574) | 1 |
 | 78 | 2026-03-01 | #13605 | `829a09641d` | review | done | feat(mastracode): add /fix-issue and /report-issue commands (#13605) | 5 |
-| 79 | 2026-03-02 | #13437 | `e9476527fd` | review | current | feat(mastracode): switch to workspace tools with TUI streaming [COR-511] (#13437) | 4 |
-| 80 | 2026-03-02 | #13682 | `ee9c8df644` | review | | feat(mastracode): add /custom-providers command for custom OpenAI-compatible providers (#13682) | 15 |
-| 81 | 2026-03-02 | #13690 | `f77cd94c44` | review | | fix: implement Harness resource ID methods and improve /resource command (#13690) | 2 |
+| 79 | 2026-03-02 | #13437 | `e9476527fd` | review | done | feat(mastracode): switch to workspace tools with TUI streaming [COR-511] (#13437) | 4 |
+| 80 | 2026-03-02 | #13682 | `ee9c8df644` | review | done | feat(mastracode): add /custom-providers command for custom OpenAI-compatible providers (#13682) | 15 |
+| 81 | 2026-03-02 | #13690 | `f77cd94c44` | review | current | fix: implement Harness resource ID methods and improve /resource command (#13690) | 2 |
 | 82 | 2026-03-03 | #13613 | `bf7ee23532` | review | | feat(mastracode): support HTTP MCP servers in config (#13613) | 8 |
 | 83 | 2026-03-02 | #13691 | `978a63d71e` | review | | fix(mastracode): gate debug.log behind MASTRA_DEBUG env var and cap file size (#13691) | 4 |
 | 84 | 2026-03-02 | #13687 | `85664e9fd8` | review | | feat(workspace): support tool name remapping in workspace tools config (#13687) | 11 |

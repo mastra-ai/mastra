@@ -60,6 +60,7 @@
 ## Dependencies / related features
 
 - [Coding tools and approval permissions](./coding-tools-permissions.md) — tool execution surface.
+- [Workspace-backed coding tools](./workspace-tools.md) — workspace tool calls are rendered through the streaming tool UI.
 - [Task tracking tools and TUI progress](./task-tracking.md) — task tools are the main special-case renderer.
 - [Interactive TUI chat](../tui/interactive-chat.md) — streaming chat renderer.
 - [Harness display state](../integrations/harness-display-state.md) — canonical active tool/input-buffer projection.

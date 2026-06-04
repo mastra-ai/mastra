@@ -799,3 +799,26 @@ Verification:
 - Focused Mastra Code tests passed: `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts src/tui/components/__tests__/help-overlay.test.ts --reporter=dot --bail 1` (2 files / 26 tests).
 
 Next queue checkpoint: PR #13437 (workspace tools with TUI streaming), then PR #13682 (`/custom-providers`).
+
+
+### Feature map PR #13437 and #13682
+
+Processed PR [#13437](https://github.com/mastra-ai/mastra/pull/13437), `e9476527fd` (`feat(mastracode): switch to workspace tools with TUI streaming [COR-511]`). Verified current source has file/list/search/edit/write/LSP/shell/process tools supplied by core `Workspace` rather than `createDynamicTools()`. `getDynamicWorkspace()` builds `Workspace` with `LocalFilesystem`, `LocalSandbox`, skill/allowed paths, plan-mode write-tool disabling, LSP config from settings plus package-runner detection, and reusable workspace IDs keyed by canonical project path. MC dynamic tools now only add non-workspace tools like `request_access`, notification inbox, web search/extract, MCP, extraTools, and hook wrappers. TUI renderer has workspace-specific output handling for view previews, tree summaries, edit diagnostics, and LSP diagnostics.
+
+Processed PR [#13682](https://github.com/mastra-ai/mastra/pull/13682), `ee9c8df644` (`feat(mastracode): add /custom-providers command for custom OpenAI-compatible providers`). Verified `/custom-providers` modal CRUD at HEAD: provider name/url/API key, model add/remove, edit/delete, duplicate prevention, URL validation, and immediate manage view after create. Settings parsing trims/sanitizes entries, strips duplicate provider prefixes from model names, and persists optional API keys. `resolveModel()` routes custom provider IDs through `ModelRouterLanguageModel` before gateway/built-in logic, so custom provider collisions intentionally win. Harness `customModelCatalogProvider` adds custom models to `listAvailableModels()` for `/models` and `/om` selectors.
+
+Documentation actions:
+
+- Added `features/tools/workspace-tools.md` for core Workspace-backed coding tools, workspace caching, plan-mode tool disabling, LSP config, TUI streaming/rendering, and missing integration tests.
+- Added `features/models/custom-providers.md` for `/custom-providers`, settings persistence, model routing/catalog integration, and missing modal/catalog tests.
+- Updated `features/README.md`, `_pr-queue.md`, `tools/coding-tools-permissions.md`, `tools/streaming-tool-arguments.md`, `integrations/skills-command.md`, `models/model-auth-and-modes.md`, `settings/onboarding-and-global-settings.md`, `tui/help-and-shortcuts.md`, `handoff.md`, and this history entry. Queue status: #13437 done, #13682 done, #13690 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/agents/workspace.ts`, `mastracode/src/agents/tools.ts`, `mastracode/src/tool-names.ts`, `mastracode/src/tui/components/tool-execution-enhanced.ts`, `mastracode/src/tui/commands/custom-providers.ts`, `mastracode/src/onboarding/settings.ts`, `mastracode/src/agents/model.ts`, `mastracode/src/index.ts`, `packages/core/src/harness/harness.ts`, `packages/core/src/harness/types.ts`, and `packages/core/src/workspace/tools/*`.
+- Tests identified/read: `packages/core/src/harness/workspace-resolution.test.ts`, `packages/core/src/harness/subagent-workspace-integration.test.ts`, `packages/core/src/workspace/tools/__tests__/*.test.ts`, `mastracode/src/agents/__tests__/workspace-env.test.ts`, `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts`, `mastracode/src/tui/commands/__tests__/custom-providers.test.ts`, `mastracode/src/onboarding/__tests__/settings.test.ts`, `mastracode/src/agents/__tests__/model.test.ts`, and `mastracode/src/tui/__tests__/command-dispatch.test.ts`.
+- PR metadata checked with `gh pr view 13437 --json number,title,body,author,mergedAt,url,files,commits` and `gh pr view 13682 --json number,title,body,author,mergedAt,url,files,commits`.
+- Focused MC tests: first run including `src/agents/__tests__/model.test.ts` reproduced the known env-sensitive failure (`resolveModel > openai/* models > uses model router when no OpenAI auth is configured`, expected `model-router`, got `openai-direct` because OpenAI auth is present). Rerun excluding that known failure passed: `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/custom-providers.test.ts src/onboarding/__tests__/settings.test.ts src/tui/__tests__/command-dispatch.test.ts src/agents/__tests__/workspace-env.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts --reporter=dot --bail 1` (5 files / 112 tests).
+- Focused core tests passed: `pnpm --filter ./packages/core exec vitest run src/harness/workspace-resolution.test.ts src/harness/subagent-workspace-integration.test.ts src/workspace/tools/__tests__/read-file.test.ts src/workspace/tools/__tests__/list-files.test.ts src/workspace/tools/__tests__/execute-command.test.ts src/workspace/tools/__tests__/edit-file.test.ts src/workspace/tools/__tests__/lsp-inspect.test.ts --reporter=dot --bail 1` (7 files / 117 tests).
+
+Next queue checkpoint: PR #13690 (Harness resource ID methods and `/resource`), then PR #13613 (HTTP MCP servers).
