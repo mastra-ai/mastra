@@ -945,3 +945,24 @@ Verification:
 - Focused MC tests passed: `pnpm --filter ./mastracode exec vitest run src/agents/extra-tools.test.ts src/clipboard/__tests__/index.test.ts src/tui/components/__tests__/custom-editor.test.ts --reporter=dot --bail 1` (3 files / 38 tests).
 
 Next queue checkpoint: PR #13716 (export `resolveModel`), then PR #13603 (auto-update prompt on session start).
+
+### Feature map batch: resolveModel export and auto-update prompts
+
+Processed PR [#13716](https://github.com/mastra-ai/mastra/pull/13716), `ee8de2adcf` (`feat(mastracode): export resolveModel from createMastraCode`). Verified current `createMastraCode()` returns `resolveModel` alongside Harness/TUI dependencies so external consumers can resolve model IDs through the same configured provider registry, custom-provider routing, gateway/OAuth/API-key fallback, and request-context-aware resolver path used by Mastra Code itself.
+
+Processed PR [#13603](https://github.com/mastra-ai/mastra/pull/13603), `548da794ec` (`feat(mastracode): auto-update prompt on session start`). Verified current startup update checks use `utils/update-check.ts` for current/latest version detection, package-manager-specific install commands, semver comparison, changelog fetch/parse, and update execution. `MastraTUI` triggers an initial non-passive check after startup work and schedules passive rechecks every 45 minutes; declining persists `settings.updateDismissedVersion` so the same version is not repeatedly prompted.
+
+Documentation actions:
+
+- Created `features/setup/auto-update-prompts.md` for startup update checks, dismissed-version persistence, package-manager install command selection, and test gaps.
+- Updated `features/setup/installation-and-launch.md` with the startup update prompt link.
+- Updated `features/models/model-auth-and-modes.md` and `features/integrations/harness-api.md` with the exported `resolveModel` surface.
+- Updated `features/settings/onboarding-and-global-settings.md` with `updateDismissedVersion` ownership.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13716 done, #13603 done, #13696 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/index.ts`, `mastracode/src/agents/model.ts`, `mastracode/src/utils/update-check.ts`, `mastracode/src/tui/mastra-tui.ts`, `mastracode/src/tui/commands/update.ts`, `mastracode/src/onboarding/settings.ts`, and related feature-map pages.
+- Focused tests passed: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_GENERATIVE_AI_API_KEY -u DEEPSEEK_API_KEY pnpm --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts src/tui/commands/__tests__/update.test.ts src/index.test.ts src/agents/__tests__/model.test.ts --reporter=dot --bail 1` (3 files / 50 tests). First run without env isolation hit the known local `OPENAI_API_KEY` routing mismatch in `model.test.ts`.
+
+Next queue checkpoint: PR #13696 (queue parallel interactive tool calls), then PR #13724 (workspace gitignore support, lower tree depth, and tool guidance).

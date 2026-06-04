@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13294](https://github.com/mastra-ai/mastra/pull/13294) — installation/startup README guidance for Mastra Code.
-- Later changes: [#13560](https://github.com/mastra-ai/mastra/pull/13560) — treats `ERR_STREAM_DESTROYED` as a non-fatal global exception/rejection during CLI runtime; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — makes debug logging opt-in via `MASTRA_DEBUG` and caps app-data `debug.log`.
+- Later changes: [#13560](https://github.com/mastra-ai/mastra/pull/13560) — treats `ERR_STREAM_DESTROYED` as a non-fatal global exception/rejection during CLI runtime; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — makes debug logging opt-in via `MASTRA_DEBUG` and caps app-data `debug.log`; [#13603](https://github.com/mastra-ai/mastra/pull/13603) — checks for newer npm versions on TUI startup and prompts for update.
 
 ## User-visible behavior
 
@@ -58,6 +58,7 @@
 
 - [Interactive TUI chat](../tui/interactive-chat.md) — default launched runtime.
 - [Debug logging](../tui/debug-logging.md) — startup debug-file behavior for TUI and headless runs.
+- [Auto-update prompts](./auto-update-prompts.md) — startup version-check prompt and dismissed-version settings.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — onboarding configures providers/models.
 - [Observational memory](../memory/observational-memory.md) — onboarding configures OM.
 

@@ -3,11 +3,11 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — OAuth/API-key providers, model selection, and Build/Plan/Fast modes.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — runtime model selection from request context and gateway heartbeat sync; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved mode/model runtime ownership onto core Harness sessions; [#13307](https://github.com/mastra-ai/mastra/pull/13307) — reloads AuthStorage before model resolution to avoid stale OpenAI Codex credentials; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added onboarding/global settings and model packs; [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults, but current source now uses OpenAI `gpt-5.5` pack/login defaults; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — onboarding accepts API-key-only access without OAuth; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and strengthened Claude Max OAuth warning, later removed by #14605 in current source; [#13490](https://github.com/mastra-ai/mastra/pull/13490) — wired `/think`/thinking state into OpenAI Codex reasoning effort; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — unified `/models` around the pack selector and improved custom pack edit/import/delete behavior; [#13566](https://github.com/mastra-ai/mastra/pull/13566) — checks the full provider registry for API-key access instead of only hardcoded providers; [#13600](https://github.com/mastra-ai/mastra/pull/13600) — makes Anthropic API keys a fallback when Claude Max OAuth is not configured; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — adds user-defined OpenAI-compatible providers to model routing and model catalogs.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — runtime model selection from request context and gateway heartbeat sync; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved mode/model runtime ownership onto core Harness sessions; [#13307](https://github.com/mastra-ai/mastra/pull/13307) — reloads AuthStorage before model resolution to avoid stale OpenAI Codex credentials; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added onboarding/global settings and model packs; [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults, but current source now uses OpenAI `gpt-5.5` pack/login defaults; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — onboarding accepts API-key-only access without OAuth; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and strengthened Claude Max OAuth warning, later removed by #14605 in current source; [#13490](https://github.com/mastra-ai/mastra/pull/13490) — wired `/think`/thinking state into OpenAI Codex reasoning effort; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — unified `/models` around the pack selector and improved custom pack edit/import/delete behavior; [#13566](https://github.com/mastra-ai/mastra/pull/13566) — checks the full provider registry for API-key access instead of only hardcoded providers; [#13600](https://github.com/mastra-ai/mastra/pull/13600) — makes Anthropic API keys a fallback when Claude Max OAuth is not configured; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — adds user-defined OpenAI-compatible providers to model routing and model catalogs; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exports `resolveModel` from `createMastraCode()` for external consumers.
 
 ## User-visible behavior
 
-- What the user can do: authenticate providers, choose model packs, create/edit/share/import custom packs, switch modes, and run headless with model/mode flags.
+- What the user can do: authenticate providers, choose model packs, create/edit/share/import custom packs, switch modes, run headless with model/mode flags, and let external `createMastraCode()` consumers resolve the same configured models.
 - Success looks like: footer, prompt/runtime model, `/models` selected pack, provider API-key availability, Anthropic OAuth/API-key priority, and persisted thread/session state agree.
 - Must preserve: selected model/mode across thread switch and restart, targeted custom pack edits, model use-count ranking, and safe fallback to defaults.
 
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | Current model ID | Harness session + persisted thread/session metadata | Runtime, footer, prompt context |
 | Current mode ID | Harness session | Runtime, footer, prompt mode section |
-| Provider credentials | AuthStorage/settings/env + provider registry `apiKeyEnvVar`, reloaded by `resolveModel()` | Model resolver, auth prompts, onboarding access gate, pack filtering |
+| Provider credentials | AuthStorage/settings/env + provider registry `apiKeyEnvVar`, reloaded by `resolveModel()` | Model resolver, exported `createMastraCode().resolveModel`, auth prompts, onboarding access gate, pack filtering |
 | Custom providers | `settings.json` `customProviders` + Harness custom catalog | Model resolver, model selector, `/models`, `/om` |
 | Anthropic auth priority | `resolveModel()` (`oauth` credential → stored/env API key → OAuth prompt fallback) | Anthropic provider construction, docs/auth guidance |
 | Model packs | Settings + thread active pack metadata | `/setup`, `/models`, session defaults |
@@ -52,7 +52,7 @@
 
 ## Key files
 
-- `mastracode/src/index.ts` — provider checks, registry API-key env scan, mode defaults, session prefill.
+- `mastracode/src/index.ts` — provider checks, registry API-key env scan, mode defaults, session prefill, and exported `resolveModel` in `createMastraCode()` result.
 - `mastracode/src/agents/model.ts` — provider/model resolution, custom provider routing, Anthropic/OpenAI API-key fallback, and OAuth priority.
 - `mastracode/src/auth/storage.ts` — credential persistence and refresh.
 - `mastracode/src/onboarding/packs.ts` — provider-filtered built-in model packs.

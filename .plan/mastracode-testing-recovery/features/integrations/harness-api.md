@@ -3,11 +3,11 @@
 ## Origin PR / commit
 
 - PR: [#13353](https://github.com/mastra-ai/mastra/pull/13353) — changed public `Harness` methods to object-parameter calls and added the first Harness class reference page.
-- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering; [#13457](https://github.com/mastra-ai/mastra/pull/13457) — added/corrected workspace lifecycle methods and dynamic workspace caching; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — initialized an internal Mastra instance from Harness storage so standalone-agent tool approvals can resume; [#13525](https://github.com/mastra-ai/mastra/pull/13525) — moved Mastra Code docs to the Code docs site and marked Harness reference docs as Alpha.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering; [#13457](https://github.com/mastra-ai/mastra/pull/13457) — added/corrected workspace lifecycle methods and dynamic workspace caching; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — initialized an internal Mastra instance from Harness storage so standalone-agent tool approvals can resume; [#13525](https://github.com/mastra-ai/mastra/pull/13525) — moved Mastra Code docs to the Code docs site and marked Harness reference docs as Alpha; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exposes Mastra Code `resolveModel` from `createMastraCode()` for external UI consumers.
 
 ## User-visible behavior
 
-- What the user can do: Mastra Code and external Harness consumers call stable, named-parameter methods such as `switchMode({ modeId })`, `sendMessage({ content })`, `switchThread({ threadId })`, `respondToQuestion({ questionId, answer })`, and `resolveWorkspace()`.
+- What the user can do: Mastra Code and external Harness consumers call stable, named-parameter methods such as `switchMode({ modeId })`, `sendMessage({ content })`, `switchThread({ threadId })`, `respondToQuestion({ questionId, answer })`, and `resolveWorkspace()`; external `createMastraCode()` consumers can also resolve model IDs through the same configured resolver as the TUI.
 - Success looks like: TUI/headless behavior is unchanged, while call sites are easier to read and safer to extend; UI consumers can subscribe to display-state snapshots instead of raw-event state machines; workspace consumers can eagerly resolve dynamic workspaces; standalone Harness agents with storage can persist and resume approval snapshots.
 - Must preserve: method names, parameter object shapes, docs examples, TUI/headless call-site parity, display-state contract, thread/model/mode behavior, and internal Mastra registration for storage-backed agents.
 
@@ -40,7 +40,7 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Harness mode/model/thread state | `packages/core/src/harness/harness.ts` | Mastra Code TUI/headless, commands, docs consumers |
+| Harness mode/model/thread state | `packages/core/src/harness/harness.ts` + Mastra Code model resolver | Mastra Code TUI/headless, commands, docs consumers, external `createMastraCode()` consumers |
 | Prompt/tool/plan resolver state | Core Harness pending resolver maps | TUI prompt/tool handlers, headless auto-resolvers |
 | Public API docs | `docs/src/content/en/reference/harness/harness-class.mdx` | External Harness consumers |
 | Display projection | `HarnessDisplayState` | TUI and external UI consumers |
@@ -59,6 +59,7 @@
 - `mastracode/src/tui/handlers/prompts.ts` — question and plan approval call sites.
 - `mastracode/src/tui/handlers/tool.ts` — tool approval call sites.
 - `mastracode/src/headless.ts` — non-TUI call sites.
+- `mastracode/src/index.ts` — exports `resolveModel` alongside Harness/TUI dependencies from `createMastraCode()`.
 - `docs/src/content/en/reference/harness/harness-class.mdx` — Alpha-badged reference page and examples for the public Harness class.
 - `docs/vercel.json` — redirects old main-site Mastra Code docs URLs to `https://code.mastra.ai/`.
 

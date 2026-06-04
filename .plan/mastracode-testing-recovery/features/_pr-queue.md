@@ -112,9 +112,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 90 | 2026-03-03 | #13710 | `bc2665ebf3` | review | done | chore(templates): README follow-ups (#13710) | 1 |
 | 91 | 2026-03-03 | #13713 | `d7ed2bb64e` | review | done | feat(mastracode): support dynamic extraTools functions (#13713) | 3 |
 | 92 | 2026-03-03 | #13712 | `d365d2926b` | review | done | feat(cli): Add clipboard image and text paste support via Ctrl+V (#13712) | 2 |
-| 93 | 2026-03-03 | #13716 | `ee8de2adcf` | review | current | feat(mastracode): export resolveModel from createMastraCode (#13716) | 1 |
-| 94 | 2026-03-03 | #13603 | `548da794ec` | review | | feat(mastracode): auto-update prompt on session start (#13603) | 4 |
-| 95 | 2026-03-03 | #13696 | `6f2946f240` | review | | fix(mastracode): queue parallel interactive tool calls to prevent input corruption (#13696) | 4 |
+| 93 | 2026-03-03 | #13716 | `ee8de2adcf` | review | done | feat(mastracode): export resolveModel from createMastraCode (#13716) | 1 |
+| 94 | 2026-03-03 | #13603 | `548da794ec` | review | done | feat(mastracode): auto-update prompt on session start (#13603) | 4 |
+| 95 | 2026-03-03 | #13696 | `6f2946f240` | review | current | fix(mastracode): queue parallel interactive tool calls to prevent input corruption (#13696) | 4 |
 | 96 | 2026-03-03 | #13724 | `77b4a254e5` | review | | feat(workspace): gitignore support, lower tree depth, fix tool guidance (#13724) | 1 |
 | 97 | 2026-03-03 | #13723 | `52022c842c` | review | | feat(mastracode): Ctrl+Z now suspends the process (SIGTSTP) (#13723) | 5 |
 | 98 | 2026-03-04 | #13523 | `edfda994ef` | likely skip | | chore: version packages (alpha) (#13523) | 2 |
