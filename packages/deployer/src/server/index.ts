@@ -502,6 +502,7 @@ export async function createHonoServer(
         experimentalUI: `'${experimentalUI}'`,
         agentSignals: `'${agentSignals}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
+        customServerUrl: `'${process.env.MASTRA_CUSTOM_SERVER_URL || ''}'`,
       });
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });

@@ -125,6 +125,7 @@ declare global {
     MASTRA_EXPERIMENTAL_FEATURES?: string;
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
+    MASTRA_CUSTOM_SERVER_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
     MASTRA_EXPERIMENTAL_UI?: string;
     MASTRA_AGENT_SIGNALS?: string;
@@ -343,11 +344,12 @@ export const routes: RouteObject[] = [
   {
     element: <RootLayout />,
     children: [
-      // Conditional routes (non-platform only)
+      // Settings is always available (users need to configure custom server URLs even on platform)
+      { path: '/settings', element: <StudioSettingsPage />, handle: navHandle('/settings') },
+      // Templates only on non-platform
       ...(isMastraPlatform
         ? []
         : [
-            { path: '/settings', element: <StudioSettingsPage />, handle: navHandle('/settings') },
             {
               path: '/templates',
               element: <Templates />,
@@ -694,7 +696,9 @@ export default function AppWrapper() {
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
-  const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
+  const customServerUrl = window.MASTRA_CUSTOM_SERVER_URL || '';
+  const endpoint =
+    cloudApiEndpoint || customServerUrl || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>

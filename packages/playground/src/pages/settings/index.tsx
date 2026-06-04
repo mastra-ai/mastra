@@ -10,6 +10,7 @@ import {
   useTheme,
 } from '@mastra/playground-ui';
 import type { Theme } from '@mastra/playground-ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
@@ -24,6 +25,12 @@ const isTheme = (value: string): value is Theme => THEME_OPTIONS.some(option => 
 export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
   const { theme, setTheme } = useTheme();
+  const queryClient = useQueryClient();
+
+  const handleConnectionSave = () => {
+    // Invalidate all cached queries so data is refetched from the new server URL
+    void queryClient.invalidateQueries();
+  };
 
   return (
     <PageLayout width="narrow">
@@ -54,7 +61,7 @@ export const StudioSettingsPage = () => {
           title="Mastra Connection"
           description="Configure the Mastra instance URL, API prefix, and request headers used by the studio."
         >
-          <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
+          <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} onSave={handleConnectionSave} />
         </SectionCard>
       </PageLayout.MainArea>
     </PageLayout>

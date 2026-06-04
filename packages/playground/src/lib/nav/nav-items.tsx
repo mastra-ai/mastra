@@ -169,7 +169,7 @@ export const mainNav: NavSection[] = [
 ];
 
 export const bottomNav: NavItem[] = [
-  { name: 'Settings', url: '/settings', Icon: SettingsIcon, isOnMastraPlatform: false },
+  { name: 'Settings', url: '/settings', Icon: SettingsIcon, isOnMastraPlatform: true },
   { name: 'Resources', url: '/resources', Icon: BookIcon, isOnMastraPlatform: true },
 ];
 

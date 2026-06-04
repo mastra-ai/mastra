@@ -274,6 +274,7 @@ export interface StudioInjectionConfig {
   experimentalUI: string;
   agentSignals: string;
   autoDetectUrl?: string;
+  customServerUrl?: string;
 }
 
 /**
@@ -300,6 +301,9 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   html = html.replace(`'%%MASTRA_AGENT_SIGNALS%%'`, config.agentSignals);
   if (config.autoDetectUrl) {
     html = html.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
+  }
+  if (config.customServerUrl) {
+    html = html.replace(`'%%MASTRA_CUSTOM_SERVER_URL%%'`, config.customServerUrl);
   }
   html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', config.basePath);
 

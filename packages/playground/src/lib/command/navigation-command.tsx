@@ -104,17 +104,15 @@ export const NavigationCommand = () => {
             <EyeIcon className="text-neutral3" />
             <span>Observability</span>
           </CommandItem>
+          <CommandItem value="settings" onSelect={() => handleSelect('/settings')}>
+            <SettingsIcon className="text-neutral3" />
+            <span>Settings</span>
+          </CommandItem>
           {!isMastraPlatform && (
-            <>
-              <CommandItem value="settings" onSelect={() => handleSelect('/settings')}>
-                <SettingsIcon className="text-neutral3" />
-                <span>Settings</span>
-              </CommandItem>
-              <CommandItem value="templates" onSelect={() => handleSelect('/templates')}>
-                <PackageIcon className="text-neutral3" />
-                <span>Templates</span>
-              </CommandItem>
-            </>
+            <CommandItem value="templates" onSelect={() => handleSelect('/templates')}>
+              <PackageIcon className="text-neutral3" />
+              <span>Templates</span>
+            </CommandItem>
           )}
         </CommandGroup>
 
