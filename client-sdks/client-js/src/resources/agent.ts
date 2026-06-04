@@ -770,24 +770,22 @@ export class Agent extends BaseResource {
           }
 
           try {
-            const continuationMessages = threadId
-              ? toolResultMessages
-              : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages];
-            const continuation = await agent.streamUntilIdle(
-              continuationMessages as MessageListInput,
-              {
+            await agent.sendToolApproval({
+              resourceId: resourceId || agent.agentId,
+              threadId,
+              toolCallId: pendingToolCalls[0]!.toolCallId,
+              approved: true,
+              requestContext: processedRequestContext,
+              messages: (threadId
+                ? toolResultMessages
+                : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]) as MessageListInput,
+              streamOptions: {
                 ...activeRuntimeOptions,
-                runId: uuid(),
                 requestContext: processedRequestContext,
                 memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
                 clientTools: processedClientTools,
-              } as never,
-            );
-            try {
-              void continuation.body?.cancel?.();
-            } catch {
-              // ignore
-            }
+              } as StreamParamsBaseWithoutMessages<any>,
+            });
           } catch (error) {
             console.error('Error running client-tool continuation:', error);
           } finally {
@@ -2576,6 +2574,9 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   */
   async streamUntilIdle<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
@@ -2756,6 +2757,8 @@ export class Agent extends BaseResource {
     toolCallId: string;
     approved: boolean;
     requestContext?: RequestContext | Record<string, any>;
+    messages?: MessageListInput;
+    streamOptions?: StreamParamsBaseWithoutMessages<any>;
   }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
     const { requestContext, ...rest } = params;
     return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
@@ -2953,6 +2956,8 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @deprecated Use `resumeStream(resumeData, { untilIdle: true, ... })` instead.
+   *
    * Resumes a suspended agent stream until idle with custom resume data.
    * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
    */

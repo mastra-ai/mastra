@@ -56,7 +56,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-      http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
+      http.post(`${BASE_URL}/api/agents/builder-agent/stream`, async ({ request }) => {
         captured.body = await request.json();
         // Minimal "no events" response body — useChat closes out cleanly.
         const stream = new ReadableStream<Uint8Array>({
@@ -121,7 +121,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-      http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
+      http.post(`${BASE_URL}/api/agents/builder-agent/stream`, async ({ request }) => {
         captured.body = await request.json();
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {

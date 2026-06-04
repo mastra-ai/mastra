@@ -2,7 +2,7 @@ import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/mess
 import { describe, expect, it } from 'vitest';
 
 import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '../om-parts-converter';
-import { toAssistantUIMessage } from '../to-assistant-ui-message';
+import { toAssistantUIMessage, toAssistantUIMessages } from '../to-assistant-ui-message';
 
 const OM_TOOL_NAME = 'mastra-memory-om-observation';
 
@@ -61,6 +61,42 @@ const assistantMessage = (parts: MastraMessagePart[]): MastraDBMessage => ({
   },
 });
 
+const signalMessage = (
+  parts: MastraMessagePart[],
+  signalType: string,
+  signalMetadata: Record<string, unknown> = {},
+): MastraDBMessage => ({
+  id: 'signal-msg-1',
+  role: 'signal',
+  type: signalType,
+  createdAt: new Date('2026-05-29T00:00:00.000Z'),
+  threadId: 'thread-1',
+  resourceId: 'resource-1',
+  content: {
+    format: 2,
+    parts,
+    metadata: {
+      signal: {
+        id: 'signal-1',
+        type: signalType,
+        tagName: signalType,
+        createdAt: '2026-05-29T00:00:00.000Z',
+        ...signalMetadata,
+      },
+    },
+  },
+});
+
+const hydratedSignalData = (message: MastraDBMessage): Record<string, unknown> => {
+  const converted = toAssistantUIMessage(message);
+  if (typeof converted.content === 'string') throw new Error('expected structured content parts');
+  const part = converted.content[0];
+  if (part?.type !== 'data' || !part.data || typeof part.data !== 'object') {
+    throw new Error('expected signal data part');
+  }
+  return part.data as Record<string, unknown>;
+};
+
 /**
  * Run a message through the real OM conversion pipeline (the same one
  * `mastra-runtime-provider` uses) so the runtime-only `dynamic-tool` part is
@@ -74,6 +110,163 @@ const firstConvertedPart = (parts: MastraMessagePart[]) => {
   if (typeof content === 'string') throw new Error('expected structured content parts');
   return content[0];
 };
+
+describe('toAssistantUIMessage signal messages', () => {
+  it('hydrates persisted non-user signal rows into assistant signal data parts', () => {
+    const signalPart: MastraMessagePart = {
+      type: 'text',
+      text: '# User\n- name: Tyler\n- location: Vancouver',
+    };
+
+    const converted = toAssistantUIMessage(signalMessage([signalPart], 'state'));
+    if (typeof converted.content === 'string') throw new Error('expected structured content parts');
+
+    expect(converted.role).toBe('assistant');
+    expect(converted.content).toEqual([
+      expect.objectContaining({
+        type: 'data',
+        name: 'signal',
+        data: expect.objectContaining({
+          id: 'signal-1',
+          type: 'state',
+          tagName: 'state',
+          contents: '# User\n- name: Tyler\n- location: Vancouver',
+          createdAt: '2026-05-29T00:00:00.000Z',
+        }),
+      }),
+    ]);
+  });
+
+  it('matches the live data-signal projection for persisted non-user signal rows', () => {
+    const liveSignalData = {
+      id: 'signal-1',
+      type: 'state',
+      tagName: 'state',
+      contents: '# User\n- name: Tyler\n- location: Vancouver',
+      createdAt: '2026-05-29T00:00:00.000Z',
+    };
+    const persisted = toAssistantUIMessage(signalMessage([{ type: 'text', text: liveSignalData.contents }], 'state'));
+    const live = toAssistantUIMessage(assistantMessage([omPart('signal', liveSignalData)]));
+
+    if (typeof persisted.content === 'string' || typeof live.content === 'string') {
+      throw new Error('expected structured content parts');
+    }
+
+    expect(persisted.role).toBe(live.role);
+    expect(persisted.content).toHaveLength(1);
+    expect(live.content).toHaveLength(1);
+    expect(persisted.content[0]).toMatchObject({
+      type: live.content[0]?.type,
+      name: 'signal',
+      data: live.content[0]?.type === 'data' ? live.content[0].data : undefined,
+    });
+  });
+
+  it('uses message fields as fallbacks when signal metadata is incomplete', () => {
+    const data = hydratedSignalData(
+      signalMessage([{ type: 'text', text: 'fallback content' }], 'state', {
+        id: undefined,
+        type: undefined,
+        tagName: undefined,
+        createdAt: undefined,
+      }),
+    );
+
+    expect(data).toMatchObject({
+      id: 'signal-msg-1',
+      type: 'state',
+      tagName: 'state',
+      contents: 'fallback content',
+      createdAt: '2026-05-29T00:00:00.000Z',
+    });
+  });
+
+  it('preserves optional signal metadata fields on hydrated data parts', () => {
+    const data = hydratedSignalData(
+      signalMessage([{ type: 'text', text: 'notification summary' }], 'notification', {
+        acceptedAt: '2026-05-29T00:00:01.000Z',
+        attributes: { priority: 'high', unread: true },
+        metadata: { recordId: 'notification-1' },
+      }),
+    );
+
+    expect(data).toMatchObject({
+      acceptedAt: '2026-05-29T00:00:01.000Z',
+      attributes: { priority: 'high', unread: true },
+      metadata: { recordId: 'notification-1' },
+    });
+  });
+
+  it('hydrates multi-part text and file signal contents', () => {
+    const filePart = {
+      type: 'file',
+      data: 'data:text/plain;base64,aGVsbG8=',
+      mimeType: 'text/plain',
+      filename: 'notes.txt',
+    } as MastraMessagePart;
+
+    const data = hydratedSignalData(signalMessage([{ type: 'text', text: 'attached notes' }, filePart], 'state'));
+
+    expect(data.contents).toEqual([
+      { type: 'text', text: 'attached notes' },
+      {
+        type: 'file',
+        data: 'data:text/plain;base64,aGVsbG8=',
+        mediaType: 'text/plain',
+        filename: 'notes.txt',
+      },
+    ]);
+  });
+
+  it('merges adjacent signal and assistant rows to match live streaming spacing', () => {
+    const messages = toAssistantUIMessages([
+      signalMessage([{ type: 'text', text: 'state contents' }], 'state'),
+      assistantMessage([{ type: 'text', text: 'assistant response' }]),
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.role).toBe('assistant');
+    expect(messages[0]?.content).toEqual([
+      expect.objectContaining({ type: 'data', name: 'signal' }),
+      expect.objectContaining({ type: 'text', text: 'assistant response' }),
+    ]);
+  });
+
+  it('does not merge unrelated adjacent assistant rows', () => {
+    const messages = toAssistantUIMessages([
+      assistantMessage([{ type: 'text', text: 'first assistant row' }]),
+      assistantMessage([{ type: 'text', text: 'second assistant row' }]),
+    ]);
+
+    expect(messages).toHaveLength(2);
+  });
+
+  it('does not merge signal rows across user messages', () => {
+    const messages = toAssistantUIMessages([
+      signalMessage([{ type: 'text', text: 'state contents' }], 'state'),
+      signalMessage([{ type: 'text', text: 'user says hello' }], 'user'),
+      assistantMessage([{ type: 'text', text: 'assistant response' }]),
+    ]);
+
+    expect(messages).toHaveLength(3);
+    expect(messages.map(message => message.role)).toEqual(['assistant', 'user', 'assistant']);
+  });
+
+  it('still renders persisted user signals as user content', () => {
+    const userPart: MastraMessagePart = { type: 'text', text: 'hello through a signal' };
+
+    const converted = toAssistantUIMessage(signalMessage([userPart], 'user'));
+    if (typeof converted.content === 'string') throw new Error('expected structured content parts');
+
+    expect(converted.role).toBe('user');
+    expect(converted.content).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        text: 'hello through a signal',
+      }),
+    ]);
+  });
+});
 
 describe('toAssistantUIMessage dynamic-tool conversion (via OM pipeline)', () => {
   it('converts a loading OM observation into a tool-call without a result', () => {
@@ -471,11 +664,11 @@ describe('toAssistantUIMessage signal role mapping', () => {
     expect(toAssistantUIMessage(message).role).toBe('user');
   });
 
-  it('renders a non-user signal as a system message', () => {
+  it('renders non-user signals as assistant messages', () => {
     const tagSignal = signalMessage({ signal: { type: 'tag' } }, 'tagged');
     const noTypeSignal = signalMessage({}, 'no type');
 
-    expect(toAssistantUIMessage(tagSignal).role).toBe('system');
-    expect(toAssistantUIMessage(noTypeSignal).role).toBe('system');
+    expect(toAssistantUIMessage(tagSignal).role).toBe('assistant');
+    expect(toAssistantUIMessage(noTypeSignal).role).toBe('assistant');
   });
 });

@@ -1636,14 +1636,20 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         };
       }
 
-      const { structuredOutput, ...restOptions } = rest;
+      const { structuredOutput, untilIdle, ...restOptions } = rest;
 
-      const options = {
+      const options: Record<string, any> = {
         ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
       };
+
+      // Support `untilIdle` option on the /stream endpoint — delegates to
+      // the idle-loop wrapper internally (same behaviour as /stream-until-idle).
+      if (untilIdle) {
+        options.untilIdle = untilIdle;
+      }
 
       const streamResult = structuredOutput
         ? await agent.stream(messages, { ...options, structuredOutput })
@@ -2511,9 +2517,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
 
-      const { structuredOutput, ...restOptions } = rest;
+      const { structuredOutput, untilIdle, ...restOptions } = rest;
 
-      const options = {
+      const options: Record<string, any> = {
         runId,
         toolCallId,
         ...restOptions,
@@ -2521,6 +2527,12 @@ export const RESUME_STREAM_ROUTE = createRoute({
         memory: authorizedMemoryOption,
         abortSignal,
       };
+
+      // Support `untilIdle` option on the /resume-stream endpoint — delegates
+      // to the idle-loop wrapper internally (same behaviour as /resume-stream-until-idle).
+      if (untilIdle) {
+        options.untilIdle = untilIdle;
+      }
 
       const streamResult = structuredOutput
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })

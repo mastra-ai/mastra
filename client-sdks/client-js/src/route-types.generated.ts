@@ -4964,6 +4964,14 @@ export type PostAgentsAgentIdGenerate_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -5130,6 +5138,14 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -5300,6 +5316,14 @@ export type PostAgentsAgentIdStream_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -5466,6 +5490,14 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   maxIdleMs?: number | undefined;
   [x: string]: unknown;
@@ -5638,6 +5670,14 @@ export type PostAgentsAgentIdStreamVnext_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -5965,6 +6005,14 @@ export type PostAgentsAgentIdSendMessage_Body =
                         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
                         fallbackValue?: any | undefined;
                       }
+                    | undefined;
+                  untilIdle?:
+                    | (
+                        | boolean
+                        | {
+                            maxIdleMs?: number | undefined;
+                          }
+                      )
                     | undefined;
                   [x: string]: unknown;
                 }
@@ -6344,6 +6392,14 @@ export type PostAgentsAgentIdQueueMessage_Body =
                         fallbackValue?: any | undefined;
                       }
                     | undefined;
+                  untilIdle?:
+                    | (
+                        | boolean
+                        | {
+                            maxIdleMs?: number | undefined;
+                          }
+                      )
+                    | undefined;
                   [x: string]: unknown;
                 }
               | undefined;
@@ -6696,6 +6752,14 @@ export type PostAgentsAgentIdSignals_Body =
                         fallbackValue?: any | undefined;
                       }
                     | undefined;
+                  untilIdle?:
+                    | (
+                        | boolean
+                        | {
+                            maxIdleMs?: number | undefined;
+                          }
+                      )
+                    | undefined;
                   [x: string]: unknown;
                 }
               | undefined;
@@ -6961,6 +7025,8 @@ export type PostAgentsAgentIdSendToolApproval_Body = {
   toolCallId: string;
   approved: boolean;
   format?: string | undefined;
+  messages?: any[] | undefined;
+  streamOptions?: any | undefined;
 };
 
 export type PostAgentsAgentIdSendToolApproval_Response = {
@@ -7175,6 +7241,14 @@ export type PostAgentsAgentIdResumeStream_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   resumeData: unknown;
   toolCallId?: string | undefined;
@@ -7510,6 +7584,14 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   resumeData: unknown;
   toolCallId?: string | undefined;
   maxIdleMs?: number | undefined;
@@ -7681,6 +7763,14 @@ export type PostAgentsAgentIdNetwork_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -8325,6 +8415,14 @@ export type PostAgentsAgentIdStreamVNext_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -8496,6 +8594,14 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -8670,6 +8776,14 @@ export type PostAgentsAgentIdStreamUi_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -20484,6 +20598,14 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   resourceId?: string | undefined;
   resourceid?: string | undefined;
   threadId?: string | undefined;
@@ -20655,6 +20777,14 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   resourceId?: string | undefined;
   resourceid?: string | undefined;
