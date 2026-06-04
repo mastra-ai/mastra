@@ -1,4 +1,3 @@
-import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -18,7 +17,20 @@ import type {
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
-const execFileAsync = promisify(execFile);
+// Lazy-init execFileAsync to avoid vitest mock issues when only
+// constants/types are imported from this module.
+let _execFileAsync: ((...a: any[]) => Promise<{ stdout: string; stderr: string }>) | undefined;
+async function execFileAsync(
+  file: string,
+  args: readonly string[],
+  options?: { cwd?: string; signal?: AbortSignal; maxBuffer?: number },
+): Promise<{ stdout: string; stderr: string }> {
+  if (!_execFileAsync) {
+    const cp = await import('node:child_process');
+    _execFileAsync = promisify(cp.execFile);
+  }
+  return _execFileAsync!(file, args, options);
+}
 
 export const GITHUB_SUBSCRIBE_PR_TAG = 'github-subscribe-pr';
 export const GITHUB_UNSUBSCRIBE_PR_TAG = 'github-unsubscribe-pr';

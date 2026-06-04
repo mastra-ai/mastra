@@ -12,6 +12,10 @@ export default defineConfig({
           maxConcurrency: 1,
           fileParallelism: false,
           isolate: true,
+          env: {
+            FORCE_COLOR: '1',
+            TERM: 'dumb',
+          },
         },
       },
     ],
