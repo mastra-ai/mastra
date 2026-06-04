@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13227](https://github.com/mastra-ai/mastra/pull/13227) — extracted built-in Explore, Plan, and Execute subagents plus dynamic workspace support.
-- Later changes: [#13331](https://github.com/mastra-ai/mastra/pull/13331) added an intended `audit-tests` subagent; current registration gap is tracked separately.
+- Later changes: [#13331](https://github.com/mastra-ai/mastra/pull/13331) added an intended `audit-tests` subagent; [#13339](https://github.com/mastra-ai/mastra/pull/13339) added parallel-only subagent guidance and an audit-tests exception; current registration/help-text gaps are tracked separately.
 
 ## User-visible behavior
 
 - What the user can do: delegate focused work to `explore`, `plan`, or `execute` subagents.
 - Success looks like: read-only subagents cannot edit; execute can make focused changes; parent chat shows subagent progress/results.
-- Must preserve: subagent model selection, tool boundaries, and loaded-history render of subagent activity.
+- Must preserve: subagent model selection, tool boundaries, parallel-only usage guidance, audit-tests exception, and loaded-history render of subagent activity.
 
 ## Entry points / commands
 
@@ -44,6 +44,7 @@
 | Read/write boundaries | Subagent `allowedWorkspaceTools` / instructions | Runtime tool availability |
 | Subagent model override | Harness state + settings | `/subagents`, runtime context |
 | Rendered progress | Harness events/history | TUI subagent component |
+| Usage guidance | Base prompt + tool guidance prompt section | Parent agent behavior |
 
 ## Key files
 
@@ -53,6 +54,8 @@
 - `mastracode/src/agents/workspace.ts` — per-request workspace and plan-mode write-tool disablement.
 - `mastracode/src/tui/commands/subagents.ts` — `/subagents` model selection.
 - `mastracode/src/tui/components/subagent-execution.ts` — TUI render component.
+- `mastracode/src/agents/prompts/base.ts` — top-level subagent usage rule.
+- `mastracode/src/agents/prompts/tool-guidance.ts` — tool-specific subagent guidance.
 
 ## Dependencies / related features
 
@@ -67,12 +70,14 @@
 - `mastracode/src/tui/commands/__tests__/subagents.test.ts` — built-in/custom subagent type picker.
 - `mastracode/src/tui/components/__tests__/subagent-execution.test.ts` — running/completed/error/fork rendering.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — persisted subagent rendering cases.
+- `mastracode/src/agents/prompts/index.test.ts` / tool-guidance tests — partial prompt/guidance coverage.
 
 ## Missing tests
 
 - End-to-end parent run spawning each built-in subagent with expected tool allowlist.
 - Abort propagation from parent run to active subagent.
 - `/subagents` thread/global model override persists across restart and thread switch.
+- Prompt test that subagent guidance consistently includes the audit-tests single-use exception everywhere it is shown.
 
 ## Known risks / regressions
 

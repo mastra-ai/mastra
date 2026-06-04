@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — project-scoped persistent conversations and thread switching.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config.
 
 ## User-visible behavior
 
 - What the user can do: resume, create, switch, and clone conversations per project/resource.
 - Success looks like: messages and thread metadata reload without leaking another thread’s ephemeral state.
-- Must preserve: history, title/resource, mode/model metadata, goals, and related status projections.
+- Must preserve: history, title/resource, mode/model metadata, goals, thread lock ownership, and related status projections.
 
 ## Entry points / commands
 
@@ -44,6 +44,7 @@
 | Current thread/resource | Harness session | TUI status, commands |
 | Thread title/metadata | Thread metadata/session records | TUI footer, goals, GitHub badges |
 | Ephemeral tasks/plan/sandbox | Harness state for active thread | Prompt context, TUI projection |
+| Thread lock ownership | Core Harness `threadLock` + MC filesystem lock files | Thread create/switch/select and TUI lock prompt |
 
 ## Key files
 
@@ -52,7 +53,9 @@
 - `mastracode/src/tui/event-dispatch.ts` — thread event cleanup/reload.
 - `mastracode/src/tui/mastra-tui.ts` — startup thread sync.
 - `mastracode/src/headless.ts` — non-TUI thread flags.
-- `mastracode/src/index.ts` — session prefill from existing threads.
+- `mastracode/src/index.ts` — session prefill from existing threads and threadLock wiring.
+- `mastracode/src/utils/thread-lock.ts` — filesystem locks, stale lock cleanup, lock errors.
+- `packages/core/src/harness/harness.ts` — lock-safe select/create/switch/delete behavior.
 
 ## Dependencies / related features
 
@@ -65,12 +68,14 @@
 - `mastracode/src/tui/commands/__tests__/thread.test.ts` — direct thread command behavior.
 - `mastracode/src/headless.test.ts` — headless thread flags.
 - `mastracode/src/HarnessCompat.test.ts` — v1 session/thread composition.
+- `packages/core/src/harness/thread-locking.test.ts` — lock acquire/release ordering, create/switch/select, and failure recovery.
 
 ## Missing tests
 
 - Restart TUI after streamed messages/tools/tasks and verify reconstructed UI/status.
 - Thread switch resets ephemeral tasks/plan/sandbox but reloads persisted metadata.
 - Headless `--continue` / `--thread title` after Harness v1 session prefill.
+- MC-level test that core thread lock conflicts reach the TUI lock prompt across real process-style locks.
 
 ## Known risks / regressions
 

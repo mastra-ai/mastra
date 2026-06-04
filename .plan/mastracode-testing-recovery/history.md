@@ -282,3 +282,18 @@ Documentation actions:
 - Updated `_pr-queue.md` status markers: #13335 done, #13307 done, #13334 current, #13339 next.
 
 Next queue checkpoint: PR #13334 (thread lock config), then PR #13339 (subagent parallel-only and verification guidance).
+
+### Feature map PR #13334 and #13339
+
+Processed PR [#13334](https://github.com/mastra-ai/mastra/pull/13334), `24b80af87d` (`feat(harness): add optional threadLock config for concurrent thread access protection (#13334)`). Verified current MC wiring in `mastracode/src/index.ts`: `HarnessCompat` receives `threadLock` callbacks backed by `acquireThreadLock`/`releaseThreadLock` when cross-process pubsub is unavailable. Verified core Harness behavior in `packages/core/src/harness/harness.ts` and `thread-locking.test.ts`: select/create/switch acquire locks, release old locks after successful acquire, and restore previous lock state on acquire/save failure.
+
+Processed PR [#13339](https://github.com/mastra-ai/mastra/pull/13339), `b322502d4a` (`feat(mastracode): add subagent parallel-only and verification guidance (#13339)`). Verified current `base.ts` includes the parallel-only subagent rule with an `audit-tests` exception. Current `tool-guidance.ts` still has the parallel-only rule but does not mention the audit-tests exception, so the documentation records a help-text consistency gap.
+
+Documentation actions:
+
+- Updated `features/threads/persistent-conversations.md` with #13334 thread-lock ownership, key files, core tests, and missing MC lock-prompt integration test.
+- Updated `features/subagents/delegation.md` with #13339 parallel-only guidance ownership and missing consistency test.
+- Updated `features/subagents/audit-tests.md` with #13339 as a later change and the remaining registration/help-text gaps.
+- Updated `_pr-queue.md` status markers: #13334 done, #13339 done, #13343 current, #13344 next.
+
+Next queue checkpoint: PR #13343 (scope thread auto-resume to current directory), then PR #13344 (todo tools moved to core and renamed to task).

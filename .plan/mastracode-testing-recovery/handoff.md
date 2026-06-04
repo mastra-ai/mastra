@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13307 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13334 (`24b80af87d`, `feat(harness): add optional threadLock config for concurrent thread access protection (#13334)`), then #13339 (`b322502d4a`, `feat(mastracode): add subagent parallel-only and verification guidance (#13339)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13339 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13343 (`2b2e157a09`, `fix: scope thread auto resume to current directory to make worktrees easier to use (#13343)`), then #13344 (`c204b632d1`, `refactor: move todo tools to @mastra/core/harness and rename to task (#13344)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 21: PR #13334 (optional thread lock config), then row 22: PR #13339 (subagent parallel-only and verification guidance).
+1. Continue at `_pr-queue.md` row 23: PR #13343 (scope thread auto-resume to current directory), then row 24: PR #13344 (move/rename todo tools to core task tools).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -69,4 +69,6 @@ None known.
 - `gh pr view 13328 --json number,title,body,author,mergedAt,url,files,commits`, current core harness display-state code/tests, TUI tool handlers, and history renderer verified streaming tool arguments. Created the streaming-tool-arguments card.
 - `gh pr view 13335 --json number,title,body,author,mergedAt,url,files,commits` plus current `mastracode/src/tui/handlers/tool.ts` verified task-tool input streaming preserves pre-tool assistant text. Updated the streaming-tool-arguments card.
 - `gh pr view 13307 --json number,title,body,author,mergedAt,url,files,commits` plus current `mastracode/src/agents/model.ts` and `model.test.ts` verified AuthStorage reload before model resolution. Updated the model auth card.
+- `gh pr view 13334 --json number,title,body,author,mergedAt,url,files,commits` plus current `mastracode/src/index.ts`, `utils/thread-lock.ts`, core Harness lock code, and `thread-locking.test.ts` verified optional thread lock config. Updated the threads card.
+- `gh pr view 13339 --json number,title,body,author,mergedAt,url,files,commits` plus current `base.ts` and `tool-guidance.ts` verified subagent parallel-only guidance and current audit-tests exception inconsistency. Updated subagent cards.
 - Current batch is doc-only; no product tests were run.

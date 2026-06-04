@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13331](https://github.com/mastra-ai/mastra/pull/13331) — added a read-only `audit-tests` subagent for test quality review.
-- Later changes: Current source has a registration gap — see Known risks.
+- Later changes: [#13339](https://github.com/mastra-ai/mastra/pull/13339) added the single-use exception to prompt guidance; current source still has registration/help-text gaps — see Known risks.
 
 ## User-visible behavior
 
