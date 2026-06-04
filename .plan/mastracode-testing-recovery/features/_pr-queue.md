@@ -84,9 +84,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 62 | 2026-02-25 | #13455 | `6302b3ae7c` | likely skip | skipped | chore: version packages (alpha) (#13455) | 2 |
 | 63 | 2026-02-25 | #13519 | `b03c0e0389` | review | done | fix: tool approval resume failing for standalone agents (#13519) | 2 |
 | 64 | 2026-02-26 | #13525 | `439dd1a1c9` | review | done | chore(docs): Move Mastra Code docs, add Alpha notice to Harness (#13525) | 6 |
-| 65 | 2026-02-26 | #13530 | `0533de8a34` | review | current | chore(docs): Move mastra-code docs (#13530) | 6 |
-| 66 | 2026-02-26 | #13512 | `191e5bd29b` | review | | fix: unify /models pack flow and improve custom pack editing UX (#13512) | 17 |
-| 67 | 2026-02-26 | #13526 | `85b54c0a4f` | review | | fix(mastracode): resolve edit tool paths like execute_command (#13526) | 7 |
+| 65 | 2026-02-26 | #13530 | `0533de8a34` | review | done | chore(docs): Move mastra-code docs (#13530) | 6 |
+| 66 | 2026-02-26 | #13512 | `191e5bd29b` | review | done | fix: unify /models pack flow and improve custom pack editing UX (#13512) | 17 |
+| 67 | 2026-02-26 | #13526 | `85b54c0a4f` | review | current | fix(mastracode): resolve edit tool paths like execute_command (#13526) | 7 |
 | 68 | 2026-02-26 | #13557 | `15f4da196c` | review | | feat(plans): persist approved plans to disk (#13401) (#13557) | 4 |
 | 69 | 2026-02-26 | #13560 | `3b56d782fa` | review | | fix: handle ERR_STREAM_DESTROYED as non-fatal in global error handlers (#13560) | 3 |
 | 70 | 2026-02-26 | #13563 | `9311c17d7a` | review | | fix: make Codex models work with OM and mastracode streams (#13563) | 4 |

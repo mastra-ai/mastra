@@ -648,3 +648,23 @@ Verification:
 - Focused tests planned for commit verification: core standalone approval resume, workflow request-context serialization, and MC LibSQL approval resume.
 
 Next queue checkpoint: PR #13530 (Mastra Code docs move follow-up), then PR #13512 (models pack UX).
+
+
+### Feature map PR #13530 and #13512
+
+Processed PR [#13530](https://github.com/mastra-ai/mastra/pull/13530), `0533de8a34` (`chore(docs): Move mastra-code docs (#13530)`). Verified this was a documentation-location follow-up: Mastra Code docs moved from the temporary `mastracode/docs/` directory into `docs/src/mastra-code/`; current HEAD no longer has `mastracode/docs/`, and the product README points to the standalone Code docs site.
+
+Processed PR [#13512](https://github.com/mastra-ai/mastra/pull/13512), `191e5bd29b` (`fix: unify /models pack flow and improve custom pack editing UX (#13512)`). Verified current `/models` opens the pack selector directly, `/models:pack` is intentionally unknown, custom pack actions include activate/edit/delete/share/import, targeted edit preserves untouched mode models, rename/delete clean up stale pack IDs, and model use counts are persisted through Harness `switchModel()` for selector sorting.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` for the unified `/models` flow, custom pack CRUD/import/share behavior, model use-count ownership, and reload risks around stale pack IDs.
+- Updated `features/settings/onboarding-and-global-settings.md` for #13512 custom-pack settings ownership and missing real-overlay tests.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13530 done, #13512 done, #13526 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/tui/commands/models-pack.ts`, `mastracode/src/onboarding/settings.ts`, `mastracode/src/tui/components/model-selector.ts`, `mastracode/src/tui/__tests__/command-dispatch.test.ts`, and `mastracode/VERIFICATION.md`.
+- Current tests checked: `mastracode/src/tui/commands/__tests__/models-pack.test.ts` and `mastracode/src/onboarding/__tests__/settings.test.ts`.
+
+Next queue checkpoint: PR #13526 (edit tool path resolution), then PR #13557 (persist approved plans to disk).

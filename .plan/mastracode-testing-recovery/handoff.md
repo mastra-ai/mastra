@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13525 (row 64) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13530 (`0533de8a34`, Mastra Code docs move follow-up), then #13512 (`191e5bd29b`, models pack UX).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13512 (row 66) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13526 (`85b54c0a4f`, edit tool path resolution), then #13557 (`15f4da196c`, persisted approved plans).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 65: PR #13530 (Mastra Code docs move follow-up), then row 66: PR #13512 (models pack UX).
+1. Continue at `_pr-queue.md` row 67: PR #13526 (edit tool path resolution), then row 68: PR #13557 (persist approved plans to disk).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
