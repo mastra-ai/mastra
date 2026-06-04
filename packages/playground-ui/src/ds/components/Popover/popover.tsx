@@ -34,11 +34,10 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
     const classNameString = typeof className === 'string' ? className : undefined;
     // Default to the nearest SideDialog/Drawer popup so the content stays
     // interactive inside a modal drawer; an explicit `container` still wins.
-    const portalContainer = usePortalContainer();
-    const resolvedContainer = container ?? portalContainer;
+    const resolvedContainer = usePortalContainer(container);
 
     return (
-      <PopoverPrimitive.Portal container={resolvedContainer ?? undefined}>
+      <PopoverPrimitive.Portal container={resolvedContainer}>
         <PopoverPrimitive.Positioner
           align={align}
           alignOffset={alignOffset}
