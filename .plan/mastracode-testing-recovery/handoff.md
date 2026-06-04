@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13431 (row 42) have been processed, with #13037, #13251, #13252, #13257, and #13260 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13422 (`d1abce8a51`, ASCII art banner), then #13428 (`6f927b2103`, read_file view rendering).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13428 (row 44) have been processed, with #13037, #13251, #13252, #13257, and #13260 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13426 (`5839d227b4`, simplified help commands), then #13427 (`d4701f7e24`, HarnessDisplayState).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 43: PR #13422 (ASCII art banner), then row 44: PR #13428 (read_file view rendering).
+1. Continue at `_pr-queue.md` row 45: PR #13426 (simplified help commands), then row 46: PR #13427 (HarnessDisplayState).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -97,3 +97,5 @@ None known.
 - `gh pr view 13376 --json number,title,body,author,mergedAt,url,files,commits`, current `instructions.ts`, `prompts/index.ts`, `prompts/base.ts`, and prompt/model-state tests verified model-aware `Co-Authored-By` guidance. Created the commit-attribution feature card.
 - `gh pr view 13421 --json number,title,body,author,mergedAt,url,files,commits`, current onboarding/settings/model-pack source, and onboarding/model-pack tests verified first-run setup, settings persistence, and pack resolution. Created the onboarding/global settings feature card.
 - `gh pr view 13431 --json number,title,body,author,mergedAt,url,files,commits`, current `auth/storage.ts`, `onboarding/packs.ts`, and `packs.test.ts` verified the Codex default change has since drifted; current OpenAI pack/login default is `openai/gpt-5.5`.
+- `gh pr view 13422 --json number,title,body,author,mergedAt,url,files,commits`, current `banner.ts`, `setup.ts`, and `banner.test.ts` verified responsive startup banner behavior. Created the startup-banner feature card.
+- `gh pr view 13428 --json number,title,body,author,mergedAt,url,files,commits`, current `tool-execution-enhanced.ts`, `workspace.ts`, `tool-names.ts`, and tool component tests verified workspace `read_file` output is rendered through the remapped `view` tool and arrow line numbers are stripped. Updated the tools card.

@@ -450,3 +450,19 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13421 done, #13431 done, #13422 current, #13428 next.
 
 Next queue checkpoint: PR #13422 (ASCII art banner), then PR #13428 (read_file view rendering).
+
+
+### Feature map PR #13422 and #13428
+
+Processed PR [#13422](https://github.com/mastra-ai/mastra/pull/13422), `d1abce8a51` (`feat(mastracode): Add ASCII art banner header with purple gradient (#13422)`). Verified current source renders a responsive startup banner with `renderBanner(version, appName)`: full `MASTRA CODE` block art for wide terminals, short `MASTRA` block art for medium terminals, and a compact single-line fallback for narrow terminals or custom app names. Current code uses Mastra green gradient stops despite the PR title/body saying purple.
+
+Processed PR [#13428](https://github.com/mastra-ai/mastra/pull/13428), `6f927b2103` (`fix(tui): fix view tool rendering for workspace read_file output (#13428)`). Verified current source remaps core workspace `read_file` to the Mastra Code `view` tool, and `ToolExecutionComponentEnhanced` strips workspace-style `→` line-number separators plus workspace read headers before syntax-highlighted rendering. Current workspace setup no longer exposes raw duplicate `mastra_workspace_*` names for normal tool display; it remaps core workspace tools through `TOOL_NAME_OVERRIDES`.
+
+Documentation actions:
+
+- Created `features/tui/startup-banner.md` for #13422 startup header behavior.
+- Updated `features/tui/interactive-chat.md` with banner layout relationship and tests.
+- Updated `features/tools/coding-tools-permissions.md` with #13428 view-output rendering behavior and missing expanded-renderer coverage.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13422 done, #13428 done, #13426 current, #13427 next.
+
+Next queue checkpoint: PR #13426 (simplified help commands), then PR #13427 (HarnessDisplayState).

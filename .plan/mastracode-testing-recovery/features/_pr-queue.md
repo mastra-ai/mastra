@@ -62,10 +62,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 40 | 2026-02-24 | #13376 | `7429026f6c` | review | done | feat(mastracode): include model name in Co-Authored-By commit message (#13376) | 3 |
 | 41 | 2026-02-23 | #13421 | `27644fbf25` | review | done | feat(mastracode): add interactive onboarding flow and global settings (#13421) | 20 |
 | 42 | 2026-02-23 | #13431 | `bb82abe5e9` | review | done | fix(mastracode): default codex model from 5.3 to 5.2 (#13431) | 2 |
-| 43 | 2026-02-23 | #13422 | `d1abce8a51` | review | current | feat(mastracode): Add ASCII art banner header with purple gradient (#13422) | 4 |
-| 44 | 2026-02-23 | #13428 | `6f927b2103` | review | next | fix(tui): fix view tool rendering for workspace read_file output (#13428) | 2 |
-| 45 | 2026-02-23 | #13426 | `5839d227b4` | review | | feat(mastracode): simplify suggested help commands (#13426) | 4 |
-| 46 | 2026-02-23 | #13427 | `d4701f7e24` | review | | feat(core): add HarnessDisplayState for UI-agnostic display state (#13427) | 28 |
+| 43 | 2026-02-23 | #13422 | `d1abce8a51` | review | done | feat(mastracode): Add ASCII art banner header with purple gradient (#13422) | 4 |
+| 44 | 2026-02-23 | #13428 | `6f927b2103` | review | done | fix(tui): fix view tool rendering for workspace read_file output (#13428) | 2 |
+| 45 | 2026-02-23 | #13426 | `5839d227b4` | review | current | feat(mastracode): simplify suggested help commands (#13426) | 4 |
+| 46 | 2026-02-23 | #13427 | `d4701f7e24` | review | next | feat(core): add HarnessDisplayState for UI-agnostic display state (#13427) | 28 |
 | 47 | 2026-02-24 | #13435 | `decccfdf65` | review | | feat(mastracode): add PostgreSQL opt-in storage backend + libsql settings ui (#13435) | 9 |
 | 48 | 2026-02-24 | #13405 | `424bd890be` | likely skip | | chore: version packages (alpha) (#13405) | 2 |
 | 49 | 2026-02-24 | #13456 | `babdfb23c2` | review | | feat(mastracode): refresh git branch on thread resume & abbreviate long branch names (#13456) | 5 |

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — initial TUI chat, streaming render, keyboard input, tool render, harness event dispatch.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior; [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added the responsive startup banner above the chat layout.
 
 ## User-visible behavior
 
@@ -52,7 +52,8 @@
 
 - `mastracode/src/tui/mastra-tui.ts` — thin lifecycle wrapper after #13413 modularization.
 - `mastracode/src/tui/state.ts` — shared `TUIState`, `MastraTUIOptions`, and state factory defaults.
-- `mastracode/src/tui/setup.ts` — keyboard shortcuts and submit behavior.
+- `mastracode/src/tui/setup.ts` — keyboard shortcuts, submit behavior, and startup layout composition.
+- `mastracode/src/tui/components/banner.ts` — static responsive header rendered before chat/frontmatter.
 - `mastracode/src/tui/event-dispatch.ts` — event-to-handler routing.
 - `mastracode/src/tui/handlers/*` — focused message, tool, OM, prompt, and subagent handlers.
 - `mastracode/src/tui/render-messages.ts` — history reconstruction.
@@ -63,6 +64,7 @@
 
 ## Dependencies / related features
 
+- [Startup banner](./startup-banner.md) — static header in the same TUI layout.
 - [Queued follow-ups and slash commands](../chat/queued-followups.md) — active-run input queueing lives in the TUI chat path.
 - [Persistent conversations](../threads/persistent-conversations.md) — chat is thread-scoped.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — selected mode/model drives runs.
@@ -72,6 +74,7 @@
 
 - `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` — active-run queue/signal behavior.
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — shortcut behavior.
+- `mastracode/src/tui/components/__tests__/banner.test.ts` — responsive startup banner rendering.
 - `mastracode/src/tui/event-dispatch.test.ts`, `render-messages.test.ts` — event/history rendering.
 - `mastracode/src/tui/handlers/*.test.ts` — focused handler coverage after #13413 extraction.
 - `mastracode/src/headless.test.ts` — non-TUI path.
@@ -85,6 +88,7 @@
 - Enter-as-signal vs Ctrl+F queued follow-up after reload.
 - Built-package import smoke for `mastracode/tui` covering ESM, CJS, and generated `.d.ts` paths.
 - Direct `createTUIState()` default-shape test so queue/tool/goal fields do not silently lose defaults during TUI refactors.
+- Full startup layout snapshot covering banner, frontmatter, instructions, chat, task progress, editor, and footer.
 
 ## Known risks / regressions
 
@@ -94,6 +98,7 @@
 - Public export can drift if `package.json` export targets, `tsup` entry names, or generated type paths stop matching.
 - `TUIState` is now the shared mutable projection for many features; adding fields without factory defaults can break handlers only at runtime.
 - TUI modularization lowered file size but increased routing seams: a missing handler import or mismatched context field can silently break one event family while the main TUI still starts.
+- Startup banner is static but width/theme assumptions can affect first-run layout in narrow or non-standard terminals.
 
 ## Verification checklist
 
