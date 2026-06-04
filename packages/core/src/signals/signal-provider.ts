@@ -141,6 +141,9 @@ export abstract class SignalProvider<TId extends string = string> {
   /** Active polling timer, if any */
   #pollTimer?: ReturnType<typeof setInterval>;
 
+  /** Guard to prevent overlapping poll cycles */
+  #isPollRunning = false;
+
   // ── Connection ──────────────────────────────────────────────────────
 
   /**
@@ -149,6 +152,14 @@ export abstract class SignalProvider<TId extends string = string> {
    */
   connect(agent: Agent<any, any, any, any>): void {
     this.#connectedAgent = agent;
+  }
+
+  /**
+   * Whether this provider is already connected to an agent.
+   * Used to skip re-wiring when an Agent is forked via `__fork()`.
+   */
+  get isConnected(): boolean {
+    return this.#connectedAgent !== undefined;
   }
 
   /**
@@ -371,11 +382,17 @@ export abstract class SignalProvider<TId extends string = string> {
     if (!interval || interval <= 0 || typeof this.poll !== 'function') return;
 
     this.#pollTimer = setInterval(() => {
+      if (this.#isPollRunning) return;
       const subscriptions = this.getSubscriptions();
       if (subscriptions.length === 0) return;
-      void Promise.resolve(this.poll!(subscriptions)).catch(error => {
-        console.warn(`[${this.id}] poll failed:`, error);
-      });
+      this.#isPollRunning = true;
+      void Promise.resolve(this.poll!(subscriptions))
+        .catch(error => {
+          console.warn(`[${this.id}] poll failed:`, error);
+        })
+        .finally(() => {
+          this.#isPollRunning = false;
+        });
     }, interval);
 
     // Don't let the timer keep the process alive

@@ -260,12 +260,12 @@ describe('SignalProvider', () => {
       p.stop();
     });
 
-    it('polls on interval with active subscriptions', () => {
+    it('polls on interval with active subscriptions', async () => {
       const p = new TestSignalProvider({ pollInterval: 1000 });
       p.doSubscribe(target1, 'res-a');
       p.startPolling();
 
-      vi.advanceTimersByTime(3500);
+      await vi.advanceTimersByTimeAsync(3500);
       expect(p.pollCalls).toHaveLength(3);
       expect(p.pollCalls[0]).toHaveLength(1);
       expect(p.pollCalls[0][0].externalResourceId).toBe('res-a');
@@ -280,27 +280,27 @@ describe('SignalProvider', () => {
       p.stop();
     });
 
-    it('stopPolling stops the timer', () => {
+    it('stopPolling stops the timer', async () => {
       const p = new TestSignalProvider({ pollInterval: 1000 });
       p.doSubscribe(target1, 'res-a');
       p.startPolling();
 
-      vi.advanceTimersByTime(2500);
+      await vi.advanceTimersByTimeAsync(2500);
       expect(p.pollCalls).toHaveLength(2);
 
       p.stopPolling();
-      vi.advanceTimersByTime(5000);
+      await vi.advanceTimersByTimeAsync(5000);
       expect(p.pollCalls).toHaveLength(2);
       p.stop();
     });
 
-    it('startPolling is idempotent', () => {
+    it('startPolling is idempotent', async () => {
       const p = new TestSignalProvider({ pollInterval: 1000 });
       p.doSubscribe(target1, 'res-a');
       p.startPolling();
       p.startPolling(); // second call should be no-op
 
-      vi.advanceTimersByTime(2500);
+      await vi.advanceTimersByTimeAsync(2500);
       expect(p.pollCalls).toHaveLength(2);
       p.stop();
     });

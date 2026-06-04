@@ -584,7 +584,11 @@ export class Agent<
       const signalOutputProcessors: OutputProcessorOrWorkflow[] = [];
 
       for (const provider of config.signals) {
-        provider.connect(this as Agent<any, any, any, any>);
+        // Skip re-wiring providers that are already connected (e.g. via __fork())
+        if (!provider.isConnected) {
+          provider.connect(this as Agent<any, any, any, any>);
+          provider.startPolling();
+        }
 
         if (provider.getInputProcessors) {
           signalInputProcessors.push(...provider.getInputProcessors());
@@ -592,8 +596,6 @@ export class Agent<
         if (provider.getOutputProcessors) {
           signalOutputProcessors.push(...provider.getOutputProcessors());
         }
-
-        provider.startPolling();
       }
 
       // Register collected input processors
