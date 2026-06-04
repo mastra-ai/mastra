@@ -8,6 +8,18 @@ afterEach(() => {
   cleanup();
 });
 
+const inputVariants = ['default', 'filled', 'outline'] as const;
+
+const expectOnlyGuardedHoverBorder = (className: string) => {
+  const hoverBorderTokens = className
+    .split(/\s+/)
+    .filter(token => token.includes('hover') && token.includes('border-border2'));
+
+  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-visible)]:border-border2']);
+  expect(className).toContain('focus-visible:border-neutral5/50');
+  expect(className).not.toContain('hover:border-border2');
+};
+
 describe('Input', () => {
   it('keeps the filled surface as the default variant', () => {
     render(<Input placeholder="Name" />);
@@ -31,5 +43,11 @@ describe('Input', () => {
     expect(cls).toContain('focus-visible:border-neutral5/50');
     expect(cls).not.toContain('ring-accent1');
     expect(cls).not.toContain('focus-visible:border-accent1');
+  });
+
+  it.each(inputVariants)('prioritizes the focus border over hover for the %s variant', variant => {
+    render(<Input variant={variant} placeholder={variant} />);
+
+    expectOnlyGuardedHoverBorder(screen.getByPlaceholderText(variant).className);
   });
 });

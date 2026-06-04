@@ -13,6 +13,7 @@ packages:
   - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
+  - signals/*
   - server-adapters/*
   - pubsub/*
   - client-sdks/*
