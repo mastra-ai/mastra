@@ -524,7 +524,7 @@ describe('createMastraCode', () => {
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
 
-  it('configures GitHubSignals as an input processor for local PR subscriptions', async () => {
+  it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
       signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
@@ -538,10 +538,8 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }> }
-      | undefined;
-    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('github-signals');
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
+    expect(agentConfig?.signals?.map(s => s.id)).toContain('github-signals');
     expect(startPollingForThread).toHaveBeenCalledWith(
       { threadId: 'thread-1', resourceId: 'thread-resource' },
       { pollImmediately: true },
