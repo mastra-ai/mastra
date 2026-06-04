@@ -212,3 +212,16 @@ Documentation actions:
 - Added schema-compat tests and missing end-to-end packaged/source tool schema coverage to the card.
 
 Next queue checkpoint: PR #13252, likely version packaging; next review PR after that is #13255.
+
+### Feature map PR #13252 and #13255
+
+Processed PR [#13252](https://github.com/mastra-ai/mastra/pull/13252), `f090302af0` (`chore: version packages (alpha) (#13252)`). Verified it only touched `mastracode/CHANGELOG.md` and `mastracode/package.json`; skipped feature-page creation.
+
+Processed PR [#13255](https://github.com/mastra-ai/mastra/pull/13255), `d715911c91` (`feat(mastracode): add separate export path for MastraTUI (#13255)`). Verified current `mastracode/package.json` exports `./tui`, `mastracode/tsup.config.ts` builds the `tui` entry, and `mastracode/src/tui/index.ts` exports the public TUI surface.
+
+Documentation actions:
+
+- Updated `.plan/mastracode-testing-recovery/features/tui/interactive-chat.md` because this is a public TUI consumption surface, not a separate runtime feature.
+- Added missing built-package import smoke coverage for `mastracode/tui`.
+
+Next queue checkpoint: PR #13257, likely version packaging; next review PR after that is #13305.

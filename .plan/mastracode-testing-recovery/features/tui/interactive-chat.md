@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — initial TUI chat, streaming render, keyboard input, tool render, harness event dispatch.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export.
 
 ## User-visible behavior
 
@@ -14,6 +14,7 @@
 ## Entry points / commands
 
 - Commands / shortcuts / flags: `mastracode`, Enter, Ctrl+C/Escape, Ctrl+F, Ctrl+T, Ctrl+E.
+- Public import path for consumers: `import { MastraTUI } from 'mastracode/tui'`.
 - Automatic triggers: startup render, harness event subscription, existing-message render.
 
 ## TUI states
@@ -51,6 +52,8 @@
 - `mastracode/src/tui/setup.ts` — keyboard shortcuts and submit behavior.
 - `mastracode/src/tui/event-dispatch.ts` — event-to-handler routing.
 - `mastracode/src/tui/render-messages.ts` — history reconstruction.
+- `mastracode/src/tui/index.ts` — public TUI export barrel.
+- `mastracode/package.json` and `mastracode/tsup.config.ts` — `mastracode/tui` export and build entry.
 - `mastracode/src/headless.ts` — non-TUI run path.
 
 ## Dependencies / related features
@@ -65,18 +68,21 @@
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — shortcut behavior.
 - `mastracode/src/tui/event-dispatch.test.ts`, `render-messages.test.ts` — event/history rendering.
 - `mastracode/src/headless.test.ts` — non-TUI path.
+- No dedicated package-export smoke test found for `mastracode/tui`.
 
 ## Missing tests
 
 - Live stream → quit/reload → reconstructed UI parity.
 - Abort while tool output streams, including persisted history shape.
 - Enter-as-signal vs Ctrl+F queued follow-up after reload.
+- Built-package import smoke for `mastracode/tui` covering ESM, CJS, and generated `.d.ts` paths.
 
 ## Known risks / regressions
 
 - Harness v1 risk: live event projection and persisted history projection can drift.
 - Slack task-list report is adjacent: rendered state and prompt/tool state diverged.
 - Headless abort timeout existed pre-Harness v1; treat as baseline noise until reverified.
+- Public export can drift if `package.json` export targets, `tsup` entry names, or generated type paths stop matching.
 
 ## Verification checklist
 
