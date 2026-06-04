@@ -98,7 +98,7 @@ export function Combobox({
           <ChevronsUpDown className={comboboxStyles.chevron} />
         </BaseCombobox.Trigger>
 
-        <BaseCombobox.Portal container={resolvedContainer} keepMounted>
+        <BaseCombobox.Portal container={resolvedContainer}>
           <BaseCombobox.Positioner align="start" sideOffset={4} className={comboboxStyles.positioner}>
             <BaseCombobox.Popup className={comboboxStyles.popup}>
               <div className={comboboxStyles.searchContainer}>
