@@ -20,14 +20,13 @@ import z from 'zod';
 // Lazy-init execFileAsync to avoid vitest mock issues when only
 // constants/types are imported from this module.
 let _execFileAsync: ((...a: any[]) => Promise<{ stdout: string; stderr: string }>) | undefined;
-function execFileAsync(
+async function execFileAsync(
   file: string,
   args: readonly string[],
   options?: { cwd?: string; signal?: AbortSignal; maxBuffer?: number },
 ): Promise<{ stdout: string; stderr: string }> {
   if (!_execFileAsync) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const cp = require('node:child_process');
+    const cp = await import('node:child_process');
     _execFileAsync = promisify(cp.execFile);
   }
   return _execFileAsync!(file, args, options);
