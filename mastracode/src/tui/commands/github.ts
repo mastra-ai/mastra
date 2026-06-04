@@ -1,5 +1,5 @@
-import { GITHUB_SIGNALS_METADATA_KEY } from '../../github-signals/index.js';
-import type { GithubPRSignalInput } from '../../github-signals/index.js';
+import { GITHUB_SIGNALS_METADATA_KEY } from '@mastra/github-signals';
+import type { GithubPRSignalInput } from '@mastra/github-signals';
 import { loadSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';

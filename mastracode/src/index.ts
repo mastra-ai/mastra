@@ -9,6 +9,7 @@ import type {
   CustomAvailableModel,
   HeartbeatHandler,
   HarnessConfig,
+  HarnessEvent,
   HarnessMode,
   HarnessSubagent,
   HarnessRequestContext,
@@ -29,6 +30,7 @@ import type { PublicSchema } from '@mastra/core/schema';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
+import { GithubSignals } from '@mastra/github-signals';
 import {
   Observability,
   MastraStorageExporter,
@@ -50,8 +52,7 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { GithubSignals } from './github-signals/index.js';
-import { /*HarnessCompat,*/ v1ModeToLegacy } from './HarnessCompat';
+import { v1ModeToLegacy } from './HarnessCompat';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
@@ -409,11 +410,43 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const outcomeScorer = createOutcomeScorer();
   const efficiencyScorer = createEfficiencyScorer();
 
-  // Agent
-  const githubSignalsProcessor = globalSettings.signals?.experimentalGithubSignals
-    ? new GithubSignals({ cwd: project.rootPath })
+  // Agent — githubSignals is created before `harness` but the closure below
+  // captures `harness` by reference; it is only invoked at notification time,
+  // well after harness is constructed (line ~692). Explicit type annotations
+  // on githubSignals, codeAgent, modes, and harness break the circular
+  // inference chain this forward reference would otherwise create.
+  const githubSignals: GithubSignals | undefined = globalSettings.signals?.experimentalGithubSignals
+    ? new GithubSignals({
+        cwd: project.rootPath,
+        getNotificationStreamOptions: ({ resourceId, threadId }) => {
+          const requestContext = new RequestContext();
+          const harnessContext: HarnessRequestContext = {
+            harnessId: harness.id,
+            state: harness.getState(),
+            getState: () => harness.getState(),
+            setState: updates => harness.setState(updates),
+            threadId,
+            resourceId,
+            modeId: harness.getCurrentModeId(),
+            workspace: harness.getWorkspace(),
+            registerQuestion: params => harness.registerQuestion(params),
+            registerPlanApproval: params => harness.registerPlanApproval(params),
+            getSubagentModelId: params => harness.getSubagentModelId(params),
+          };
+          requestContext.set('harness', harnessContext);
+
+          return {
+            memory: { thread: threadId, resource: resourceId },
+            requestContext,
+            maxSteps: 1000,
+            savePerStep: false,
+            requireToolApproval: (harness.getState() as Record<string, unknown>).yolo !== true,
+            modelSettings: { temperature: 1 },
+          };
+        },
+      })
     : undefined;
-  const codeAgent = new Agent({
+  const codeAgent: Agent = new Agent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
     instructions: getDynamicInstructions,
@@ -429,6 +462,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         sampling: { type: 'ratio', rate: 0.3 },
       },
     },
+    signals: githubSignals ? [githubSignals] : [],
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -440,39 +474,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           return getStaticallyLoadedInstructionPaths(projectPath);
         },
       }),
-      ...(githubSignalsProcessor ? [githubSignalsProcessor as any] : []),
       new ProviderHistoryCompat(),
     ],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
-  });
-
-  githubSignalsProcessor?.addAgent(codeAgent, {
-    getNotificationStreamOptions: ({ resourceId, threadId }) => {
-      const requestContext = new RequestContext();
-      const harnessContext: HarnessRequestContext = {
-        harnessId: harness.id,
-        state: harness.getState(),
-        getState: () => harness.getState(),
-        setState: updates => harness.setState(updates),
-        threadId,
-        resourceId,
-        modeId: harness.getCurrentModeId(),
-        workspace: harness.getWorkspace(),
-        registerQuestion: params => harness.registerQuestion(params),
-        registerPlanApproval: params => harness.registerPlanApproval(params),
-        getSubagentModelId: params => harness.getSubagentModelId(params),
-      };
-      requestContext.set('harness', harnessContext);
-
-      return {
-        memory: { thread: threadId, resource: resourceId },
-        requestContext,
-        maxSteps: 1000,
-        savePerStep: false,
-        requireToolApproval: (harness.getState() as Record<string, unknown>).yolo !== true,
-        modelSettings: { temperature: 1 },
-      };
-    },
   });
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
@@ -583,7 +587,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (!defaultModeId) {
     throw new Error('MastraCode requires at least one mode');
   }
-  const modes = modesV1.map(mode => v1ModeToLegacy(mode, codeAgent));
+  const modes: HarnessMode<MastraCodeState>[] = modesV1.map(mode => v1ModeToLegacy(mode, codeAgent));
 
   // Map subagent types to mode models: explore→fast, plan→plan, execute→build
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
@@ -689,7 +693,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // });
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const harness = new Harness<MastraCodeState>({
+  const harness: Harness<MastraCodeState> = new Harness<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
@@ -814,7 +818,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {
-    harness.subscribe(event => {
+    harness.subscribe((event: HarnessEvent) => {
       if (event.type === 'thread_changed') {
         hookManager.setSessionId(event.threadId);
       } else if (event.type === 'thread_created') {
@@ -823,14 +827,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  if (githubSignalsProcessor) {
+  if (githubSignals) {
     const startGithubPollingForCurrentThread = async (threadId?: string | null) => {
       if (!threadId) return;
-      githubSignalsProcessor.stopAllPolling();
+      githubSignals.stopAllPolling();
       try {
         const threads = await harness.listThreads({ allResources: true });
-        const thread = threads.find(item => item.id === threadId);
-        await githubSignalsProcessor.startPollingForThread(
+        const thread = threads.find((item: { id: string }) => item.id === threadId);
+        await githubSignals.startPollingForThread(
           {
             threadId,
             resourceId: thread?.resourceId ?? harness.getResourceId(),
@@ -842,7 +846,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }
     };
 
-    harness.subscribe(event => {
+    harness.subscribe((event: HarnessEvent) => {
       if (event.type === 'thread_changed') void startGithubPollingForCurrentThread(event.threadId);
       else if (event.type === 'thread_created') void startGithubPollingForCurrentThread(event.thread.id);
     });
@@ -869,6 +873,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,
-    githubSignals: githubSignalsProcessor,
+    githubSignals,
   };
 }

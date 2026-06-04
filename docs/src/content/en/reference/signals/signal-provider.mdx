@@ -1,0 +1,519 @@
+---
+title: "Reference: SignalProvider | Signals"
+description: "API reference for SignalProvider, the abstract base class for building signal providers that monitor external sources and push events into agent threads."
+packages:
+  - "@mastra/core"
+---
+
+# SignalProvider
+
+Abstract base class for building signal providers. A signal provider monitors external sources (APIs, webhooks, event streams) and pushes notification signals into agent threads through a built-in subscription registry.
+
+Signal providers are not processors by default. Providers that need to intercept agent execution return processors from `getInputProcessors()` or `getOutputProcessors()`. Providers that expose agent-callable tools return them from `getTools()`.
+
+For a ready-to-use webhook-based provider, see [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider).
+
+## Usage example
+
+Polling provider that checks an API every 30 seconds:
+
+```typescript title="src/signals/slack-signals.ts"
+import { SignalProvider } from '@mastra/core/signals'
+import type { SignalSubscription } from '@mastra/core/signals'
+
+class SlackSignals extends SignalProvider<'slack-signals'> {
+  readonly id = 'slack-signals'
+  readonly pollInterval = 30_000
+
+  async poll(subscriptions: SignalSubscription[]) {
+    for (const sub of subscriptions) {
+      const messages = await fetchSlackMessages(sub.externalResourceId)
+      if (messages.length > 0) {
+        await this.notify(
+          {
+            source: 'slack',
+            kind: 'new-messages',
+            summary: `${messages.length} new messages in ${sub.externalResourceId}`,
+          },
+          { threadId: sub.threadId, resourceId: sub.resourceId },
+        )
+      }
+    }
+  }
+}
+```
+
+Register with an agent:
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+
+const agent = new Agent({
+  signals: [new SlackSignals()],
+})
+```
+
+The agent calls `connect(this)`, registers any processors or tools the provider returns, and starts polling.
+
+## Constructor parameters
+
+`SignalProvider` is abstract. Subclasses call `super()` with no arguments.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'TId extends string',
+    description: 'Unique identifier for this provider. Subclasses must implement this as a readonly property.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable display name for the provider.',
+    isOptional: true,
+  },
+  {
+    name: 'pollInterval',
+    type: 'number',
+    description:
+      'Poll interval in milliseconds. When set, the framework calls `poll()` on this interval. Leave `undefined` or `0` for webhook-only providers.',
+    isOptional: true,
+  },
+  {
+    name: 'isConnected',
+    type: 'boolean',
+    description:
+      'Whether this provider is connected to an agent. Returns `true` after `connect()` is called. Used internally to skip re-wiring during `Agent.__fork()`.',
+  },
+]}
+/>
+
+## Methods
+
+### Connection
+
+#### `connect(agent)`
+
+Called by the Agent constructor. Establishes the bidirectional link so the provider can send signals back to the agent. Override to run additional setup after the link is established. Always call `super.connect(agent)`.
+
+```typescript prettier:false
+class MySignals extends SignalProvider<'my-signals'> {
+  readonly id = 'my-signals'
+
+  override connect(agent) {
+    super.connect(agent)
+    // additional setup after agent link is established
+  }
+}
+```
+
+#### `__registerMastra(mastra)`
+
+Called when the provider's agent is registered with a Mastra instance. Override to access storage or other Mastra services. Always call `super.__registerMastra(mastra)`.
+
+```typescript prettier:false
+override __registerMastra(mastra) {
+  super.__registerMastra(mastra)
+  // this.mastra is now available
+}
+```
+
+### Processor and tool integration
+
+#### `getInputProcessors()`
+
+Return input processors this provider needs to be registered with the agent. Override when your provider intercepts agent input steps (for example, injecting context hints or detecting tool calls).
+
+```typescript prettier:false
+getInputProcessors() {
+  return [this]
+}
+```
+
+Returns: `InputProcessorOrWorkflow[]`
+
+#### `getOutputProcessors()`
+
+Return output processors this provider needs to be registered with the agent. Override when your provider intercepts agent output steps.
+
+```typescript prettier:false
+getOutputProcessors() {
+  return [this]
+}
+```
+
+Returns: `OutputProcessorOrWorkflow[]`
+
+#### `getTools()`
+
+Return tools this provider exposes to the agent. Override when your provider adds agent-callable tools such as subscribe or unsubscribe commands.
+
+```typescript prettier:false
+getTools() {
+  return {
+    subscribe_pr: createTool({ /* ... */ }),
+    unsubscribe_pr: createTool({ /* ... */ }),
+  }
+}
+```
+
+Returns: `Record<string, unknown>`
+
+### Subscription tracking
+
+#### `subscribe(target, externalResourceId, metadata?)`
+
+Subscribe a thread to an external resource. This is a protected method — call it from within your provider implementation.
+
+```typescript prettier:false
+const sub = this.subscribe(
+  { threadId: 'thread-1', resourceId: 'user-1' },
+  'github:mastra-ai/mastra#123',
+  { pr: 123 },
+)
+```
+
+Returns: `SignalSubscription` — the created subscription, or the existing one with merged metadata.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'target',
+    type: 'SignalProviderTarget',
+    description: 'The thread to subscribe. Must include `threadId` and `resourceId`.',
+  },
+  {
+    name: 'externalResourceId',
+    type: 'string',
+    description: 'Provider-specific identifier for the external resource (for example, `"github:owner/repo#123"`).',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description:
+      'Additional data to store with the subscription. Merged into existing metadata on duplicate subscribes.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### `unsubscribe(target, externalResourceId)`
+
+Remove a subscription.
+
+```typescript prettier:false
+const removed = this.unsubscribe(
+  { threadId: 'thread-1', resourceId: 'user-1' },
+  'github:mastra-ai/mastra#123',
+)
+```
+
+Returns: `boolean` — `true` if removed, `false` if no matching subscription existed.
+
+#### `getSubscriptions()`
+
+Return all active subscriptions for this provider.
+
+```typescript prettier:false
+const allSubs = this.getSubscriptions()
+```
+
+Returns: `SignalSubscription[]`
+
+#### `getSubscriptionsForResource(externalResourceId)`
+
+Return all subscriptions for a specific external resource.
+
+```typescript prettier:false
+const subs = this.getSubscriptionsForResource('github:mastra-ai/mastra#123')
+for (const sub of subs) {
+  await this.notify(
+    { source: 'my-provider', kind: 'update', summary: 'Resource updated' },
+    { threadId: sub.threadId, resourceId: sub.resourceId },
+  )
+}
+```
+
+Returns: `SignalSubscription[]`
+
+#### `getSubscriptionsForThread(target)`
+
+Return all subscriptions for a specific thread.
+
+```typescript prettier:false
+const subs = this.getSubscriptionsForThread({
+  threadId: 'thread-1',
+  resourceId: 'user-1',
+})
+```
+
+Returns: `SignalSubscription[]`
+
+#### `hasSubscription(target, externalResourceId)`
+
+Check whether a subscription exists.
+
+```typescript prettier:false
+if (this.hasSubscription(target, 'github:mastra-ai/mastra#123')) {
+  // already subscribed
+}
+```
+
+Returns: `boolean`
+
+#### `unsubscribeAll(target)`
+
+Remove all subscriptions for a thread.
+
+```typescript prettier:false
+const removed = this.unsubscribeAll({
+  threadId: 'thread-1',
+  resourceId: 'user-1',
+})
+```
+
+Returns: `number` — count of removed subscriptions.
+
+#### `subscriptionCount`
+
+Total number of active subscriptions for this provider.
+
+```typescript prettier:false
+if (this.subscriptionCount === 0) {
+  // nothing to poll
+}
+```
+
+Returns: `number`
+
+### Polling
+
+#### `poll(subscriptions)`
+
+Called on each poll cycle with all active subscriptions. Override to check external sources and emit notifications. The framework prevents overlapping poll cycles — if a `poll()` call takes longer than `pollInterval`, the next cycle is skipped.
+
+```typescript prettier:false
+async poll(subscriptions: SignalSubscription[]) {
+  for (const sub of subscriptions) {
+    const events = await checkExternalSource(sub.externalResourceId)
+    for (const event of events) {
+      await this.notify(
+        { source: 'my-provider', kind: event.type, summary: event.message },
+        { threadId: sub.threadId, resourceId: sub.resourceId },
+      )
+    }
+  }
+}
+```
+
+#### `startPolling()`
+
+Start the polling timer. Called by the Agent after `connect()`. Idempotent — calling multiple times has no effect.
+
+```typescript prettier:false
+provider.startPolling()
+```
+
+#### `stopPolling()`
+
+Stop the polling timer.
+
+```typescript prettier:false
+provider.stopPolling()
+```
+
+### Webhooks
+
+#### `handleWebhook(request)`
+
+Handle an incoming webhook request. Override to parse the payload, match it to subscriptions, and emit notification signals. See [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) for a ready-to-use implementation.
+
+```typescript prettier:false
+async handleWebhook(request) {
+  const payload = request.body as { repo: string, event: string }
+  const subs = this.getSubscriptionsForResource(payload.repo)
+
+  for (const sub of subs) {
+    await this.notify(
+      { source: 'github', kind: payload.event, summary: `Event on ${payload.repo}` },
+      { threadId: sub.threadId, resourceId: sub.resourceId },
+    )
+  }
+
+  return { status: 200, body: { matched: subs.length } }
+}
+```
+
+Returns: `Promise<{ status?: number; body?: unknown }>`
+
+### Lifecycle
+
+#### `start()`
+
+Called after `connect()` to run async initialization. Override when setup requires the agent or Mastra instance to be available.
+
+```typescript prettier:false
+async start() {
+  await this.loadInitialState()
+}
+```
+
+#### `stop()`
+
+Called on shutdown. The default implementation stops polling and clears all subscriptions.
+
+```typescript prettier:false
+provider.stop()
+```
+
+### Notifications
+
+#### `notify(notification, target)`
+
+Send a notification signal to the connected agent. This is a protected convenience wrapper around `agent.sendNotificationSignal()`.
+
+```typescript prettier:false
+await this.notify(
+  {
+    source: 'my-provider',
+    kind: 'pr-updated',
+    summary: 'PR #123 was updated',
+    priority: 'high',
+    payload: { prNumber: 123 },
+  },
+  { threadId: 'thread-1', resourceId: 'user-1' },
+)
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'notification',
+    type: 'object',
+    description: 'The notification payload.',
+    properties: [
+      {
+        name: 'source',
+        type: 'string',
+        description: 'Identifier for the notification source.',
+      },
+      {
+        name: 'kind',
+        type: 'string',
+        description: 'Type of event (for example, `"pr-updated"`, `"new-message"`).',
+      },
+      {
+        name: 'summary',
+        type: 'string',
+        description: 'Human-readable summary of the event.',
+      },
+      {
+        name: 'priority',
+        type: '"high" | "medium" | "low"',
+        description: 'Notification priority.',
+        isOptional: true,
+      },
+      {
+        name: 'payload',
+        type: 'unknown',
+        description: 'Arbitrary data attached to the notification.',
+        isOptional: true,
+      },
+    ],
+  },
+  {
+    name: 'target',
+    type: 'SignalProviderTarget',
+    description: 'The thread to notify. Must include `threadId` and `resourceId`.',
+  },
+]}
+/>
+
+## Types
+
+### `SignalSubscription`
+
+The subscription object returned by `subscribe()`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for the subscription.',
+  },
+  {
+    name: 'providerId',
+    type: 'string',
+    description: 'The provider that owns this subscription.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The thread receiving signals.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'The resource owning the thread.',
+  },
+  {
+    name: 'externalResourceId',
+    type: 'string',
+    description: 'Provider-specific identifier for the external resource (for example, `"github:owner/repo#123"`).',
+  },
+  {
+    name: 'subscribedAt',
+    type: 'Date',
+    description: 'When the subscription was created.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Provider-specific metadata stored with the subscription.',
+  },
+]}
+/>
+
+### `SignalProviderTarget`
+
+Identifies a specific agent thread.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The thread to target.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'The resource owning the thread.',
+  },
+  {
+    name: 'agentId',
+    type: 'string',
+    description: 'Agent identifier.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Type guard
+
+### `isSignalProvider(obj)`
+
+Runtime check for `SignalProvider` instances.
+
+```typescript prettier:false
+import { isSignalProvider } from '@mastra/core/signals'
+
+if (isSignalProvider(obj)) {
+  obj.connect(agent)
+}
+```
+
+Returns: `boolean`
