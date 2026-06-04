@@ -110,7 +110,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     // toJSON's stack signal here, not its other fields, to avoid pulling in
     // subclass extras like Chai AssertionError.toJSON's name/ok/stack that
     // the agent-loop snapshot tests don't expect.
-    const errRecord = value as Record<string, unknown>;
+    const errRecord = value as unknown as Record<string, unknown>;
     let includeStack = value.stack !== undefined;
     if (includeStack && typeof errRecord.toJSON === 'function') {
       try {
@@ -128,9 +128,10 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     // Register in `seen` BEFORE recursing so cycles (incl. self-referential
     // `cause`) terminate.
     seen.set(value, out);
-    if (value.cause !== undefined) (out as Record<string, unknown>).cause = deepCloneForRun(value.cause, seen);
+    const outRecord = out as unknown as Record<string, unknown>;
+    if (value.cause !== undefined) outRecord.cause = deepCloneForRun(value.cause, seen);
     for (const key of Object.keys(value)) {
-      (out as Record<string, unknown>)[key] = deepCloneForRun((value as Record<string, unknown>)[key], seen);
+      outRecord[key] = deepCloneForRun(errRecord[key], seen);
     }
     return out;
   }
