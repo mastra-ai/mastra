@@ -388,3 +388,18 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13354 done, #13353 done, #13260 current, #13416 next.
 
 Next queue checkpoint: PR #13260 (likely version-package skip), then PR #13416 (plan mode agent calls `submit_plan`).
+
+
+### Feature map PR #13260 and #13416
+
+Skipped PR [#13260](https://github.com/mastra-ai/mastra/pull/13260), `e610573a4c` (`chore: version packages (alpha) (#13260)`). Verified via PR metadata and `git show` that Mastra Code changes were `mastracode/CHANGELOG.md` and `mastracode/package.json` version/package churn only; no user-visible feature mapping needed.
+
+Processed PR [#13416](https://github.com/mastra-ai/mastra/pull/13416), `9a3d857436` (`fix(mastracode): plan mode agent now calls submit_plan tool (#13416)`). Verified current source: `plan.ts` requires calling `submit_plan`, `tool-guidance.ts` exposes `submit_plan` only in Plan mode when not denied, core `submitPlanTool` emits `plan_approval_required`, TUI `handlePlanApproval()` resolves approve/reject/goal actions, and `renderExistingMessages()` reconstructs persisted `submit_plan` results as resolved plan cards.
+
+Documentation actions:
+
+- Created `features/goals/plan-approval.md` for Plan-mode `submit_plan` approval and Build/goal handoff behavior.
+- Updated `features/chat/prompt-context.md` with #13416's mode-aware tool guidance dependency.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13260 skipped, #13416 done, #13413 current, #13385 next.
+
+Next queue checkpoint: PR #13413 (TUI modularization), then PR #13385 (TS/JS LSP language identifier fix).

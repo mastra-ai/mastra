@@ -54,10 +54,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 32 | 2026-02-20 | #13355 | `89b1a4aead` | review | done | fix(mastracode): allow view_range for directory listings (#13355) | 2 |
 | 33 | 2026-02-20 | #13354 | `78d1c808ad` | review | done | fix(memory): improve OM continuity at low activation (#13354) | 3 |
 | 34 | 2026-02-20 | #13353 | `59d30b5d0c` | review | done | refactor(harness): use object parameters for all Harness methods + add reference docs (#13353) | 3 |
-| 35 | 2026-02-20 | #13260 | `e610573a4c` | likely skip | current | chore: version packages (alpha) (#13260) | 2 |
-| 36 | 2026-02-23 | #13416 | `9a3d857436` | review | next | fix(mastracode): plan mode agent now calls submit_plan tool (#13416) | 5 |
-| 37 | 2026-02-23 | #13413 | `f08b0bb00b` | review | | refactor: modularize TUI into focused modules (#13413) | 41 |
-| 38 | 2026-02-23 | #13385 | `18553c3541` | review | | fix(mastracode): use correct LSP language identifier for TS/JS files (#13385) | 1 |
+| 35 | 2026-02-20 | #13260 | `e610573a4c` | likely skip | skipped | chore: version packages (alpha) (#13260) | 2 |
+| 36 | 2026-02-23 | #13416 | `9a3d857436` | review | done | fix(mastracode): plan mode agent now calls submit_plan tool (#13416) | 5 |
+| 37 | 2026-02-23 | #13413 | `f08b0bb00b` | review | current | refactor: modularize TUI into focused modules (#13413) | 41 |
+| 38 | 2026-02-23 | #13385 | `18553c3541` | review | next | fix(mastracode): use correct LSP language identifier for TS/JS files (#13385) | 1 |
 | 39 | 2026-02-23 | #13384 | `8af03582df` | review | | fix(mastracode): exclude hidden files from directory listings (#13384) | 2 |
 | 40 | 2026-02-24 | #13376 | `7429026f6c` | review | | feat(mastracode): include model name in Co-Authored-By commit message (#13376) | 3 |
 | 41 | 2026-02-23 | #13421 | `27644fbf25` | review | | feat(mastracode): add interactive onboarding flow and global settings (#13421) | 20 |

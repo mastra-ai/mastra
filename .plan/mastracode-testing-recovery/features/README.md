@@ -46,6 +46,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |
 | Integrations | Core Harness API and reference docs | #13353 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
+| Goals | Plan approval and build handoff | #13416 | Core Harness plan resolver + TUI plan card | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
 | Memory | Observational memory | #13231, #13305, #13330, #13349, #13354 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13234](https://github.com/mastra-ai/mastra/pull/13234) — moved prompt building into agent prompt modules and added runtime instruction assembly.
-- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; task-list injection, model-specific prompt sections, goal-mode prompt guidance, and dynamic AGENTS.md injection changed this behavior later.
+- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; [#13416](https://github.com/mastra-ai/mastra/pull/13416) — split mode-aware tool guidance into `tool-guidance.ts` and made Plan mode explicitly require `submit_plan`; task-list injection, model-specific prompt sections, goal-mode prompt guidance, and dynamic AGENTS.md injection changed this behavior later.
 
 ## User-visible behavior
 
@@ -60,6 +60,7 @@
 - [Interactive chat](../tui/interactive-chat.md) — every chat run uses this prompt assembly.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — selected mode/model affects prompt sections.
 - [Coding tools and approval permissions](../tools/coding-tools-permissions.md) — denied tools alter tool guidance.
+- [Plan approval and build handoff](../goals/plan-approval.md) — Plan-mode prompt/tool guidance must route plans through `submit_plan`.
 - [Observational memory](../memory/observational-memory.md) — task prompt injection protects task state after memory truncation.
 
 ## Existing tests
