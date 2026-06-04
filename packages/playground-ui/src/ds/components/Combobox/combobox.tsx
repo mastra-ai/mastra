@@ -61,7 +61,7 @@ export function Combobox({
   // Default to the nearest SideDialog/Drawer popup so the list stays
   // interactive inside a modal drawer; an explicit `container` still wins.
   const portalContainer = usePortalContainer();
-  const resolvedContainer = container ?? portalContainer;
+  const resolvedContainer = container ?? portalContainer ?? undefined;
 
   const handleSelect = (item: ComboboxOption | null) => {
     if (item) {
