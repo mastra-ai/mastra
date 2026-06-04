@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13255 have been processed, with #13037, #13251, and #13252 recorded as version-package skips. `_pr-queue.md` now has a Status column for follow-along state. Next checkpoint: #13257 is likely version packaging; next review PR after that is #13305 (`b2601234bd`, `fix(memory): improve OM activation chunk selection and safeguards (#13305)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13305 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13294 (`a8e92aec01`, `chore(mastracode): Update installation instructions (#13294)`), then #13330 (`608e156def`, `fix: restore OM status updates and model change events in harness (#13330)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 13: PR #13257, likely version packaging. If confirmed, record as skipped and continue to row 14: PR #13305.
+1. Continue at `_pr-queue.md` row 15: PR #13294, docs/install instructions, then row 16: PR #13330.
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -60,5 +60,7 @@ None known.
 - `gh pr view 13253 --json number,title,body,author,mergedAt,url,files,commits` plus current `mastracode/src/tools/*` and `packages/schema-compat/src/zod-to-json.ts` verified the Zod v3/v4 tool-schema compatibility fix. Updated the tools card and missing packaged/source schema test note.
 - `gh pr view 13252` and `git show f090302af0 -- mastracode` verified #13252 as Changesets alpha packaging only; skipped.
 - `gh pr view 13255 --json number,title,body,author,mergedAt,url,files,commits` plus current `mastracode/package.json`, `mastracode/tsup.config.ts`, and `mastracode/src/tui/index.ts` verified the public `mastracode/tui` export. Updated the TUI card and missing package-export smoke test note.
-- `_pr-queue.md` now has a Status column through row 14 so progress is visible directly in the queue file.
+- `_pr-queue.md` now has a Status column through row 16 so progress is visible directly in the queue file.
+- `gh pr view 13257` and `git show 834b03e500 -- mastracode` verified #13257 as Changesets alpha packaging only; skipped.
+- `gh pr view 13305 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/agents/memory.ts`, and core OM threshold/runtime/tests verified the OM activation safeguard changes. Updated the memory card and noted current MC defaults differ from the #13305 PR body.
 - Current batch is doc-only; no product tests were run.

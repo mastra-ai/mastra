@@ -32,10 +32,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 10 | 2026-02-18 | #13253 | `1415bcd894` | review | done | fix(schema-compat): fix zodToJsonSchema routing for v3/v4 schemas (#13253) | 11 |
 | 11 | 2026-02-18 | #13252 | `f090302af0` | likely skip | skipped | chore: version packages (alpha) (#13252) | 2 |
 | 12 | 2026-02-19 | #13255 | `d715911c91` | review | done | feat(mastracode): add separate export path for MastraTUI (#13255) | 2 |
-| 13 | 2026-02-19 | #13257 | `834b03e500` | likely skip | current | chore: version packages (alpha) (#13257) | 2 |
-| 14 | 2026-02-19 | #13305 | `b2601234bd` | review | next | fix(memory): improve OM activation chunk selection and safeguards (#13305) | 1 |
-| 15 | 2026-02-20 | #13294 | `a8e92aec01` | review | | chore(mastracode): Update installation instructions (#13294) | 1 |
-| 16 | 2026-02-20 | #13330 | `608e156def` | review | | fix: restore OM status updates and model change events in harness (#13330) | 1 |
+| 13 | 2026-02-19 | #13257 | `834b03e500` | likely skip | skipped | chore: version packages (alpha) (#13257) | 2 |
+| 14 | 2026-02-19 | #13305 | `b2601234bd` | review | done | fix(memory): improve OM activation chunk selection and safeguards (#13305) | 1 |
+| 15 | 2026-02-20 | #13294 | `a8e92aec01` | review | current | chore(mastracode): Update installation instructions (#13294) | 1 |
+| 16 | 2026-02-20 | #13330 | `608e156def` | review | next | fix: restore OM status updates and model change events in harness (#13330) | 1 |
 | 17 | 2026-02-20 | #13331 | `3ea22d7703` | review | | feat(mastracode): add audit-tests subagent (#13331) | 3 |
 | 18 | 2026-02-20 | #13328 | `45bb78b70b` | review | | feat: stream tool arguments incrementally across all tool renderers (#13328) | 3 |
 | 19 | 2026-02-20 | #13335 | `7f317fc5e4` | review | | fix(tui): preserve assistant message text across todo_write tool calls (#13335) | 1 |

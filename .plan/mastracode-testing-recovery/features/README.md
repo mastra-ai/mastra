@@ -41,7 +41,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Models | Model auth, selection, modes | #13218 | Settings + harness session | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Tools | Coding tools and approval permissions | #13218 | Harness state + permission policy | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |
-| Memory | Observational memory | #13231 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |
+| Memory | Observational memory | #13231, #13305 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
 

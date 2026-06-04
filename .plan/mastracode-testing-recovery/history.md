@@ -225,3 +225,17 @@ Documentation actions:
 - Added missing built-package import smoke coverage for `mastracode/tui`.
 
 Next queue checkpoint: PR #13257, likely version packaging; next review PR after that is #13305.
+
+### Feature map PR #13257 and #13305
+
+Processed PR [#13257](https://github.com/mastra-ai/mastra/pull/13257), `834b03e500` (`chore: version packages (alpha) (#13257)`). Verified it only touched `mastracode/CHANGELOG.md` and `mastracode/package.json`; skipped feature-page creation.
+
+Processed PR [#13305](https://github.com/mastra-ai/mastra/pull/13305), `b2601234bd` (`fix(memory): improve OM activation chunk selection and safeguards (#13305)`). Verified PR body, current `mastracode/src/agents/memory.ts`, and current core OM threshold/runtime/tests under `packages/memory/src/processors/observational-memory/`.
+
+Documentation actions:
+
+- Updated `.plan/mastracode-testing-recovery/features/memory/observational-memory.md` because this changes OM activation/retention behavior visible as background memory stability.
+- Recorded that current Mastra Code defaults differ from the #13305 PR body, so later PRs may have changed the intended `bufferActivation` / `blockAfter` values.
+- Updated `_pr-queue.md` status markers: #13257 skipped, #13305 done, #13294 current, #13330 next.
+
+Next queue checkpoint: PR #13294, docs/install instructions; next review PR after that is #13330.

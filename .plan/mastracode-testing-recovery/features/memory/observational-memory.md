@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — dynamic memory configuration, configurable thresholds, observational memory support.
-- Later changes: Unknown — continue PR queue verification.
+- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support.
 
 ## User-visible behavior
 
 - What the user can do: use persistent observational memory across Mastra Code conversations/resources.
 - Success looks like: observations/reflections happen in the background without polluting chat or forgetting important context.
-- Must preserve: observer/reflector model settings, thresholds, scope, attachment behavior, and loaded memory after restart.
+- Must preserve: observer/reflector model settings, thresholds, scope, attachment behavior, activation retention behavior, and loaded memory after restart.
 
 ## Entry points / commands
 
@@ -48,7 +48,9 @@
 
 ## Key files
 
-- `mastracode/src/agents/memory.ts` — dynamic OM memory factory.
+- `mastracode/src/agents/memory.ts` — dynamic OM memory factory and Mastra Code defaults.
+- `packages/memory/src/processors/observational-memory/thresholds.ts` — activation retention floor and chunk-boundary safeguards.
+- `packages/memory/src/processors/observational-memory/observational-memory.ts` — core OM runtime.
 - `mastracode/src/tui/commands/om.ts` — `/om` settings modal wiring.
 - `mastracode/src/tui/handlers/om.ts` — OM event rendering.
 - `mastracode/src/tui/components/om-settings.ts` — settings UI.
@@ -65,6 +67,7 @@
 - `mastracode/src/tui/commands/__tests__/om.test.ts` — OM role override persistence behavior.
 - `mastracode/src/tui/components/__tests__/om-settings.test.ts` — model picker behavior for OM settings.
 - `mastracode/src/tui/handlers/__tests__/om.test.ts` — OM marker rendering/quiet-mode behavior.
+- `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` — core activation, reflection, overshoot, and retention behavior.
 - `mastracode/src/utils/__tests__/gateway-sync.test.ts` — related heartbeat gateway sync wrapper.
 
 ## Missing tests
@@ -72,12 +75,14 @@
 - End-to-end observation/reflection across restart with resource/thread scope.
 - `/om` modal changes propagate to harness state, thread settings, settings file, and next memory factory instance.
 - Abort/failure behavior for active OM cycles.
+- Mastra Code-specific test that `getDynamicMemory()` wires intended OM activation defaults into core memory.
 
 ## Known risks / regressions
 
 - Memory factory cache key must include every setting that changes behavior.
 - State is split across harness state, settings, thread settings, storage, and display state.
 - Dynamic AGENTS.md reminders must not be observed into memory.
+- Core OM activation defaults can drift from Mastra Code defaults; PR #13305 intended `bufferActivation: 1000` / `blockAfter: 1.2`, while current Mastra Code wiring is `bufferActivation: 2000` / `blockAfter: 2`.
 
 ## Verification checklist
 
