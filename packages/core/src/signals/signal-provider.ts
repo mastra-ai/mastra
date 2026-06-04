@@ -1,7 +1,7 @@
+import type { Agent } from '../agent/agent';
 import type { Mastra } from '../mastra';
 import type { SendNotificationSignalInput } from '../notifications/types';
-import type { Processor } from '../processors';
-import type { Agent } from './agent';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 
 /**
  * Identifies a specific agent thread that a signal provider targets.
@@ -51,12 +51,19 @@ export type SignalProviderWebhookRequest = {
 /**
  * Abstract base for signal providers.
  *
- * A SignalProvider is a Processor that monitors external sources and pushes
- * notification signals into agent threads. It combines three capabilities:
+ * A SignalProvider monitors external sources and pushes notification signals
+ * into agent threads. It combines three capabilities:
  *
- * 1. **Processor hooks** — intercept agent input/output steps (inherited from Processor)
- * 2. **Subscription tracking** — built-in registry of which threads are subscribed to which external resources
- * 3. **External monitoring** — polling or webhook-driven event ingestion
+ * 1. **Subscription tracking** — built-in registry of which threads are subscribed to which external resources
+ * 2. **External monitoring** — polling or webhook-driven event ingestion
+ * 3. **Optional processor/tool integration** — providers can expose input/output processors and tools
+ *
+ * Not all signal providers are processors. A provider that only polls an API
+ * and pushes notifications needs no processor hooks at all. Providers that
+ * need to intercept agent execution (e.g., injecting subscription hints) can
+ * return processors via `getInputProcessors()` / `getOutputProcessors()`.
+ * Providers that expose agent tools (e.g., subscribe/unsubscribe commands)
+ * can return them via `getTools()`.
  *
  * ## Usage
  *
@@ -67,8 +74,9 @@ export type SignalProviderWebhookRequest = {
  * ```
  *
  * The Agent automatically:
- * - Registers the provider as both an input and output processor
  * - Calls `connect(this)` to establish the bidirectional link
+ * - Registers any processors returned by `getInputProcessors()` / `getOutputProcessors()`
+ * - Merges any tools returned by `getTools()`
  * - Starts polling if `pollInterval` is defined
  *
  * ## Building a Provider
@@ -91,22 +99,23 @@ export type SignalProviderWebhookRequest = {
  *
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export abstract class SignalProvider<TId extends string = string> implements Processor<TId> {
+export abstract class SignalProvider<TId extends string = string> {
   abstract readonly id: TId;
   readonly name?: string;
 
   /**
    * The Mastra instance this provider is registered with.
-   * Available after the provider is registered via __registerMastra.
+   * Set by the framework when the agent is registered with Mastra.
    */
   protected mastra?: Mastra<any, any, any, any, any, any, any, any, any, any>;
 
   /**
-   * @internal Called when the processor is registered with a Mastra instance.
+   * @internal Called when the provider's agent is registered with a Mastra instance.
    */
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
     this.mastra = mastra;
   }
+
   /**
    * The agent this provider is connected to.
    * Set automatically when passed to `Agent({ signals: [...] })`.
@@ -149,6 +158,45 @@ export abstract class SignalProvider<TId extends string = string> implements Pro
   protected get agent(): Agent<any, any, any, any> | undefined {
     return this.#connectedAgent;
   }
+
+  // ── Processors & Tools ─────────────────────────────────────────────
+
+  /**
+   * Return input processors this provider needs registered with the agent.
+   * Override when your provider intercepts agent input steps (e.g., injecting
+   * subscription hints, detecting PR-related shell commands).
+   *
+   * @example
+   * ```ts
+   * getInputProcessors() {
+   *   return [this]; // when the provider itself implements processInputStep
+   * }
+   * ```
+   */
+  getInputProcessors?(): InputProcessorOrWorkflow[];
+
+  /**
+   * Return output processors this provider needs registered with the agent.
+   * Override when your provider intercepts agent output steps.
+   */
+  getOutputProcessors?(): OutputProcessorOrWorkflow[];
+
+  /**
+   * Return tools this provider exposes to the agent.
+   * Override when your provider adds agent-callable tools (e.g.,
+   * subscribe/unsubscribe commands).
+   *
+   * @example
+   * ```ts
+   * getTools() {
+   *   return {
+   *     subscribe_pr: createTool({ ... }),
+   *     unsubscribe_pr: createTool({ ... }),
+   *   };
+   * }
+   * ```
+   */
+  getTools?(): Record<string, unknown>;
 
   // ── Subscription tracking ──────────────────────────────────────────
 
@@ -248,7 +296,7 @@ export abstract class SignalProvider<TId extends string = string> implements Pro
    * ```ts
    * const subs = this.getSubscriptionsForResource('github:mastra-ai/mastra#123');
    * for (const sub of subs) {
-   *   await this.agent?.sendNotificationSignal(..., { resourceId: sub.resourceId, threadId: sub.threadId });
+   *   await this.notify({ ... }, { resourceId: sub.resourceId, threadId: sub.threadId });
    * }
    * ```
    */

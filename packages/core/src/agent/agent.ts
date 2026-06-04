@@ -76,6 +76,7 @@ import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
+import type { SignalProvider } from '../signals/signal-provider';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
@@ -113,7 +114,6 @@ import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import type { SignalProvider } from './signal-provider';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -579,38 +579,47 @@ export class Agent<
     if (config.signals && config.signals.length > 0) {
       this.#signals = config.signals;
 
-      // SignalProvider implements Processor, but the InputProcessorOrWorkflow /
-      // OutputProcessorOrWorkflow unions use branded intersections. We cast
-      // through unknown so the processor runner (which accepts Processor[])
-      // can handle them.
-      const asInput = config.signals as unknown as InputProcessorOrWorkflow[];
-      const asOutput = config.signals as unknown as OutputProcessorOrWorkflow[];
+      // Collect processors and tools from signal providers that opt in
+      const signalInputProcessors: InputProcessorOrWorkflow[] = [];
+      const signalOutputProcessors: OutputProcessorOrWorkflow[] = [];
 
-      // Register each signal provider as both input and output processor
-      const existingInput = this.#inputProcessors;
-      this.#inputProcessors = existingInput
-        ? typeof existingInput === 'function'
-          ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
-              const resolved = await existingInput(ctx);
-              return [...asInput, ...resolved];
-            }
-          : [...asInput, ...existingInput]
-        : asInput;
-
-      const existingOutput = this.#outputProcessors;
-      this.#outputProcessors = existingOutput
-        ? typeof existingOutput === 'function'
-          ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
-              const resolved = await existingOutput(ctx);
-              return [...resolved, ...asOutput];
-            }
-          : [...existingOutput, ...asOutput]
-        : asOutput;
-
-      // Connect each provider and start polling
       for (const provider of config.signals) {
         provider.connect(this as Agent<any, any, any, any>);
+
+        if (provider.getInputProcessors) {
+          signalInputProcessors.push(...provider.getInputProcessors());
+        }
+        if (provider.getOutputProcessors) {
+          signalOutputProcessors.push(...provider.getOutputProcessors());
+        }
+
         provider.startPolling();
+      }
+
+      // Register collected input processors
+      if (signalInputProcessors.length > 0) {
+        const existingInput = this.#inputProcessors;
+        this.#inputProcessors = existingInput
+          ? typeof existingInput === 'function'
+            ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
+                const resolved = await existingInput(ctx);
+                return [...signalInputProcessors, ...resolved];
+              }
+            : [...signalInputProcessors, ...existingInput]
+          : signalInputProcessors;
+      }
+
+      // Register collected output processors
+      if (signalOutputProcessors.length > 0) {
+        const existingOutput = this.#outputProcessors;
+        this.#outputProcessors = existingOutput
+          ? typeof existingOutput === 'function'
+            ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
+                const resolved = await existingOutput(ctx);
+                return [...resolved, ...signalOutputProcessors];
+              }
+            : [...existingOutput, ...signalOutputProcessors]
+          : signalOutputProcessors;
       }
     }
 

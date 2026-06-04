@@ -9,7 +9,13 @@ import { SignalProvider } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
-import type { ProcessInputStepArgs, ProcessInputStepResult, ProcessOutputStepArgs } from '@mastra/core/processors';
+import type {
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
+  ProcessOutputStepArgs,
+} from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
@@ -916,6 +922,14 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   override connect(agent: Agent<any, any, any, any>): void {
     super.connect(agent);
     this.#agent = agent as unknown as GithubSignalAgent;
+  }
+
+  getInputProcessors(): InputProcessorOrWorkflow[] {
+    return [this as unknown as InputProcessorOrWorkflow];
+  }
+
+  getOutputProcessors(): OutputProcessorOrWorkflow[] {
+    return [this as unknown as OutputProcessorOrWorkflow];
   }
 
   onSubscriptionsChanged(handler: GithubSubscriptionsChangedHandler): void {
