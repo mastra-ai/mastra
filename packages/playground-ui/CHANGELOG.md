@@ -1,5 +1,34 @@
 # @mastra/playground-ui
 
+## 32.0.2-alpha.0
+
+### Patch Changes
+
+- Fixed combobox popups so model picker dropdowns open correctly outside side dialogs. ([#17556](https://github.com/mastra-ai/mastra/pull/17556))
+
+- Updated dependencies [[`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9), [`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/client-js@1.23.2-alpha.0
+  - @mastra/react@0.5.2-alpha.0
+  - @mastra/core@1.41.0-alpha.0
+
+## 32.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0
+  - @mastra/client-js@1.23.1
+  - @mastra/react@0.5.1
+
+## 32.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0-alpha.0
+  - @mastra/client-js@1.23.1-alpha.0
+  - @mastra/react@0.5.1-alpha.0
+
 ## 32.0.0
 
 ### Patch Changes

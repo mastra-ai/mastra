@@ -21,7 +21,7 @@ import {
   buildStreamErrorMessage,
   isMaxStepsFinishChunk,
 } from './stream-error-message';
-import { toAssistantUIMessage } from './to-assistant-ui-message';
+import { toAssistantUIMessages } from './to-assistant-ui-message';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -550,11 +550,10 @@ export function MastraRuntimeProvider({
   // tracked in `streamErrors` (which survives the post-stream initialMessages
   // refresh). Without filtering here we would briefly render duplicate errors
   // during the streaming window.
-  const vnextmessages = [...messages.filter(msg => msg.content?.metadata?.status !== 'error'), ...streamErrors].map(
-    msg => {
-      const converted = convertOmPartsInMastraMessage(msg, globalOmParts);
-      return toAssistantUIMessage(converted);
-    },
+  const vnextmessages = toAssistantUIMessages(
+    [...messages.filter(msg => msg.content?.metadata?.status !== 'error'), ...streamErrors].map(msg =>
+      convertOmPartsInMastraMessage(msg, globalOmParts),
+    ),
   );
 
   const runtime = useExternalStoreRuntime({
