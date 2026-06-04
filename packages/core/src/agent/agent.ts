@@ -579,10 +579,10 @@ export class Agent<
     if (config.signals && config.signals.length > 0) {
       this.#signals = config.signals;
 
-      // SignalProvider extends BaseProcessor which implements Processor, but the
-      // InputProcessorOrWorkflow / OutputProcessorOrWorkflow unions use branded
-      // intersections. We cast through Processor[] (the common base) which the
-      // processor runner already accepts.
+      // SignalProvider implements Processor, but the InputProcessorOrWorkflow /
+      // OutputProcessorOrWorkflow unions use branded intersections. We cast
+      // through unknown so the processor runner (which accepts Processor[])
+      // can handle them.
       const asInput = config.signals as unknown as InputProcessorOrWorkflow[];
       const asOutput = config.signals as unknown as OutputProcessorOrWorkflow[];
 

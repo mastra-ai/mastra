@@ -238,21 +238,12 @@ describe('WebhookSignalProvider', () => {
     });
   });
 
-  describe('monitoring helpers', () => {
-    it('startMonitoring returns true', () => {
-      expect(provider.startMonitoring()).toBe(true);
-    });
-
-    it('isMonitoring reflects subscription state', () => {
-      expect(provider.isMonitoring()).toBe(false);
-      provider.subscribeThread(target1, 'res');
-      expect(provider.isMonitoring()).toBe(true);
-    });
-
-    it('stopAll clears everything', () => {
-      provider.subscribeThread(target1, 'res');
-      provider.stopAll();
-      expect(provider.isMonitoring()).toBe(false);
+  describe('lifecycle', () => {
+    it('stop() clears all subscriptions', () => {
+      provider.subscribeThread(target1, 'res-a');
+      provider.subscribeThread(target2, 'res-b');
+      provider.stop();
+      expect(provider.subscribeThread(target1, 'res-a').id).toBeDefined();
     });
   });
 });

@@ -1,3 +1,4 @@
+import type { SendNotificationSignalInput } from '../notifications/types';
 import { SignalProvider } from './signal-provider';
 import type { SignalProviderTarget, SignalProviderWebhookRequest, SignalSubscription } from './signal-provider';
 
@@ -31,20 +32,7 @@ export type WebhookSignalProviderOptions = {
    * Optional function to build the notification from a webhook payload.
    * When not provided, a default notification is built from the payload.
    */
-  buildNotification?: (
-    payload: unknown,
-    subscription: SignalSubscription,
-  ) => {
-    source: string;
-    kind: string;
-    summary: string;
-    priority?: 'low' | 'medium' | 'high' | 'urgent';
-    payload?: unknown;
-    dedupeKey?: string;
-    coalesceKey?: string;
-    attributes?: Record<string, string | number | boolean | null | undefined>;
-    metadata?: Record<string, unknown>;
-  };
+  buildNotification?: (payload: unknown, subscription: SignalSubscription) => SendNotificationSignalInput;
 };
 
 /**
@@ -186,24 +174,6 @@ export class WebhookSignalProvider extends SignalProvider<string> {
     return { status: 200, body: { matched } };
   }
 
-  // ── Monitoring (no-op — webhooks are push-based) ───────────────────
-
-  startMonitoring(): boolean {
-    return true;
-  }
-
-  stopMonitoring(): void {
-    // no-op for webhooks
-  }
-
-  isMonitoring(): boolean {
-    return this.subscriptionCount > 0;
-  }
-
-  stopAll(): void {
-    this.stop();
-  }
-
   // ── Internal ───────────────────────────────────────────────────────
 
   #extractResourceIds(payload: unknown): string[] {
@@ -223,20 +193,7 @@ export class WebhookSignalProvider extends SignalProvider<string> {
     return [];
   }
 
-  #buildNotification(
-    payload: unknown,
-    subscription: SignalSubscription,
-  ): {
-    source: string;
-    kind: string;
-    summary: string;
-    priority?: 'low' | 'medium' | 'high' | 'urgent';
-    payload?: unknown;
-    dedupeKey?: string;
-    coalesceKey?: string;
-    attributes?: Record<string, string | number | boolean | null | undefined>;
-    metadata?: Record<string, unknown>;
-  } {
+  #buildNotification(payload: unknown, subscription: SignalSubscription): SendNotificationSignalInput {
     if (this.#options.buildNotification) {
       return this.#options.buildNotification(payload, subscription);
     }

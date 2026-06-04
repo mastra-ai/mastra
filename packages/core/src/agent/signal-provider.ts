@@ -1,4 +1,5 @@
 import type { Mastra } from '../mastra';
+import type { SendNotificationSignalInput } from '../notifications/types';
 import type { Processor } from '../processors';
 import type { Agent } from './agent';
 
@@ -381,20 +382,7 @@ export abstract class SignalProvider<TId extends string = string> implements Pro
    *
    * @throws If no agent is connected
    */
-  protected async notify(
-    notification: {
-      source: string;
-      kind: string;
-      summary: string;
-      priority?: 'low' | 'medium' | 'high' | 'urgent';
-      payload?: unknown;
-      dedupeKey?: string;
-      coalesceKey?: string;
-      attributes?: Record<string, string | number | boolean | null | undefined>;
-      metadata?: Record<string, unknown>;
-    },
-    target: SignalProviderTarget,
-  ): Promise<void> {
+  protected async notify(notification: SendNotificationSignalInput, target: SignalProviderTarget): Promise<void> {
     const agent = this.#connectedAgent;
     if (!agent) {
       throw new Error(
