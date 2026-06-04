@@ -902,3 +902,25 @@ Verification:
 - Focused core test passed: `pnpm --filter ./packages/core exec vitest run src/harness/workspace-resolution.test.ts --reporter=dot --bail 1` (1 file / 12 tests, no type errors).
 
 Next queue checkpoint: PR #13700 (forward requestContext and skill paths to subagents), then PR #13710 (README follow-ups).
+
+
+### Feature map batch: subagent request context and template README follow-ups
+
+Processed PR [#13700](https://github.com/mastra-ai/mastra/pull/13700), `1c4221cf60` (`fix: forward requestContext and skill paths to subagents`). Verified current core `createSubagentTool()` forwards a copied `RequestContext` into `subagentToRun.stream()`. Non-forked subagents preserve harness state but strip parent `threadId`/`resourceId`; forked subagents retarget inherited tools to the cloned thread/resource. Verified Mastra Code `getAllowedPathsFromContext()` now merges computed skill paths from `buildSkillPaths(projectPath, configDir)` with `sandboxAllowedPaths`, so delegated agents can access the same skill directories and user-approved external paths as the parent.
+
+Processed PR [#13710](https://github.com/mastra-ai/mastra/pull/13710), `bc2665ebf3` (`chore(templates): README follow-ups`). Verified this is template README copy cleanup only; no Mastra Code runtime feature card was needed.
+
+Documentation actions:
+
+- Updated `features/subagents/delegation.md` with request-context copy/retarget behavior, inherited filesystem access, test coverage, and leakage risk.
+- Updated `features/tools/workspace-tools.md` with subagent skill/sandbox path inheritance and `getAllowedPathsFromContext()` coverage.
+- Updated `features/integrations/skills-command.md` with skill-path inheritance for delegated agents.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13700 done, #13710 done, #13713 current.
+
+Verification:
+
+- Current source checked: `packages/core/src/harness/tools.ts`, `packages/core/src/harness/subagent-tool.test.ts`, `mastracode/src/agents/workspace.ts`, `mastracode/src/tools/utils.ts`, `mastracode/src/tools/__tests__/get-allowed-paths.test.ts`, and related feature-map pages.
+- Focused core tests passed: `pnpm --filter ./packages/core exec vitest run src/harness/subagent-tool.test.ts src/harness/subagent-workspace-integration.test.ts --reporter=dot --bail 1` (2 files / 29 tests, no type errors).
+- Focused MC tests passed: `pnpm --filter ./mastracode exec vitest run src/tools/__tests__/get-allowed-paths.test.ts src/agents/__tests__/build-skill-paths.test.ts src/agents/__tests__/workspace-skill-activation.test.ts --reporter=dot --bail 1` (3 files / 17 tests).
+
+Next queue checkpoint: PR #13713 (dynamic extraTools functions), then PR #13712 (Ctrl+V clipboard paste).

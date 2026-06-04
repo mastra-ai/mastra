@@ -56,19 +56,19 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Models | Custom OpenAI-compatible providers | #13682 | settings customProviders + Harness custom catalog | Partial | High | [page](./models/custom-providers.md) |
 | Models | Thinking and reasoning effort | #13490, #13563 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
 | Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526, #13564, #13609, #13687 | Harness state + permission policy + workspace filesystem + extraTools | Partial | High | [page](./tools/coding-tools-permissions.md) |
-| Tools | Workspace-backed coding tools | #13437, #13526, #13687, #13693 | core/custom Workspace + LocalFilesystem/LocalSandbox + tool-name overrides | Partial | High | [page](./tools/workspace-tools.md) |
+| Tools | Workspace-backed coding tools | #13437, #13526, #13687, #13693, #13700 | core/custom Workspace + LocalFilesystem/LocalSandbox + tool-name overrides | Partial | High | [page](./tools/workspace-tools.md) |
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |
 | Integrations | MCP server configuration | #13613 | MCP config files + manager runtime state | Partial | High | [page](./integrations/mcp-server-configuration.md) |
 | Integrations | Core Harness API and reference docs | #13353, #13457, #13519, #13525 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
 | Integrations | Harness display state | #13427 | Core Harness display projection | Partial | High | [page](./integrations/harness-display-state.md) |
-| Integrations | Skills command and workspace resolution | #13457 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
+| Integrations | Skills command and workspace resolution | #13457, #13700 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
 | Integrations | Lifecycle hooks | #13442 | hook config + TUI lifecycle + tool wrapper | Partial | High | [page](./integrations/lifecycle-hooks.md) |
 | Integrations | GitHub issue reporting command | #13605 | TUI command prompt + GitHub CLI side effects | Partial | High | [page](./integrations/github-issue-reporting.md) |
 | Git | Commit attribution | #13376 | Prompt context + harness model state | Missing | Medium | [page](./git/commit-attribution.md) |
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
-| Subagents | Delegation to Explore / Plan / Execute | #13227, #13339 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |
+| Subagents | Delegation to Explore / Plan / Execute | #13227, #13339, #13700 | Harness config + subagent request context/session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
 | Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13563, #13569 | Memory storage + harness/settings OM state + clone remapping | Partial | High | [page](./memory/observational-memory.md) |
 

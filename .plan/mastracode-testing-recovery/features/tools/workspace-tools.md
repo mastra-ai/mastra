@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13437](https://github.com/mastra-ai/mastra/pull/13437) — switched Mastra Code from MC-local file/edit/shell tools to core Workspace tools with TUI streaming support.
-- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map; [#13687](https://github.com/mastra-ai/mastra/pull/13687) — added core Workspace `name` remapping so the exposed tool dictionary and tool IDs use Mastra Code's stable names; [#13693](https://github.com/mastra-ai/mastra/pull/13693) — lets `createMastraCode({ workspace })` provide a custom workspace instead of the default dynamic local workspace.
+- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map; [#13687](https://github.com/mastra-ai/mastra/pull/13687) — added core Workspace `name` remapping so the exposed tool dictionary and tool IDs use Mastra Code's stable names; [#13693](https://github.com/mastra-ai/mastra/pull/13693) — lets `createMastraCode({ workspace })` provide a custom workspace instead of the default dynamic local workspace; [#13700](https://github.com/mastra-ai/mastra/pull/13700) — forwards request context and skill/sandbox paths into subagent tool runs.
 
 ## User-visible behavior
 
 - What the user can do: use standard coding tools (`view`, `search_content`, `find_files`, `write_file`, `string_replace_lsp`, `ast_smart_edit`, `execute_command`, process tools, LSP inspect) through the core Workspace abstraction; embedders can pass a custom workspace into `createMastraCode()`.
-- Success looks like: workspace tools obey project-root containment, allowed external paths, plan-mode write-tool disabling, LSP diagnostics, write locks, read-before-write policy, TUI streaming/rendering, and explicit workspace overrides.
-- Must preserve: user-facing Mastra Code tool names stay stable even though runtime implementations come from `@mastra/core/workspace`, old `mastra_workspace_*` IDs must not remain callable after remapping, and the default local workspace remains the fallback when no override is supplied.
+- Success looks like: workspace tools obey project-root containment, allowed external paths, plan-mode write-tool disabling, LSP diagnostics, write locks, read-before-write policy, TUI streaming/rendering, explicit workspace overrides, and subagent inheritance of approved skill/sandbox paths.
+- Must preserve: user-facing Mastra Code tool names stay stable even though runtime implementations come from `@mastra/core/workspace`, old `mastra_workspace_*` IDs must not remain callable after remapping, the default local workspace remains the fallback when no override is supplied, and subagents must not lose parent-approved filesystem access.
 
 ## Entry points / commands
 
@@ -43,7 +43,7 @@
 | Workspace instance | `createMastraCode({ workspace })` override or default `getDynamicWorkspace` + Core Harness resolver/cache | Agent runtime, workspace tools, skills |
 | Workspace ID | Custom workspace ID or `mastra-code-workspace-${projectPath}` for the default dynamic workspace | Mastra workspace registry reuse |
 | Filesystem root | `LocalFilesystem.basePath = projectPath` | read/list/search/edit/write tools |
-| Extra allowed paths | skill paths + temp dirs + `sandboxAllowedPaths` | filesystem containment/access requests |
+| Extra allowed paths | skill paths + temp dirs + `sandboxAllowedPaths`; `getAllowedPathsFromContext()` for subagent/file-tool contexts | filesystem containment/access requests, subagent workspace tools |
 | Sandbox process env | `getDynamicWorkspace()` / `LocalSandbox` | `execute_command`, process manager |
 | Tool name mapping | Core `WorkspaceToolsConfig.name` + MC `TOOL_NAME_OVERRIDES` | model-visible tool dictionary keys, tool IDs, permissions, TUI components |
 | Plan-mode write disable | `getDynamicWorkspace()` tools config | Plan mode tool visibility |
@@ -53,6 +53,7 @@
 
 - `mastracode/src/index.ts` — public `MastraCodeConfig.workspace` override and fallback to `getDynamicWorkspace` for both Harness generations.
 - `mastracode/src/agents/workspace.ts` — dynamic workspace construction, skill/allowed path assembly, plan-mode write-tool disabling, LSP config, sandbox env.
+- `mastracode/src/tools/utils.ts` — allowed-path extraction for tool contexts, combining computed skill paths and sandbox-approved paths.
 - `mastracode/src/agents/tools.ts` — MC dynamic tool map after file/edit/shell tools moved to Workspace.
 - `mastracode/src/tool-names.ts` — stable Mastra Code tool-name overrides for core workspace tools.
 - `packages/core/src/harness/harness.ts` — workspace resolution/cache and request-context wiring.
@@ -73,8 +74,10 @@
 - `packages/core/src/workspace/tools/__tests__/*.test.ts` — read/list/search/edit/write/LSP/execute/process tool behavior, read tracking, write locks, output helpers.
 - `packages/core/src/harness/workspace-resolution.test.ts` — static/dynamic workspace resolution and caching.
 - `packages/core/src/harness/subagent-workspace-integration.test.ts` — subagent workspace-tool visibility/allowlists.
+- `packages/core/src/harness/subagent-tool.test.ts` — subagent request-context forwarding and workspace allowlist filtering.
 - `mastracode/src/agents/__tests__/workspace-env.test.ts` — parent env variables pass into workspace subprocesses.
 - `mastracode/src/agents/__tests__/build-skill-paths.test.ts` and `workspace-skill-activation.test.ts` — dynamic workspace skill paths.
+- `mastracode/src/tools/__tests__/get-allowed-paths.test.ts` — skill/sandbox path merging for subagent tool contexts.
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — TUI formatting for workspace tool output including quiet view previews, diagnostics, tree summaries, and edge cases.
 
 ## Missing tests

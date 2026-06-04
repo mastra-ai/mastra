@@ -108,9 +108,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 86 | 2026-03-02 | #13692 | `87ab58f1c5` | review | done | fix(mastracode): fix test failures from cross-test contamination and add temp dir gitignore (#13692) | 4 |
 | 87 | 2026-03-02 | #13701 | `33f289c616` | review | done | use separate tui debug env var (#13701) | 1 |
 | 88 | 2026-03-03 | #13693 | `6e1b940177` | review | done | feat(mc): set workspace (#13693) | 1 |
-| 89 | 2026-03-03 | #13700 | `1c4221cf60` | review | current | fix: forward requestContext and skill paths to subagents (#13700) | 5 |
-| 90 | 2026-03-03 | #13710 | `bc2665ebf3` | review | | chore(templates): README follow-ups (#13710) | 1 |
-| 91 | 2026-03-03 | #13713 | `d7ed2bb64e` | review | | feat(mastracode): support dynamic extraTools functions (#13713) | 3 |
+| 89 | 2026-03-03 | #13700 | `1c4221cf60` | review | done | fix: forward requestContext and skill paths to subagents (#13700) | 5 |
+| 90 | 2026-03-03 | #13710 | `bc2665ebf3` | review | done | chore(templates): README follow-ups (#13710) | 1 |
+| 91 | 2026-03-03 | #13713 | `d7ed2bb64e` | review | current | feat(mastracode): support dynamic extraTools functions (#13713) | 3 |
 | 92 | 2026-03-03 | #13712 | `d365d2926b` | review | | feat(cli): Add clipboard image and text paste support via Ctrl+V (#13712) | 2 |
 | 93 | 2026-03-03 | #13716 | `ee8de2adcf` | review | | feat(mastracode): export resolveModel from createMastraCode (#13716) | 1 |
 | 94 | 2026-03-03 | #13603 | `548da794ec` | review | | feat(mastracode): auto-update prompt on session start (#13603) | 4 |
