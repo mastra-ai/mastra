@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13305 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13294 (`a8e92aec01`, `chore(mastracode): Update installation instructions (#13294)`), then #13330 (`608e156def`, `fix: restore OM status updates and model change events in harness (#13330)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13330 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13331 (`3ea22d7703`, `feat(mastracode): add audit-tests subagent (#13331)`), then #13328 (`45bb78b70b`, `feat: stream tool arguments incrementally across all tool renderers (#13328)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 15: PR #13294, docs/install instructions, then row 16: PR #13330.
+1. Continue at `_pr-queue.md` row 17: PR #13331 (`audit-tests` subagent), then row 18: PR #13328 (incremental tool argument streaming).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -63,4 +63,6 @@ None known.
 - `_pr-queue.md` now has a Status column through row 16 so progress is visible directly in the queue file.
 - `gh pr view 13257` and `git show 834b03e500 -- mastracode` verified #13257 as Changesets alpha packaging only; skipped.
 - `gh pr view 13305 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/agents/memory.ts`, and core OM threshold/runtime/tests verified the OM activation safeguard changes. Updated the memory card and noted current MC defaults differ from the #13305 PR body.
+- `gh pr view 13294 --json number,title,body,author,mergedAt,url,files,commits` plus current README/package/startup files verified install/launch docs. Created the setup install card.
+- `gh pr view 13330 --json number,title,body,author,mergedAt,url,files,commits`, current `/om` callbacks, and core harness OM event tests verified streamed OM lifecycle/model-change event behavior. Updated the memory card.
 - Current batch is doc-only; no product tests were run.

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — dynamic memory configuration, configurable thresholds, observational memory support.
-- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support.
+- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events.
 
 ## User-visible behavior
 
@@ -28,8 +28,8 @@
 
 ## Streaming / loading / interrupted states
 
-- Streaming / loading: observation/reflection/buffering/activation events update OM UI components.
-- Abort / retry / resume: OM failures render markers; exact abort interaction with active OM cycles needs verification.
+- Streaming / loading: `data-om-status`, observation, buffering, activation, and failure chunks become harness OM events and update OM UI components.
+- Abort / retry / resume: OM buffering/observation failures abort the stream through core harness events; exact user-facing retry behavior still needs verification.
 
 ## Streaming vs loaded-from-history behavior
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Observations/reflections | Memory storage + vector store when present | Agent memory retrieval |
-| Observer/reflector models | Harness state + settings | OM model functions, `/om` |
+| Observer/reflector models | Harness state + thread settings + settings | OM model functions, `/om`, `om_model_changed` subscribers |
 | Thresholds | Harness state + thread settings + settings | Memory factory, `/om` |
 | OM UI progress | Harness display state + transient TUI components | Chat/status rendering |
 | OM scope | Project/resource settings via `getOmScope()` | Memory factory |
@@ -51,6 +51,7 @@
 - `mastracode/src/agents/memory.ts` — dynamic OM memory factory and Mastra Code defaults.
 - `packages/memory/src/processors/observational-memory/thresholds.ts` — activation retention floor and chunk-boundary safeguards.
 - `packages/memory/src/processors/observational-memory/observational-memory.ts` — core OM runtime.
+- `packages/core/src/harness/harness.ts` — OM stream chunk handling and observer/reflector model switch events.
 - `mastracode/src/tui/commands/om.ts` — `/om` settings modal wiring.
 - `mastracode/src/tui/handlers/om.ts` — OM event rendering.
 - `mastracode/src/tui/components/om-settings.ts` — settings UI.
@@ -68,6 +69,7 @@
 - `mastracode/src/tui/components/__tests__/om-settings.test.ts` — model picker behavior for OM settings.
 - `mastracode/src/tui/handlers/__tests__/om.test.ts` — OM marker rendering/quiet-mode behavior.
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` — core activation, reflection, overshoot, and retention behavior.
+- `packages/core/src/harness/om-failure-abort.test.ts`, `om-threshold-persistence.test.ts`, `get-om-record.test.ts` — core harness OM failure, threshold, and record behavior.
 - `mastracode/src/utils/__tests__/gateway-sync.test.ts` — related heartbeat gateway sync wrapper.
 
 ## Missing tests
@@ -76,6 +78,7 @@
 - `/om` modal changes propagate to harness state, thread settings, settings file, and next memory factory instance.
 - Abort/failure behavior for active OM cycles.
 - Mastra Code-specific test that `getDynamicMemory()` wires intended OM activation defaults into core memory.
+- Mastra Code `/om` command test asserting observer/reflector model changes call `switchObserverModel()` / `switchReflectorModel()` rather than raw `setState()`.
 
 ## Known risks / regressions
 

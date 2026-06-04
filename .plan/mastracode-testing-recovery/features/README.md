@@ -35,13 +35,14 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 
 | Area | Feature | Origin | State owner | Tests | Risk | Page |
 | --- | --- | --- | --- | --- | --- | --- |
+| Setup | Installation and launch | #13294 | package metadata + startup runtime | Missing | Medium | [page](./setup/installation-and-launch.md) |
 | TUI | Interactive chat | #13218 | TUI + harness session | Partial | High | [page](./tui/interactive-chat.md) |
 | Chat | Prompt context and project instructions | #13234 | Harness request context + instruction files | Partial | High | [page](./chat/prompt-context.md) |
 | Threads | Persistent conversations / switching | #13218 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Models | Model auth, selection, modes | #13218 | Settings + harness session | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Tools | Coding tools and approval permissions | #13218 | Harness state + permission policy | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |
-| Memory | Observational memory | #13231, #13305 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |
+| Memory | Observational memory | #13231, #13305, #13330 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
 
