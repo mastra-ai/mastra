@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — dynamic memory configuration, configurable thresholds, observational memory support.
-- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added setup/global settings OM pack defaults; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — centralized OM UI progress in `HarnessDisplayState`; [#13476](https://github.com/mastra-ai/mastra/pull/13476) — fixed buffering precision, mid-step activation, blockAfter semantics, and retained-context safeguards.
+- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added setup/global settings OM pack defaults; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — centralized OM UI progress in `HarnessDisplayState`; [#13476](https://github.com/mastra-ai/mastra/pull/13476) — fixed buffering precision, mid-step activation, blockAfter semantics, and retained-context safeguards; [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex-resolved OM models and OM failure aborts work with Mastra Code streams.
 
 ## User-visible behavior
 
@@ -29,7 +29,7 @@
 ## Streaming / loading / interrupted states
 
 - Streaming / loading: `data-om-status`, observation, buffering, activation, and failure chunks become harness OM events and update OM UI components. Observer output now carries `currentTask` / `suggestedContinuation` separately from durable observations. Mid-step buffering activation should happen as soon as thresholds are crossed, not wait for the next user turn.
-- Abort / retry / resume: OM buffering/observation failures abort the stream through core harness events; degenerate observer output retries once and then fails the observer run.
+- Abort / retry / resume: OM buffering/observation failures emit typed OM failure events, abort the active harness stream, reset abort state, and prevent partial `message_start`; degenerate observer output retries once and then fails the observer run.
 
 ## Streaming vs loaded-from-history behavior
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Observations/reflections | Memory storage + vector store when present | Agent memory retrieval |
-| Observer/reflector models | Harness state + thread settings + settings | OM model functions, `/setup`, `/om`, `om_model_changed` subscribers |
+| Observer/reflector models | Harness request context + thread settings + settings | OM model functions, `/setup`, `/om`, `om_model_changed` subscribers, Codex OAuth remapping |
 | Thresholds | Harness state + thread settings + settings | Memory factory, `/om` |
 | OM UI progress | Harness display state + transient TUI components | Chat/status rendering |
 | OM scope | Project/resource settings via `getOmScope()` | Memory factory |
@@ -50,13 +50,13 @@
 
 ## Key files
 
-- `mastracode/src/agents/memory.ts` — dynamic OM memory factory and Mastra Code defaults; current source sets observation `bufferActivation` to `2000` for thread scope.
+- `mastracode/src/agents/memory.ts` — dynamic OM memory factory and Mastra Code defaults; current source sets observation `bufferActivation` to `2000` for thread scope and passes `remapForCodexOAuth: true` for observer/reflector model resolution.
 - `packages/memory/src/processors/observational-memory/thresholds.ts` — activation retention floor, `blockAfter` resolution, and chunk-boundary safeguards.
 - `packages/memory/src/processors/observational-memory/observational-memory.ts` — core OM runtime, mid-step activation decisions, and context injection (`<current-task>` / `<suggested-response>`).
-- `packages/memory/src/processors/observational-memory/observer-runner.ts` — observer streaming call, parsed continuation hints, and degenerate-output retry/failure.
+- `packages/memory/src/processors/observational-memory/observer-runner.ts` — observer streaming call, request-context/abort propagation, parsed continuation hints, and degenerate-output retry/failure.
 - `packages/memory/src/processors/observational-memory/observation-strategies/async-buffer.ts` — buffered chunk persistence for continuation hints.
 - `packages/memory/src/processors/observational-memory/observation-strategies/sync.ts` — sync observation persistence into thread OM metadata.
-- `packages/core/src/harness/harness.ts` — OM stream chunk handling and observer/reflector model switch events.
+- `packages/core/src/harness/harness.ts` — OM stream chunk handling, OM failure aborts, and observer/reflector model switch events.
 - `mastracode/src/tui/commands/om.ts` — `/om` settings modal wiring.
 - `mastracode/src/tui/handlers/om.ts` — OM event rendering.
 - `mastracode/src/tui/components/om-settings.ts` — settings UI.
@@ -78,14 +78,14 @@
 - `mastracode/src/tui/handlers/__tests__/om.test.ts` — OM marker rendering/quiet-mode behavior.
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` — core activation, reflection, overshoot, retention behavior, blockAfter fallback, continuation-hint parsing, and most-recent activated chunk hint selection.
 - `packages/memory/src/processors/observational-memory/__tests__/mid-loop-observation.test.ts` — mid-step observation/activation regressions, including async buffer activation without waiting for the next user turn.
-- `packages/core/src/harness/om-failure-abort.test.ts`, `om-threshold-persistence.test.ts`, `get-om-record.test.ts` — core harness OM failure, threshold, and record behavior.
+- `packages/core/src/harness/om-failure-abort.test.ts`, `om-threshold-persistence.test.ts`, `get-om-record.test.ts` — core harness OM failure/abort, threshold, and record behavior.
+- `packages/memory/src/processors/observational-memory/__tests__/abort-signal.test.ts` — observer/reflector abort-signal guard behavior.
 - `mastracode/src/utils/__tests__/gateway-sync.test.ts` — related heartbeat gateway sync wrapper.
 
 ## Missing tests
 
 - End-to-end observation/reflection across restart with resource/thread scope, including `currentTask` / `suggestedContinuation` continuity.
 - `/om` modal changes propagate to harness state, thread settings, settings file, and next memory factory instance.
-- Abort/failure behavior for active OM cycles.
 - Mastra Code-specific test that `getDynamicMemory()` wires intended OM activation defaults into core memory.
 - Mastra Code `/om` command test asserting observer/reflector model changes call `switchObserverModel()` / `switchReflectorModel()` rather than raw `setState()`.
 
@@ -97,6 +97,7 @@
 - Core OM activation defaults can drift from Mastra Code defaults; PR #13305 intended `bufferActivation: 1000` / `blockAfter: 1.2`, PR #13349 temporarily raised observation `bufferActivation` to `4000`, and current Mastra Code wiring is `bufferActivation: 2000` / `blockAfter: 2` after later precision/scope changes.
 - Storage adapters must keep activation-boundary math in sync; in-memory, LibSQL, MongoDB, and PG each implement `swapBufferedToActive()`.
 - Continuation hints are intentionally taken from the most recent activated chunk only; stale older hints must not leak forward after partial activation.
+- OM observer/reflector model resolution must preserve requestContext so Codex OAuth remapping, reasoning effort, and gateway headers survive the memory pipeline.
 
 ## Verification checklist
 

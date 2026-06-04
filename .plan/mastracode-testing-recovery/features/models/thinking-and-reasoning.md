@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13490](https://github.com/mastra-ai/mastra/pull/13490) — wire Mastra Code thinking settings into OpenAI Codex reasoning effort.
-- Later changes: none known.
+- Later changes: [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex reasoning/middleware compatible with OM model resolution and Mastra Code streams.
 
 ## User-visible behavior
 
@@ -28,12 +28,12 @@
 
 ## Streaming / loading / interrupted states
 
-- Streaming / loading: runtime model resolution reads `thinkingLevel` from harness request context before building the provider.
+- Streaming / loading: runtime and OM model resolution read `thinkingLevel` from harness request context before building the provider.
 - Abort / retry / resume: thinking is between-run state; changing it should affect the next model resolution, not mutate already-started streams.
 
 ## Streaming vs loaded-from-history behavior
 
-- While actively streaming: Codex middleware injects `providerOptions.openai.reasoningEffort` for the selected level.
+- While actively streaming: Codex middleware injects `providerOptions.openai.reasoningEffort`, `instructions`, and `store: false` for the selected level/path.
 - After reload / history reconstruction: `settings.preferences.thinkingLevel` and harness state seed the next session/run.
 
 ## State ownership
@@ -41,14 +41,14 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Thinking level | Harness state + `settings.preferences.thinkingLevel` | `/think`, `/models`, headless startup, model resolver |
-| Codex effective level | `getEffectiveThinkingLevel()` | OpenAI Codex OAuth provider |
+| Codex effective level | `getEffectiveThinkingLevel()` + request-context state | OpenAI Codex OAuth provider, OM observer/reflector models |
 | Provider value labels | `getThinkingLevelsForModel()` | `/think` selector, settings UI |
 
 ## Key files
 
 - `mastracode/src/tui/commands/think.ts` — command/selector behavior.
-- `mastracode/src/providers/openai-codex.ts` — `ThinkingLevel`, `reasoningEffort` mapping, GPT-5 minimum.
-- `mastracode/src/agents/model.ts` — reads `thinkingLevel` from request context and passes it into Codex resolution.
+- `mastracode/src/providers/openai-codex.ts` — `ThinkingLevel`, `reasoningEffort` mapping, GPT-5 minimum, Codex fetch/middleware request shaping.
+- `mastracode/src/agents/model.ts` — reads `thinkingLevel` from request context, remaps Codex OAuth models when requested, and passes it into Codex resolution.
 - `mastracode/src/tui/components/thinking-settings.ts` — level labels and provider values.
 - `mastracode/src/tui/commands/models-pack.ts` — OpenAI pack auto-enables low thinking.
 
@@ -68,13 +68,14 @@
 
 - `/think` selector/direct-argument command test, including invalid arg and non-OpenAI warning behavior.
 - `/models` OpenAI pack activation test that verifies `off` auto-upgrades to `low`.
-- Provider request-shape test that asserts `reasoningEffort` lands in Codex `providerOptions`.
+- Provider request-shape test that asserts `reasoningEffort`, `instructions`, `store: false`, and `topP` removal land in Codex `providerOptions`.
 
 ## Known risks / regressions
 
 - Current `supportsThinking()` is provider-prefix based (`openai/`), so future non-OpenAI reasoning providers need explicit expansion.
 - OpenAI/Codex model defaults drift over time; tests should avoid hard-coding stale default IDs unless testing migration behavior.
 - Turning thinking `off` still becomes `low` for GPT-5 Codex models by design.
+- OM model calls must keep the same request-context state as normal chat model calls; otherwise Codex OAuth can lose reasoning/tool-call behavior only inside memory.
 
 ## Verification checklist
 

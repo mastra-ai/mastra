@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13557 (row 68) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13560 (`3b56d782fa`, non-fatal ERR_STREAM_DESTROYED), then #13563 (`9311c17d7a`, Codex OM/stream compatibility).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13563 (row 70) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13564 (`675a6d717f`, extraTools wiring), then #13566 (`5ea3a02d66`, model API-key detection).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 69: PR #13560 (non-fatal `ERR_STREAM_DESTROYED`), then row 70: PR #13563 (Codex OM/stream compatibility).
+1. Continue at `_pr-queue.md` row 71: PR #13564 (extraTools wiring), then row 72: PR #13566 (model API-key detection).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

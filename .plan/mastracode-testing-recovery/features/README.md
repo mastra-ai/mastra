@@ -36,7 +36,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 
 | Area | Feature | Origin | State owner | Tests | Risk | Page |
 | --- | --- | --- | --- | --- | --- | --- |
-| Setup | Installation and launch | #13294 | package metadata + startup runtime | Missing | Medium | [page](./setup/installation-and-launch.md) |
+| Setup | Installation and launch | #13294, #13560 | package metadata + startup runtime | Partial | Medium | [page](./setup/installation-and-launch.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
 | TUI | Help and shortcuts | #13426 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
 | TUI | File autocomplete | #13460 | editor autocomplete provider + `fd` detection | Partial | Medium | [page](./tui/file-autocomplete.md) |
@@ -49,7 +49,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Chat | Queued follow-ups and slash commands | #13345, #13493 | TUI transient queue state + command template processor | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Models | Model auth, selection, modes | #13218, #13307, #13490, #13512 | Settings + harness session + thread pack metadata | Partial | High | [page](./models/model-auth-and-modes.md) |
-| Models | Thinking and reasoning effort | #13490 | Harness state + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
+| Models | Thinking and reasoning effort | #13490, #13563 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
 | Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526 | Harness state + permission policy + workspace filesystem | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
@@ -62,7 +62,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Goals | Plan approval and build handoff | #13416, #13557 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
-| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |
+| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13563 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
 

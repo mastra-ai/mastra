@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13294](https://github.com/mastra-ai/mastra/pull/13294) — installation/startup README guidance for Mastra Code.
-- Later changes: Unknown — continue PR queue verification.
+- Later changes: [#13560](https://github.com/mastra-ai/mastra/pull/13560) — treats `ERR_STREAM_DESTROYED` as a non-fatal global exception/rejection during CLI runtime.
 
 ## User-visible behavior
 
@@ -29,7 +29,7 @@
 ## Streaming / loading / interrupted states
 
 - Streaming / loading: launch path must reach the same TUI/headless runtime before streaming begins.
-- Abort / retry / resume: startup errors should fail clearly before a run starts; no special install-time interrupt behavior known.
+- Abort / retry / resume: startup errors should fail clearly before a run starts; runtime `ERR_STREAM_DESTROYED` exceptions/rejections are ignored as terminal-stream cleanup noise instead of becoming fatal crashes.
 
 ## Streaming vs loaded-from-history behavior
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Package entry point | `mastracode/package.json` bin/exports | npm/npx/global install |
-| Startup runtime | `mastracode/src/main.ts` | TUI/headless entry |
+| Startup runtime | `mastracode/src/main.ts` + `error-classification.ts` | TUI/headless entry, global error handlers |
 | Onboarding state | settings/auth storage | First-run setup |
 | Install instructions | `mastracode/README.md` | Users and docs readers |
 
@@ -49,7 +49,8 @@
 
 - `mastracode/README.md` — current install and usage guidance.
 - `mastracode/package.json` — package name, bin path, exports.
-- `mastracode/src/main.ts` — CLI/TUI startup path.
+- `mastracode/src/main.ts` — CLI/TUI startup path and global uncaught exception / rejection handlers.
+- `mastracode/src/error-classification.ts` — classifies `ERR_STREAM_DESTROYED` through causes/AggregateError while leaving real fatal errors to `handleFatalError()`.
 - `mastracode/src/headless.ts` — non-TUI prompt mode.
 
 ## Dependencies / related features
@@ -60,12 +61,14 @@
 
 ## Existing tests
 
-- `mastracode/src/main.ts` has behavior covered indirectly through TUI/headless tests.
+- `mastracode/src/__tests__/stream-destroyed-error.test.ts` — unit and subprocess tests for non-fatal `ERR_STREAM_DESTROYED` classification.
+- `mastracode/src/main.ts` has remaining behavior covered indirectly through TUI/headless tests.
 - No dedicated install/packaged CLI smoke test found.
 
 ## Missing tests
 
 - Built package smoke: install/pack, run `mastracode --help` and `mastracode --prompt`.
+- Integration test for a real terminal stream closing during active TUI output, not only subprocess detector scripts.
 - Global/npx startup test that catches missing workspace dependency builds or bad ESM subpaths.
 - First-run onboarding smoke from a clean config dir.
 
@@ -73,6 +76,7 @@
 
 - Source checkout instructions and published package instructions can diverge.
 - Global install can expose ESM/export-map problems not caught by source-mode tests.
+- Error classification must stay narrow: swallowing broader stream errors could hide real startup/runtime failures.
 - Workspace package build assumptions can break local contributors if docs are stale.
 
 ## Verification checklist

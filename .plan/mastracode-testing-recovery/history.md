@@ -690,3 +690,25 @@ Verification:
 - Accidental `pnpm --filter ./mastracode test -- --run src/utils/__tests__/save-plan.test.ts --reporter=dot --bail 1` expanded to the full package suite and reproduced the known 5 failing files / 6 failing tests baseline.
 
 Next queue checkpoint: PR #13560 (non-fatal `ERR_STREAM_DESTROYED`), then PR #13563 (Codex OM/stream compatibility).
+
+
+### Feature map PR #13560 and #13563
+
+Processed PR [#13560](https://github.com/mastra-ai/mastra/pull/13560), `3b56d782fa` (`fix: handle ERR_STREAM_DESTROYED as non-fatal in global error handlers`). Verified `main.ts` ignores `ERR_STREAM_DESTROYED` in both `uncaughtException` and `unhandledRejection` handlers, while `error-classification.ts` keeps matching narrow by walking bounded cause chains and `AggregateError.errors`.
+
+Processed PR [#13563](https://github.com/mastra-ai/mastra/pull/13563), `9311c17d7a` (`fix: make Codex models work with OM and mastracode streams`). Verified current source passes request context and abort signals through observer/reflector streams, resolves OM observer/reflector models with Codex OAuth remapping enabled, shapes Codex provider options for reasoning/tool use, and aborts the active harness stream on OM observation/buffering failures.
+
+Documentation actions:
+
+- Updated `features/setup/installation-and-launch.md` with #13560 global error classification behavior and tests.
+- Updated `features/memory/observational-memory.md` with #13563 Codex-aware OM model routing, request-context propagation, and OM failure abort behavior.
+- Updated `features/models/thinking-and-reasoning.md` with #13563 Codex middleware/OM compatibility notes.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13560 done, #13563 done, #13564 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/main.ts`, `mastracode/src/error-classification.ts`, `mastracode/src/__tests__/stream-destroyed-error.test.ts`, `mastracode/src/agents/model.ts`, `mastracode/src/agents/memory.ts`, `mastracode/src/providers/openai-codex.ts`, `packages/core/src/harness/harness.ts`, `packages/core/src/harness/om-failure-abort.test.ts`, and `packages/memory/src/processors/observational-memory/{observer-runner.ts,reflector-runner.ts,observational-memory.ts}`.
+- Current tests checked: `packages/memory/src/processors/observational-memory/__tests__/abort-signal.test.ts`, `packages/core/src/harness/om-failure-abort.test.ts`, `mastracode/src/__tests__/codex-model-routing.test.ts`, and `mastracode/src/__tests__/stream-destroyed-error.test.ts`.
+- Focused tests passed: `pnpm --filter ./mastracode exec vitest run src/__tests__/stream-destroyed-error.test.ts src/__tests__/codex-model-routing.test.ts --reporter=dot --bail 1` (2 files / 20 tests), `pnpm --filter ./packages/core test -- --run src/harness/om-failure-abort.test.ts --reporter=dot --bail 1` (1 file / 2 tests), and `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/abort-signal.test.ts --reporter=dot --bail 1` (1 file / 5 tests).
+
+Next queue checkpoint: PR #13564 (extraTools wiring), then PR #13566 (model API-key detection).
