@@ -44,6 +44,7 @@ Every feature page must include:
 - TUI states
 - Headless / non-TUI behavior
 - Streaming / loading / interrupted states
+- Streaming vs loaded-from-history behavior
 - State ownership
 - Key files
 - Dependencies / related features

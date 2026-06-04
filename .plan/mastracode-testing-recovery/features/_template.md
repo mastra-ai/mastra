@@ -25,6 +25,10 @@ How this behaves outside the interactive TUI, including `--prompt`, `--continue`
 
 What happens while work is running, loading, streaming, cancelled, aborted, retried, or resumed.
 
+## Streaming vs loaded-from-history behavior
+
+How the feature behaves while it is actively streaming versus after it is reconstructed from persisted thread/history state. Include differences in rendered UI, state restoration, metadata, tool/goal/task components, and reload behavior.
+
 ## State ownership
 
 List each important state field and its source of truth. Note persisted storage, thread metadata, session state, TUI projection, prompt context, and tool/runtime access when relevant.
@@ -56,3 +60,4 @@ List each important state field and its source of truth. Note persisted storage,
 - [ ] Missing tests listed.
 - [ ] State ownership verified.
 - [ ] TUI/headless behavior considered.
+- [ ] Streaming versus loaded-from-history behavior considered.

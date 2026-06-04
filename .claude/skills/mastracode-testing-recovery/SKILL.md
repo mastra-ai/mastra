@@ -37,6 +37,7 @@ Treat `handoff.md` as the pickup point, not as truth. It should tell you what is
 - Copy `.plan/mastracode-testing-recovery/features/_template.md` for each feature page.
 - Organize by user-visible feature area, not implementation layer.
 - Include the origin PR/commit near the top of each feature page.
+- Document active streaming behavior separately from loaded-from-history/reload behavior.
 - Use normal relative Markdown links for related features.
 
 ## Branch and PR flow

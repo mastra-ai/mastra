@@ -55,6 +55,7 @@ For each PR in the queue:
    - Read current source files touched by or related to the PR.
    - Find current tests for the behavior.
    - Check whether later code changed, replaced, or removed the original behavior.
+   - Verify active streaming behavior separately from loaded-from-history behavior, especially for features like goals, tasks, tool components, and other persisted UI/state projections.
 3. Decide the documentation action.
    - If the PR introduced a new user-visible feature, create a new feature page if one does not exist.
    - If the PR modifies an already documented feature, update that existing feature page instead of creating a duplicate.
@@ -87,6 +88,7 @@ Every page must include:
 - TUI states
 - Headless / non-TUI behavior
 - Streaming / loading / interrupted states
+- Streaming vs loaded-from-history behavior
 - State ownership
 - Key files
 - Dependencies / related features
