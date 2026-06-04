@@ -64,13 +64,6 @@ interface TraceContext {
   sessionId?: string;
 }
 
-interface FinishedSpanContext {
-  traceId: string;
-  spanId: string;
-}
-
-const DEFAULT_FINISHED_SPAN_CONTEXT_CACHE_MAX_ENTRIES = 10_000;
-
 function flushApmExporter(): Promise<void> {
   const exporterFlush = (tracer as any)?._tracer?._exporter?.flush;
   if (typeof exporterFlush !== 'function') {
@@ -160,11 +153,6 @@ export interface DatadogBridgeConfig extends BaseExporterConfig {
    * LLM Observability tags instead of being nested in annotations.metadata.
    */
   requestContextKeys?: string[];
-
-  /**
-   * Maximum number of finished span contexts to retain for score forwarding.
-   */
-  finishedSpanContextCacheMaxEntries?: number;
 }
 
 /**
@@ -177,12 +165,10 @@ export interface DatadogBridgeConfig extends BaseExporterConfig {
 export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
   name = 'datadog-bridge';
 
-  private config: Required<Pick<DatadogBridgeConfig, 'mlApp' | 'site' | 'finishedSpanContextCacheMaxEntries'>> &
-    DatadogBridgeConfig;
+  private config: Required<Pick<DatadogBridgeConfig, 'mlApp' | 'site'>> & DatadogBridgeConfig;
   private ddSpanMap = new Map<string, any>();
   private traceContext = new Map<string, TraceContext>();
   private openSpanCounts = new Map<string, number>();
-  private finishedSpanContexts = new Map<string, FinishedSpanContext>();
 
   constructor(config: DatadogBridgeConfig = {}) {
     super(config);
@@ -217,8 +203,6 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       apiKey,
       agentless,
       env,
-      finishedSpanContextCacheMaxEntries:
-        config.finishedSpanContextCacheMaxEntries ?? DEFAULT_FINISHED_SPAN_CONTEXT_CACHE_MAX_ENTRIES,
     };
 
     ensureTracer({
@@ -276,12 +260,12 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
             toTraceId?: (hex?: boolean) => string;
           }
         | undefined;
-      const spanId = ddContext?.toSpanId?.(true) ?? generateSpanId();
+      const spanId = ddContext?.toSpanId?.() ?? generateSpanId();
       const traceId =
         ddContext?.toTraceId?.(true) ??
         (externalParentId ? (options.parent?.traceId ?? generateTraceId()) : generateTraceId());
       const parentContext = apmParentDdSpan?.context?.() as { toSpanId?: (hex?: boolean) => string } | undefined;
-      const parentSpanId = parentContext?.toSpanId?.(true) ?? externalParentId;
+      const parentSpanId = parentContext?.toSpanId?.() ?? externalParentId;
 
       this.captureTraceContext(traceId, options);
       this.openSpanCounts.set(traceId, (this.openSpanCounts.get(traceId) ?? 0) + 1);
@@ -326,22 +310,9 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       return;
     }
 
-    const exported = this.getFinishedSpanContext(score.traceId, score.spanId);
-    if (!exported) {
-      this.logger.warn(
-        'Datadog bridge: dropping score for span that has not been finished and exported to dd-trace yet',
-        {
-          traceId: score.traceId,
-          spanId: score.spanId,
-          scorerId: score.scorerId,
-        },
-      );
-      return;
-    }
-
     try {
       tracer.llmobs.submitEvaluation(
-        { traceId: exported.traceId, spanId: exported.spanId },
+        { traceId: score.traceId, spanId: score.spanId },
         {
           label: score.scorerName ?? score.scorerId,
           value: score.score,
@@ -511,19 +482,6 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     }
 
     try {
-      const exported = tracer.llmobs?.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
-      if (exported?.traceId && exported?.spanId) {
-        this.rememberFinishedSpanContext(span.traceId, span.id, exported);
-      }
-    } catch (error) {
-      this.logger.error('[DatadogBridge] Failed to export dd span for score lookup', {
-        error,
-        spanId: span.id,
-        spanName: span.name,
-      });
-    }
-
-    try {
       if (typeof ddSpan.finish === 'function') {
         ddSpan.finish(endTime.getTime());
       }
@@ -568,32 +526,6 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
 
     this.openSpanCounts.delete(traceId);
     this.traceContext.delete(traceId);
-  }
-
-  private getFinishedSpanContext(traceId: string, spanId: string): FinishedSpanContext | undefined {
-    const key = this.finishedSpanContextKey(traceId, spanId);
-    const context = this.finishedSpanContexts.get(key);
-    if (context) {
-      this.finishedSpanContexts.delete(key);
-      this.finishedSpanContexts.set(key, context);
-    }
-    return context;
-  }
-
-  private rememberFinishedSpanContext(traceId: string, spanId: string, context: FinishedSpanContext): void {
-    const key = this.finishedSpanContextKey(traceId, spanId);
-    this.finishedSpanContexts.delete(key);
-    this.finishedSpanContexts.set(key, context);
-
-    while (this.finishedSpanContexts.size > this.config.finishedSpanContextCacheMaxEntries) {
-      const oldestKey = this.finishedSpanContexts.keys().next().value;
-      if (!oldestKey) break;
-      this.finishedSpanContexts.delete(oldestKey);
-    }
-  }
-
-  private finishedSpanContextKey(traceId: string, spanId: string): string {
-    return `${traceId}:${spanId}`;
   }
 
   private buildAnnotations(span: AnyExportedSpan): Record<string, any> {
@@ -733,7 +665,6 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     this.ddSpanMap.clear();
     this.openSpanCounts.clear();
     this.traceContext.clear();
-    this.finishedSpanContexts.clear();
 
     await this.flush();
 
@@ -776,7 +707,8 @@ function fillRandomBytes(bytes: Uint8Array): void {
 function generateSpanId(): string {
   const bytes = new Uint8Array(8);
   fillRandomBytes(bytes);
-  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return BigInt(`0x${hex}`).toString(10);
 }
 
 function generateTraceId(): string {
