@@ -2,10 +2,12 @@ import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v4';
 
-import { ACPConnection } from './connection';
+import { ACPToolSession } from './session';
 import type { CreateACPToolOptions } from './types';
 
 export function createACPTool(options: CreateACPToolOptions) {
+  const session = new ACPToolSession(options);
+
   return createTool({
     id: options.id,
     description: options.description,
@@ -45,11 +47,7 @@ export function createACPTool(options: CreateACPToolOptions) {
     ),
     execute: async ({ task }, context) => {
       const workspace = await context?.mastra?.getWorkspace();
-      const connection = new ACPConnection({
-        ...options,
-        workspace,
-      });
-
+      const connection = session.getConnection(workspace);
       const output = await connection.prompt(task, context?.abortSignal);
 
       return { output };
