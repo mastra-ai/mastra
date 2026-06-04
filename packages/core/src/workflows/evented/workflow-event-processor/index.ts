@@ -938,9 +938,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
 
     // Run nested workflow - check for both EventedWorkflow and regular Workflow
-    if (step.step instanceof EventedWorkflow || (step.step as any).component === 'WORKFLOW') {
-      // Cast to Workflow since we know this is a nested workflow at this point
-      const nestedWorkflow = step.step as any;
+    if (step.step instanceof EventedWorkflow || step.step.component === 'WORKFLOW') {
+      const nestedWorkflow = step.step as Workflow;
       // Handle resume with only nested workflow ID specified (auto-detect suspended inner step)
       if (resumeSteps?.length === 1 && resumeSteps[0] === step.step.id) {
         const stepData = stepResults[step.step.id];

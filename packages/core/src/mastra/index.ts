@@ -605,7 +605,7 @@ export class Mastra<
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
-  #internalMastraWorkflows: Record<string, Workflow> = {};
+  #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
   // Tracks registration timestamps for run-scoped internal workflows so a lazy
   // TTL sweep can evict entries from abandoned suspended runs that were never
   // resumed. Unscoped (singleton) entries are not tracked — they live forever.
@@ -2321,7 +2321,7 @@ export class Mastra<
    *   a run-scoped registration — so a run-scoped lookup can never resolve a
    *   *different* run's instance via an id scan.
    */
-  __registerInternalWorkflow(workflow: Workflow, runId?: string) {
+  __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string) {
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
@@ -2355,7 +2355,7 @@ export class Mastra<
     return !!this.#internalMastraWorkflows[id];
   }
 
-  __getInternalWorkflow(id: string, runId?: string): Workflow {
+  __getInternalWorkflow(id: string, runId?: string): AnyWorkflow {
     const workflow = runId
       ? (this.#internalMastraWorkflows[`${id}:${runId}`] ?? this.#internalMastraWorkflows[id])
       : this.#internalMastraWorkflows[id];

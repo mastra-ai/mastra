@@ -6216,7 +6216,7 @@ export class Agent<
     // closure-bound instance. __registerInternalWorkflow also calls
     // __registerMastra under the hood, which wires the pubsub `createRun` needs.
     const executionRunId = randomUUID();
-    effectiveMastra?.__registerInternalWorkflow(executionWorkflow as any, executionRunId);
+    effectiveMastra?.__registerInternalWorkflow(executionWorkflow, executionRunId);
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
     try {
