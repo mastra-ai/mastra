@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13505 (row 58) have been processed, with #13037, #13251, #13252, #13257, #13260, and #13405 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13476 (`cb9f921320`, OM buffering precision), then #13490 (`d7ad237020`, Codex reasoning effort).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13490 (row 60) have been processed, with #13037, #13251, #13252, #13257, #13260, and #13405 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13508 (`b69a0046cb`, Claude Max OAuth warning strengthening), then #13455 (`6302b3ae7c`, likely version-package skip).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 59: PR #13476 (OM buffering precision), then row 60: PR #13490 (Codex reasoning effort).
+1. Continue at `_pr-queue.md` row 61: PR #13508 (Claude Max OAuth warning strengthening), then row 62: PR #13455 (likely version-package skip).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -111,3 +111,9 @@ None known.
 - `gh pr view 13487 --json number,title,body,author,mergedAt,url,files,commits`, current `theme.ts`, `detect-theme.ts`, `/theme` command, startup theme resolution, and theme contrast tests verified terminal theme detection/contrast behavior. Created the terminal-theme feature card.
 - `gh pr view 13494 --json number,title,body,author,mergedAt,url,files,commits` and current `onboarding-inline.ts` verified the supported-providers docs URL is now `https://mastra.ai/models`. Updated the onboarding/settings card.
 - Focused verification for #13487/#13494: theme contrast + onboarding settings/packs tests passed (3 files / 68 tests).
+- `gh pr view 13493 --json number,title,body,author,mergedAt,url,files,commits`, current `slash-command-processor.ts`, command loader, and setup autocomplete verified unused slash args are appended safely. Updated the queued-followups card.
+- `gh pr view 13500 --json number,title,body,author,mergedAt,url,files,commits`, current onboarding/settings source, provider access resolution, and onboarding/settings tests verified API-key-only onboarding. Updated onboarding/model cards.
+- `gh pr view 13503 --json number,title,body,author,mergedAt,url,files,commits`, current theme module exports and theme tests verified theme helper access through the `theme` object. Updated the terminal-theme card.
+- `gh pr view 13505 --json number,title,body,author,mergedAt,url,files,commits`, current login/model source and changelog evidence verified the Claude Max OAuth warning was historical and later removed by #14605. Updated onboarding/model cards.
+- `gh pr view 13476 --json number,title,body,author,mergedAt,url,files,commits`, current memory runtime/storage implementations, thresholds, token counter, and OM tests verified buffering precision and retained-context safeguards. Updated the observational-memory card.
+- `gh pr view 13490 --json number,title,body,author,mergedAt,url,files,commits`, current Codex provider/model resolver, `/think` command, thinking settings, and model tests verified OpenAI Codex reasoning effort wiring. Created the thinking-and-reasoning feature card.

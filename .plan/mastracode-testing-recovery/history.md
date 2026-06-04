@@ -586,3 +586,25 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13503 done, #13505 done, #13476 current.
 
 Next queue checkpoint: PR #13476 (OM buffering precision), then PR #13490 (Codex reasoning effort).
+
+
+### Feature map PR #13476 and #13490
+
+Processed PR [#13476](https://github.com/mastra-ai/mastra/pull/13476), `cb9f921320` (`fix: observational memory buffering precision (#13476)`). Verified current OM runtime and storage keep retained-context safeguards for buffered activation, interpret `blockAfter` as a threshold multiplier below 100 and absolute count at/above 100, trigger mid-step activation when buffered thresholds are crossed, and disable async buffering for resource scope in Mastra Code defaults.
+
+Processed PR [#13490](https://github.com/mastra-ai/mastra/pull/13490), `d7ad237020` (`feat(mastracode): wire reasoning effort for OpenAI Codex models (#13490)`). Verified current OpenAI Codex provider maps thinking levels to `reasoningEffort`, enforces a minimum `low` level for GPT-5 Codex when requested `off`, and `/think` supports direct args, status, and an inline selector.
+
+Documentation actions:
+
+- Updated `features/memory/observational-memory.md` with #13476 activation precision, mid-step activation, storage-adapter sync risks, and current Mastra Code defaults.
+- Created `features/models/thinking-and-reasoning.md` for `/think`, `--thinking-level`, Codex provider mapping, and OpenAI pack auto-enable behavior.
+- Updated `features/models/model-auth-and-modes.md`, `features/README.md`, and `_pr-queue.md` status markers: #13476 done, #13490 done, #13508 current.
+
+Verification:
+
+- `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/mid-loop-observation.test.ts --reporter=dot --bail 1` passed (7 tests).
+- `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory.test.ts --reporter=dot --bail 1 -t "blockAfter|buffered activation|activation"` passed (56 selected tests).
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/codex-model-routing.test.ts src/headless.test.ts --reporter=dot --bail 1` passed (49 tests).
+- Targeted `model.test.ts` Codex cases passed after unsetting leaked API-key env vars; broad `model.test.ts -t "Codex|OpenAI|thinking"` still hits the known env-leak failure in `getOpenAIApiKey`.
+
+Next queue checkpoint: PR #13508 (Claude Max OAuth warning strengthening), then PR #13455 (likely version-package skip).
