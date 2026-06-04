@@ -24,6 +24,9 @@ interface AgentPlaygroundViewProps {
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
   openPrTitle?: string;
+  codeSourceStorage?: 'filesystem' | 'source-provider' | 'unavailable';
+  sourceProviderName?: string;
+  sourceUnavailableReason?: string;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
@@ -46,6 +49,9 @@ function LeftPanel({
   showCodeModeActions,
   canOpenPr,
   openPrTitle,
+  codeSourceStorage,
+  sourceProviderName,
+  sourceUnavailableReason,
   onSaveDraft,
   onPublish,
   onDownloadJson,
@@ -66,6 +72,9 @@ function LeftPanel({
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
   openPrTitle?: string;
+  codeSourceStorage?: 'filesystem' | 'source-provider' | 'unavailable';
+  sourceProviderName?: string;
+  sourceUnavailableReason?: string;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
@@ -86,6 +95,9 @@ function LeftPanel({
     showCodeModeActions,
     canOpenPr,
     openPrTitle,
+    codeSourceStorage,
+    sourceProviderName,
+    sourceUnavailableReason,
     onSaveDraft,
     onPublish,
     onDownloadJson,
@@ -137,6 +149,9 @@ export function AgentPlaygroundView({
   showCodeModeActions,
   canOpenPr,
   openPrTitle,
+  codeSourceStorage,
+  sourceProviderName,
+  sourceUnavailableReason,
   onSaveDraft,
   onPublish,
   onDownloadJson,
@@ -176,6 +191,9 @@ export function AgentPlaygroundView({
             showCodeModeActions={showCodeModeActions}
             canOpenPr={canOpenPr}
             openPrTitle={openPrTitle}
+            codeSourceStorage={codeSourceStorage}
+            sourceProviderName={sourceProviderName}
+            sourceUnavailableReason={sourceUnavailableReason}
             onSaveDraft={onSaveDraft}
             onPublish={onPublish}
             onDownloadJson={onDownloadJson}

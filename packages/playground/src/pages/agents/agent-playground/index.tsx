@@ -16,6 +16,7 @@ import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
+import { useEditorSourceCapabilities } from '@/domains/configuration/hooks/use-editor-source-capabilities';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
@@ -26,6 +27,7 @@ function AgentPlayground() {
   const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const editorSource = useEditorSource();
+  const editorSourceCapabilities = useEditorSourceCapabilities();
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
@@ -42,10 +44,27 @@ function AgentPlayground() {
   });
 
   const isCodeAgentOverride = codeAgent?.source === 'code';
-  const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
+  // Code-source UI is driven by the editor's global source, not whether the agent
+  // is code-defined. Storage-only agents created under a code-source editor are
+  // persisted through the same source provider, so they use the code-mode action bar too.
+  const isCodeSourceAgent = editorSource === 'code';
   const isCodeAgentEditable = !isCodeAgentOverride || codeAgent?.editor !== false;
   const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;
-  const canOpenPr = showCodeModeActions && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
+  const canSaveCodeSource = editorSourceCapabilities?.source === 'code' ? editorSourceCapabilities.canSave : true;
+  const canOpenSourceChangeRequest =
+    editorSourceCapabilities?.source === 'code' ? editorSourceCapabilities.canOpenChangeRequest : true;
+  const codeSourceUnavailableReason = canSaveCodeSource ? undefined : editorSourceCapabilities?.unavailableReason;
+  const codeSourceStorage =
+    editorSourceCapabilities?.source === 'code' && editorSourceCapabilities.storage !== 'database'
+      ? editorSourceCapabilities.storage
+      : undefined;
+  const sourceProviderName = editorSourceCapabilities?.provider?.displayName;
+  const canOpenPr =
+    showCodeModeActions &&
+    canOpenSourceChangeRequest &&
+    isMastraPlatform &&
+    !!mastraPlatformApiEndpoint &&
+    !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr ? 'Open a pull request for these JSON changes' : undefined;
   const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
   const hasMemory = Boolean(memory?.result);
@@ -102,7 +121,10 @@ function AgentPlayground() {
 
   const handleOpenPrClick = useCallback(async () => {
     if (!mastraPlatformApiEndpoint || !mastraPlatformProjectId) return;
-    await handleOpenPr({ platformApiEndpoint: mastraPlatformApiEndpoint, projectId: mastraPlatformProjectId });
+    await handleOpenPr({
+      platformApiEndpoint: mastraPlatformApiEndpoint,
+      projectId: mastraPlatformProjectId,
+    });
   }, [handleOpenPr, mastraPlatformApiEndpoint, mastraPlatformProjectId]);
 
   const handleVersionSelect = useCallback(
@@ -178,6 +200,9 @@ function AgentPlayground() {
         showCodeModeActions={showCodeModeActions}
         canOpenPr={canOpenPr}
         openPrTitle={openPrTitle}
+        codeSourceStorage={codeSourceStorage}
+        sourceProviderName={sourceProviderName}
+        sourceUnavailableReason={codeSourceUnavailableReason}
         onSaveDraft={handleSaveDraft}
         onPublish={handlePublishVersion}
         onDownloadJson={handleDownloadJson}

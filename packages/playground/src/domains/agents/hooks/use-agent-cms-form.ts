@@ -40,6 +40,16 @@ type EditOptions = {
 
 export type UseAgentCmsFormOptions = CreateOptions | EditOptions;
 
+function hasNonEmptyInstructionBlock(blocks: AgentFormValues['instructionBlocks']) {
+  return (blocks ?? []).some(block => {
+    if (block.type === 'prompt_block_ref') {
+      return !!block.promptBlockId;
+    }
+
+    return typeof block.content === 'string' && block.content.trim().length > 0;
+  });
+}
+
 export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
@@ -54,17 +64,23 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
   // Derive which fields are owned by the user (vs by code).
   // editor === false → nothing is owned (locked)
+  // editor undefined → everything is owned (default editable)
   // editor.instructions === true → user owns instructions
   // editor.tools === true → user owns tools (membership + descriptions)
   // editor.tools === { description: true } → user owns tool descriptions only
   // Variables (requestContextSchema) are always editable for code agents.
-  const ownsInstructions = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.instructions === true);
-  const ownsTools = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.tools === true);
+  const ownsAllCodeFields = isCodeAgentOverride && editorConfig === undefined;
+  const hasExplicitEditorConfig = editorConfig !== undefined && editorConfig !== false;
+  const ownsInstructions =
+    !isCodeAgentOverride || ownsAllCodeFields || (hasExplicitEditorConfig && editorConfig.instructions === true);
+  const ownsTools =
+    !isCodeAgentOverride || ownsAllCodeFields || (hasExplicitEditorConfig && editorConfig.tools === true);
   const ownsToolDescriptions =
     !isCodeAgentOverride ||
-    (editorConfig !== false &&
-      (editorConfig?.tools === true ||
-        (typeof editorConfig?.tools === 'object' && editorConfig.tools.description === true)));
+    ownsAllCodeFields ||
+    (hasExplicitEditorConfig &&
+      (editorConfig.tools === true ||
+        (typeof editorConfig.tools === 'object' && editorConfig.tools.description === true)));
 
   // Track whether we've already created a stored override for a code agent in this session
   const [overrideCreated, setOverrideCreated] = useState(false);
@@ -233,6 +249,19 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     [isEdit, isCodeAgentOverride, ownsInstructions, ownsTools, ownsToolDescriptions, client],
   );
 
+  const validateOwnedInstructions = useCallback(
+    (values: AgentFormValues) => {
+      if (!isCodeAgentOverride || !ownsInstructions || hasNonEmptyInstructionBlock(values.instructionBlocks)) {
+        return true;
+      }
+
+      form.setError('instructionBlocks', { type: 'manual', message: 'Instructions are required' });
+      toast.error('Instructions are required');
+      return false;
+    },
+    [form, isCodeAgentOverride, ownsInstructions],
+  );
+
   const buildMemoryParams = useCallback((values: AgentFormValues) => {
     const memoryBase = values.memory?.enabled
       ? {
@@ -265,6 +294,10 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       }
 
       const values = form.getValues();
+      if (!validateOwnedInstructions(values)) {
+        return;
+      }
+
       setIsSavingDraft(true);
 
       try {
@@ -320,6 +353,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       options,
       buildSharedParams,
       buildMemoryParams,
+      validateOwnedInstructions,
       createStoredAgent,
       updateStoredAgent,
       queryClient,
@@ -338,6 +372,10 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       }
 
       const values = form.getValues();
+      if (!publishVersionId && !validateOwnedInstructions(values)) {
+        return;
+      }
+
       setIsSubmitting(true);
 
       try {
@@ -432,6 +470,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       agentId,
       buildSharedParams,
       buildMemoryParams,
+      validateOwnedInstructions,
       queryClient,
     ],
   );
@@ -445,9 +484,14 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       return;
     }
 
-    const sharedParams = await buildSharedParams(form.getValues());
+    const values = form.getValues();
+    if (!validateOwnedInstructions(values)) {
+      return;
+    }
+
+    const sharedParams = await buildSharedParams(values);
     return client.getStoredAgent(options.agentId).export(sharedParams);
-  }, [buildSharedParams, client, form, isEdit, options]);
+  }, [buildSharedParams, client, form, isEdit, options, validateOwnedInstructions]);
 
   const handleDownloadJson = useCallback(async () => {
     try {
@@ -468,38 +512,30 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   }, [getAgentExport]);
 
   const handleOpenPr = useCallback(
-    async ({ platformApiEndpoint, projectId }: { platformApiEndpoint: string; projectId: string }) => {
-      if (!isEdit) return;
+    async (_platformOptions: { platformApiEndpoint: string; projectId: string }) => {
+      if (!agentId) return;
 
       try {
-        const response = await getAgentExport();
-        if (!response) return;
-
-        const apiEndpoint = platformApiEndpoint.replace(/\/$/, '');
-        const prResponse = await fetch(`${apiEndpoint}/v1/server/projects/${projectId}/agent-overrides/pr`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: response.agentId,
-            fileName: response.fileName,
-            content: response.content,
-          }),
-        });
-
-        if (!prResponse.ok) {
-          const message = await prResponse.text();
-          throw new Error(message || `Request failed with ${prResponse.status}`);
+        const isValid = await form.trigger();
+        if (!isValid) {
+          toast.error('Please fill in all required fields');
+          return;
         }
 
-        const result = (await prResponse.json()) as { url: string };
+        const values = form.getValues();
+        if (!validateOwnedInstructions(values)) {
+          return;
+        }
+
+        const sharedParams = await buildSharedParams(values);
+        const result = await client.getStoredAgent(agentId).openChangeRequest(sharedParams);
         window.open(result.url, '_blank', 'noopener,noreferrer');
         toast.success('Pull request opened');
       } catch (error) {
         toast.error(`Failed to open PR: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     },
-    [getAgentExport, isEdit],
+    [agentId, buildSharedParams, client, form, validateOwnedInstructions],
   );
 
   const watched = useWatch({ control: form.control });
