@@ -933,6 +933,7 @@ export class AgentThreadStreamRuntime {
         // When a run is aborted, cancel the current subscriber stream reader so
         // the generator's inner loop unblocks and can yield the synthetic abort.
         if (data.type === 'run-aborted' && activeReaderRunId === data.runId && currentReader) {
+          cancelledByAbort = true;
           try {
             void currentReader.cancel();
           } catch {}
@@ -959,6 +960,9 @@ export class AgentThreadStreamRuntime {
     // the blocked `reader.read()` resolves immediately with {done: true}.
     let currentReader: ReadableStreamDefaultReader<any> | null = null;
     let activeReaderRunId: string | null = null;
+    // Set to true when the reader is cancelled explicitly due to a run-aborted
+    // event, so the generator can yield a synthetic abort chunk.
+    let cancelledByAbort = false;
 
     const unsubscribe = () => {
       if (done) return;
@@ -1023,10 +1027,12 @@ export class AgentThreadStreamRuntime {
                   break;
                 }
               }
-              // If the stream closed without a terminal chunk (e.g. force-closed
-              // by abort), yield a synthetic abort so subscribers finalize the run.
-              if (!readerReleased && !done) {
+              // If the stream closed because we cancelled the reader after a
+              // run-aborted event, yield a synthetic abort so subscribers
+              // finalize the run.
+              if (!readerReleased && !done && cancelledByAbort) {
                 yield { type: 'abort', runId: run.runId } as any;
+                cancelledByAbort = false;
               }
             } finally {
               currentReader = null;
