@@ -861,3 +861,23 @@ Processed PR [#13687](https://github.com/mastra-ai/mastra/pull/13687), `85664e9f
 - Verified `packages/core/src/workspace/tools/__tests__/tool-creation.test.ts` coverage for remapped filesystem/sandbox tools, preserved config options, ID updates, default-name preservation, and duplicate-name errors.
 - Verified Mastra Code `TOOL_NAME_OVERRIDES` / `MC_TOOLS` usage across permissions, prompt guidance, subagent allowlists, validation errors, and `ToolExecutionComponentEnhanced` special cases.
 - Updated workspace tools, coding tool permissions, README index, queue, and handoff. Queue now points at row 85 (#13569) as current.
+
+
+### Feature map batch: OM clone on fork and test contamination cleanup
+
+Processed PR [#13569](https://github.com/mastra-ai/mastra/pull/13569), `b8963791c6` (`feat(memory): clone Observational Memory when forking threads`). Verified current `Memory.cloneThread()` clones thread-scoped OM after the storage-domain thread/message clone, remaps `observedMessageIds`, deprecated `bufferedMessageIds`, and `bufferedObservationChunks[*].messageIds` through `messageIdMap`, resets transient observing/buffering flags, and rolls back the already-persisted clone if OM cloning fails before vector embedding. Resource-scoped OM is shared when the resource ID is unchanged and cloned with xxhash thread-tag remapping when the clone targets a new resource.
+
+Processed PR [#13692](https://github.com/mastra-ai/mastra/pull/13692), `87ab58f1c5` (`fix(mastracode): fix test failures from cross-test contamination and add temp dir gitignore`). Verified current affected tests use `vi.hoisted(() => vi.resetModules())` to avoid isolate:false module-cache contamination in `model.test.ts` and command dispatch tests, and `.gitignore` covers `.test-tmp/` for interrupted local test output.
+
+Documentation actions:
+
+- Updated `features/memory/observational-memory.md` with OM clone/fork behavior, source-of-truth ownership, key clone files, `clone-thread-om.test.ts`, and storage-backed integration gaps.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13569 done, #13692 done, #13701 current.
+
+Verification:
+
+- Current source checked: `packages/memory/src/index.ts`, `packages/memory/src/clone-thread-om.test.ts`, `packages/core/src/storage/domains/memory/inmemory.ts`, `mastracode/src/agents/__tests__/model.test.ts`, `.gitignore`, and related feature-map pages.
+- Focused memory test passed: `pnpm --filter ./packages/memory exec vitest run src/clone-thread-om.test.ts --reporter=dot --bail 1` (1 file / 11 tests).
+- Focused MC tests passed with provider env vars unset: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY pnpm --filter ./mastracode exec vitest run src/agents/__tests__/model.test.ts src/tui/__tests__/command-dispatch.test.ts --reporter=dot --bail 1` (2 files / 56 tests). The first run without env isolation hit the known local `OPENAI_API_KEY` routing mismatch in `model.test.ts`.
+
+Next queue checkpoint: PR #13701 (separate TUI debug env var), then PR #13693 (set workspace).

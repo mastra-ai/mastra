@@ -104,9 +104,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 82 | 2026-03-03 | #13613 | `bf7ee23532` | review | done | feat(mastracode): support HTTP MCP servers in config (#13613) | 8 |
 | 83 | 2026-03-02 | #13691 | `978a63d71e` | review | done | fix(mastracode): gate debug.log behind MASTRA_DEBUG env var and cap file size (#13691) | 4 |
 | 84 | 2026-03-02 | #13687 | `85664e9fd8` | review | done | feat(workspace): support tool name remapping in workspace tools config (#13687) | 11 |
-| 85 | 2026-03-02 | #13569 | `b8963791c6` | review | current | feat(memory): clone Observational Memory when forking threads (#13569) | 8 |
-| 86 | 2026-03-02 | #13692 | `87ab58f1c5` | review | | fix(mastracode): fix test failures from cross-test contamination and add temp dir gitignore (#13692) | 4 |
-| 87 | 2026-03-02 | #13701 | `33f289c616` | review | | use separate tui debug env var (#13701) | 1 |
+| 85 | 2026-03-02 | #13569 | `b8963791c6` | review | done | feat(memory): clone Observational Memory when forking threads (#13569) | 8 |
+| 86 | 2026-03-02 | #13692 | `87ab58f1c5` | review | done | fix(mastracode): fix test failures from cross-test contamination and add temp dir gitignore (#13692) | 4 |
+| 87 | 2026-03-02 | #13701 | `33f289c616` | review | current | use separate tui debug env var (#13701) | 1 |
 | 88 | 2026-03-03 | #13693 | `6e1b940177` | review | | feat(mc): set workspace (#13693) | 1 |
 | 89 | 2026-03-03 | #13700 | `1c4221cf60` | review | | fix: forward requestContext and skill paths to subagents (#13700) | 5 |
 | 90 | 2026-03-03 | #13710 | `bc2665ebf3` | review | | chore(templates): README follow-ups (#13710) | 1 |

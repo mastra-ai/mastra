@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — dynamic memory configuration, configurable thresholds, observational memory support.
-- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added setup/global settings OM pack defaults; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — centralized OM UI progress in `HarnessDisplayState`; [#13476](https://github.com/mastra-ai/mastra/pull/13476) — fixed buffering precision, mid-step activation, blockAfter semantics, and retained-context safeguards; [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex-resolved OM models and OM failure aborts work with Mastra Code streams.
+- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added setup/global settings OM pack defaults; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — centralized OM UI progress in `HarnessDisplayState`; [#13476](https://github.com/mastra-ai/mastra/pull/13476) — fixed buffering precision, mid-step activation, blockAfter semantics, and retained-context safeguards; [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex-resolved OM models and OM failure aborts work with Mastra Code streams; [#13569](https://github.com/mastra-ai/mastra/pull/13569) — clones thread-scoped OM, remaps message/thread IDs, and preserves resource-scoped sharing semantics when forking threads.
 
 ## User-visible behavior
 
-- What the user can do: use persistent observational memory across Mastra Code conversations/resources.
-- Success looks like: observations/reflections happen in the background without polluting chat or forgetting important context.
-- Must preserve: observer/reflector model settings, thresholds, scope, attachment behavior, activation/window-retention behavior, continuation hints, and loaded memory after restart.
+- What the user can do: use persistent observational memory across Mastra Code conversations/resources, including cloned/forked threads.
+- Success looks like: observations/reflections happen in the background without polluting chat or forgetting important context; forking a thread carries the relevant OM forward without mutating the source.
+- Must preserve: observer/reflector model settings, thresholds, scope, attachment behavior, activation/window-retention behavior, continuation hints, message-ID remapping on clone, and loaded memory after restart.
 
 ## Entry points / commands
 
@@ -34,7 +34,7 @@
 ## Streaming vs loaded-from-history behavior
 
 - While actively streaming: OM markers/output are live UI components around the active response; continuation hints are captured from observer output and can be persisted into thread OM metadata or buffered chunks.
-- After reload / history reconstruction: memory effects are available through stored memory and thread metadata; transient OM progress markers should not resume as active work.
+- After reload / history reconstruction: memory effects are available through stored memory and thread metadata; cloned threads should load cloned thread-scoped OM, while same-resource clones should share resource-scoped OM naturally. Transient OM progress markers should not resume as active work.
 
 ## State ownership
 
@@ -47,16 +47,19 @@
 | OM scope | Project/resource settings via `getOmScope()` | Memory factory |
 | Buffer activation math | Core OM thresholds + storage `swapBufferedToActive()` | Runtime context trimming, async buffering, blockAfter fallback |
 | Continuation hints | Observer output → buffered chunks / thread OM metadata | Next observer prompt, memory context injection, activation result |
+| Cloned OM records | `Memory.cloneThread()` + storage OM domain | Thread/resource fork behavior, message-ID remapping, source-record preservation |
 
 ## Key files
 
 - `mastracode/src/agents/memory.ts` — dynamic OM memory factory and Mastra Code defaults; current source sets observation `bufferActivation` to `2000` for thread scope and passes `remapForCodexOAuth: true` for observer/reflector model resolution.
 - `packages/memory/src/processors/observational-memory/thresholds.ts` — activation retention floor, `blockAfter` resolution, and chunk-boundary safeguards.
+- `packages/memory/src/index.ts` — `cloneThread()` orchestration, OM clone rollback, message-ID remapping, resource-scope sharing, and xxhash thread-tag replacement.
 - `packages/memory/src/processors/observational-memory/observational-memory.ts` — core OM runtime, mid-step activation decisions, and context injection (`<current-task>` / `<suggested-response>`).
 - `packages/memory/src/processors/observational-memory/observer-runner.ts` — observer streaming call, request-context/abort propagation, parsed continuation hints, and degenerate-output retry/failure.
 - `packages/memory/src/processors/observational-memory/observation-strategies/async-buffer.ts` — buffered chunk persistence for continuation hints.
 - `packages/memory/src/processors/observational-memory/observation-strategies/sync.ts` — sync observation persistence into thread OM metadata.
-- `packages/core/src/harness/harness.ts` — OM stream chunk handling, OM failure aborts, and observer/reflector model switch events.
+- `packages/core/src/harness/harness.ts` — OM stream chunk handling, OM failure aborts, observer/reflector model switch events, and `Harness.cloneThread()` dynamic memory path.
+- `packages/core/src/storage/domains/memory/*` and store-backed memory domains — OM storage APIs used by clone/read/history/insert paths.
 - `mastracode/src/tui/commands/om.ts` — `/om` settings modal wiring.
 - `mastracode/src/tui/handlers/om.ts` — OM event rendering.
 - `mastracode/src/tui/components/om-settings.ts` — settings UI.
@@ -69,6 +72,7 @@
 - [Onboarding and global settings](../settings/onboarding-and-global-settings.md) — first-run setup selects default OM pack/model.
 - [Harness display state](../integrations/harness-display-state.md) — OM status/progress fields used by TUI rendering.
 - [Persistent conversations](../threads/persistent-conversations.md) — OM scope/reload depends on resource/thread context.
+- [Resource ID switching](../threads/resource-id-switching.md) — resource changes determine whether resource-scoped OM is shared or cloned to a new resource.
 - [Storage backend configuration](../settings/storage-backend.md) — selected storage/vector backend owns persisted observations and recall index.
 
 ## Existing tests
@@ -79,6 +83,7 @@
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` — core activation, reflection, overshoot, retention behavior, blockAfter fallback, continuation-hint parsing, and most-recent activated chunk hint selection.
 - `packages/memory/src/processors/observational-memory/__tests__/mid-loop-observation.test.ts` — mid-step observation/activation regressions, including async buffer activation without waiting for the next user turn.
 - `packages/core/src/harness/om-failure-abort.test.ts`, `om-threshold-persistence.test.ts`, `get-om-record.test.ts` — core harness OM failure/abort, threshold, and record behavior.
+- `packages/memory/src/clone-thread-om.test.ts` — thread-scoped OM clone, resource-scoped sharing/new-resource clone, message-ID remapping, transient-flag reset, malformed fields, current-generation-only clone, and Harness dynamic-memory clone path.
 - `packages/memory/src/processors/observational-memory/__tests__/abort-signal.test.ts` — observer/reflector abort-signal guard behavior.
 - `mastracode/src/utils/__tests__/gateway-sync.test.ts` — related heartbeat gateway sync wrapper.
 
@@ -88,6 +93,7 @@
 - `/om` modal changes propagate to harness state, thread settings, settings file, and next memory factory instance.
 - Mastra Code-specific test that `getDynamicMemory()` wires intended OM activation defaults into core memory.
 - Mastra Code `/om` command test asserting observer/reflector model changes call `switchObserverModel()` / `switchReflectorModel()` rather than raw `setState()`.
+- Storage-backed integration coverage for OM clone across LibSQL/Postgres/Mongo/MySQL/Redis adapters, especially rollback and resource-scope new-resource clones.
 
 ## Known risks / regressions
 
@@ -98,6 +104,7 @@
 - Storage adapters must keep activation-boundary math in sync; in-memory, LibSQL, MongoDB, and PG each implement `swapBufferedToActive()`.
 - Continuation hints are intentionally taken from the most recent activated chunk only; stale older hints must not leak forward after partial activation.
 - OM observer/reflector model resolution must preserve requestContext so Codex OAuth remapping, reasoning effort, and gateway headers survive the memory pipeline.
+- Clone must remap only messages included in `messageIdMap`; dropped source IDs must not leak into cloned OM. If OM clone fails after storage cloned the thread, rollback must delete the clone before vector embedding starts.
 
 ## Verification checklist
 
