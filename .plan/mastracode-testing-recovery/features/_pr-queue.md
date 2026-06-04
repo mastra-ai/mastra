@@ -66,9 +66,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 44 | 2026-02-23 | #13428 | `6f927b2103` | review | done | fix(tui): fix view tool rendering for workspace read_file output (#13428) | 2 |
 | 45 | 2026-02-23 | #13426 | `5839d227b4` | review | done | feat(mastracode): simplify suggested help commands (#13426) | 4 |
 | 46 | 2026-02-23 | #13427 | `d4701f7e24` | review | done | feat(core): add HarnessDisplayState for UI-agnostic display state (#13427) | 28 |
-| 47 | 2026-02-24 | #13435 | `decccfdf65` | review | current | feat(mastracode): add PostgreSQL opt-in storage backend + libsql settings ui (#13435) | 9 |
-| 48 | 2026-02-24 | #13405 | `424bd890be` | likely skip | | chore: version packages (alpha) (#13405) | 2 |
-| 49 | 2026-02-24 | #13456 | `babdfb23c2` | review | | feat(mastracode): refresh git branch on thread resume & abbreviate long branch names (#13456) | 5 |
+| 47 | 2026-02-24 | #13435 | `decccfdf65` | review | done | feat(mastracode): add PostgreSQL opt-in storage backend + libsql settings ui (#13435) | 9 |
+| 48 | 2026-02-24 | #13405 | `424bd890be` | likely skip | skipped | chore: version packages (alpha) (#13405) | 2 |
+| 49 | 2026-02-24 | #13456 | `babdfb23c2` | review | current | feat(mastracode): refresh git branch on thread resume & abbreviate long branch names (#13456) | 5 |
 | 50 | 2026-02-24 | #13457 | `00f43e8e97` | review | | fix: cache dynamic workspace on harness after resolution (#13457) | 1 |
 | 51 | 2026-02-24 | #13460 | `e9cc208c94` | review | | fix(mastracode): wire fdPath to enable @ file autocomplete (#13460) | 2 |
 | 52 | 2026-02-25 | #13442 | `cc62d1b2bb` | review | | mastracode: trigger Stop and UserPromptSubmit hooks in TUI (#13442) | 2 |

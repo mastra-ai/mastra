@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13421](https://github.com/mastra-ai/mastra/pull/13421) — interactive first-run `/setup` flow, persisted global settings, built-in/custom model packs, OM packs, and YOLO preference.
-- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults.
+- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL.
 
 ## User-visible behavior
 
@@ -45,6 +45,7 @@
 | Custom model packs | `settings.json` `customModelPacks` | `/setup`, `/models`, startup `resolveModelDefaults()` |
 | OM pack/model | Harness state + global settings OM fields | OM memory factory, `/om`, setup wizard |
 | YOLO/quiet preferences | Harness state + global settings preferences | Permission prompts, tool/task rendering |
+| Storage backend | Global settings + env overrides | Storage factory, memory/history persistence |
 
 ## Key files
 
@@ -53,7 +54,7 @@
 - `mastracode/src/onboarding/packs.ts` — provider-filtered built-in mode/OM packs.
 - `mastracode/src/tui/mastra-tui.ts` — startup onboarding trigger and `applyOnboardingResult()` runtime persistence.
 - `mastracode/src/tui/commands/models-pack.ts` — `/models` pack switch/custom/edit/share/import behavior.
-- `mastracode/src/index.ts` — startup resolution of settings into Harness modes, OM state, subagents, and preferences.
+- `mastracode/src/index.ts` — startup resolution of settings into Harness modes, OM state, subagents, storage, and preferences.
 - `mastracode/src/auth/storage.ts` — provider post-login default model IDs.
 
 ## Dependencies / related features
@@ -61,6 +62,7 @@
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — mode model defaults and auth checks.
 - [Observational memory](../memory/observational-memory.md) — setup selects default OM model pack.
 - [Persistent conversations](../threads/persistent-conversations.md) — per-thread model-pack metadata overrides global defaults.
+- [Storage backend configuration](./storage-backend.md) — storage backend choice is persisted in the same global settings file.
 
 ## Existing tests
 

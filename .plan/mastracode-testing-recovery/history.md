@@ -482,3 +482,19 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13426 done, #13427 done, #13435 current.
 
 Next queue checkpoint: PR #13435 (PostgreSQL opt-in storage backend + libsql settings UI), then PR #13405 (likely version skip).
+
+
+### Feature map PR #13435 and #13405
+
+Processed PR [#13435](https://github.com/mastra-ai/mastra/pull/13435), `decccfdf65` (`feat(mastracode): add PostgreSQL opt-in storage backend + libsql settings ui (#13435)`). Verified current source resolves storage in priority order: env vars, global `settings.json`, legacy `.mastracode/database.json`, then default local LibSQL. `/settings` now exposes a Storage backend picker for LibSQL/PostgreSQL connection strings, saves the choice, stops the TUI, and requires restart. `createStorage()` tests PostgreSQL on startup and falls back to LibSQL with a warning so the user can still fix settings.
+
+Processed PR [#13405](https://github.com/mastra-ai/mastra/pull/13405), `424bd890be` (`chore: version packages (alpha) (#13405)`). Verified it is alpha package version/CHANGELOG churn for Mastra Code and package metadata only; no feature page needed.
+
+Documentation actions:
+
+- Created `features/settings/storage-backend.md` for storage backend selection, config precedence, fallback behavior, vector-store pairing, and restart/migration risks.
+- Updated `features/settings/onboarding-and-global-settings.md` with #13435 storage settings ownership.
+- Updated `features/threads/persistent-conversations.md` and `features/memory/observational-memory.md` with storage backend dependencies.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13435 done, #13405 skipped, #13456 current.
+
+Next queue checkpoint: PR #13456 (refresh git branch on thread resume), then PR #13457 (cache dynamic workspace on harness).

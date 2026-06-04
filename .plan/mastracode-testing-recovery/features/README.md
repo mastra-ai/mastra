@@ -40,6 +40,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
 | TUI | Help and shortcuts | #13426 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
 | Settings | Onboarding and global settings | #13421, #13431 | settings.json + thread settings | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
+| Settings | Storage backend configuration | #13435 | env/settings + storage factory | Partial | High | [page](./settings/storage-backend.md) |
 | TUI | Interactive chat | #13218, #13350, #13413, #13427 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376 | Harness request context + instruction files | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345 | TUI transient queue state | Partial | High | [page](./chat/queued-followups.md) |

@@ -68,6 +68,7 @@
 - [Onboarding and global settings](../settings/onboarding-and-global-settings.md) — first-run setup selects default OM pack/model.
 - [Harness display state](../integrations/harness-display-state.md) — OM status/progress fields used by TUI rendering.
 - [Persistent conversations](../threads/persistent-conversations.md) — OM scope/reload depends on resource/thread context.
+- [Storage backend configuration](../settings/storage-backend.md) — selected storage/vector backend owns persisted observations and recall index.
 
 ## Existing tests
 

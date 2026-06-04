@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13427 (row 46) have been processed, with #13037, #13251, #13252, #13257, and #13260 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13435 (`decccfdf65`, PostgreSQL opt-in storage backend + libsql settings UI), then #13405 (`424bd890be`, likely version skip).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13405 (row 48) have been processed, with #13037, #13251, #13252, #13257, #13260, and #13405 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13456 (`babdfb23c2`, refresh git branch on thread resume), then #13457 (`00f43e8e97`, cache dynamic workspace on harness).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 47: PR #13435 (PostgreSQL opt-in storage backend + libsql settings UI), then row 48: PR #13405 (likely version skip).
+1. Continue at `_pr-queue.md` row 49: PR #13456 (refresh git branch on thread resume), then row 50: PR #13457 (cache dynamic workspace on harness).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -101,3 +101,5 @@ None known.
 - `gh pr view 13428 --json number,title,body,author,mergedAt,url,files,commits`, current `tool-execution-enhanced.ts`, `workspace.ts`, `tool-names.ts`, and tool component tests verified workspace `read_file` output is rendered through the remapped `view` tool and arrow line numbers are stripped. Updated the tools card.
 - `gh pr view 13426 --json number,title,body,author,mergedAt,url,files,commits`, current `help.ts`, `help-overlay.ts`, `setup.ts`, and help-overlay tests verified compact `/help` command/shortcut output. Created the help-and-shortcuts feature card.
 - `gh pr view 13427 --json number,title,body,author,mergedAt,url,files,commits`, current core `HarnessDisplayState`, `display-state-scheduler.ts`, `harness.ts`, TUI display-state routing, and display-state tests verified UI-agnostic display-state behavior. Created the Harness display-state feature card.
+- `gh pr view 13435 --json number,title,body,author,mergedAt,url,files,commits`, current `project.ts`, `storage-factory.ts`, settings UI/command files, and storage-config tests verified LibSQL/PostgreSQL backend resolution, fallback, and restart-required settings behavior. Created the storage-backend feature card.
+- `gh pr view 13405 --json number,title,body,author,mergedAt,url,files,commits` and `git show 424bd890be -- mastracode .changeset` verified #13405 as alpha package version/CHANGELOG-only churn; skipped.

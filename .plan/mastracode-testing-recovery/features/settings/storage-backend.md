@@ -1,0 +1,90 @@
+# Storage backend configuration
+
+## Origin PR / commit
+
+- PR: [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added opt-in PostgreSQL storage alongside default LibSQL, plus `/settings` backend selection.
+- Later changes: none known.
+
+## User-visible behavior
+
+- What the user can do: use default local LibSQL, configure remote LibSQL/Turso, or switch to PostgreSQL from `/settings` or environment variables.
+- Success looks like: threads, memory, approvals, and agent data use the selected backend after restart; failed PostgreSQL startup falls back to LibSQL with a warning so `/settings` remains reachable.
+- Must preserve: backend precedence, connection-string persistence, restart-required UX, LibSQL fallback, and vector-store pairing.
+
+## Entry points / commands
+
+- Commands / shortcuts / flags: `/settings` → Storage backend; env vars `MASTRA_STORAGE_BACKEND`, `MASTRA_DB_URL`, `MASTRA_DB_AUTH_TOKEN`, `MASTRA_PG_CONNECTION_STRING`, `MASTRA_PG_HOST`, `MASTRA_PG_PORT`, `MASTRA_PG_DATABASE`, `MASTRA_PG_USER`, `MASTRA_PG_PASSWORD`, `MASTRA_PG_SCHEMA_NAME`.
+- Automatic triggers: `createMastraCode()` resolves storage config during startup before Harness/memory construction.
+
+## TUI states
+
+- Idle: settings overlay opens a backend picker, then a masked connection input for PostgreSQL or LibSQL URL.
+- Active / modal / error: saving a storage change writes `settings.json`, hides the overlay, stops the TUI, prints a restart-required notice, and exits.
+
+## Headless / non-TUI behavior
+
+- Supported: headless startup uses the same env/settings/legacy/default resolution path.
+- Not supported / unknown: no interactive repair flow in headless; PostgreSQL misconfiguration falls back only if storage initialization reaches `createStorage()` successfully.
+
+## Streaming / loading / interrupted states
+
+- Streaming / loading: backend is selected before streaming starts; it is not a mid-stream setting.
+- Abort / retry / resume: PostgreSQL connection failures fall back to LibSQL and emit `storageWarning`; fatal uncaught `ECONNREFUSED` still prints PostgreSQL repair guidance.
+
+## Streaming vs loaded-from-history behavior
+
+- While actively streaming: storage backend is fixed for the process; changing it requires restart.
+- After reload / history reconstruction: history/session/OM retrieval come from the backend selected at startup, so switching backends can look like missing history unless data was migrated separately.
+
+## State ownership
+
+| State | Owner / source of truth | Consumers |
+| --- | --- | --- |
+| Backend selection | Env vars first, then `settings.json` `storage.backend`, then legacy `.mastracode/database.json`, then local LibSQL default | `getStorageConfig()` |
+| LibSQL URL/token | `MASTRA_DB_URL`/`MASTRA_DB_AUTH_TOKEN` or `settings.storage.libsql` | `LibSQLStore`, `LibSQLVector` |
+| PostgreSQL connection | `MASTRA_PG_*` vars or `settings.storage.pg` | `PostgresStore`, `PgVector` |
+| Effective backend after fallback | `createStorage()` result | Vector-store selection, startup warnings |
+
+## Key files
+
+- `mastracode/src/utils/project.ts` — storage config precedence and env/settings/legacy parsing.
+- `mastracode/src/utils/storage-factory.ts` — creates LibSQL/PostgreSQL stores, tests PG startup, and falls back to LibSQL with warnings.
+- `mastracode/src/onboarding/settings.ts` — persisted `StorageSettings` schema/defaults.
+- `mastracode/src/tui/components/settings.ts` — storage backend submenu and connection input.
+- `mastracode/src/tui/commands/settings.ts` — saves backend settings and forces restart.
+- `mastracode/src/index.ts` — startup wires storage, vector store, memory, and warnings.
+- `mastracode/src/main.ts` — displays storage warnings and fatal PG repair guidance.
+
+## Dependencies / related features
+
+- [Onboarding and global settings](./onboarding-and-global-settings.md) — stores backend choice in global settings.
+- [Persistent conversations](../threads/persistent-conversations.md) — thread/session history depends on selected storage.
+- [Observational memory](../memory/observational-memory.md) — OM and recall vector storage depend on selected backend.
+
+## Existing tests
+
+- `mastracode/src/utils/__tests__/storage-config.test.ts` — config precedence, env/settings parsing, LibSQL creation, PG fallback, vector-store fallback, and PG option construction.
+- `mastracode/src/onboarding/__tests__/settings.test.ts` — settings schema/default parsing includes storage defaults.
+
+## Missing tests
+
+- `/settings` storage backend overlay interaction, masked input behavior, saved settings, and forced restart.
+- Restart after switching backend: selected backend, footer/runtime warning, and history visibility.
+- Successful PostgreSQL integration against a real test database, including `PgVector` usage and schema/index flags.
+- Data migration story when switching LibSQL ↔ PostgreSQL.
+
+## Known risks / regressions
+
+- Backend switching does not migrate existing history, so users can interpret an empty new backend as lost conversations.
+- PostgreSQL fallback means the process may keep running on LibSQL while settings still say `pg`; UI/status needs to make that clear enough.
+- `/settings` accepts only connection strings for PostgreSQL even though env/settings types also support host/port fields.
+- Env vars override settings, so `/settings` changes may appear ignored until env vars are removed.
+
+## Verification checklist
+
+- [x] Code paths checked.
+- [x] Existing tests identified.
+- [x] Missing tests listed.
+- [x] State ownership verified.
+- [x] TUI/headless behavior considered.
+- [x] Streaming versus loaded-from-history behavior considered.

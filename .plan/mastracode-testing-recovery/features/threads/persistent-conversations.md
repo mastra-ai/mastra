@@ -64,6 +64,7 @@
 - [Interactive TUI chat](../tui/interactive-chat.md) — history render is thread-scoped.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — model/mode reload depends on thread/session metadata.
 - [Task tracking tools and TUI progress](../tools/task-tracking.md) — task state is thread-local and must reset/reload correctly.
+- [Storage backend configuration](../settings/storage-backend.md) — selected backend owns persisted thread/session history.
 
 ## Existing tests
 
@@ -85,6 +86,7 @@
 
 - Slack reported new-session creation broken on alpha; needs current repro/verification.
 - Model/mode reload bug belongs partly here because thread/session metadata is the reload path.
+- Backend switching can make existing history appear missing unless storage migration is explicit.
 - Harness v1 session prefill is high risk for stale/incomplete thread records.
 - Worktrees share resource IDs; missing/incorrect `projectPath` metadata can resume the wrong directory’s thread.
 
