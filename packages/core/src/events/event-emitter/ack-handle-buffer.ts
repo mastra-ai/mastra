@@ -33,7 +33,18 @@ export class AckHandleBuffer {
     private readonly onError?: (err: unknown, ctx: { phase: 'cb' | 'ack-dropped' }) => void,
   ) {
     this.policy = new BatchPolicy(opts, deps);
-    this.policy.bindFlushHandler(() => this.flush());
+    // The policy's deadline timer fires this handler fire-and-forget (it
+    // discards the returned promise), so a rejection from `flush()` — e.g. a
+    // user-supplied `coalesce` throwing inside `prepareBatch`, which lands
+    // outside the per-event try/catch below — would otherwise escape as an
+    // unhandled rejection on the timer path. The inline flush-now, group, and
+    // explicit `flush()` paths each catch this already; route the timer path
+    // through the same `onError` channel.
+    this.policy.bindFlushHandler(() =>
+      this.flush().catch(err => {
+        this.onError?.(err, { phase: 'cb' });
+      }),
+    );
   }
 
   /**

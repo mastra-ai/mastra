@@ -354,4 +354,44 @@ describe('EventEmitterPubSub — batching', () => {
       await local.close();
     }
   });
+
+  // Regression: the deadline timer (maxWaitMs) fires `flush()` fire-and-forget
+  // from BatchPolicy.scheduleAt — the returned promise is discarded. A throwing
+  // `coalesce` rejects that flush from prepareBatch, outside the per-event
+  // try/catch. Unlike flush-now / explicit flush(), nothing awaits the timer
+  // flush, so the rejection used to escape as an UnhandledPromiseRejection. It
+  // must be routed through the configured logger instead.
+  it('surfaces timer-triggered flush rejections through the logger (maxWaitMs path)', async () => {
+    vi.useFakeTimers();
+    const error = vi.fn();
+    const local = new EventEmitterPubSub(undefined, {
+      logger: { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any,
+    });
+    try {
+      const cb = vi.fn();
+      // maxWaitMs with no maxSize: the publish only schedules the deadline
+      // timer (onEnqueue returns 'wait'), so the flush is purely timer-driven.
+      await local.subscribe('topic-timer-reject', cb, {
+        batch: {
+          maxWaitMs: 100,
+          coalesce: () => {
+            throw new Error('coalesce-timer-boom');
+          },
+        },
+      });
+
+      await local.publish('topic-timer-reject', makeEvent({ type: 'x' }));
+      expect(error).not.toHaveBeenCalled();
+
+      // Fire the deadline timer — this triggers the rejecting flush.
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(cb).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalled();
+      const firstCallArgs = error.mock.calls[0];
+      expect(firstCallArgs?.[0]).toEqual(expect.stringContaining('batched cb failed'));
+    } finally {
+      await local.close();
+    }
+  });
 });
