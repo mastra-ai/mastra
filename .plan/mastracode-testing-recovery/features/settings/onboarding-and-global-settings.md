@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13421](https://github.com/mastra-ai/mastra/pull/13421) — interactive first-run `/setup` flow, persisted global settings, built-in/custom model packs, OM packs, and YOLO preference.
-- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added persisted theme preference; [#13494](https://github.com/mastra-ai/mastra/pull/13494) — fixed the supported-providers documentation URL in onboarding; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — allows onboarding to proceed with API-key-only provider access instead of requiring OAuth/built-in packs; [#13505](https://github.com/mastra-ai/mastra/pull/13505) — added an Anthropic OAuth warning, but current source has removed that flow via later #14605.
+- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added persisted theme preference; [#13494](https://github.com/mastra-ai/mastra/pull/13494) — fixed the supported-providers documentation URL in onboarding; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — allows onboarding to proceed with API-key-only provider access instead of requiring OAuth/built-in packs; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and then strengthened an Anthropic OAuth warning, but current source has removed that flow via later #14605.
 
 ## User-visible behavior
 
@@ -20,7 +20,7 @@
 
 - Idle: setup wizard renders as modal overlay; `/models` opens model-pack switcher/import/edit flow.
 - Active / modal / error: onboarding can launch login, refresh available packs after login, show API-key docs/copy when no provider access is detected, prompt API keys during custom model selection, or be cancelled/skipped.
-- Historical note: Anthropic OAuth warning modals from #13505/#13508 are not active in current source; current login/setup flows go straight through auth mode + login dialog.
+- Historical note: Anthropic OAuth warning modals from #13505/#13508 are not active in current source; current login/setup flows go straight through auth mode + login dialog. The #13508 warning specifically strengthened the now-removed copy to mention reported bans and Terms of Service risk.
 
 ## Headless / non-TUI behavior
 

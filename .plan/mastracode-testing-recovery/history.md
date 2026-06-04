@@ -608,3 +608,23 @@ Verification:
 - Targeted `model.test.ts` Codex cases passed after unsetting leaked API-key env vars; broad `model.test.ts -t "Codex|OpenAI|thinking"` still hits the known env-leak failure in `getOpenAIApiKey`.
 
 Next queue checkpoint: PR #13508 (Claude Max OAuth warning strengthening), then PR #13455 (likely version-package skip).
+
+
+### Feature map PR #13508 and #13455
+
+Processed PR [#13508](https://github.com/mastra-ai/mastra/pull/13508), `089b114eb9` (`fix(mastracode): strengthen Claude Max OAuth risk warning`). Verified the PR only strengthened the warning copy added by #13505: it changed `CLAUDE_MAX_OAUTH_WARNING_MESSAGE` and docs text to mention reported bans and Terms of Service risk. Current source no longer has the warning module or modal flow because #14605 removed it; login/setup now proceed through auth-mode selection and the login dialog.
+
+Processed PR [#13455](https://github.com/mastra-ai/mastra/pull/13455), `6302b3ae7c` (`chore: version packages (alpha)`). Verified it only touched `mastracode/CHANGELOG.md` and `mastracode/package.json` under Mastra Code, so it is a version-package skip.
+
+Documentation actions:
+
+- Updated `features/settings/onboarding-and-global-settings.md` and `features/models/model-auth-and-modes.md` with #13508 as historical warning-copy strengthening that is no longer active at HEAD.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13508 done, #13455 skipped, #13519 current.
+
+Verification:
+
+- `gh pr view 13508 --json number,title,body,author,mergedAt,url,files,commits` and `git show 089b114e...` verified the warning-copy-only diff.
+- Current source search verified `auth/claude-max-warning.ts` is gone and `/login` no longer gates Anthropic OAuth on a Claude Max warning.
+- `gh pr view 13455 --json number,title,body,author,mergedAt,url,files,commits` and `git show 6302b3ae7c -- mastracode` verified the version-only skip.
+
+Next queue checkpoint: PR #13519 (tool approval resume for standalone agents), then PR #13525 (Mastra Code docs move).

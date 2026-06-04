@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13490 (row 60) have been processed, with #13037, #13251, #13252, #13257, #13260, and #13405 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13508 (`b69a0046cb`, Claude Max OAuth warning strengthening), then #13455 (`6302b3ae7c`, likely version-package skip).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13455 (row 62) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13519 (`b03c0e0389`, tool approval resume for standalone agents), then #13525 (`439dd1a1c9`, Mastra Code docs move).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 61: PR #13508 (Claude Max OAuth warning strengthening), then row 62: PR #13455 (likely version-package skip).
+1. Continue at `_pr-queue.md` row 63: PR #13519 (tool approval resume for standalone agents), then row 64: PR #13525 (Mastra Code docs move).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

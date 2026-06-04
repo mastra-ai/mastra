@@ -80,9 +80,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 58 | 2026-02-25 | #13505 | `11def4789e` | review | done | feat(mastracode): add Claude Max OAuth ToS warning (#13505) | 6 |
 | 59 | 2026-02-25 | #13476 | `cb9f921320` | review | done | fix: observational memory buffering precision (#13476) | 1 |
 | 60 | 2026-02-25 | #13490 | `d7ad237020` | review | done | feat(mastracode): wire reasoning effort for OpenAI Codex models (#13490) | 11 |
-| 61 | 2026-02-25 | #13508 | `b69a0046cb` | review | current | fix(mastracode): strengthen Claude Max OAuth risk warning (#13508) | 1 |
-| 62 | 2026-02-25 | #13455 | `6302b3ae7c` | likely skip | | chore: version packages (alpha) (#13455) | 2 |
-| 63 | 2026-02-25 | #13519 | `b03c0e0389` | review | | fix: tool approval resume failing for standalone agents (#13519) | 2 |
+| 61 | 2026-02-25 | #13508 | `b69a0046cb` | review | done | fix(mastracode): strengthen Claude Max OAuth risk warning (#13508) | 1 |
+| 62 | 2026-02-25 | #13455 | `6302b3ae7c` | likely skip | skipped | chore: version packages (alpha) (#13455) | 2 |
+| 63 | 2026-02-25 | #13519 | `b03c0e0389` | review | current | fix: tool approval resume failing for standalone agents (#13519) | 2 |
 | 64 | 2026-02-26 | #13525 | `439dd1a1c9` | review | | chore(docs): Move Mastra Code docs, add Alpha notice to Harness (#13525) | 6 |
 | 65 | 2026-02-26 | #13530 | `0533de8a34` | review | | chore(docs): Move mastra-code docs (#13530) | 6 |
 | 66 | 2026-02-26 | #13512 | `191e5bd29b` | review | | fix: unify /models pack flow and improve custom pack editing UX (#13512) | 17 |
