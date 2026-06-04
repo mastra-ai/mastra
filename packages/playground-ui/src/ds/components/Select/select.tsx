@@ -158,10 +158,9 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
   ) => {
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
-    const portalContainer = usePortalContainer();
-    const resolvedContainer = container ?? portalContainer;
+    const resolvedContainer = usePortalContainer(container);
     return (
-      <SelectPrimitive.Portal container={resolvedContainer ?? undefined}>
+      <SelectPrimitive.Portal container={resolvedContainer}>
         <SelectPrimitive.Positioner
           className="z-50 outline-none"
           side={side}
