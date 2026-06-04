@@ -79,6 +79,42 @@ describe('Switch', () => {
     expect(screen.getByRole('switch').classList.contains('custom-switch')).toBe(true);
   });
 
+  it('renders an optional icon inside the thumb', () => {
+    render(<Switch aria-label="Toggle" icon={<span data-testid="switch-icon">Icon</span>} />);
+
+    const switchEl = screen.getByRole('switch');
+    const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
+    const iconEl = thumbEl?.querySelector('[data-slot="switch-thumb-icon"]');
+
+    expect(iconEl).toBeDefined();
+    expect(iconEl?.getAttribute('aria-hidden')).toBe('true');
+    expect(iconEl?.className).toContain('group-data-[checked]/switch:text-neutral6');
+    expect(screen.getByTestId('switch-icon')).toBeDefined();
+  });
+
+  it('renders checked and unchecked thumb icons with state-driven visibility classes', () => {
+    render(
+      <Switch
+        aria-label="Toggle"
+        checkedIcon={<span data-testid="checked-icon">Checked</span>}
+        uncheckedIcon={<span data-testid="unchecked-icon">Unchecked</span>}
+      />,
+    );
+
+    const switchEl = screen.getByRole('switch');
+    const checkedIconEl = switchEl.querySelector('[data-switch-icon="checked"]');
+    const uncheckedIconEl = switchEl.querySelector('[data-switch-icon="unchecked"]');
+
+    expect(checkedIconEl).toBeDefined();
+    expect(checkedIconEl?.getAttribute('aria-hidden')).toBe('true');
+    expect(checkedIconEl?.className).toContain('opacity-0');
+    expect(checkedIconEl?.className).toContain('group-data-[checked]/switch:opacity-100');
+    expect(uncheckedIconEl).toBeDefined();
+    expect(uncheckedIconEl?.getAttribute('aria-hidden')).toBe('true');
+    expect(uncheckedIconEl?.className).toContain('opacity-100');
+    expect(uncheckedIconEl?.className).toContain('group-data-[checked]/switch:opacity-0');
+  });
+
   it('uses neutral switch states without the old accent glow', () => {
     render(<Switch aria-label="Toggle" defaultChecked />);
 

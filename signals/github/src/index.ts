@@ -4,16 +4,18 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import type { AgentSignalInput } from '@mastra/core/agent';
+import type { AgentSignalInput, Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type {
-  Processor,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
   ProcessInputStepArgs,
   ProcessInputStepResult,
   ProcessOutputStepArgs,
 } from '@mastra/core/processors';
+import { SignalProvider } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
@@ -151,6 +153,7 @@ export type GithubSignalsOptions = {
   syncClient?: GithubSignalsSyncClient;
   repositoryResolver?: GithubRepositoryResolver;
   threadStore?: GithubSignalsThreadStore;
+  getNotificationStreamOptions?: GithubSignalAgentOptions['getNotificationStreamOptions'];
 };
 
 export type GithubSubscriptionsChangedEvent = {
@@ -843,10 +846,10 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
   }
 }
 
-export class GithubSignals implements Processor<'github-signals'> {
+export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly id = 'github-signals' as const;
-  readonly name = 'GitHub Signals';
-  protected mastra?: GithubSignalsMastra;
+  override readonly name = 'GitHub Signals';
+  #ghMastra?: GithubSignalsMastra;
 
   static signals = {
     subscribeToPR(input: GithubSubscribePRSignalInput): AgentSignalInput {
@@ -898,22 +901,48 @@ export class GithubSignals implements Processor<'github-signals'> {
   #subscriptionsChangedHandler?: GithubSubscriptionsChangedHandler;
 
   constructor(options: GithubSignalsOptions = {}) {
+    super();
     this.#options = options;
     this.#syncClient = options.syncClient ?? new GitcrawlSyncClient({ command: options.gitcrawlCommand });
     this.#repositoryResolver = options.repositoryResolver ?? new GitRemoteRepositoryResolver();
+    if (options.getNotificationStreamOptions) {
+      this.#agentOptions = { getNotificationStreamOptions: options.getNotificationStreamOptions };
+    }
   }
 
+  /**
+   * @deprecated Use `Agent({ signals: [githubSignals] })` instead.
+   * Kept for backward compatibility.
+   */
   addAgent(agent: GithubSignalAgent, options: GithubSignalAgentOptions = {}): void {
     this.#agent = agent;
     this.#agentOptions = options;
+  }
+
+  /**
+   * Called by the Agent constructor when this provider is passed via `signals: [...]`.
+   * Sets the bidirectional link so the provider can send signals back to the agent.
+   */
+  override connect(agent: Agent<any, any, any, any>): void {
+    super.connect(agent);
+    this.#agent = agent as unknown as GithubSignalAgent;
+  }
+
+  getInputProcessors(): InputProcessorOrWorkflow[] {
+    return [this as unknown as InputProcessorOrWorkflow];
+  }
+
+  getOutputProcessors(): OutputProcessorOrWorkflow[] {
+    return [this as unknown as OutputProcessorOrWorkflow];
   }
 
   onSubscriptionsChanged(handler: GithubSubscriptionsChangedHandler): void {
     this.#subscriptionsChangedHandler = handler;
   }
 
-  __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
-    this.mastra = mastra as unknown as GithubSignalsMastra;
+  override __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+    super.__registerMastra(mastra);
+    this.#ghMastra = mastra as unknown as GithubSignalsMastra;
   }
 
   async syncThreadNow(input: GithubPollingThread): Promise<number> {
@@ -1090,7 +1119,7 @@ export class GithubSignals implements Processor<'github-signals'> {
 
   async #resolveThreadStore(): Promise<GithubSignalsThreadStore | undefined> {
     if (this.#options.threadStore) return this.#options.threadStore;
-    const storage = this.mastra?.getStorage?.();
+    const storage = this.#ghMastra?.getStorage?.();
     const memoryStore = storage?.getStore ? await storage.getStore('memory') : undefined;
     return memoryStore as GithubSignalsThreadStore | undefined;
   }
@@ -1210,7 +1239,7 @@ export class GithubSignals implements Processor<'github-signals'> {
   #getNotificationAgent(_input?: { agentId?: string }): GithubSignalAgent | undefined {
     if (this.#agent) return this.#agent;
     const agentId = _input?.agentId ?? this.#options.agentId;
-    return agentId ? this.mastra?.getAgentById?.(agentId) : undefined;
+    return agentId ? this.#ghMastra?.getAgentById?.(agentId) : undefined;
   }
 
   async #getThreadSubscriptions(input: GithubPollingThread): Promise<GithubPRSubscription[]> {

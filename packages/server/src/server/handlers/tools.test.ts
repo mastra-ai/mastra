@@ -77,6 +77,73 @@ describe('Tools Handlers', () => {
       expect(result).toHaveProperty(mockTool.id);
       expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
     });
+
+    it('should merge tools from mastra.listTools() and registeredTools', async () => {
+      // Simulates MCP tools or other dynamically created tools in mastra instance
+      const dynamicTool: ToolAction = createTool({
+        id: 'dynamic-mcp-tool',
+        description: 'A dynamically created tool (e.g., MCP)',
+        execute: vi.fn(),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        tools: { [dynamicTool.id]: dynamicTool },
+      });
+      // Bundler-discovered tools passed separately
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: mockTools,
+      });
+      // Both sources should be present
+      expect(result).toHaveProperty(mockTool.id);
+      expect(result).toHaveProperty(dynamicTool.id);
+      expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
+      expect(result[dynamicTool.id]).toHaveProperty('id', dynamicTool.id);
+    });
+
+    it('should let registeredTools take precedence on key conflicts', async () => {
+      const mastraTool: ToolAction = createTool({
+        id: 'shared-key',
+        description: 'From mastra instance',
+        execute: vi.fn(),
+      });
+      const bundlerTool: ToolAction = createTool({
+        id: 'shared-key',
+        description: 'From bundler',
+        execute: vi.fn(),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        tools: { 'shared-key': mastraTool },
+      });
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: { 'shared-key': bundlerTool },
+      });
+      expect(result['shared-key']).toHaveProperty('description', 'From bundler');
+    });
+
+    it('should dedupe the same tool registered under different keys, preferring the registered key', async () => {
+      // Mirrors the deployer flow: an agent registers the tool by its intrinsic id
+      // (get-weather) while the CLI bundler registers the same instance by export name
+      // (weatherTool). The merged response must list it once, under the registered key.
+      const weatherTool: ToolAction = createTool({
+        id: 'get-weather',
+        description: 'Get current weather for a location',
+        execute: vi.fn(),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        tools: { [weatherTool.id]: weatherTool },
+      });
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: { weatherTool },
+      });
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result).toHaveProperty('weatherTool');
+      expect(result).not.toHaveProperty('get-weather');
+    });
   });
 
   describe('getToolByIdHandler', () => {
