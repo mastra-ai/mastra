@@ -199,7 +199,6 @@ async function runOpenAIGenerate<OUTPUT>(
     signal: getAbortSignal(options),
   });
 
-  logOpenAIRawResult('generate', result);
   recordOpenAIToolTelemetry(result.newItems, telemetry);
   const text = getTextFromFinalOutput(result.finalOutput);
   const responseId = result.lastResponseId;
@@ -269,7 +268,6 @@ function runOpenAIAsMastraStream<OUTPUT>(
 
         await result.completed;
 
-        logOpenAIRawResult('stream', result);
         responseId = result.lastResponseId ?? responseId;
         modelId = getModelId(undefined, result.lastAgent ?? agent, result.rawResponses.at(-1));
         if (!text) {
@@ -454,54 +452,6 @@ function getOpenAIProviderMetadata({
     itemCount,
     usage,
   });
-}
-
-function logOpenAIRawResult(phase: 'generate' | 'stream', result: unknown): void {
-  if (process.env.MASTRA_OPENAI_SDK_DEBUG !== '1') {
-    return;
-  }
-
-  const record = toRecord(result);
-  const state = toRecord(record?.state);
-  const runContext = toRecord(record?.runContext);
-
-  console.info(
-    `[OpenAISDKAgent:${phase}:raw]`,
-    JSON.stringify(
-      {
-        finalOutput: record?.finalOutput,
-        lastResponseId: record?.lastResponseId,
-        rawResponses: record?.rawResponses,
-        newItems: record?.newItems,
-        stateUsage: state?.usage,
-        runContextUsage: runContext?.usage,
-      },
-      createSafeJsonReplacer(),
-      2,
-    ),
-  );
-}
-
-function createSafeJsonReplacer(): (key: string, value: unknown) => unknown {
-  const seen = new WeakSet<object>();
-
-  return (_key, value) => {
-    if (typeof value === 'bigint') {
-      return value.toString();
-    }
-    if (typeof value === 'function') {
-      return `[Function ${value.name || 'anonymous'}]`;
-    }
-    if (!isRecord(value)) {
-      return value;
-    }
-    if (seen.has(value)) {
-      return '[Circular]';
-    }
-
-    seen.add(value);
-    return value;
-  };
 }
 
 function recordOpenAIToolTelemetry(items: RunItem[], telemetry: OpenAIToolTelemetry): void {
