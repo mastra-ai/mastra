@@ -89,6 +89,7 @@
 - [Task tracking tools and TUI progress](./task-tracking.md) — always-allowed task tools and pinned progress projection.
 - [MCP status and reload command](../integrations/mcp-status-command.md) — MCP manager status must match merged runtime tools.
 - [Lifecycle hooks](../integrations/lifecycle-hooks.md) — hook decisions can block tool execution before the runtime tool runs.
+- [GitHub issue reporting command](../integrations/github-issue-reporting.md) — issue workflow asks the agent to run `gh` commands through normal shell/tool policy.
 - [Interactive TUI chat](../tui/interactive-chat.md) — tool components render in chat/history.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — plan mode and model family affect tools.
 - [Core Harness API and reference docs](../integrations/harness-api.md) — owns the approval API and internal storage registration used by resume.

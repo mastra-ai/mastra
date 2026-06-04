@@ -96,9 +96,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 74 | 2026-02-27 | #13600 | `43187ad783` | review | done | feat(mastracode): support Anthropic API key as fallback auth for model resolution (#13600) | 4 |
 | 75 | 2026-02-27 | #13556 | `c6c5376cb2` | review | done | feat: add Quiet mode setting for subagent output collapse (#13556) | 9 |
 | 76 | 2026-02-28 | #13609 | `ebab49855b` | review | done | fix: preserve assistant text after tool updates and add openai web_search fallback (#13609) | 2 |
-| 77 | 2026-02-28 | #13574 | `276246e0b9` | review | current | feat(harness): file attachment support with filename preservation and text file handling (#13574) | 1 |
-| 78 | 2026-03-01 | #13605 | `829a09641d` | review | | feat(mastracode): add /fix-issue and /report-issue commands (#13605) | 5 |
-| 79 | 2026-03-02 | #13437 | `e9476527fd` | review | | feat(mastracode): switch to workspace tools with TUI streaming [COR-511] (#13437) | 4 |
+| 77 | 2026-02-28 | #13574 | `276246e0b9` | review | done | feat(harness): file attachment support with filename preservation and text file handling (#13574) | 1 |
+| 78 | 2026-03-01 | #13605 | `829a09641d` | review | done | feat(mastracode): add /fix-issue and /report-issue commands (#13605) | 5 |
+| 79 | 2026-03-02 | #13437 | `e9476527fd` | review | current | feat(mastracode): switch to workspace tools with TUI streaming [COR-511] (#13437) | 4 |
 | 80 | 2026-03-02 | #13682 | `ee9c8df644` | review | | feat(mastracode): add /custom-providers command for custom OpenAI-compatible providers (#13682) | 15 |
 | 81 | 2026-03-02 | #13690 | `f77cd94c44` | review | | fix: implement Harness resource ID methods and improve /resource command (#13690) | 2 |
 | 82 | 2026-03-03 | #13613 | `bf7ee23532` | review | | feat(mastracode): support HTTP MCP servers in config (#13613) | 8 |

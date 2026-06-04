@@ -58,6 +58,7 @@
 ## Dependencies / related features
 
 - [Interactive chat](../tui/interactive-chat.md) — every chat run uses this prompt assembly.
+- [File attachments in chat input](./file-attachments.md) — attachments are per-run user message content, not static instruction context.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — selected mode/model affects prompt sections.
 - [Coding tools and approval permissions](../tools/coding-tools-permissions.md) — denied tools alter tool guidance.
 - [Plan approval and build handoff](../goals/plan-approval.md) — Plan-mode prompt/tool guidance must route plans through `submit_plan`.
@@ -82,6 +83,7 @@
 
 - Prompt context can drift if harness state, thread metadata, and TUI footer disagree.
 - Loaded-from-history runs can silently use current filesystem instructions, not the instructions that existed when history was created.
+- Attachments are user-message content, not instruction context; prompt-audit tests need to inspect both channels separately.
 - Static instruction loading and dynamic `AgentsMDInjector` both touch AGENTS guidance; ignored-path handling must avoid duplicate instruction reminders.
 
 ## Verification checklist

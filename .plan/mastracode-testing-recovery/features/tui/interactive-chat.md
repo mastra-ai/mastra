@@ -77,6 +77,7 @@
 - [Lifecycle hooks](../integrations/lifecycle-hooks.md) — prompt-submit and stop hooks run through this TUI loop.
 - [Git branch context and status](../git/branch-context.md) — footer branch text is refreshed during thread/run lifecycle events.
 - [Queued follow-ups and slash commands](../chat/queued-followups.md) — active-run input queueing lives in the TUI chat path.
+- [File attachments in chat input](../chat/file-attachments.md) — chat input can include file/image parts in addition to text.
 - [Persistent conversations](../threads/persistent-conversations.md) — chat is thread-scoped.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — selected mode/model drives runs.
 - [Coding tools and approval permissions](../tools/coding-tools-permissions.md) — tools render inside chat.

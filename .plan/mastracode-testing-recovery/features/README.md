@@ -46,6 +46,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Settings | Storage backend configuration | #13435 | env/settings + storage factory | Partial | High | [page](./settings/storage-backend.md) |
 | TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
+| Chat | File attachments in chat input | #13574 | Harness signal content + message-list adapters | Partial | High | [page](./chat/file-attachments.md) |
 | Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345, #13493 | TUI transient queue state + command template processor | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
@@ -59,6 +60,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Integrations | Harness display state | #13427 | Core Harness display projection | Partial | High | [page](./integrations/harness-display-state.md) |
 | Integrations | Skills command and workspace resolution | #13457 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
 | Integrations | Lifecycle hooks | #13442 | hook config + TUI lifecycle + tool wrapper | Partial | High | [page](./integrations/lifecycle-hooks.md) |
+| Integrations | GitHub issue reporting command | #13605 | TUI command prompt + GitHub CLI side effects | Partial | High | [page](./integrations/github-issue-reporting.md) |
 | Git | Commit attribution | #13376 | Prompt context + harness model state | Missing | Medium | [page](./git/commit-attribution.md) |
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |

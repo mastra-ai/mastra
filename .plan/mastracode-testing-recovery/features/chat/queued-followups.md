@@ -58,6 +58,7 @@
 
 - [Interactive TUI chat](../tui/interactive-chat.md) — keyboard input and active-run state.
 - [Prompt context and project instructions](./prompt-context.md) — queued slash commands must not be sent as raw LLM text.
+- [GitHub issue reporting command](../integrations/github-issue-reporting.md) — `/report-issue` uses slash-command prompt injection.
 
 ## Existing tests
 

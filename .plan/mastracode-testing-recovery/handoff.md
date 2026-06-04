@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13609 (row 76) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13574 (`276246e0b9`, file attachments), then #13605 (`dc1c33ba3c`, GitHub issue commands).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13605 (row 78) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13437 (`e9476527fd`, workspace tools with TUI streaming), then #13682 (`ee9c8df644`, custom providers command).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 77: PR #13574 (file attachments), then row 78: PR #13605 (`/fix-issue` and `/report-issue`).
+1. Continue at `_pr-queue.md` row 79: PR #13437 (workspace tools with TUI streaming), then row 80: PR #13682 (`/custom-providers`).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -137,3 +137,6 @@ None known.
 - `gh pr view 13556 --json number,title,body,author,mergedAt,url,files,commits`, current quiet-mode settings/source, subagent component, tool renderer, and tests verified quiet mode state. Added `features/tui/quiet-mode.md`; noted current source appears later-polished/superseded versus the original collapse wording.
 - `gh pr view 13609 --json number,title,body,author,mergedAt,url,files,commits`, current message handler and dynamic tools verified assistant text preservation after tool-only chunks plus OpenAI native `web_search` fallback. Updated interactive-chat and coding-tools cards; noted prompt-guidance parity risk.
 - Focused verification for #13556/#13609 passed: onboarding settings, subagent execution, tool execution enhanced, message handler, and dynamic tools tests (5 files / 120 tests).
+- `gh pr view 13574 --json number,title,body,author,mergedAt,url,files,commits`, current Harness send/message-content paths, signal tests, and message-list adapter tests verified file attachment support. Added `features/chat/file-attachments.md`; noted missing direct Harness `sendMessage({ files })` test.
+- `gh pr view 13605 --json number,title,body,author,mergedAt,url,files,commits`, current command dispatch/setup/help/report command source verified `/report-issue`; `/fix-issue` is absent at HEAD despite the PR title. Added `features/integrations/github-issue-reporting.md`; noted missing direct command prompt test.
+- Focused verification for #13574/#13605 passed: core agent signals + AIV5 file adapter + attachment prompt tests (3 files / 94 tests), MC command-dispatch + help-overlay tests (2 files / 26 tests).

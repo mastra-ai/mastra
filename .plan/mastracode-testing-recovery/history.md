@@ -777,3 +777,25 @@ Verification:
 - Focused tests passed: `pnpm --filter ./mastracode exec vitest run src/onboarding/__tests__/settings.test.ts src/tui/components/__tests__/subagent-execution.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts src/tui/handlers/__tests__/message.test.ts src/agents/tools.test.ts --reporter=dot --bail 1` (5 files / 120 tests).
 
 Next queue checkpoint: PR #13574 (file attachments), then PR #13605 (`/fix-issue` and `/report-issue`).
+
+
+### Feature map PR #13574 and #13605
+
+Processed PR [#13574](https://github.com/mastra-ai/mastra/pull/13574), `276246e0b9` (`feat(harness): file attachment support with filename preservation and text file handling`). Verified current Harness API accepts `sendMessage({ content, files })`, converts text/json attachments into filename-labeled fenced text, preserves binary file parts with `mediaType`/`filename`, and rehydrates persisted file/image content through signal and message-list adapters. Current adapter behavior: AIV4 emits file parts through `experimental_attachments`; AIV5 normalizes URL/data-URI file parts and avoids duplicate legacy attachment output.
+
+Processed PR [#13605](https://github.com/mastra-ai/mastra/pull/13605), `829a09641d` (`feat(mastracode): add /fix-issue and /report-issue commands`). Verified current HEAD only exposes `/report-issue`; `/fix-issue` was removed by commit `079d9d4914` inside the same PR. `/report-issue` gates on model selection, creates a thread when `pendingNewThread` is true, injects a guided issue-reporting prompt, instructs duplicate search through `gh issue list` / `gh search issues`, requires user approval before `gh issue create`, and uses the `mastra-ai/mastra` repo plus `mastracode` label.
+
+Documentation actions:
+
+- Added `features/chat/file-attachments.md` for Harness attachment input, filename preservation, adapter conversion, and missing direct Harness tests.
+- Added `features/integrations/github-issue-reporting.md` for `/report-issue`, stale `/fix-issue` title mismatch, GitHub CLI side effects, and prompt-driven approval risk.
+- Updated `features/README.md`, `_pr-queue.md`, `tui/help-and-shortcuts.md`, `tui/interactive-chat.md`, `chat/prompt-context.md`, `chat/queued-followups.md`, `tools/coding-tools-permissions.md`, `handoff.md`, and this history entry. Queue status: #13574 done, #13605 done, #13437 current.
+
+Verification:
+
+- Current source checked: `packages/core/src/harness/harness.ts`, `packages/core/src/harness/types.ts`, `packages/core/src/agent/message-list/adapters/AIV4Adapter.ts`, `packages/core/src/agent/message-list/adapters/AIV5Adapter.ts`, `packages/core/src/agent/__tests__/agent-signals.test.ts`, `packages/core/src/agent/message-list/adapters/AIV5Adapter-file-ui-part.test.ts`, `packages/core/src/agent/message-list/prompt/attachments-to-parts.test.ts`, `mastracode/src/tui/commands/report-issue.ts`, `mastracode/src/tui/command-dispatch.ts`, `mastracode/src/tui/setup.ts`, and `mastracode/src/tui/components/help-overlay.ts`.
+- PR metadata checked with `gh pr view 13574 --json number,title,body,author,mergedAt,url,files,commits` and `gh pr view 13605 --json number,title,body,author,mergedAt,url,files,commits`.
+- Focused core tests passed: `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts src/agent/message-list/adapters/AIV5Adapter-file-ui-part.test.ts src/agent/message-list/prompt/attachments-to-parts.test.ts --reporter=dot --bail 1` (3 files / 94 tests).
+- Focused Mastra Code tests passed: `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts src/tui/components/__tests__/help-overlay.test.ts --reporter=dot --bail 1` (2 files / 26 tests).
+
+Next queue checkpoint: PR #13437 (workspace tools with TUI streaming), then PR #13682 (`/custom-providers`).
