@@ -13,6 +13,7 @@ import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
+import { IdleCounterComponent } from './components/idle-counter.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
@@ -135,7 +136,11 @@ export function setupKeyboardShortcuts(
 
   // Shift+Tab - cycle harness modes
   state.editor.onAction('cycleMode', async () => {
-    // Block mode switching while plan approval is active
+    // Block mode switching while the agent is active or plan approval is pending
+    if (state.harness.isRunning()) {
+      showInfo(state, 'Wait for the agent to finish first');
+      return;
+    }
     if (state.activeInlinePlanApproval) {
       showInfo(state, 'Resolve the plan approval first');
       return;
@@ -252,8 +257,11 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.ui.addChild(state.chatContainer);
   // Task progress (between chat and editor, visible only when tasks exist)
   state.taskProgress = new TaskProgressComponent();
+  state.taskProgress.setQuietMode(state.quietMode);
   state.ui.addChild(state.taskProgress);
   state.ui.addChild(state.editorContainer);
+  state.idleCounter = new IdleCounterComponent();
+  state.editorContainer.addChild(state.idleCounter);
   state.editorContainer.addChild(state.editor);
 
   // Add footer with two-line status
@@ -341,6 +349,17 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'observability', description: 'Configure cloud observability' },
+    {
+      name: 'github',
+      description: 'Subscribe/sync/debug GitHub PR signals',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'subscribe', label: 'subscribe', description: 'Subscribe this thread to a GitHub PR' },
+          { value: 'unsubscribe', label: 'unsubscribe', description: 'Unsubscribe this thread from a GitHub PR' },
+          { value: 'sync', label: 'sync', description: 'Immediately sync subscribed GitHub PRs' },
+          { value: 'debug', label: 'debug', description: 'Show GitHub signal subscription debug info' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
     {
       name: 'goal',
       description: 'Set/manage persistent goal (Ralph loop)',

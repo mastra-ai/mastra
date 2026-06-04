@@ -22,7 +22,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v3';
-import { weatherTool } from '../__fixtures__/tools';
+import { mockWeatherTool } from '../__fixtures__/tools';
 import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
@@ -158,7 +158,6 @@ describe('MCPServer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // @ts-expect-error - accessing internal for testing - Mocking Date completely
     // Must use a regular function (not arrow function) to support `new Date()` constructor calls
     global.Date = vi.fn(function (this: any, ...args: any[]) {
       if (args.length === 0) {
@@ -169,7 +168,6 @@ describe('MCPServer', () => {
       return new OriginalDate(...args); // new Date('some-string') or new Date(timestamp)
     }) as any;
 
-    // @ts-expect-error - accessing internal for testing
     global.Date.now = vi.fn(() => mockDate.getTime());
     // @ts-expect-error - accessing internal for testing
     global.Date.prototype = OriginalDate.prototype;
@@ -547,7 +545,7 @@ describe('MCPServer', () => {
     let notificationTestServer: MCPServer;
     let notificationTestInternalClient: InternalMastraMCPClient;
     let notificationHttpServer: http.Server;
-    const NOTIFICATION_PORT = 9400 + Math.floor(Math.random() * 1000);
+    let notificationPort: number;
 
     const mockInitialResources: Resource[] = [
       {
@@ -599,7 +597,7 @@ describe('MCPServer', () => {
       notificationTestServer = new MCPServer(serverOptions);
 
       notificationHttpServer = http.createServer(async (req, res) => {
-        const url = new URL(req.url || '', `http://localhost:${NOTIFICATION_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${notificationPort}`);
         await notificationTestServer.startSSE({
           url,
           ssePath: '/sse',
@@ -608,12 +606,22 @@ describe('MCPServer', () => {
           res,
         });
       });
-      await new Promise<void>(resolve => notificationHttpServer.listen(NOTIFICATION_PORT, resolve));
+      notificationPort = await new Promise<number>((resolve, reject) => {
+        notificationHttpServer.once('error', reject);
+        notificationHttpServer.listen(0, () => {
+          const address = notificationHttpServer.address();
+          if (address && typeof address === 'object') {
+            resolve(address.port);
+            return;
+          }
+          reject(new Error('Failed to obtain notification test port'));
+        });
+      });
 
       notificationTestInternalClient = new InternalMastraMCPClient({
         name: 'notification-internal-client',
         server: {
-          url: new URL(`http://localhost:${NOTIFICATION_PORT}/sse`),
+          url: new URL(`http://localhost:${notificationPort}/sse`),
           logger: logMessage =>
             console.log(
               `[${logMessage.serverName} - ${logMessage.level.toUpperCase()}]: ${logMessage.message}`,
@@ -625,7 +633,7 @@ describe('MCPServer', () => {
     });
 
     afterAll(async () => {
-      await notificationTestInternalClient.disconnect();
+      await notificationTestInternalClient?.disconnect();
       if (notificationHttpServer) {
         await new Promise<void>((resolve, reject) =>
           notificationHttpServer.close(err => {
@@ -634,7 +642,7 @@ describe('MCPServer', () => {
           }),
         );
       }
-      await notificationTestServer.close();
+      await notificationTestServer?.close();
     });
 
     beforeEach(() => {
@@ -910,7 +918,7 @@ describe('MCPServer', () => {
       server = new MCPServer({
         name: 'Test MCP Server',
         version: '0.1.0',
-        tools: { weatherTool },
+        tools: { weatherTool: mockWeatherTool },
       });
 
       httpServer = http.createServer(async (req, res) => {
@@ -1048,7 +1056,7 @@ describe('MCPServer', () => {
         name: 'Test MCP Server',
         version: '0.1.0',
         tools: {
-          weatherTool,
+          weatherTool: mockWeatherTool,
           testAuthTool: {
             description: 'Test tool to validate auth information from extra params',
             parameters: z.object({
@@ -1202,7 +1210,7 @@ describe('MCPServer', () => {
       server = new MCPServer({
         name: 'Test MCP Server',
         version: '0.1.0',
-        tools: { weatherTool },
+        tools: { weatherTool: mockWeatherTool },
       });
 
       hono = new Hono();

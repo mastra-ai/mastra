@@ -1,6 +1,6 @@
 {
   "name": "mastra-docs",
-  "version": "0.0.40",
+  "version": "0.0.47",
   "private": true,
   "repository": "https://github.com/mastra-ai/mastra",
   "homepage": "https://mastra.ai",
@@ -58,6 +58,7 @@
     "algoliasearch": "^5.49.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.5",
     "dotenv": "^17.3.1",
     "fs-extra": "^11.3.4",
     "hast-util-select": "^6.0.4",
@@ -89,6 +90,7 @@
     "@types/mdast": "^4.0.4",
     "@types/node": "22.19.13",
     "baseline-browser-mapping": "^2.10.8",
+    "jsdom": "^26.1.0",
     "postcss": "^8.5.8",
     "remark": "^15.0.1",
     "remark-cli": "^12.0.1",
@@ -124,5 +126,5 @@
       "last 5 safari version"
     ]
   },
-  "packageManager": "pnpm@10.18.2"
+  "packageManager": "pnpm@11.3.0"
 }

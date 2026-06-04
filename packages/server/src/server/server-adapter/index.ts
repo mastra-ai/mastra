@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
@@ -17,10 +19,12 @@ import {
   isStudioClientTypeHeader,
 } from '../constants';
 import { formatZodError } from '../handlers/error';
+export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
-import { SERVER_ROUTES, getEffectivePermission } from './routes';
 import type { ServerRoute } from './routes';
+import { SERVER_ROUTES, getEffectivePermission } from './routes';
+import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
@@ -99,6 +103,30 @@ export interface ParsedRequestParams {
   };
 }
 
+function isAbortSignalError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code, name } = error as { code?: string; name?: string };
+  return name === 'AbortError' || code === 'ABORT_ERR';
+}
+
+function isExpectedResponseCloseError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code } = error as { code?: string };
+  return (
+    code === 'ECONNRESET' ||
+    code === 'EPIPE' ||
+    code === 'ERR_STREAM_DESTROYED' ||
+    code === 'ERR_STREAM_WRITE_AFTER_END' ||
+    code === 'ERR_STREAM_PREMATURE_CLOSE'
+  );
+}
+
+function isResponseClosed(response: { writableEnded?: boolean; destroyed?: boolean }): boolean {
+  return Boolean(response.writableEnded || response.destroyed);
+}
+
 function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
   return route.requiresAuth !== false;
 }
@@ -122,104 +150,9 @@ function getFGARouteInfo(route: ServerRoute): FGARouteInfo {
 }
 
 function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
-  return [getEffectivePermission(route), route.fga?.permission].filter(
-    (permission): permission is MastraFGAPermissionInput => Boolean(permission),
-  );
-}
-
-function getToolRoutePermission(path: string): MastraFGAPermissionInput {
-  return path.includes('/execute') ? 'tools:execute' : 'tools:read';
-}
-
-function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
-  if (!isProtectedFGARoute(route) || !route.path || !route.method) {
-    return null;
-  }
-
-  const permission = getEffectivePermission(route) as MastraFGAPermissionInput | null;
-  if (!permission) {
-    return null;
-  }
-
-  const path = route.path;
-  if (path.startsWith('/agents/:agentId/tools/:toolId')) {
-    return {
-      resourceType: 'tool',
-      resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
-      permission: getToolRoutePermission(path),
-    };
-  }
-
-  if (path.startsWith('/agents/:agentId')) {
-    return { resourceType: 'agent', resourceIdParam: 'agentId', permission };
-  }
-
-  if (path.startsWith('/workflows/:workflowId')) {
-    return { resourceType: 'workflow', resourceIdParam: 'workflowId', permission };
-  }
-
-  if (path.startsWith('/tools/:toolId')) {
-    return { resourceType: 'tool', resourceIdParam: 'toolId', permission };
-  }
-
-  if (path.startsWith('/mcp/:serverId/tools/:toolId')) {
-    return {
-      resourceType: 'tool',
-      resourceId: ({ serverId, toolId }) => JSON.stringify([String(serverId), String(toolId)]),
-      permission: getToolRoutePermission(path),
-    };
-  }
-
-  if (path.startsWith('/mcp/:serverId')) {
-    return { resourceType: 'mcp', resourceIdParam: 'serverId', permission };
-  }
-
-  if (path.startsWith('/memory/threads/:threadId') || path.startsWith('/memory/network/threads/:threadId')) {
-    return { resourceType: 'thread', resourceIdParam: 'threadId', permission };
-  }
-
-  if (path === '/memory/threads' || path === '/memory/network/threads') {
-    return {
-      resourceType: 'thread',
-      resourceId: ({ threadId, resourceId }) => {
-        if (typeof threadId === 'string') return threadId;
-        return typeof resourceId === 'string' ? resourceId : undefined;
-      },
-      permission,
-    };
-  }
-
-  if (path === '/memory/save-messages' || path === '/memory/network/save-messages') {
-    return {
-      resourceType: 'thread',
-      resourceId: ({ messages }) => {
-        if (!Array.isArray(messages)) return undefined;
-        const threadId = messages.find(
-          message => message && typeof message === 'object' && 'threadId' in message,
-        )?.threadId;
-        return typeof threadId === 'string' ? threadId : undefined;
-      },
-      permission,
-    };
-  }
-
-  if (path === '/v1/responses') {
-    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
-  }
-
-  if (path.startsWith('/v1/responses/:responseId')) {
-    return { resourceType: 'response', resourceIdParam: 'responseId', permission };
-  }
-
-  if (path === '/v1/conversations') {
-    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
-  }
-
-  if (path.startsWith('/v1/conversations/:conversationId')) {
-    return { resourceType: 'conversation', resourceIdParam: 'conversationId', permission };
-  }
-
-  return null;
+  return [getEffectivePermission(route), route.fga?.permission]
+    .flatMap(value => (Array.isArray(value) ? value : [value]))
+    .filter((permission): permission is MastraFGAPermissionInput => Boolean(permission));
 }
 
 async function resolveRouteFGAConfig(
@@ -562,6 +495,14 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       token = context.getQuery('apiKey') || null;
     }
 
+    const fallbackHeaders = new Headers();
+    for (const headerName of ['authorization', 'cookie']) {
+      const headerValue = context.getHeader(headerName);
+      if (headerValue) {
+        fallbackHeaders.set(headerName, headerValue);
+      }
+    }
+
     // Delegate to coreAuthMiddleware for all auth logic
     const result = await coreAuthMiddleware({
       path: context.path,
@@ -571,9 +512,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       authConfig,
       customRouteAuthConfig: this.customRouteAuthConfig,
       requestContext: context.requestContext,
-      rawRequest: context.request,
+      rawRequest:
+        context.request ??
+        new Request(`http://localhost${context.path}`, { method: context.method, headers: fallbackHeaders }),
       token,
       buildAuthorizeContext: context.buildAuthorizeContext ?? (() => null),
+      requiresAuth: route.requiresAuth,
     });
 
     if (result.action === 'next') {
@@ -596,6 +540,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * 1. If route has explicit `requiresPermission`, use that
    * 2. Otherwise, derive permission from path/method (e.g., GET /agents → agents:read)
    * 3. Routes with `requiresAuth: false` skip permission checks
+   *
+   * When the route specifies an array of permissions, the user needs ANY ONE
+   * of them (logical OR).
    *
    * @param route - The route being accessed
    * @param userPermissions - The user's permissions from the request context
@@ -621,12 +568,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return null;
     }
 
-    // Check if user has the required permission
-    if (!userPermissions || !hasPermissionFn(userPermissions, requiredPermission)) {
+    // Check if user has the required permission(s)
+    // When an array is provided, user needs ANY ONE of them (logical OR)
+    const permissions = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+    const hasAny = userPermissions && permissions.some(perm => hasPermissionFn(userPermissions, perm));
+
+    if (!hasAny) {
       return {
         status: 403,
         error: 'Forbidden',
-        message: `Missing required permission: ${requiredPermission}`,
+        message: `Missing required permission: ${permissions.join(' or ')}`,
       };
     }
 
@@ -646,6 +597,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.registerAuthMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
+    await this.validateAgentBuilderLicense();
     await this.validateFGAPolicyCoverage();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
@@ -681,6 +633,36 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       // @mastra/core/auth/ee module not available; EE authorization cannot function.
       throw new Error(
         `[mastra/auth-ee] ${configuredFeatures.join(' and ')} ${configuredFeatures.length === 1 ? 'is' : 'are'} configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n` +
+          'Ensure @mastra/core is updated to a version that includes EE support.',
+      );
+    }
+  }
+
+  /**
+   * Validate that an Agent Builder configuration has a valid EE license.
+   * Throws if the editor is configured with builder support but no valid EE license is available.
+   */
+  async validateAgentBuilderLicense(): Promise<void> {
+    const editor = this.mastra.getEditor();
+    if (!editor?.hasEnabledBuilderConfig?.()) return;
+
+    try {
+      const { isEEEnabled } = await import('@mastra/core/auth/ee');
+      if (!isEEEnabled()) {
+        throw new Error(
+          '[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.\n' +
+            'Agent Builder requires a Mastra Enterprise License for production use.\n' +
+            'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
+            'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
+        throw err;
+      }
+      // @mastra/core/auth/ee module not available — Agent Builder cannot function
+      throw new Error(
+        '[mastra/auth-ee] Agent Builder is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }
@@ -786,7 +768,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const serverOnError = this.mastra.getServer()?.onError;
     app.onError((err, c) => {
       if (serverOnError) {
-        return serverOnError(err, c);
+        return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
       return c.json({ error: 'Internal Server Error' }, 500);
     });
@@ -833,6 +815,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     headers: Record<string, string | string[] | undefined>,
     body: unknown,
     requestContext?: RequestContext,
+    signal?: AbortSignal,
   ): Promise<Response | null> {
     if (!this.customRouteHandler) return null;
 
@@ -845,8 +828,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         });
     }
 
-    const init: RequestInit = { method, headers: fetchHeaders };
-    if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
+    const init: RequestInit = { method, headers: fetchHeaders, signal };
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && body !== undefined) {
       if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
         if (body instanceof ReadableStream) {
@@ -879,7 +862,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       writeHead(status: number, headers: Record<string, string | string[]>): void;
       write(chunk: unknown): void;
       end(data?: string): void;
-    },
+      writableEnded?: boolean;
+      destroyed?: boolean;
+    } & NodeJS.WritableStream,
+    signal?: AbortSignal,
   ): Promise<void> {
     const headers: Record<string, string | string[]> = {};
     response.headers.forEach((value, key) => {
@@ -891,21 +877,45 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     if (setCookies && setCookies.length > 0) {
       headers['set-cookie'] = setCookies;
     }
+    if (isResponseClosed(nodeRes)) {
+      await response.body?.cancel();
+      return;
+    }
     nodeRes.writeHead(response.status, headers);
 
     if (response.body) {
-      const reader = response.body.getReader();
+      let responseBodyError: unknown;
+      let responseBodyErrorAfterResponseClosed = false;
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          nodeRes.write(value);
+        const responseStream = Readable.fromWeb(response.body as any);
+        // This listener must run before pipeline's cleanup so source errors are
+        // not mistaken for client disconnects after pipeline destroys nodeRes.
+        responseStream.once('error', error => {
+          responseBodyError = error;
+          responseBodyErrorAfterResponseClosed = isResponseClosed(nodeRes);
+        });
+        if (signal) {
+          await pipeline(responseStream, nodeRes, { signal });
+        } else {
+          await pipeline(responseStream, nodeRes);
         }
-      } finally {
-        nodeRes.end();
+      } catch (error) {
+        const expectedSignalAbort =
+          signal?.aborted && isAbortSignalError(error) && (!responseBodyError || responseBodyErrorAfterResponseClosed);
+        const expectedResponseClose =
+          (!responseBodyError || responseBodyErrorAfterResponseClosed) &&
+          isResponseClosed(nodeRes) &&
+          isExpectedResponseCloseError(error);
+        // Request cancellation is expected unless the response body already reported its own error.
+        if (!expectedSignalAbort && !expectedResponseClose) {
+          throw error;
+        }
       }
     } else {
-      nodeRes.end(await response.text());
+      const text = await response.text();
+      if (!isResponseClosed(nodeRes)) {
+        nodeRes.end(text);
+      }
     }
   }
 
@@ -1081,9 +1091,10 @@ export async function checkRouteFGA(
       message: 'FGA authorization denied: route FGA metadata is incomplete',
     };
   }
+  const effectivePermission = route.path ? getEffectivePermission(route) : null;
   const permission =
     fgaConfig.permission ||
-    (route.path ? getEffectivePermission(route) : null) ||
+    effectivePermission ||
     `${getFGAResourcePermissionSlug(fgaConfig.resourceType)}:${deriveFGAAction(route.method)}`;
 
   const authorized = await fgaProvider.check(user, {

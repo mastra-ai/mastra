@@ -321,7 +321,6 @@ async function runSingleToolSchemaTest(
 const SUITE_TIMEOUT = 300000; // 5 minutes
 const TEST_TIMEOUT = 300000; // 5 minutes
 
-if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
 const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
 const modelsToTestV1 = [

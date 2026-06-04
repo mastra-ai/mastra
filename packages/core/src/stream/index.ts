@@ -19,6 +19,7 @@ export type {
   ReasoningChunk,
   SourceChunk,
   ToolCallChunk,
+  PendingToolCall,
   ToolResultChunk,
 
   // Result Types
@@ -37,6 +38,8 @@ export type {
   TextStartPayload,
   FilePayload,
   SourcePayload,
+  IsTaskCompletePayload,
+  TripwirePayload,
 
   // JSON & Data Types
   JSONArray,

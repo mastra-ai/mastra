@@ -83,7 +83,7 @@ export const PERMISSION_PATTERNS = {
   '*:publish': '*:publish',
   /** View all resources */
   '*:read': '*:read',
-  /** Change visibility/audience (e.g. private↔public) all resources */
+  /** Change visibility/audience all resources */
   '*:share': '*:share',
   /** Create and modify all resources */
   '*:write': '*:write',
@@ -233,8 +233,6 @@ export const PERMISSION_PATTERNS = {
   'stored-agents:publish': 'stored-agents:publish',
   /** View stored agents */
   'stored-agents:read': 'stored-agents:read',
-  /** Change visibility/audience (e.g. private↔public) stored agents */
-  'stored-agents:share': 'stored-agents:share',
   /** Create and modify stored agents */
   'stored-agents:write': 'stored-agents:write',
   /** Delete stored MCP clients */
@@ -267,8 +265,6 @@ export const PERMISSION_PATTERNS = {
   'stored-skills:publish': 'stored-skills:publish',
   /** View stored skills */
   'stored-skills:read': 'stored-skills:read',
-  /** Change visibility/audience (e.g. private↔public) stored skills */
-  'stored-skills:share': 'stored-skills:share',
   /** Create and modify stored skills */
   'stored-skills:write': 'stored-skills:write',
   /** Delete stored workspaces */
@@ -279,8 +275,12 @@ export const PERMISSION_PATTERNS = {
   'stored-workspaces:write': 'stored-workspaces:write',
   /** View system info */
   'system:read': 'system:read',
+  /** Delete tool-providers */
+  'tool-providers:delete': 'tool-providers:delete',
   /** View tool-providers */
   'tool-providers:read': 'tool-providers:read',
+  /** Create and modify tool-providers */
+  'tool-providers:write': 'tool-providers:write',
   /** Execute tools */
   'tools:execute': 'tools:execute',
   /** View tools */
@@ -309,14 +309,18 @@ export const PERMISSION_PATTERNS = {
   'workspaces:read': 'workspaces:read',
   /** Create and modify workspaces */
   'workspaces:write': 'workspaces:write',
-  /** Full access to all stored-* resources (stored-agents, stored-skills, stored-prompt-blocks, stored-mcp-clients, stored-scorers, stored-workspaces) */
+  /** Full access to all stored resource families */
   'stored:*': 'stored:*',
-  /** View any stored-* resource */
+  /** View all stored resource families */
   'stored:read': 'stored:read',
-  /** Create and modify any stored-* resource */
+  /** Create and modify all stored resource families */
   'stored:write': 'stored:write',
-  /** Delete any stored-* resource */
+  /** Delete all stored resource families */
   'stored:delete': 'stored:delete',
+  /** Change visibility/audience stored agents */
+  'stored-agents:share': 'stored-agents:share',
+  /** Change visibility/audience stored skills */
+  'stored-skills:share': 'stored-skills:share',
 } as const;
 
 /**
@@ -375,7 +379,6 @@ export const PERMISSIONS = [
   'stored-agents:delete',
   'stored-agents:publish',
   'stored-agents:read',
-  'stored-agents:share',
   'stored-agents:write',
   'stored-mcp-clients:delete',
   'stored-mcp-clients:publish',
@@ -392,13 +395,14 @@ export const PERMISSIONS = [
   'stored-skills:delete',
   'stored-skills:publish',
   'stored-skills:read',
-  'stored-skills:share',
   'stored-skills:write',
   'stored-workspaces:delete',
   'stored-workspaces:read',
   'stored-workspaces:write',
   'system:read',
+  'tool-providers:delete',
   'tool-providers:read',
+  'tool-providers:write',
   'tools:execute',
   'tools:read',
   'vector:delete',
@@ -511,8 +515,6 @@ export const MastraFGAPermissions = {
   STORED_AGENTS_PUBLISH: 'stored-agents:publish',
   /** View stored agents */
   STORED_AGENTS_READ: 'stored-agents:read',
-  /** Change visibility/audience (e.g. private↔public) stored agents */
-  STORED_AGENTS_SHARE: 'stored-agents:share',
   /** Create and modify stored agents */
   STORED_AGENTS_WRITE: 'stored-agents:write',
   /** Delete stored MCP clients */
@@ -545,8 +547,6 @@ export const MastraFGAPermissions = {
   STORED_SKILLS_PUBLISH: 'stored-skills:publish',
   /** View stored skills */
   STORED_SKILLS_READ: 'stored-skills:read',
-  /** Change visibility/audience (e.g. private↔public) stored skills */
-  STORED_SKILLS_SHARE: 'stored-skills:share',
   /** Create and modify stored skills */
   STORED_SKILLS_WRITE: 'stored-skills:write',
   /** Delete stored workspaces */
@@ -557,8 +557,12 @@ export const MastraFGAPermissions = {
   STORED_WORKSPACES_WRITE: 'stored-workspaces:write',
   /** View system info */
   SYSTEM_READ: 'system:read',
+  /** Delete tool-providers */
+  TOOL_PROVIDERS_DELETE: 'tool-providers:delete',
   /** View tool-providers */
   TOOL_PROVIDERS_READ: 'tool-providers:read',
+  /** Create and modify tool-providers */
+  TOOL_PROVIDERS_WRITE: 'tool-providers:write',
   /** Execute tools */
   TOOLS_EXECUTE: 'tools:execute',
   /** View tools */

@@ -47,9 +47,9 @@ export function MetricsDataTable<T extends { key: string }>({
           <span
             key={`${i}-${col.label}`}
             className={cn(
-              'h-9 py-1 flex items-center border-b border-surface5 uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs sticky top-0 z-10 bg-surface2',
+              'h-9 py-1 flex items-center border-b border-surface5 uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs sticky top-0 z-10 bg-surface3',
               i === 0
-                ? 'text-left sticky left-0 z-20 bg-surface2 pr-4 after:absolute after:right-1 after:top-1/2 after:-translate-y-1/2 after:h-3/5 after:w-px after:bg-surface5'
+                ? 'text-left sticky left-0 z-20 bg-surface3 pr-4 after:absolute after:right-1 after:top-1/2 after:-translate-y-1/2 after:h-3/5 after:w-px after:bg-surface5'
                 : 'px-4 text-right',
             )}
           >
@@ -74,7 +74,7 @@ export function MetricsDataTable<T extends { key: string }>({
                   'h-10 flex items-center text-ui-sm whitespace-nowrap border-t border-surface5',
                   rowIndex === 0 && 'border-t-transparent',
                   i === 0
-                    ? 'text-left text-neutral3 sticky left-0 z-10 bg-surface2 pr-4 after:absolute after:right-1 after:top-1/2 after:-translate-y-1/2 after:h-3/5 after:w-px after:bg-surface5'
+                    ? 'text-left text-neutral3 sticky left-0 z-10 bg-surface3 pr-4 after:absolute after:right-1 after:top-1/2 after:-translate-y-1/2 after:h-3/5 after:w-px after:bg-surface5'
                     : cn(
                         'px-4 text-right tabular-nums',
                         col.highlight ? 'text-neutral4 font-semibold' : 'text-neutral3',

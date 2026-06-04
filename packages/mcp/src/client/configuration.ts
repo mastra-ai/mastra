@@ -734,6 +734,22 @@ To fix this you have three different options:
   }
 
   /**
+   * Returns instructions advertised by connected MCP servers during initialize.
+   *
+   * Servers that have not connected yet, or did not advertise instructions,
+   * return `undefined`.
+   */
+  public getServerInstructions(): Record<string, string | undefined> {
+    const instructions: Record<string, string | undefined> = {};
+
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      instructions[serverName] = this.mcpClientsById.get(serverName)?.instructions;
+    }
+
+    return instructions;
+  }
+
+  /**
    * Retrieves all tools from all configured servers with namespaced names.
    *
    * Tool names are namespaced as `serverName_toolName` to prevent conflicts between servers.

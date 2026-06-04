@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { coreFeatures } from '@mastra/core/features';
 import type { StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore, ObservabilityStorage as CoreObservabilityStorage } from '@mastra/core/storage';
 
@@ -10,6 +11,8 @@ import type {
 
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
+const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
+const DUCKDB_OBSERVABILITY_FEATURES = ['delta-polling'] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -110,6 +113,16 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
 
   get tracingStrategy(): ObservabilityStoreImpl['tracingStrategy'] {
     return this.delegate?.tracingStrategy ?? this.observabilityStrategy;
+  }
+
+  getFeatures(): ReturnType<ObservabilityStoreImpl['getFeatures']> {
+    // Deliberately mirrored here so the lazy facade can advertise DuckDB's
+    // static delta polling feature before the delegate is instantiated.
+    if (!coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE)) {
+      return undefined;
+    }
+
+    return DUCKDB_OBSERVABILITY_FEATURES;
   }
 
   async init(...args: Parameters<ObservabilityStoreImpl['init']>): ReturnType<ObservabilityStoreImpl['init']> {
@@ -488,5 +501,16 @@ export class DuckDBStore extends MastraCompositeStore {
   /** Convenience accessor for the observability domain. */
   get observability(): ObservabilityStorageDuckDB {
     return this.observabilityStore;
+  }
+
+  /**
+   * Release the underlying DuckDB instance so the file lock is freed.
+   * Called automatically by Mastra.shutdown(). Without this, the DuckDB
+   * native write lock persists past process exit during dev hot reloads,
+   * causing "Conflicting lock is held" errors on the next start.
+   * Safe to call more than once; subsequent calls are no-ops.
+   */
+  async close(): Promise<void> {
+    await this.db.close();
   }
 }

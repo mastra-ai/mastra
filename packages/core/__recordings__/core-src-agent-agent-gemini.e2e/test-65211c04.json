@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "name": "test-65211c04",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should strip workflow tools when toolChoice is none with structured output",
+    "createdAt": "2026-05-18T10:50:50.791Z",
+    "updatedAt": "2026-05-28T17:33:39.705Z"
+  },
+  "recordings": [
+    {
+      "hash": "61b1cc56bd228b70",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["summary"],
+              "type": "object",
+              "properties": {
+                "summary": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Return a short structured summary about exercise."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You answer directly when asked for structured output."
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989618551
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 28 May 2026 17:33:39 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1040",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n  \"summary\": \"Regular exercise offers numerous benefits, including improved cardiovascular health, weight management, and mood enhancement. It can also reduce the risk of chronic diseases. Aim for at least 150 minutes of moderate-intensity or 75 minutes of vigorous-intensity aerobic activity per week, along with muscle-strengthening activities.\"\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.11690338452657063
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 21,
+            "candidatesTokenCount": 72,
+            "totalTokenCount": 93,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 21
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 72
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "cnwYav79NPuf_uMPkemJ0AI"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

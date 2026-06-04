@@ -50,7 +50,8 @@ export interface ProviderOptions {
   [key: string]: Record<string, any> | undefined;
 }
 
-export type ActivationTTL = number | string | false;
+export type ActivationTTL = number | string | 'auto' | false;
+export type ResolvedActivationTTL = number | 'auto';
 
 /**
  * Configuration for the observation step (Observer agent).
@@ -122,6 +123,16 @@ export interface ObservationConfig {
   bufferTokens?: number | false;
 
   /**
+   * Whether to run background observation buffering when a turn ends and the agent becomes idle.
+   *
+   * This is separate from `bufferTokens`: `bufferTokens` controls step-time async buffering,
+   * while `bufferOnIdle` controls end-of-turn buffering for short idle turns.
+   *
+   * @default false
+   */
+  bufferOnIdle?: boolean;
+
+  /**
    * Controls how many raw message tokens to retain after activation.
    *
    * - **Ratio (0 < value <= 1):** fraction of `messageTokens` to activate.
@@ -191,6 +202,31 @@ export interface ObservationConfig {
    * @default false
    */
   threadTitle?: boolean;
+
+  /**
+   * Controls which attachment parts (image/file) are forwarded to the
+   * Observer model alongside their placeholder text lines. The placeholder
+   * line (e.g. `[Image #1: photo.png]`) is always emitted so the Observer
+   * still knows an attachment existed.
+   *
+   * - `'auto'`: use the provider capabilities registry to decide.
+   *   If the observer model supports attachments (multimodal input), they
+   *   are forwarded; otherwise they are dropped. Falls back to `true` when
+   *   no capabilities data is available for the model.
+   * - `true`: forward all attachments.
+   * - `false`: drop all attachments; placeholders remain visible.
+   * - `string[]`: allowlist of mimeType patterns. Each entry is matched
+   *   case-insensitively against the part's mimeType. Supports exact matches
+   *   (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'`
+   *   for everything. An empty array drops everything.
+   *
+   * Use this when the Observer model is text-only (e.g. some DeepSeek
+   * endpoints) while the main agent uses a multimodal model. The same
+   * filter applies to tool results that contain image or file parts.
+   *
+   * @default true
+   */
+  observeAttachments?: 'auto' | boolean | string[];
 }
 
 /**
@@ -312,12 +348,13 @@ export interface ObservationMarkerConfig {
   messageTokens: number;
   observationTokens: number;
   scope: 'thread' | 'resource';
-  activateAfterIdle?: number;
+  activateAfterIdle?: ResolvedActivationTTL;
 }
 
 export interface ObservationModelContext {
   provider?: string;
   modelId?: string;
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -928,10 +965,12 @@ export interface ResolvedObservationConfig {
   maxTokensPerBatch: number;
   /** Token interval for async background observation buffering (resolved from config) */
   bufferTokens?: number;
+  /** Whether to buffer unobserved messages at the end of an idle turn */
+  bufferOnIdle: boolean;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
-  /** Time in milliseconds before buffered observations are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: number;
+  /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: ResolvedActivationTTL;
   /** Force-activate buffered observations when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
@@ -942,6 +981,8 @@ export interface ResolvedObservationConfig {
   instruction?: string;
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
+  /** Filter for attachment parts forwarded to the Observer model */
+  observeAttachments: 'auto' | boolean | string[];
 }
 
 export interface ResolvedReflectionConfig {
@@ -955,8 +996,8 @@ export interface ResolvedReflectionConfig {
   providerOptions: ProviderOptions;
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
-  /** Time in milliseconds before buffered reflections are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: number;
+  /** Time in milliseconds, or auto provider-aware TTL, before buffered reflections are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: ResolvedActivationTTL;
   /** Force-activate buffered reflections when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */

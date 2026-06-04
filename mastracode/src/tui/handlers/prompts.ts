@@ -2,6 +2,7 @@
  * Event handlers for interactive prompt events:
  * ask_question, sandbox_access_request, plan_approval_required.
  */
+import type { HarnessQuestionSelectionMode } from '@mastra/core/harness';
 import { savePlanToDisk } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -35,6 +36,7 @@ export async function handleAskQuestion(
   questionId: string,
   question: string,
   options?: Array<{ label: string; description?: string }>,
+  selectionMode?: HarnessQuestionSelectionMode,
 ): Promise<void> {
   const { state } = ctx;
 
@@ -55,11 +57,18 @@ export async function handleAskQuestion(
             askUserComponent.activate({
               question,
               options,
+              selectionMode,
               multiline: true,
               tui: state.ui,
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
                 state.harness.respondToQuestion({ questionId, answer });
+                resolve();
+                processNextInlineQuestion(state);
+              },
+              onSubmitMulti: answers => {
+                state.activeInlineQuestion = undefined;
+                state.harness.respondToQuestion({ questionId, answer: answers });
                 resolve();
                 processNextInlineQuestion(state);
               },
@@ -78,10 +87,17 @@ export async function handleAskQuestion(
               {
                 question,
                 options,
+                selectionMode,
                 multiline: true,
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
                   state.harness.respondToQuestion({ questionId, answer });
+                  resolve();
+                  processNextInlineQuestion(state);
+                },
+                onSubmitMulti: answers => {
+                  state.activeInlineQuestion = undefined;
+                  state.harness.respondToQuestion({ questionId, answer: answers });
                   resolve();
                   processNextInlineQuestion(state);
                 },
@@ -127,11 +143,17 @@ export async function handleAskQuestion(
       const dialog = new AskQuestionDialogComponent({
         question,
         options,
+        selectionMode,
         multiline: true,
         tui: state.ui,
         onSubmit: answer => {
           state.ui.hideOverlay();
           state.harness.respondToQuestion({ questionId, answer });
+          resolve();
+        },
+        onSubmitMulti: answers => {
+          state.ui.hideOverlay();
+          state.harness.respondToQuestion({ questionId, answer: answers });
           resolve();
         },
         onCancel: () => {
@@ -255,6 +277,7 @@ export async function handlePlanApproval(
       plan,
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
         await approvePlan(ctx, planId, title, plan);
 
         // Fire a structured system-reminder signal to wake the freshly
@@ -280,24 +303,24 @@ export async function handlePlanApproval(
       },
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
         await approvePlan(ctx, planId, title, plan);
 
-        // Hand off to the normal `/goal` flow. `startGoal` (default
-        // `trigger: 'send'`) sets + persists the goal, then fires the
-        // canonical structured goal-reminder via `harness.sendSignal` —
-        // identical to typing `/goal <objective>` by hand. No second
-        // reminder is sent; the goal judge in `handleAgentEnd` keeps the
-        // agent driving toward the goal after its first response.
-        //
-        // `approvePlan` already waited for the aborted plan-mode run to
-        // idle, so this signal starts a fresh build-mode run.
+        // `approvePlan` waits for plan mode to idle before `startGoal` sends
+        // the canonical goal reminder, so this starts a fresh build-mode run.
         const objective = formatPlanGoalObjective(title, plan);
         await ctx.startGoal(objective, 'Goal cancelled.');
+
+        const goal = state.goalManager.getGoal();
+        if (goal?.id) {
+          state.planStartedGoalId = goal.id;
+        }
 
         resolve();
       },
       onReject: async (feedback?: string) => {
         state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
         await state.harness.respondToPlanApproval({
           planId,
           response: { action: 'rejected', feedback },
@@ -339,7 +362,7 @@ export async function handlePlanApproval(
     }
     state.ui.requestRender();
     state.chatContainer.invalidate();
-    approvalComponent.focused = true;
+    state.ui.setFocus(approvalComponent);
 
     ctx.notify('plan_approval', `Plan "${title}" requires approval`);
   });

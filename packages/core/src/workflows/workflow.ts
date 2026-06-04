@@ -31,7 +31,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import { ProcessorRunner, ProcessorState } from '../processors';
+import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import {
   summarizeActiveToolsForSpan,
@@ -277,7 +277,8 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processInputStep: Function })
     | (Processor<TProcessorId> & { processOutputStream: Function })
     | (Processor<TProcessorId> & { processOutputResult: Function })
-    | (Processor<TProcessorId> & { processOutputStep: Function }),
+    | (Processor<TProcessorId> & { processOutputStep: Function })
+    | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
@@ -996,6 +997,14 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorState = state ?? {};
       }
 
+      const processorMessageList =
+        messageList ??
+        (Array.isArray(messages)
+          ? new MessageList()
+              .add(messages as MastraDBMessage[], 'input')
+              .addSystem((systemMessages ?? []) as CoreMessage[])
+          : undefined);
+
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
@@ -1006,6 +1015,15 @@ function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        ...(processorMessageList
+          ? {
+              sendSignal: createProcessorSendSignal({
+                messageList: processorMessageList,
+                writer: processorWriter,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
+              }),
+            }
+          : {}),
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -1014,13 +1032,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         phase,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
-        messageList:
-          messageList ??
-          (Array.isArray(messages)
-            ? new MessageList()
-                .add(messages as MastraDBMessage[], 'input')
-                .addSystem((systemMessages ?? []) as CoreMessage[])
-            : undefined),
+        messageList: processorMessageList,
         stepNumber,
         systemMessages,
         streamParts,
@@ -1105,7 +1117,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1131,7 +1143,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: checkedMessageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1201,6 +1213,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                systemMessages: checkedMessageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1321,7 +1334,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1347,7 +1360,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1404,7 +1417,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1430,7 +1443,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: checkedMessageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1500,7 +1513,8 @@ export function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processOutputStream === 'function' ||
       typeof (obj as any).processOutputResult === 'function' ||
       typeof (obj as any).processOutputStep === 'function' ||
-      typeof (obj as any).processAPIError === 'function')
+      typeof (obj as any).processAPIError === 'function' ||
+      typeof (obj as any).computeStateSignal === 'function')
   );
 }
 
@@ -1636,6 +1650,7 @@ export class Workflow<
 {
   public id: TWorkflowId;
   public description?: string | undefined;
+  public metadata?: Record<string, unknown> | undefined;
   public inputSchema: StandardSchemaWithJSON<TInput>;
   public outputSchema: StandardSchemaWithJSON<TOutput>;
   public stateSchema?: StandardSchemaWithJSON<TState>;
@@ -1670,6 +1685,7 @@ export class Workflow<
     stateSchema,
     requestContextSchema,
     description,
+    metadata,
     executionEngine,
     retryConfig,
     steps,
@@ -1679,6 +1695,7 @@ export class Workflow<
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;
+    this.metadata = metadata;
     this.inputSchema = inputSchema ? toStandardSchema(inputSchema) : inputSchema;
     this.outputSchema = outputSchema ? toStandardSchema(outputSchema) : outputSchema;
     this.stateSchema = stateSchema ? toStandardSchema(stateSchema) : undefined;
@@ -2068,9 +2085,21 @@ export class Workflow<
         infer O,
         any, // Don't infer TResume - causes issues with heterogeneous tuples
         any, // Don't infer TSuspend - causes issues with heterogeneous tuples
-        TEngineType
+        TEngineType,
+        infer TStepRC
       >
-        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, any, any, TEngineType>
+        ? Step<
+            string,
+            SubsetOf<S, TState>,
+            TPrevSchema,
+            O,
+            any,
+            any,
+            TEngineType,
+            // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+            // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+            unknown extends TStepRC ? unknown : TRequestContext
+          >
         : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
   ) {
@@ -2553,15 +2582,22 @@ export class Workflow<
     const fgaProvider = mastra?.getServer()?.fga;
     if (fgaProvider) {
       const user = requestContext?.get('user' as any);
-      if (user) {
-        const { checkFGA } = await import('../auth/ee/fga-check');
-        await checkFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'workflow', id: this.id },
-          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
-        });
-      }
+      const { getWorkflowFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
+      await requireFGA({
+        fgaProvider,
+        user,
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.id) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext,
+        context: {
+          resourceId,
+        },
+        metadata: {
+          workflowId: this.id,
+          runId,
+          resourceId,
+        },
+      });
     }
 
     const effectiveValidateInputs = validateInputs ?? this.#options.validateInputs ?? true;
@@ -2732,8 +2768,10 @@ export class Workflow<
   }
 
   public async listActiveWorkflowRuns() {
-    const runningRuns = await this.listWorkflowRuns({ status: 'running' });
-    const waitingRuns = await this.listWorkflowRuns({ status: 'waiting' });
+    const [runningRuns, waitingRuns] = await Promise.all([
+      this.listWorkflowRuns({ status: 'running' }),
+      this.listWorkflowRuns({ status: 'waiting' }),
+    ]);
 
     return {
       runs: [...runningRuns.runs, ...waitingRuns.runs],
@@ -3895,6 +3933,52 @@ export class Run<
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._resume(params);
+  }
+
+  /**
+   * Resumes a suspended workflow without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId after dispatching the resume.
+   *
+   * The resume executes in the background and the result is never awaited. Engines that
+   * poll for results (e.g. Inngest) override this with an implementation that skips polling
+   * entirely, which avoids the `getRunOutput()` polling race.
+   *
+   * NOTE: this is exposed over HTTP / the client SDK as `resume-no-wait` / `resumeNoWait()`,
+   * not `resumeAsync`, because the existing `resumeAsync()` client/server surface awaits the
+   * full workflow result. TODO(v2): consolidate so `resumeAsync` consistently means
+   * fire-and-forget (mirroring `start`/`startAsync` semantics) across core, client SDK and
+   * HTTP routes; that consolidation is a breaking change deferred to Mastra v2.
+   * @returns A promise that resolves to the runId
+   */
+  async resumeAsync<TResume>(
+    params: {
+      resumeData?: TResume;
+      step?:
+        | Step<string, any, any, any, TResume, any, TEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TEngineType, any>[],
+            Step<string, any, any, any, TResume, any, TEngineType, any>,
+          ]
+        | string
+        | string[];
+      label?: string;
+      requestContext?: RequestContext<TRequestContext>;
+      retryCount?: number;
+      tracingOptions?: TracingOptions;
+      outputWriter?: OutputWriter;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      forEachIndex?: number;
+      perStep?: boolean;
+    } & Partial<ObservabilityContext>,
+  ): Promise<{ runId: string }> {
+    // Fire resume in background, don't await completion
+    this._resume(params).catch(err => {
+      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background resume failed:`, err);
+    });
+    return { runId: this.runId };
   }
 
   /**

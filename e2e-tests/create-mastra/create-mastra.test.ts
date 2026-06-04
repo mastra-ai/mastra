@@ -28,7 +28,8 @@ describe('create mastra', () => {
           stdio: ['inherit', 'inherit', 'inherit'],
           env: {
             ...process.env,
-            npm_config_registry: registry,
+            pnpm_config_registry: registry,
+            pnpm_config_minimum_release_age: '0',
           },
         },
       );

@@ -21,6 +21,12 @@ VercelSandbox is stateless. There is no persistent filesystem, no interactive sh
 
 :::
 
+:::note
+
+For a full Linux MicroVM with a persistent filesystem, `sudo` access, exposed ports, and background processes, use [`VercelMicroVMSandbox`](/reference/workspace/vercel-microvm-sandbox), which is backed by the [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) product.
+
+:::
+
 ## Installation
 
 ```bash npm2yarn
@@ -44,7 +50,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'dev-agent',
-  model: 'anthropic/claude-sonnet-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
   workspace,
 })
 ```

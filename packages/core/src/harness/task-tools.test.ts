@@ -555,7 +555,7 @@ describe('taskUpdateTool', () => {
     expect(ctx.events).toEqual([]);
   });
 
-  it('rejects updates that would create multiple in-progress tasks', async () => {
+  it('auto-demotes previous in-progress task when updating another to in_progress', async () => {
     const initialTasks = [
       {
         id: 'investigate',
@@ -575,14 +575,43 @@ describe('taskUpdateTool', () => {
       { requestContext: ctx.requestContext },
     );
 
-    expect(result).toEqual({
-      content: 'Only one task can be in_progress at a time.',
-      tasks: initialTasks,
-      isError: true,
-    });
-    expect(ctx.state.tasks).toBe(initialTasks);
-    expect(ctx.setState).not.toHaveBeenCalled();
-    expect(ctx.events).toEqual([]);
+    expect(result.isError).toBe(false);
+    expect(ctx.state.tasks).toEqual([
+      { id: 'investigate', content: 'Investigate issue', status: 'pending', activeForm: 'Investigating issue' },
+      { id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' },
+    ]);
+  });
+
+  it('preserves the explicitly updated earlier task when setting it to in_progress', async () => {
+    const initialTasks = [
+      {
+        id: 'investigate',
+        content: 'Investigate issue',
+        status: 'pending' as const,
+        activeForm: 'Investigating issue',
+      },
+      {
+        id: 'tests',
+        content: 'Write tests',
+        status: 'in_progress' as const,
+        activeForm: 'Writing tests',
+      },
+    ];
+    const ctx = createTaskContext(initialTasks);
+
+    const result = await (taskUpdateTool as any).execute(
+      {
+        id: 'investigate',
+        status: 'in_progress',
+      },
+      { requestContext: ctx.requestContext },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(ctx.state.tasks).toEqual([
+      { id: 'investigate', content: 'Investigate issue', status: 'in_progress', activeForm: 'Investigating issue' },
+      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
+    ]);
   });
 });
 

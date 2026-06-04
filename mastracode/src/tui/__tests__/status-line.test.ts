@@ -51,6 +51,9 @@ vi.mock('../theme.js', () => ({
     blue: '#3b82f6',
     specialGray: '#6b7280',
   },
+  extendedColors: {
+    skyBlue: '#0ea5e9',
+  },
   tintHex: (_color: string, _amount: number) => '#111111',
   getThemeMode: () => 'dark',
   ensureContrast: (_color: string) => _color,
@@ -65,6 +68,7 @@ function createState() {
   const memorySetText = vi.fn();
 
   return {
+    options: {},
     harness: {
       getDisplayState: vi.fn(() => ({
         omProgress: { status: 'idle' },
@@ -74,6 +78,8 @@ function createState() {
       listModes: vi.fn(() => [{ id: 'build', name: 'build', color: '#00ff00' }]),
       getCurrentMode: vi.fn(() => ({ id: 'build', name: 'build', color: '#00ff00' })),
       getCurrentModeId: vi.fn(() => 'build'),
+      getCurrentThreadId: vi.fn(() => 'thread-1'),
+      getResourceId: vi.fn(() => 'resource-1'),
       getState: vi.fn(() => ({ yolo: false })),
       getObserverModelId: vi.fn(() => 'openai/gpt-4o'),
       getReflectorModelId: vi.fn(() => 'openai/gpt-4o-mini'),
@@ -90,6 +96,7 @@ function createState() {
       gitBranch: 'feat/mc-queueing-ux',
     },
     pendingQueuedActions: [],
+    activeGithubPrSubscriptions: [],
     goalManager: { getGoal: vi.fn(() => null) },
     ui: { requestRender: vi.fn() },
   } as any;
@@ -128,6 +135,36 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).not.toContain('queued');
+  });
+
+  it('shows the active GitHub PR subscription beside the thread path', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [
+      {
+        owner: 'mastra-ai',
+        repo: 'mastra',
+        prNumber: 17439,
+        lastNotificationKind: 'pull-request-activity',
+        lastNotificationPriority: 'medium',
+      },
+    ];
+    state.options = { githubSignals: { isPollingThread: vi.fn(() => true) } };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('PR#17439');
+    expect(rendered).not.toContain('polling');
+    expect(rendered).not.toContain('updated');
+  });
+
+  it('does not show GitHub PR status for unsubscribed threads', () => {
+    const state = createState();
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).not.toContain('PR#');
   });
 
   it('preserves the gateway prefix when compacting gateway-backed model ids', () => {
@@ -216,7 +253,14 @@ describe('updateStatusLine', () => {
     vi.setSystemTime(now);
     const state = createState();
     state.goalManager = {
-      getGoal: vi.fn(() => ({ status: 'active', turnsUsed: 0, maxTurns: 20, startedAt: '2026-05-15T10:50:00.000Z' })),
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        turnsUsed: 0,
+        maxTurns: 20,
+        startedAt: '2026-05-15T10:50:00.000Z',
+        activeStartedAt: '2026-05-15T10:50:00.000Z',
+        activeDurationMs: 0,
+      })),
     };
 
     updateStatusLine(state);
@@ -228,12 +272,41 @@ describe('updateStatusLine', () => {
     vi.useRealTimers();
   });
 
+  it('freezes active goal duration while waiting for user input', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T17:00:00.000Z'));
+    const state = createState();
+    state.goalManager = {
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        turnsUsed: 0,
+        maxTurns: 20,
+        startedAt: '2026-05-15T10:50:00.000Z',
+        activeDurationMs: 10 * 60_000,
+      })),
+    };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('pursuing goal (10m)');
+    expect(rendered).not.toContain('6hr10m');
+    vi.useRealTimers();
+  });
+
   it('uses a compact active goal duration label on narrow screens', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
     const state = createState();
     state.goalManager = {
-      getGoal: vi.fn(() => ({ status: 'active', turnsUsed: 0, maxTurns: 20, startedAt: '2026-05-13T09:00:00.000Z' })),
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        turnsUsed: 0,
+        maxTurns: 20,
+        startedAt: '2026-05-13T09:00:00.000Z',
+        activeStartedAt: '2026-05-13T09:00:00.000Z',
+        activeDurationMs: 0,
+      })),
     };
     process.stdout.columns = 35;
 

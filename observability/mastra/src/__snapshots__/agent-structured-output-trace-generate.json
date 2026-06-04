@@ -277,18 +277,28 @@
             "entityId": "test-agent",
             "attributes": {
               "processorExecutor": "legacy",
-              "processorIndex": 0
+              "processorIndex": 0,
+              "internalUsage": {
+                "inputTokens": 15,
+                "outputTokens": 25,
+                "inputDetails": {
+                  "text": 15
+                },
+                "outputDetails": {
+                  "text": 25
+                }
+              }
             },
             "metadata": {
               "runId": "<runId-1>",
               "environment": "test"
             },
             "input": {
-              "totalChunks": 5,
+              "totalChunks": 6,
               "accumulatedText": "Mock V2 generate response"
             },
             "output": {
-              "totalChunks": 5,
+              "totalChunks": 6,
               "accumulatedText": "Mock V2 generate response"
             }
           }
