@@ -59,6 +59,7 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
+import type { SignalProvider } from './signal-provider';
 import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
@@ -621,6 +622,23 @@ interface AgentConfigBase<
    * Notification delivery configuration for record-first notification signals.
    */
   notifications?: AgentNotificationConfig;
+  /**
+   * Signal providers that monitor external sources and push
+   * notification signals into agent threads.
+   *
+   * Each provider is automatically registered as both an input and
+   * output processor, and connected to this agent instance.
+   *
+   * @example
+   * ```ts
+   * const agent = new Agent({
+   *   signals: [new GithubSignals({ cwd: project.rootPath })],
+   * });
+   * ```
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  signals?: SignalProvider[];
   /**
    * Optional agent-level transform policy for tool payloads before they are
    * serialized into display streams or user-visible transcripts.

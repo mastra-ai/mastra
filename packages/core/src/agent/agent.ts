@@ -113,6 +113,7 @@ import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import type { SignalProvider } from './signal-provider';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -361,6 +362,7 @@ export class Agent<
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
   #notifications?: AgentNotificationConfig;
+  #signals?: SignalProvider[];
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #editorConfig?: AgentEditorConfig;
   /**
@@ -572,6 +574,44 @@ export class Agent<
 
     if (config.notifications) {
       this.#notifications = config.notifications;
+    }
+
+    if (config.signals && config.signals.length > 0) {
+      this.#signals = config.signals;
+
+      // SignalProvider extends BaseProcessor which implements Processor, but the
+      // InputProcessorOrWorkflow / OutputProcessorOrWorkflow unions use branded
+      // intersections. We cast through Processor[] (the common base) which the
+      // processor runner already accepts.
+      const asInput = config.signals as unknown as InputProcessorOrWorkflow[];
+      const asOutput = config.signals as unknown as OutputProcessorOrWorkflow[];
+
+      // Register each signal provider as both input and output processor
+      const existingInput = this.#inputProcessors;
+      this.#inputProcessors = existingInput
+        ? typeof existingInput === 'function'
+          ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
+              const resolved = await existingInput(ctx);
+              return [...asInput, ...resolved];
+            }
+          : [...asInput, ...existingInput]
+        : asInput;
+
+      const existingOutput = this.#outputProcessors;
+      this.#outputProcessors = existingOutput
+        ? typeof existingOutput === 'function'
+          ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
+              const resolved = await existingOutput(ctx);
+              return [...resolved, ...asOutput];
+            }
+          : [...existingOutput, ...asOutput]
+        : asOutput;
+
+      // Connect each provider and start polling
+      for (const provider of config.signals) {
+        provider.connect(this as Agent<any, any, any, any>);
+        provider.startPolling();
+      }
     }
 
     // @ts-expect-error Flag for agent network messages

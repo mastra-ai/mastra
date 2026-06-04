@@ -1,0 +1,413 @@
+import { BaseProcessor } from '../processors';
+import type { Agent } from './agent';
+
+/**
+ * Identifies a specific agent thread that a signal provider targets.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SignalProviderTarget = {
+  threadId: string;
+  resourceId: string;
+  agentId?: string;
+};
+
+/**
+ * A subscription that links an agent thread to an external resource
+ * monitored by a signal provider.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SignalSubscription = {
+  /** Unique identifier for the subscription */
+  id: string;
+  /** The provider that owns this subscription */
+  providerId: string;
+  /** The thread receiving signals */
+  threadId: string;
+  /** The resource owning the thread */
+  resourceId: string;
+  /** Provider-specific identifier for the external resource (e.g., "github:owner/repo#123") */
+  externalResourceId: string;
+  /** When the subscription was created */
+  subscribedAt: Date;
+  /** Provider-specific metadata for the subscription */
+  metadata: Record<string, unknown>;
+};
+
+/**
+ * Options for the handleWebhook method.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SignalProviderWebhookRequest = {
+  body: unknown;
+  headers: Record<string, string>;
+  params?: Record<string, string>;
+};
+
+/**
+ * Abstract base for signal providers.
+ *
+ * A SignalProvider is a Processor that monitors external sources and pushes
+ * notification signals into agent threads. It combines three capabilities:
+ *
+ * 1. **Processor hooks** — intercept agent input/output steps (inherited from Processor)
+ * 2. **Subscription tracking** — built-in registry of which threads are subscribed to which external resources
+ * 3. **External monitoring** — polling or webhook-driven event ingestion
+ *
+ * ## Usage
+ *
+ * ```ts
+ * const agent = new Agent({
+ *   signals: [new MySignalProvider()],
+ * });
+ * ```
+ *
+ * The Agent automatically:
+ * - Registers the provider as both an input and output processor
+ * - Calls `connect(this)` to establish the bidirectional link
+ * - Starts polling if `pollInterval` is defined
+ *
+ * ## Building a Provider
+ *
+ * Extend this class, implement the abstract `id` field, and override
+ * whichever hooks your provider needs:
+ *
+ * ```ts
+ * class SlackSignals extends SignalProvider<'slack-signals'> {
+ *   readonly id = 'slack-signals';
+ *   readonly pollInterval = 30_000; // poll every 30s
+ *
+ *   async poll(subscriptions: SignalSubscription[]) {
+ *     for (const sub of subscriptions) {
+ *       // check Slack, emit notifications for changes
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export abstract class SignalProvider<TId extends string = string> extends BaseProcessor<TId> {
+  /**
+   * The agent this provider is connected to.
+   * Set automatically when passed to `Agent({ signals: [...] })`.
+   */
+  #connectedAgent?: Agent<any, any, any, any>;
+
+  /**
+   * In-memory subscription registry.
+   * Key: `${resourceId}:${threadId}:${externalResourceId}`
+   */
+  readonly #subscriptions = new Map<string, SignalSubscription>();
+
+  /**
+   * Index: externalResourceId → set of subscription keys
+   */
+  readonly #subscriptionsByResource = new Map<string, Set<string>>();
+
+  /**
+   * Index: `${resourceId}:${threadId}` → set of subscription keys
+   */
+  readonly #subscriptionsByThread = new Map<string, Set<string>>();
+
+  /** Active polling timer, if any */
+  #pollTimer?: ReturnType<typeof setInterval>;
+
+  // ── Connection ──────────────────────────────────────────────────────
+
+  /**
+   * Called by the Agent constructor to establish the bidirectional link.
+   * Override to perform additional setup (always call `super.connect(agent)`).
+   */
+  connect(agent: Agent<any, any, any, any>): void {
+    this.#connectedAgent = agent;
+  }
+
+  /**
+   * The connected agent. Available after `connect()` has been called.
+   * Use this to send signals and notification signals back into agent threads.
+   */
+  protected get agent(): Agent<any, any, any, any> | undefined {
+    return this.#connectedAgent;
+  }
+
+  // ── Subscription tracking ──────────────────────────────────────────
+
+  /**
+   * Subscribe a thread to an external resource.
+   *
+   * @param target - The thread to receive signals
+   * @param externalResourceId - Provider-specific resource identifier
+   *   (e.g., `"github:mastra-ai/mastra#123"`, `"slack:C0B01RW7A4T"`)
+   * @param metadata - Optional provider-specific metadata for the subscription
+   */
+  protected subscribe(
+    target: SignalProviderTarget,
+    externalResourceId: string,
+    metadata: Record<string, unknown> = {},
+  ): SignalSubscription {
+    const key = this.#subscriptionKey(target, externalResourceId);
+    const existing = this.#subscriptions.get(key);
+    if (existing) {
+      existing.metadata = { ...existing.metadata, ...metadata };
+      return existing;
+    }
+
+    const subscription: SignalSubscription = {
+      id: crypto.randomUUID(),
+      providerId: this.id,
+      threadId: target.threadId,
+      resourceId: target.resourceId,
+      externalResourceId,
+      subscribedAt: new Date(),
+      metadata,
+    };
+
+    this.#subscriptions.set(key, subscription);
+
+    // Update resource index
+    let resourceSet = this.#subscriptionsByResource.get(externalResourceId);
+    if (!resourceSet) {
+      resourceSet = new Set();
+      this.#subscriptionsByResource.set(externalResourceId, resourceSet);
+    }
+    resourceSet.add(key);
+
+    // Update thread index
+    const threadKey = this.#threadKey(target);
+    let threadSet = this.#subscriptionsByThread.get(threadKey);
+    if (!threadSet) {
+      threadSet = new Set();
+      this.#subscriptionsByThread.set(threadKey, threadSet);
+    }
+    threadSet.add(key);
+
+    return subscription;
+  }
+
+  /**
+   * Unsubscribe a thread from an external resource.
+   *
+   * @returns `true` if a subscription was removed, `false` if none existed
+   */
+  protected unsubscribe(target: SignalProviderTarget, externalResourceId: string): boolean {
+    const key = this.#subscriptionKey(target, externalResourceId);
+    const subscription = this.#subscriptions.get(key);
+    if (!subscription) return false;
+
+    this.#subscriptions.delete(key);
+
+    // Clean up resource index
+    const resourceSet = this.#subscriptionsByResource.get(externalResourceId);
+    if (resourceSet) {
+      resourceSet.delete(key);
+      if (resourceSet.size === 0) this.#subscriptionsByResource.delete(externalResourceId);
+    }
+
+    // Clean up thread index
+    const threadKey = this.#threadKey(target);
+    const threadSet = this.#subscriptionsByThread.get(threadKey);
+    if (threadSet) {
+      threadSet.delete(key);
+      if (threadSet.size === 0) this.#subscriptionsByThread.delete(threadKey);
+    }
+
+    return true;
+  }
+
+  /**
+   * Get all active subscriptions for this provider.
+   */
+  protected getSubscriptions(): SignalSubscription[] {
+    return [...this.#subscriptions.values()];
+  }
+
+  /**
+   * Get all subscriptions for a specific external resource.
+   *
+   * @example
+   * ```ts
+   * const subs = this.getSubscriptionsForResource('github:mastra-ai/mastra#123');
+   * for (const sub of subs) {
+   *   await this.agent?.sendNotificationSignal(..., { resourceId: sub.resourceId, threadId: sub.threadId });
+   * }
+   * ```
+   */
+  protected getSubscriptionsForResource(externalResourceId: string): SignalSubscription[] {
+    const keys = this.#subscriptionsByResource.get(externalResourceId);
+    if (!keys) return [];
+    return [...keys].map(key => this.#subscriptions.get(key)!).filter(Boolean);
+  }
+
+  /**
+   * Get all subscriptions for a specific thread.
+   */
+  protected getSubscriptionsForThread(target: SignalProviderTarget): SignalSubscription[] {
+    const threadKey = this.#threadKey(target);
+    const keys = this.#subscriptionsByThread.get(threadKey);
+    if (!keys) return [];
+    return [...keys].map(key => this.#subscriptions.get(key)!).filter(Boolean);
+  }
+
+  /**
+   * Check if a thread is subscribed to a specific external resource.
+   */
+  protected hasSubscription(target: SignalProviderTarget, externalResourceId: string): boolean {
+    return this.#subscriptions.has(this.#subscriptionKey(target, externalResourceId));
+  }
+
+  /**
+   * Remove all subscriptions for a thread.
+   */
+  protected unsubscribeAll(target: SignalProviderTarget): number {
+    const threadSubscriptions = this.getSubscriptionsForThread(target);
+    let removed = 0;
+    for (const sub of threadSubscriptions) {
+      if (this.unsubscribe(target, sub.externalResourceId)) removed++;
+    }
+    return removed;
+  }
+
+  /**
+   * Total number of active subscriptions.
+   */
+  protected get subscriptionCount(): number {
+    return this.#subscriptions.size;
+  }
+
+  // ── Polling ────────────────────────────────────────────────────────
+
+  /**
+   * Optional poll interval in milliseconds.
+   * When defined, the framework calls `poll()` on this interval
+   * with all active subscriptions.
+   *
+   * Set to `undefined` or `0` for webhook-only providers that don't poll.
+   */
+  readonly pollInterval?: number;
+
+  /**
+   * Called on each poll cycle with all active subscriptions.
+   * Override to check external sources and emit notifications.
+   *
+   * @param subscriptions - All active subscriptions for this provider
+   */
+  poll?(subscriptions: SignalSubscription[]): Promise<void>;
+
+  /**
+   * Start the polling timer. Called automatically by the Agent after `connect()`.
+   * Can also be called manually to restart polling after `stopPolling()`.
+   */
+  startPolling(): void {
+    if (this.#pollTimer) return;
+    const interval = this.pollInterval;
+    if (!interval || interval <= 0 || typeof this.poll !== 'function') return;
+
+    this.#pollTimer = setInterval(() => {
+      const subscriptions = this.getSubscriptions();
+      if (subscriptions.length === 0) return;
+      void Promise.resolve(this.poll!(subscriptions)).catch(error => {
+        console.warn(`[${this.id}] poll failed:`, error);
+      });
+    }, interval);
+
+    // Don't let the timer keep the process alive
+    this.#pollTimer.unref?.();
+  }
+
+  /**
+   * Stop the polling timer.
+   */
+  stopPolling(): void {
+    if (this.#pollTimer) {
+      clearInterval(this.#pollTimer);
+      this.#pollTimer = undefined;
+    }
+  }
+
+  // ── Webhook ────────────────────────────────────────────────────────
+
+  /**
+   * Handle an incoming webhook request.
+   * Override to parse the payload, match it to subscriptions,
+   * and emit notification signals.
+   *
+   * The framework routes `POST /api/signals/:providerId` to this method.
+   */
+  handleWebhook?(request: SignalProviderWebhookRequest): Promise<{ status?: number; body?: unknown }>;
+
+  // ── Lifecycle ──────────────────────────────────────────────────────
+
+  /**
+   * Called after `connect()` to perform async initialization.
+   * Override for setup that requires the agent or Mastra to be available.
+   */
+  start?(): Promise<void> | void;
+
+  /**
+   * Called on shutdown. Override to clean up resources.
+   * Default implementation stops polling and clears all subscriptions.
+   */
+  stop(): void {
+    this.stopPolling();
+    this.#subscriptions.clear();
+    this.#subscriptionsByResource.clear();
+    this.#subscriptionsByThread.clear();
+  }
+
+  // ── Convenience ────────────────────────────────────────────────────
+
+  /**
+   * Send a notification signal to the connected agent.
+   * Convenience wrapper around `this.agent.sendNotificationSignal()`.
+   *
+   * @throws If no agent is connected
+   */
+  protected async notify(
+    notification: {
+      source: string;
+      kind: string;
+      summary: string;
+      priority?: 'low' | 'medium' | 'high' | 'urgent';
+      payload?: unknown;
+      dedupeKey?: string;
+      coalesceKey?: string;
+      attributes?: Record<string, string | number | boolean | null | undefined>;
+      metadata?: Record<string, unknown>;
+    },
+    target: SignalProviderTarget,
+  ): Promise<void> {
+    const agent = this.#connectedAgent;
+    if (!agent) {
+      throw new Error(
+        `[${this.id}] Cannot send notification: no agent connected. Was this provider passed to Agent({ signals: [...] })?`,
+      );
+    }
+
+    await agent.sendNotificationSignal(notification, {
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+    });
+  }
+
+  // ── Internal ───────────────────────────────────────────────────────
+
+  #subscriptionKey(target: SignalProviderTarget, externalResourceId: string): string {
+    return `${target.resourceId}:${target.threadId}:${externalResourceId}`;
+  }
+
+  #threadKey(target: SignalProviderTarget): string {
+    return `${target.resourceId}:${target.threadId}`;
+  }
+}
+
+/**
+ * Type guard to check if an object is a SignalProvider.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export function isSignalProvider(obj: unknown): obj is SignalProvider {
+  return obj instanceof SignalProvider;
+}
