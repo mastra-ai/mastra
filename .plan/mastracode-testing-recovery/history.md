@@ -514,3 +514,26 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13456 done, #13457 done, #13460 current.
 
 Next queue checkpoint: PR #13460 (fdPath file autocomplete), then PR #13442 (Stop/UserPromptSubmit hooks).
+
+
+### Feature map PR #13460 and #13442
+
+Processed PR [#13460](https://github.com/mastra-ai/mastra/pull/13460), `e9cc208c94` (`fix(mastracode): wire fdPath to enable @ file autocomplete (#13460)`). Verified current source detects `fd` then `fdfind` with `which`/`where`, passes the resolved path as the third `CombinedAutocompleteProvider` argument, and preserves slash/custom/skill autocomplete provider setup. Current tests cover slash/skill autocomplete ordering but do not prove `fdPath` propagation.
+
+Processed PR [#13442](https://github.com/mastra-ai/mastra/pull/13442), `cc62d1b2bb` (`mastracode: trigger Stop and UserPromptSubmit hooks in TUI (#13442)`). Verified current TUI runs `UserPromptSubmit` for non-command initial and interactive prompts before sending, removes optimistic messages when blocked, and runs `Stop` on `agent_end` reasons `complete`, `aborted`, and `error`. Also verified dynamic tool hooks still wrap `PreToolUse` / `PostToolUse` in `agents/tools.ts`.
+
+Documentation actions:
+
+- Created `features/tui/file-autocomplete.md` for `@` file references and `fd`/`fdfind` detection.
+- Created `features/integrations/lifecycle-hooks.md` for hook config, blocking semantics, TUI lifecycle wiring, and tool hook wrapping.
+- Updated `features/tui/interactive-chat.md`, `features/integrations/skills-command.md`, and `features/tools/coding-tools-permissions.md` with #13460/#13442 relationships.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13460 done, #13442 done, #13487 current.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/agents/tools.test.ts --reporter=dot` passed (4 tests).
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/setup-keyboard-shortcuts.test.ts --reporter=dot --bail 1` failed on the known stale `/github` autocomplete expectation (`sync` now appears before `debug`).
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-hooks.test.ts src/agents/tools.test.ts --reporter=dot` could not execute the hooks file because its `node:child_process` mock omits `execFile`, now imported via GitHub command wiring.
+- An accidental broad `pnpm --filter ./mastracode test -- --run ...` reproduced the existing 5 failed files / 6 failed tests baseline; no code changes were made in this batch.
+
+Next queue checkpoint: PR #13487 (terminal color theme), then PR #13494 (supported providers doc link).

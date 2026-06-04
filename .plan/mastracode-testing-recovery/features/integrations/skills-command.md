@@ -3,6 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13457](https://github.com/mastra-ai/mastra/pull/13457) — cache dynamic Harness workspace resolution so `/skills` works before the first message.
+- Later changes: [#13460](https://github.com/mastra-ai/mastra/pull/13460) — the same autocomplete provider rebuild also receives `fdPath` for `@` file suggestions.
 - Related origin: [#13227](https://github.com/mastra-ai/mastra/pull/13227) — introduced workspace-backed skill loading during early subagent/workspace organization.
 
 ## User-visible behavior
@@ -56,6 +57,7 @@
 - [Core Harness API](./harness-api.md) — workspace methods are part of the public Harness surface.
 - [Delegation](../subagents/delegation.md) — workspace/skills setup came from the same early organization work.
 - [Prompt context](../chat/prompt-context.md) — activated skill content becomes agent-visible instruction context.
+- [File autocomplete](../tui/file-autocomplete.md) — file and skill suggestions share `setupAutocomplete()` provider rebuilds.
 
 ## Existing tests
 

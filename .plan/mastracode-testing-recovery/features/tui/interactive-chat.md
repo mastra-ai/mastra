@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — initial TUI chat, streaming render, keyboard input, tool render, harness event dispatch.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior; [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added the responsive startup banner above the chat layout; [#13426](https://github.com/mastra-ai/mastra/pull/13426) — simplified the startup command hint and `/help` reference; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added core `HarnessDisplayState` and centralized status-line refresh through `display_state_changed`; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes and abbreviates Git branch status in the footer.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior; [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added the responsive startup banner above the chat layout; [#13426](https://github.com/mastra-ai/mastra/pull/13426) — simplified the startup command hint and `/help` reference; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added core `HarnessDisplayState` and centralized status-line refresh through `display_state_changed`; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes and abbreviates Git branch status in the footer; [#13460](https://github.com/mastra-ai/mastra/pull/13460) — wires `fd`/`fdfind` into editor file autocomplete; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — runs prompt-submit and stop hooks in the TUI lifecycle.
 
 ## User-visible behavior
 
@@ -46,6 +46,8 @@
 | Display projection | `HarnessDisplayState` | Status line, tasks, tools, OM, future UIs |
 | Streaming components | TUI transient projection | Chat container |
 | Mutable TUI state | `TUIState` object from `createTUIState()` | Commands, extracted handlers, tests, TUI class |
+| Autocomplete provider | `setupAutocomplete()` | Editor slash, skill, custom command, and `@` file suggestions |
+| Hook lifecycle | `HookManager` + TUI run/event loop | Prompt submit, stop/session hook execution |
 | Event routing | `event-dispatch.ts` + focused handlers | Tool/message/OM/thread/status renderers |
 | Abort state | Harness terminal event after TUI request | TUI cleanup |
 
@@ -53,7 +55,7 @@
 
 - `mastracode/src/tui/mastra-tui.ts` — thin lifecycle wrapper after #13413 modularization.
 - `mastracode/src/tui/state.ts` — shared `TUIState`, `MastraTUIOptions`, and state factory defaults.
-- `mastracode/src/tui/setup.ts` — keyboard shortcuts, submit behavior, and startup layout composition.
+- `mastracode/src/tui/setup.ts` — keyboard shortcuts, submit behavior, startup layout composition, and autocomplete provider wiring.
 - `mastracode/src/tui/components/banner.ts` — static responsive header rendered before chat/frontmatter.
 - `mastracode/src/tui/event-dispatch.ts` — event-to-handler routing; `display_state_changed` refreshes the status line from Harness display state; `thread_changed` refreshes Git branch.
 - `packages/core/src/harness/types.ts` and `harness.ts` — `HarnessDisplayState` source for active tools/tasks/OM/current-message projection.
@@ -67,8 +69,10 @@
 ## Dependencies / related features
 
 - [Startup banner](./startup-banner.md) — static header in the same TUI layout.
+- [File autocomplete](./file-autocomplete.md) — editor `@` file suggestions share the autocomplete setup path.
 - [Help and shortcuts](./help-and-shortcuts.md) — compact startup hint and `/help` reference.
 - [Harness display state](../integrations/harness-display-state.md) — canonical active-display projection for status/tasks/tools/OM.
+- [Lifecycle hooks](../integrations/lifecycle-hooks.md) — prompt-submit and stop hooks run through this TUI loop.
 - [Git branch context and status](../git/branch-context.md) — footer branch text is refreshed during thread/run lifecycle events.
 - [Queued follow-ups and slash commands](../chat/queued-followups.md) — active-run input queueing lives in the TUI chat path.
 - [Persistent conversations](../threads/persistent-conversations.md) — chat is thread-scoped.
@@ -78,7 +82,8 @@
 ## Existing tests
 
 - `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` — active-run queue/signal behavior.
-- `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — shortcut behavior.
+- `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — shortcut behavior and slash autocomplete ordering.
+- `mastracode/src/tui/__tests__/mastra-tui-hooks.test.ts` — prompt-submit/stop hook wiring.
 - `mastracode/src/tui/components/__tests__/banner.test.ts` — responsive startup banner rendering.
 - `mastracode/src/tui/components/__tests__/help-overlay.test.ts` — compact `/help` output.
 - `packages/core/src/harness/display-state.test.ts` — display-state projection used by status/tasks/tools/OM rendering.

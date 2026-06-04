@@ -70,9 +70,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 48 | 2026-02-24 | #13405 | `424bd890be` | likely skip | skipped | chore: version packages (alpha) (#13405) | 2 |
 | 49 | 2026-02-24 | #13456 | `babdfb23c2` | review | done | feat(mastracode): refresh git branch on thread resume & abbreviate long branch names (#13456) | 5 |
 | 50 | 2026-02-24 | #13457 | `00f43e8e97` | review | done | fix: cache dynamic workspace on harness after resolution (#13457) | 1 |
-| 51 | 2026-02-24 | #13460 | `e9cc208c94` | review | current | fix(mastracode): wire fdPath to enable @ file autocomplete (#13460) | 2 |
-| 52 | 2026-02-25 | #13442 | `cc62d1b2bb` | review | | mastracode: trigger Stop and UserPromptSubmit hooks in TUI (#13442) | 2 |
-| 53 | 2026-02-25 | #13487 | `9ef0b440ed` | review | | feat(mastracode): inherit terminal color theme for light/dark mode support (#13487) | 21 |
+| 51 | 2026-02-24 | #13460 | `e9cc208c94` | review | done | fix(mastracode): wire fdPath to enable @ file autocomplete (#13460) | 2 |
+| 52 | 2026-02-25 | #13442 | `cc62d1b2bb` | review | done | mastracode: trigger Stop and UserPromptSubmit hooks in TUI (#13442) | 2 |
+| 53 | 2026-02-25 | #13487 | `9ef0b440ed` | review | current | feat(mastracode): inherit terminal color theme for light/dark mode support (#13487) | 21 |
 | 54 | 2026-02-25 | #13494 | `5c6bf27b79` | review | | fix(mastracode): Update documentation link for supported providers (#13494) | 1 |
 | 55 | 2026-02-25 | #13493 | `434ad50157` | review | | fix(mastracode): append unused arguments to slash command output (#13493) | 1 |
 | 56 | 2026-02-25 | #13500 | `47cb0a8962` | review | | fix(mastracode): allow onboarding to proceed with API keys only (#13500) | 2 |
