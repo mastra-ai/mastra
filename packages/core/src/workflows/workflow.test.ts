@@ -17,8 +17,9 @@ import { RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
+import { createWorkflow } from './create';
 import type { Workflow } from './types';
-import { createStep, createWorkflow } from './workflow';
+import { createStep } from './workflow';
 
 // ============================================================================
 // Shared Test Suite (Default Engine)

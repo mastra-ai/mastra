@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
-import { createStep, createWorkflow } from '../workflow';
+import { createWorkflow } from '../create';
+import { createStep } from '../workflow';
 
 const testStorage = new MockStore();
 

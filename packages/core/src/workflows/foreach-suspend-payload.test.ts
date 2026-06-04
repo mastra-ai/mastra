@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
-import { createStep, createWorkflow } from './workflow';
+import { createWorkflow } from './create';
+import { createStep } from './workflow';
 
 /**
  * Regression test for parallel-foreach `suspendPayload` being wiped between
