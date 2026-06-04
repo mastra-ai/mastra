@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — coding tools, approvals, permissions, YOLO, hooks, MCP tool merge.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior; [#13348](https://github.com/mastra-ai/mastra/pull/13348) — capped file/search/web tool result output around 2k tokens; [#13355](https://github.com/mastra-ai/mastra/pull/13355) — allowed the old unified `view` tool's `view_range` to paginate directory listings; [#13385](https://github.com/mastra-ai/mastra/pull/13385) — fixed TS/JS LSP language IDs; [#13384](https://github.com/mastra-ai/mastra/pull/13384) — fixed hidden-file exclusion for the old directory-listing implementation; [#13428](https://github.com/mastra-ai/mastra/pull/13428) — fixed `view` rendering for core workspace `read_file` output; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — completed live TUI lifecycle hook wiring for `Stop` and `UserPromptSubmit`; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — fixed persisted approval resume for standalone/storage-backed agents; [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit-tool path resolution with command execution/project root semantics; current core tools now own file/list/LSP behavior.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — context-aware dynamic tools and execution-mode availability; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved tool approvals, questions, and plan approval primitives into core Harness; [#13250](https://github.com/mastra-ai/mastra/pull/13250) — fixed packaged ESM startup for LSP-backed tools; [#13253](https://github.com/mastra-ai/mastra/pull/13253) — fixed Zod v3/v4 schema routing for tool input schemas; [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments into live renderers; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved task/todo tools into core Harness built-ins; [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wired the TUI `/mcp` status/reload command to the real MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored MCP manager construction to `createMcpManager()` without changing MCP tool merge behavior; [#13348](https://github.com/mastra-ai/mastra/pull/13348) — capped file/search/web tool result output around 2k tokens; [#13355](https://github.com/mastra-ai/mastra/pull/13355) — allowed the old unified `view` tool's `view_range` to paginate directory listings; [#13385](https://github.com/mastra-ai/mastra/pull/13385) — fixed TS/JS LSP language IDs; [#13384](https://github.com/mastra-ai/mastra/pull/13384) — fixed hidden-file exclusion for the old directory-listing implementation; [#13428](https://github.com/mastra-ai/mastra/pull/13428) — fixed `view` rendering for core workspace `read_file` output; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — completed live TUI lifecycle hook wiring for `Stop` and `UserPromptSubmit`; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — fixed persisted approval resume for standalone/storage-backed agents; [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit-tool path resolution with command execution/project root semantics; [#13564](https://github.com/mastra-ai/mastra/pull/13564) — wires config `extraTools` into the dynamic tool builder and keeps denied tools out of both runtime and prompt guidance; current core tools now own file/list/LSP behavior.
 
 ## User-visible behavior
 
 - What the user can do: let the agent read/search/edit/list files, run shell, inspect symbols, use web/MCP tools, and request path access.
-- Success looks like: risky tools ask unless policy/session grants/YOLO allow them.
+- Success looks like: risky tools ask unless policy/session grants/YOLO allow them; configured extra tools appear when allowed and denied tools disappear everywhere.
 - Must preserve: visible tool list, runtime tool availability, prompt guidance, approval UI, and bounded tool output stay aligned.
 
 ## Entry points / commands
@@ -40,8 +40,8 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Tool definitions | Workspace + `createDynamicTools()` + `McpManager` interface | Runtime, prompt guidance |
-| Permission policies | Harness state / permission rules | Approval engine, `/permissions` |
+| Tool definitions | Workspace + `createDynamicTools()` + `McpManager` interface + config `extraTools` | Runtime, prompt guidance |
+| Permission policies | Harness state / permission rules | Approval engine, `/permissions`, dynamic tool filtering |
 | YOLO | Harness state | Approval engine, status/commands |
 | Session grants | Harness session | Approval engine only |
 | Tool rendering | Harness events/history | TUI projections |
@@ -56,7 +56,7 @@
 
 ## Key files
 
-- `mastracode/src/agents/tools.ts` — dynamic tools, web search, MCP merge, hooks.
+- `mastracode/src/agents/tools.ts` — dynamic tools, web search, MCP merge, config `extraTools`, denied-tool filtering, hooks.
 - `mastracode/src/mcp/manager.ts` — MCP manager factory/interface that supplies tools to `createDynamicTools()`.
 - `mastracode/src/tui/commands/mcp.ts` — MCP status/reload command that reads the same manager.
 - `mastracode/src/agents/workspace.ts` — workspace provisioning, plan-mode tool filtering, and sandbox paths.
@@ -125,7 +125,8 @@
 ## Known risks / regressions
 
 - Harness v1 risk: permission state, visible tools, prompt guidance, and runtime tools can drift.
-- Denied non-workspace tools are filtered in `createDynamicTools()`; workspace tool visibility must be verified separately.
+- Extra tools intentionally cannot overwrite built-ins; future merge-order changes could reopen tool-shadowing bugs.
+- Denied non-workspace tools are filtered in `createDynamicTools()` and omitted from prompt guidance; workspace tool visibility must be verified separately.
 - Task-state Slack regression is adjacent because task tools also need rendered/prompt/runtime state sync.
 - Task tools are core built-ins and always-allowed; MC prompt/runtime/TUI restrictions must stay aligned after future core changes.
 - LSP-backed tools can break at package startup if ESM-only subpath imports are not built/imported exactly as Node expects.

@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13563 (row 70) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13564 (`675a6d717f`, extraTools wiring), then #13566 (`5ea3a02d66`, model API-key detection).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13566 (row 72) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13598 (`e37c95493f`, rejected-plan visibility), then #13600 (`43187ad783`, Anthropic API-key fallback).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 71: PR #13564 (extraTools wiring), then row 72: PR #13566 (model API-key detection).
+1. Continue at `_pr-queue.md` row 73: PR #13598 (rejected-plan visibility), then row 74: PR #13600 (Anthropic API-key fallback).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -126,3 +126,8 @@ None known.
 - `gh pr view 13526 --json number,title,body,author,mergedAt,url,files,commits`, current core workspace filesystem/tools source, and path-containment tests verified edit tool path resolution semantics. Updated tools card.
 - `gh pr view 13557 --json number,title,body,author,mergedAt,url,files,commits`, current plan approval handler, `utils/plans.ts`, README/docs, and save-plan tests verified best-effort approved-plan persistence. Updated plan-approval card.
 - Focused verification for #13526/#13557 passed: core local-filesystem/edit-file tests (2 files / 131 tests) and Mastra Code save-plan test (1 file / 6 tests). An accidental Mastra Code full-suite invocation reproduced the known 5-file baseline failures.
+- `gh pr view 13560 --json number,title,body,author,mergedAt,url,files,commits`, current `main.ts`, `error-classification.ts`, and stream-destroyed tests verified non-fatal `ERR_STREAM_DESTROYED` handling. Updated install/launch card.
+- `gh pr view 13563 --json number,title,body,author,mergedAt,url,files,commits`, current Codex provider/model/memory source, core Harness OM failure tests, and memory abort-signal tests verified Codex OM/stream compatibility. Updated OM and thinking cards.
+- `gh pr view 13564 --json number,title,body,author,mergedAt,url,files,commits`, current `createDynamicTools()`, tool guidance, and extra-tools tests verified extraTools merge and denied-tool filtering. Updated tools card.
+- `gh pr view 13566 --json number,title,body,author,mergedAt,url,files,commits`, current provider-registry startup/setup/model-pack source verified all-provider API-key access detection. Updated model/settings cards.
+- Focused verification for #13564/#13566 passed: extra-tools, onboarding packs, and models-pack tests (3 files / 39 tests).

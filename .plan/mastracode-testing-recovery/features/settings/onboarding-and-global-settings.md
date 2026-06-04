@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13421](https://github.com/mastra-ai/mastra/pull/13421) — interactive first-run `/setup` flow, persisted global settings, built-in/custom model packs, OM packs, and YOLO preference.
-- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added persisted theme preference; [#13494](https://github.com/mastra-ai/mastra/pull/13494) — fixed the supported-providers documentation URL in onboarding; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — allows onboarding to proceed with API-key-only provider access instead of requiring OAuth/built-in packs; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and then strengthened an Anthropic OAuth warning, but current source has removed that flow via later #14605; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — made `/models` the single pack flow and hardened custom pack settings updates.
+- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added persisted theme preference; [#13494](https://github.com/mastra-ai/mastra/pull/13494) — fixed the supported-providers documentation URL in onboarding; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — allows onboarding to proceed with API-key-only provider access instead of requiring OAuth/built-in packs; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and then strengthened an Anthropic OAuth warning, but current source has removed that flow via later #14605; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — made `/models` the single pack flow and hardened custom pack settings updates; [#13566](https://github.com/mastra-ai/mastra/pull/13566) — expands provider access detection to all registry provider API-key env vars.
 
 ## User-visible behavior
 
 - What the user can do: complete first-run setup or re-run `/setup`; use OAuth or configured API keys; choose mode model pack, OM pack, and YOLO default.
-- Success looks like: selected pack updates current run, thread metadata, global settings, subagent defaults, OM models, and status line; API-key-only providers do not get blocked at the auth step.
+- Success looks like: selected pack updates current run, thread metadata, global settings, subagent defaults, OM models, and status line; API-key-only providers, including non-hardcoded registry providers, do not get blocked at the auth step.
 - Must preserve: skipped/completed onboarding state, active model/OM pack IDs, custom packs, provider access detection, YOLO preference, and settings migrations.
 
 ## Entry points / commands
@@ -44,7 +44,7 @@
 | Onboarding completion/skipped/version | `settings.json` onboarding section | Startup gating, `/setup` previous selections |
 | Active model pack | Thread setting `activeModelPackId` + global settings fallback | `/models`, startup default resolution, footer/runtime model state |
 | Custom model packs | `settings.json` `customModelPacks` plus thread active pack metadata | `/setup`, `/models` create/edit/import/share/delete, startup `resolveModelDefaults()` |
-| Provider access | AuthStorage + env/API-key detection | Onboarding auth gate, pack filtering, model prompts |
+| Provider access | AuthStorage + env/API-key detection + provider registry `apiKeyEnvVar` | Onboarding auth gate, pack filtering, model prompts |
 | OM pack/model | Harness state + global settings OM fields | OM memory factory, `/om`, setup wizard |
 | YOLO/quiet preferences | Harness state + global settings preferences | Permission prompts, tool/task rendering |
 | Storage backend | Global settings + env overrides | Storage factory, memory/history persistence |
@@ -55,9 +55,9 @@
 - `mastracode/src/onboarding/onboarding-inline.ts` — setup wizard UI, API-key/OAuth copy, step flow, and supported-provider docs link.
 - `mastracode/src/onboarding/settings.ts` — `settings.json` schema, migrations, defaults, and pack resolution.
 - `mastracode/src/onboarding/packs.ts` — provider-filtered built-in mode/OM packs plus always-available custom packs.
-- `mastracode/src/tui/mastra-tui.ts` — startup onboarding trigger and `applyOnboardingResult()` runtime persistence.
+- `mastracode/src/tui/mastra-tui.ts` — startup onboarding trigger, runtime provider access refresh, and `applyOnboardingResult()` runtime persistence.
 - `mastracode/src/tui/commands/models-pack.ts` — `/models` pack switch/custom/edit/share/import behavior.
-- `mastracode/src/index.ts` — startup resolution of settings into Harness modes, OM state, subagents, storage, and preferences.
+- `mastracode/src/index.ts` — startup resolution of settings into Harness modes, registry provider API-key access, OM state, subagents, storage, and preferences.
 - `mastracode/src/auth/storage.ts` — provider post-login default model IDs.
 
 ## Dependencies / related features
@@ -78,6 +78,7 @@
 ## Missing tests
 
 - First-run onboarding wizard end-to-end: cancel, API-key-only provider access, login refresh, custom pack, OM pack, YOLO, persisted settings.
+- Non-hardcoded registry provider API key (including multi-env `apiKeyEnvVar` entries) keeps setup from showing the no-provider warning.
 - Reload after `/setup`: footer/runtime model, thread metadata, subagent defaults, and OM defaults all agree.
 - `/models` activation/import/share/delete/targeted-edit flow through real TUI overlay, not only helper functions.
 - Headless startup with active model pack and custom pack settings.
@@ -86,6 +87,7 @@
 
 - State is split across live harness session, thread metadata, global settings, auth storage, and UI projections.
 - Provider access can be true from API keys even when no non-custom built-in mode pack is available; onboarding must use the explicit `hasProviderAccess` flag, not infer from pack count.
+- Provider registry API-key detection can drift between startup, setup, `/models`, and runtime model resolution, especially for providers with multiple env var names.
 - Built-in pack model IDs drift over time; current source uses OpenAI `gpt-5.5` even though #13431 temporarily lowered Codex defaults.
 - Earlier Slack regression around “No model selected” after reload likely lives near this settings/session boundary.
 - Custom pack rename/delete/import can leave stale global or thread pack IDs if cleanup misses one ownership layer.

@@ -712,3 +712,24 @@ Verification:
 - Focused tests passed: `pnpm --filter ./mastracode exec vitest run src/__tests__/stream-destroyed-error.test.ts src/__tests__/codex-model-routing.test.ts --reporter=dot --bail 1` (2 files / 20 tests), `pnpm --filter ./packages/core test -- --run src/harness/om-failure-abort.test.ts --reporter=dot --bail 1` (1 file / 2 tests), and `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/abort-signal.test.ts --reporter=dot --bail 1` (1 file / 5 tests).
 
 Next queue checkpoint: PR #13564 (extraTools wiring), then PR #13566 (model API-key detection).
+
+
+### Feature map PR #13564 and #13566
+
+Processed PR [#13564](https://github.com/mastra-ai/mastra/pull/13564), `675a6d717f` (`fix(mastracode): wire extraTools into tool builder and filter denied tools (#13564)`). Verified `createDynamicTools()` now receives config `extraTools`, supports record or request-context function forms, refuses to let extra tools overwrite built-ins, applies disabled-tool and per-tool deny filtering, and passes `deniedTools` into prompt guidance so runtime and instructions stay aligned.
+
+Processed PR [#13566](https://github.com/mastra-ai/mastra/pull/13566), `dd32e1e7a2` (`fix(mastracode): detect API keys for all registry providers in setup flow (#13566)`). Verified startup and runtime provider access now scan registry `apiKeyEnvVar` entries instead of only the original hardcoded providers, so API-key-only providers such as Groq/Mistral can satisfy setup/model access checks.
+
+Documentation actions:
+
+- Updated `features/tools/coding-tools-permissions.md` with #13564 extraTools ownership, denied-tool prompt/runtime filtering, and merge-order risks.
+- Updated `features/models/model-auth-and-modes.md` and `features/settings/onboarding-and-global-settings.md` with #13566 provider-registry API-key detection and missing non-hardcoded-provider tests.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13564 done, #13566 done, #13598 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/agents/tools.ts`, `mastracode/src/agents/prompts/tool-guidance.ts`, `mastracode/src/agents/prompts/index.ts`, `mastracode/src/agents/extra-tools.test.ts`, `mastracode/src/index.ts`, `mastracode/src/tui/mastra-tui.ts`, `mastracode/src/tui/commands/models-pack.ts`, `mastracode/src/onboarding/packs.ts`, and `mastracode/src/onboarding/onboarding-inline.ts`.
+- PR metadata checked with `gh pr view 13564 --json number,title,body,author,mergedAt,url,files,commits` and `gh pr view 13566 --json number,title,body,author,mergedAt,url,files,commits`.
+- Focused tests passed: `pnpm --filter ./mastracode exec vitest run src/agents/extra-tools.test.ts src/onboarding/__tests__/packs.test.ts src/tui/commands/__tests__/models-pack.test.ts --reporter=dot --bail 1` (3 files / 39 tests).
+
+Next queue checkpoint: PR #13598 (rejected-plan visibility), then PR #13600 (Anthropic API-key fallback).

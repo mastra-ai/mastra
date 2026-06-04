@@ -90,9 +90,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 68 | 2026-02-26 | #13557 | `15f4da196c` | review | done | feat(plans): persist approved plans to disk (#13401) (#13557) | 4 |
 | 69 | 2026-02-26 | #13560 | `3b56d782fa` | review | done | fix: handle ERR_STREAM_DESTROYED as non-fatal in global error handlers (#13560) | 3 |
 | 70 | 2026-02-26 | #13563 | `9311c17d7a` | review | done | fix: make Codex models work with OM and mastracode streams (#13563) | 4 |
-| 71 | 2026-02-27 | #13564 | `675a6d717f` | review | current | fix(mastracode): wire extraTools into tool builder and filter denied tools (#13564) | 5 |
-| 72 | 2026-02-27 | #13566 | `dd32e1e7a2` | review | | fix(mastracode): detect API keys for all registry providers in setup flow (#13566) | 5 |
-| 73 | 2026-02-27 | #13598 | `e37c95493f` | review | | fix: keep submitted plan visible when requesting changes (#13598) | 1 |
+| 71 | 2026-02-27 | #13564 | `675a6d717f` | review | done | fix(mastracode): wire extraTools into tool builder and filter denied tools (#13564) | 5 |
+| 72 | 2026-02-27 | #13566 | `dd32e1e7a2` | review | done | fix(mastracode): detect API keys for all registry providers in setup flow (#13566) | 5 |
+| 73 | 2026-02-27 | #13598 | `e37c95493f` | review | current | fix: keep submitted plan visible when requesting changes (#13598) | 1 |
 | 74 | 2026-02-27 | #13600 | `43187ad783` | review | | feat(mastracode): support Anthropic API key as fallback auth for model resolution (#13600) | 4 |
 | 75 | 2026-02-27 | #13556 | `c6c5376cb2` | review | | feat: add Quiet mode setting for subagent output collapse (#13556) | 9 |
 | 76 | 2026-02-28 | #13609 | `ebab49855b` | review | | fix: preserve assistant text after tool updates and add openai web_search fallback (#13609) | 2 |
