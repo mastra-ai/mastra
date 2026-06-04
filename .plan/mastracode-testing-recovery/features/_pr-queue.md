@@ -74,9 +74,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 52 | 2026-02-25 | #13442 | `cc62d1b2bb` | review | done | mastracode: trigger Stop and UserPromptSubmit hooks in TUI (#13442) | 2 |
 | 53 | 2026-02-25 | #13487 | `9ef0b440ed` | review | done | feat(mastracode): inherit terminal color theme for light/dark mode support (#13487) | 21 |
 | 54 | 2026-02-25 | #13494 | `5c6bf27b79` | review | done | fix(mastracode): Update documentation link for supported providers (#13494) | 1 |
-| 55 | 2026-02-25 | #13493 | `434ad50157` | review | current | fix(mastracode): append unused arguments to slash command output (#13493) | 1 |
-| 56 | 2026-02-25 | #13500 | `47cb0a8962` | review | | fix(mastracode): allow onboarding to proceed with API keys only (#13500) | 2 |
-| 57 | 2026-02-25 | #13503 | `cc26bff512` | review | | fix(mastracode): remove individual theme function exports to fix startup crash (#13503) | 30 |
+| 55 | 2026-02-25 | #13493 | `434ad50157` | review | done | fix(mastracode): append unused arguments to slash command output (#13493) | 1 |
+| 56 | 2026-02-25 | #13500 | `47cb0a8962` | review | done | fix(mastracode): allow onboarding to proceed with API keys only (#13500) | 2 |
+| 57 | 2026-02-25 | #13503 | `cc26bff512` | review | current | fix(mastracode): remove individual theme function exports to fix startup crash (#13503) | 30 |
 | 58 | 2026-02-25 | #13505 | `11def4789e` | review | | feat(mastracode): add Claude Max OAuth ToS warning (#13505) | 6 |
 | 59 | 2026-02-25 | #13476 | `cb9f921320` | review | | fix: observational memory buffering precision (#13476) | 1 |
 | 60 | 2026-02-25 | #13490 | `d7ad237020` | review | | feat(mastracode): wire reasoning effort for OpenAI Codex models (#13490) | 11 |

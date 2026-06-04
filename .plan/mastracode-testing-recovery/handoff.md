@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13494 (row 54) have been processed, with #13037, #13251, #13252, #13257, #13260, and #13405 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13493 (`434ad50157`, append slash-command args), then #13500 (`47cb0a8962`, onboarding API keys).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13500 (row 56) have been processed, with #13037, #13251, #13252, #13257, #13260, and #13405 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13503 (`cc26bff512`, theme export startup crash), then #13505 (`11def4789e`, Claude Max OAuth ToS warning).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 55: PR #13493 (append unused slash-command args), then row 56: PR #13500 (onboarding API-key-only flow).
+1. Continue at `_pr-queue.md` row 57: PR #13503 (theme export startup crash), then row 58: PR #13505 (Claude Max OAuth ToS warning).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

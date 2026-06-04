@@ -556,3 +556,18 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/theme-contrast.test.ts src/onboarding/__tests__/settings.test.ts src/onboarding/__tests__/packs.test.ts --reporter=dot` passed (3 files / 68 tests).
 
 Next queue checkpoint: PR #13493 (append unused slash-command args), then PR #13500 (allow onboarding with API keys only).
+
+
+### Feature map PR #13493 and #13500
+
+Processed PR [#13493](https://github.com/mastra-ai/mastra/pull/13493), `434ad50157` (`fix(mastracode): append unused arguments to slash command output (#13493)`). Verified current `processSlashCommand()` appends raw user args as an `ARGUMENTS:` block only when the template has no `$ARGUMENTS` or `$1+` placeholders, and does the append after shell/file expansion so raw args are not executed. The current regex treats `$0` as literal shell/prose text, not a positional placeholder.
+
+Processed PR [#13500](https://github.com/mastra-ai/mastra/pull/13500), `47cb0a8962` (`fix(mastracode): allow onboarding to proceed with API keys only (#13500)`). Verified current onboarding computes `hasProviderAccess` from the full provider-access object, passes it into `OnboardingInlineComponent`, and shows API-key/OAuth copy instead of blocking users who have API keys but no OAuth login or built-in pack.
+
+Documentation actions:
+
+- Updated `features/chat/queued-followups.md` for custom slash-command argument preservation and missing `$0`/append tests.
+- Updated `features/settings/onboarding-and-global-settings.md` and `features/models/model-auth-and-modes.md` for API-key-only onboarding access.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13493 done, #13500 done, #13503 current.
+
+Next queue checkpoint: PR #13503 (theme export startup crash), then PR #13505 (Claude Max OAuth ToS warning).

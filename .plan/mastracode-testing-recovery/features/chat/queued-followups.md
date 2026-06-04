@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13345](https://github.com/mastra-ai/mastra/pull/13345) — Ctrl+F resolves autocomplete and queues slash commands while a run is active.
-- Later changes: none known.
+- Later changes: [#13493](https://github.com/mastra-ai/mastra/pull/13493) — preserves custom slash-command arguments when the template has no `$ARGUMENTS`/`$1+` placeholders, and treats `$0` as literal shell text rather than a positional argument.
 
 ## User-visible behavior
 
-- What the user can do: press Ctrl+F during an active run to queue a follow-up instead of sending an interjection signal.
-- Success looks like: `/rev` autocomplete resolves to `/review`, then runs as a slash command after the current run finishes.
-- Must preserve: FIFO order across queued plain messages, image messages, and slash commands.
+- What the user can do: press Ctrl+F during an active run to queue a follow-up, or run custom slash commands with arguments.
+- Success looks like: `/rev` autocomplete resolves to `/review`, then runs as a slash command after the current run finishes; `//gh-debug-issue 123` exposes `123` to the model even if the template omits argument placeholders.
+- Must preserve: FIFO order across queued plain messages, image messages, and slash commands; unused custom-command args must not be dropped or shell-executed.
 
 ## Entry points / commands
 
@@ -43,6 +43,7 @@
 | Queued action order | `TUIState.pendingQueuedActions` | Agent lifecycle drain |
 | Queued text/image messages | `TUIState.pendingFollowUpMessages` | `fireMessage()` after drain |
 | Queued slash commands | `TUIState.pendingSlashCommands` | `handleSlashCommand()` after drain |
+| Custom command arguments | `processSlashCommand()` template processor | Slash-command message payload |
 | Autocomplete acceptance | `CustomEditor` | Ctrl+F / Enter handlers |
 
 ## Key files
@@ -51,6 +52,7 @@
 - `mastracode/src/tui/setup.ts` — Ctrl+F shortcut reads editor text and queues only during active runs.
 - `mastracode/src/tui/mastra-tui.ts` — stores queued messages/slash commands.
 - `mastracode/src/tui/handlers/agent-lifecycle.ts` — drains queued actions after `agent_end`.
+- `mastracode/src/utils/slash-command-processor.ts` — expands `$ARGUMENTS`/`$1+`, appends unused raw args after shell/file expansion, and preserves literal `$0`.
 
 ## Dependencies / related features
 
@@ -61,16 +63,19 @@
 
 - `mastracode/src/tui/components/__tests__/custom-editor.test.ts` — Ctrl+F resolves slash autocomplete and preserves `/`.
 - `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` — FIFO drain across messages/slash commands and pending slash removal.
+- `mastracode/src/utils/__tests__/slash-command-processor.test.ts` — current file-reference behavior only; no direct coverage for #13493 argument append / `$0` preservation.
 
 ## Missing tests
 
 - Real terminal/TUI integration test for Ctrl+F with an actual autocomplete provider and a live active run.
 - Reload behavior proving transient queues do not resurrect from history.
+- Custom slash-command processor tests for: no placeholders appends `ARGUMENTS`, `$ARGUMENTS` suppresses append, `$1+` suppresses append, and `$0` remains literal.
 
 ## Known risks / regressions
 
 - Queue state is TUI-only; crashes before drain lose queued commands.
 - If autocomplete inserts command text without a leading slash, queued command routing depends on the slash-restoration guard.
+- Raw args append after shell/file expansion prevents command injection, but the final LLM-visible payload can still duplicate intent if templates also describe custom placeholders in prose.
 
 ## Verification checklist
 
