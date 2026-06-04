@@ -15,7 +15,9 @@ import {
   deleteStoredAgentResponseSchema,
   getStoredAgentDependentsResponseSchema,
   exportStoredAgentBodySchema,
+  openStoredAgentChangeRequestBodySchema,
   exportStoredAgentResponseSchema,
+  openStoredAgentChangeRequestResponseSchema,
   previewInstructionsBodySchema,
   previewInstructionsResponseSchema,
 } from '../schemas/stored-agents';
@@ -63,35 +65,9 @@ async function resolveBrowserField(browser: unknown, mastra: { getEditor?: () =>
   return browser;
 }
 
-const AGENT_SNAPSHOT_CONFIG_FIELDS = [
-  'name',
-  'description',
-  'instructions',
-  'model',
-  'tools',
-  'defaultOptions',
-  'workflows',
-  'agents',
-  'integrationTools',
-  'toolProviders',
-  'inputProcessors',
-  'outputProcessors',
-  'memory',
-  'scorers',
-  'requestContextSchema',
-  'mcpClients',
-  'skills',
-  'workspace',
-  'browser',
-] as const;
+const AGENT_SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'instructions', 'tools', 'requestContextSchema'] as const;
 
-const CODE_AGENT_OVERRIDE_FIELDS = [
-  'instructions',
-  'tools',
-  'integrationTools',
-  'mcpClients',
-  'requestContextSchema',
-] as const;
+const CODE_AGENT_OVERRIDE_FIELDS = ['instructions', 'tools', 'requestContextSchema'] as const;
 
 /**
  * Derive ownership flags from a code agent's editor config.
@@ -121,6 +97,35 @@ function getCodeAgentOwnership(editorConfig: unknown): {
   const ownsToolDescriptionsOnly =
     typeof toolsCfg === 'object' && toolsCfg !== null && (toolsCfg as { description?: unknown }).description === true;
   return { ownsInstructions, ownsTools, ownsToolDescriptionsOnly };
+}
+
+function hasNonEmptyInstructions(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  return value.some(block => {
+    if (!block || typeof block !== 'object') {
+      return false;
+    }
+
+    const typedBlock = block as { type?: unknown; id?: unknown; content?: unknown };
+    if (typedBlock.type === 'prompt_block_ref') {
+      return typeof typedBlock.id === 'string' && typedBlock.id.length > 0;
+    }
+
+    return typeof typedBlock.content === 'string' && typedBlock.content.trim().length > 0;
+  });
+}
+
+function assertOwnedInstructionsNotEmpty(instructions: unknown) {
+  if (!hasNonEmptyInstructions(instructions)) {
+    throw new HTTPException(400, { message: 'Instructions are required' });
+  }
 }
 
 function sortForStableJson(value: unknown): unknown {
@@ -154,11 +159,7 @@ function buildExportConfig(
     if (input[field] === undefined) continue;
     if (ownership) {
       if (field === 'instructions' && !ownership.ownsInstructions) continue;
-      if (
-        (field === 'tools' || field === 'integrationTools' || field === 'mcpClients') &&
-        !ownership.ownsTools &&
-        !ownership.ownsToolDescriptionsOnly
-      ) {
+      if (field === 'tools' && !ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
         continue;
       }
     }
@@ -169,7 +170,19 @@ function buildExportConfig(
 }
 
 function agentExportFilename(agentId: string) {
-  return `${agentId}.json`;
+  return `agents/${encodeURIComponent(agentId)}.json`;
+}
+
+function sourceChangeRequestHeadRef(agentId: string) {
+  const safeAgentId = agentId.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'agent';
+  return `mastra/${safeAgentId}`;
+}
+
+function sourceChangeRequestMessage(agentId: string, userName?: string, changeMessage?: string) {
+  const normalizedUserName = userName?.replace(/\s+/g, ' ').trim();
+  const normalizedMessage = changeMessage?.replace(/\s+/g, ' ').trim();
+  const message = normalizedMessage || `Update ${agentId} agent override`;
+  return normalizedUserName ? `${message} by ${normalizedUserName}` : message;
 }
 
 // ============================================================================
@@ -303,6 +316,47 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   },
 });
 
+async function buildStoredAgentExport({
+  mastra,
+  requestContext,
+  storedAgentId,
+  body,
+}: {
+  mastra: any;
+  requestContext: any;
+  storedAgentId: string;
+  body: Record<string, unknown>;
+}) {
+  const storage = mastra.getStorage();
+  const agentsStore = storage ? await storage.getStore('agents') : undefined;
+  const storedAgent = await agentsStore?.getByIdResolved(storedAgentId, { status: 'draft' });
+  if (storedAgent) {
+    assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
+    assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: storedAgent });
+  }
+
+  let codeAgent: { __getEditorConfig?: () => unknown; source?: string } | undefined;
+  try {
+    codeAgent = mastra.getAgentById?.(storedAgentId) as typeof codeAgent;
+  } catch {
+    codeAgent = undefined;
+  }
+
+  if (!storedAgent && !codeAgent) {
+    throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
+  }
+
+  const config = buildExportConfig(body, codeAgent);
+  const content = `${JSON.stringify(config, null, 2)}\n`;
+
+  return {
+    agentId: storedAgentId,
+    fileName: agentExportFilename(storedAgentId),
+    content,
+    config,
+  };
+}
+
 export const EXPORT_STORED_AGENT_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/agents/:storedAgentId/export',
@@ -316,36 +370,48 @@ export const EXPORT_STORED_AGENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, requestContext, storedAgentId, ...body }) => {
     try {
-      const storage = mastra.getStorage();
-      const agentsStore = storage ? await storage.getStore('agents') : undefined;
-      const storedAgent = await agentsStore?.getByIdResolved(storedAgentId, { status: 'draft' });
-      if (storedAgent) {
-        assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
-        assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: storedAgent });
-      }
-
-      let codeAgent: { __getEditorConfig?: () => unknown; source?: string } | undefined;
-      try {
-        codeAgent = mastra.getAgentById?.(storedAgentId) as typeof codeAgent;
-      } catch {
-        codeAgent = undefined;
-      }
-
-      if (!storedAgent && !codeAgent) {
-        throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
-      }
-
-      const config = buildExportConfig(body, codeAgent);
-      const content = `${JSON.stringify(config, null, 2)}\n`;
-
-      return {
-        agentId: storedAgentId,
-        fileName: agentExportFilename(storedAgentId),
-        content,
-        config,
-      };
+      return await buildStoredAgentExport({ mastra, requestContext, storedAgentId, body });
     } catch (error) {
       return handleError(error, 'Error exporting stored agent');
+    }
+  },
+});
+
+export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
+  method: 'POST',
+  path: '/stored/agents/:storedAgentId/change-request',
+  responseType: 'json',
+  pathParamSchema: storedAgentIdPathParams,
+  bodySchema: openStoredAgentChangeRequestBodySchema,
+  responseSchema: openStoredAgentChangeRequestResponseSchema,
+  summary: 'Open stored agent source change request',
+  description: 'Opens a source-provider change request for deterministic agent override JSON without mutating storage',
+  tags: ['Stored Agents'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, storedAgentId, ...body }) => {
+    try {
+      const provider = mastra.getEditor?.()?.getSourceStorageProvider?.();
+      if (!provider?.openChangeRequest) {
+        throw new HTTPException(400, { message: 'Source storage provider cannot open change requests' });
+      }
+
+      const { changeMessage, userName, ...exportBody } = body;
+      const response = await buildStoredAgentExport({ mastra, requestContext, storedAgentId, body: exportBody });
+      const message = sourceChangeRequestMessage(storedAgentId, userName, changeMessage);
+      return await provider.openChangeRequest({
+        title: `Update ${storedAgentId} agent override`,
+        body: `Updates ${response.fileName} from Mastra Studio.`,
+        headRef: sourceChangeRequestHeadRef(storedAgentId),
+        files: [
+          {
+            path: response.fileName,
+            content: response.content,
+            message,
+          },
+        ],
+      });
+    } catch (error) {
+      return handleError(error, 'Error opening stored agent change request');
     }
   },
 });
@@ -486,6 +552,30 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
 
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
+      let createInstructions: typeof instructions | undefined = instructions;
+      let createTools = tools;
+      let createIntegrationTools = integrationTools;
+      let createMcpClients = mcpClients;
+      let codeAgentForCreate: { __getEditorConfig?: () => unknown; source?: string } | undefined;
+      try {
+        codeAgentForCreate = mastra.getAgentById?.(id) as typeof codeAgentForCreate;
+      } catch {
+        codeAgentForCreate = undefined;
+      }
+      if (codeAgentForCreate?.source === 'code') {
+        const ownership = getCodeAgentOwnership(codeAgentForCreate.__getEditorConfig?.());
+        if (ownership.ownsInstructions) {
+          assertOwnedInstructionsNotEmpty(createInstructions);
+        } else {
+          createInstructions = undefined;
+        }
+        if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
+          createTools = undefined;
+          createIntegrationTools = undefined;
+          createMcpClients = undefined;
+        }
+      }
+
       const input = {
         id,
         authorId,
@@ -493,15 +583,15 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
         name,
         description,
-        instructions,
+        instructions: createInstructions,
         model,
-        tools,
+        tools: createTools,
         defaultOptions,
         workflows,
         agents,
-        integrationTools,
+        integrationTools: createIntegrationTools,
         toolProviders,
-        mcpClients,
+        mcpClients: createMcpClients,
         inputProcessors,
         outputProcessors,
         memory,
@@ -661,7 +751,9 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       }
       if (codeAgentForUpdate?.source === 'code') {
         const ownership = getCodeAgentOwnership(codeAgentForUpdate.__getEditorConfig?.());
-        if (!ownership.ownsInstructions) {
+        if (ownership.ownsInstructions) {
+          assertOwnedInstructionsNotEmpty(instructions);
+        } else {
           instructions = undefined;
         }
         if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {

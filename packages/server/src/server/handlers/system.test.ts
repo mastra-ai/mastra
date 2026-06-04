@@ -14,9 +14,24 @@ type MockStorage = {
   };
 };
 
-const createMockMastra = (hasEditor: boolean, storage?: MockStorage, hasObservability = false) =>
+type MockEditor = {
+  getSource?: () => 'code' | 'db' | undefined;
+  getSourceStorageProvider?: () =>
+    | {
+        id: string;
+        displayName: string;
+        getCapabilities: () => Promise<{
+          canWrite: boolean;
+          canOpenChangeRequest: boolean;
+          reason?: string;
+        }>;
+      }
+    | undefined;
+};
+
+const createMockMastra = (editor: boolean | MockEditor, storage?: MockStorage, hasObservability = false) =>
   ({
-    getEditor: () => (hasEditor ? {} : undefined),
+    getEditor: () => (editor === true ? {} : editor || undefined),
     getStorage: () => storage,
     observability: {
       getDefaultInstance: () => (hasObservability ? {} : undefined),
@@ -161,6 +176,112 @@ describe('System Handlers', () => {
         storageType: undefined,
         observabilityStorageType: undefined,
         observabilityRuntimeStrategy: undefined,
+      });
+    });
+
+    it('should return filesystem capabilities for local code-source editor storage', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra({ getSource: () => 'code' }),
+      } as any);
+
+      expect(result).toMatchObject({
+        cmsEnabled: true,
+        editorSource: 'code',
+        editorSourceCapabilities: {
+          source: 'code',
+          storage: 'filesystem',
+          canSave: true,
+          canOpenChangeRequest: false,
+        },
+      });
+    });
+
+    it('should return unavailable capabilities for hosted code-source editor storage without a provider', async () => {
+      process.env.MASTRA_CLOUD_API_ENDPOINT = 'https://example.mastra.cloud';
+
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra({ getSource: () => 'code' }),
+      } as any);
+
+      expect(result).toMatchObject({
+        cmsEnabled: true,
+        editorSource: 'code',
+        editorSourceCapabilities: {
+          source: 'code',
+          storage: 'unavailable',
+          canSave: false,
+          canOpenChangeRequest: false,
+          unavailableReason: 'Code-source editing requires a source provider in hosted Studio.',
+        },
+      });
+    });
+
+    it('should return configured source-provider capabilities for code-source editor storage', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra({
+          getSource: () => 'code',
+          getSourceStorageProvider: () => ({
+            id: 'mock-source',
+            displayName: 'Mock Source',
+            getCapabilities: async () => ({ canWrite: true, canOpenChangeRequest: true }),
+          }),
+        }),
+      } as any);
+
+      expect(result).toMatchObject({
+        cmsEnabled: true,
+        editorSource: 'code',
+        editorSourceCapabilities: {
+          source: 'code',
+          storage: 'source-provider',
+          provider: { id: 'mock-source', displayName: 'Mock Source' },
+          canSave: true,
+          canOpenChangeRequest: true,
+        },
+      });
+    });
+
+    it('should return provider unavailable reasons for read-only source-provider storage', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra({
+          getSource: () => 'code',
+          getSourceStorageProvider: () => ({
+            id: 'mock-source',
+            displayName: 'Mock Source',
+            getCapabilities: async () => ({
+              canWrite: false,
+              canOpenChangeRequest: false,
+              reason: 'Missing source provider write permission.',
+            }),
+          }),
+        }),
+      } as any);
+
+      expect(result).toMatchObject({
+        editorSourceCapabilities: {
+          source: 'code',
+          storage: 'source-provider',
+          canSave: false,
+          canOpenChangeRequest: false,
+          unavailableReason: 'Missing source provider write permission.',
+        },
+      });
+    });
+
+    it('should return database capabilities for db-source editor storage', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra({ getSource: () => 'db' }),
+      } as any);
+
+      expect(result).toMatchObject({
+        cmsEnabled: true,
+        editorSource: 'db',
+        editorSourceCapabilities: {
+          source: 'db',
+          storage: 'database',
+          canSave: true,
+          canOpenChangeRequest: false,
+        },
       });
     });
 

@@ -15,6 +15,7 @@ import {
   DELETE_STORED_AGENT_ROUTE,
   PREVIEW_INSTRUCTIONS_ROUTE,
   EXPORT_STORED_AGENT_ROUTE,
+  OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE,
 } from './stored-agents';
 
 // Mock handleAutoVersioning to prevent version creation in tests
@@ -229,16 +230,18 @@ interface MockEditor {
   prompt: {
     preview: ReturnType<typeof vi.fn>;
   };
+  getSourceStorageProvider?: ReturnType<typeof vi.fn>;
 }
 
-function createMockEditor(agentsStore?: MockAgentsStore): MockEditor {
+function createMockEditor(agentsStore?: MockAgentsStore, sourceStorageProvider?: unknown): MockEditor {
   return {
+    getSourceStorageProvider: sourceStorageProvider ? vi.fn().mockReturnValue(sourceStorageProvider) : undefined,
     agent: {
       clearCache: vi.fn(),
       // Delegate to storage so existing assertions work
       create: vi.fn().mockImplementation(async (input: unknown) => {
         if (agentsStore) {
-          await agentsStore.create({ agent: input });
+          await (agentsStore.create as any)({ agent: input });
         }
         return {} as unknown;
       }),
@@ -561,13 +564,15 @@ describe('Stored Agents Handlers', () => {
         storedAgentId: 'code-agent',
         instructions: 'Stored instructions',
         tools: { weatherTool: { description: 'Check weather' } },
+        integrationTools: { composio: { type: 'composio' } },
+        mcpClients: { local: { type: 'mcp' } },
         model: { provider: 'openai', name: 'gpt-4o' },
         name: 'Code Agent',
       });
 
       expect(result).toEqual({
         agentId: 'code-agent',
-        fileName: 'code-agent.json',
+        fileName: 'agents/code-agent.json',
         config: {
           instructions: 'Stored instructions',
           tools: { weatherTool: { description: 'Check weather' } },
@@ -601,12 +606,102 @@ describe('Stored Agents Handlers', () => {
 
       expect(result).toMatchObject({
         agentId: 'locked-agent',
-        fileName: 'locked-agent.json',
+        fileName: 'agents/locked-agent.json',
         config: {
           requestContextSchema: { type: 'object' },
         },
         content: '{\n  "requestContextSchema": {\n    "type": "object"\n  }\n}\n',
       });
+    });
+
+    it('should omit non-editable fields from storage-only agent exports', async () => {
+      mockAgentsData.set('storage-only-agent', {
+        id: 'storage-only-agent',
+        name: 'Storage Only Agent',
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'storage-only-agent',
+        name: 'Storage Only Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        scorers: { quality: { description: 'Quality scorer' } },
+        skills: { coding: { description: 'Coding skill' } },
+        tools: { weatherTool: { description: 'Check weather' } },
+      });
+
+      expect(result).toEqual({
+        agentId: 'storage-only-agent',
+        fileName: 'agents/storage-only-agent.json',
+        config: {
+          instructions: 'Stored instructions',
+          name: 'Storage Only Agent',
+          tools: { weatherTool: { description: 'Check weather' } },
+        },
+        content:
+          '{\n  "instructions": "Stored instructions",\n  "name": "Storage Only Agent",\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
+      });
+    });
+  });
+
+  describe('OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE', () => {
+    it('should open a source-provider change request for exported agent JSON', async () => {
+      const openChangeRequest = vi.fn().mockResolvedValue({
+        id: '123',
+        url: 'https://github.com/acme/repo/pull/123',
+        ref: 'mastra/source-storage/test',
+      });
+      mockAgentsData.set('test-agent-1', {
+        id: 'test-agent-1',
+        name: 'Test Agent',
+        model: { provider: 'openai', name: 'gpt-4o' },
+      });
+      const editor = createMockEditor(mockAgentsStore, { openChangeRequest });
+      mockMastra = createMockMastra({ storage: mockStorage, editor });
+
+      const result = await OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'test-agent-1',
+        instructions: 'Updated instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        name: 'Test Agent',
+        changeMessage: 'Tune weather instructions',
+        userName: 'Ada Lovelace',
+      });
+
+      expect(openChangeRequest).toHaveBeenCalledWith({
+        title: 'Update test-agent-1 agent override',
+        body: 'Updates agents/test-agent-1.json from Mastra Studio.',
+        headRef: 'mastra/test-agent-1',
+        files: [
+          {
+            path: 'agents/test-agent-1.json',
+            content: '{\n  "instructions": "Updated instructions",\n  "name": "Test Agent"\n}\n',
+            message: 'Tune weather instructions by Ada Lovelace',
+          },
+        ],
+      });
+      expect(result).toEqual({
+        id: '123',
+        url: 'https://github.com/acme/repo/pull/123',
+        ref: 'mastra/source-storage/test',
+      });
+    });
+
+    it('should reject change requests when provider is unavailable', async () => {
+      try {
+        await OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          storedAgentId: 'test-agent-1',
+          instructions: 'Updated instructions',
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(400);
+        expect((error as HTTPException).message).toBe('Source storage provider cannot open change requests');
+      }
     });
   });
 
@@ -638,6 +733,62 @@ describe('Stored Agents Handlers', () => {
           id: 'new-agent',
           name: 'New Agent',
           visibility: 'public',
+        }),
+      });
+    });
+
+    it('should reject empty instructions when creating an override for a code agent that owns instructions', async () => {
+      const mastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'code-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ instructions: true, tools: true }),
+          },
+        },
+      });
+
+      try {
+        await CREATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mastra),
+          id: 'code-agent',
+          name: 'Code Agent',
+          instructions: [],
+          model: { name: 'gpt-4', provider: 'openai' },
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(400);
+        expect((error as HTTPException).message).toBe('Instructions are required');
+      }
+    });
+
+    it('should strip empty instructions when creating an override for a code agent that does not own instructions', async () => {
+      const mastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'description-only-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ tools: { description: true } }),
+          },
+        },
+      });
+
+      await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        id: 'description-only-agent',
+        name: 'Description Only Agent',
+        instructions: [],
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
+        agent: expect.objectContaining({
+          id: 'description-only-agent',
+          instructions: undefined,
         }),
       });
     });
@@ -788,6 +939,72 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).status).toBe(404);
         expect((error as HTTPException).message).toBe('Stored agent with id non-existent not found');
       }
+    });
+
+    it('should reject empty instructions when updating a code agent that owns instructions', async () => {
+      mockAgentsData.set('code-agent', {
+        id: 'code-agent',
+        name: 'Code Agent',
+        instructions: 'Existing instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-code-agent-1',
+      });
+      const mastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'code-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ instructions: true, tools: true }),
+          },
+        },
+      });
+
+      try {
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mastra),
+          storedAgentId: 'code-agent',
+          instructions: [{ type: 'prompt_block', content: '   ' }],
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(400);
+        expect((error as HTTPException).message).toBe('Instructions are required');
+      }
+    });
+
+    it('should allow empty instructions when updating a code agent that does not own instructions', async () => {
+      mockAgentsData.set('description-only-agent', {
+        id: 'description-only-agent',
+        name: 'Description Only Agent',
+        instructions: 'Existing instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-description-only-agent-1',
+      });
+      const mastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'description-only-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ tools: { description: true } }),
+          },
+        },
+      });
+
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        storedAgentId: 'description-only-agent',
+        instructions: [],
+      });
+
+      expect(mockAgentsStore.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'description-only-agent',
+          instructions: undefined,
+        }),
+      );
     });
 
     it('should allow updating memory to null to disable memory', async () => {

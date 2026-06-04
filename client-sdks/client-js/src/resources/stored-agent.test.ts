@@ -227,6 +227,51 @@ describe('StoredAgent Resource', () => {
       );
     });
 
+    it('should export stored agent JSON', async () => {
+      const params = { instructions: 'Updated instructions' };
+      const mockResponse = {
+        agentId: storedAgentId,
+        fileName: `agents/${storedAgentId}.json`,
+        content: '{\n  "instructions": "Updated instructions"\n}\n',
+        config: { instructions: 'Updated instructions' },
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await storedAgent.export(params);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/export`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should open a stored agent change request', async () => {
+      const params = {
+        instructions: 'Updated instructions',
+        changeMessage: 'Tune weather instructions',
+        userName: 'Ada Lovelace',
+      };
+      const mockResponse = {
+        id: '123',
+        url: 'https://github.com/acme/repo/pull/123',
+        ref: 'mastra/source-storage/test',
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await storedAgent.openChangeRequest(params);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/change-request`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
     it('should delete stored agent', async () => {
       const mockResponse = {
         success: true,

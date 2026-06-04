@@ -1394,11 +1394,22 @@ export type ExportStoredAgentParams = Partial<
   Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
 >;
 
+export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
+  changeMessage?: string;
+  userName?: string;
+};
+
 export interface ExportStoredAgentResponse {
   agentId: string;
   fileName: string;
   content: string;
   config: Record<string, unknown>;
+}
+
+export interface OpenStoredAgentChangeRequestResponse {
+  id?: string | number;
+  url: string;
+  ref?: string;
 }
 
 export interface UpdateStoredAgentParams {

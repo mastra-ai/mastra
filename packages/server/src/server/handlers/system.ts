@@ -5,6 +5,84 @@ import { apiSchemaManifestResponseSchema, systemPackagesResponseSchema } from '.
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
+async function getEditorSourceCapabilities(editor: {
+  getSource?: () => 'code' | 'db' | undefined;
+  getSourceStorageProvider?: () =>
+    | {
+        id: string;
+        displayName: string;
+        getCapabilities: () => Promise<{
+          canWrite: boolean;
+          canOpenChangeRequest: boolean;
+          reason?: string;
+        }>;
+      }
+    | undefined;
+}) {
+  const editorSource = editor.getSource?.();
+  if (!editorSource) return undefined;
+
+  if (editorSource === 'db') {
+    return {
+      source: editorSource,
+      storage: 'database' as const,
+      canSave: true,
+      canOpenChangeRequest: false,
+    };
+  }
+
+  const configuredProvider = editor.getSourceStorageProvider?.();
+  if (configuredProvider) {
+    const capabilities = await configuredProvider.getCapabilities();
+    return {
+      source: editorSource,
+      storage: 'source-provider' as const,
+      provider: {
+        id: configuredProvider.id,
+        displayName: configuredProvider.displayName,
+      },
+      canSave: capabilities.canWrite,
+      canOpenChangeRequest: capabilities.canOpenChangeRequest,
+      unavailableReason: capabilities.canWrite ? undefined : capabilities.reason,
+    };
+  }
+
+  const sourceProvider = process.env.MASTRA_SOURCE_PROVIDER;
+
+  if (sourceProvider) {
+    return {
+      source: editorSource,
+      storage: 'source-provider' as const,
+      provider: {
+        id: sourceProvider,
+        displayName: process.env.MASTRA_SOURCE_PROVIDER_NAME || sourceProvider,
+      },
+      canSave: process.env.MASTRA_SOURCE_STORAGE_CAN_WRITE !== 'false',
+      canOpenChangeRequest: process.env.MASTRA_SOURCE_STORAGE_CAN_OPEN_CHANGE_REQUEST === 'true',
+    };
+  }
+
+  const isHosted =
+    process.env.MASTRA_DEPLOYMENT_ID || process.env.MASTRA_CLOUD_API_ENDPOINT || process.env.MASTRA_PLATFORM_PROJECT_ID;
+
+  if (isHosted) {
+    return {
+      source: editorSource,
+      storage: 'unavailable' as const,
+      canSave: false,
+      canOpenChangeRequest: false,
+      unavailableReason: 'Code-source editing requires a source provider in hosted Studio.',
+    };
+  }
+
+  return {
+    source: editorSource,
+    storage: 'filesystem' as const,
+    canSave: true,
+    canOpenChangeRequest: false,
+  };
+}
+
 export const GET_API_SCHEMA_ROUTE = createRoute({
   method: 'GET',
   path: '/system/api-schema',
@@ -54,12 +132,14 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
 
       const editor = mastra.getEditor();
       const editorSource = editor?.getSource?.();
+      const editorSourceCapabilities = editor ? await getEditorSourceCapabilities(editor) : undefined;
 
       return {
         packages,
         isDev: process.env.MASTRA_DEV === 'true',
         cmsEnabled: !!editor,
         editorSource,
+        editorSourceCapabilities,
         observabilityEnabled,
         storageType,
         observabilityStorageType,

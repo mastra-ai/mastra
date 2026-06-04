@@ -374,6 +374,11 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
 
 export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();
 
+export const openStoredAgentChangeRequestBodySchema = exportStoredAgentBodySchema.extend({
+  changeMessage: z.string().trim().max(500).optional(),
+  userName: z.string().trim().min(1).max(120).optional(),
+});
+
 // ============================================================================
 // Response Schemas
 // ============================================================================
@@ -527,6 +532,12 @@ export const exportStoredAgentResponseSchema = z.object({
   fileName: z.string(),
   content: z.string(),
   config: z.record(z.string(), z.unknown()),
+});
+
+export const openStoredAgentChangeRequestResponseSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  url: z.string(),
+  ref: z.string().optional(),
 });
 
 // ============================================================================
