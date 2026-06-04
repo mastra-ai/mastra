@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13227](https://github.com/mastra-ai/mastra/pull/13227) — extracted built-in Explore, Plan, and Execute subagents plus dynamic workspace support.
-- Later changes: Unknown — continue PR queue verification.
+- Later changes: [#13331](https://github.com/mastra-ai/mastra/pull/13331) added an intended `audit-tests` subagent; current registration gap is tracked separately.
 
 ## User-visible behavior
 
@@ -56,6 +56,7 @@
 
 ## Dependencies / related features
 
+- [Audit-tests subagent](./audit-tests.md) — intended read-only test-audit subagent with current registration risk.
 - [Coding tools and approval permissions](../tools/coding-tools-permissions.md) — subagents depend on workspace tool boundaries.
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — subagent model overrides use the model catalog/auth path.
 - [Interactive TUI chat](../tui/interactive-chat.md) — subagent progress renders inside chat.

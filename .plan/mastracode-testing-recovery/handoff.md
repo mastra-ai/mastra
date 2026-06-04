@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13330 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13331 (`3ea22d7703`, `feat(mastracode): add audit-tests subagent (#13331)`), then #13328 (`45bb78b70b`, `feat: stream tool arguments incrementally across all tool renderers (#13328)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and PRs #13227-#13328 have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13335 (`7f317fc5e4`, `fix(tui): preserve assistant message text across todo_write tool calls (#13335)`), then #13307 (`12e4819fe2`, `fix(mastracode): reload auth storage before resolving OpenAI Codex model (#13307)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 17: PR #13331 (`audit-tests` subagent), then row 18: PR #13328 (incremental tool argument streaming).
+1. Continue at `_pr-queue.md` row 19: PR #13335 (preserve assistant text across task tool calls), then row 20: PR #13307 (reload auth storage for OpenAI Codex model resolution).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -65,4 +65,6 @@ None known.
 - `gh pr view 13305 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/agents/memory.ts`, and core OM threshold/runtime/tests verified the OM activation safeguard changes. Updated the memory card and noted current MC defaults differ from the #13305 PR body.
 - `gh pr view 13294 --json number,title,body,author,mergedAt,url,files,commits` plus current README/package/startup files verified install/launch docs. Created the setup install card.
 - `gh pr view 13330 --json number,title,body,author,mergedAt,url,files,commits`, current `/om` callbacks, and core harness OM event tests verified streamed OM lifecycle/model-change event behavior. Updated the memory card.
+- `gh pr view 13331 --json number,title,body,author,mergedAt,url,files,commits`, current `audit-tests.ts`, `index.ts`, and prompt guidance verified intended audit-tests behavior plus current registration gap. Created the audit-tests card.
+- `gh pr view 13328 --json number,title,body,author,mergedAt,url,files,commits`, current core harness display-state code/tests, TUI tool handlers, and history renderer verified streaming tool arguments. Created the streaming-tool-arguments card.
 - Current batch is doc-only; no product tests were run.

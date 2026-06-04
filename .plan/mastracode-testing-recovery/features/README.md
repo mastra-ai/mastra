@@ -41,7 +41,9 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Threads | Persistent conversations / switching | #13218 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Models | Model auth, selection, modes | #13218 | Settings + harness session | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Tools | Coding tools and approval permissions | #13218 | Harness state + permission policy | Partial | High | [page](./tools/coding-tools-permissions.md) |
+| Tools | Streaming tool arguments | #13328 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227 | Harness config + subagent session state | Partial | High | [page](./subagents/delegation.md) |
+| Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
 | Memory | Observational memory | #13231, #13305, #13330 | Memory storage + harness/settings OM state | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
