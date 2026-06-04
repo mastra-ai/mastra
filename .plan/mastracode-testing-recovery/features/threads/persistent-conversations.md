@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — project-scoped persistent conversations and thread switching.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config; [#13343](https://github.com/mastra-ai/mastra/pull/13343) — scoped startup auto-resume to current working directory/worktree via `projectPath` metadata.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config; [#13343](https://github.com/mastra-ai/mastra/pull/13343) — scoped startup auto-resume to current working directory/worktree via `projectPath` metadata; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — added Harness resource ID helpers and improved `/resource` switching.
 
 ## User-visible behavior
 
@@ -13,7 +13,7 @@
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `/new`, `/threads`, headless `--continue`, `--thread`, `--title`, `--clone-thread`, `--resource-id`.
+- Commands / shortcuts / flags: `/new`, `/threads`, `/resource`, headless `--continue`, `--thread`, `--title`, `--clone-thread`, `--resource-id`.
 - Automatic triggers: startup thread selection filters by `metadata.projectPath`; `thread_created`, `thread_changed`.
 
 ## TUI states
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Thread history | Harness memory/storage | TUI history renderer, headless |
-| Current thread/resource | Harness session | TUI status, commands |
+| Current thread/resource | Harness session + resource ID helpers | TUI status, `/resource`, commands |
 | Thread title/metadata | Thread metadata/session records | TUI footer, goals, GitHub badges |
 | Project path scope | Thread `metadata.projectPath` + legacy directory birthtime fallback | Startup auto-resume filtering |
 | Ephemeral tasks/plan/sandbox | Harness state for active thread | Prompt context, TUI projection |
@@ -65,6 +65,7 @@
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — model/mode reload depends on thread/session metadata.
 - [Task tracking tools and TUI progress](../tools/task-tracking.md) — task state is thread-local and must reset/reload correctly.
 - [Storage backend configuration](../settings/storage-backend.md) — selected backend owns persisted thread/session history.
+- [Resource ID switching](./resource-id-switching.md) — `/resource` changes the outer resource scope for thread selection.
 
 ## Existing tests
 

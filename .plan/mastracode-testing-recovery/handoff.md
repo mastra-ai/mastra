@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13682 (row 80) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13690 (`f77cd94c44`, Harness resource ID methods), then #13613 (`bf7ee23532`, HTTP MCP servers).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13613 (row 82) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13691 (`978a63d71e`, debug log env/size), then #13687 (`85664e9fd8`, workspace tool name remapping).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 81: PR #13690 (Harness resource ID methods and `/resource`), then row 82: PR #13613 (HTTP MCP servers).
+1. Continue at `_pr-queue.md` row 83: PR #13691 (debug.log env/size), then row 84: PR #13687 (workspace tool name remapping).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -143,3 +143,6 @@ None known.
 - `gh pr view 13437 --json number,title,body,author,mergedAt,url,files,commits`, current `getDynamicWorkspace()`, core workspace resolver/tests, workspace tool tests, and TUI tool renderer verified workspace-backed coding tools. Added `features/tools/workspace-tools.md`; noted plan-mode/reload integration gaps.
 - `gh pr view 13682 --json number,title,body,author,mergedAt,url,files,commits`, current `/custom-providers` command, settings parser, model resolver, catalog provider, dispatch/help/setup wiring verified custom providers. Added `features/models/custom-providers.md`; noted modal-flow and Harness custom-catalog cache gaps.
 - Focused verification for #13437/#13682: core workspace/harness slice passed (7 files / 117 tests); MC custom-provider/settings/dispatch/workspace-env/tool-renderer slice passed (5 files / 112 tests). Including `model.test.ts` reproduced the known env-sensitive OpenAI auth failure (expected model-router, got openai-direct), so it was excluded from the passing rerun.
+- `gh pr view 13690 --json number,title,body,author,mergedAt,url,files,commits`, current `/resource` command, Harness resource ID helpers, headless args, and resource tests verified resource switching. Added `features/threads/resource-id-switching.md`; noted missing end-to-end loaded-history/resource-switch test.
+- `gh pr view 13613 --json number,title,body,author,mergedAt,url,files,commits`, current MCP config/manager/types, command setup text, and tests verified HTTP MCP server config support. Added `features/integrations/mcp-server-configuration.md`; noted missing real HTTP MCP server integration and OAuth flow tests.
+- Focused verification for #13690/#13613 passed: MC resource/MCP/headless/dispatch tests (5 files / 138 tests) and core resource ID tests (1 file / 6 tests).

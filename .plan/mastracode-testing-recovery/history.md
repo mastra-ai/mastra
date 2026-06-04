@@ -822,3 +822,25 @@ Verification:
 - Focused core tests passed: `pnpm --filter ./packages/core exec vitest run src/harness/workspace-resolution.test.ts src/harness/subagent-workspace-integration.test.ts src/workspace/tools/__tests__/read-file.test.ts src/workspace/tools/__tests__/list-files.test.ts src/workspace/tools/__tests__/execute-command.test.ts src/workspace/tools/__tests__/edit-file.test.ts src/workspace/tools/__tests__/lsp-inspect.test.ts --reporter=dot --bail 1` (7 files / 117 tests).
 
 Next queue checkpoint: PR #13690 (Harness resource ID methods and `/resource`), then PR #13613 (HTTP MCP servers).
+
+
+### Feature map PR #13690 and #13613
+
+Processed PR [#13690](https://github.com/mastra-ai/mastra/pull/13690), `f77cd94c44` (`fix: implement Harness resource ID methods and improve /resource command`). Verified current source exposes Harness `getResourceId()`, `setResourceId()`, `getDefaultResourceId()`, and `getKnownResourceIds()`; `/resource` displays current/default/known IDs, switches resource scope, resumes the latest thread for that resource, or marks `pendingNewThread` when none exist. Headless mode supports `--resource-id` for non-TUI scoping.
+
+Processed PR [#13613](https://github.com/mastra-ai/mastra/pull/13613), `bf7ee23532` (`feat(mastracode): support HTTP MCP servers in config`). Verified current MCP config accepts stdio `command` entries and HTTP `url` entries, static `headers`, and validated OAuth metadata. Manager builds `MCPClient` server defs with `URL`, `requestInit`, optional `MCPOAuthClientProvider`, transport-aware statuses, skipped-server reasons, reload/reconnect, namespaced tools, and app-data OAuth token storage.
+
+Documentation actions:
+
+- Added `features/threads/resource-id-switching.md` for `/resource`, headless `--resource-id`, Harness resource helpers, latest-thread resume, pending-new-thread path, and missing loaded-history/resource-switch tests.
+- Added `features/integrations/mcp-server-configuration.md` for stdio/HTTP MCP config, merge precedence, OAuth/static headers, manager state ownership, and missing real HTTP/OAuth integration tests.
+- Updated `features/README.md`, `_pr-queue.md`, `threads/persistent-conversations.md`, `integrations/mcp-status-command.md`, `tools/coding-tools-permissions.md`, `tui/help-and-shortcuts.md`, `handoff.md`, and this history entry. Queue status: #13690 done, #13613 done, #13691 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/tui/commands/resource.ts`, `mastracode/src/tui/commands/__tests__/resource.test.ts`, `packages/core/src/harness/harness.ts`, `packages/core/src/harness/resource-id.test.ts`, `mastracode/src/headless.ts`, `mastracode/src/mcp/config.ts`, `mastracode/src/mcp/types.ts`, `mastracode/src/mcp/manager.ts`, `mastracode/src/mcp/__tests__/config.test.ts`, `mastracode/src/mcp/__tests__/manager.test.ts`, `mastracode/src/tui/commands/mcp.ts`, and `mastracode/src/main.ts`.
+- PR metadata checked with `gh pr view 13690 --json number,title,body,author,mergedAt,url,files,commits` and `gh pr view 13613 --json number,title,body,author,mergedAt,url,files,commits`.
+- Focused MC tests passed: `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/resource.test.ts src/mcp/__tests__/config.test.ts src/mcp/__tests__/manager.test.ts src/tui/__tests__/command-dispatch.test.ts src/headless.test.ts --reporter=dot --bail 1` (5 files / 138 tests).
+- Focused core tests passed: `pnpm --filter ./packages/core exec vitest run src/harness/resource-id.test.ts --reporter=dot --bail 1` (1 file / 6 tests).
+
+Next queue checkpoint: PR #13691 (debug.log env/size), then PR #13687 (workspace tool name remapping).

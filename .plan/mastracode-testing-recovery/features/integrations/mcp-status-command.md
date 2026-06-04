@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wire `mcpManager` into the TUI so `/mcp` can show status and reload servers.
-- Later changes: [#13347](https://github.com/mastra-ai/mastra/pull/13347) — replaced the `MCPManager` class with `createMcpManager()` + `McpManager` interface while preserving status/reload/tool behavior.
+- Later changes: [#13347](https://github.com/mastra-ai/mastra/pull/13347) — replaced the `MCPManager` class with `createMcpManager()` + `McpManager` interface while preserving status/reload/tool behavior; [#13613](https://github.com/mastra-ai/mastra/pull/13613) — added HTTP MCP server config and transport-aware statuses.
 
 ## User-visible behavior
 
 - What the user can do: run `/mcp`, `/mcp status`, or `/mcp reload` to inspect configured MCP servers.
-- Success looks like: configured servers show real connected/error/skipped state instead of `MCP system not initialized.`
+- Success looks like: configured stdio/HTTP servers show real connected/error/skipped state instead of `MCP system not initialized.`
 - Must preserve: MCP tools can work in conversations and the command UI must report the same manager state.
 
 ## Entry points / commands
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | MCP manager interface | `createMcpManager()` result / `TUIState.mcpManager` | `/mcp`, dynamic tools, cleanup |
-| Server statuses | `McpManager` closure state | selector, text status, reload/reconnect UI |
+| Server statuses | `McpManager` closure state, including `transport` | selector, text status, reload/reconnect UI |
 | Config paths/skipped servers | MCP config loader + manager closure state | `/mcp` setup instructions/status |
 
 ## Key files
@@ -55,6 +55,7 @@
 
 ## Dependencies / related features
 
+- [MCP server configuration](./mcp-server-configuration.md) — config files and stdio/HTTP server definitions feed this status UI.
 - [Coding tools and approval permissions](../tools/coding-tools-permissions.md) — MCP tools join the visible/runtime tool set.
 - [Interactive TUI chat](../tui/interactive-chat.md) — command messages and overlays render inside TUI.
 

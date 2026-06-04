@@ -85,6 +85,7 @@
 ## Dependencies / related features
 
 - [Workspace-backed coding tools](./workspace-tools.md) — core Workspace owns file/edit/shell/LSP tool implementations.
+- [MCP server configuration](../integrations/mcp-server-configuration.md) — configured MCP tools join the same runtime/permission surface.
 - [Streaming tool arguments](./streaming-tool-arguments.md) — live partial tool input rendering.
 - [Interactive TUI chat](../tui/interactive-chat.md) — expanded/collapsed tool renderers are embedded in chat/history.
 - [Task tracking tools and TUI progress](./task-tracking.md) — always-allowed task tools and pinned progress projection.

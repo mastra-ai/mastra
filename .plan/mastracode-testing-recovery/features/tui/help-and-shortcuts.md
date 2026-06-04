@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13426](https://github.com/mastra-ai/mastra/pull/13426) — replaced the old verbose `/help` output with a compact command/shortcut reference.
-- Later changes: [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added `/theme` to the command surface/help list; [#13605](https://github.com/mastra-ai/mastra/pull/13605) — added `/report-issue` to the command surface/help list; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — added `/custom-providers` to the command surface/help list.
+- Later changes: [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added `/theme` to the command surface/help list; [#13605](https://github.com/mastra-ai/mastra/pull/13605) — added `/report-issue` to the command surface/help list; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — added `/custom-providers` to the command surface/help list; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — lists `/resource` as resource switching help.
 
 ## User-visible behavior
 
@@ -40,7 +40,7 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Help command list | `buildHelpText()` hardcoded entries + `ctx.harness.listModes()` | `/help` command, including `/theme`, `/report-issue`, and `/custom-providers` |
+| Help command list | `buildHelpText()` hardcoded entries + `ctx.harness.listModes()` | `/help` command, including `/theme`, `/report-issue`, `/custom-providers`, `/resource`, and `/mcp` |
 | Custom commands | `SlashCommandContext.customSlashCommands` | Help text custom section |
 | Shell passthrough label | Global settings + shell resolver | Help text shell section |
 | Startup hint | `buildLayout()` | TUI startup header |
@@ -59,6 +59,8 @@
 - [Terminal theme and contrast](./terminal-theme.md) — `/theme` command is listed here.
 - [GitHub issue reporting command](../integrations/github-issue-reporting.md) — `/report-issue` command is listed here.
 - [Custom OpenAI-compatible providers](../models/custom-providers.md) — `/custom-providers` command is listed here.
+- [Resource ID switching](../threads/resource-id-switching.md) — `/resource` command is listed here.
+- [MCP server configuration](../integrations/mcp-server-configuration.md) — `/mcp` command is listed here.
 - [Queued follow-ups and slash commands](../chat/queued-followups.md) — slash command dispatch executes `/help`.
 
 ## Existing tests
@@ -73,7 +75,7 @@
 
 ## Known risks / regressions
 
-- Command list is manually maintained and can drift from registered commands, including `/theme`, `/report-issue`, `/custom-providers`, and provider-specific subcommands.
+- Command list is manually maintained and can drift from registered commands, including `/theme`, `/report-issue`, `/custom-providers`, `/resource`, `/mcp`, and provider-specific subcommands.
 - Custom slash commands are listed, but command namespace collisions or hidden commands are not modeled by the help builder.
 - Headless/non-TUI help parity is unverified.
 

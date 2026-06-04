@@ -50,6 +50,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345, #13493 | TUI transient queue state + command template processor | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
+| Threads | Resource ID switching | #13690 | Harness resource ID + resource-scoped threads | Partial | High | [page](./threads/resource-id-switching.md) |
 | Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600 | Settings + harness session + thread pack metadata + provider registry | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Models | Custom OpenAI-compatible providers | #13682 | settings customProviders + Harness custom catalog | Partial | High | [page](./models/custom-providers.md) |
 | Models | Thinking and reasoning effort | #13490, #13563 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
@@ -58,6 +59,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |
+| Integrations | MCP server configuration | #13613 | MCP config files + manager runtime state | Partial | High | [page](./integrations/mcp-server-configuration.md) |
 | Integrations | Core Harness API and reference docs | #13353, #13457, #13519, #13525 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
 | Integrations | Harness display state | #13427 | Core Harness display projection | Partial | High | [page](./integrations/harness-display-state.md) |
 | Integrations | Skills command and workspace resolution | #13457 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
