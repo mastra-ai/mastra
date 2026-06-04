@@ -302,9 +302,7 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   if (config.autoDetectUrl) {
     html = html.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
   }
-  if (config.customServerUrl) {
-    html = html.replace(`'%%MASTRA_CUSTOM_SERVER_URL%%'`, config.customServerUrl);
-  }
+  html = html.replace(`'%%MASTRA_CUSTOM_SERVER_URL%%'`, config.customServerUrl ?? `''`);
   html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', config.basePath);
 
   return html;
