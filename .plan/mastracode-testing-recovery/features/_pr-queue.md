@@ -50,10 +50,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 28 | 2026-02-20 | #13347 | `48d19d89e0` | review | done | refactor: replace MCPManager class with factory function (#13347) | 5 |
 | 29 | 2026-02-20 | #13348 | `4137924b3f` | review | done | fix: limit tool result token sizes for view, grep, and web tools (#13348) | 3 |
 | 30 | 2026-02-20 | #13349 | `5f1f0fa8a3` | review | done | fix: raise memory buffer activation threshold to prevent aggressive window shrinking (#13349) | 1 |
-| 31 | 2026-02-20 | #13350 | `e65ec08031` | review | current | refactor: extract TUI state into dedicated TUIState interface and factory (#13350) | 3 |
-| 32 | 2026-02-20 | #13355 | `89b1a4aead` | review | next | fix(mastracode): allow view_range for directory listings (#13355) | 2 |
-| 33 | 2026-02-20 | #13354 | `78d1c808ad` | review | | fix(memory): improve OM continuity at low activation (#13354) | 3 |
-| 34 | 2026-02-20 | #13353 | `59d30b5d0c` | review | | refactor(harness): use object parameters for all Harness methods + add reference docs (#13353) | 3 |
+| 31 | 2026-02-20 | #13350 | `e65ec08031` | review | done | refactor: extract TUI state into dedicated TUIState interface and factory (#13350) | 3 |
+| 32 | 2026-02-20 | #13355 | `89b1a4aead` | review | done | fix(mastracode): allow view_range for directory listings (#13355) | 2 |
+| 33 | 2026-02-20 | #13354 | `78d1c808ad` | review | current | fix(memory): improve OM continuity at low activation (#13354) | 3 |
+| 34 | 2026-02-20 | #13353 | `59d30b5d0c` | review | next | refactor(harness): use object parameters for all Harness methods + add reference docs (#13353) | 3 |
 | 35 | 2026-02-20 | #13260 | `e610573a4c` | likely skip | | chore: version packages (alpha) (#13260) | 2 |
 | 36 | 2026-02-23 | #13416 | `9a3d857436` | review | | fix(mastracode): plan mode agent now calls submit_plan tool (#13416) | 5 |
 | 37 | 2026-02-23 | #13413 | `f08b0bb00b` | review | | refactor: modularize TUI into focused modules (#13413) | 41 |

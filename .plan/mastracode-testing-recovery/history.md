@@ -358,3 +358,18 @@ Documentation actions:
 - Updated `features/README.md` and `_pr-queue.md` status markers: #13348 done, #13349 done, #13350 current, #13355 next.
 
 Next queue checkpoint: PR #13350 (TUIState extraction), then PR #13355 (`view_range` directory listing fix).
+
+
+### Feature map PR #13350 and #13355
+
+Processed PR [#13350](https://github.com/mastra-ai/mastra/pull/13350), `e65ec08031` (`refactor: extract TUI state into dedicated TUIState interface and factory (#13350)`). Verified current `mastracode/src/tui/state.ts` owns the shared `TUIState`, `MastraTUIOptions`, and `createTUIState()` factory defaults, and `mastracode/src/tui/index.ts` exports `createTUIState` / `TUIState` through `mastracode/tui`.
+
+Processed PR [#13355](https://github.com/mastra-ai/mastra/pull/13355), `89b1a4aead` (`fix(mastracode): allow view_range for directory listings (#13355)`). Verified the original fix in deleted `mastracode/src/tools/file-view.ts` allowed `view_range` to slice directory listings and tolerate null range entries. Current source no longer has literal `view_range`; the replacement is split core workspace tools: `read_file` supports file `offset` / `limit`, while `list_files` handles directory trees without offset/limit pagination.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-chat.md` with #13350 shared TUI state/public export behavior and missing `createTUIState()` default-shape tests.
+- Updated `features/tools/coding-tools-permissions.md` with #13355's historical directory pagination fix, current split core tool behavior, and missing current pagination-regression coverage.
+- Updated `features/README.md` and `_pr-queue.md` status markers: #13350 done, #13355 done, #13354 current, #13353 next.
+
+Next queue checkpoint: PR #13354 (OM continuity at low activation), then PR #13353 (Harness object-parameter refactor/reference docs).

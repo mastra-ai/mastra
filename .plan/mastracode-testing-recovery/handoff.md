@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13349 (row 30) have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13350 (`e65ec08031`, `refactor: extract TUI state into dedicated TUIState interface and factory (#13350)`), then #13355 (`89b1a4aead`, `fix(mastracode): allow view_range for directory listings (#13355)`).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13355 (row 32) have been processed, with #13037, #13251, #13252, and #13257 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13354 (`78d1c808ad`, `fix(memory): improve OM continuity at low activation (#13354)`), then #13353 (`59d30b5d0c`, `refactor(harness): use object parameters for all Harness methods + add reference docs (#13353)`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 31: PR #13350 (TUIState extraction), then row 32: PR #13355 (`view_range` for directory listings).
+1. Continue at `_pr-queue.md` row 33: PR #13354 (OM continuity at low activation), then row 34: PR #13353 (Harness object-parameter refactor/reference docs).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -82,3 +82,6 @@ None known.
 
 - `gh pr view 13348 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/tools/web-search.ts`, `packages/core/src/workspace/tools/output-helpers.ts`, and core output-helper tests verified 2k token result limits. Updated the tools card.
 - `gh pr view 13349 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/agents/memory.ts`, and `git blame` verified #13349's 4000-token threshold was temporary; current source is back to 2000 after later precision/scope work. Updated the OM card.
+
+- `gh pr view 13350 --json number,title,body,author,mergedAt,url,files,commits`, current `mastracode/src/tui/state.ts`, `tui/index.ts`, and TUI tests verified `TUIState` / `createTUIState()` extraction and public export. Updated the interactive TUI card.
+- `gh pr view 13355 --json number,title,body,author,mergedAt,url,files,commits`, the old `file-view.ts` patch, current core `read-file.ts` / `list-files.ts`, and workspace tool tests verified that literal `view_range` directory pagination was replaced by split core tools. Updated the tools card with current behavior and risk.

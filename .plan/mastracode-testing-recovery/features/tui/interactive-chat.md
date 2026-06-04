@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — initial TUI chat, streaming render, keyboard input, tool render, harness event dispatch.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()` so commands, handlers, tests, and public TUI consumers use the same state shape.
 
 ## User-visible behavior
 
@@ -14,7 +14,7 @@
 ## Entry points / commands
 
 - Commands / shortcuts / flags: `mastracode`, Enter, Ctrl+C/Escape, Ctrl+F, Ctrl+T, Ctrl+E.
-- Public import path for consumers: `import { MastraTUI } from 'mastracode/tui'`.
+- Public import path for consumers: `import { MastraTUI, createTUIState, type TUIState } from 'mastracode/tui'`.
 - Automatic triggers: startup render, harness event subscription, existing-message render.
 
 ## TUI states
@@ -44,11 +44,13 @@
 | Chat history | Harness / memory storage | TUI renderer, headless output |
 | Active run | Harness runtime | TUI keyboard/status handlers |
 | Streaming components | TUI transient projection | Chat container |
+| Mutable TUI state | `TUIState` object from `createTUIState()` | Commands, handlers, tests, TUI class |
 | Abort state | Harness terminal event after TUI request | TUI cleanup |
 
 ## Key files
 
 - `mastracode/src/tui/mastra-tui.ts` — startup, subscription, event handling.
+- `mastracode/src/tui/state.ts` — shared `TUIState`, `MastraTUIOptions`, and state factory defaults.
 - `mastracode/src/tui/setup.ts` — keyboard shortcuts and submit behavior.
 - `mastracode/src/tui/event-dispatch.ts` — event-to-handler routing.
 - `mastracode/src/tui/render-messages.ts` — history reconstruction.
@@ -69,6 +71,7 @@
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — shortcut behavior.
 - `mastracode/src/tui/event-dispatch.test.ts`, `render-messages.test.ts` — event/history rendering.
 - `mastracode/src/headless.test.ts` — non-TUI path.
+- `mastracode/src/tui/__tests__/*` imports `TUIState` in handler/queue/goal tests, but most tests still hand-build partial state objects.
 - No dedicated package-export smoke test found for `mastracode/tui`.
 
 ## Missing tests
@@ -77,6 +80,7 @@
 - Abort while tool output streams, including persisted history shape.
 - Enter-as-signal vs Ctrl+F queued follow-up after reload.
 - Built-package import smoke for `mastracode/tui` covering ESM, CJS, and generated `.d.ts` paths.
+- Direct `createTUIState()` default-shape test so queue/tool/goal fields do not silently lose defaults during TUI refactors.
 
 ## Known risks / regressions
 
@@ -84,6 +88,7 @@
 - Slack task-list report is adjacent: rendered state and prompt/tool state diverged.
 - Headless abort timeout existed pre-Harness v1; treat as baseline noise until reverified.
 - Public export can drift if `package.json` export targets, `tsup` entry names, or generated type paths stop matching.
+- `TUIState` is now the shared mutable projection for many features; adding fields without factory defaults can break handlers only at runtime.
 
 ## Verification checklist
 
