@@ -1,5 +1,5 @@
 ---
-title: "OpenTelemetry bridge | Tracing | Observability"
+title: "OpenTelemetry bridge | Integrations | Observability"
 description: "Integrate Mastra tracing with existing OpenTelemetry infrastructure"
 packages:
   - "@mastra/observability"
@@ -18,7 +18,7 @@ The OpenTelemetry (OTEL) Bridge enables bidirectional integration between Mastra
 
 :::info Looking to send traces without existing OTEL infrastructure?
 
-If you don't have existing OpenTelemetry instrumentation, the [OpenTelemetry Exporter](/docs/observability/tracing/exporters/otel) may be simpler — it sends traces directly without requiring an OTEL SDK setup.
+If you don't have existing OpenTelemetry instrumentation, the [OpenTelemetry Exporter](/docs/observability/integrations/exporters/otel) may be simpler — it sends traces directly without requiring an OTEL SDK setup.
 
 :::
 
@@ -163,7 +163,7 @@ tsx --import ./instrumentation.ts ./src/index.ts
 
 The OtelBridge exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
 
-For details on span naming and attributes, see the [OpenTelemetry Exporter semantic conventions](/docs/observability/tracing/exporters/otel#opentelemetry-semantic-conventions).
+For details on span naming and attributes, see the [OpenTelemetry Exporter semantic conventions](/docs/observability/integrations/exporters/otel#opentelemetry-semantic-conventions).
 
 ## Trace hierarchy
 
@@ -226,5 +226,5 @@ If traces aren't displaying or connecting as expected:
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
-- [OpenTelemetry Exporter](/docs/observability/tracing/exporters/otel): For sending traces to OTEL backends
+- [OpenTelemetry Exporter](/docs/observability/integrations/exporters/otel): For sending traces to OTEL backends
 - [OtelBridge Reference](/reference/observability/tracing/bridges/otel): API documentation

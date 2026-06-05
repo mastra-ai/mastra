@@ -1,5 +1,5 @@
 ---
-title: "Datadog exporter | Tracing | Observability"
+title: "Datadog exporter | Integrations | Observability"
 description: "Send traces to Datadog for LLM observability and analytics"
 packages:
   - "@mastra/observability"
@@ -11,7 +11,7 @@ packages:
 
 :::info Also using `dd-trace` APM?
 
-If you also use `dd-trace` APM auto-instrumentation, consider the [Datadog Bridge](/docs/observability/tracing/bridges/datadog) instead. The bridge creates `dd-trace` spans in real time so HTTP and database calls inside tools and processors are correctly nested under their parent Mastra span. The exporter on its own sends LLM Observability data after execution completes, which means auto-instrumented APM spans fall back to the request handler.
+If you also use `dd-trace` APM auto-instrumentation, consider the [Datadog Bridge](/docs/observability/integrations/bridges/datadog) instead. The bridge creates `dd-trace` spans in real time so HTTP and database calls inside tools and processors are correctly nested under their parent Mastra span. The exporter on its own sends LLM Observability data after execution completes, which means auto-instrumented APM spans fall back to the request handler.
 
 :::
 
