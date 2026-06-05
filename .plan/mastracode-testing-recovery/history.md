@@ -2674,3 +2674,24 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/github-signals/index.test.ts src/tui/commands/__tests__/github.test.ts src/agents/extra-tools.test.ts --bail=1 --reporter=dot` — 3 files / 68 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/HarnessCompat.test.ts src/__tests__/index.test.ts -t 'state|switchMode|GithubSignals|notification_inbox|notification inbox' --bail=1 --reporter=dot` — 1 file passed / 1 skipped; 5 tests passed / 16 skipped.
 - `pnpm --filter ./packages/core exec vitest run src/notifications/notifications.test.ts src/agent/__tests__/agent-signals.test.ts -t 'notification|Notification|sendNotificationSignal' --bail=1 --reporter=dot` — 2 files / 33 tests passed / 62 skipped / no type errors.
+
+### Rows 357-358 feature-map checkpoint
+
+Processed final queued rows 357-358 in oldest-to-newest order:
+
+- #17492 — Changesets alpha package-version batch; skipped after PR/file verification confirmed the Mastra Code scope only changed `mastracode/CHANGELOG.md` and `mastracode/package.json`.
+- #17538 — GitHub Signals branch PR auto-subscribe: verified current `handleAgentEnd()` calls `tryAutoSubscribeToBranchPR()` once per thread after a normal agent run completes; the helper gates on `settings.signals.experimentalGithubSignals`, requires an active GitHub Signals processor plus current thread/resource, detects the checked-out branch PR through `gh pr view --json url`, calls `subscribeThreadToPR`, shows a best-effort info message, and swallows detection/subscription failures so agent completion is not disrupted.
+
+Documentation actions:
+
+- Updated `features/git/github-signal-subscriptions.md` with #17538 as a later change, branch PR auto-subscribe behavior, state ownership, key files, test coverage, missing lifecycle guard coverage, and known risks.
+- Updated `features/README.md` GitHub Signals row to include #17538.
+- Marked `_pr-queue.md` row 357 skipped and row 358 done.
+- Updated `handoff.md` to record that current `_pr-queue.md` is exhausted through row 358.
+
+Focused evidence read: `gh pr view` metadata for #17492/#17538; `git show --name-only` for both merge commits; current `mastracode/src/tui/commands/github.ts`, `mastracode/src/tui/handlers/agent-lifecycle.ts`, `mastracode/src/tui/commands/__tests__/github.test.ts`, and existing GitHub Signals feature card.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/github.test.ts --bail=1 --reporter=dot` — 1 file / 17 tests passed.
+- Queue exhaustion check: `rows=358 first=1 last=358 blank_status=[]`.

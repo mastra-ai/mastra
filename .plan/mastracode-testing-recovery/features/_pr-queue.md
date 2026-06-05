@@ -376,5 +376,5 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 354 | 2026-06-03 | #17447 | `77e686c264` | review | done | 07 feat(mastracode): add GitHub signal subscriptions (#17447) | 27 |
 | 355 | 2026-06-03 | #17411 | `23c3b74ac7` | review | done | feat(core): compose Harness v1 session state (#17411) | 6 |
 | 356 | 2026-06-03 | #17511 | `de71e4fb3e` | review | done | fix(mastracode): fall back to legacy switchMode when no session is active (#17511) | 2 |
-| 357 | 2026-06-03 | #17492 | `aeb4b1568d` | likely skip | | chore: version packages (alpha) (#17492) | 2 |
-| 358 | 2026-06-03 | #17538 | `3d1efdeb39` | review | | feat(mastracode): auto-subscribe to branch PR via GitHub Signals on agent run end (#17538) | 3 |
+| 357 | 2026-06-03 | #17492 | `aeb4b1568d` | likely skip | skipped | chore: version packages (alpha) (#17492) | 2 |
+| 358 | 2026-06-03 | #17538 | `3d1efdeb39` | review | done | feat(mastracode): auto-subscribe to branch PR via GitHub Signals on agent run end (#17538) | 3 |
