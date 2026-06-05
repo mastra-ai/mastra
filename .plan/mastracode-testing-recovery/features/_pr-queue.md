@@ -226,11 +226,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 204 | 2026-04-14 | #15352 | `c809341c0f` | review | done | refactor: refine Mastra Code autonomy prompts (#15352) | 2 |
 | 205 | 2026-04-14 | #15359 | `274504c739` | review | done | feat: compress mastracode OM memory with caveman speak (#15359) | 2 |
 | 206 | 2026-04-14 | #15200 | `74f927608f` | likely skip | skipped | chore: version packages (alpha) (#15200) | 2 |
-| 207 | 2026-04-15 | #15370 | `95b144b2d5` | review | current | feat(mastracode): add share and import for model packs (#15370) | 3 |
-| 208 | 2026-04-15 | #15390 | `1192dffd35` | likely skip | | chore: version packages (alpha) (#15390) | 2 |
-| 209 | 2026-04-15 | #14909 | `b42565acf0` | review | | feat(mastracode): add --model CLI option to headless mode (#14909) | 4 |
-| 210 | 2026-04-15 | #15365 | `9467ea8769` | review | | feat: add activateAfterIdle for observational memory activation when prompt caches expire (#15365) | 6 |
-| 211 | 2026-04-16 | #15420 | `0fd90a215c` | review | | feat: activate observations on provider changes (#15420) | 6 |
+| 207 | 2026-04-15 | #15370 | `95b144b2d5` | review | done | feat(mastracode): add share and import for model packs (#15370) | 3 |
+| 208 | 2026-04-15 | #15390 | `1192dffd35` | likely skip | skipped | chore: version packages (alpha) (#15390) | 2 |
+| 209 | 2026-04-15 | #14909 | `b42565acf0` | review | done | feat(mastracode): add --model CLI option to headless mode (#14909) | 4 |
+| 210 | 2026-04-15 | #15365 | `9467ea8769` | review | done | feat: add activateAfterIdle for observational memory activation when prompt caches expire (#15365) | 6 |
+| 211 | 2026-04-16 | #15420 | `0fd90a215c` | review | current | feat: activate observations on provider changes (#15420) | 6 |
 | 212 | 2026-04-16 | #15458 | `346c2f5f05` | review | | chore(mastracode): bump Anthropic pack defaults to opus-4-7 and sonnet-4-6 (#15458) | 1 |
 | 213 | 2026-04-16 | #15462 | `f607106854` | review | | fix: prevent early observational memory reflection activation overshoot (#15462) | 4 |
 | 214 | 2026-04-18 | #15483 | `7f9dc6260b` | review | | fix(mastracode): check stored API key slot and env vars in key resolution (#15483) | 1 |

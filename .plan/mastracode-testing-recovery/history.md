@@ -1772,3 +1772,31 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts src/agents/thread-caveman-state.test.ts --bail=1 --reporter=dot` — 2 files / 15 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts -t "caveman observation setting" --bail=1 --reporter=dot` — targeted startup caveman restore tests passed (2 passed / 14 skipped).
+
+### PR #15370 / #15390 / #14909 / #15365 feature-map checkpoint
+
+Verified rows 207-210:
+
+- #15370 adds custom model-pack share/import. Current `models-pack.ts` serializes custom packs into `mastra-pack:` base64 payloads, deserializes and validates pasted payloads, copies shared payloads through the platform clipboard helper with inline fallback, validates imported model IDs against available models, and handles name collisions with overwrite/rename/cancel choices.
+- #15390 is a Changesets alpha package-version batch; skipped for feature mapping.
+- #14909 adds headless `--model` / `--settings` behavior. Current `headless.ts` uses the shared settings/AuthStorage path, validates requested models against `harness.listAvailableModels()`, reports unknown/missing-key failures before `agent_start`, warns when `--model` overrides `--mode`, and treats MCP init failures as headless warnings instead of startup crashes.
+- #15365 adds OM `activateAfterIdle`. Current core memory accepts number/duration-string/`auto`/`false` TTLs, resolves `auto` through provider/model cache-retention heuristics, computes last activity from message/part timestamps, activates buffered observations/reflections when idle TTL expires, and emits `om_activation` markers with `triggeredBy`, `activateAfterIdle`, `lastActivityAt`, and `ttlExpiredMs` attribution.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` for model-pack share/import payload ownership, `--model` headless preflight, key files, tests, missing tests, and import risks.
+- Updated `features/headless/prompt-mode.md` for #14909 CLI flags, shared settings, preflight behavior, warning/output contracts, and test coverage.
+- Updated `features/memory/observational-memory.md` for #15365 idle activation TTL ownership, key files, tests, missing tests, and timestamp/storage risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15370 done, #15390 skipped, #14909 done, #15365 done, #15420 current.
+
+Focused evidence read: PR metadata for #15370/#15390/#14909/#15365; current `mastracode/src/tui/commands/models-pack.ts`, clipboard helper, model-pack tests, `mastracode/src/headless.ts`, `headless.test.ts`, `headless-integration.test.ts`, `packages/memory/src/processors/observational-memory/observational-memory.ts`, `activation-ttl.ts`, OM event/marker handlers, memory config tests, TTL tests, and TUI marker tests.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/models-pack.test.ts src/headless.test.ts --bail=1 --reporter=dot` — 2 files / 59 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/headless-integration.test.ts -t "headless mode — --model flag" --bail=1 --reporter=dot` — targeted `--model` integration tests passed (8 passed / 15 skipped).
+- `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/activation-ttl.test.ts src/processors/observational-memory/__tests__/idle-buffering.test.ts --bail=1 --reporter=dot` — 2 files / 13 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/memory/memory-config.test.ts --bail=1 --reporter=dot` — 1 file / 7 tests passed / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/om-marker.test.ts --bail=1 --reporter=dot` — 1 file / 5 tests passed.
+- `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory-api.test.ts -t "activateAfterIdle" --bail=1 --reporter=dot` — targeted activateAfterIdle API tests passed (10 passed / 135 skipped).
