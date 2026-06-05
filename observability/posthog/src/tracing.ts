@@ -237,7 +237,6 @@ export class PosthogExporter extends TrackingExporter<
    * capture call. The Node SDK derives the event's `$groups` from that field and
    * overwrites any property-level `$groups`, so group metadata carried in
    * properties is dropped unless it is mirrored here.
-   * @see https://github.com/mastra-ai/mastra/issues/17599
    */
   private withGroups(message: EventMessage): EventMessage {
     const groups = message.properties?.$groups;
