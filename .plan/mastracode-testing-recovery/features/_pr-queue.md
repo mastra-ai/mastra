@@ -193,10 +193,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 171 | 2026-03-31 | #14535 | `acf5fbcb89` | review | done | fix: handle circular references in tool results to prevent JSON.stringify crashes (#14535) | 4 |
 | 172 | 2026-03-31 | #14870 | `0cd1c8dd9d` | likely skip | skipped | chore: version packages (alpha) (#14870) | 2 |
 | 173 | 2026-03-31 | #14904 | `051aece9c3` | likely skip | skipped | chore: version packages (alpha) (#14904) | 2 |
-| 174 | 2026-04-01 | #14911 | `2737684b2a` | likely skip | current | chore: version packages (alpha) (#14911) | 2 |
-| 175 | 2026-04-01 | #14960 | `a9d47b786f` | review | | fix(mastracode): disable MCP tool result timeout for long-running tools (#14960) | 1 |
-| 176 | 2026-04-01 | #14961 | `b016d2d4b7` | review | | fix: instruct agent to use request_access tool instead of telling user to run /sandbox (#14961) | 1 |
-| 177 | 2026-04-01 | #14929 | `121c67f169` | likely skip | | chore: version packages (alpha) (#14929) | 2 |
+| 174 | 2026-04-01 | #14911 | `2737684b2a` | likely skip | skipped | chore: version packages (alpha) (#14911) | 2 |
+| 175 | 2026-04-01 | #14960 | `a9d47b786f` | review | done | fix(mastracode): disable MCP tool result timeout for long-running tools (#14960) | 1 |
+| 176 | 2026-04-01 | #14961 | `b016d2d4b7` | review | done | fix: instruct agent to use request_access tool instead of telling user to run /sandbox (#14961) | 1 |
+| 177 | 2026-04-01 | #14929 | `121c67f169` | likely skip | current | chore: version packages (alpha) (#14929) | 2 |
 | 178 | 2026-04-01 | #14952 | `c8c86aa145` | review | | feat: Mastra Gateway model router provider + memory integration (#14952) | 23 |
 | 179 | 2026-04-02 | #14936 | `323b31fe37` | review | | feat(mastracode): mask sensitive input fields in TUI dialogs (#14936) | 4 |
 | 180 | 2026-04-03 | #14965 | `176278f52a` | likely skip | | chore: version packages (alpha) (#14965) | 2 |

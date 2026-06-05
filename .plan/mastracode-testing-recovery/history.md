@@ -1549,3 +1549,25 @@ Focused evidence read: PR metadata/diffs for #14535/#14870/#14904; current `pack
 Verification:
 
 - `corepack pnpm --filter ./packages/core exec vitest run src/utils.test.ts --bail=1 --reporter=dot` — 1 file / 66 tests passed / no type errors.
+
+### PR #14911 / #14960 / #14961 feature-map checkpoint
+
+Verified rows 174-176:
+
+- #14911 is a Changesets alpha package-version batch across packages; skipped for feature mapping.
+- #14960 disables the practical MCP tool-result timeout by passing `timeout: MASTRACODE_MCP_TIMEOUT_MS` (`7 * 24 * 60 * 60 * 1000`) into the MastraCode `MCPClient` constructor in `mastracode/src/mcp/manager.ts`, preserving existing status/tool/log/reconnect behavior while allowing long-running MCP tools to finish.
+- #14961 updates base prompt File Access & Sandbox guidance so external-path access failures instruct the agent to call `request_access` instead of telling the user to run `/sandbox`.
+
+Documentation actions:
+
+- Updated `features/integrations/mcp-server-configuration.md` and `mcp-status-command.md` for the long MCP timeout owner, behavior, tests, and risks.
+- Updated `features/chat/prompt-context.md` and `features/tools/workspace-tools.md` for request_access prompt guidance.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14911 skipped, #14960 done, #14961 done, #14929 current.
+
+Focused evidence read: PR metadata/diffs for #14911/#14960/#14961; current `mastracode/src/mcp/manager.ts`, `mastracode/src/agents/prompts/base.ts`, `mastracode/AGENTS.md`, and related feature cards.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/mcp/__tests__/manager.test.ts src/agents/__tests__/prompts.test.ts --bail=1 --reporter=dot` — 2 files / 50 tests passed.
+- Note: an earlier `pnpm --filter ./mastracode test -- --run ...` attempt accidentally invoked the broad MastraCode suite and failed in unrelated tests; the focused `exec vitest run` command above is the relevant checkpoint evidence.
