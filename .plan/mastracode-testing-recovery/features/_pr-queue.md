@@ -258,11 +258,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 236 | 2026-04-28 | #15760 | `13b4d7c16d` | review | done | Add stream error retry processor (#15760) | 4 |
 | 237 | 2026-04-28 | #15695 | `5a4b1ee802` | review | done | feat(core): forked subagents inherit parent thread + prompt cache prefix (#15695) | 8 |
 | 238 | 2026-04-28 | #15857 | `84a4c8515b` | likely skip | skipped | chore: version packages (alpha) (#15857) | 2 |
-| 239 | 2026-04-28 | #15896 | `14227ce4b3` | likely skip | current | chore: version packages (alpha) (#15896) | 2 |
-| 240 | 2026-04-28 | #15820 | `b430eef4e5` | review | | feat(mastracode): include common binaries in system prompt (#15820) | 6 |
-| 241 | 2026-04-29 | #15770 | `30fe03e5f5` | likely skip | | chore(deps): update ai sdk (#15770) | 1 |
-| 242 | 2026-04-29 | #15909 | `7179450363` | likely skip | | chore: version packages (alpha) (#15909) | 2 |
-| 243 | 2026-04-29 | #15928 | `f1589291e3` | likely skip | | chore: version packages (alpha) (#15928) | 2 |
+| 239 | 2026-04-28 | #15896 | `14227ce4b3` | likely skip | skipped | chore: version packages (alpha) (#15896) | 2 |
+| 240 | 2026-04-28 | #15820 | `b430eef4e5` | review | done | feat(mastracode): include common binaries in system prompt (#15820) | 6 |
+| 241 | 2026-04-29 | #15770 | `30fe03e5f5` | likely skip | skipped | chore(deps): update ai sdk (#15770) | 1 |
+| 242 | 2026-04-29 | #15909 | `7179450363` | likely skip | skipped | chore: version packages (alpha) (#15909) | 2 |
+| 243 | 2026-04-29 | #15928 | `f1589291e3` | likely skip | current | chore: version packages (alpha) (#15928) | 2 |
 | 244 | 2026-04-29 | #15924 | `93a7e6f5e3` | review | | feat(mastracode): show changelog in update prompt (#15924) | 4 |
 | 245 | 2026-04-29 | #15942 | `8f1c0e7c9f` | review | | fix(mastracode): display user message in TUI before async operations (#15942) | 1 |
 | 246 | 2026-04-30 | #15940 | `3b11cdd283` | likely skip | | chore: version packages (alpha) (#15940) | 2 |

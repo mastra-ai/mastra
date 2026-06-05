@@ -1973,3 +1973,23 @@ Verification:
 - `pnpm --filter ./packages/core exec vitest run src/processors/stream-error-retry-processor.test.ts --bail=1 --reporter=dot` — 1 file / 11 tests passed / no type errors.
 - `pnpm --filter ./packages/core exec vitest run src/harness/subagent-tool.test.ts src/harness/fork-clone-metadata.test.ts src/harness/list-threads-fork-filter.test.ts -t "fork" --bail=1 --reporter=dot` — 3 files / 18 tests passed / 15 skipped / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts src/tui/__tests__/render-messages.test.ts -t "stream-error-retry|fork" --bail=1 --reporter=dot` — 1 file passed / 1 skipped; 1 test passed / 39 skipped.
+
+### PR #15896 / #15820 / #15770 / #15909 feature-map checkpoint
+
+Verified rows 239-242:
+
+- #15896 and #15909 are Changesets alpha package-version batches; skipped for feature mapping.
+- #15820 adds common local binary availability to the Mastra Code system prompt. Current source detects Python/Node/package-manager/git/search/network/container/compiler binaries via `which`/`where`, caches sync/async detection results, feeds `commonBinaries` from `getDynamicInstructions()`, and renders `Common binaries: name: path` / `name: not found` in the base Environment section.
+- #15770 is an AI SDK dependency update touching package metadata and lockfiles; skipped for user-visible feature mapping.
+
+Documentation actions:
+
+- Updated `features/chat/prompt-context.md` for common binary detection, Environment prompt rendering, state ownership, key files, tests, and PATH/cache risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15896 skipped, #15820 done, #15770 skipped, #15909 skipped, #15928 current.
+
+Focused evidence read: PR metadata for #15896/#15820/#15770/#15909; current `mastracode/src/utils/binaries.ts`, `mastracode/src/agents/instructions.ts`, `mastracode/src/agents/prompts/{base.ts,index.ts}`, `mastracode/src/agents/__tests__/prompts.test.ts`, `mastracode/src/headless.ts`, and `mastracode/src/tools/request-sandbox-access.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts -t "common binary|model-specific" --bail=1 --reporter=dot` — 1 file / 4 tests passed / 2 skipped.

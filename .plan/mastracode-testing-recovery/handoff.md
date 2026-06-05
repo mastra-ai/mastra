@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15857 (row 238) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, and #15857 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 239 #15896 (Changesets alpha skip), then row 240 #15820 (common binaries in system prompt).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15909 (row 242) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, and #15909 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 243 #15928 (Changesets alpha skip), then row 244 #15924 (show changelog in update prompt).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 239: PR #15896 (Changesets alpha skip), then row 240 #15820 (common binaries in system prompt).
+1. Continue at `_pr-queue.md` row 243: PR #15928 (Changesets alpha skip), then row 244 #15924 (show changelog in update prompt).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 239-242 verified/documented: #15896/#15909 Changesets alpha skips, #15820 common binary detection in the Environment prompt, and #15770 AI SDK dependency update skip. Focused verification passed: prompt common-binary/model-specific tests (4).
 - Rows 235-238 verified/documented: #15759 OpenAI GPT-5.5 pack/prompt defaults, #15760 StreamErrorRetryProcessor and Mastra Code wiring, #15695 forked subagents inheriting parent thread/cache/toolsets, and #15857 Changesets alpha skip. Focused verification passed: OpenAI pack/prompt tests (11), stream-error retry core tests (11, no type errors), forked subagent core tests (18, no type errors), and MastraCode processor/render wiring target (1).
 - Rows 231-234 verified/documented: #15730 ProviderHistoryCompat prompt/error processor, #15703 custom `/om` model strings and role override preservation, #15642 observability/evals/feedback system, and #15710 Changesets alpha skip. Focused verification passed: ProviderHistoryCompat core tests (33), OM custom model/role tests (8), eval scorer tests (58), and MastraCode processor wiring test (1).
 - Rows 227-230 verified/documented: #15678 active-thread-scoped custom slash command dispatch, #15656/#15699 Changesets alpha skips, and #15749 thread-boundary cleanup for tasks/plan/sandbox/task UI plus per-thread TUI projections. Focused verification passed: targeted thread lifecycle tests (5) and custom slash-command dispatch tests (7).
